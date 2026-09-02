@@ -7,3 +7,4 @@ draft — idempotently, so re-running against unchanged inputs changes nothing.
 ## Documentation
 
 - [Product Requirements Document](docs/prd.md)
+- [Implementation Plan](docs/implementation-plan.md)
