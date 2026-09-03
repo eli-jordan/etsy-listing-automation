@@ -118,26 +118,48 @@ def main() -> None:
         bundled_dir / "bundled-test-design.png", format="PNG", optimize=False, compress_level=6
     )
 
-    template_dir = REPO_ROOT / "tests" / "fixtures" / "mockup-templates" / "synthetic-tee"
+    _write_template_set(
+        REPO_ROOT / "tests" / "fixtures" / "mockup-templates" / "synthetic-tee",
+        {"black": (35, 35, 38), "white": (245, 245, 240)},
+    )
+
+    # Matches tests/fixtures/workspace's profile (mockup_template: flat-lay-01)
+    # and listing (colors: [black, blue-jean, ivory, moss]) -- lets the render
+    # stage's behaviour tests exercise a full listing end to end.
+    _write_template_set(
+        REPO_ROOT / "tests" / "fixtures" / "workspace" / "mockup-templates" / "flat-lay-01",
+        {
+            "black": (35, 35, 38),
+            "blue-jean": (72, 96, 130),
+            "ivory": (230, 222, 200),
+            "moss": (100, 110, 70),
+        },
+    )
+
+    design_dest = REPO_ROOT / "tests" / "fixtures" / "workspace" / "designs" / "take-a-hike.png"
+    design_dest.parent.mkdir(parents=True, exist_ok=True)
+    grid.save(design_dest, format="PNG", optimize=False, compress_level=6)
+
+    print(f"wrote {design_dir / 'grid-target.png'}")
+    print(f"wrote {bundled_dir / 'bundled-test-design.png'}")
+    print(f"wrote {design_dest}")
+
+
+def _write_template_set(template_dir: Path, colours: dict[str, tuple[int, int, int]]) -> None:
     template_dir.mkdir(parents=True, exist_ok=True)
-    colours = {"black": (35, 35, 38), "white": (245, 245, 240)}
     for name, rgb in colours.items():
         base = make_template_base(TEMPLATE_SIZE, rgb)
         base.save(template_dir / f"{name}.png", format="PNG", optimize=False, compress_level=6)
 
     quad = print_area_quad(TEMPLATE_SIZE)
-    template_yaml = template_dir / "template.yaml"
     quad_yaml = "\n".join(f"    - [{p[0]}, {p[1]}]" for p in quad)
-    template_yaml.write_text(
+    (template_dir / "template.yaml").write_text(
         "warp:\n  quad:\n" + quad_yaml + "\n"
         "displace:\n  enabled: false\n  strength: 0.0\n"
         "shade:\n  enabled: true\n  opacity: 0.6\n  blend: soft-light\n",
         encoding="utf-8",
     )
-
-    print(f"wrote {design_dir / 'grid-target.png'}")
-    print(f"wrote {bundled_dir / 'bundled-test-design.png'}")
-    print(f"wrote {template_dir} (black.png, white.png, template.yaml)")
+    print(f"wrote {template_dir} ({', '.join(colours)}, template.yaml)")
 
 
 if __name__ == "__main__":

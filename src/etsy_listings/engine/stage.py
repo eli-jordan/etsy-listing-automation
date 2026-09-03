@@ -5,6 +5,7 @@ Dependencies between stages are list order, not a dependency graph."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import Any, Protocol, TypeVar
 
 from etsy_listings.engine.change import StagePlan
@@ -16,8 +17,19 @@ A = TypeVar("A")
 L = TypeVar("L")
 
 
-class StageResult(Protocol):
-    """Marker for whatever a stage's ``apply`` hands back to fold into the lockfile."""
+@dataclass(frozen=True)
+class StageApplyResult:
+    """What a stage's ``apply`` hands back to fold into the next lockfile.
+
+    ``applied`` becomes ``lock.applied[stage.name]`` -- the verbatim
+    last-applied document A2 hashes. ``outputs`` merges into the lockfile's
+    separate ``outputs`` axis (workspace-relative path -> content hash), which
+    is what later decides whether a file needs *re-uploading*, independently
+    of whether the stage needed to *re-run* at all.
+    """
+
+    applied: dict[str, Any]
+    outputs: dict[str, str] = field(default_factory=dict)
 
 
 class Stage(Protocol[D, A, L]):
@@ -32,7 +44,7 @@ class Stage(Protocol[D, A, L]):
 
     def plan(self, desired: D, applied: A | None, live: L | None) -> StagePlan: ...
 
-    def apply(self, ctx: RunContext, stage_plan: StagePlan, desired: D) -> StageResult: ...
+    def apply(self, ctx: RunContext, stage_plan: StagePlan, desired: D) -> StageApplyResult: ...
 
 
 AnyStage = Stage[Any, Any, Any]
