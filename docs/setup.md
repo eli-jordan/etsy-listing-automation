@@ -1,0 +1,220 @@
+# Infrastructure setup
+
+What has to exist outside this repository before Phase 2 (Printify) can run.
+Phase 0 and 1 needed none of it — they are entirely local.
+
+> **This is a real shop, not a throwaway.** The plan's exit criteria were
+> written assuming a disposable test shop. They aren't disposable here, so the
+> sequence below is ordered to make the first real write boring: confirm the
+> draft setting *before* the first publish, and use a deliberately unattractive
+> first product. See "Making the first write safe".
+
+---
+
+## 1. Printify
+
+### 1.1 Connect the Etsy store
+
+In Printify: **My stores → Add new store → Etsy**, and complete the Etsy
+authorisation. This is Printify's own integration and uses Etsy's OAuth from
+Printify's side — it does **not** need an Etsy developer app, and is not
+blocked by Etsy API approval.
+
+This connection is what makes `external.id` appear on a published product, and
+`external.id` *is* the Etsy listing id — the only bridge between the two
+systems. Without it, Phase 2's exit criteria cannot be met.
+
+### 1.2 Confirm products publish as DRAFT
+
+**Do this before anything else touches the shop.** Printify's store settings
+control whether a published product lands on Etsy as a draft or as an active,
+publicly visible listing. The whole review model here assumes draft (PRD 5,
+listed as a risk precisely because it is inferred rather than observed).
+
+Find the setting in the Etsy store's settings inside Printify and confirm it
+publishes as a draft. If you can't find an explicit toggle, treat that as
+unresolved rather than assuming — it is one of the four risks Phase 2 exists to
+answer empirically, and getting it wrong means a listing goes public before
+you've reviewed it, and costs $0.20.
+
+### 1.3 Generate an API token
+
+Printify → **account settings → Connections** (`printify.com/app/account/connections`)
+→ generate a personal access token.
+
+Scopes to select:
+
+| Scope | Why |
+|---|---|
+| `shops.read` | resolve your shop id |
+| `catalog.read` | blueprints, print providers, variants (already used in Phase 0) |
+| `products.read` | `GET products/{id}` — the `printify_product` stage's live read |
+| `products.write` | create and update the product |
+| `uploads.read`, `uploads.write` | upload the design image the print area references |
+
+The token is shown **once**. If you lose it, generate a new one.
+
+### 1.4 Shipping and production partner
+
+Etsy requires a production partner declaration, and a listing needs a shipping
+profile. Printify supplies both on publish, but a store that has never
+published anything can have them unset. If the first publish fails validation,
+this is the usual cause.
+
+---
+
+## 2. Etsy
+
+### 2.1 The shop itself
+
+Must be an open shop that can accept listings — payment method set, policies
+configured. Printify publishes *into* it.
+
+### 2.2 Register the developer app — do this now
+
+**Not needed for Phase 2. Start it anyway.**
+
+<https://www.etsy.com/developers/register> — register an app for the Open API
+v3. You get a **keystring** (API key) and a shared secret. Approval is manual
+and the lead time is unknown (PRD risk 1).
+
+It is a form, not engineering work, and Phase 3 is blocked cold without it. The
+implementation plan's standing advice is to file it early; that is now overdue
+rather than early.
+
+### 2.3 Two ids you'll need for `defaults.yaml`
+
+`shop_section_id` and `return_policy_id`. Create at least one shop section and
+one return policy in Etsy's shop manager. **See "Known gap" below** — getting
+their numeric ids currently needs the Etsy API, which is Phase 3.
+
+---
+
+## 3. The workspace
+
+The workspace is a **separate directory you own**, never this repository. Create
+it wherever you keep working data:
+
+```
+etsy-listings/
+  defaults.yaml
+  .env                     # secrets, gitignored
+  designs/
+  mockup-templates/
+  listings/
+  common-media/
+```
+
+`defaults.yaml`:
+
+```yaml
+etsy:
+  shop_id: 12345678
+  who_made: i_did
+  when_made: made_to_order
+  is_supply: false
+  shop_section_id: 4455667
+  return_policy_id: 1122334
+  renewal: manual
+currency: NOK
+preferred_print_provider: Monster Digital
+```
+
+Point the tool at it with `--root`, or `export ETSY_LISTINGS_ROOT=...` in
+`~/.zshenv`. Cygwin paths work (`/home/Admin/etsy-listings`).
+
+If the workspace is its own git repo, gitignore `.env`, `.auth/` and `.cache/`
+before the first commit.
+
+---
+
+## 4. Where the secrets go — and where they don't
+
+**In the workspace's `.env`:**
+
+```
+PRINTIFY_API_TOKEN=...
+ANTHROPIC_API_KEY=...        # not needed until Phase 4
+```
+
+Etsy OAuth tokens land in `.auth/etsy-tokens.json`, written by `auth` in Phase
+3 — you won't create that by hand.
+
+**Do not paste any of these into a chat with me, or into a file in this
+repository.** I don't need them: the tool reads them from that file at runtime,
+and I can write and test every code path against fakes and cassettes without
+ever seeing a real credential. If a command needs the token, it picks it up
+from the environment on your machine. If you ever do paste one somewhere it
+shouldn't be, rotate it rather than deleting the message — Printify tokens are
+regenerable from the same Connections page.
+
+---
+
+## 5. Real assets you'll need
+
+Phase 2 pushes a real product, so `apply` runs the render stage first and needs
+real inputs:
+
+- **A design file** — RGBA PNG, and large enough for ~300 DPI over the profile's
+  print area (a 4500×5400 print area wants a 4500×5400 design). Validation
+  rejects anything smaller with the required size named; it never upscales.
+- **A calibrated mockup template** — at least one template set, calibrated in
+  the browser (`etsy-listings ui`). Until Phase 3 the mockups aren't uploaded
+  anywhere, but `apply` still renders them.
+
+---
+
+## 6. Making the first write safe
+
+On a shop you intend to keep:
+
+1. Confirm the draft setting (1.2) before any publish.
+2. First product: use a real design you'd genuinely list, but expect to delete
+   it. Create it, confirm `external.id` appears, confirm it is a **draft** in
+   Etsy, then run `apply` again and confirm it is a no-op — that is the whole
+   exit criterion.
+3. Delete the test product from Printify (which removes the Etsy draft) once
+   the findings are written up.
+4. A draft costs nothing. Only activation triggers the $0.20 listing fee — so
+   nothing above costs money unless the draft setting is wrong, which is why it
+   is step one.
+
+`create_product` is the only non-idempotent call in the system. It's guarded by
+the lockfile's `printify_product_id` plus a pre-flight lookup so a retry can't
+duplicate a product — that guard is the first thing to get a behaviour test in
+Phase 2, before anything talks to a real shop.
+
+---
+
+## Known gap: `defaults.yaml` demands two Etsy ids Phase 2 doesn't use
+
+`shop_section_id` and `return_policy_id` are **required** fields, but they're
+only consumed by the `etsy_copy` stage in Phase 3, and their numeric values
+normally come back *from* the Etsy API — which needs the app approval that
+hasn't happened yet. As written, you can't load a workspace to do Phase 2
+without ids you can't easily obtain until Phase 3.
+
+Options, in preference order:
+
+1. Make both optional, required only when the `etsy_copy` stage runs. This is
+   the honest fix — a field should be required by the phase that uses it.
+2. Put placeholder values in for now and correct them in Phase 3. Works, but
+   leaves a wrong value in a config file that looks authoritative.
+
+Same applies to `etsy.shop_id`: needed in Phase 3, and obtainable from Printify
+in the meantime, so it is less of a problem.
+
+---
+
+## Checklist
+
+- [ ] Printify account with the Etsy store connected
+- [ ] Publish-as-draft confirmed in Printify's store settings
+- [ ] Printify API token generated with the five scopes above
+- [ ] Etsy shop open and able to accept listings
+- [ ] Etsy developer app **submitted** (for Phase 3)
+- [ ] At least one Etsy shop section and one return policy created
+- [ ] Workspace directory created, `defaults.yaml` written
+- [ ] `.env` holding `PRINTIFY_API_TOKEN`, gitignored
+- [ ] One real design at print-area resolution
+- [ ] One calibrated mockup template
