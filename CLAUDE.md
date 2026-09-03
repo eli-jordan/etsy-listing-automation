@@ -167,15 +167,24 @@ user data into this repo, and never assume cwd is the workspace root.
 
 ## Testing
 
-Five layers, each with a job (`A4`):
+Six layers, each with a job (`A4`, plus `browser` added in Phase 1):
 
 | Layer | Job |
 |---|---|
 | Unit | slugification, `Money`, hash canonicalisation, path resolution, limiter maths |
 | Golden | per-pass renders on a grid target; end-to-end composites per template |
 | Behaviour | in-memory fake clients: idempotency, drift, resume, polling, batch |
+| Browser | `-m browser`, playwright over the built SPA served by FastAPI: the calibrator's drag → render → save loop |
 | Contract | cassette replay through real httpx: payload shape, auth, error decoding |
 | E2E | `-m e2e`, skipped by default, env-gated at a throwaway shop |
+
+The browser layer runs as part of a normal `pytest` (unlike `e2e`) but skips
+itself cleanly when playwright, its chromium build, or `ui/frontend/dist` is
+missing. It exists for the one thing no other layer covers: that the React app,
+the FastAPI endpoints and the real renderer work *together*. Assertions go
+through observable effects — a PNG the browser actually decoded at the
+template's true pixel size, and the `template.yaml` that Save wrote to disk —
+not through internal state.
 
 Reach for a **fake** to test behaviour and a **cassette** to test payload shape.
 Asking either to do the other's job is the mistake this split exists to prevent.
@@ -202,7 +211,10 @@ uv run pytest tests/unit/test_money.py                     # one file
 uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"          # by keyword
 uv run pytest -m e2e                 # only the env-gated e2e layer
-uv run pytest --update-goldens       # regenerate render goldens (Phase 1+)
+uv run pytest -m browser             # only the calibrator browser tests
+uv run pytest -m "not browser"       # skip them (e.g. no chromium installed)
+uv run playwright install chromium   # one-off, enables the browser layer
+uv run pytest --update-goldens       # regenerate render goldens
 uv run mypy src                      # strict type check
 uv run ruff check . / ruff format .  # lint / format
 ```

@@ -47,12 +47,14 @@ dev = [
     "mypy>=1.10,<2",
     "ruff>=0.14,<1",
     "types-pyyaml",
+    "playwright>=1.49,<2",
 ]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = [
     "e2e: exercises real Printify/Etsy APIs against a throwaway shop; skipped by default",
+    "browser: drives the calibrator in a real browser via playwright; skipped when it is unavailable",
 ]
 addopts = "-m 'not e2e'"
 

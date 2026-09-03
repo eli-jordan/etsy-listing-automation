@@ -135,8 +135,23 @@ uv run pytest tests/unit/test_money.py                      # one file
 uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"                                   # by keyword
 uv run pytest -m e2e                                           # only the (env-gated) e2e layer
+uv run pytest -m browser                                       # only the calibrator browser tests
+uv run pytest -m "not browser"                                 # skip them
 uv run pytest --update-goldens                                 # regenerate render goldens
 ```
+
+The **browser layer** drives the calibrator in real chromium via playwright,
+against the built SPA served by FastAPI (the same shape `etsy-listings ui`
+serves). It runs as part of an ordinary `pytest`, but needs a one-off browser
+install and a built frontend:
+
+```bash
+uv run playwright install chromium
+cd src/etsy_listings/ui/frontend && npm run build
+```
+
+Without either, those tests skip with a message saying which step is missing —
+they never fail for environmental reasons.
 
 The `e2e` layer hits real Printify and Etsy APIs against a throwaway shop and
 is never part of a default run — see CLAUDE.md and the plan's testing table
