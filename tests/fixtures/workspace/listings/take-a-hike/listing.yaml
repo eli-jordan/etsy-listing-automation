@@ -1,0 +1,23 @@
+profile: comfort-colors-1717
+design: ../../designs/take-a-hike.png
+colors: [black, blue-jean, ivory, moss]
+brief: >
+  Retro 70s sunset mountain scene. Design text reads exactly
+  "TAKE A HIKE". Audience: hikers, national-park visitors, outdoorsy gifts.
+prices:
+  S: 349 NOK
+  M: 349 NOK
+  L: 349 NOK
+  XL: 359 NOK
+  XXL: 369 NOK
+  XXXL: 379 NOK
+etsy:
+  title: <generate>
+  description: <generate>
+  tags: <generate>
+  materials: [cotton]
+  renewal: manual
+media:
+  - mockup: black
+  - mockup: blue-jean
+  - mockup: ivory

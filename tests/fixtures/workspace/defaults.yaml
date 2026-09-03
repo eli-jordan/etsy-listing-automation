@@ -1,0 +1,10 @@
+etsy:
+  shop_id: 12345678
+  who_made: i_did
+  when_made: made_to_order
+  is_supply: false
+  shop_section_id: 4455667
+  return_policy_id: 1122334
+  renewal: manual
+currency: NOK
+preferred_print_provider: Monster Digital
