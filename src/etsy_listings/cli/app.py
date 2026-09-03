@@ -159,6 +159,20 @@ def apply(
 
 
 @app.command()
+def new(
+    design: str = typer.Argument(..., help="Design name, matching designs/<name>.png"),
+    category: str = typer.Option("tshirt", "--category", help="Blueprint category filter"),
+    root: Path | None = typer.Option(None, "--root", help="Workspace root override"),
+) -> None:
+    """Interactive garment/provider picker; writes profile (if absent) + listing."""
+    from etsy_listings.newcmd.interactive import run_new
+
+    workspace = _open_workspace(root)
+    catalog = CachedCatalogClient(HttpCatalogClient(), workspace.cache("catalog"))
+    run_new(workspace, catalog, design, category)
+
+
+@app.command()
 def ui(
     root: Path | None = typer.Option(None, "--root", help="Workspace root override"),
     host: str = typer.Option("127.0.0.1", "--host"),
