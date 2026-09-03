@@ -9,11 +9,12 @@ reviewable Etsy draft: renders custom mockups locally, configures the product in
 Printify, and patches the resulting Etsy listing. Idempotent by design — re-running
 against unchanged inputs must make no remote changes.
 
-**Phase 0 (foundations) is implemented**; Phases 1-6 are not. "Code layout"
-below shows what exists today, marked per module. "Commands" still describes
-the PRD's full CLI surface — only `plan` is real; the rest is the agreed design
-for later phases. Check the tree, or [docs/architecture.md](docs/architecture.md),
-before assuming a module, command or test exists.
+**Phases 0 and 1 are implemented**; Phases 2-6 are not. "Code layout" below
+shows what exists today, marked per module. "Commands" still describes the
+PRD's full CLI surface — `plan`, `apply`, `new` and `ui` are real; the rest is
+the agreed design for later phases. Check the tree, or
+[docs/architecture.md](docs/architecture.md), before assuming a module,
+command or test exists.
 
 ## The two documents, and which wins
 
@@ -35,12 +36,33 @@ last-applied doc` saves the next reader a trip through 700 lines of PRD.
 
 ## Environment
 
-Git runs under **cygwin with zsh**. This matters more than usual here:
+**Run everything in zsh under cygwin.** Commands, test runs, linters, the type
+checker, git, `npm`, and tool installs all belong in that shell — it is the
+environment this project is developed and verified in, and the only one its
+paths, PATH setup and scripts are known to work in. Do not reach for
+PowerShell, `cmd`, or Git Bash: Git Bash in particular *looks* like it works
+and then bites. It mangles POSIX arguments (`/home/Admin` becomes
+`C:/Program Files/Git/home/Admin`); it puts its own `bash` ahead of cygwin's,
+which breaks the `npm` launcher script; and — worst of the three, because it
+hangs instead of erroring — its git cannot resolve the cygwin-style credential
+helper, so anything touching `origin` blocks until something kills it (see
+"GitHub access"). If a command is worth running, run it in cygwin zsh; if it
+fails there, that is a real failure, not an artefact.
 
-- Use POSIX paths and shell syntax. The repo lives at
-  `/home/Admin/code/etsy-listing-automation` from inside cygwin, and at
-  `C:\cygwin64\home\Admin\code\etsy-listing-automation` from Windows tools.
-  Windows-side tools invoked from cygwin need `/cygdrive/c/...` translation.
+The repo lives at `/home/Admin/code/etsy-listing-automation` from inside
+cygwin, and at `C:\cygwin64\home\Admin\code\etsy-listing-automation` from
+Windows tools. Use POSIX paths and shell syntax.
+- The toolchain is **Windows-native, driven from cygwin**: `uv` (and the Python
+  it manages) and `node` are Windows binaries on cygwin's PATH via
+  `~/.zshenv`. Cygwin translates the *working directory* for them, so running
+  `uv run pytest` or `npm run build` from inside the repo just works. Paths
+  passed as *arguments* do not translate — `C:\...` is what those binaries see.
+- `--root` and `ETSY_LISTINGS_ROOT` therefore accept cygwin paths and translate
+  them (`workspace/userpath.py`): `/home/Admin/ws`, `/cygdrive/c/ws` and
+  `C:\ws` all work. This is why `--root` is declared `str`, not `Path` — on
+  Windows `str(Path("/home/Admin"))` is already `\home\Admin`, and a mangled
+  path can't be distinguished from a root-relative one. Any *new* CLI option
+  taking a user-supplied path needs the same treatment.
 - `core.fileMode` is set to **false** in this repo's local config. The Windows
   filesystem cannot hold the exec bit, so without it every checkout shows phantom
   `100755 → 100644` modifications on files that were committed from elsewhere.
@@ -48,26 +70,39 @@ Git runs under **cygwin with zsh**. This matters more than usual here:
 - Line endings: git warns about `LF → CRLF` on write. Content is stored LF. The
   warnings are noise, not a problem to fix.
 
-### Known-broken: GitHub credentials
+### GitHub access — use cygwin git, and only cygwin git
 
-`~/.gitconfig` routes GitHub HTTPS auth through GitHub CLI:
+Working, as of GitHub CLI 2.98.0. `~/.gitconfig` routes GitHub HTTPS auth
+through `gh`:
 
 ```
 credential.https://github.com.helper !'/cygdrive/c/Program Files/GitHub CLI/gh.exe' auth git-credential
 ```
 
-That path does not exist — `gh` is not installed. Consequences: **`git push`,
-`git ls-remote` and anything else touching `origin` will hang** on the dead
-helper (it blocks rather than failing fast), and `gh` commands are unavailable, so
-PRs cannot be opened from the command line.
+`git push`, `git fetch` and `gh pr create` all work — **from cygwin zsh**,
+where `git` is `/usr/bin/git`.
 
-Diagnose quickly with `GIT_TERMINAL_PROMPT=0 git ls-remote origin` — that fails
-fast instead of hanging. Fix is the user's call: reinstall GitHub CLI, or delete
-the two stale `credential.https://*.github.com.helper` lines from `~/.gitconfig`
-so git falls back to `manager-core`.
+That helper path is a **cygwin** path. Only cygwin's git can resolve it. Run
+git from Git Bash (`/mingw64/bin/git`) and the helper cannot be found, but git
+does not report that: the command **hangs** until something kills it, and then
+reports
 
-Until it is fixed, commit locally and tell the user the push and PR could not be
-done. Do not silently skip the step.
+```
+fatal: helper error (143): Unknown
+```
+
+143 is SIGTERM — the exit code of whatever killed it, not a diagnosis. This
+looks exactly like a missing `gh.exe`, and previously *was* one, so it is easy
+to misread as "GitHub access is broken" and go hunting for an install that is
+already there.
+
+**If anything touching `origin` hangs, check which git you are running before
+anything else** (`which git` — it must be `/usr/bin/git`). This is the sharpest
+instance of the general rule above: run everything in cygwin zsh.
+
+To distinguish a genuine auth failure from the wrong-git hang:
+`GIT_TERMINAL_PROMPT=0 git ls-remote origin` fails fast on real auth problems,
+and `gh auth status` confirms the account and scopes independently of git.
 
 ## Toolchain
 
@@ -79,24 +114,36 @@ OpenCV and Pillow are **pinned to exact versions**, deliberately. Renders are
 hashed and compared against goldens; a minor bump that shifts output bytes causes
 every listing's images to re-upload. Do not loosen those pins casually.
 
+`click` is pinned to `<8.2` alongside typer `0.12.x` — a newer click breaks
+typer's `TyperArgument.make_metavar()` call signature. Bump both together if
+you ever upgrade typer.
+
+Node is only needed for frontend development, not for installing the package
+(see "Frontend build hook" in the README) — any current LTS works. On a
+machine without admin rights (`winget install` needing elevation fails), the
+official Windows x64 zip from nodejs.org extracts and runs fine from a
+user-writable directory with no installer.
+
 ## Code layout
 
 Per `A1`–`A10`. Full detail in the plan; the shape:
 
 ```
 src/etsy_listings/
-  cli/          Typer app, one module per command             [Phase 0: `plan` only]
+  cli/          Typer app, one module per command        [plan/apply/new/ui done]
   workspace/    root discovery (walk up for defaults.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
   catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, stages/
-                                                    [scaffolding done; STAGES is empty]
-  render/       pure passes, frozen RenderConfig, derived maps, pipeline    [Phase 1]
+                                        [done; STAGES = [Render()], more stages later]
+  render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
+  newcmd/       `new` picker: pure logic + a thin questionary wrapper       [done]
   clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
                                                                             [Phase 2/3]
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
-  ui/           FastAPI api/ + React frontend/                    [Phase 1: calibrator only]
+  ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
+                             (dashboard/setup wizard/run runner: Phase 5)
 ```
 
 ## Invariants
@@ -119,9 +166,13 @@ later. Each traces to a decision.
   (`A7`).
 - **Every `cv2` call passes explicit `interpolation` and `borderMode`.** Relying
   on defaults makes output depend on the library version.
-- **`Workspace.resolve()` rejects paths escaping the root** (`A8`). This is also
-  what keeps the UI's file endpoints safe, so it is a security boundary, not a
-  tidiness rule.
+- **Only `workspace` knows the directory layout.** Everything else asks for
+  `workspace.lock_file(name)` rather than joining
+  `listings/<name>/state.lock.json`. Two rules enforce it: `resolve()` rejects
+  paths escaping the root (`A8`), and the layout accessors reject any name that
+  is not a single path segment. Together they are what keeps the UI's endpoints
+  safe — template names arrive from URLs — so this is a security boundary, not
+  a tidiness rule. A new path-taking CLI option or endpoint goes through them.
 - **Two hash axes, not one.** `input_hash` decides whether to re-render;
   `outputs` (per-file) decides whether to re-upload. Collapsing them breaks the
   library-upgrade case the PRD calls out.
@@ -144,15 +195,24 @@ user data into this repo, and never assume cwd is the workspace root.
 
 ## Testing
 
-Five layers, each with a job (`A4`):
+Six layers, each with a job (`A4`, plus `browser` added in Phase 1):
 
 | Layer | Job |
 |---|---|
 | Unit | slugification, `Money`, hash canonicalisation, path resolution, limiter maths |
 | Golden | per-pass renders on a grid target; end-to-end composites per template |
 | Behaviour | in-memory fake clients: idempotency, drift, resume, polling, batch |
+| Browser | `-m browser`, playwright over the built SPA served by FastAPI: the calibrator's drag → render → save loop |
 | Contract | cassette replay through real httpx: payload shape, auth, error decoding |
 | E2E | `-m e2e`, skipped by default, env-gated at a throwaway shop |
+
+The browser layer runs as part of a normal `pytest` (unlike `e2e`) but skips
+itself cleanly when playwright, its chromium build, or `ui/frontend/dist` is
+missing. It exists for the one thing no other layer covers: that the React app,
+the FastAPI endpoints and the real renderer work *together*. Assertions go
+through observable effects — a PNG the browser actually decoded at the
+template's true pixel size, and the `template.yaml` that Save wrote to disk —
+not through internal state.
 
 Reach for a **fake** to test behaviour and a **cassette** to test payload shape.
 Asking either to do the other's job is the mistake this split exists to prevent.
@@ -161,36 +221,70 @@ Golden failures should name the guilty render pass — that is why per-pass gold
 exist alongside end-to-end ones. Regenerate with `--update-goldens` only after
 looking at the diff.
 
+No real design files or garment photography live in this repo (or a fresh
+checkout) — `scripts/generate_test_assets.py` procedurally generates a
+grid/ruler test design and a tiny synthetic mockup template set, deterministically
+(fixed seed, no clock input), committed as ordinary test fixtures.
+
 The E2E test hits real Printify and Etsy and costs real state. It is never part of
 a default run. It also doubles as the cassette recorder.
 
+### Coverage: 80% is a floor, not a target
+
+`./scripts/check.sh` measures **branch** coverage over the whole suite and
+**fails under 80%** (`fail_under` in `pyproject.toml`). Line coverage is not
+enough: a half-tested `if` is the shape most regressions hide in.
+
+It currently sits at ~85%, so there is real headroom. If a change drops it
+below the floor, that change shipped untested logic — write the test. Do not
+lower the threshold, and do not add `# pragma: no cover` to make a number go
+up. The one legitimate use of an exclusion is code that genuinely cannot be
+exercised in-process (a `__main__` guard, a `TYPE_CHECKING` block), and those
+are already configured centrally.
+
+Coverage is deliberately **not** in `addopts`, so running one file
+(`uv run pytest tests/unit/test_money.py`) doesn't fail a gate it was never
+going to meet. The gate lives in the check script, which is what runs before a
+commit.
+
 ### Running the suite
+
+All of these run in cygwin zsh (see Environment).
 
 ```
 uv sync                              # install deps + create .venv
-./scripts/check.sh                   # format + lint + typecheck + test, one command
+./scripts/check.sh                   # format + lint + typecheck + test + coverage gate
+uv run pytest --cov                  # coverage on demand, enforcing the 80% floor
+uv run pytest --cov --cov-report=html  # then open htmlcov/index.html
 uv run pytest                        # full suite (excludes -m e2e by default)
 uv run pytest tests/unit/test_money.py                     # one file
 uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"          # by keyword
 uv run pytest -m e2e                 # only the env-gated e2e layer
-uv run pytest --update-goldens       # regenerate render goldens (Phase 1+)
+uv run pytest -m browser             # only the calibrator browser tests
+uv run pytest -m "not browser"       # skip them (e.g. no chromium installed)
+uv run playwright install chromium   # one-off, enables the browser layer
+uv run pytest --update-goldens       # regenerate render goldens
 uv run mypy src                      # strict type check
 uv run ruff check . / ruff format .  # lint / format
 ```
 
+Frontend (`src/etsy_listings/ui/frontend/`): `npm run dev|build|typecheck|lint|format`.
+See the README's "The calibrator" section for the full loop, including
+regenerating the typed API client after an endpoint change.
+
 ## Commands
 
-Only `plan` is implemented (Phase 0). The rest of this table is the PRD's
-agreed CLI surface for reference when building later phases — do not assume a
-command exists because it is listed here.
+`plan`, `apply`, `new` and `ui` are implemented. The rest of this table is the
+PRD's agreed CLI surface for reference when building later phases — do not
+assume a command exists because it is listed here.
 
 ```
-new <design>       interactive garment/provider picker; writes profile + listing   [Phase 1]
+new <design>       interactive garment/provider picker; writes profile + listing   [done]
 plan <listing|--all>   three-way diff against live state                          [done]
-apply <listing|--all>  execute every stage the plan identified                     [Phase 2+]
-render / generate      force a single local stage                          [Phase 1 / Phase 4]
-ui                     setup wizard, dashboard, calibrator, run runner    [Phase 1: calibrator only]
+apply <listing|--all>  execute every stage the plan identified          [done; only `render` exists]
+render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
+ui                     setup wizard, dashboard, calibrator, run runner    [calibrator done; rest Phase 5]
 auth                   Etsy OAuth PKCE + Anthropic credentials                     [Phase 3]
 catalog refresh        force-refresh the cached Printify catalog                  [Phase 6]
 unlock <listing>       clear a Printify product stuck publishing                  [Phase 2]

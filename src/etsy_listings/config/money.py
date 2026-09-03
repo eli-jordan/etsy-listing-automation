@@ -51,7 +51,7 @@ class Money:
         match = _MONEY_RE.match(raw)
         if match is None:
             raise MoneyFormatError(
-                f"price {raw!r} is not in the form '<amount> <CURRENCY>' " f"(e.g. '349 NOK')"
+                f"price {raw!r} is not in the form '<amount> <CURRENCY>' (e.g. '349 NOK')"
             )
         amount_str, currency = match.groups()
         try:

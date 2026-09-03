@@ -20,6 +20,7 @@ def execute(ctx: RunContext, plan: Plan, lock: Lockfile, stages: list[AnyStage])
     """
     stages_by_name = {stage.name: stage for stage in stages}
     applied = dict(lock.applied)
+    outputs = dict(lock.outputs)
     completed = list(lock.stages_completed)
 
     for stage_plan in plan.stage_plans:
@@ -28,7 +29,9 @@ def execute(ctx: RunContext, plan: Plan, lock: Lockfile, stages: list[AnyStage])
         stage = stages_by_name[stage_plan.stage]
         desired = stage.desired(ctx, plan.listing)
         ctx.emit(f"applying {stage.name}")
-        stage.apply(ctx, stage_plan, desired)
+        result = stage.apply(ctx, stage_plan, desired)
+        applied[stage.name] = result.applied
+        outputs.update(result.outputs)
         if stage.name not in completed:
             completed.append(stage.name)
 
@@ -37,6 +40,6 @@ def execute(ctx: RunContext, plan: Plan, lock: Lockfile, stages: list[AnyStage])
         applied_at=datetime.now(UTC).isoformat(),
         applied=applied,
         remote=lock.remote,
-        outputs=lock.outputs,
+        outputs=outputs,
         stages_completed=completed,
     )

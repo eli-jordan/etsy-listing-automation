@@ -1,6 +1,8 @@
 """Phase 0 exit criterion: ``plan`` runs against a fixture workspace with no
-network beyond the catalog -- and since no stage exists yet to touch the
-catalog, this exercises the full CLI path with zero network calls at all."""
+network beyond the catalog -- no stage here touches the catalog, so this
+exercises the full CLI path with zero network calls at all. Phase 1 adds the
+first real stage (render), so the empty-plan assertion from Phase 0 is now a
+"render needs to run" assertion instead."""
 
 from __future__ import annotations
 
@@ -17,7 +19,7 @@ def test_plan_single_listing_against_fixture_workspace(workspace_root: Path) -> 
     result = runner.invoke(app, ["plan", "take-a-hike", "--root", str(workspace_root)])
     assert result.exit_code == 0, result.output
     assert "take-a-hike" in result.output
-    assert "no stages configured" in result.output
+    assert "+ render" in result.output
 
 
 def test_plan_all_against_fixture_workspace(workspace_root: Path) -> None:
