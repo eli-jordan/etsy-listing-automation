@@ -142,9 +142,13 @@ later. Each traces to a decision.
   (`A7`).
 - **Every `cv2` call passes explicit `interpolation` and `borderMode`.** Relying
   on defaults makes output depend on the library version.
-- **`Workspace.resolve()` rejects paths escaping the root** (`A8`). This is also
-  what keeps the UI's file endpoints safe, so it is a security boundary, not a
-  tidiness rule.
+- **Only `workspace` knows the directory layout.** Everything else asks for
+  `workspace.lock_file(name)` rather than joining
+  `listings/<name>/state.lock.json`. Two rules enforce it: `resolve()` rejects
+  paths escaping the root (`A8`), and the layout accessors reject any name that
+  is not a single path segment. Together they are what keeps the UI's endpoints
+  safe — template names arrive from URLs — so this is a security boundary, not
+  a tidiness rule. A new path-taking CLI option or endpoint goes through them.
 - **Two hash axes, not one.** `input_hash` decides whether to re-render;
   `outputs` (per-file) decides whether to re-upload. Collapsing them breaks the
   library-upgrade case the PRD calls out.
