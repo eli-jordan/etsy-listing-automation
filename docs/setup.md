@@ -82,11 +82,13 @@ It is a form, not engineering work, and Phase 3 is blocked cold without it. The
 implementation plan's standing advice is to file it early; that is now overdue
 rather than early.
 
-### 2.3 Two ids you'll need for `defaults.yaml`
+### 2.3 Shop section and return policy
 
-`shop_section_id` and `return_policy_id`. Create at least one shop section and
-one return policy in Etsy's shop manager. **See "Known gap" below** — getting
-their numeric ids currently needs the Etsy API, which is Phase 3.
+Create at least one shop section and one return policy in Etsy's shop manager.
+You do **not** need their numeric ids yet — `shop_section_id` and
+`return_policy_id` are optional in `defaults.yaml` and are only demanded by the
+Etsy stages in Phase 3, whose setup flow reads them back from the API. Leave
+them out until then.
 
 ---
 
@@ -105,7 +107,7 @@ etsy-listings/
   common-media/
 ```
 
-`defaults.yaml`:
+`defaults.yaml` — everything Phase 2 needs, and nothing it doesn't:
 
 ```yaml
 etsy:
@@ -113,9 +115,8 @@ etsy:
   who_made: i_did
   when_made: made_to_order
   is_supply: false
-  shop_section_id: 4455667
-  return_policy_id: 1122334
   renewal: manual
+  # shop_section_id and return_policy_id are Phase 3; add them then.
 currency: NOK
 preferred_print_provider: Monster Digital
 ```
@@ -186,26 +187,6 @@ Phase 2, before anything talks to a real shop.
 
 ---
 
-## Known gap: `defaults.yaml` demands two Etsy ids Phase 2 doesn't use
-
-`shop_section_id` and `return_policy_id` are **required** fields, but they're
-only consumed by the `etsy_copy` stage in Phase 3, and their numeric values
-normally come back *from* the Etsy API — which needs the app approval that
-hasn't happened yet. As written, you can't load a workspace to do Phase 2
-without ids you can't easily obtain until Phase 3.
-
-Options, in preference order:
-
-1. Make both optional, required only when the `etsy_copy` stage runs. This is
-   the honest fix — a field should be required by the phase that uses it.
-2. Put placeholder values in for now and correct them in Phase 3. Works, but
-   leaves a wrong value in a config file that looks authoritative.
-
-Same applies to `etsy.shop_id`: needed in Phase 3, and obtainable from Printify
-in the meantime, so it is less of a problem.
-
----
-
 ## Checklist
 
 - [ ] Printify account with the Etsy store connected
@@ -213,7 +194,7 @@ in the meantime, so it is less of a problem.
 - [ ] Printify API token generated with the five scopes above
 - [ ] Etsy shop open and able to accept listings
 - [ ] Etsy developer app **submitted** (for Phase 3)
-- [ ] At least one Etsy shop section and one return policy created
+- [ ] At least one Etsy shop section and one return policy created (ids not needed until Phase 3)
 - [ ] Workspace directory created, `defaults.yaml` written
 - [ ] `.env` holding `PRINTIFY_API_TOKEN`, gitignored
 - [ ] One real design at print-area resolution
