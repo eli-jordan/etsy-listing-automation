@@ -4,6 +4,7 @@ render passes themselves stay pure (A7)."""
 
 from __future__ import annotations
 
+import io
 from pathlib import Path
 
 import numpy as np
@@ -34,14 +35,20 @@ def load_template_base(path: Path) -> RGB:
     return array
 
 
-def save_png(image: Image.Image, path: Path) -> None:
+def encode_png(image: Image.Image) -> bytes:
     """Deterministic PNG encode: 8-bit sRGB, no ``pnginfo`` (so no ``tIME`` or
     other timestamp/metadata chunk enters the file), fixed compression level so
     the same pixels always produce the same bytes on a given Pillow version --
     across versions, a changed byte stream is a real output-hash change the PRD
     wants visible (risk 9), not something to paper over here.
     """
-    path.parent.mkdir(parents=True, exist_ok=True)
     if image.mode != "RGB":
         image = image.convert("RGB")
-    image.save(path, format="PNG", optimize=False, compress_level=6, pnginfo=None)
+    buffer = io.BytesIO()
+    image.save(buffer, format="PNG", optimize=False, compress_level=6, pnginfo=None)
+    return buffer.getvalue()
+
+
+def save_png(image: Image.Image, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(encode_png(image))
