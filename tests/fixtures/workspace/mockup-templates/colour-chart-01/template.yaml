@@ -1,0 +1,27 @@
+kind: multiple
+colour_coverage: subset
+shade:
+  enabled: true
+  opacity: 0.6
+  blend: soft-light
+placements:
+- colour: black
+  bounding_box:
+  - x: 144.0
+    y: 126.72
+  - x: 345.59999999999997
+    y: 115.2
+  - x: 355.2
+    y: 391.68
+  - x: 134.4
+    y: 403.2
+- colour: moss
+  bounding_box:
+  - x: 624.0
+    y: 126.72
+  - x: 825.5999999999999
+    y: 115.2
+  - x: 835.2
+    y: 391.68
+  - x: 614.4
+    y: 403.2

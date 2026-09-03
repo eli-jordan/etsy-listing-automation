@@ -2,10 +2,15 @@ from __future__ import annotations
 
 import numpy as np
 
-from etsy_listings.render.config import DisplaceConfig, ShadeConfig, WarpConfig
-from etsy_listings.render.passes import displace, export, shade, warp
+from etsy_listings.render.config import DisplaceConfig, Point, ShadeConfig
+from etsy_listings.render.passes import displace, export, export_many, shade, warp
 
-IDENTITY_QUAD = ((0.0, 0.0), (63.0, 0.0), (63.0, 63.0), (0.0, 63.0))
+IDENTITY_QUAD = (
+    Point(x=0.0, y=0.0),
+    Point(x=63.0, y=0.0),
+    Point(x=63.0, y=63.0),
+    Point(x=0.0, y=63.0),
+)
 
 
 def _solid_rgba(size: int, rgba: tuple[int, int, int, int]) -> np.ndarray:
@@ -19,7 +24,7 @@ def _solid_rgba(size: int, rgba: tuple[int, int, int, int]) -> np.ndarray:
 
 def test_warp_identity_quad_preserves_solid_colour() -> None:
     design = _solid_rgba(64, (200, 50, 50, 255))
-    result = warp(design, WarpConfig(quad=IDENTITY_QUAD), (64, 64))
+    result = warp(design, IDENTITY_QUAD, (64, 64))
     # Interior pixels should be untouched by an (almost) identity transform;
     # only edge pixels may differ due to interpolation/rounding.
     interior = result[10:54, 10:54]
@@ -29,7 +34,7 @@ def test_warp_identity_quad_preserves_solid_colour() -> None:
 
 def test_warp_output_matches_requested_canvas_size() -> None:
     design = _solid_rgba(20, (1, 2, 3, 255))
-    result = warp(design, WarpConfig(quad=IDENTITY_QUAD), (100, 80))
+    result = warp(design, IDENTITY_QUAD, (100, 80))
     assert result.shape == (80, 100, 4)
 
 
@@ -97,3 +102,28 @@ def test_export_returns_rgb_image() -> None:
     result = export(base, layer)
     assert result.mode == "RGB"
     assert result.size == (4, 4)
+
+
+def test_export_many_with_no_layers_leaves_base_unchanged() -> None:
+    base = np.full((8, 8, 3), 50, dtype=np.uint8)
+    result = export_many(base, [])
+    assert np.array_equal(np.array(result), base)
+
+
+def test_export_many_with_one_layer_matches_export() -> None:
+    """The single-layer path through export_many must be byte-identical to
+    export() -- this is what keeps colour-matrix/single kind output
+    (which calls export() directly) unaffected by the multiple-kind addition."""
+    base = np.full((8, 8, 3), 50, dtype=np.uint8)
+    layer = _solid_rgba(8, (255, 0, 0, 180))
+    assert np.array_equal(np.array(export_many(base, [layer])), np.array(export(base, layer)))
+
+
+def test_export_many_folds_layers_in_order() -> None:
+    base = np.full((8, 8, 3), 0, dtype=np.uint8)
+    red = _solid_rgba(8, (255, 0, 0, 255))
+    blue = _solid_rgba(8, (0, 0, 255, 255))
+    result = np.array(export_many(base, [red, blue]))
+    # blue is later in the list, so it's composited last and wins where they overlap
+    assert np.all(result[..., 2] == 255)
+    assert np.all(result[..., 0] == 0)

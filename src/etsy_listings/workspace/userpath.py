@@ -3,7 +3,7 @@
 This exists for exactly one environment: the tool runs as a Windows-native
 Python, but is driven from a Cygwin shell, where the natural thing to type is
 ``--root /home/Admin/etsy-listings``. Windows Python reads that as
-``C:\\home\\Admin\\etsy-listings`` and reports a confusing "no defaults.yaml
+``C:\\home\\Admin\\etsy-listings`` and reports a confusing "no shop.yaml
 found" against a path the user never named.
 
 Only *user-supplied* paths go through here -- CLI options and the

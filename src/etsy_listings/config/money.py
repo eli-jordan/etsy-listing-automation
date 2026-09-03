@@ -77,12 +77,12 @@ def require_currency(money: Money, expected: str, field: str) -> None:
     """Raise an actionable error if ``money`` is not denominated in ``expected``.
 
     Cross-field validation (a listing's prices against the workspace's
-    ``defaults.yaml`` currency) can't live inside :class:`Money` itself, since a
+    ``shop.yaml`` currency) can't live inside :class:`Money` itself, since a
     bare ``Money`` has no notion of what currency the shop expects.
     """
     if money.currency != expected:
         raise MoneyFormatError(
             f"{field}: price is in {money.currency}, but this workspace's "
-            f"currency is {expected} (set in defaults.yaml); every price must be "
+            f"currency is {expected} (set in shop.yaml); every price must be "
             f"written in {expected}"
         )

@@ -93,7 +93,7 @@ rather than early.
 
 Create at least one shop section and one return policy in Etsy's shop manager.
 You do **not** need their numeric ids yet — `shop_section_id` and
-`return_policy_id` are optional in `defaults.yaml` and are only demanded by the
+`return_policy_id` are optional in `shop.yaml` and are only demanded by the
 Etsy stages in Phase 3, whose setup flow reads them back from the API. Leave
 them out until then.
 
@@ -106,7 +106,7 @@ it wherever you keep working data:
 
 ```
 etsy-listings/
-  defaults.yaml
+  shop.yaml
   .env                     # secrets, gitignored
   designs/
   mockup-templates/
@@ -114,7 +114,7 @@ etsy-listings/
   common-media/
 ```
 
-`defaults.yaml` — everything Phase 2 needs, and nothing it doesn't:
+`shop.yaml` — everything Phase 2 needs, and nothing it doesn't:
 
 ```yaml
 etsy:
@@ -202,7 +202,7 @@ Phase 2, before anything talks to a real shop.
 - [ ] Etsy shop open and able to accept listings
 - [ ] Etsy developer app **submitted** (for Phase 3)
 - [ ] At least one Etsy shop section and one return policy created (ids not needed until Phase 3)
-- [ ] Workspace directory created, `defaults.yaml` written
+- [ ] Workspace directory created, `shop.yaml` written
 - [ ] `.env` holding `PRINTIFY_API_TOKEN`, gitignored
 - [ ] One real design at print-area resolution
 - [ ] One calibrated mockup template

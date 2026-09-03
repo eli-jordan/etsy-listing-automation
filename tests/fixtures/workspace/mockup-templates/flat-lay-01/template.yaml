@@ -1,12 +1,13 @@
-warp:
-  quad:
-    - [144.0, 126.72]
-    - [345.59999999999997, 115.2]
-    - [355.2, 391.68]
-    - [134.4, 403.2]
-displace:
-  enabled: false
-  strength: 0.0
+kind: colour-matrix
+bounding_box:
+- x: 144.0
+  y: 126.72
+- x: 345.59999999999997
+  y: 115.2
+- x: 355.2
+  y: 391.68
+- x: 134.4
+  y: 403.2
 shade:
   enabled: true
   opacity: 0.6

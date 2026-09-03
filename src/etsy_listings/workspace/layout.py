@@ -8,7 +8,7 @@ this file is the single place the layout is defined.
 from __future__ import annotations
 
 # Top level
-DEFAULTS_FILE = "defaults.yaml"
+SHOP_FILE = "shop.yaml"
 EXCEPTIONS_FILE = "exceptions.yaml"
 ENV_FILE = ".env"
 AUTH_DIR = ".auth"

@@ -1,4 +1,4 @@
-"""Pure render passes: warp -> displace -> shade -> export. A7.
+"""Pure render passes: warp -> displace -> shade -> export/export_many. A7.
 
 No I/O, no globals, no clock. Every array is 8-bit sRGB; RGBA where alpha
 matters (the design and its warped/displaced/shaded print layer), RGB for the
@@ -10,11 +10,13 @@ greps this module for the ones that aren't.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import cv2
 import numpy as np
 from PIL import Image
 
-from etsy_listings.render.config import DisplaceConfig, ShadeConfig, WarpConfig
+from etsy_listings.render.config import BoundingBox, DisplaceConfig, ShadeConfig
 from etsy_listings.render.types import RGB, RGBA, FloatMap
 
 DISPLACE_MAX_PX = 24.0
@@ -22,8 +24,8 @@ DISPLACE_MAX_PX = 24.0
 tuned by eye in the calibrator, per template."""
 
 
-def warp(design: RGBA, cfg: WarpConfig, output_size: tuple[int, int]) -> RGBA:
-    """Homography from the design's own rectangle onto ``cfg.quad``.
+def warp(design: RGBA, bounding_box: BoundingBox, output_size: tuple[int, int]) -> RGBA:
+    """Homography from the design's own rectangle onto ``bounding_box``.
 
     ``output_size`` is ``(width, height)`` of the template canvas the design is
     being placed onto -- the warped result is canvas-sized so later passes never
@@ -31,7 +33,7 @@ def warp(design: RGBA, cfg: WarpConfig, output_size: tuple[int, int]) -> RGBA:
     """
     h, w = design.shape[:2]
     src = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=np.float32)
-    dst = np.array(cfg.quad, dtype=np.float32)
+    dst = np.array([[p.x, p.y] for p in bounding_box], dtype=np.float32)
     matrix = cv2.getPerspectiveTransform(src, dst)
     result = cv2.warpPerspective(
         design,
@@ -118,5 +120,21 @@ def export(base: RGB, print_layer: RGBA) -> Image.Image:
     alpha = print_layer[..., 3:4].astype(np.float32) / 255.0
 
     composite = base_f * (1 - alpha) + print_rgb * alpha
+    composite_u8 = np.clip(composite + 0.5, 0, 255).astype(np.uint8)
+    return Image.fromarray(composite_u8, mode="RGB")
+
+
+def export_many(base: RGB, print_layers: Sequence[RGBA]) -> Image.Image:
+    """Alpha-composite several canvas-sized RGBA layers over ``base`` in list
+    order (``multiple``-kind scenes only -- a separate function rather than a
+    generalisation of :func:`export`, so the single-layer path used by
+    ``colour-matrix``/``single`` kinds, and every golden that exercises it,
+    stays untouched). Same straight-alpha, float32, round-not-truncate
+    arithmetic as :func:`export`, folded across every layer in turn."""
+    composite = base[..., :3].astype(np.float32)
+    for layer in print_layers:
+        layer_rgb = layer[..., :3].astype(np.float32)
+        alpha = layer[..., 3:4].astype(np.float32) / 255.0
+        composite = composite * (1 - alpha) + layer_rgb * alpha
     composite_u8 = np.clip(composite + 0.5, 0, 255).astype(np.uint8)
     return Image.fromarray(composite_u8, mode="RGB")

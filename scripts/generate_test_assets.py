@@ -4,8 +4,13 @@ because no real design files or mockup photography exist on this machine:
 - A grid/ruler test design (PRD: "a toggle switches to a grid/ruler target,
   which makes warp and displacement errors more obvious than artwork does").
   Used both as the calibrator's bundled test design and as golden-test input.
-- A tiny two-colour synthetic mockup template set ("synthetic-tee") standing
-  in for real garment photography in golden and behaviour tests.
+- Dark-ink and light-ink bundled test designs, so a mis-resolved artwork
+  (light-ink design on a light garment, say) is visually obvious in the
+  calibrator rather than only described in a diff.
+- Tiny synthetic mockup template sets standing in for real garment
+  photography in golden and behaviour tests -- ``colour-matrix`` kind
+  (``synthetic-tee``, ``flat-lay-01``) and ``multiple`` kind
+  (``colour-chart-01``).
 
 Run with ``uv run python scripts/generate_test_assets.py``. Output is
 committed -- these are deterministic generators, but re-running them should
@@ -18,11 +23,13 @@ from __future__ import annotations
 from pathlib import Path
 
 import numpy as np
+import yaml
 from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).parent.parent
 DESIGN_SIZE = (360, 432)  # matches the fixture profile's 5:6 print-area aspect
 TEMPLATE_SIZE = (480, 576)
+CHART_SIZE = (960, 576)  # two garments side by side
 
 # Corner markers, distinct colours, to make orientation obvious after a warp.
 CORNER_COLOURS = {
@@ -33,21 +40,30 @@ CORNER_COLOURS = {
 }
 
 
-def make_grid_target(size: tuple[int, int]) -> Image.Image:
+def make_grid_target(
+    size: tuple[int, int], *, line_rgb: tuple[int, int, int] | None = None
+) -> Image.Image:
+    """``line_rgb`` swaps the grid/outline ink colour: default (near-black) for
+    the general-purpose target, dark or light for the artwork-tone targets."""
     w, h = size
     image = Image.new("RGBA", size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
 
-    draw.rectangle([0, 0, w - 1, h - 1], outline=(20, 20, 20, 255), width=4)
+    outline = (*line_rgb, 255) if line_rgb else (20, 20, 20, 255)
+    draw.rectangle([0, 0, w - 1, h - 1], outline=outline, width=4)
 
     step = 24
     for x in range(step, w, step):
         major = (x % (step * 5)) == 0
-        colour = (60, 60, 60, 200) if major else (150, 150, 150, 120)
+        colour = (
+            (*line_rgb, 200) if line_rgb else ((60, 60, 60, 200) if major else (150, 150, 150, 120))
+        )
         draw.line([(x, 0), (x, h)], fill=colour, width=2 if major else 1)
     for y in range(step, h, step):
         major = (y % (step * 5)) == 0
-        colour = (60, 60, 60, 200) if major else (150, 150, 150, 120)
+        colour = (
+            (*line_rgb, 200) if line_rgb else ((60, 60, 60, 200) if major else (150, 150, 150, 120))
+        )
         draw.line([(0, y), (w, y)], fill=colour, width=2 if major else 1)
 
     marker = 28
@@ -57,9 +73,11 @@ def make_grid_target(size: tuple[int, int]) -> Image.Image:
     draw.rectangle([0, h - marker, marker, h], fill=CORNER_COLOURS["bottom-left"])
 
     cx, cy = w // 2, h // 2
-    draw.ellipse([cx - 40, cy - 40, cx + 40, cy + 40], outline=(180, 30, 120, 255), width=3)
-    draw.line([(cx, 0), (cx, h)], fill=(180, 30, 120, 90), width=1)
-    draw.line([(0, cy), (w, cy)], fill=(180, 30, 120, 90), width=1)
+    ring = (*line_rgb, 255) if line_rgb else (180, 30, 120, 255)
+    draw.ellipse([cx - 40, cy - 40, cx + 40, cy + 40], outline=ring, width=3)
+    if not line_rgb:
+        draw.line([(cx, 0), (cx, h)], fill=(180, 30, 120, 90), width=1)
+        draw.line([(0, cy), (w, cy)], fill=(180, 30, 120, 90), width=1)
 
     return image
 
@@ -94,15 +112,18 @@ def make_template_base(size: tuple[int, int], garment_rgb: tuple[int, int, int])
     return Image.fromarray(garment, mode="RGB")
 
 
-def print_area_quad(size: tuple[int, int]) -> list[list[float]]:
-    """A quad noticeably inset and slightly non-rectangular (a hair of
-    perspective skew), so warp tests exercise more than an axis-aligned resize."""
+def print_area_box(size: tuple[int, int], *, x_offset: float = 0.0) -> list[dict[str, float]]:
+    """A box noticeably inset and slightly non-rectangular (a hair of
+    perspective skew), so warp tests exercise more than an axis-aligned
+    resize. ``x_offset`` (0..1 of width) lets a chart scene place several
+    boxes side by side without overlapping."""
     w, h = size
+    ox = w * x_offset
     return [
-        [w * 0.30, h * 0.22],
-        [w * 0.72, h * 0.20],
-        [w * 0.74, h * 0.68],
-        [w * 0.28, h * 0.70],
+        {"x": ox + w * 0.30, "y": h * 0.22},
+        {"x": ox + w * 0.72, "y": h * 0.20},
+        {"x": ox + w * 0.74, "y": h * 0.68},
+        {"x": ox + w * 0.28, "y": h * 0.70},
     ]
 
 
@@ -112,21 +133,38 @@ def main() -> None:
     grid = make_grid_target(DESIGN_SIZE)
     grid.save(design_dir / "grid-target.png", format="PNG", optimize=False, compress_level=6)
 
+    on_light = make_grid_target(DESIGN_SIZE, line_rgb=(15, 15, 15))  # dark ink, for light garments
+    on_dark = make_grid_target(
+        DESIGN_SIZE, line_rgb=(245, 245, 245)
+    )  # light ink, for dark garments
+
     bundled_dir = REPO_ROOT / "src" / "etsy_listings" / "ui" / "api" / "static"
     bundled_dir.mkdir(parents=True, exist_ok=True)
     grid.save(
         bundled_dir / "bundled-test-design.png", format="PNG", optimize=False, compress_level=6
     )
+    on_light.save(
+        bundled_dir / "bundled-test-design-on-light.png",
+        format="PNG",
+        optimize=False,
+        compress_level=6,
+    )
+    on_dark.save(
+        bundled_dir / "bundled-test-design-on-dark.png",
+        format="PNG",
+        optimize=False,
+        compress_level=6,
+    )
 
-    _write_template_set(
+    _write_colour_matrix_set(
         REPO_ROOT / "tests" / "fixtures" / "mockup-templates" / "synthetic-tee",
         {"black": (35, 35, 38), "white": (245, 245, 240)},
     )
 
-    # Matches tests/fixtures/workspace's profile (mockup_template: flat-lay-01)
-    # and listing (colors: [black, blue-jean, ivory, moss]) -- lets the render
+    # Matches tests/fixtures/workspace's profile (templates: [flat-lay-01]) and
+    # listing (colors: [black, blue-jean, ivory, moss]) -- lets the render
     # stage's behaviour tests exercise a full listing end to end.
-    _write_template_set(
+    _write_colour_matrix_set(
         REPO_ROOT / "tests" / "fixtures" / "workspace" / "mockup-templates" / "flat-lay-01",
         {
             "black": (35, 35, 38),
@@ -136,28 +174,65 @@ def main() -> None:
         },
     )
 
+    _write_multiple_set(
+        REPO_ROOT / "tests" / "fixtures" / "workspace" / "mockup-templates" / "colour-chart-01",
+        {"black": (35, 35, 38), "moss": (100, 110, 70)},
+    )
+
     design_dest = REPO_ROOT / "tests" / "fixtures" / "workspace" / "designs" / "take-a-hike.png"
     design_dest.parent.mkdir(parents=True, exist_ok=True)
     grid.save(design_dest, format="PNG", optimize=False, compress_level=6)
 
     print(f"wrote {design_dir / 'grid-target.png'}")
     print(f"wrote {bundled_dir / 'bundled-test-design.png'}")
+    print(f"wrote {bundled_dir / 'bundled-test-design-on-light.png'}")
+    print(f"wrote {bundled_dir / 'bundled-test-design-on-dark.png'}")
     print(f"wrote {design_dest}")
 
 
-def _write_template_set(template_dir: Path, colours: dict[str, tuple[int, int, int]]) -> None:
+def _write_colour_matrix_set(template_dir: Path, colours: dict[str, tuple[int, int, int]]) -> None:
     template_dir.mkdir(parents=True, exist_ok=True)
     for name, rgb in colours.items():
         base = make_template_base(TEMPLATE_SIZE, rgb)
         base.save(template_dir / f"{name}.png", format="PNG", optimize=False, compress_level=6)
 
-    quad = print_area_quad(TEMPLATE_SIZE)
-    quad_yaml = "\n".join(f"    - [{p[0]}, {p[1]}]" for p in quad)
+    config = {
+        "kind": "colour-matrix",
+        "bounding_box": print_area_box(TEMPLATE_SIZE),
+        "shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"},
+    }
     (template_dir / "template.yaml").write_text(
-        "warp:\n  quad:\n" + quad_yaml + "\n"
-        "displace:\n  enabled: false\n  strength: 0.0\n"
-        "shade:\n  enabled: true\n  opacity: 0.6\n  blend: soft-light\n",
-        encoding="utf-8",
+        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
+    )
+    print(f"wrote {template_dir} ({', '.join(colours)}, template.yaml)")
+
+
+def _write_multiple_set(template_dir: Path, colours: dict[str, tuple[int, int, int]]) -> None:
+    """One photo, several garments side by side -- ``multiple`` kind."""
+    template_dir.mkdir(parents=True, exist_ok=True)
+    w, h = CHART_SIZE
+    scene = np.full((h, w, 3), 235, dtype=np.uint8)
+    names = list(colours)
+    slot_w = w // len(names)
+    placements = []
+    for i, name in enumerate(names):
+        rgb = colours[name]
+        slot = make_template_base((slot_w, h), rgb)
+        scene[:, i * slot_w : (i + 1) * slot_w] = np.asarray(slot)
+        placements.append({"colour": name, "bounding_box": print_area_box((slot_w, h), x_offset=i)})
+
+    Image.fromarray(scene, mode="RGB").save(
+        template_dir / "scene.png", format="PNG", optimize=False, compress_level=6
+    )
+
+    config = {
+        "kind": "multiple",
+        "colour_coverage": "subset",
+        "shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"},
+        "placements": placements,
+    }
+    (template_dir / "template.yaml").write_text(
+        yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
     )
     print(f"wrote {template_dir} ({', '.join(colours)}, template.yaml)")
 

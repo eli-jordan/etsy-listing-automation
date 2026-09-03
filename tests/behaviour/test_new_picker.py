@@ -87,7 +87,6 @@ def test_build_profile_reads_print_area_from_placeholder() -> None:
         provider_title=PROVIDER.title,
         placeholder="front",
         variant_set=VARIANT_SET,
-        mockup_template="flat-lay-01",
     )
     assert profile.print_area.width == 4500
     assert profile.print_area.height == 5400
@@ -101,7 +100,6 @@ def test_build_profile_raises_actionable_error_for_missing_placeholder() -> None
             provider_title=PROVIDER.title,
             placeholder="back",
             variant_set=VARIANT_SET,
-            mockup_template="flat-lay-01",
         )
 
 
@@ -116,7 +114,6 @@ def test_write_profile_if_absent_writes_once_then_reuses(workspace_root: Path) -
         provider_title=PROVIDER.title,
         placeholder="front",
         variant_set=VARIANT_SET,
-        mockup_template="flat-lay-01",
     )
     slug = profile_slug_for(TSHIRT)
 
@@ -132,13 +129,17 @@ def test_build_listing_stub_has_one_price_per_size_and_one_mockup_per_colour() -
     data = build_listing_stub(
         profile_slug="unisex-garment-dyed-heavy-weight-tee",
         design_ref="../../designs/take-a-hike.png",
+        template="flat-lay-01",
         colours=["black", "blue-jean"],
         sizes=["S", "M"],
         base_price="0 NOK",
         brief="",
     )
     assert data["prices"] == {"S": "0 NOK", "M": "0 NOK"}
-    assert data["media"] == [{"mockup": "black"}, {"mockup": "blue-jean"}]
+    assert data["media"] == [
+        {"template": "flat-lay-01", "colour": "black"},
+        {"template": "flat-lay-01", "colour": "blue-jean"},
+    ]
     assert data["etsy"]["title"] == "<generate>"
 
 
@@ -146,6 +147,7 @@ def test_validate_listing_stub_rejects_currency_mismatch() -> None:
     data = build_listing_stub(
         profile_slug="p",
         design_ref="../../designs/x.png",
+        template="flat-lay-01",
         colours=["black"],
         sizes=["S"],
         base_price="0 USD",
@@ -160,6 +162,7 @@ def test_write_listing_refuses_to_overwrite_an_existing_listing(workspace_root: 
     data = build_listing_stub(
         profile_slug="comfort-colors-1717",
         design_ref="../../designs/take-a-hike.png",
+        template="flat-lay-01",
         colours=["black"],
         sizes=["S"],
         base_price="0 NOK",

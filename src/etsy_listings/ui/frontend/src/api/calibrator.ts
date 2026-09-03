@@ -1,26 +1,22 @@
 import { api } from "./client";
-import type { Quad, RenderConfigState, TemplateSummary } from "../types";
+import type {
+  BoundingBox,
+  BundledDesign,
+  DisplaceConfig,
+  Placement,
+  ShadeConfig,
+  TemplateConfigState,
+  TemplateKind,
+  TemplateSummary,
+  UploadResponse,
+} from "../types";
 
 /**
  * The calibrator's whole HTTP surface. Everything above this file works in
  * domain types and never touches fetch, URLs or the generated schema.
- *
- * It also re-narrows the quad. The generated client models what survives JSON
- * serialisation, so the four-corner tuple arrives typed as `number[][]` --
- * checking the shape here, once, is what lets the rest of the app rely on
- * "exactly four corners" instead of re-checking or casting at every use.
  */
 
 export class CalibratorApiError extends Error {}
-
-function toQuad(points: number[][]): Quad {
-  if (points.length !== 4 || points.some((p) => p.length !== 2)) {
-    throw new CalibratorApiError(
-      `expected a quad of 4 [x, y] corners, got ${JSON.stringify(points)}`,
-    );
-  }
-  return points.map(([x, y]) => [x, y] as [number, number]) as Quad;
-}
 
 export async function listTemplates(): Promise<TemplateSummary[]> {
   const { data, error } = await api.GET("/api/templates");
@@ -28,39 +24,77 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
   return data;
 }
 
-/** Returns null when the template has no template.yaml yet (a fresh upload). */
-export async function getTemplateConfig(name: string): Promise<RenderConfigState | null> {
+/**
+ * Returns null when the template has no template.yaml yet (a fresh upload).
+ *
+ * The cast is because openapi-fetch widens `bounding_box`'s 4-tuple to a
+ * plain array when inferring the response type of a 3-way discriminated
+ * union -- the server still enforces exactly 4 points either way.
+ */
+export async function getTemplateConfig(name: string): Promise<TemplateConfigState | null> {
   const { data, error } = await api.GET("/api/templates/{name}/config", {
     params: { path: { name } },
   });
   if (error) return null;
-  return { ...data, warp: { quad: toQuad(data.warp.quad) } };
+  return data as unknown as TemplateConfigState;
 }
 
-export async function saveTemplateConfig(name: string, config: RenderConfigState): Promise<void> {
-  const { error } = await api.PUT("/api/templates/{name}/config", {
+export async function saveTemplateConfig(
+  name: string,
+  config: TemplateConfigState,
+): Promise<TemplateConfigState> {
+  const { data, error } = await api.PUT("/api/templates/{name}/config", {
     params: { path: { name } },
     body: config,
   });
   if (error) throw new CalibratorApiError("could not save template.yaml");
+  return data as unknown as TemplateConfigState;
 }
 
 /**
- * Renders a preview through the real server-side pipeline. Returns an object
- * URL the caller owns and must revoke.
+ * Multipart upload with a repeated `files` field -- built by hand rather than
+ * through the generated client, since openapi-fetch's multipart support
+ * doesn't cover repeated array fields cleanly.
+ */
+export async function uploadTemplate(
+  name: string,
+  kind: TemplateKind,
+  files: File[],
+): Promise<UploadResponse> {
+  const form = new FormData();
+  for (const file of files) form.append("files", file);
+
+  const response = await fetch(`/api/templates?${new URLSearchParams({ name, kind })}`, {
+    method: "POST",
+    body: form,
+  });
+  if (!response.ok) throw new CalibratorApiError(`upload failed for ${name}`);
+  return (await response.json()) as UploadResponse;
+}
+
+type PreviewBody =
+  | { colour: string; bounding_box: BoundingBox; displace: DisplaceConfig; shade: ShadeConfig }
+  | { placements: Placement[]; displace: DisplaceConfig; shade: ShadeConfig }
+  | { bounding_box: BoundingBox; displace: DisplaceConfig; shade: ShadeConfig };
+
+/**
+ * Renders a preview through the real server-side pipeline. The body shape
+ * must match the target template's actual kind -- the endpoint rejects a
+ * mismatch rather than guessing. Returns an object URL the caller owns and
+ * must revoke.
  */
 export async function renderPreview(
   name: string,
-  colour: string,
-  config: RenderConfigState,
+  body: PreviewBody,
+  design: BundledDesign = "bundled-grid",
 ): Promise<string> {
   const response = await fetch(`/api/templates/${encodeURIComponent(name)}/preview`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ colour, ...config }),
+    body: JSON.stringify({ ...body, design }),
   });
   if (!response.ok) {
-    throw new CalibratorApiError(`preview failed for ${colour}`);
+    throw new CalibratorApiError(`preview failed for ${name}`);
   }
   return URL.createObjectURL(await response.blob());
 }

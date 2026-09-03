@@ -131,7 +131,7 @@ Per `A1`–`A10`. Full detail in the plan; the shape:
 ```
 src/etsy_listings/
   cli/          Typer app, one module per command        [plan/apply/new/ui done]
-  workspace/    root discovery (walk up for defaults.yaml), path resolution  [done]
+  workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
   catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, stages/
@@ -179,8 +179,20 @@ later. Each traces to a decision.
 - **Every price carries an explicit currency.** Bare numbers are rejected at
   validation. Revenue is NOK, Printify's costs are USD; a bare number is a bug
   waiting to be a refund (PRD 24).
-- **Mockup filename = slugified Printify colour name.** Convention, not a mapping
-  table. A sparse `exceptions.yaml` handles what will not slugify (PRD 7a).
+- **`colour-matrix`-kind mockup filename = slugified Printify colour name.**
+  Convention, not a mapping table. A sparse `exceptions.yaml` handles what
+  will not slugify (PRD 7a). `multiple`- and `single`-kind templates use a
+  fixed `scene.png` instead — no per-colour photo to name (PRD 28).
+- **A template is exactly one of three kinds — never a mix.** `kind:
+  colour-matrix | multiple | single`, a discriminated union (`A11`). **No
+  profile-level registry of templates** — `Profile` carries no `templates`
+  field; a template lives purely in `mockup-templates/{name}/`, and any
+  listing may reference any of them. A listing's `media:` always names
+  `{template, colour?}` explicitly — there is no default template and no
+  bare-colour shorthand (`A13`, PRD 29).
+- **Rendering is driven purely by `media`.** A scene renders only if some
+  `media` entry references it — `listing.colors` drives which Printify
+  variants sell (Phase 2), not which photos get rendered (PRD 31).
 - **`apply` is strictly sequential; only `plan`'s read-only live fetches fan out**
   over a thread pool (`A3`). Never parallelise writes.
 - **Secrets never enter the repo.** Tokens in `.auth/`, keys in `.env`, both
@@ -188,23 +200,25 @@ later. Each traces to a decision.
 
 ## Workspace vs repo
 
-This repository is the **tool**. The data — `defaults.yaml`, `designs/`,
+This repository is the **tool**. The data — `shop.yaml`, `designs/`,
 `listings/`, `mockup-templates/`, `.cache/` — lives in a separate directory the
-user owns, found by walking up from cwd for `defaults.yaml` (`A8`). Never write
+user owns, found by walking up from cwd for `shop.yaml` (`A8`). Never write
 user data into this repo, and never assume cwd is the workspace root.
 
 ## Testing
 
-Six layers, each with a job (`A4`, plus `browser` added in Phase 1):
+Six pytest layers, each with a job (`A4`, plus `browser` added in Phase 1),
+plus a separate frontend unit layer:
 
 | Layer | Job |
 |---|---|
 | Unit | slugification, `Money`, hash canonicalisation, path resolution, limiter maths |
 | Golden | per-pass renders on a grid target; end-to-end composites per template |
 | Behaviour | in-memory fake clients: idempotency, drift, resume, polling, batch |
-| Browser | `-m browser`, playwright over the built SPA served by FastAPI: the calibrator's drag → render → save loop |
+| Browser | `-m browser`, playwright over the built SPA served by FastAPI: one full drag → render → save loop per template kind |
 | Contract | cassette replay through real httpx: payload shape, auth, error decoding |
 | E2E | `-m e2e`, skipped by default, env-gated at a throwaway shop |
+| Frontend unit (Vitest) | `ui/frontend/`, not part of `pytest` — component tests for the calibrator's editors, panels and API client; `npm run test` / `test:coverage` |
 
 The browser layer runs as part of a normal `pytest` (unlike `e2e`) but skips
 itself cleanly when playwright, its chromium build, or `ui/frontend/dist` is
@@ -235,7 +249,7 @@ a default run. It also doubles as the cassette recorder.
 **fails under 80%** (`fail_under` in `pyproject.toml`). Line coverage is not
 enough: a half-tested `if` is the shape most regressions hide in.
 
-It currently sits at ~85%, so there is real headroom. If a change drops it
+It currently sits at ~84%, so there is real headroom. If a change drops it
 below the floor, that change shipped untested logic — write the test. Do not
 lower the threshold, and do not add `# pragma: no cover` to make a number go
 up. The one legitimate use of an exclusion is code that genuinely cannot be
@@ -247,13 +261,20 @@ Coverage is deliberately **not** in `addopts`, so running one file
 going to meet. The gate lives in the check script, which is what runs before a
 commit.
 
+**The frontend carries a matching gate** — Vitest + the v8 coverage provider,
+same 80%-branch floor, same "not in the default `npm run test`" reasoning
+(`npm run test:coverage` is the enforced one). `./scripts/check.sh` runs both
+gates and skips the frontend one cleanly (not a failure) when `npm` isn't on
+`PATH`, so a Python-only contributor's `check.sh` run isn't blocked by a
+toolchain they don't have.
+
 ### Running the suite
 
 All of these run in cygwin zsh (see Environment).
 
 ```
 uv sync                              # install deps + create .venv
-./scripts/check.sh                   # format + lint + typecheck + test + coverage gate
+./scripts/check.sh                   # format + lint + typecheck + test + coverage gate, Python and frontend
 uv run pytest --cov                  # coverage on demand, enforcing the 80% floor
 uv run pytest --cov --cov-report=html  # then open htmlcov/index.html
 uv run pytest                        # full suite (excludes -m e2e by default)
@@ -269,9 +290,10 @@ uv run mypy src                      # strict type check
 uv run ruff check . / ruff format .  # lint / format
 ```
 
-Frontend (`src/etsy_listings/ui/frontend/`): `npm run dev|build|typecheck|lint|format`.
-See the README's "The calibrator" section for the full loop, including
-regenerating the typed API client after an endpoint change.
+Frontend (`src/etsy_listings/ui/frontend/`):
+`npm run dev|build|typecheck|lint|format|test|test:coverage`. See the
+README's "The calibrator" section for the full loop, including regenerating
+the typed API client after an endpoint change.
 
 ## Commands
 

@@ -1,4 +1,4 @@
-"""``defaults.yaml``: shop-wide configuration."""
+"""``shop.yaml``: shop-wide configuration."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 
 
 class MissingEtsyDefaultError(ValueError):
-    """A ``defaults.yaml`` field that only some phases need, asked for by a
+    """A ``shop.yaml`` field that only some phases need, asked for by a
     phase that needs it.
 
     Raised at the point of use rather than at load, so a workspace can be set
@@ -22,7 +22,7 @@ class MissingEtsyDefaultError(ValueError):
     def __init__(self, field: str, needed_to: str, how_to_find: str) -> None:
         self.field = field
         super().__init__(
-            f"defaults.yaml: etsy.{field} is not set, and is required to {needed_to}. {how_to_find}"
+            f"shop.yaml: etsy.{field} is not set, and is required to {needed_to}. {how_to_find}"
         )
 
 

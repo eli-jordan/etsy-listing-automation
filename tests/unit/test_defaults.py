@@ -20,7 +20,7 @@ MINIMAL: dict[str, object] = {
 
 
 def _write(tmp_path: Path, data: dict[str, object]) -> Path:
-    path = tmp_path / "defaults.yaml"
+    path = tmp_path / "shop.yaml"
     path.write_text(yaml.safe_dump(data), encoding="utf-8")
     return path
 
@@ -63,7 +63,7 @@ def test_requiring_an_unset_id_names_the_field_and_how_to_get_it(accessor: str, 
 
     message = str(exc_info.value)
     assert f"etsy.{field}" in message
-    assert "defaults.yaml" in message
+    assert "shop.yaml" in message
     assert "Etsy" in message  # says where the value comes from
 
 

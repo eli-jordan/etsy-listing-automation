@@ -18,6 +18,117 @@
         "title": "Body_upload_template_api_templates_post",
         "type": "object"
       },
+      "ColourMatrixPreviewRequest": {
+        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET .../config`` response (which includes ``kind``) into the body.",
+        "properties": {
+          "bounding_box": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              }
+            ],
+            "title": "Bounding Box",
+            "type": "array"
+          },
+          "colour": {
+            "title": "Colour",
+            "type": "string"
+          },
+          "design": {
+            "default": "bundled-grid",
+            "enum": [
+              "bundled-grid",
+              "bundled-on-light",
+              "bundled-on-dark"
+            ],
+            "title": "Design",
+            "type": "string"
+          },
+          "displace": {
+            "$ref": "#/components/schemas/DisplaceConfig",
+            "default": {
+              "enabled": false,
+              "strength": 0.0
+            }
+          },
+          "shade": {
+            "$ref": "#/components/schemas/ShadeConfig",
+            "default": {
+              "blend": "soft-light",
+              "enabled": true,
+              "opacity": 0.6
+            }
+          }
+        },
+        "required": [
+          "colour",
+          "bounding_box"
+        ],
+        "title": "ColourMatrixPreviewRequest",
+        "type": "object"
+      },
+      "ColourMatrixTemplate": {
+        "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour (PRD 7a) -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
+        "properties": {
+          "bounding_box": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              }
+            ],
+            "title": "Bounding Box",
+            "type": "array"
+          },
+          "displace": {
+            "$ref": "#/components/schemas/DisplaceConfig",
+            "default": {
+              "enabled": false,
+              "strength": 0.0
+            }
+          },
+          "kind": {
+            "const": "colour-matrix",
+            "default": "colour-matrix",
+            "title": "Kind",
+            "type": "string"
+          },
+          "shade": {
+            "$ref": "#/components/schemas/ShadeConfig",
+            "default": {
+              "blend": "soft-light",
+              "enabled": true,
+              "opacity": 0.6
+            }
+          }
+        },
+        "required": [
+          "bounding_box"
+        ],
+        "title": "ColourMatrixTemplate",
+        "type": "object"
+      },
       "DisplaceConfig": {
         "description": "PRD: implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
@@ -48,15 +159,15 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
-      "PreviewRequest": {
+      "MultiplePreviewRequest": {
         "properties": {
-          "colour": {
-            "title": "Colour",
-            "type": "string"
-          },
           "design": {
-            "const": "bundled-grid",
             "default": "bundled-grid",
+            "enum": [
+              "bundled-grid",
+              "bundled-on-light",
+              "bundled-on-dark"
+            ],
             "title": "Design",
             "type": "string"
           },
@@ -67,6 +178,13 @@
               "strength": 0.0
             }
           },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/Placement"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
           "shade": {
             "$ref": "#/components/schemas/ShadeConfig",
             "default": {
@@ -74,20 +192,127 @@
               "enabled": true,
               "opacity": 0.6
             }
+          }
+        },
+        "required": [
+          "placements"
+        ],
+        "title": "MultiplePreviewRequest",
+        "type": "object"
+      },
+      "MultipleTemplate": {
+        "description": "Several garments in one photo. ``displace``/``shade`` are scene-level\nonly -- one photo, one lighting pass; a placement needing different\nrendering treatment belongs in its own template instead.",
+        "properties": {
+          "colour_coverage": {
+            "default": "exact",
+            "enum": [
+              "exact",
+              "subset"
+            ],
+            "title": "Colour Coverage",
+            "type": "string"
           },
-          "warp": {
-            "$ref": "#/components/schemas/WarpConfig"
+          "displace": {
+            "$ref": "#/components/schemas/DisplaceConfig",
+            "default": {
+              "enabled": false,
+              "strength": 0.0
+            }
+          },
+          "kind": {
+            "const": "multiple",
+            "default": "multiple",
+            "title": "Kind",
+            "type": "string"
+          },
+          "placements": {
+            "items": {
+              "$ref": "#/components/schemas/Placement"
+            },
+            "title": "Placements",
+            "type": "array"
+          },
+          "shade": {
+            "$ref": "#/components/schemas/ShadeConfig",
+            "default": {
+              "blend": "soft-light",
+              "enabled": true,
+              "opacity": 0.6
+            }
+          }
+        },
+        "required": [
+          "placements"
+        ],
+        "title": "MultipleTemplate",
+        "type": "object"
+      },
+      "Placement": {
+        "description": "One garment within a ``multiple``-kind scene.",
+        "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "bounding_box": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              }
+            ],
+            "title": "Bounding Box",
+            "type": "array"
+          },
+          "colour": {
+            "title": "Colour",
+            "type": "string"
           }
         },
         "required": [
           "colour",
-          "warp"
+          "bounding_box"
         ],
-        "title": "PreviewRequest",
+        "title": "Placement",
+        "type": "object"
+      },
+      "Point": {
+        "properties": {
+          "x": {
+            "title": "X",
+            "type": "number"
+          },
+          "y": {
+            "title": "Y",
+            "type": "number"
+          }
+        },
+        "required": [
+          "x",
+          "y"
+        ],
+        "title": "Point",
         "type": "object"
       },
       "ShadeConfig": {
-        "description": "PRD: on by default. ``multiply`` crushes prints on dark garments, so\n``soft-light`` or a mid-grey pivot is used for those instead.",
+        "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
         "properties": {
           "blend": {
             "default": "soft-light",
@@ -113,28 +338,38 @@
         "title": "ShadeConfig",
         "type": "object"
       },
-      "TemplateConfigResponse": {
+      "SinglePreviewRequest": {
         "properties": {
-          "displace": {
-            "$ref": "#/components/schemas/DisplaceConfig"
+          "bounding_box": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              }
+            ],
+            "title": "Bounding Box",
+            "type": "array"
           },
-          "shade": {
-            "$ref": "#/components/schemas/ShadeConfig"
+          "design": {
+            "default": "bundled-grid",
+            "enum": [
+              "bundled-grid",
+              "bundled-on-light",
+              "bundled-on-dark"
+            ],
+            "title": "Design",
+            "type": "string"
           },
-          "warp": {
-            "$ref": "#/components/schemas/WarpConfig"
-          }
-        },
-        "required": [
-          "warp",
-          "displace",
-          "shade"
-        ],
-        "title": "TemplateConfigResponse",
-        "type": "object"
-      },
-      "TemplateConfigUpdate": {
-        "properties": {
           "displace": {
             "$ref": "#/components/schemas/DisplaceConfig",
             "default": {
@@ -149,15 +384,85 @@
               "enabled": true,
               "opacity": 0.6
             }
-          },
-          "warp": {
-            "$ref": "#/components/schemas/WarpConfig"
           }
         },
         "required": [
-          "warp"
+          "bounding_box"
         ],
-        "title": "TemplateConfigUpdate",
+        "title": "SinglePreviewRequest",
+        "type": "object"
+      },
+      "SingleTemplate": {
+        "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
+        "properties": {
+          "artwork": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Artwork"
+          },
+          "bounding_box": {
+            "maxItems": 4,
+            "minItems": 4,
+            "prefixItems": [
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              },
+              {
+                "$ref": "#/components/schemas/Point"
+              }
+            ],
+            "title": "Bounding Box",
+            "type": "array"
+          },
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
+          "displace": {
+            "$ref": "#/components/schemas/DisplaceConfig",
+            "default": {
+              "enabled": false,
+              "strength": 0.0
+            }
+          },
+          "kind": {
+            "const": "single",
+            "default": "single",
+            "title": "Kind",
+            "type": "string"
+          },
+          "shade": {
+            "$ref": "#/components/schemas/ShadeConfig",
+            "default": {
+              "blend": "soft-light",
+              "enabled": true,
+              "opacity": 0.6
+            }
+          }
+        },
+        "required": [
+          "bounding_box"
+        ],
+        "title": "SingleTemplate",
         "type": "object"
       },
       "TemplateSummary": {
@@ -173,6 +478,22 @@
             "title": "Has Config",
             "type": "boolean"
           },
+          "kind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "colour-matrix",
+                  "multiple",
+                  "single"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Kind"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -180,6 +501,7 @@
         },
         "required": [
           "name",
+          "kind",
           "colours",
           "has_config"
         ],
@@ -195,6 +517,15 @@
             "title": "Colours",
             "type": "array"
           },
+          "kind": {
+            "enum": [
+              "colour-matrix",
+              "multiple",
+              "single"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -202,6 +533,7 @@
         },
         "required": [
           "name",
+          "kind",
           "colours"
         ],
         "title": "UploadResponse",
@@ -245,75 +577,6 @@
           "type"
         ],
         "title": "ValidationError",
-        "type": "object"
-      },
-      "WarpConfig": {
-        "properties": {
-          "quad": {
-            "maxItems": 4,
-            "minItems": 4,
-            "prefixItems": [
-              {
-                "maxItems": 2,
-                "minItems": 2,
-                "prefixItems": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "type": "array"
-              },
-              {
-                "maxItems": 2,
-                "minItems": 2,
-                "prefixItems": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "type": "array"
-              },
-              {
-                "maxItems": 2,
-                "minItems": 2,
-                "prefixItems": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "type": "array"
-              },
-              {
-                "maxItems": 2,
-                "minItems": 2,
-                "prefixItems": [
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "number"
-                  }
-                ],
-                "type": "array"
-              }
-            ],
-            "title": "Quad",
-            "type": "array"
-          }
-        },
-        "required": [
-          "quad"
-        ],
-        "title": "WarpConfig",
         "type": "object"
       }
     }
@@ -381,6 +644,20 @@
               "title": "Name",
               "type": "string"
             }
+          },
+          {
+            "in": "query",
+            "name": "kind",
+            "required": true,
+            "schema": {
+              "enum": [
+                "colour-matrix",
+                "multiple",
+                "single"
+              ],
+              "title": "Kind",
+              "type": "string"
+            }
           }
         ],
         "requestBody": {
@@ -440,7 +717,26 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TemplateConfigResponse"
+                  "discriminator": {
+                    "mapping": {
+                      "colour-matrix": "#/components/schemas/ColourMatrixTemplate",
+                      "multiple": "#/components/schemas/MultipleTemplate",
+                      "single": "#/components/schemas/SingleTemplate"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ColourMatrixTemplate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MultipleTemplate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SingleTemplate"
+                    }
+                  ],
+                  "title": "Response Get Config Api Templates  Name  Config Get"
                 }
               }
             },
@@ -479,7 +775,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TemplateConfigUpdate"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ColourMatrixTemplate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MultipleTemplate"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SingleTemplate"
+                  }
+                ],
+                "title": "Body"
               }
             }
           },
@@ -490,7 +797,26 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TemplateConfigResponse"
+                  "discriminator": {
+                    "mapping": {
+                      "colour-matrix": "#/components/schemas/ColourMatrixTemplate",
+                      "multiple": "#/components/schemas/MultipleTemplate",
+                      "single": "#/components/schemas/SingleTemplate"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ColourMatrixTemplate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MultipleTemplate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SingleTemplate"
+                    }
+                  ],
+                  "title": "Response Put Config Api Templates  Name  Config Put"
                 }
               }
             },
@@ -531,7 +857,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/PreviewRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ColourMatrixPreviewRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MultiplePreviewRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/SinglePreviewRequest"
+                  }
+                ],
+                "title": "Body"
               }
             }
           },

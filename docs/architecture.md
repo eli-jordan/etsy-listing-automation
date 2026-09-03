@@ -59,7 +59,7 @@ what makes them testable in isolation — and what lets `render` be pure.
 | `workspace` | Where every file lives, path safety, loading config | Know what a render or a Printify product is |
 | `render` | warp → displace → shade → export, and derived maps | Any I/O, globals or clock (A7) |
 | `catalog` | Printify blueprint/provider/variant reads, TTL cache, name→id | Anything shop-scoped or authenticated |
-| `config` | `defaults.yaml` / profile / listing models, `Money`, slugs | Know where those files are on disk |
+| `config` | `shop.yaml` / profile / listing models, `Money`, slugs | Know where those files are on disk |
 
 Three boundaries carry most of the weight:
 

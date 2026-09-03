@@ -8,8 +8,8 @@ and the order of work. Where the two disagree, the PRD wins and this file is wro
 
 ## Architecture decision log
 
-Ten forks, resolved. Numbered `A#` so they can be cited from code comments and
-commit messages without colliding with the PRD's own decision log.
+Fifteen forks, resolved. Numbered `A#` so they can be cited from code comments
+and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
 |---|---|---|
@@ -19,10 +19,15 @@ commit messages without colliding with the PRD's own decision log.
 | A4 | API layer | Narrow `Protocol` per API returning pydantic models. In-memory fakes drive the behavioural suite; a small set of cassette-replay contract tests pin payload shape; a manual `-m e2e` run exercises the real APIs on demand and doubles as the cassette recorder. |
 | A5 | UI stack | FastAPI JSON API + React/TypeScript built with Vite. TS client **generated** from the OpenAPI schema — never hand-written. SSE for progress. |
 | A6 | Run history | SQLite at `.cache/runs.db` in WAL mode, `runs` + `run_events`. One recorder shared by CLI and UI, so CLI runs appear in the dashboard. Disposable: drop-and-recreate rather than migrate. |
-| A7 | Renderer | Pure functions over ndarrays composed in fixed order. Frozen pydantic `RenderConfig`; its canonical JSON is the hash. Explicit determinism controls. Goldens per pass *and* end-to-end. |
-| A8 | Workspace | The data tree is a separate directory you own, marked by `defaults.yaml`, discovered by walking up from cwd. `--root` / `ETSY_LISTINGS_ROOT` override. All config paths resolve against the workspace root, never cwd. |
+| A7 | Renderer | Pure functions over ndarrays composed in fixed order. Frozen pydantic `RenderConfig`; its canonical JSON is the hash. Explicit determinism controls. Goldens per pass *and* end-to-end. Extended by A12 for `multiple`-kind scenes: a **separate** `render_scene()`/`export_many()`, not a generalisation of the single-layer `render()`/`export()` — zero regression risk to the pre-existing goldens, verified by an explicit byte-identity test. |
+| A8 | Workspace | The data tree is a separate directory you own, marked by `shop.yaml`, discovered by walking up from cwd. `--root` / `ETSY_LISTINGS_ROOT` override. All config paths resolve against the workspace root, never cwd. |
 | A9 | Review gate | The Etsy draft is the only gate; `apply` generates and pushes in one run. `generate` remains standalone for when you want to read the copy first. |
 | A10 | Build order | Strict PRD phase order, 0 to 6. |
+| A11 | Template kind schema | Discriminated pydantic union on `kind` (`ColourMatrixTemplate \| MultipleTemplate \| SingleTemplate`, `Field(discriminator="kind")`), loaded via `load_template_config()` — no wrapping model, since the file *is* one of the three shapes. PRD 28. |
+| A12 | Multi-layer rendering | `render_scene()`/`Layer`/`export_many()` in `render/pipeline.py`/`render/passes.py`, `multiple`-kind only. The existing single-layer `render()`/`export()` are untouched, not generalised — see A7. |
+| A13 | Template ownership + media addressing | No profile-level registry — `Profile` carries no `templates` field. `listing.media` always references `{template, colour?}` explicitly, naming any template that exists in `mockup-templates/`; no default, no bare-colour shorthand. A template is purely local and Etsy-facing (Printify never sees it), unlike `blueprint`/`print_provider`/`sizes`, which genuinely are Printify product-creation inputs — that's why templates don't live on the profile the way those do. PRD 29. |
+| A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in the render stage (`engine/stages/render.py::_resolve_artwork`), reused unchanged by the future `printify_product` stage (Phase 2). PRD 30. |
+| A15 | Render cache namespacing | `.cache/renders/{listing}/{template}/...`, not `.cache/renders/{listing}/{colour}.png` — namespaced by template, since a listing can reference more than one `colour-matrix`-kind template and a bare colour is no longer unique across them. |
 
 ### Toolchain
 
@@ -94,7 +99,7 @@ STAGES = [Render(), Generate(), PrintifyProduct(),
 
 | Stage | `desired` | `read_live` | `apply` |
 |---|---|---|---|
-| `render` | design bytes hash + template assets + resolved `RenderConfig` + colour list | `None` (local) | render each colour into `.cache/renders/{listing}/` |
+| `render` | design/artwork bytes hashes + template assets + resolved `RenderConfig`(s) per referenced scene (A11–A14) | `None` (local) | render each scene actually referenced by `media` into `.cache/renders/{listing}/{template}/` (A15) |
 | `generate` | brief + design hash + profile context + prompt template hashes | `None` (local) | call the model, validate hard, write `generated.yaml` |
 | `printify_product` | blueprint/provider ids, enabled variant matrix, per-variant prices in cents, print areas | `GET products/{id}`, incl. `visible` (below) | create or update product |
 | `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
@@ -205,7 +210,7 @@ re-upload, correctly and visibly.
 
 ```python
 class Workspace:
-    root: Path                       # dir containing defaults.yaml
+    root: Path                       # dir containing shop.yaml
     defaults: Defaults
 
     @classmethod
@@ -214,7 +219,7 @@ class Workspace:
     def cache(self, *parts: str) -> Path: ...
 ```
 
-Discovery walks up from cwd for `defaults.yaml`, honouring `--root` then
+Discovery walks up from cwd for `shop.yaml`, honouring `--root` then
 `ETSY_LISTINGS_ROOT` first. `resolve()` rejects paths that escape the root, which
 also makes the UI's file-serving endpoints safe by construction.
 
@@ -223,17 +228,22 @@ also makes the UI's file-serving endpoints safe by construction.
 ## Renderer
 
 ```python
-def warp(design: NDArray, cfg: WarpConfig) -> NDArray: ...
+def warp(design: NDArray, bounding_box: BoundingBox, output_size: tuple[int, int]) -> NDArray: ...
 def displace(img: NDArray, cfg: DisplaceConfig, height: NDArray) -> NDArray: ...
 def shade(img: NDArray, cfg: ShadeConfig, luminance: NDArray) -> NDArray: ...
 def export(base: NDArray, print_layer: NDArray) -> Image.Image: ...
 
-def render(design, template, colour, cfg: RenderConfig) -> Image.Image:
-    x = warp(design, cfg.warp)
-    if cfg.displace.enabled: x = displace(x, cfg.displace, maps.height(template, colour))
-    if cfg.shade.enabled:    x = shade(x, cfg.shade, maps.luminance(template, colour))
-    return export(template.base(colour), x)
+def render(design, template_base, cfg: RenderConfig, *, height=None, luminance=None) -> Image.Image:
+    x = warp(design, cfg.bounding_box, template_base_size)
+    if cfg.displace.enabled: x = displace(x, cfg.displace, height)
+    if cfg.shade.enabled:    x = shade(x, cfg.shade, luminance)
+    return export(template_base, x)
 ```
+
+`multiple`-kind scenes (several garments in one photo) use a separate
+`render_scene()` over a list of `Layer`s, folded by `export_many()` — not a
+generalisation of the single-layer path above, so it carries zero regression
+risk to it (A12).
 
 Every pass is pure: no I/O, no globals, no clock. All inputs arrive as arrays or
 frozen config, which is what makes both the hash and the goldens meaningful.
@@ -335,7 +345,7 @@ GET  /api/setup/etsy/callback
 POST /api/setup/printify                  {token}
 GET  /api/setup/etsy/sections
 GET  /api/setup/etsy/return-policies
-POST /api/setup/defaults                  writes defaults.yaml
+POST /api/setup/defaults                  writes shop.yaml
 ```
 
 Screens: **Setup wizard** (shown whenever no shop is connected), **Dashboard**
@@ -384,7 +394,7 @@ until they pass.
 
 ### Phase 0 — foundations
 
-Workspace discovery and path resolution; pydantic models for `defaults.yaml`,
+Workspace discovery and path resolution; pydantic models for `shop.yaml`,
 profiles, listings, exceptions; the `Money` type with explicit-currency
 validation; slugification rules plus collision detection; catalog fetch, TTL cache
 and name-to-id resolution; `Change` vocabulary; lockfile model and
