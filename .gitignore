@@ -1,0 +1,21 @@
+.claude/settings.local.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+dist/
+*.egg-info/
+
+# Node / frontend
+node_modules/
+src/etsy_listings/ui/frontend/dist/
+
+# Workspace-local secrets (never present in this repo, guarded anyway)
+.env
+.auth/
