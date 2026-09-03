@@ -24,18 +24,25 @@ This connection is what makes `external.id` appear on a published product, and
 `external.id` *is* the Etsy listing id — the only bridge between the two
 systems. Without it, Phase 2's exit criteria cannot be met.
 
-### 1.2 Confirm products publish as DRAFT
+### 1.2 Confirm products publish as DRAFT — this has to be done by hand
 
-**Do this before anything else touches the shop.** Printify's store settings
-control whether a published product lands on Etsy as a draft or as an active,
-publicly visible listing. The whole review model here assumes draft (PRD 5,
-listed as a risk precisely because it is inferred rather than observed).
+**Do this before anything else touches the shop, and don't expect the tool to
+ever do it for you.** Checked directly against Printify's API Reference: the
+product's `visible` field ("Used for publishing. Visibility in sales channel")
+is documented **read-only**, and `publish.json`'s request body only accepts
+`images`, `variants`, `title`, `description`, `tags`, `shipping_template` —
+draft-vs-live is nowhere in it. "Hide in Store" is a checkbox in Printify's own
+web app, not an API parameter; nothing this tool sends can set it. Details and
+citations: `docs/implementation-plan.md`, "Draft-vs-live cannot be set through
+the API."
 
-Find the setting in the Etsy store's settings inside Printify and confirm it
-publishes as a draft. If you can't find an explicit toggle, treat that as
-unresolved rather than assuming — it is one of the four risks Phase 2 exists to
-answer empirically, and getting it wrong means a listing goes public before
-you've reviewed it, and costs $0.20.
+So: find the setting in the Etsy store's settings inside Printify, by hand, and
+confirm it publishes as a draft, before running `apply` against this shop for
+the first time. What's still unconfirmed is whether that setting is a
+persistent per-shop default or something that needs re-checking — Phase 2's
+`docs/api-findings.md` writeup should settle that. Until it's confirmed either
+way, re-check it before every publish. Getting it wrong means a listing goes
+public before you've reviewed it, and costs the $0.20 listing fee.
 
 ### 1.3 Generate an API token
 
