@@ -1,6 +1,6 @@
 """Workspace root discovery and path resolution. A8.
 
-The data tree (``defaults.yaml``, ``designs/``, ``listings/``,
+The data tree (``shop.yaml``, ``designs/``, ``listings/``,
 ``mockup-templates/``, ``.cache/``) is a separate directory the user owns, never
 this repository. ``Workspace.resolve()`` is the single chokepoint every path
 reference in a config file passes through, and it refuses to resolve outside the
@@ -25,7 +25,7 @@ from etsy_listings.workspace.userpath import to_native_path
 class WorkspaceNotFoundError(FileNotFoundError):
     def __init__(self, start: Path) -> None:
         super().__init__(
-            f"no '{layout.DEFAULTS_FILE}' found in {start} or any parent directory; "
+            f"no '{layout.SHOP_FILE}' found in {start} or any parent directory; "
             f"pass --root, set {layout.ROOT_ENV_VAR}, or run from inside a workspace"
         )
 
@@ -79,14 +79,14 @@ class Workspace:
         root_override: Path | None = None,
     ) -> Workspace:
         root = cls._find_root(start=start, root_override=root_override)
-        defaults = Defaults.load(root / layout.DEFAULTS_FILE)
+        defaults = Defaults.load(root / layout.SHOP_FILE)
         return cls(root=root, defaults=defaults)
 
     @staticmethod
     def _find_root(*, start: Path | None, root_override: Path | None) -> Path:
         if root_override is not None:
             candidate = root_override.resolve()
-            if not (candidate / layout.DEFAULTS_FILE).is_file():
+            if not (candidate / layout.SHOP_FILE).is_file():
                 raise WorkspaceNotFoundError(candidate)
             return candidate
 
@@ -96,13 +96,13 @@ class Workspace:
         env_root = os.environ.get(layout.ROOT_ENV_VAR)
         if env_root:
             candidate = to_native_path(env_root).resolve()
-            if not (candidate / layout.DEFAULTS_FILE).is_file():
+            if not (candidate / layout.SHOP_FILE).is_file():
                 raise WorkspaceNotFoundError(candidate)
             return candidate
 
         search_start = (start or Path.cwd()).resolve()
         for candidate in (search_start, *search_start.parents):
-            if (candidate / layout.DEFAULTS_FILE).is_file():
+            if (candidate / layout.SHOP_FILE).is_file():
                 return candidate
         raise WorkspaceNotFoundError(search_start)
 
@@ -172,18 +172,32 @@ class Workspace:
         return self.template_dir(template) / layout.DERIVED_DIR
 
     def template_base_image(self, template: str, colour: str) -> Path:
-        """PRD 7a: the mockup filename *is* the slugified colour name."""
+        """``colour-matrix``-kind templates only (PRD 7a): the mockup filename
+        *is* the slugified colour name."""
         return self.template_dir(template) / f"{_segment(colour)}.png"
 
-    def render_file(self, listing: str, colour: str) -> Path:
-        return self.cache(layout.RENDERS_DIR, _segment(listing), f"{_segment(colour)}.png")
+    def template_scene_image(self, template: str) -> Path:
+        """``multiple``/``single``-kind templates: exactly one photo, fixed
+        filename -- there's no per-colour name to derive it from."""
+        return self.template_dir(template) / "scene.png"
+
+    def render_file(self, listing: str, template: str, colour: str | None = None) -> Path:
+        """Namespaced by template: a listing can reference several templates
+        (item 4), including more than one ``colour-matrix``-kind set, so a
+        bare colour slug alone is not always unique across them. Mirrors each
+        template's own scene-naming convention, just namespaced --
+        ``{colour}.png`` under the template for ``colour-matrix`` kind (pass
+        ``colour``), ``scene.png`` for ``multiple``/``single`` kind (omit
+        ``colour`` -- exactly one output, nothing to disambiguate)."""
+        filename = f"{_segment(colour)}.png" if colour is not None else "scene.png"
+        return self.cache(layout.RENDERS_DIR, _segment(listing), _segment(template), filename)
 
     def catalog_cache_dir(self) -> Path:
         return self.cache(layout.CATALOG_DIR)
 
     # ------------------------------------------------------------------
     # Reading the tree's config files. The workspace already owns
-    # defaults.yaml, so it is also the natural place to load the files whose
+    # shop.yaml, so it is also the natural place to load the files whose
     # validation depends on it -- callers no longer have to remember to pass
     # `currency=` to every listing load, which was the one argument it was
     # possible to get quietly wrong.

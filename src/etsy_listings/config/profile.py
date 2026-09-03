@@ -7,6 +7,7 @@ geometry. Reused by every listing built on the same garment.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Literal
 
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -29,7 +30,10 @@ class Profile(BaseModel):
     placeholder: str
     print_area: PrintArea
     sizes: list[str]
-    mockup_template: str
+    colour_tone: dict[str, Literal["light", "dark"]] = {}
+    """Human-classified once via ``new``, not auto-seeded -- Printify's
+    catalog carries no hex colour value in this codebase. Drives artwork
+    (light/dark ink) resolution for listings with more than one design file."""
 
     @classmethod
     def load(cls, path: Path) -> Profile:

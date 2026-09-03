@@ -110,7 +110,7 @@ copy and images.
 
 ```
 etsy-listings/
-  defaults.yaml                     # shop-wide
+  shop.yaml                     # shop-wide
   .env                              # gitignored — Printify + Anthropic keys
   .auth/etsy-tokens.json            # gitignored — OAuth tokens
   .cache/                           # gitignored
@@ -155,7 +155,7 @@ changes and the images re-upload, which is correct behaviour.
 
 ## Config
 
-### `defaults.yaml`
+### `shop.yaml`
 ```yaml
 etsy:
   shop_id: 12345678
@@ -201,8 +201,16 @@ print_provider: Monster Digital     # authoritative; id resolved from cache
 placeholder: front
 print_area: { width: 4500, height: 5400 }   # px, from the catalog placeholders
 sizes: [S, M, L, XL, XXL, XXXL]
-mockup_template: flat-lay-01
 ```
+
+Mockup templates are **not** listed here. Only fields Printify's product
+creation actually needs live on the profile — `templates:` was tried and
+dropped (PRD 29): a template is a purely local, Etsy-facing rendering asset
+Printify never sees, so forcing it through a shared per-garment registry
+didn't earn its keep the way `blueprint`/`sizes`/`print_area` do, and it got
+in the way of two listings on the same garment wanting different mockups. A
+listing's `media:` may reference any template that exists in
+`mockup-templates/` directly.
 
 ### `listings/{name}/listing.yaml`
 
@@ -231,17 +239,17 @@ etsy:
   description: <generate>
   tags: <generate>
   materials: [cotton]
-  renewal: manual          # overrides defaults.yaml
+  renewal: manual          # overrides shop.yaml
 media:
-  - mockup: black
-  - mockup: blue-jean
-  - mockup: ivory
+  - { template: flat-lay-01, colour: black }
+  - { template: flat-lay-01, colour: blue-jean }
+  - { template: flat-lay-01, colour: ivory }
   - ../../common-media/comfort-colors-sizing-chart.png
   - ../../common-media/care-instructions.png
 ```
 
 **Every price carries its currency explicitly.** Validation rejects any price
-whose currency differs from `defaults.yaml`, and any bare number — so a figure
+whose currency differs from `shop.yaml`, and any bare number — so a figure
 can never be silently misread as the wrong currency, which matters when the
 revenue side is NOK and Printify's cost side is USD.
 
@@ -258,9 +266,12 @@ literally otherwise. A re-run never silently rewrites reviewed copy —
 
 ### Colour naming — convention, not a mapping table
 
-A mockup filename must equal the **slugified Printify colour name**
-(`"Blue Jean"` → `blue-jean.png`), and `listing.yaml` refers to colours by that
-same slug. No mapping file to maintain.
+A `colour-matrix`-kind mockup filename must equal the **slugified Printify
+colour name** (`"Blue Jean"` → `blue-jean.png`), and `listing.yaml` refers to
+colours by that same slug. No mapping file to maintain. **`multiple`- and
+`single`-kind templates use a fixed filename, `scene.png`, instead** — see
+"Mockup templates: kinds, multi-artwork" below — since those kinds have no
+per-colour photo to derive a name from.
 
 Slugification rules must be defined precisely and treated as stable. A sparse,
 **empty-by-default** `exceptions.yaml` handles colour names that don't slugify
@@ -281,7 +292,7 @@ new take-a-hike [--category tshirt]
    fields — verify during implementation whether a better facet exists.*
 2. Interactive fuzzy-search picker for the garment.
 3. Fetches print providers offering that blueprint. `preferred_print_provider`
-   from `defaults.yaml` is preselected when it appears in the list.
+   from `shop.yaml` is preselected when it appears in the list.
 4. Reads the chosen combination's variants to populate `sizes` and `print_area`
    automatically from the placeholder dimensions.
 5. Prompts for the mockup template set.
@@ -334,8 +345,8 @@ listings/take-a-hike  [LIVE — etsy listing 1234567890]
       XL      359 → 379
       XXL     369 → 389
   ~ media
-      + mockup: moss                           (rank 4)
-      - mockup: ivory
+      + { template: flat-lay-01, colour: moss }      (rank 4)
+      - { template: flat-lay-01, colour: ivory }
   ! drift  etsy.description was edited outside this tool
            applying will overwrite it
 
@@ -407,6 +418,41 @@ problem for typographic tees, not a cosmetic one. It also conflicts with Etsy
 expecting photos to represent the actual item, and breaks determinism. **AI
 belongs in template authoring (calibration), not in the render path.**
 
+### Mockup templates: kinds, multiple templates, multi-artwork
+
+A template is exactly one of three **kinds**, never a mix — full detail in
+[docs/multi-placement-rendering.md](multi-placement-rendering.md):
+
+- **`colour-matrix`** — one photo per colour, the design at the same position
+  in every one. This is the default case above.
+- **`multiple`** — several garments in one photo (a colour chart). Each
+  garment is a *placement*: its own colour and position.
+- **`single`** — one photo, one garment (a lifestyle shot, a folded product
+  photo).
+
+**Templates are not declared on the profile.** A mockup template lives purely
+in `mockup-templates/{name}/`, and a listing's `media:` may reference any of
+them directly — there is no per-garment registry to keep in sync, and two
+listings sharing a garment are free to use entirely different templates.
+(An earlier version of this design listed available templates on the
+profile; dropped because Printify never sees a template, so it doesn't
+belong alongside the fields — blueprint, print provider, sizes — that
+actually are garment-level facts Printify's product creation needs.) Each
+`media:` entry always names which template (and, for `colour-matrix` kind,
+which colour) it is: `{ template: flat-lay-01, colour: black }`. There is no
+bare-colour shorthand — addressing is always explicit, which is what lets a
+listing pull together outputs from several templates into one ordered media
+list, including interleaving a shared asset between two mockups.
+
+**A design may need more than one artwork file** — dark ink for light
+garments, light ink for dark ones. `listing.yaml`'s `design:` becomes a map
+keyed by artwork tag (`on-light`/`on-dark`) when more than one file is
+needed; a bare path stays valid shorthand for the common single-artwork case.
+Which garment colour is which tone is a profile-level fact
+(`colour_tone: { black: dark, ivory: light }`), classified once, by hand,
+when `new` sets up the garment — not inferred from Printify, which does not
+expose a colour hex value in this tool's catalog integration.
+
 ---
 
 ## The UI
@@ -419,7 +465,7 @@ better seen than typed.
 If no shop is connected, the UI opens straight into a setup wizard rather than an
 empty dashboard. It walks through connecting **Etsy** (OAuth PKCE via localhost
 callback) and **Printify** (API token), obtaining Anthropic credentials, and then
-generating `defaults.yaml` — reading the shop id, available shop sections and
+generating `shop.yaml` — reading the shop id, available shop sections and
 return policies back from the Etsy API so those are picked from a list rather
 than typed. This is the same work the `auth` CLI command does, presented as a
 guided flow.
@@ -495,7 +541,7 @@ title.
 We own: **title, description, tags, images, shop section, materials, per-image
 alt text, and renewal policy.** Everything else stays as Printify left it.
 
-Renewal defaults to **manual** in `defaults.yaml` and is overridable per listing,
+Renewal defaults to **manual** in `shop.yaml` and is overridable per listing,
 written to Etsy's `should_auto_renew`.
 
 *Known wrinkle:* Etsy requires a title at creation, so Printify's first publish
@@ -569,7 +615,7 @@ Etsy, and `external.id` appears on success.
 - Every requested colour has a matching mockup file.
 - Every media entry resolves: `mockup:` references name a colour the listing
   offers, paths exist. ≤10 images total.
-- Every price carries an explicit currency, and it matches `defaults.yaml`. Bare
+- Every price carries an explicit currency, and it matches `shop.yaml`. Bare
   numbers are rejected.
 - Blueprint and print provider names resolve to catalog IDs; failure lists the
   valid names.
@@ -678,9 +724,9 @@ whether Norway is among them needs checking, not assuming).
 | 6 | Placement config | Per-template `template.yaml`, per-listing override. |
 | 6b | Calibrator | Browser UI with live preview through the real renderer. Lives only inside the `ui` app; no standalone command. Ships with a bundled test design. |
 | 6c | Geometry | Four-corner quad (homography). |
-| 6d | Per-colour geometry | One default quad per set, per-file overrides supported. |
+| 6d | Per-colour geometry | Superseded by #28 — `colour-matrix` kind has no per-colour override at all; a colour needing different geometry is a separate `single`-kind template. |
 | 6e | Occlusion masks | Deferred to v2. |
-| 7a | Colour mapping | Convention: mockup filename = slugified Printify colour name. Sparse exceptions file. |
+| 7a | Colour mapping | Convention: `colour-matrix`-kind mockup filename = slugified Printify colour name. Sparse exceptions file. `multiple`/`single` kind use a fixed `scene.png` instead (#28). |
 | 7b | Variant IDs | Catalog cached with a TTL, fetched automatically; `catalog refresh` as override. |
 | 8a | Config layering | Profile = garment definition (generated by `new`); listing = everything commercial and creative, including prices. |
 | 8b | Overrides | Anything overridable, every departure flagged in `plan`. |
@@ -701,6 +747,11 @@ whether Norway is among them needs checking, not assuming).
 | 22 | Mockup storage | Rendered mockups persist in gitignored `.cache/renders/` — not regenerated every run, not committed. |
 | 23 | Provider references | Blueprints and print providers referred to by name in all config; names resolve to Printify IDs via a cached lookup. |
 | 24 | Price units | Every price carries an explicit currency (`349 NOK`); bare numbers and mismatched currencies are rejected. |
-| 25 | Media references | `mockup: <colour-slug>` logical references rather than cache paths; shared assets by path. |
-| 26 | First run | The `ui` opens a setup wizard when no shop is connected — Etsy and Printify auth, Anthropic credentials, and guided `defaults.yaml` generation. |
+| 25 | Media references | Superseded by #29 — always-explicit `{template, colour?}` references, no bare-colour shorthand. |
+| 26 | First run | The `ui` opens a setup wizard when no shop is connected — Etsy and Printify auth, Anthropic credentials, and guided `shop.yaml` generation. |
 | 27 | Stage orchestration | `plan` determines whether render and generate need to run from input hashes; `apply` runs them. Both remain available as explicit commands. |
+| 28 | Template kinds | A template is exactly one of `colour-matrix` / `multiple` / `single`, never a mix — [docs/multi-placement-rendering.md](multi-placement-rendering.md). |
+| 29 | Multiple templates per listing | No profile-level registry — a listing's `media:` may reference any template that exists in `mockup-templates/`, always naming it explicitly as `{template, colour?}`; no default, no shorthand. Superseded once from an earlier `profile.templates: list[str]` registry, dropped because a template is a purely local, Etsy-facing asset Printify never sees. |
+| 30 | Multi-artwork | `listing.design:` polymorphic (bare path or a map keyed by artwork tag); `profile.colour_tone` classified by hand via `new`, not inferred from Printify. |
+| 31 | What renders | Driven purely by `media` references, not by `listing.colors` membership — a listing's colours drive which Printify variants sell, not which photos render. |
+| 32 | Frontend testing | Vitest + React Testing Library, v8 coverage provider, 80%-branch floor mirroring the Python gate, wired into `scripts/check.sh`. |

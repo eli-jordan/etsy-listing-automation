@@ -101,6 +101,82 @@ export interface components {
       files: string[];
     };
     /**
+     * ColourMatrixPreviewRequest
+     * @description Disambiguated from the other two preview shapes by required fields
+     *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
+     *     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
+     *     than forbidden, since a natural client pattern is spreading a whole
+     *     ``GET .../config`` response (which includes ``kind``) into the body.
+     */
+    ColourMatrixPreviewRequest: {
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /** Colour */
+      colour: string;
+      /**
+       * Design
+       * @default bundled-grid
+       * @enum {string}
+       */
+      design: "bundled-grid" | "bundled-on-light" | "bundled-on-dark";
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
+     * ColourMatrixTemplate
+     * @description One photo per colour, same design position in all of them. Scene
+     *     images are ``{colour-slug}.png`` per colour (PRD 7a) -- there is no
+     *     ``colours:`` list in the YAML, since the filenames present in the
+     *     directory *are* the colour set.
+     */
+    ColourMatrixTemplate: {
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "colour-matrix";
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
      * DisplaceConfig
      * @description PRD: implemented but off by default -- over-strong displacement looks
      *     melted, so it's tuned per template in the calibrator's live preview.
@@ -122,16 +198,14 @@ export interface components {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
     };
-    /** PreviewRequest */
-    PreviewRequest: {
-      /** Colour */
-      colour: string;
+    /** MultiplePreviewRequest */
+    MultiplePreviewRequest: {
       /**
        * Design
        * @default bundled-grid
-       * @constant
+       * @enum {string}
        */
-      design: "bundled-grid";
+      design: "bundled-grid" | "bundled-on-light" | "bundled-on-dark";
       /**
        * @default {
        *       "enabled": false,
@@ -139,6 +213,8 @@ export interface components {
        *     }
        */
       displace: components["schemas"]["DisplaceConfig"];
+      /** Placements */
+      placements: components["schemas"]["Placement"][];
       /**
        * @default {
        *       "blend": "soft-light",
@@ -147,12 +223,76 @@ export interface components {
        *     }
        */
       shade: components["schemas"]["ShadeConfig"];
-      warp: components["schemas"]["WarpConfig"];
+    };
+    /**
+     * MultipleTemplate
+     * @description Several garments in one photo. ``displace``/``shade`` are scene-level
+     *     only -- one photo, one lighting pass; a placement needing different
+     *     rendering treatment belongs in its own template instead.
+     */
+    MultipleTemplate: {
+      /**
+       * Colour Coverage
+       * @default exact
+       * @enum {string}
+       */
+      colour_coverage: "exact" | "subset";
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "multiple";
+      /** Placements */
+      placements: components["schemas"]["Placement"][];
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
+     * Placement
+     * @description One garment within a ``multiple``-kind scene.
+     */
+    Placement: {
+      /** Artwork */
+      artwork?: string | null;
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /** Colour */
+      colour: string;
+    };
+    /** Point */
+    Point: {
+      /** X */
+      x: number;
+      /** Y */
+      y: number;
     };
     /**
      * ShadeConfig
-     * @description PRD: on by default. ``multiply`` crushes prints on dark garments, so
-     *     ``soft-light`` or a mid-grey pivot is used for those instead.
+     * @description Blends the base mockup photo's own greyscale lighting over the printed
+     *     design, so a flat design picks up the garment's real fold shadows and
+     *     light falloff instead of looking pasted on as a flat rectangle -- this is
+     *     why a plain flat-lay PNG is enough to mock up, with no purchased
+     *     Photoshop lighting map needed. On by default: almost every mockup needs
+     *     it. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a
+     *     mid-grey pivot is used for those instead.
      */
     ShadeConfig: {
       /**
@@ -172,14 +312,21 @@ export interface components {
        */
       opacity: number;
     };
-    /** TemplateConfigResponse */
-    TemplateConfigResponse: {
-      displace: components["schemas"]["DisplaceConfig"];
-      shade: components["schemas"]["ShadeConfig"];
-      warp: components["schemas"]["WarpConfig"];
-    };
-    /** TemplateConfigUpdate */
-    TemplateConfigUpdate: {
+    /** SinglePreviewRequest */
+    SinglePreviewRequest: {
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /**
+       * Design
+       * @default bundled-grid
+       * @enum {string}
+       */
+      design: "bundled-grid" | "bundled-on-light" | "bundled-on-dark";
       /**
        * @default {
        *       "enabled": false,
@@ -195,7 +342,44 @@ export interface components {
        *     }
        */
       shade: components["schemas"]["ShadeConfig"];
-      warp: components["schemas"]["WarpConfig"];
+    };
+    /**
+     * SingleTemplate
+     * @description One photo, one garment -- a lifestyle shot, a folded product photo,
+     *     anything that isn't part of a colour set.
+     */
+    SingleTemplate: {
+      /** Artwork */
+      artwork?: string | null;
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /** Colour */
+      colour?: string | null;
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "single";
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
     };
     /** TemplateSummary */
     TemplateSummary: {
@@ -203,6 +387,8 @@ export interface components {
       colours: string[];
       /** Has Config */
       has_config: boolean;
+      /** Kind */
+      kind: ("colour-matrix" | "multiple" | "single") | null;
       /** Name */
       name: string;
     };
@@ -210,6 +396,11 @@ export interface components {
     UploadResponse: {
       /** Colours */
       colours: string[];
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "colour-matrix" | "multiple" | "single";
       /** Name */
       name: string;
     };
@@ -225,11 +416,6 @@ export interface components {
       msg: string;
       /** Error Type */
       type: string;
-    };
-    /** WarpConfig */
-    WarpConfig: {
-      /** Quad */
-      quad: [[number, number], [number, number], [number, number], [number, number]];
     };
   };
   responses: never;
@@ -286,6 +472,7 @@ export interface operations {
     parameters: {
       query: {
         name: string;
+        kind: "colour-matrix" | "multiple" | "single";
       };
       header?: never;
       path?: never;
@@ -334,7 +521,10 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["TemplateConfigResponse"];
+          "application/json":
+            | components["schemas"]["ColourMatrixTemplate"]
+            | components["schemas"]["MultipleTemplate"]
+            | components["schemas"]["SingleTemplate"];
         };
       };
       /** @description Validation Error */
@@ -359,7 +549,10 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["TemplateConfigUpdate"];
+        "application/json":
+          | components["schemas"]["ColourMatrixTemplate"]
+          | components["schemas"]["MultipleTemplate"]
+          | components["schemas"]["SingleTemplate"];
       };
     };
     responses: {
@@ -369,7 +562,10 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["TemplateConfigResponse"];
+          "application/json":
+            | components["schemas"]["ColourMatrixTemplate"]
+            | components["schemas"]["MultipleTemplate"]
+            | components["schemas"]["SingleTemplate"];
         };
       };
       /** @description Validation Error */
@@ -394,7 +590,10 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["PreviewRequest"];
+        "application/json":
+          | components["schemas"]["ColourMatrixPreviewRequest"]
+          | components["schemas"]["MultiplePreviewRequest"]
+          | components["schemas"]["SinglePreviewRequest"];
       };
     };
     responses: {

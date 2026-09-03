@@ -33,15 +33,39 @@ def _coerce_money(raw: Any) -> Money:  # noqa: ANN401 - pydantic validator bound
 PriceField = Annotated[Money, BeforeValidator(_coerce_money)]
 
 
-class MockupMediaEntry(BaseModel):
+def _coerce_design(raw: Any) -> dict[str, str]:  # noqa: ANN401 - pydantic validator boundary
+    """A bare path is shorthand for the common single-artwork case -- it
+    normalises to one entry, so artwork resolution's "sole key" rule (item 2)
+    picks it with no other machinery involved."""
+    if isinstance(raw, str):
+        return {"default": raw}
+    result: dict[str, str] = raw
+    return result
+
+
+DesignField = Annotated[dict[str, str], BeforeValidator(_coerce_design)]
+"""Artwork key -> workspace-relative design path. A design needing different
+ink for light vs dark shirts carries more than one entry, conventionally keyed
+``on-light``/``on-dark``; resolution order lives in the render stage
+(engine/stages/render.py), since it needs the profile and template too."""
+
+
+class TemplateMediaEntry(BaseModel):
+    """Always-explicit template reference -- there is no bare-colour
+    shorthand. ``colour`` is required when the referenced template is
+    ``colour-matrix`` kind (which colour's photo) and must be omitted for
+    ``multiple``/``single`` kind (exactly one output each, nothing to
+    disambiguate)."""
+
     model_config = ConfigDict(extra="forbid")
 
-    mockup: str
+    template: str
+    colour: str | None = None
 
 
-MediaEntry = MockupMediaEntry | str
-"""Either ``{mockup: <colour-slug>}`` (PRD 25, resolved via the render cache) or a
-bare path string to a shared asset under ``common-media/``."""
+MediaEntry = TemplateMediaEntry | str
+"""Either an explicit template reference, or a bare path string to a shared
+asset under ``common-media/``."""
 
 
 class EtsyListingConfig(BaseModel):
@@ -78,11 +102,15 @@ class Listing(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     profile: str
-    design: str
+    design: DesignField
     colors: list[str]
     brief: str
     prices: dict[str, PriceField]
     price_overrides: dict[str, dict[str, PriceField]] = {}
+    artwork: dict[str, str] = {}
+    """Explicit per-design artwork override, colour -> artwork key. Wins over
+    everything else in resolution order (item 2) -- the thing a human is most
+    likely to actually revisit per design."""
     etsy: EtsyListingConfig = EtsyListingConfig()
     media: list[MediaEntry]
 
@@ -108,10 +136,18 @@ class Listing(BaseModel):
                     f"price_overrides has an entry for {color!r}, which is not in colors"
                 )
 
+        for color in self.artwork:
+            if color not in self.colors:
+                raise ValueError(f"artwork has an entry for {color!r}, which is not in colors")
+
         for entry in self.media:
-            if isinstance(entry, MockupMediaEntry) and entry.mockup not in self.colors:
+            if (
+                isinstance(entry, TemplateMediaEntry)
+                and entry.colour is not None
+                and entry.colour not in self.colors
+            ):
                 raise ValueError(
-                    f"media references mockup {entry.mockup!r}, which is not in colors"
+                    f"media references colour {entry.colour!r}, which is not in colors"
                 )
 
         return self

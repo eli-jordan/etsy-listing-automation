@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from etsy_listings.render.config import TemplateConfig
+from etsy_listings.render.config import load_template_config
 from etsy_listings.render.io import load_design, load_template_base
 from etsy_listings.render.maps import height_map, luminance_map
 from etsy_listings.render.pipeline import render
@@ -21,10 +21,10 @@ GOLDENS = Path(__file__).parent / "goldens"
 
 @pytest.mark.parametrize("colour", ["black", "white"])
 def test_e2e_composite_golden(colour: str, assert_matches_golden) -> None:  # noqa: ANN001
-    template_config = TemplateConfig.model_validate(
+    template_config = load_template_config(
         yaml.safe_load((TEMPLATE_DIR / "template.yaml").read_text(encoding="utf-8"))
     )
-    cfg = template_config.resolve(colour)
+    cfg = template_config.render_config()
 
     design = load_design(DESIGN_PATH)
     base = load_template_base(TEMPLATE_DIR / f"{colour}.png")
@@ -36,10 +36,10 @@ def test_e2e_composite_golden(colour: str, assert_matches_golden) -> None:  # no
 
 
 def test_e2e_composite_with_displace_enabled_golden(assert_matches_golden) -> None:  # noqa: ANN001
-    template_config = TemplateConfig.model_validate(
+    template_config = load_template_config(
         yaml.safe_load((TEMPLATE_DIR / "template.yaml").read_text(encoding="utf-8"))
     )
-    cfg = template_config.resolve("black").model_copy(
+    cfg = template_config.render_config().model_copy(
         update={
             "displace": template_config.displace.model_copy(
                 update={"enabled": True, "strength": 0.6}

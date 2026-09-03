@@ -7,7 +7,7 @@ this that only adds the questionary prompts.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import yaml
 from pydantic import ValidationError
@@ -62,7 +62,7 @@ def build_profile(
     provider_title: str,
     placeholder: str,
     variant_set: VariantSet,
-    mockup_template: str,
+    colour_tone: dict[str, Literal["light", "dark"]] | None = None,
 ) -> Profile:
     area = variant_set.placeholder(placeholder)
     if area is None:
@@ -78,7 +78,7 @@ def build_profile(
         placeholder=placeholder,
         print_area=PrintArea(width=area.width, height=area.height),
         sizes=sizes,
-        mockup_template=mockup_template,
+        colour_tone=colour_tone or {},
     )
 
 
@@ -100,6 +100,7 @@ def build_listing_stub(
     *,
     profile_slug: str,
     design_ref: str,
+    template: str,
     colours: list[str],
     sizes: list[str],
     base_price: str,
@@ -107,7 +108,8 @@ def build_listing_stub(
 ) -> dict[str, Any]:
     """A starting ``listing.yaml`` document: one price per size (all equal --
     per-size and per-colour adjustment is a manual edit, PRD step 2), one
-    ``mockup:`` media entry per colour, and ``<generate>`` sentinels for the
+    explicit ``{template, colour}`` media entry per colour against the
+    profile's default (first) template, and ``<generate>`` sentinels for the
     fields AI copy generation owns."""
     return {
         "profile": profile_slug,
@@ -116,7 +118,7 @@ def build_listing_stub(
         "brief": brief,
         "prices": dict.fromkeys(sizes, base_price),
         "etsy": {"title": GENERATE, "description": GENERATE, "tags": GENERATE, "materials": []},
-        "media": [{"mockup": colour} for colour in colours],
+        "media": [{"template": template, "colour": colour} for colour in colours],
     }
 
 

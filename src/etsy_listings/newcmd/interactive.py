@@ -8,6 +8,8 @@ terminal prompt except that a human can answer it.
 
 from __future__ import annotations
 
+from typing import Literal, cast
+
 import questionary
 import typer
 
@@ -66,12 +68,26 @@ def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, cate
     if not mockup_template:
         raise typer.Exit(code=1)
 
+    colour_tone: dict[str, Literal["light", "dark"]] = {}
+    needs_tone = questionary.confirm(
+        "Will any listing on this profile need different artwork for light vs dark shirts?",
+        default=False,
+    ).ask()
+    if needs_tone:
+        for colour in sorted(colour_slugs.values()):
+            tone = questionary.select(
+                f"{colour}: light or dark garment?", choices=["light", "dark"]
+            ).ask()
+            if tone is None:
+                raise typer.Exit(code=1)
+            colour_tone[colour] = cast('Literal["light", "dark"]', tone)
+
     profile = build_profile(
         blueprint_title=blueprint.title,
         provider_title=provider.title,
         placeholder=DEFAULT_PLACEHOLDER,
         variant_set=variant_set,
-        mockup_template=mockup_template,
+        colour_tone=colour_tone,
     )
     slug = profile_slug_for(blueprint)
     written = write_profile_if_absent(workspace, slug, profile)
@@ -88,6 +104,7 @@ def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, cate
     listing_data = build_listing_stub(
         profile_slug=slug,
         design_ref=f"../../designs/{design_name}.png",
+        template=mockup_template,
         colours=colours,
         sizes=profile.sizes,
         base_price=f"{base_price} {workspace.defaults.currency}",

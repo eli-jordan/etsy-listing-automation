@@ -18,6 +18,7 @@ etsy:
   materials: [cotton]
   renewal: manual
 media:
-  - mockup: black
-  - mockup: blue-jean
-  - mockup: ivory
+  - { template: flat-lay-01, colour: black }
+  - { template: flat-lay-01, colour: blue-jean }
+  - { template: flat-lay-01, colour: ivory }
+  - { template: flat-lay-01, colour: moss }

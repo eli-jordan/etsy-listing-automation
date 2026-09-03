@@ -1,25 +1,31 @@
 import { useRef, useState } from "react";
-import type { WarpConfig } from "../types";
+import type { BoundingBox, Point } from "../types";
 
-type Point = [number, number];
+const NUDGE_PX = 1;
+const NUDGE_PX_FAST = 8;
 
 interface Props {
   imageUrl: string;
-  quad: WarpConfig["quad"];
-  onChange: (quad: WarpConfig["quad"]) => void;
+  boxes: BoundingBox[];
+  selectedIndex: number;
+  onSelect: (index: number) => void;
+  onChangeBox: (index: number, box: BoundingBox) => void;
 }
 
 /**
- * Draggable four-corner quad overlaid on the (already-rendered) preview
- * image. The SVG's viewBox is set to the image's natural pixel size, so
- * screen-to-image coordinate mapping goes through the SVG's own CTM rather
- * than a hand-rolled scale factor -- correct regardless of how the browser
- * scales the displayed image.
+ * Draggable four-corner box overlaid on the (already-rendered) preview
+ * image -- one or more of them. The selected box gets live drag handles; the
+ * rest render dimmed and click-to-select (`multiple`-kind templates only
+ * ever have more than one; `colour-matrix`/`single` pass a single-element
+ * array and never show the selection chrome). The SVG's viewBox is set to
+ * the image's natural pixel size, so screen-to-image coordinate mapping goes
+ * through the SVG's own CTM rather than a hand-rolled scale factor --
+ * correct regardless of how the browser scales the displayed image.
  */
-export function QuadEditor({ imageUrl, quad, onChange }: Props) {
+export function QuadEditor({ imageUrl, boxes, selectedIndex, onSelect, onChangeBox }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [naturalSize, setNaturalSize] = useState<[number, number] | null>(null);
-  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragPointIndex, setDragPointIndex] = useState<number | null>(null);
 
   function toImageSpace(clientX: number, clientY: number): Point | null {
     const svg = svgRef.current;
@@ -30,30 +36,48 @@ export function QuadEditor({ imageUrl, quad, onChange }: Props) {
     point.x = clientX;
     point.y = clientY;
     const transformed = point.matrixTransform(ctm.inverse());
-    return [transformed.x, transformed.y];
+    return { x: transformed.x, y: transformed.y };
   }
 
-  function handlePointerDown(index: number) {
+  function handlePointerDown(pointIndex: number) {
     return (event: React.PointerEvent<SVGCircleElement>) => {
       event.currentTarget.setPointerCapture(event.pointerId);
-      setDragIndex(index);
+      setDragPointIndex(pointIndex);
     };
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    if (dragIndex === null) return;
+    if (dragPointIndex === null) return;
     const point = toImageSpace(event.clientX, event.clientY);
     if (!point) return;
-    const next = quad.map((p, i) => (i === dragIndex ? point : p)) as WarpConfig["quad"];
-    onChange(next);
+    const box = boxes[selectedIndex];
+    if (!box) return;
+    const next = box.map((p, i) => (i === dragPointIndex ? point : p)) as BoundingBox;
+    onChangeBox(selectedIndex, next);
   }
 
   function handlePointerUp() {
-    setDragIndex(null);
+    setDragPointIndex(null);
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const box = boxes[selectedIndex];
+    if (!box) return;
+    const step = event.shiftKey ? NUDGE_PX_FAST : NUDGE_PX;
+    let dx = 0;
+    let dy = 0;
+    if (event.key === "ArrowLeft") dx = -step;
+    else if (event.key === "ArrowRight") dx = step;
+    else if (event.key === "ArrowUp") dy = -step;
+    else if (event.key === "ArrowDown") dy = step;
+    else return;
+    event.preventDefault();
+    const next = box.map((p) => ({ x: p.x + dx, y: p.y + dy })) as BoundingBox;
+    onChangeBox(selectedIndex, next);
   }
 
   return (
-    <div className="quad-editor">
+    <div className="quad-editor" tabIndex={0} onKeyDown={handleKeyDown}>
       <img
         src={imageUrl}
         alt="Rendered preview"
@@ -70,20 +94,34 @@ export function QuadEditor({ imageUrl, quad, onChange }: Props) {
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
-          <polygon
-            points={quad.map(([x, y]) => `${x},${y}`).join(" ")}
-            className="quad-editor__polygon"
-          />
-          {quad.map(([x, y], index) => (
-            <circle
-              key={index}
-              cx={x}
-              cy={y}
-              r={Math.max(naturalSize[0], naturalSize[1]) * 0.015}
-              className="quad-editor__handle"
-              onPointerDown={handlePointerDown(index)}
-            />
-          ))}
+          {boxes.map((box, boxIndex) => {
+            const active = boxIndex === selectedIndex;
+            return (
+              <g
+                key={boxIndex}
+                className={
+                  active ? "quad-editor__box" : "quad-editor__box quad-editor__box--dimmed"
+                }
+                onClick={() => onSelect(boxIndex)}
+              >
+                <polygon
+                  points={box.map((p) => `${p.x},${p.y}`).join(" ")}
+                  className="quad-editor__polygon"
+                />
+                {active &&
+                  box.map((p, pointIndex) => (
+                    <circle
+                      key={pointIndex}
+                      cx={p.x}
+                      cy={p.y}
+                      r={Math.max(naturalSize[0], naturalSize[1]) * 0.015}
+                      className="quad-editor__handle"
+                      onPointerDown={handlePointerDown(pointIndex)}
+                    />
+                  ))}
+              </g>
+            );
+          })}
         </svg>
       )}
     </div>

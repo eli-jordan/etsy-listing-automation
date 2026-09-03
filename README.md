@@ -60,9 +60,9 @@ uv run etsy-listings new <design-name>      # interactive garment/provider picke
 uv run etsy-listings ui --root <workspace>  # serves the calibrator at :8000
 ```
 
-`plan`/`apply`/`new`/`ui` all look for `defaults.yaml` by walking up from the
+`plan`/`apply`/`new`/`ui` all look for `shop.yaml` by walking up from the
 current directory; pass `--root <path>` or set `ETSY_LISTINGS_ROOT` to point
-at a workspace explicitly (the *workspace* — your `defaults.yaml`,
+at a workspace explicitly (the *workspace* — your `shop.yaml`,
 `designs/`, `listings/` — is a separate directory you own, never this
 repository; see CLAUDE.md).
 
