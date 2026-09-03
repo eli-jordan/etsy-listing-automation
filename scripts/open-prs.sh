@@ -5,7 +5,7 @@
 #
 # Each branch builds on the one below it, so each PR is based on its parent
 # rather than on main -- that way every PR shows only its own diff and nothing
-# needs rebasing. Merge them bottom-up (plan, then phase 0, then phase 1).
+# needs rebasing. Merge phase 0 first, then phase 1.
 #
 # Safe to re-run: branches already pushed are just updated, and a branch that
 # already has an open PR is skipped rather than erroring.
@@ -26,18 +26,11 @@ open_pr() {
   gh pr create --base "$base" --head "$branch" --title "$title" --body "$body"
 }
 
-open_pr "docs/implementation-plan" "main" \
-  "Implementation plan for the PRD" \
-"Companion to the PRD: module boundaries, core contracts and the order of work.
+# The implementation plan landed on main in PR #2, so `main` already contains
+# the commit phase-0 was branched from -- phase-0 bases directly on main with
+# no rebase.
 
-Settles ten architecture decisions (\`A1\`-\`A10\`) — the staged plan/apply
-pipeline, the lockfile as the verbatim last-applied document, the workspace as
-a separate data tree, and the renderer's purity and determinism rules — plus
-the phase breakdown each later PR implements.
-
-🤖 Generated with [Claude Code](https://claude.com/claude-code)"
-
-open_pr "feat/phase-0-foundations" "docs/implementation-plan" \
+open_pr "feat/phase-0-foundations" "main" \
   "Phase 0: foundations" \
 "Workspace discovery and path resolution, the config models, and the engine
 primitives everything later builds on. No network, no credentials.
@@ -84,9 +77,9 @@ pin and cleared the npm advisory; cygwin path handling for \`--root\`; a
 playwright browser-test layer; an 80% branch-coverage gate; and a refactor
 making \`workspace\` the single owner of the directory layout.
 
-152 tests, mypy strict and ruff clean, TypeScript strict and ESLint clean.
+159 tests, mypy strict and ruff clean, TypeScript strict and ESLint clean.
 
 🤖 Generated with [Claude Code](https://claude.com/claude-code)"
 
 echo
-echo "Done. Merge bottom-up: implementation-plan, then phase 0, then phase 1."
+echo "Done. Merge phase 0 first, then phase 1."
