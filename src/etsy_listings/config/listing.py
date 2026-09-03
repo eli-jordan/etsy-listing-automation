@@ -99,8 +99,7 @@ class Listing(BaseModel):
 
         if len(self.media) > MAX_MEDIA_ENTRIES:
             raise ValueError(
-                f"media has {len(self.media)} entries, over Etsy's "
-                f"{MAX_MEDIA_ENTRIES}-image limit"
+                f"media has {len(self.media)} entries, over Etsy's {MAX_MEDIA_ENTRIES}-image limit"
             )
 
         for color in self.price_overrides:

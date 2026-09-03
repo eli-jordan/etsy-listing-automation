@@ -1,12 +1,12 @@
 """Concrete stages, in pipeline order (A1: order encodes dependency).
 
-Empty in Phase 0 -- ``plan``/``apply`` walk this list and, with nothing in it,
-produce an empty plan. Phase 1 adds ``Render()``; later phases add the
-Printify/Etsy stages.
+``Render()`` is the first real stage (Phase 1). Later phases add ``Generate``,
+``PrintifyProduct``, ``Publish``, ``EtsyCopy`` and ``EtsyMedia`` after it.
 """
 
 from __future__ import annotations
 
 from etsy_listings.engine.stage import AnyStage
+from etsy_listings.engine.stages.render import RenderStage
 
-STAGES: list[AnyStage] = []
+STAGES: list[AnyStage] = [RenderStage()]

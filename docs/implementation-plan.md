@@ -96,7 +96,7 @@ STAGES = [Render(), Generate(), PrintifyProduct(),
 |---|---|---|---|
 | `render` | design bytes hash + template assets + resolved `RenderConfig` + colour list | `None` (local) | render each colour into `.cache/renders/{listing}/` |
 | `generate` | brief + design hash + profile context + prompt template hashes | `None` (local) | call the model, validate hard, write `generated.yaml` |
-| `printify_product` | blueprint/provider ids, enabled variant matrix, per-variant prices in cents, print areas | `GET products/{id}` | create or update product |
+| `printify_product` | blueprint/provider ids, enabled variant matrix, per-variant prices in cents, print areas | `GET products/{id}`, incl. `visible` (below) | create or update product |
 | `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
 | `etsy_copy` | title, description, tags, materials, section, `should_auto_renew` | `getListing` | `updateListing` |
 | `etsy_media` | ordered media manifest, each entry `(ref, content_hash)` | listing images + ids | full delete-and-reupload in rank order |
@@ -104,6 +104,31 @@ STAGES = [Render(), Generate(), PrintifyProduct(),
 Local stages have no live state, so drift is undefined for them — that is exactly
 what `local: bool` encodes, and the engine skips drift reporting for them rather
 than each stage having to remember.
+
+### Draft-vs-live cannot be set through the API — PRD risk 5, resolved in one direction
+
+Checked directly against Printify's API Reference (`developers.printify.com/docs/`):
+Product has a documented `visible` field ("Used for publishing. Visibility in
+sales channel", defaults to `true`) but it is marked **read-only**, and the
+`publish.json` request body only accepts `images`, `variants`, `title`,
+`description`, `tags`, `shipping_template` — `visible` is not among them, and it
+is absent from the create/update product bodies and from the Shop resource too.
+
+**"Hide in Store" is a Printify web-app UI action, not an API parameter.**
+Nothing this tool sends can make a publish come in as a draft; the shop's
+Etsy-connection setting (`docs/setup.md` §1.2) is the only lever, and it must be
+set by a human in Printify's UI before the first `apply` ever publishes.
+
+What the API *does* give us: `visible` comes back on `GET products/{id}`, so
+`printify_product.read_live()` reads it and the stage surfaces a warning if a
+product it manages ever comes back `visible: true` — a tripwire, not a fix,
+since nothing here can correct it.
+
+**Still open, and only answerable against the real Printify account (Phase 2's
+job, not this doc's):** whether the shop's draft setting is a persistent
+per-shop default that holds for every future publish, or something that reverts
+and needs re-confirming — write this into `docs/api-findings.md` before Phase 2
+exits, citing this section.
 
 ### `Change` vocabulary
 
@@ -387,8 +412,11 @@ create/update; publish with sync flags; polling; `unlock`; the first cassette
 contract tests.
 
 *Exit:* a product is created against a test shop and gains `external.id`; a second
-`apply` is a no-op; PRD risks 2, 3, 5 and 6 are answered empirically and written up
-in `docs/api-findings.md`.
+`apply` is a no-op; PRD risks 2, 3 and 6 are answered empirically and written up in
+`docs/api-findings.md`. Risk 5's API-surface question is answered already (see
+"Draft-vs-live cannot be set through the API", above) — what Phase 2 must still
+confirm empirically is whether the shop's Printify-side draft setting persists
+across every future publish, and record that in the same file.
 
 ### Phase 3 — Etsy
 
