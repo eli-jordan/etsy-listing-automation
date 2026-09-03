@@ -58,6 +58,24 @@ markers = [
 ]
 addopts = "-m 'not e2e'"
 
+[tool.coverage.run]
+source = ["src/etsy_listings"]
+branch = true
+
+[tool.coverage.report]
+# Branch coverage, not line coverage: a half-tested `if` is the shape most
+# regressions hide in. Currently ~85%, so the gate has real headroom -- if a
+# change drops it under 80, that is a change that shipped untested logic, not
+# a threshold to nudge downward.
+fail_under = 80
+show_missing = true
+skip_covered = true
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
+
 [tool.ruff]
 line-length = 100
 target-version = "py312"

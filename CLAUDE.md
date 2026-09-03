@@ -36,11 +36,19 @@ last-applied doc` saves the next reader a trip through 700 lines of PRD.
 
 ## Environment
 
-Git runs under **cygwin with zsh**. This matters more than usual here:
+**Run everything in zsh under cygwin.** Commands, test runs, linters, the type
+checker, git, `npm`, and tool installs all belong in that shell — it is the
+environment this project is developed and verified in, and the only one its
+paths, PATH setup and scripts are known to work in. Do not reach for
+PowerShell, `cmd`, or Git Bash: Git Bash in particular *looks* like it works
+and then bites, because it mangles POSIX arguments (`/home/Admin` becomes
+`C:/Program Files/Git/home/Admin`) and puts its own `bash` ahead of cygwin's,
+which breaks the `npm` launcher script. If a command is worth running, run it
+in cygwin zsh; if it fails there, that is a real failure, not an artefact.
 
-- Use POSIX paths and shell syntax. The repo lives at
-  `/home/Admin/code/etsy-listing-automation` from inside cygwin, and at
-  `C:\cygwin64\home\Admin\code\etsy-listing-automation` from Windows tools.
+The repo lives at `/home/Admin/code/etsy-listing-automation` from inside
+cygwin, and at `C:\cygwin64\home\Admin\code\etsy-listing-automation` from
+Windows tools. Use POSIX paths and shell syntax.
 - The toolchain is **Windows-native, driven from cygwin**: `uv` (and the Python
   it manages) and `node` are Windows binaries on cygwin's PATH via
   `~/.zshenv`. Cygwin translates the *working directory* for them, so running
@@ -59,26 +67,23 @@ Git runs under **cygwin with zsh**. This matters more than usual here:
 - Line endings: git warns about `LF → CRLF` on write. Content is stored LF. The
   warnings are noise, not a problem to fix.
 
-### Known-broken: GitHub credentials
+### GitHub access
 
-`~/.gitconfig` routes GitHub HTTPS auth through GitHub CLI:
+Working, as of GitHub CLI 2.98.0. `~/.gitconfig` routes GitHub HTTPS auth
+through `gh`:
 
 ```
 credential.https://github.com.helper !'/cygdrive/c/Program Files/GitHub CLI/gh.exe' auth git-credential
 ```
 
-That path does not exist — `gh` is not installed. Consequences: **`git push`,
-`git ls-remote` and anything else touching `origin` will hang** on the dead
-helper (it blocks rather than failing fast), and `gh` commands are unavailable, so
-PRs cannot be opened from the command line.
+That path exists, `C:\Program Files\GitHub CLI\` is on the machine PATH, and
+`gh auth status` reports a logged-in account with `repo` scope — so `git
+push`, `git fetch` and `gh pr create` all work from cygwin zsh.
 
-Diagnose quickly with `GIT_TERMINAL_PROMPT=0 git ls-remote origin` — that fails
-fast instead of hanging. Fix is the user's call: reinstall GitHub CLI, or delete
-the two stale `credential.https://*.github.com.helper` lines from `~/.gitconfig`
-so git falls back to `manager-core`.
-
-Until it is fixed, commit locally and tell the user the push and PR could not be
-done. Do not silently skip the step.
+*(Historical note, in case the symptom returns: this helper previously pointed
+at a `gh.exe` that was not installed, and every command touching `origin`
+**hung** on it rather than failing. `GIT_TERMINAL_PROMPT=0 git ls-remote
+origin` fails fast and is the quick way to tell.)*
 
 ## Toolchain
 
@@ -205,11 +210,33 @@ grid/ruler test design and a tiny synthetic mockup template set, deterministical
 The E2E test hits real Printify and Etsy and costs real state. It is never part of
 a default run. It also doubles as the cassette recorder.
 
+### Coverage: 80% is a floor, not a target
+
+`./scripts/check.sh` measures **branch** coverage over the whole suite and
+**fails under 80%** (`fail_under` in `pyproject.toml`). Line coverage is not
+enough: a half-tested `if` is the shape most regressions hide in.
+
+It currently sits at ~85%, so there is real headroom. If a change drops it
+below the floor, that change shipped untested logic — write the test. Do not
+lower the threshold, and do not add `# pragma: no cover` to make a number go
+up. The one legitimate use of an exclusion is code that genuinely cannot be
+exercised in-process (a `__main__` guard, a `TYPE_CHECKING` block), and those
+are already configured centrally.
+
+Coverage is deliberately **not** in `addopts`, so running one file
+(`uv run pytest tests/unit/test_money.py`) doesn't fail a gate it was never
+going to meet. The gate lives in the check script, which is what runs before a
+commit.
+
 ### Running the suite
+
+All of these run in cygwin zsh (see Environment).
 
 ```
 uv sync                              # install deps + create .venv
-./scripts/check.sh                   # format + lint + typecheck + test, one command
+./scripts/check.sh                   # format + lint + typecheck + test + coverage gate
+uv run pytest --cov                  # coverage on demand, enforcing the 80% floor
+uv run pytest --cov --cov-report=html  # then open htmlcov/index.html
 uv run pytest                        # full suite (excludes -m e2e by default)
 uv run pytest tests/unit/test_money.py                     # one file
 uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test

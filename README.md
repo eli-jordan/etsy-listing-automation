@@ -113,7 +113,11 @@ when `ui/frontend/dist/` doesn't already exist — a CI-built wheel ships
 
 ## Development
 
-One command runs everything:
+Development happens in **zsh under cygwin** — that is the shell this project is
+built and verified in, and the one its PATH setup and scripts expect. See
+[CLAUDE.md](CLAUDE.md) for why other shells (Git Bash especially) misbehave here.
+
+One command runs everything, including the coverage gate:
 
 ```bash
 ./scripts/check.sh
@@ -122,11 +126,20 @@ One command runs everything:
 Or the individual steps:
 
 ```bash
-uv run ruff format .          # formatter
-uv run ruff check .           # linter
+uv run ruff format .           # formatter
+uv run ruff check .            # linter
 uv run mypy src                # strict type check
 uv run pytest                  # full test suite (excludes -m e2e by default)
+uv run pytest --cov            # ...with the branch-coverage gate
 ```
+
+### Coverage
+
+`check.sh` measures **branch** coverage and fails under **80%** (currently
+~85%). Coverage is not enabled by default in `pytest` runs, so running a single
+test file doesn't trip a gate it could never meet — the gate runs in the check
+script, before a commit. `uv run pytest --cov --cov-report=html` then opening
+`htmlcov/index.html` shows exactly which branches are missed.
 
 Useful pytest invocations:
 
