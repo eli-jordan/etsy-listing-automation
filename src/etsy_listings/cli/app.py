@@ -25,6 +25,7 @@ from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import build_plan, format_plan
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.workspace.layout import LISTINGS_DIR
+from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import Workspace, WorkspaceNotFoundError
 
 app = typer.Typer(no_args_is_help=True)
@@ -40,9 +41,11 @@ def _root_callback() -> None:
     # (`apply`, `new`, ...) is added in a later phase.
 
 
-def _open_workspace(root: Path | None) -> Workspace:
+def _open_workspace(root: str | None) -> Workspace:
+    """``--root`` is taken as a raw string, not a Path, so a Cygwin-style
+    ``/home/...`` argument can be translated before pathlib mangles it."""
     try:
-        return Workspace.discover(root_override=root)
+        return Workspace.discover(root_override=to_native_path(root) if root else None)
     except WorkspaceNotFoundError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
@@ -83,7 +86,7 @@ def _load_listing(workspace: Workspace, name: str) -> Listing:
 def plan(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
     all: bool = typer.Option(False, "--all", help="Plan every listing in the workspace"),
-    root: Path | None = typer.Option(None, "--root", help="Workspace root override"),
+    root: str | None = typer.Option(None, "--root", help="Workspace root override"),
 ) -> None:
     """Three-way diff against live state; decides which stages need to run."""
     if not listing and not all:
@@ -120,7 +123,7 @@ def plan(
 def apply(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
     all: bool = typer.Option(False, "--all", help="Apply every listing in the workspace"),
-    root: Path | None = typer.Option(None, "--root", help="Workspace root override"),
+    root: str | None = typer.Option(None, "--root", help="Workspace root override"),
 ) -> None:
     """Execute every stage the plan identified. Only local stages (render) run
     until later phases add Printify/Etsy."""
@@ -162,7 +165,7 @@ def apply(
 def new(
     design: str = typer.Argument(..., help="Design name, matching designs/<name>.png"),
     category: str = typer.Option("tshirt", "--category", help="Blueprint category filter"),
-    root: Path | None = typer.Option(None, "--root", help="Workspace root override"),
+    root: str | None = typer.Option(None, "--root", help="Workspace root override"),
 ) -> None:
     """Interactive garment/provider picker; writes profile (if absent) + listing."""
     from etsy_listings.newcmd.interactive import run_new
@@ -174,7 +177,7 @@ def new(
 
 @app.command()
 def ui(
-    root: Path | None = typer.Option(None, "--root", help="Workspace root override"),
+    root: str | None = typer.Option(None, "--root", help="Workspace root override"),
     host: str = typer.Option("127.0.0.1", "--host"),
     port: int = typer.Option(8000, "--port"),
 ) -> None:

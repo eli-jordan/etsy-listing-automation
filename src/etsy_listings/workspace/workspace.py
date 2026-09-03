@@ -15,6 +15,7 @@ from pathlib import Path, PureWindowsPath
 
 from etsy_listings.config.defaults import Defaults
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.userpath import to_native_path
 
 
 class WorkspaceNotFoundError(FileNotFoundError):
@@ -67,9 +68,12 @@ class Workspace:
                 raise WorkspaceNotFoundError(candidate)
             return candidate
 
+        # ETSY_LISTINGS_ROOT arrives as a raw string, so it may still be in
+        # Cygwin form. (--root gets the same treatment in the CLI, which must
+        # translate before pathlib touches the string -- see to_native_path.)
         env_root = os.environ.get(layout.ROOT_ENV_VAR)
         if env_root:
-            candidate = Path(env_root).resolve()
+            candidate = to_native_path(env_root).resolve()
             if not (candidate / layout.DEFAULTS_FILE).is_file():
                 raise WorkspaceNotFoundError(candidate)
             return candidate

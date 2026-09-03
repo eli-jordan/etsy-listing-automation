@@ -41,7 +41,17 @@ Git runs under **cygwin with zsh**. This matters more than usual here:
 - Use POSIX paths and shell syntax. The repo lives at
   `/home/Admin/code/etsy-listing-automation` from inside cygwin, and at
   `C:\cygwin64\home\Admin\code\etsy-listing-automation` from Windows tools.
-  Windows-side tools invoked from cygwin need `/cygdrive/c/...` translation.
+- The toolchain is **Windows-native, driven from cygwin**: `uv` (and the Python
+  it manages) and `node` are Windows binaries on cygwin's PATH via
+  `~/.zshenv`. Cygwin translates the *working directory* for them, so running
+  `uv run pytest` or `npm run build` from inside the repo just works. Paths
+  passed as *arguments* do not translate — `C:\...` is what those binaries see.
+- `--root` and `ETSY_LISTINGS_ROOT` therefore accept cygwin paths and translate
+  them (`workspace/userpath.py`): `/home/Admin/ws`, `/cygdrive/c/ws` and
+  `C:\ws` all work. This is why `--root` is declared `str`, not `Path` — on
+  Windows `str(Path("/home/Admin"))` is already `\home\Admin`, and a mangled
+  path can't be distinguished from a root-relative one. Any *new* CLI option
+  taking a user-supplied path needs the same treatment.
 - `core.fileMode` is set to **false** in this repo's local config. The Windows
   filesystem cannot hold the exec bit, so without it every checkout shows phantom
   `100755 → 100644` modifications on files that were committed from elsewhere.
