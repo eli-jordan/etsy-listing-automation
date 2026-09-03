@@ -14,10 +14,9 @@ from pydantic import ValidationError
 
 from etsy_listings.catalog.models import Blueprint, VariantSet
 from etsy_listings.config.errors import format_validation_error
-from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.listing import GENERATE, Listing
 from etsy_listings.config.profile import PrintArea, Profile
-from etsy_listings.config.slug import ColourExceptions, SlugCollisionError, slug_map, slugify
+from etsy_listings.config.slug import ColourExceptions, slug_map, slugify
 from etsy_listings.workspace.workspace import Workspace
 
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -87,7 +86,7 @@ def write_profile_if_absent(workspace: Workspace, slug: str, profile: Profile) -
     """Returns True if a new profile.yaml was written, False if one already
     existed and was left untouched (PRD: "writes profiles/{slug}.yaml if
     absent; reuses it silently if present")."""
-    path = workspace.root / "profiles" / f"{slug}.yaml"
+    path = workspace.profile_file(slug)
     if path.is_file():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -129,30 +128,9 @@ def validate_listing_stub(data: dict[str, Any], *, currency: str) -> Listing:
 
 
 def write_listing(workspace: Workspace, design_name: str, data: dict[str, Any]) -> Path:
-    path = workspace.root / "listings" / design_name / "listing.yaml"
+    path = workspace.listing_file(design_name)
     if path.is_file():
         raise FileExistsError(f"a listing already exists at {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
     return path
-
-
-def load_workspace_exceptions(workspace: Workspace) -> ColourExceptions:
-    return load_exceptions(workspace.root / "exceptions.yaml")
-
-
-__all__ = [
-    "CATEGORY_KEYWORDS",
-    "SIZE_ORDER",
-    "SlugCollisionError",
-    "build_listing_stub",
-    "build_profile",
-    "filter_blueprints_by_category",
-    "load_workspace_exceptions",
-    "profile_slug_for",
-    "resolve_colour_slugs",
-    "sort_sizes",
-    "validate_listing_stub",
-    "write_listing",
-    "write_profile_if_absent",
-]

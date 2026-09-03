@@ -15,7 +15,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from etsy_listings.render.passes import RGB, FloatMap
+from etsy_listings.render.types import RGB, FloatMap
 
 
 def luminance_map(base_rgb: RGB) -> FloatMap:

@@ -7,24 +7,21 @@ A10's strict phase order.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from datetime import UTC, datetime
-from pathlib import Path
 
 import typer
 
 from etsy_listings import __about__
 from etsy_listings.catalog.cache import CachedCatalogClient
 from etsy_listings.catalog.http import HttpCatalogClient
+from etsy_listings.cli.render import format_plan
 from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.exceptions import load_exceptions
-from etsy_listings.config.listing import Listing
-from etsy_listings.config.profile import Profile
 from etsy_listings.engine.apply import execute
-from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.context import EventSink, RunContext
 from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import build_plan, format_plan
+from etsy_listings.engine.plan import build_plan
 from etsy_listings.engine.stages import STAGES
-from etsy_listings.workspace.layout import LISTINGS_DIR
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import Workspace, WorkspaceNotFoundError
 
@@ -51,35 +48,57 @@ def _open_workspace(root: str | None) -> Workspace:
         raise typer.Exit(code=1) from exc
 
 
-def _listing_names(workspace: Workspace) -> list[str]:
-    listings_dir = workspace.root / LISTINGS_DIR
-    if not listings_dir.is_dir():
-        return []
-    return sorted(p.name for p in listings_dir.iterdir() if (p / "listing.yaml").is_file())
+def _run_context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
+    catalog = CachedCatalogClient(HttpCatalogClient(), workspace.catalog_cache_dir())
+    if on_event is None:
+        return RunContext(workspace=workspace, catalog=catalog)
+    return RunContext(workspace=workspace, catalog=catalog, on_event=on_event)
 
 
-def _lock_path(workspace: Workspace, name: str) -> Path:
-    return workspace.root / LISTINGS_DIR / name / "state.lock.json"
+def _empty_lock() -> Lockfile:
+    return Lockfile.empty(tool_version=__about__.VERSION, applied_at=datetime.now(UTC).isoformat())
 
 
-def _read_or_empty_lock(path: Path) -> Lockfile:
-    return Lockfile.read(path) or Lockfile.empty(
-        tool_version=__about__.VERSION, applied_at=datetime.now(UTC).isoformat()
-    )
+def _validate_config(workspace: Workspace, listing: str) -> None:
+    """Parse everything the run depends on, so a config error is reported
+    before any stage work starts. The parsed values are discarded -- each stage
+    loads what it needs itself (A1); this is purely the early failure."""
+    config = workspace.load_listing(listing)
+    workspace.load_profile(config.profile)
+    workspace.load_exceptions()
 
 
-def _load_listing(workspace: Workspace, name: str) -> Listing:
-    listing_dir = workspace.root / LISTINGS_DIR / name
-    listing_path = listing_dir / "listing.yaml"
-    listing = Listing.load(listing_path, currency=workspace.defaults.currency)
+def _target_listings(workspace: Workspace, listing: str | None, every: bool) -> list[str]:
+    if not listing and not every:
+        typer.echo("pass a listing name or --all", err=True)
+        raise typer.Exit(code=1)
 
-    profile_path = workspace.root / "profiles" / f"{listing.profile}.yaml"
-    Profile.load(profile_path)  # validated for side effect of catching config errors early
+    names = workspace.listing_names() if every else [listing] if listing else []
+    if not names:
+        typer.echo("no listings found" if every else f"no such listing: {listing}", err=True)
+        raise typer.Exit(code=1)
+    return names
 
-    exceptions_path = workspace.root / "exceptions.yaml"
-    load_exceptions(exceptions_path)  # validated eagerly; used by render/new in later phases
 
-    return listing
+def _run_over_listings(
+    workspace: Workspace,
+    names: list[str],
+    ctx: RunContext,
+    action: Callable[[RunContext, str, Lockfile], None],
+) -> None:
+    """Run ``action`` per listing, continue-on-error (PRD 16: one bad listing
+    must not halt fifty good ones), exiting non-zero if any failed."""
+    failed = False
+    for name in names:
+        try:
+            _validate_config(workspace, name)
+        except ConfigLoadError as exc:
+            typer.echo(str(exc), err=True)
+            failed = True
+            continue
+        action(ctx, name, Lockfile.read(workspace.lock_file(name)) or _empty_lock())
+
+    raise typer.Exit(code=1 if failed else 0)
 
 
 @app.command()
@@ -89,34 +108,14 @@ def plan(
     root: str | None = typer.Option(None, "--root", help="Workspace root override"),
 ) -> None:
     """Three-way diff against live state; decides which stages need to run."""
-    if not listing and not all:
-        typer.echo("pass a listing name or --all", err=True)
-        raise typer.Exit(code=1)
-
     workspace = _open_workspace(root)
-    catalog = CachedCatalogClient(HttpCatalogClient(), workspace.cache("catalog"))
-    ctx = RunContext(workspace=workspace, catalog=catalog)
+    ctx = _run_context(workspace)
 
-    names = _listing_names(workspace) if all else [listing] if listing else []
-    if not names:
-        typer.echo("no listings found" if all else f"no such listing: {listing}", err=True)
-        raise typer.Exit(code=1)
-
-    exit_code = 0
-    for name in names:
-        try:
-            _load_listing(workspace, name)
-        except ConfigLoadError as exc:
-            typer.echo(str(exc), err=True)
-            exit_code = 1
-            continue
-
-        lock = _read_or_empty_lock(_lock_path(workspace, name))
-        stage_plan = build_plan(ctx, name, lock, STAGES)
-        typer.echo(format_plan(stage_plan))
+    def show_plan(ctx: RunContext, name: str, lock: Lockfile) -> None:
+        typer.echo(format_plan(build_plan(ctx, name, lock, STAGES)))
         typer.echo("")
 
-    raise typer.Exit(code=exit_code)
+    _run_over_listings(workspace, _target_listings(workspace, listing, all), ctx, show_plan)
 
 
 @app.command()
@@ -127,38 +126,15 @@ def apply(
 ) -> None:
     """Execute every stage the plan identified. Only local stages (render) run
     until later phases add Printify/Etsy."""
-    if not listing and not all:
-        typer.echo("pass a listing name or --all", err=True)
-        raise typer.Exit(code=1)
-
     workspace = _open_workspace(root)
-    catalog = CachedCatalogClient(HttpCatalogClient(), workspace.cache("catalog"))
-    ctx = RunContext(
-        workspace=workspace, catalog=catalog, on_event=lambda msg: typer.echo(f"  {msg}")
-    )
+    ctx = _run_context(workspace, on_event=lambda msg: typer.echo(f"  {msg}"))
 
-    names = _listing_names(workspace) if all else [listing] if listing else []
-    if not names:
-        typer.echo("no listings found" if all else f"no such listing: {listing}", err=True)
-        raise typer.Exit(code=1)
-
-    exit_code = 0
-    for name in names:
-        try:
-            _load_listing(workspace, name)
-        except ConfigLoadError as exc:
-            typer.echo(str(exc), err=True)
-            exit_code = 1
-            continue
-
-        lock_path = _lock_path(workspace, name)
-        lock = _read_or_empty_lock(lock_path)
-        stage_plan = build_plan(ctx, name, lock, STAGES)
+    def run_apply(ctx: RunContext, name: str, lock: Lockfile) -> None:
         typer.echo(f"applying {name}")
-        new_lock = execute(ctx, stage_plan, lock, STAGES)
-        new_lock.write(lock_path)
+        plan = build_plan(ctx, name, lock, STAGES)
+        execute(ctx, plan, lock, STAGES).write(workspace.lock_file(name))
 
-    raise typer.Exit(code=exit_code)
+    _run_over_listings(workspace, _target_listings(workspace, listing, all), ctx, run_apply)
 
 
 @app.command()
@@ -171,7 +147,7 @@ def new(
     from etsy_listings.newcmd.interactive import run_new
 
     workspace = _open_workspace(root)
-    catalog = CachedCatalogClient(HttpCatalogClient(), workspace.cache("catalog"))
+    catalog = CachedCatalogClient(HttpCatalogClient(), workspace.catalog_cache_dir())
     run_new(workspace, catalog, design, category)
 
 

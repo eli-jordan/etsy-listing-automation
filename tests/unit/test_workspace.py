@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.workspace.workspace import (
+    InvalidNameError,
     PathEscapesWorkspaceError,
     Workspace,
     WorkspaceNotFoundError,
@@ -94,3 +95,69 @@ def test_cache_path_is_under_root(workspace_root: Path) -> None:
     assert (
         ws.cache("catalog", "blueprints.json") == ws.root / ".cache" / "catalog" / "blueprints.json"
     )
+
+
+# --- layout accessors: the single place that knows the tree's shape ---
+
+
+def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    root = ws.root
+    assert ws.listing_file("take-a-hike") == root / "listings" / "take-a-hike" / "listing.yaml"
+    assert ws.lock_file("take-a-hike") == root / "listings" / "take-a-hike" / "state.lock.json"
+    assert ws.profile_file("comfort-colors-1717") == root / "profiles" / "comfort-colors-1717.yaml"
+    assert ws.exceptions_file() == root / "exceptions.yaml"
+    assert ws.template_dir("flat-lay-01") == root / "mockup-templates" / "flat-lay-01"
+    assert (
+        ws.template_config_file("flat-lay-01") == ws.template_dir("flat-lay-01") / "template.yaml"
+    )
+    assert ws.template_derived_dir("flat-lay-01") == ws.template_dir("flat-lay-01") / "_derived"
+    assert (
+        ws.template_base_image("flat-lay-01", "black")
+        == ws.template_dir("flat-lay-01") / "black.png"
+    )
+    assert ws.render_file("take-a-hike", "black") == (
+        root / ".cache" / "renders" / "take-a-hike" / "black.png"
+    )
+    assert ws.catalog_cache_dir() == root / ".cache" / "catalog"
+
+
+def test_listing_names_finds_listings_with_a_listing_file(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.listing_names() == ["take-a-hike"]
+
+
+def test_listing_names_ignores_directories_without_a_listing_file(workspace_root: Path) -> None:
+    (workspace_root / "listings" / "not-a-listing").mkdir()
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.listing_names() == ["take-a-hike"]
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["..", ".", "", "../escape", "nested/name", "back\\slash", "C:evil"],
+)
+def test_layout_accessors_reject_names_that_are_not_a_single_segment(
+    workspace_root: Path, name: str
+) -> None:
+    """Names reach these accessors from config files and from URLs, so a
+    traversal attempt must be refused before it is ever joined to the root."""
+    ws = Workspace.discover(root_override=workspace_root)
+    with pytest.raises(InvalidNameError):
+        ws.template_dir(name)
+    with pytest.raises(InvalidNameError):
+        ws.listing_file(name)
+
+
+def test_workspace_loads_listing_with_the_workspace_currency(workspace_root: Path) -> None:
+    """The workspace owns defaults.yaml, so callers never pass `currency=`
+    themselves -- the one argument it was possible to get quietly wrong."""
+    ws = Workspace.discover(root_override=workspace_root)
+    listing = ws.load_listing("take-a-hike")
+    assert listing.prices["S"].currency == ws.defaults.currency
+
+
+def test_workspace_loads_profile_and_exceptions(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.load_profile("comfort-colors-1717").mockup_template == "flat-lay-01"
+    assert ws.load_exceptions().root == {}  # absent exceptions.yaml means "no exceptions"

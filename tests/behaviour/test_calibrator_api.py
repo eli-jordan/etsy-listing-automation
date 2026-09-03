@@ -95,6 +95,15 @@ def test_upload_creates_a_new_template_with_default_config(
     assert config_response.status_code == 200
 
 
+def test_traversal_template_name_is_rejected_not_resolved(client: TestClient) -> None:
+    """Template names arrive from the URL. They go through the workspace's
+    layout accessors, so a traversal attempt is refused by the same rule that
+    guards every other path (A8) rather than by a check local to the web layer."""
+    response = client.get("/api/templates/..%2F..%2Fetc/config")
+    assert response.status_code in (400, 404)
+    assert "defaults.yaml" not in response.text
+
+
 def test_health_endpoint(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200

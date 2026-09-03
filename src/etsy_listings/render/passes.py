@@ -12,14 +12,10 @@ from __future__ import annotations
 
 import cv2
 import numpy as np
-from numpy.typing import NDArray
 from PIL import Image
 
 from etsy_listings.render.config import DisplaceConfig, ShadeConfig, WarpConfig
-
-RGBA = NDArray[np.uint8]
-RGB = NDArray[np.uint8]
-FloatMap = NDArray[np.float32]
+from etsy_listings.render.types import RGB, RGBA, FloatMap
 
 DISPLACE_MAX_PX = 24.0
 """Pixel displacement at strength=1.0. A calibration constant, not derived --
@@ -81,7 +77,7 @@ def displace(img: RGBA, cfg: DisplaceConfig, height: FloatMap) -> RGBA:
     return np.asarray(result, dtype=np.uint8)
 
 
-def _soft_light(base: NDArray[np.float32], light: NDArray[np.float32]) -> NDArray[np.float32]:
+def _soft_light(base: FloatMap, light: FloatMap) -> FloatMap:
     """Photoshop-style soft-light blend, both operands in [0, 1]."""
     dark = 2 * base * light + base**2 * (1 - 2 * light)
     bright = np.sqrt(base) * (2 * light - 1) + 2 * base * (1 - light)

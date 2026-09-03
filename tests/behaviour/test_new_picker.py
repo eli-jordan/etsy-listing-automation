@@ -17,9 +17,8 @@ from etsy_listings.catalog.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.config.slug import ColourExceptions
+from etsy_listings.config.slug import ColourExceptions, SlugCollisionError
 from etsy_listings.newcmd.logic import (
-    SlugCollisionError,
     build_listing_stub,
     build_profile,
     filter_blueprints_by_category,

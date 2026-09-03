@@ -10,7 +10,8 @@ from __future__ import annotations
 from PIL import Image
 
 from etsy_listings.render.config import RenderConfig
-from etsy_listings.render.passes import RGB, RGBA, FloatMap, displace, export, shade, warp
+from etsy_listings.render.passes import displace, export, shade, warp
+from etsy_listings.render.types import RGB, RGBA, FloatMap
 
 
 def render(

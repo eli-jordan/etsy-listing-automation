@@ -2,6 +2,11 @@
 preview through the *real* renderer (PRD: "the Python backend re-runs the real
 renderer on each change and streams back the composite, so the preview is the
 actual output, not an approximation").
+
+Every path here comes from ``Workspace``. That is deliberate: template names
+arrive from URLs, and routing them through the workspace's accessors means the
+"stays inside the root" rule (A8) is enforced by the same code the rest of the
+tool uses, instead of a second, bespoke check living in the web layer.
 """
 
 from __future__ import annotations
@@ -24,7 +29,7 @@ from etsy_listings.ui.api.schemas import (
     TemplateSummary,
     UploadResponse,
 )
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -36,15 +41,12 @@ def _workspace(request: Request) -> Workspace:
     return workspace
 
 
-def _template_dir(workspace: Workspace, name: str) -> Path:
-    template_dir = workspace.root / "mockup-templates" / name
+def _template_config_path(workspace: Workspace, name: str) -> Path:
+    """Resolve a template name from a URL, turning a bad one into a 400."""
     try:
-        template_dir.relative_to(workspace.root)
-    except ValueError as exc:  # pragma: no cover - name is a single path segment
-        raise HTTPException(status_code=400, detail="invalid template name") from exc
-    if "/" in name or "\\" in name or name in ("", ".", ".."):
-        raise HTTPException(status_code=400, detail="invalid template name")
-    return template_dir
+        return workspace.template_config_file(name)
+    except InvalidNameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _colours(template_dir: Path) -> list[str]:
@@ -65,95 +67,105 @@ def _default_quad(size: tuple[int, int]) -> WarpConfig:
     )
 
 
+def _read_template_config(path: Path) -> TemplateConfig:
+    return TemplateConfig.model_validate(yaml.safe_load(path.read_text(encoding="utf-8")))
+
+
+def _write_template_config(path: Path, config: TemplateConfig) -> None:
+    path.write_text(
+        yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
+    )
+
+
+def _as_response(config: TemplateConfig) -> TemplateConfigResponse:
+    return TemplateConfigResponse(warp=config.warp, displace=config.displace, shade=config.shade)
+
+
 @router.get("", response_model=list[TemplateSummary])
 def list_templates(request: Request) -> list[TemplateSummary]:
     workspace = _workspace(request)
-    templates_root = workspace.root / "mockup-templates"
+    templates_root = workspace.templates_dir()
     if not templates_root.is_dir():
         return []
-    summaries = []
-    for entry in sorted(templates_root.iterdir()):
-        if not entry.is_dir():
-            continue
-        summaries.append(
-            TemplateSummary(
-                name=entry.name,
-                colours=_colours(entry),
-                has_config=(entry / "template.yaml").is_file(),
-            )
+    return [
+        TemplateSummary(
+            name=entry.name,
+            colours=_colours(entry),
+            has_config=workspace.template_config_file(entry.name).is_file(),
         )
-    return summaries
+        for entry in sorted(templates_root.iterdir())
+        if entry.is_dir()
+    ]
 
 
 @router.post("", response_model=UploadResponse)
 async def upload_template(request: Request, name: str, files: list[UploadFile]) -> UploadResponse:
     workspace = _workspace(request)
-    template_dir = _template_dir(workspace, name)
+    config_path = _template_config_path(workspace, name)
     if not files:
         raise HTTPException(status_code=400, detail="upload at least one colour image")
 
-    template_dir.mkdir(parents=True, exist_ok=True)
+    config_path.parent.mkdir(parents=True, exist_ok=True)
     colours: list[str] = []
     for upload in files:
         if not upload.filename:
             raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
         colour = Path(upload.filename).stem
-        contents = await upload.read()
-        (template_dir / f"{colour}.png").write_bytes(contents)
+        try:
+            destination = workspace.template_base_image(name, colour)
+        except InvalidNameError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        destination.write_bytes(await upload.read())
         colours.append(colour)
 
-    if not (template_dir / "template.yaml").is_file():
-        with Image.open(template_dir / f"{colours[0]}.png") as img:
+    # A freshly uploaded set gets a starting quad so the calibrator has
+    # something to drag; an existing template.yaml is never overwritten.
+    if not config_path.is_file():
+        with Image.open(workspace.template_base_image(name, colours[0])) as img:
             size = img.size
-        default_config = TemplateConfig(warp=_default_quad(size))
-        (template_dir / "template.yaml").write_text(
-            yaml.safe_dump(default_config.model_dump(mode="json"), sort_keys=False),
-            encoding="utf-8",
-        )
+        _write_template_config(config_path, TemplateConfig(warp=_default_quad(size)))
 
     return UploadResponse(name=name, colours=sorted(colours))
 
 
 @router.get("/{name}/config", response_model=TemplateConfigResponse)
 def get_config(request: Request, name: str) -> TemplateConfigResponse:
-    workspace = _workspace(request)
-    template_dir = _template_dir(workspace, name)
-    config_path = template_dir / "template.yaml"
+    config_path = _template_config_path(_workspace(request), name)
     if not config_path.is_file():
         raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}")
-    config = TemplateConfig.model_validate(yaml.safe_load(config_path.read_text(encoding="utf-8")))
-    return TemplateConfigResponse(warp=config.warp, displace=config.displace, shade=config.shade)
+    return _as_response(_read_template_config(config_path))
 
 
 @router.put("/{name}/config", response_model=TemplateConfigResponse)
 def put_config(request: Request, name: str, body: TemplateConfigUpdate) -> TemplateConfigResponse:
-    workspace = _workspace(request)
-    template_dir = _template_dir(workspace, name)
-    if not template_dir.is_dir():
+    config_path = _template_config_path(_workspace(request), name)
+    if not config_path.parent.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
 
     config = TemplateConfig(warp=body.warp, displace=body.displace, shade=body.shade)
-    (template_dir / "template.yaml").write_text(
-        yaml.safe_dump(config.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
-    )
-    return TemplateConfigResponse(warp=config.warp, displace=config.displace, shade=config.shade)
+    _write_template_config(config_path, config)
+    return _as_response(config)
 
 
 @router.post("/{name}/preview")
 def preview(request: Request, name: str, body: PreviewRequest) -> Response:
     workspace = _workspace(request)
-    template_dir = _template_dir(workspace, name)
-    base_path = template_dir / f"{body.colour}.png"
+    try:
+        base_path = workspace.template_base_image(name, body.colour)
+    except InvalidNameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not base_path.is_file():
         raise HTTPException(status_code=404, detail=f"no base image for colour {body.colour!r}")
 
-    design = load_design(BUNDLED_DESIGN)
     base = load_template_base(base_path)
-    cache = DerivedMapCache(template_dir / "_derived")
-
     cfg = RenderConfig(warp=body.warp, displace=body.displace, shade=body.shade)
-    height = cache.height(body.colour, base) if cfg.displace.enabled else None
-    luminance = cache.luminance(body.colour, base) if cfg.shade.enabled else None
+    cache = DerivedMapCache(workspace.template_derived_dir(name))
 
-    image = render(design, base, cfg, height=height, luminance=luminance)
+    image = render(
+        load_design(BUNDLED_DESIGN),
+        base,
+        cfg,
+        height=cache.height(body.colour, base) if cfg.displace.enabled else None,
+        luminance=cache.luminance(body.colour, base) if cfg.shade.enabled else None,
+    )
     return Response(content=encode_png(image), media_type="image/png")

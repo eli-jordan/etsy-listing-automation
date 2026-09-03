@@ -15,8 +15,6 @@ from dataclasses import dataclass
 
 import yaml
 
-from etsy_listings.config.listing import Listing
-from etsy_listings.config.profile import Profile
 from etsy_listings.engine.change import StagePlan
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile, canonical_hash, to_workspace_relative_posix
@@ -54,25 +52,24 @@ class RenderStage:
     local = True
 
     def desired(self, ctx: RunContext, listing: str) -> RenderDesired:
-        root = ctx.workspace.root
-        listing_dir = root / "listings" / listing
-        listing_cfg = Listing.load(
-            listing_dir / "listing.yaml", currency=ctx.workspace.defaults.currency
-        )
-        profile = Profile.load(root / "profiles" / f"{listing_cfg.profile}.yaml")
+        workspace = ctx.workspace
+        listing_cfg = workspace.load_listing(listing)
+        profile = workspace.load_profile(listing_cfg.profile)
 
-        design_path = ctx.workspace.resolve(listing_cfg.design, relative_to=listing_dir)
+        design_path = workspace.resolve(
+            listing_cfg.design, relative_to=workspace.listing_dir(listing)
+        )
         design_hash = f"sha256:{hashlib.sha256(design_path.read_bytes()).hexdigest()}"
 
-        template_dir = root / "mockup-templates" / profile.mockup_template
-        template_yaml_text = (template_dir / "template.yaml").read_text(encoding="utf-8")
+        template = profile.mockup_template
+        template_yaml_text = workspace.template_config_file(template).read_text(encoding="utf-8")
         template_config = TemplateConfig.model_validate(yaml.safe_load(template_yaml_text))
 
         hasher = hashlib.sha256()
         hasher.update(template_yaml_text.encode("utf-8"))
         configs: dict[str, str] = {}
         for colour in listing_cfg.colors:
-            base_path = template_dir / f"{colour}.png"
+            base_path = workspace.template_base_image(template, colour)
             if not base_path.is_file():
                 raise TemplateAssetError(colour, base_path)
             hasher.update(base_path.read_bytes())
@@ -80,7 +77,7 @@ class RenderStage:
 
         return RenderDesired(
             listing=listing,
-            design_ref=to_workspace_relative_posix(root, design_path),
+            design_ref=to_workspace_relative_posix(workspace.root, design_path),
             design_hash=design_hash,
             template_name=profile.mockup_template,
             template_hash=f"sha256:{hasher.hexdigest()}",
@@ -110,31 +107,29 @@ class RenderStage:
     def apply(
         self, ctx: RunContext, stage_plan: StagePlan, desired: RenderDesired
     ) -> StageApplyResult:
-        root = ctx.workspace.root
-        design_path = root / desired.design_ref
-        design = load_design(design_path)
+        workspace = ctx.workspace
+        design = load_design(workspace.root / desired.design_ref)
 
-        template_dir = root / "mockup-templates" / desired.template_name
+        template = desired.template_name
         template_config = TemplateConfig.model_validate(
-            yaml.safe_load((template_dir / "template.yaml").read_text(encoding="utf-8"))
+            yaml.safe_load(workspace.template_config_file(template).read_text(encoding="utf-8"))
         )
-        map_cache = DerivedMapCache(template_dir / "_derived")
+        map_cache = DerivedMapCache(workspace.template_derived_dir(template))
 
         outputs: dict[str, str] = {}
         for colour in desired.colours:
-            base_path = template_dir / f"{colour}.png"
-            base = load_template_base(base_path)
+            base = load_template_base(workspace.template_base_image(template, colour))
             cfg = template_config.resolve(colour)
 
             height = map_cache.height(colour, base) if cfg.displace.enabled else None
             luminance = map_cache.luminance(colour, base) if cfg.shade.enabled else None
 
             image = render_pipeline(design, base, cfg, height=height, luminance=luminance)
-            output_path = ctx.workspace.cache("renders", desired.listing, f"{colour}.png")
+            output_path = workspace.render_file(desired.listing, colour)
             save_png(image, output_path)
 
             output_hash = f"sha256:{hashlib.sha256(output_path.read_bytes()).hexdigest()}"
-            outputs[to_workspace_relative_posix(root, output_path)] = output_hash
+            outputs[to_workspace_relative_posix(workspace.root, output_path)] = output_hash
             ctx.emit(f"rendered {colour}")
 
         applied = {

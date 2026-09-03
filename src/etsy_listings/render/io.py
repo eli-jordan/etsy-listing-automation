@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from etsy_listings.render.passes import RGB, RGBA
+from etsy_listings.render.types import RGB, RGBA
 
 
 class DesignValidationError(ValueError):

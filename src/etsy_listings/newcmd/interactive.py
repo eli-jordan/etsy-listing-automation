@@ -12,12 +12,11 @@ import questionary
 import typer
 
 from etsy_listings.catalog.client import CatalogClient
+from etsy_listings.config.slug import SlugCollisionError
 from etsy_listings.newcmd.logic import (
-    SlugCollisionError,
     build_listing_stub,
     build_profile,
     filter_blueprints_by_category,
-    load_workspace_exceptions,
     profile_slug_for,
     resolve_colour_slugs,
     validate_listing_stub,
@@ -56,7 +55,7 @@ def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, cate
     provider = next(p for p in providers if p.title == provider_choice)
 
     variant_set = catalog.variants(blueprint.id, provider.id)
-    exceptions = load_workspace_exceptions(workspace)
+    exceptions = workspace.load_exceptions()
     try:
         colour_slugs = resolve_colour_slugs(variant_set, exceptions)
     except SlugCollisionError as exc:
