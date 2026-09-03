@@ -9,11 +9,12 @@ reviewable Etsy draft: renders custom mockups locally, configures the product in
 Printify, and patches the resulting Etsy listing. Idempotent by design — re-running
 against unchanged inputs must make no remote changes.
 
-**Phase 0 (foundations) is implemented**; Phases 1-6 are not. "Code layout"
-below shows what exists today, marked per module. "Commands" still describes
-the PRD's full CLI surface — only `plan` is real; the rest is the agreed design
-for later phases. Check the tree, or [docs/architecture.md](docs/architecture.md),
-before assuming a module, command or test exists.
+**Phases 0 and 1 are implemented**; Phases 2-6 are not. "Code layout" below
+shows what exists today, marked per module. "Commands" still describes the
+PRD's full CLI surface — `plan`, `apply`, `new` and `ui` are real; the rest is
+the agreed design for later phases. Check the tree, or
+[docs/architecture.md](docs/architecture.md), before assuming a module,
+command or test exists.
 
 ## The two documents, and which wins
 
@@ -79,24 +80,36 @@ OpenCV and Pillow are **pinned to exact versions**, deliberately. Renders are
 hashed and compared against goldens; a minor bump that shifts output bytes causes
 every listing's images to re-upload. Do not loosen those pins casually.
 
+`click` is pinned to `<8.2` alongside typer `0.12.x` — a newer click breaks
+typer's `TyperArgument.make_metavar()` call signature. Bump both together if
+you ever upgrade typer.
+
+Node is only needed for frontend development, not for installing the package
+(see "Frontend build hook" in the README) — any current LTS works. On a
+machine without admin rights (`winget install` needing elevation fails), the
+official Windows x64 zip from nodejs.org extracts and runs fine from a
+user-writable directory with no installer.
+
 ## Code layout
 
 Per `A1`–`A10`. Full detail in the plan; the shape:
 
 ```
 src/etsy_listings/
-  cli/          Typer app, one module per command             [Phase 0: `plan` only]
+  cli/          Typer app, one module per command        [plan/apply/new/ui done]
   workspace/    root discovery (walk up for defaults.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
   catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, stages/
-                                                    [scaffolding done; STAGES is empty]
-  render/       pure passes, frozen RenderConfig, derived maps, pipeline    [Phase 1]
+                                        [done; STAGES = [Render()], more stages later]
+  render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
+  newcmd/       `new` picker: pure logic + a thin questionary wrapper       [done]
   clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
                                                                             [Phase 2/3]
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
-  ui/           FastAPI api/ + React frontend/                    [Phase 1: calibrator only]
+  ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
+                             (dashboard/setup wizard/run runner: Phase 5)
 ```
 
 ## Invariants
@@ -161,6 +174,11 @@ Golden failures should name the guilty render pass — that is why per-pass gold
 exist alongside end-to-end ones. Regenerate with `--update-goldens` only after
 looking at the diff.
 
+No real design files or garment photography live in this repo (or a fresh
+checkout) — `scripts/generate_test_assets.py` procedurally generates a
+grid/ruler test design and a tiny synthetic mockup template set, deterministically
+(fixed seed, no clock input), committed as ordinary test fixtures.
+
 The E2E test hits real Printify and Etsy and costs real state. It is never part of
 a default run. It also doubles as the cassette recorder.
 
@@ -179,18 +197,22 @@ uv run mypy src                      # strict type check
 uv run ruff check . / ruff format .  # lint / format
 ```
 
+Frontend (`src/etsy_listings/ui/frontend/`): `npm run dev|build|typecheck|lint|format`.
+See the README's "The calibrator" section for the full loop, including
+regenerating the typed API client after an endpoint change.
+
 ## Commands
 
-Only `plan` is implemented (Phase 0). The rest of this table is the PRD's
-agreed CLI surface for reference when building later phases — do not assume a
-command exists because it is listed here.
+`plan`, `apply`, `new` and `ui` are implemented. The rest of this table is the
+PRD's agreed CLI surface for reference when building later phases — do not
+assume a command exists because it is listed here.
 
 ```
-new <design>       interactive garment/provider picker; writes profile + listing   [Phase 1]
+new <design>       interactive garment/provider picker; writes profile + listing   [done]
 plan <listing|--all>   three-way diff against live state                          [done]
-apply <listing|--all>  execute every stage the plan identified                     [Phase 2+]
-render / generate      force a single local stage                          [Phase 1 / Phase 4]
-ui                     setup wizard, dashboard, calibrator, run runner    [Phase 1: calibrator only]
+apply <listing|--all>  execute every stage the plan identified          [done; only `render` exists]
+render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
+ui                     setup wizard, dashboard, calibrator, run runner    [calibrator done; rest Phase 5]
 auth                   Etsy OAuth PKCE + Anthropic credentials                     [Phase 3]
 catalog refresh        force-refresh the cached Printify catalog                  [Phase 6]
 unlock <listing>       clear a Printify product stuck publishing                  [Phase 2]
