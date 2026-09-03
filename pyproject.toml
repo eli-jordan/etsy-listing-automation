@@ -29,6 +29,14 @@ etsy-listings = "etsy_listings.cli.app:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/etsy_listings"]
 
+[tool.hatch.build]
+# ui/frontend/dist/ is gitignored (built, not source) but must ship in the
+# wheel -- hatchling excludes gitignored paths from artifacts by default.
+artifacts = ["src/etsy_listings/ui/frontend/dist/**"]
+
+[tool.hatch.build.hooks.custom]
+path = "hatch_build.py"
+
 [dependency-groups]
 dev = [
     "pytest>=8.2,<9",
