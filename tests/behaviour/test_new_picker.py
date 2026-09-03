@@ -1,7 +1,7 @@
 """Behaviour tests for the `new` picker's logic, through the fake catalog
 client -- no live Printify catalog, no terminal, per the plan's guidance:
 "drive it in tests through the fake catalog client and make sure the
-interactive path is thin enough to be obviously correct.\" """
+interactive path is thin enough to be obviously correct.\""""
 
 from __future__ import annotations
 

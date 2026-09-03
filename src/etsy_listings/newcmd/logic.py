@@ -115,7 +115,7 @@ def build_listing_stub(
         "design": design_ref,
         "colors": colours,
         "brief": brief,
-        "prices": {size: base_price for size in sizes},
+        "prices": dict.fromkeys(sizes, base_price),
         "etsy": {"title": GENERATE, "description": GENERATE, "tags": GENERATE, "materials": []},
         "media": [{"mockup": colour} for colour in colours],
     }

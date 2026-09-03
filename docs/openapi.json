@@ -5,7 +5,7 @@
         "properties": {
           "files": {
             "items": {
-              "format": "binary",
+              "contentMediaType": "application/octet-stream",
               "type": "string"
             },
             "title": "Files",
@@ -209,6 +209,13 @@
       },
       "ValidationError": {
         "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
           "loc": {
             "items": {
               "anyOf": [
@@ -554,6 +561,43 @@
         "tags": [
           "templates"
         ]
+      }
+    },
+    "/{full_path}": {
+      "get": {
+        "operationId": "spa_fallback__full_path__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "full_path",
+            "required": true,
+            "schema": {
+              "title": "Full Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Spa Fallback"
       }
     }
   }
