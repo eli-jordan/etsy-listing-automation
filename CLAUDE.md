@@ -9,10 +9,11 @@ reviewable Etsy draft: renders custom mockups locally, configures the product in
 Printify, and patches the resulting Etsy listing. Idempotent by design — re-running
 against unchanged inputs must make no remote changes.
 
-**There is no application code yet.** The repo currently holds two documents and
-nothing else. Everything under "Code layout" and "Commands" below describes the
-agreed design, not shipped behaviour — do not assume a module, command or test
-exists because it is named here. Check the tree first.
+**Phase 0 (foundations) is implemented**; Phases 1-6 are not. "Code layout"
+below shows what exists today, marked per module. "Commands" still describes
+the PRD's full CLI surface — only `plan` is real; the rest is the agreed design
+for later phases. Check the tree, or [docs/architecture.md](docs/architecture.md),
+before assuming a module, command or test exists.
 
 ## The two documents, and which wins
 
@@ -84,16 +85,18 @@ Per `A1`–`A10`. Full detail in the plan; the shape:
 
 ```
 src/etsy_listings/
-  cli/          Typer app, one module per command
-  workspace/    root discovery (walk up for defaults.yaml), path resolution
-  config/       pydantic models, Money type, slugification
-  catalog/      Printify catalog fetch + TTL cache + name-to-id resolution
+  cli/          Typer app, one module per command             [Phase 0: `plan` only]
+  workspace/    root discovery (walk up for defaults.yaml), path resolution  [done]
+  config/       pydantic models, Money type, slugification     [done]
+  catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, stages/
-  render/       pure passes, frozen RenderConfig, derived maps, pipeline
+                                                    [scaffolding done; STAGES is empty]
+  render/       pure passes, frozen RenderConfig, derived maps, pipeline    [Phase 1]
   clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
-  ai/           prompts, generation, hard validation
-  runs/         SQLite recorder
-  ui/           FastAPI api/ + React frontend/
+                                                                            [Phase 2/3]
+  ai/           prompts, generation, hard validation                      [Phase 4]
+  runs/         SQLite recorder                                           [Phase 6]
+  ui/           FastAPI api/ + React frontend/                    [Phase 1: calibrator only]
 ```
 
 ## Invariants
@@ -161,21 +164,37 @@ looking at the diff.
 The E2E test hits real Printify and Etsy and costs real state. It is never part of
 a default run. It also doubles as the cassette recorder.
 
-## Commands
-
-Not yet implemented — this is the agreed CLI surface, for reference when building
-it. See the PRD's CLI table for the authoritative list.
+### Running the suite
 
 ```
-new <design>       interactive garment/provider picker; writes profile + listing
-plan <listing|--all>   three-way diff against live state
-apply <listing|--all>  execute every stage the plan identified
-render / generate      force a single local stage
-ui                     setup wizard, dashboard, calibrator, run runner
-auth                   Etsy OAuth PKCE + Anthropic credentials
-catalog refresh        force-refresh the cached Printify catalog
-unlock <listing>       clear a Printify product stuck publishing
-status [<listing>]
+uv sync                              # install deps + create .venv
+./scripts/check.sh                   # format + lint + typecheck + test, one command
+uv run pytest                        # full suite (excludes -m e2e by default)
+uv run pytest tests/unit/test_money.py                     # one file
+uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
+uv run pytest -k "currency"          # by keyword
+uv run pytest -m e2e                 # only the env-gated e2e layer
+uv run pytest --update-goldens       # regenerate render goldens (Phase 1+)
+uv run mypy src                      # strict type check
+uv run ruff check . / ruff format .  # lint / format
+```
+
+## Commands
+
+Only `plan` is implemented (Phase 0). The rest of this table is the PRD's
+agreed CLI surface for reference when building later phases — do not assume a
+command exists because it is listed here.
+
+```
+new <design>       interactive garment/provider picker; writes profile + listing   [Phase 1]
+plan <listing|--all>   three-way diff against live state                          [done]
+apply <listing|--all>  execute every stage the plan identified                     [Phase 2+]
+render / generate      force a single local stage                          [Phase 1 / Phase 4]
+ui                     setup wizard, dashboard, calibrator, run runner    [Phase 1: calibrator only]
+auth                   Etsy OAuth PKCE + Anthropic credentials                     [Phase 3]
+catalog refresh        force-refresh the cached Printify catalog                  [Phase 6]
+unlock <listing>       clear a Printify product stuck publishing                  [Phase 2]
+status [<listing>]                                                                [Phase 6]
 ```
 
 ## Writing style for the docs
