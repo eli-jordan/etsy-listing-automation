@@ -143,6 +143,87 @@ class TestThumbnails:
         assert response.status_code in (400, 404)
 
 
+class TestDesignLibrary:
+    """A16: the test design is a library, not a fixed literal. The grid target
+    answers "is the warp right?" and says nothing about how a real ink weight
+    sits on a real garment, so the set has to be open."""
+
+    def _png_bytes(self) -> bytes:
+        from io import BytesIO
+
+        from PIL import Image
+
+        buffer = BytesIO()
+        Image.new("RGBA", (64, 64), (200, 60, 60, 255)).save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def test_lists_the_bundled_designs_with_labels(self, client: TestClient) -> None:
+        response = client.get("/api/designs")
+        assert response.status_code == 200
+        by_id = {d["id"]: d for d in response.json()}
+        assert by_id["bundled-grid"]["label"] == "Grid / ruler target"
+        assert by_id["bundled-on-light"]["label"] == "Sample art · light ink"
+        assert by_id["bundled-on-dark"]["label"] == "Sample art · dark ink"
+        assert {d["source"] for d in response.json()} == {"bundled"}
+
+    def test_an_uploaded_design_joins_the_library(self, client: TestClient) -> None:
+        upload = client.post(
+            "/api/designs",
+            files={"file": ("my-artwork.png", self._png_bytes(), "image/png")},
+        )
+        assert upload.status_code == 200
+        assert upload.json()["id"] == "my-artwork"
+
+        by_id = {d["id"]: d for d in client.get("/api/designs").json()}
+        assert by_id["my-artwork"]["source"] == "upload"
+
+    def test_an_uploaded_design_lands_in_the_workspace_not_the_repo(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        client.post(
+            "/api/designs", files={"file": ("my-artwork.png", self._png_bytes(), "image/png")}
+        )
+        assert (workspace_root / "test-designs" / "my-artwork.png").is_file()
+
+    def test_an_uploaded_design_can_be_previewed_through_the_real_renderer(
+        self, client: TestClient
+    ) -> None:
+        client.post(
+            "/api/designs", files={"file": ("my-artwork.png", self._png_bytes(), "image/png")}
+        )
+        config = client.get("/api/templates/flat-lay-01/config").json()
+        response = client.post(
+            "/api/templates/flat-lay-01/preview",
+            json={**config, "colour": "black", "design": "my-artwork"},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+
+    def test_an_unknown_design_is_a_400_not_a_crash(self, client: TestClient) -> None:
+        """The id now comes from a list the client fetched, so a stale one is a
+        client error rather than a KeyError escaping as a 500."""
+        config = client.get("/api/templates/flat-lay-01/config").json()
+        response = client.post(
+            "/api/templates/flat-lay-01/preview",
+            json={**config, "colour": "black", "design": "no-such-design"},
+        )
+        assert response.status_code == 400
+        assert "no-such-design" in response.json()["detail"]
+
+    def test_upload_rejects_a_name_that_escapes_the_workspace(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/designs",
+            files={"file": ("../../evil.png", self._png_bytes(), "image/png")},
+        )
+        assert response.status_code == 400
+
+    def test_upload_rejects_a_file_that_is_not_an_image(self, client: TestClient) -> None:
+        response = client.post(
+            "/api/designs", files={"file": ("notes.txt", b"not a png", "text/plain")}
+        )
+        assert response.status_code == 400
+
+
 def test_get_config_returns_the_fixture_bounding_box(client: TestClient) -> None:
     response = client.get("/api/templates/flat-lay-01/config")
     assert response.status_code == 200

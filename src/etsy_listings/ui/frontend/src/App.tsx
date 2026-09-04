@@ -38,6 +38,11 @@ export function App() {
     config: TemplateConfigState;
   } | null>(null);
   const [status, setStatus] = useState("");
+  // Which test artwork the previews render with (A16). A way of looking at a
+  // template rather than a property of one, so it lives here and never enters
+  // template.yaml -- and it deliberately survives switching template, since
+  // "show me all of these against my real artwork" is the point of changing it.
+  const [design, setDesign] = useState("bundled-grid");
 
   const refreshTemplates = useCallback((selectName?: string) => {
     listTemplates()
@@ -153,13 +158,27 @@ export function App() {
               config={config}
               colours={selected?.colours ?? []}
               onChange={setConfig}
+              design={design}
+              onDesignChange={setDesign}
             />
           )}
           {templateName && config?.kind === "multiple" && (
-            <MultipleEditor templateName={templateName} config={config} onChange={setConfig} />
+            <MultipleEditor
+              templateName={templateName}
+              config={config}
+              onChange={setConfig}
+              design={design}
+              onDesignChange={setDesign}
+            />
           )}
           {templateName && config?.kind === "single" && (
-            <SingleEditor templateName={templateName} config={config} onChange={setConfig} />
+            <SingleEditor
+              templateName={templateName}
+              config={config}
+              onChange={setConfig}
+              design={design}
+              onDesignChange={setDesign}
+            />
           )}
           {templateName && !config && <p>No template.yaml yet for {templateName}.</p>}
           {!templateName && <p>No templates yet -- upload one below.</p>}

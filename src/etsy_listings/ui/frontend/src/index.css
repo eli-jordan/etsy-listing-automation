@@ -701,6 +701,143 @@ button:not([class]):active:not(:disabled) {
   margin-top: var(--space-2);
 }
 
+/* — the inspector's panels — */
+.realism,
+.design-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.realism__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.realism__heading,
+.design-picker__heading {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  margin: 0;
+}
+
+.realism__pass {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.realism__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.realism__row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.realism__title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-right: auto;
+  cursor: pointer;
+}
+
+.realism__value {
+  font-size: 11px;
+  width: 3ch;
+  text-align: right;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+/* The endpoint captions say which way the slider runs -- "45%" alone does not
+   tell you what more of it looks like. */
+.realism__scale {
+  margin: 0;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.realism__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.realism__divider {
+  border: 0;
+  height: 1px;
+  background: var(--color-divider);
+  margin: var(--space-1) 0;
+  width: 100%;
+}
+
+.realism__advanced {
+  font-size: 11px;
+  border-top: 1px dashed var(--color-divider);
+  padding-top: var(--space-2);
+}
+
+.realism__advanced summary {
+  cursor: pointer;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+/* Two columns so the pass names line up against their values -- these are
+   read as a table of what is actually in template.yaml. */
+.realism__raw {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-2);
+  margin: var(--space-2) 0 0;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 10.5px;
+}
+
+.realism__raw dt {
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.realism__raw dd {
+  margin: 0;
+  text-align: right;
+}
+
+.design-picker__select {
+  width: 100%;
+}
+
+.design-picker__upload {
+  font-size: 11px;
+  color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+/* The native file input is replaced by its label, which reads as the
+   wireframe's "＋ Upload a PNG…" row. */
+.design-picker__upload input[type="file"] {
+  display: none;
+}
+
+.design-picker__status {
+  margin: 0;
+  min-height: 1em;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 .upload-form {
   margin-top: var(--space-8);
 }

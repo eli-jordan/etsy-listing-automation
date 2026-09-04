@@ -28,7 +28,7 @@ afterEach(() => {
 describe("Gallery", () => {
   it("renders nothing for a single-colour set", () => {
     const { container } = render(
-      <Gallery templateName="flat-lay-01" colours={["black"]} config={CONFIG} />,
+      <Gallery templateName="flat-lay-01" colours={["black"]} config={CONFIG} design="bundled-grid" />,
     );
     expect(container).toBeEmptyDOMElement();
   });
@@ -38,7 +38,7 @@ describe("Gallery", () => {
       .spyOn(calibrator, "renderPreview")
       .mockImplementation(async (_name, body) => `blob:${"colour" in body ? body.colour : ""}`);
 
-    render(<Gallery templateName="flat-lay-01" colours={["black", "ivory"]} config={CONFIG} />);
+    render(<Gallery templateName="flat-lay-01" colours={["black", "ivory"]} config={CONFIG} design="bundled-grid" />);
 
     expect(spy).not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(800);
@@ -48,6 +48,7 @@ describe("Gallery", () => {
     expect(spy).toHaveBeenCalledWith(
       "flat-lay-01",
       expect.objectContaining({ colour: "black", bounding_box: CONFIG.bounding_box }),
+      "bundled-grid",
     );
     await waitFor(() => expect(screen.getByAltText("black")).toHaveAttribute("src", "blob:black"));
     expect(screen.getByAltText("ivory")).toHaveAttribute("src", "blob:ivory");
@@ -56,10 +57,10 @@ describe("Gallery", () => {
   it("only fires once for rapid successive config changes (debounced)", async () => {
     const spy = vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:x");
     const { rerender } = render(
-      <Gallery templateName="flat-lay-01" colours={["black", "ivory"]} config={CONFIG} />,
+      <Gallery templateName="flat-lay-01" colours={["black", "ivory"]} config={CONFIG} design="bundled-grid" />,
     );
     const changed = { ...CONFIG, shade: { ...CONFIG.shade, opacity: 0.9 } };
-    rerender(<Gallery templateName="flat-lay-01" colours={["black", "ivory"]} config={changed} />);
+    rerender(<Gallery templateName="flat-lay-01" colours={["black", "ivory"]} config={changed} design="bundled-grid" />);
 
     await vi.advanceTimersByTimeAsync(800);
     // Two colours, but only the latest config's debounce fired -- not one

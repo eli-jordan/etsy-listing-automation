@@ -1,6 +1,20 @@
 {
   "components": {
     "schemas": {
+      "Body_upload_design_api_designs_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_design_api_designs_post",
+        "type": "object"
+      },
       "Body_upload_template_api_templates_post": {
         "properties": {
           "files": {
@@ -47,11 +61,6 @@
           },
           "design": {
             "default": "bundled-grid",
-            "enum": [
-              "bundled-grid",
-              "bundled-on-light",
-              "bundled-on-dark"
-            ],
             "title": "Design",
             "type": "string"
           },
@@ -129,6 +138,34 @@
         "title": "ColourMatrixTemplate",
         "type": "object"
       },
+      "DesignSummary": {
+        "description": "One entry in the calibrator's test-design library (A16).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "bundled",
+              "upload"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "source"
+        ],
+        "title": "DesignSummary",
+        "type": "object"
+      },
       "DisplaceConfig": {
         "description": "PRD: implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
@@ -163,11 +200,6 @@
         "properties": {
           "design": {
             "default": "bundled-grid",
-            "enum": [
-              "bundled-grid",
-              "bundled-on-light",
-              "bundled-on-dark"
-            ],
             "title": "Design",
             "type": "string"
           },
@@ -362,11 +394,6 @@
           },
           "design": {
             "default": "bundled-grid",
-            "enum": [
-              "bundled-grid",
-              "bundled-on-light",
-              "bundled-on-dark"
-            ],
             "title": "Design",
             "type": "string"
           },
@@ -607,6 +634,70 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/designs": {
+      "get": {
+        "operationId": "list_designs_api_designs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DesignSummary"
+                  },
+                  "title": "Response List Designs Api Designs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Designs",
+        "tags": [
+          "designs"
+        ]
+      },
+      "post": {
+        "operationId": "upload_design_api_designs_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_design_api_designs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Design",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_api_health_get",

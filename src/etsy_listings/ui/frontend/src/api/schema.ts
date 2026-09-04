@@ -4,6 +4,24 @@
  */
 
 export interface paths {
+    "/api/designs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Designs */
+        get: operations["list_designs_api_designs_get"];
+        put?: never;
+        /** Upload Design */
+        post: operations["upload_design_api_designs_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/health": {
         parameters: {
             query?: never;
@@ -126,6 +144,11 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** Body_upload_design_api_designs_post */
+        Body_upload_design_api_designs_post: {
+            /** File */
+            file: string;
+        };
         /** Body_upload_template_api_templates_post */
         Body_upload_template_api_templates_post: {
             /** Files */
@@ -152,9 +175,8 @@ export interface components {
             /**
              * Design
              * @default bundled-grid
-             * @enum {string}
              */
-            design: "bundled-grid" | "bundled-on-light" | "bundled-on-dark";
+            design: string;
             /**
              * @default {
              *       "enabled": false,
@@ -208,6 +230,28 @@ export interface components {
             shade: components["schemas"]["ShadeConfig"];
         };
         /**
+         * DesignSummary
+         * @description One entry in the calibrator's test-design library (A16).
+         *
+         *     ``bundled-grid``: the grid/ruler target, for spotting warp/displacement
+         *     errors. ``bundled-on-light``/``bundled-on-dark``: deterministic
+         *     ink-coloured targets, so a mis-resolved artwork is visually obvious in the
+         *     calibrator, not just described in a diff. ``upload``: a PNG the user added,
+         *     for judging a real ink weight on a real garment -- the question the grid
+         *     cannot answer.
+         */
+        DesignSummary: {
+            /** Id */
+            id: string;
+            /** Label */
+            label: string;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "bundled" | "upload";
+        };
+        /**
          * DisplaceConfig
          * @description PRD: implemented but off by default -- over-strong displacement looks
          *     melted, so it's tuned per template in the calibrator's live preview.
@@ -234,9 +278,8 @@ export interface components {
             /**
              * Design
              * @default bundled-grid
-             * @enum {string}
              */
-            design: "bundled-grid" | "bundled-on-light" | "bundled-on-dark";
+            design: string;
             /**
              * @default {
              *       "enabled": false,
@@ -355,9 +398,8 @@ export interface components {
             /**
              * Design
              * @default bundled-grid
-             * @enum {string}
              */
-            design: "bundled-grid" | "bundled-on-light" | "bundled-on-dark";
+            design: string;
             /**
              * @default {
              *       "enabled": false,
@@ -464,6 +506,59 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+    list_designs_api_designs_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignSummary"][];
+                };
+            };
+        };
+    };
+    upload_design_api_designs_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_design_api_designs_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DesignSummary"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     health_api_health_get: {
         parameters: {
             query?: never;

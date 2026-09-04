@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as calibrator from "./api/calibrator";
 import type { ColourMatrixTemplate, MultipleTemplate, TemplateSummary } from "./types";
@@ -48,6 +48,12 @@ function header() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+});
+
+beforeEach(() => {
+  // Every editor's inspector mounts the test-design picker, which fetches the
+  // library. Stubbed so these tests stay about App's own behaviour.
+  vi.spyOn(calibrator, "listDesigns").mockResolvedValue([]);
 });
 
 describe("App", () => {
@@ -165,36 +171,38 @@ describe("App", () => {
   });
 
   describe("Reset", () => {
-    async function renderWithEdit() {
+    /** Reset is the header's, but the only way to make the page dirty is
+     * through a real control -- so this drives the wrinkle slider, which the
+     * Print realism panel exposes as a 0-100 percentage over a 0..1 config. */
+    async function mount() {
       vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
       vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
       vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
       render(<App />);
+      return await screen.findByLabelText("Wrinkle strength");
+    }
 
-      const strength = await screen.findByLabelText(/strength/);
-      fireEvent.change(strength, { target: { value: "0.75" } });
-      await waitFor(() => expect(strength).toHaveValue("0.75"));
+    async function mountAndEdit() {
+      const strength = await mount();
+      fireEvent.change(strength, { target: { value: "75" } });
+      await waitFor(() => expect(strength).toHaveValue("75"));
       return strength;
     }
 
     it("is disabled until something is edited", async () => {
-      vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
-      vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
-      vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-      render(<App />);
-      await screen.findByLabelText(/strength/);
+      await mount();
       expect(screen.getByRole("button", { name: "Reset" })).toBeDisabled();
     });
 
     it("throws away unsaved edits and goes back to what is on disk", async () => {
-      const strength = await renderWithEdit();
+      const strength = await mountAndEdit();
       fireEvent.click(screen.getByRole("button", { name: "Reset" }));
       await waitFor(() => expect(strength).toHaveValue("0"));
     });
 
     it("does not re-fetch to do it -- the last saved config is already held", async () => {
       const getSpy = vi.spyOn(calibrator, "getTemplateConfig");
-      await renderWithEdit();
+      await mountAndEdit();
       const callsBefore = getSpy.mock.calls.length;
       fireEvent.click(screen.getByRole("button", { name: "Reset" }));
       await waitFor(() => expect(getSpy.mock.calls.length).toBe(callsBefore));

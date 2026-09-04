@@ -1,14 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
 import { renderPreview } from "../api/calibrator";
 import { PlacementsPanel } from "../components/PlacementsPanel";
+import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
-import { DisplaceControls, ShadeControls } from "../components/RenderControls";
+import { TestDesignPicker } from "../components/TestDesignPicker";
 import type { BoundingBox, MultipleTemplate, Placement } from "../types";
 
 interface Props {
   templateName: string;
   config: MultipleTemplate;
   onChange: (config: MultipleTemplate) => void;
+  design: string;
+  onDesignChange: (design: string) => void;
 }
 
 const PREVIEW_DEBOUNCE_MS = 200;
@@ -18,17 +21,27 @@ const PREVIEW_DEBOUNCE_MS = 200;
  * separate gallery need here (unlike colour-matrix kind) -- the main preview
  * already shows everything at once.
  */
-export function MultipleEditor({ templateName, config, onChange }: Props) {
+export function MultipleEditor({
+  templateName,
+  config,
+  onChange,
+  design,
+  onDesignChange,
+}: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      renderPreview(templateName, {
-        placements: config.placements,
-        displace: config.displace,
-        shade: config.shade,
-      }).then((url) => {
+      renderPreview(
+        templateName,
+        {
+          placements: config.placements,
+          displace: config.displace,
+          shade: config.shade,
+        },
+        design,
+      ).then((url) => {
         setPreviewUrl((previous) => {
           if (previous) URL.revokeObjectURL(previous);
           return url;
@@ -36,7 +49,7 @@ export function MultipleEditor({ templateName, config, onChange }: Props) {
       });
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [templateName, config]);
+  }, [templateName, config, design]);
 
   const handleBoxChange = useCallback(
     (index: number, box: BoundingBox) =>
@@ -73,23 +86,17 @@ export function MultipleEditor({ templateName, config, onChange }: Props) {
       </div>
 
       <aside className="app__controls">
-        <label>
-          Colour coverage
-          <select
-            value={config.colour_coverage}
-            onChange={(e) =>
-              onChange({ ...config, colour_coverage: e.target.value as "exact" | "subset" })
-            }
-          >
-            <option value="exact">exact</option>
-            <option value="subset">subset</option>
-          </select>
-        </label>
-        <DisplaceControls
-          value={config.displace}
-          onChange={(displace) => onChange({ ...config, displace })}
+        {/* `colour_coverage` has no home in wireframe 2a and is, for now,
+            editable only by hand in template.yaml. Recorded as a debt in
+            docs/implementation-plan.md -- it belongs in the Advanced
+            disclosure when it comes back. */}
+        <TestDesignPicker value={design} onChange={onDesignChange} />
+        <PrintRealismPanel
+          displace={config.displace}
+          shade={config.shade}
+          onDisplaceChange={(displace) => onChange({ ...config, displace })}
+          onShadeChange={(shade) => onChange({ ...config, shade })}
         />
-        <ShadeControls value={config.shade} onChange={(shade) => onChange({ ...config, shade })} />
         <PlacementsPanel
           placements={config.placements}
           selectedIndex={clampedIndex}

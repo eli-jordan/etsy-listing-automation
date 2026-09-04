@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { renderPreview } from "../api/calibrator";
 import { Gallery } from "../components/Gallery";
+import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
-import { DisplaceControls, ShadeControls } from "../components/RenderControls";
+import { TestDesignPicker } from "../components/TestDesignPicker";
 import type { BoundingBox, ColourMatrixTemplate } from "../types";
 
 interface Props {
@@ -10,11 +11,22 @@ interface Props {
   config: ColourMatrixTemplate;
   colours: string[];
   onChange: (config: ColourMatrixTemplate) => void;
+  /** Which test artwork the preview renders with. A way of looking at the
+   * template, not a property of it, so it lives above the config. */
+  design: string;
+  onDesignChange: (design: string) => void;
 }
 
 const PREVIEW_DEBOUNCE_MS = 200;
 
-export function ColourMatrixEditor({ templateName, config, colours, onChange }: Props) {
+export function ColourMatrixEditor({
+  templateName,
+  config,
+  colours,
+  onChange,
+  design,
+  onDesignChange,
+}: Props) {
   const [selectedColour, setSelectedColour] = useState<string | null>(null);
   // Derived rather than synced via effect+setState: falls back to the first
   // colour whenever the selection isn't (or is no longer) one of them --
@@ -26,12 +38,16 @@ export function ColourMatrixEditor({ templateName, config, colours, onChange }: 
   useEffect(() => {
     if (!colour) return;
     const timer = setTimeout(() => {
-      renderPreview(templateName, {
-        colour,
-        bounding_box: config.bounding_box,
-        displace: config.displace,
-        shade: config.shade,
-      }).then((url) => {
+      renderPreview(
+        templateName,
+        {
+          colour,
+          bounding_box: config.bounding_box,
+          displace: config.displace,
+          shade: config.shade,
+        },
+        design,
+      ).then((url) => {
         setPreviewUrl((previous) => {
           if (previous) URL.revokeObjectURL(previous);
           return url;
@@ -39,7 +55,7 @@ export function ColourMatrixEditor({ templateName, config, colours, onChange }: 
       });
     }, PREVIEW_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [templateName, colour, config]);
+  }, [templateName, colour, config, design]);
 
   const handleBoxChange = useCallback(
     (_index: number, box: BoundingBox) => onChange({ ...config, bounding_box: box }),
@@ -79,17 +95,21 @@ export function ColourMatrixEditor({ templateName, config, colours, onChange }: 
         </div>
 
         <aside className="app__controls">
-          <DisplaceControls
-            value={config.displace}
-            onChange={(displace) => onChange({ ...config, displace })}
-          />
-          <ShadeControls
-            value={config.shade}
-            onChange={(shade) => onChange({ ...config, shade })}
+          <TestDesignPicker value={design} onChange={onDesignChange} />
+          <PrintRealismPanel
+            displace={config.displace}
+            shade={config.shade}
+            onDisplaceChange={(displace) => onChange({ ...config, displace })}
+            onShadeChange={(shade) => onChange({ ...config, shade })}
           />
         </aside>
       </main>
-      <Gallery templateName={templateName} colours={colours} config={config} />
+      <Gallery
+        templateName={templateName}
+        colours={colours}
+        config={config}
+        design={design}
+      />
     </>
   );
 }

@@ -6,6 +6,9 @@ interface Props {
   templateName: string;
   colours: string[];
   config: ColourMatrixTemplate;
+  /** Same test artwork the main preview uses -- a gallery rendered with a
+   * different design than the one on screen would be quietly misleading. */
+  design: string;
 }
 
 const GALLERY_DEBOUNCE_MS = 800;
@@ -17,7 +20,7 @@ const GALLERY_DEBOUNCE_MS = 800;
  * would hammer the server on every pointer-move frame otherwise. Reuses the
  * existing preview endpoint (one call per colour); no new API surface.
  */
-export function Gallery({ templateName, colours, config }: Props) {
+export function Gallery({ templateName, colours, config, design }: Props) {
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const urlsRef = useRef<string[]>([]);
 
@@ -25,12 +28,16 @@ export function Gallery({ templateName, colours, config }: Props) {
     const timer = setTimeout(() => {
       Promise.all(
         colours.map(async (colour) => {
-          const url = await renderPreview(templateName, {
-            colour,
-            bounding_box: config.bounding_box,
-            displace: config.displace,
-            shade: config.shade,
-          });
+          const url = await renderPreview(
+            templateName,
+            {
+              colour,
+              bounding_box: config.bounding_box,
+              displace: config.displace,
+              shade: config.shade,
+            },
+            design,
+          );
           return [colour, url] as const;
         }),
       ).then((entries) => {
@@ -40,7 +47,7 @@ export function Gallery({ templateName, colours, config }: Props) {
       });
     }, GALLERY_DEBOUNCE_MS);
     return () => clearTimeout(timer);
-  }, [templateName, colours, config]);
+  }, [templateName, colours, config, design]);
 
   useEffect(() => () => urlsRef.current.forEach((url) => URL.revokeObjectURL(url)), []);
 

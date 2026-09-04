@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
+from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.templates import router as templates_router
 from etsy_listings.workspace.workspace import Workspace
 
@@ -35,6 +36,7 @@ def create_app(workspace: Workspace) -> FastAPI:
     )
 
     app.include_router(templates_router)
+    app.include_router(designs_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

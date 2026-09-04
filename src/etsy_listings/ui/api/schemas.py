@@ -15,11 +15,23 @@ from etsy_listings.render.config import BoundingBox, DisplaceConfig, Placement, 
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
-BundledDesign = Literal["bundled-grid", "bundled-on-light", "bundled-on-dark"]
-"""``bundled-grid``: the grid/ruler target, for spotting warp/displacement
-errors. ``bundled-on-light``/``bundled-on-dark``: deterministic ink-coloured
-targets, so a mis-resolved artwork is visually obvious in the calibrator, not
-just described in a diff."""
+DesignSource = Literal["bundled", "upload"]
+
+
+class DesignSummary(BaseModel):
+    """One entry in the calibrator's test-design library (A16).
+
+    ``bundled-grid``: the grid/ruler target, for spotting warp/displacement
+    errors. ``bundled-on-light``/``bundled-on-dark``: deterministic
+    ink-coloured targets, so a mis-resolved artwork is visually obvious in the
+    calibrator, not just described in a diff. ``upload``: a PNG the user added,
+    for judging a real ink weight on a real garment -- the question the grid
+    cannot answer.
+    """
+
+    id: str
+    label: str
+    source: DesignSource
 
 
 TemplateStatus = Literal["needs-calibration", "calibrated"]
@@ -59,21 +71,21 @@ class ColourMatrixPreviewRequest(BaseModel):
     bounding_box: BoundingBox
     displace: DisplaceConfig = DisplaceConfig()
     shade: ShadeConfig = ShadeConfig()
-    design: BundledDesign = "bundled-grid"
+    design: str = "bundled-grid"
 
 
 class MultiplePreviewRequest(BaseModel):
     placements: list[Placement]
     displace: DisplaceConfig = DisplaceConfig()
     shade: ShadeConfig = ShadeConfig()
-    design: BundledDesign = "bundled-grid"
+    design: str = "bundled-grid"
 
 
 class SinglePreviewRequest(BaseModel):
     bounding_box: BoundingBox
     displace: DisplaceConfig = DisplaceConfig()
     shade: ShadeConfig = ShadeConfig()
-    design: BundledDesign = "bundled-grid"
+    design: str = "bundled-grid"
 
 
 PreviewRequest = ColourMatrixPreviewRequest | MultiplePreviewRequest | SinglePreviewRequest

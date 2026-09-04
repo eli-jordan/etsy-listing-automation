@@ -16,6 +16,11 @@ CACHE_DIR = ".cache"
 PROMPTS_DIR = "prompts"
 PROFILES_DIR = "profiles"
 DESIGNS_DIR = "designs"
+TEST_DESIGNS_DIR = "test-designs"
+"""Calibration aids, kept apart from ``designs/``. These are throwaway targets
+you judge a template's geometry and lighting against, not artwork any listing
+ships -- mixing them into ``designs/`` would put non-products in the one
+directory that is meant to hold only products (A16)."""
 MOCKUP_TEMPLATES_DIR = "mockup-templates"
 COMMON_MEDIA_DIR = "common-media"
 LISTINGS_DIR = "listings"

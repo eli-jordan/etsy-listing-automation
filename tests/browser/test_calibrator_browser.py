@@ -200,16 +200,34 @@ class TestColourMatrixKind:
         assert after is not None
         assert (after["x"], after["y"]) != (before["x"], before["y"])
 
-    def test_toggling_displace_rerenders_with_the_new_setting(self, page) -> None:  # noqa: ANN001
+    def test_toggling_the_wrinkle_pass_rerenders_with_the_new_setting(  # noqa: ANN001
+        self, page
+    ) -> None:
+        """The control is named for what it does to the photograph now, but it
+        still writes `displace` -- this is the test that the rename stayed a
+        rename and did not quietly repoint the toggle."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
-        displace_toggle = page.locator("fieldset", has_text="Displace").locator(
-            "input[type=checkbox]"
-        )
         with page.expect_request(lambda r: "/preview" in r.url) as request_info:
-            displace_toggle.check()
+            page.get_by_label("Follow fabric wrinkles").check()
         sent = json.loads(request_info.value.post_data or "{}")
         assert sent["displace"]["enabled"] is True
+
+    def test_the_shading_presets_write_a_blend_mode(self, page) -> None:  # noqa: ANN001
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(PREVIEW_IMAGE)
+        with page.expect_request(lambda r: "/preview" in r.url) as request_info:
+            page.get_by_role("button", name="Rich").click()
+        sent = json.loads(request_info.value.post_data or "{}")
+        assert sent["shade"]["blend"] == "multiply"
+
+    def test_choosing_a_test_design_rerenders_against_it(self, page) -> None:  # noqa: ANN001
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(PREVIEW_IMAGE)
+        with page.expect_request(lambda r: "/preview" in r.url) as request_info:
+            page.get_by_label("Test design").select_option("bundled-on-dark")
+        sent = json.loads(request_info.value.post_data or "{}")
+        assert sent["design"] == "bundled-on-dark"
 
     def test_saving_writes_the_dragged_box_to_template_yaml(  # noqa: ANN001
         self, page, workspace_root: Path
@@ -311,7 +329,7 @@ class TestUploadCreatesEachKind:
         page.get_by_label("Name").fill("lifestyle-01")
         page.get_by_label("Kind").select_option("single")
         with page.expect_response(lambda r: r.url.endswith("/api/templates") and r.status == 200):
-            page.locator("input[type=file]").set_input_files(str(source))
+            page.locator(".upload-form input[type=file]").set_input_files(str(source))
         page.wait_for_selector("text=uploaded")
 
         assert _selected_template(page) == "lifestyle-01"
@@ -334,7 +352,7 @@ class TestUploadCreatesEachKind:
         page.get_by_label("Name").fill("flat-lay-02")
         page.get_by_label("Kind").select_option("colour-matrix")
         with page.expect_response(lambda r: r.url.endswith("/api/templates") and r.status == 200):
-            page.locator("input[type=file]").set_input_files([str(black), str(ivory)])
+            page.locator(".upload-form input[type=file]").set_input_files([str(black), str(ivory)])
         page.wait_for_selector("text=uploaded")
 
         assert _selected_template(page) == "flat-lay-02"

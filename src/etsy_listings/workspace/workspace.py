@@ -216,6 +216,14 @@ class Workspace:
         filename -- there's no per-colour name to derive it from."""
         return self.template_dir(template) / "scene.png"
 
+    def test_designs_dir(self) -> Path:
+        """Where the calibrator's uploaded test targets live (A16). Separate
+        from ``designs/``, which holds artwork that actually ships."""
+        return self.root / layout.TEST_DESIGNS_DIR
+
+    def test_design_file(self, name: str) -> Path:
+        return self.test_designs_dir() / f"{_segment(name)}.png"
+
     def render_file(self, listing: str, template: str, colour: str | None = None) -> Path:
         """Namespaced by template: a listing can reference several templates
         (item 4), including more than one ``colour-matrix``-kind set, so a

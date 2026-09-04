@@ -1,7 +1,7 @@
 import { api } from "./client";
 import type {
   BoundingBox,
-  BundledDesign,
+  DesignSummary,
   DisplaceConfig,
   Placement,
   ShadeConfig,
@@ -72,6 +72,26 @@ export async function uploadTemplate(
   return (await response.json()) as UploadResponse;
 }
 
+/** The calibrator's test-design library: three bundled targets plus whatever
+ * the user has uploaded into the workspace (A16). */
+export async function listDesigns(): Promise<DesignSummary[]> {
+  const { data, error } = await api.GET("/api/designs");
+  if (error || !data) throw new CalibratorApiError("failed to list test designs");
+  return data;
+}
+
+/** Adds a PNG to the library. Hand-rolled like `uploadTemplate` -- the
+ * generated client cannot describe a multipart body. */
+export async function uploadDesign(file: File): Promise<DesignSummary> {
+  const body = new FormData();
+  body.append("file", file);
+  const response = await fetch("/api/designs", { method: "POST", body });
+  if (!response.ok) {
+    throw new CalibratorApiError("failed to upload test design");
+  }
+  return (await response.json()) as DesignSummary;
+}
+
 /**
  * The rail's per-template photo. A plain URL rather than a fetch: the browser
  * loads, caches and evicts these itself, and there is no object URL for anyone
@@ -95,7 +115,7 @@ type PreviewBody =
 export async function renderPreview(
   name: string,
   body: PreviewBody,
-  design: BundledDesign = "bundled-grid",
+  design: string = "bundled-grid",
 ): Promise<string> {
   const response = await fetch(`/api/templates/${encodeURIComponent(name)}/preview`, {
     method: "POST",

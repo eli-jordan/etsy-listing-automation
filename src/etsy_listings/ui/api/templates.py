@@ -35,8 +35,8 @@ from etsy_listings.render.config import (
 from etsy_listings.render.io import encode_png, load_design, load_template_base
 from etsy_listings.render.maps import DerivedMapCache
 from etsy_listings.render.pipeline import Layer, render, render_scene
+from etsy_listings.ui.api.designs import resolve_design
 from etsy_listings.ui.api.schemas import (
-    BundledDesign,
     ColourMatrixPreviewRequest,
     MultiplePreviewRequest,
     PreviewRequest,
@@ -53,13 +53,6 @@ THUMBNAIL_MAX = 160
 """Longest edge of a rail thumbnail, in px. The rail draws them at ~26x30 CSS
 px (wireframe 2a), so this leaves headroom for a HiDPI screen without turning
 the list into a megabyte of PNG."""
-
-STATIC_DIR = Path(__file__).parent / "static"
-BUNDLED_DESIGNS: dict[BundledDesign, Path] = {
-    "bundled-grid": STATIC_DIR / "bundled-test-design.png",
-    "bundled-on-light": STATIC_DIR / "bundled-test-design-on-light.png",
-    "bundled-on-dark": STATIC_DIR / "bundled-test-design-on-dark.png",
-}
 
 
 def _workspace(request: Request) -> Workspace:
@@ -289,7 +282,7 @@ def preview(request: Request, name: str, body: PreviewRequest) -> Response:
     if not config_path.is_file():
         raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}")
     template_cfg = _read_template_config(config_path)
-    design = load_design(BUNDLED_DESIGNS[body.design])
+    design = load_design(resolve_design(workspace, body.design))
     cache = DerivedMapCache(workspace.template_derived_dir(name))
 
     if isinstance(template_cfg, ColourMatrixTemplate):
