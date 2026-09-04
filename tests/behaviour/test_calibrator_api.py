@@ -27,6 +27,22 @@ def test_list_templates_includes_fixture_templates_with_kind(client: TestClient)
     assert by_name["colour-chart-01"]["kind"] == "multiple"
 
 
+def test_list_templates_includes_a_directory_with_no_template_yaml(
+    client: TestClient, workspace_root: Path
+) -> None:
+    """The calibrator is what writes template.yaml, so an uncalibrated
+    directory has to be listable -- otherwise there is no way to select it and
+    calibrate it."""
+    (workspace_root / "mockup-templates" / "not-calibrated-yet").mkdir()
+    by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+    assert by_name["not-calibrated-yet"] == {
+        "name": "not-calibrated-yet",
+        "kind": None,
+        "colours": [],
+        "has_config": False,
+    }
+
+
 def test_get_config_returns_the_fixture_bounding_box(client: TestClient) -> None:
     response = client.get("/api/templates/flat-lay-01/config")
     assert response.status_code == 200
