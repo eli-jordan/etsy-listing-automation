@@ -74,7 +74,7 @@ export function App() {
             </option>
           ))}
         </select>
-        <button onClick={handleSave} disabled={!config}>
+        <button className="btn btn-primary" onClick={handleSave} disabled={!config}>
           Save template.yaml
         </button>
         <p className="app__status" role="status">

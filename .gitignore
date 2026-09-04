@@ -20,6 +20,12 @@ src/etsy_listings/ui/frontend/dist/
 .env
 .auth/
 
+# Browser-test screenshots. Artifacts for human review against the wireframes,
+# not goldens -- nothing compares them, and a browser screenshot varies with
+# the platform's font rasterisation, so committing them would only produce
+# diffs nobody can act on.
+tests/browser/_screenshots/
+
 # Derived render caches (luminance/displacement maps). Fully derivable from
 # the template photos, and regenerated on demand -- including under the test
 # fixtures, where a run leaves several MB of .npy behind.
