@@ -1,13 +1,21 @@
-"""The ``render`` stage: local-only (no live remote state), wires the pure
-render pipeline into plan/apply.
+"""The ``render`` stage: local-only (no remote state), wires the pure render
+pipeline into plan/apply.
 
 Its ``desired()`` does the I/O the render *passes* deliberately don't (A7):
 loading the listing/profile/template config and hashing the design + template
-assets. ``apply()`` is the one place renders actually happen and get written
-to ``.cache/renders/{listing}/{template}/...`` (PRD: rendered mockups persist
-in the gitignored cache, keyed by listing, never committed; namespaced by
-template since a listing can reference several -- see
+assets. ``read_live()`` looks at what is actually on disk under
+``.cache/renders/``. ``apply()`` is the one place renders actually happen and
+get written to ``.cache/renders/{listing}/{template}/...`` (PRD: rendered
+mockups persist in the gitignored cache, keyed by listing, never committed;
+namespaced by template since a listing can reference several -- see
 ``Workspace.render_file``).
+
+Two questions decide whether work happens, and both have to be asked. The
+``input_hash`` answers "would a render produce something different?"; the
+outputs on disk answer "is what a previous render produced still there?". The
+cache is gitignored and fully derivable, so it is a directory people delete --
+checking only the hash made ``plan`` report "No changes." over a half-empty
+render cache, and ``apply`` then did nothing to restore it.
 
 A template is exactly one of three kinds (multi-placement redesign,
 docs/multi-placement-rendering.md). A scene renders if, and only if, some
@@ -26,8 +34,8 @@ import yaml
 
 from etsy_listings.config.listing import Listing, TemplateMediaEntry
 from etsy_listings.config.profile import Profile
-from etsy_listings.engine.change import StagePlan
-from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.change import Action, StagePlan
+from etsy_listings.engine.context import RunContext, Swatch
 from etsy_listings.engine.lock import Lockfile, canonical_hash, to_workspace_relative_posix
 from etsy_listings.engine.stage import StageApplyResult
 from etsy_listings.render.config import (
@@ -40,7 +48,9 @@ from etsy_listings.render.io import load_design, load_template_base, save_png
 from etsy_listings.render.maps import DerivedMapCache
 from etsy_listings.render.pipeline import Layer, render_scene
 from etsy_listings.render.pipeline import render as render_pipeline
+from etsy_listings.render.swatch import sample_swatch
 from etsy_listings.render.types import RGBA
+from etsy_listings.workspace.workspace import Workspace
 
 TemplateConfigT = ColourMatrixTemplate | MultipleTemplate | SingleTemplate
 
@@ -72,13 +82,37 @@ class MediaColourMismatchError(ValueError):
 
 
 class ArtworkResolutionError(ValueError):
-    def __init__(self, colour: str | None, tone: str | None, available: list[str]) -> None:
+    """Names *which* key was asked for and *who* asked for it.
+
+    Without both, the message sends you to the wrong file. A template with
+    ``artwork: on-light`` over a single-file design used to report only
+    "colour 'white' needs an artwork but none resolves", which reads as a
+    problem with the colour or the listing -- while the demand actually came
+    from the template, and ``on-light`` appeared nowhere in the message.
+    """
+
+    def __init__(
+        self,
+        colour: str | None,
+        tone: str | None,
+        available: list[str],
+        *,
+        wanted: str | None = None,
+        source: str = "",
+    ) -> None:
         detail = f"colour {colour!r}" if colour is not None else "this template"
         tone_note = f" (tone: {tone})" if tone else ""
-        super().__init__(
-            f"{detail}{tone_note} needs an artwork but none resolves -- design offers "
-            f"{available!r}; add a listing.artwork override or a matching key"
-        )
+        if wanted is not None:
+            super().__init__(
+                f"{detail}{tone_note}: {source} asks for artwork {wanted!r}, which the "
+                f"design does not have -- it offers {available!r}. Add {wanted!r} to the "
+                f"listing's design:, or remove the override."
+            )
+        else:
+            super().__init__(
+                f"{detail}{tone_note} needs an artwork but none resolves -- design offers "
+                f"{available!r}; add a listing.artwork override or a matching key"
+            )
 
 
 def _resolve_artwork(
@@ -99,20 +133,22 @@ def _resolve_artwork(
     key_set = set(keys)
 
     candidate: str | None = None
+    source = ""
     if colour is not None and colour in listing.artwork:
-        candidate = listing.artwork[colour]
+        candidate, source = listing.artwork[colour], f"the listing's artwork[{colour!r}]"
     elif template_override is not None:
-        candidate = template_override
+        candidate, source = template_override, "the template's own artwork: override"
     elif colour is not None and colour in profile.colour_tone:
         toned = f"on-{profile.colour_tone[colour]}"
-        candidate = toned if toned in key_set else None
+        if toned in key_set:
+            candidate, source = toned, f"the profile's colour_tone[{colour!r}]"
 
     if candidate is None and len(keys) == 1:
-        candidate = keys[0]
+        candidate, source = keys[0], "the design's sole key"
 
     if candidate is None or candidate not in key_set:
         tone = profile.colour_tone.get(colour) if colour is not None else None
-        raise ArtworkResolutionError(colour, tone, sorted(keys))
+        raise ArtworkResolutionError(colour, tone, sorted(keys), wanted=candidate, source=source)
     return candidate
 
 
@@ -123,12 +159,23 @@ class RenderDesired:
     design_hash: dict[str, str]  # artwork key -> sha256, only keys actually used
     template_hash: dict[str, str]  # template name -> sha256
     scene_config: dict[str, str]  # scene key -> canonical json of its render recipe
+    scene_inputs: dict[str, tuple[str, ...]]  # scene key -> the files it reads
+    scene_outputs: dict[str, str]  # scene key -> the file it writes
 
 
 @dataclass(frozen=True)
 class RenderApplied:
     input_hash: str
     scenes: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RenderLive:
+    """What is on disk right now, for the scenes the lockfile claims were
+    rendered. An observation only -- comparing it against desired/applied is
+    ``plan()``'s job, per A2."""
+
+    outputs_present: dict[str, bool]  # scene key -> its render file exists
 
 
 def _scene_key(template: str, colour: str | None) -> str:
@@ -140,6 +187,11 @@ def _split_scene_key(scene: str) -> tuple[str, str | None]:
         template, colour = scene.split("/", 1)
         return template, colour
     return scene, None
+
+
+def _render_path(workspace: Workspace, listing: str, scene: str) -> Path:
+    template, colour = _split_scene_key(scene)
+    return workspace.render_file(listing, template, colour)
 
 
 def _hash_path(path: Path) -> str:
@@ -159,6 +211,9 @@ class RenderStage:
         listing_cfg = workspace.load_listing(listing)
         profile = workspace.load_profile(listing_cfg.profile)
 
+        def relative(path: Path) -> str:
+            return to_workspace_relative_posix(workspace.root, path)
+
         design_paths: dict[str, Path] = {
             key: workspace.resolve(ref, relative_to=workspace.listing_dir(listing))
             for key, ref in listing_cfg.design.items()
@@ -175,6 +230,8 @@ class RenderStage:
         design_hash: dict[str, str] = {}
         scenes: list[str] = []
         scene_config: dict[str, str] = {}
+        scene_inputs: dict[str, tuple[str, ...]] = {}
+        scene_outputs: dict[str, str] = {}
 
         for template_name, colour in referenced:
             if template_name not in template_configs:
@@ -192,6 +249,8 @@ class RenderStage:
 
             scene = _scene_key(template_name, colour)
             scenes.append(scene)
+            config_path = workspace.template_config_file(template_name)
+            scene_outputs[scene] = relative(workspace.render_file(listing, template_name, colour))
 
             if isinstance(template_cfg, ColourMatrixTemplate):
                 assert colour is not None
@@ -211,6 +270,11 @@ class RenderStage:
                         "render_config": cfg.canonical_json(),
                     },
                     sort_keys=True,
+                )
+                scene_inputs[scene] = (
+                    relative(design_paths[artwork_key]),
+                    relative(config_path),
+                    relative(base_path),
                 )
                 template_hash.setdefault(
                     template_name,
@@ -240,6 +304,11 @@ class RenderStage:
                     },
                     sort_keys=True,
                 )
+                scene_inputs[scene] = (
+                    relative(design_paths[artwork_key]),
+                    relative(config_path),
+                    relative(base_path),
+                )
                 template_hash[template_name] = _hash_bytes(
                     template_texts[template_name].encode("utf-8") + base_path.read_bytes()
                 )
@@ -250,6 +319,7 @@ class RenderStage:
                 if not base_path.is_file():
                     raise TemplateAssetError(template_name, None, base_path)
                 placement_entries = []
+                artwork_refs: dict[str, None] = {}
                 for placement in template_cfg.placements:
                     artwork_key = _resolve_artwork(
                         colour=placement.colour,
@@ -258,6 +328,7 @@ class RenderStage:
                         template_override=placement.artwork,
                     )
                     design_hash[artwork_key] = _hash_path(design_paths[artwork_key])
+                    artwork_refs.setdefault(relative(design_paths[artwork_key]), None)
                     p_cfg = template_cfg.render_config_for(placement)
                     placement_entries.append(
                         {
@@ -275,6 +346,7 @@ class RenderStage:
                     },
                     sort_keys=True,
                 )
+                scene_inputs[scene] = (*artwork_refs, relative(config_path), relative(base_path))
                 template_hash[template_name] = _hash_bytes(
                     template_texts[template_name].encode("utf-8") + base_path.read_bytes()
                 )
@@ -285,6 +357,8 @@ class RenderStage:
             design_hash=design_hash,
             template_hash=template_hash,
             scene_config=scene_config,
+            scene_inputs=scene_inputs,
+            scene_outputs=scene_outputs,
         )
 
     def last_applied(self, lock: Lockfile) -> RenderApplied | None:
@@ -293,18 +367,67 @@ class RenderStage:
             return None
         return RenderApplied(input_hash=data["input_hash"], scenes=tuple(data["scenes"]))
 
-    def read_live(self, ctx: RunContext, lock: Lockfile) -> None:
-        return None
+    def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> RenderLive | None:
+        """Does what the lockfile claims was rendered still exist?
 
-    def plan(self, desired: RenderDesired, applied: RenderApplied | None, live: None) -> StagePlan:
-        input_hash = self._input_hash(desired)
+        A stat per scene, deliberately not a re-hash of every PNG: a
+        ``plan --all`` over a real catalogue would otherwise read every
+        rendered megabyte on every invocation, to answer a question the
+        separate ``outputs`` axis already exists to answer at upload time.
+        """
+        applied = self.last_applied(lock)
         if applied is None:
-            return StagePlan(stage=self.name, will_run=True, reason="no previous render")
-        if applied.input_hash != input_hash:
-            return StagePlan(stage=self.name, will_run=True, reason="design or template changed")
+            return None
+        return RenderLive(
+            outputs_present={
+                scene: _render_path(ctx.workspace, listing, scene).is_file()
+                for scene in applied.scenes
+            }
+        )
+
+    def plan(
+        self, desired: RenderDesired, applied: RenderApplied | None, live: RenderLive | None
+    ) -> StagePlan:
+        if applied is None:
+            return self._will_run(desired, "no previous render", missing=())
+        if applied.input_hash != self._input_hash(desired):
+            return self._will_run(desired, "design or template changed", missing=())
         if applied.scenes != desired.scenes:
-            return StagePlan(stage=self.name, will_run=True, reason="referenced scenes changed")
+            return self._will_run(desired, "referenced scenes changed", missing=())
+
+        missing = tuple(
+            scene
+            for scene in desired.scenes
+            if live is not None and not live.outputs_present.get(scene, False)
+        )
+        if missing:
+            noun = "file" if len(missing) == 1 else "files"
+            return self._will_run(
+                desired, f"{len(missing)} rendered {noun} missing from the cache", missing=missing
+            )
         return StagePlan(stage=self.name, will_run=False)
+
+    def _will_run(
+        self, desired: RenderDesired, reason: str, *, missing: tuple[str, ...]
+    ) -> StagePlan:
+        return StagePlan(
+            stage=self.name,
+            will_run=True,
+            reason=reason,
+            actions=self._actions(desired, missing),
+        )
+
+    def _actions(self, desired: RenderDesired, missing: tuple[str, ...]) -> tuple[Action, ...]:
+        missing_set = set(missing)
+        return tuple(
+            Action(
+                description=f"render {scene}",
+                inputs=desired.scene_inputs[scene],
+                outputs=(desired.scene_outputs[scene],),
+                missing_outputs=(desired.scene_outputs[scene],) if scene in missing_set else (),
+            )
+            for scene in desired.scenes
+        )
 
     def apply(
         self, ctx: RunContext, stage_plan: StagePlan, desired: RenderDesired
@@ -338,6 +461,7 @@ class RenderStage:
 
             template_cfg = template_configs[template_name]
             map_cache = map_caches[template_name]
+            swatches: tuple[Swatch, ...]
 
             if isinstance(template_cfg, ColourMatrixTemplate):
                 assert colour is not None
@@ -348,6 +472,7 @@ class RenderStage:
                 )
                 height = map_cache.height(colour, base) if cfg.displace.enabled else None
                 luminance = map_cache.luminance(colour, base) if cfg.shade.enabled else None
+                swatches = (sample_swatch(base, cfg.bounding_box),)
                 image = render_pipeline(
                     design_for(artwork_key), base, cfg, height=height, luminance=luminance
                 )
@@ -364,6 +489,7 @@ class RenderStage:
                 )
                 height = map_cache.height(template_name, base) if cfg.displace.enabled else None
                 luminance = map_cache.luminance(template_name, base) if cfg.shade.enabled else None
+                swatches = (sample_swatch(base, cfg.bounding_box),)
                 image = render_pipeline(
                     design_for(artwork_key), base, cfg, height=height, luminance=luminance
                 )
@@ -392,13 +518,17 @@ class RenderStage:
                 luminance = (
                     map_cache.luminance(template_name, base) if template_cfg.shade.enabled else None
                 )
+                swatches = tuple(
+                    sample_swatch(base, placement.bounding_box)
+                    for placement in template_cfg.placements
+                )
                 image = render_scene(base, layers, height=height, luminance=luminance)
                 output_path = workspace.render_file(desired.listing, template_name)
 
             save_png(image, output_path)
             output_hash = _hash_path(output_path)
             outputs[to_workspace_relative_posix(workspace.root, output_path)] = output_hash
-            ctx.emit(f"rendered {scene}")
+            ctx.emit(f"rendered {scene}", swatches=swatches)
 
         applied = {
             "input_hash": self._input_hash(desired),

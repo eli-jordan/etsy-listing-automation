@@ -13,7 +13,7 @@ and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
 |---|---|---|
-| A1 | plan/apply engine | Staged pipeline. A fixed ordered list of `Stage` objects sharing one protocol; `read_live()` returning `None` marks a stage local-only. Dependencies are list order, not a graph. |
+| A1 | plan/apply engine | Staged pipeline. A fixed ordered list of `Stage` objects sharing one protocol; `local: bool` marks a stage as having no *remote* state, which suppresses drift reporting and keeps its `read_live()` out of A3's fan-out — it does not mean the stage reads nothing, since a local stage still owns outputs on disk that `plan` has to verify. Dependencies are list order, not a graph. |
 | A2 | State + diff | `state.lock.json` stores the **verbatim last-applied desired document**. Each stage writes its own `plan()` comparing desired/applied/live and emitting `Change` objects, over a shared vocabulary and shared comparison helpers. |
 | A3 | Concurrency | Sync core throughout. `plan`'s live-state reads fan out over a bounded thread pool; `apply` is strictly sequential. One thread-safe token-bucket limiter shared by every path. |
 | A4 | API layer | Narrow `Protocol` per API returning pydantic models. In-memory fakes drive the behavioural suite; a small set of cassette-replay contract tests pin payload shape; a manual `-m e2e` run exercises the real APIs on demand and doubles as the cassette recorder. |
@@ -85,11 +85,11 @@ src/etsy_listings/
 ```python
 class Stage(Protocol):
     name: str
-    local: bool                      # True => read_live() returns None
+    local: bool                      # True => no remote state, so no drift
 
     def desired(self, ctx: RunContext) -> Desired: ...
     def last_applied(self, lock: Lockfile) -> Applied | None: ...
-    def read_live(self, ctx: RunContext) -> Live | None: ...
+    def read_live(self, ctx: RunContext, listing, lock) -> Live | None: ...
     def plan(self, desired, applied, live) -> StagePlan: ...
     def apply(self, ctx: RunContext, plan: StagePlan) -> StageResult: ...
 
@@ -99,16 +99,28 @@ STAGES = [Render(), Generate(), PrintifyProduct(),
 
 | Stage | `desired` | `read_live` | `apply` |
 |---|---|---|---|
-| `render` | design/artwork bytes hashes + template assets + resolved `RenderConfig`(s) per referenced scene (A11–A14) | `None` (local) | render each scene actually referenced by `media` into `.cache/renders/{listing}/{template}/` (A15) |
-| `generate` | brief + design hash + profile context + prompt template hashes | `None` (local) | call the model, validate hard, write `generated.yaml` |
+| `render` | design/artwork bytes hashes + template assets + resolved `RenderConfig`(s) per referenced scene (A11–A14) | which rendered files still exist under `.cache/renders/` | render each scene actually referenced by `media` into `.cache/renders/{listing}/{template}/` (A15) |
+| `generate` | brief + design hash + profile context + prompt template hashes | whether `generated.yaml` still exists | call the model, validate hard, write `generated.yaml` |
 | `printify_product` | blueprint/provider ids, enabled variant matrix, per-variant prices in cents, print areas | `GET products/{id}`, incl. `visible` (below) | create or update product |
 | `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
 | `etsy_copy` | title, description, tags, materials, section, `should_auto_renew` | `getListing` | `updateListing` |
 | `etsy_media` | ordered media manifest, each entry `(ref, content_hash)` | listing images + ids | full delete-and-reupload in rank order |
 
-Local stages have no live state, so drift is undefined for them — that is exactly
-what `local: bool` encodes, and the engine skips drift reporting for them rather
-than each stage having to remember.
+Local stages have no *remote* state — that is what `local: bool` encodes, and it
+buys two things: drift is undefined for them, so the engine skips drift reporting
+rather than each stage having to remember; and their `read_live()` is cheap and
+local, so it never joins A3's live-fetch pool.
+
+It does not mean they observe nothing. `render` writes PNGs into a gitignored,
+fully derivable cache, which is precisely the kind of directory people delete;
+`generate` writes `generated.yaml`. Those outputs are live state in every sense
+that matters — they simply have no second writer to have drifted *from*. So
+every stage's `read_live()` is called, local ones included, and a difference a
+local stage finds is reported as work to redo rather than as drift.
+
+This paragraph used to say local stages have no live state at all, which read as
+licence to skip the read entirely. `plan` duly reported "No changes." over a
+half-emptied render cache, and `apply` did nothing to refill it.
 
 ### Draft-vs-live cannot be set through the API — PRD risk 5, resolved in one direction
 

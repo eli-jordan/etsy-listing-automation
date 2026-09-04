@@ -82,12 +82,36 @@ def drift(path: str, applied: Any, live: Any) -> Drift | None:  # noqa: ANN401
 
 
 @dataclass(frozen=True)
+class Action:
+    """One concrete unit of work a stage will perform if applied, with the
+    files it reads and the files it writes.
+
+    ``plan`` is meant to answer "what would happen, exactly?", not just "does
+    something need to happen?" -- a stage that reports ``will_run`` without
+    saying what it will read and write leaves the user guessing. Paths are
+    workspace-relative and forward-slashed, the same form that enters a hash
+    (see ``to_workspace_relative_posix``), so plan output is identical on
+    Windows and Linux.
+
+    ``missing_outputs`` is the subset of ``outputs`` that does not exist on
+    disk right now. It is the stage that observes this, never the renderer:
+    presentation may not stat a file (A2).
+    """
+
+    description: str
+    inputs: tuple[str, ...] = field(default_factory=tuple)
+    outputs: tuple[str, ...] = field(default_factory=tuple)
+    missing_outputs: tuple[str, ...] = field(default_factory=tuple)
+
+
+@dataclass(frozen=True)
 class StagePlan:
     stage: str
     will_run: bool
     changes: tuple[Change, ...] = field(default_factory=tuple)
     drift: tuple[Drift, ...] = field(default_factory=tuple)
     reason: str | None = None
+    actions: tuple[Action, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)

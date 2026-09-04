@@ -22,16 +22,21 @@ def build_plan(
 ) -> Plan:
     """Three-way compare desired/applied/live across every stage, in order.
 
-    Live reads are the only part of a run that may fan out over a thread pool
-    (A3) -- not implemented yet, since Phase 0/1 have no stage whose
-    ``read_live`` does real I/O. Each stage's own ``plan()`` computes the diff;
-    this function only orchestrates the walk and assembles the result.
+    Every stage's ``read_live`` is called, ``local`` ones included: a local
+    stage has no *remote* state, but it can still have outputs on disk that
+    were deleted or edited since the last apply, and a plan that doesn't look
+    is a plan that reports "no changes" over a half-empty render cache. What
+    ``local`` buys is that the read is cheap and local, so it stays out of
+    A3's live-fetch thread pool (not implemented yet -- no stage in Phase 0/1
+    does remote I/O), and that a difference is reported as work to redo rather
+    than as drift. Each stage's own ``plan()`` computes the diff; this
+    function only orchestrates the walk and assembles the result.
     """
     stage_plans: list[StagePlan] = []
     for stage in stages:
         desired = stage.desired(ctx, listing)
         applied = stage.last_applied(lock)
-        live = None if stage.local else stage.read_live(ctx, lock)
+        live = stage.read_live(ctx, listing, lock)
         stage_plans.append(stage.plan(desired, applied, live))
 
     etsy_listing_id = lock.remote.get("etsy_listing_id")
