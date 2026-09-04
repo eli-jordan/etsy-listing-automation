@@ -28,6 +28,7 @@ and commit messages without colliding with the PRD's own decision log.
 | A13 | Template ownership + media addressing | No profile-level registry — `Profile` carries no `templates` field. `listing.media` always references `{template, colour?}` explicitly, naming any template that exists in `mockup-templates/`; no default, no bare-colour shorthand. A template is purely local and Etsy-facing (Printify never sees it), unlike `blueprint`/`print_provider`/`sizes`, which genuinely are Printify product-creation inputs — that's why templates don't live on the profile the way those do. PRD 29. |
 | A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in the render stage (`engine/stages/render.py::_resolve_artwork`), reused unchanged by the future `printify_product` stage (Phase 2). PRD 30. |
 | A15 | Render cache namespacing | `.cache/renders/{listing}/{template}/...`, not `.cache/renders/{listing}/{colour}.png` — namespaced by template, since a listing can reference more than one `colour-matrix`-kind template and a bare colour is no longer unique across them. |
+| A16 | Calibrator test design | A **library**, not the fixed `BundledDesign` literal it replaces. The three bundled targets stay and keep their ids; the preview endpoint resolves an arbitrary id against those plus PNGs the user has uploaded into the workspace, and an unknown id is a 400 rather than a `KeyError`. The literal was right while the only designs were the ones shipped in `api/static/`, but calibration is judged by eye, and the grid target answers "is the warp right?" while saying nothing about how a real ink weight sits on a real garment. The set has to be open for the second question. Uploads land in the workspace, never the repo. |
 
 ### Toolchain
 
@@ -362,9 +363,34 @@ POST /api/setup/defaults                  writes shop.yaml
 
 Screens: **Setup wizard** (shown whenever no shop is connected), **Dashboard**
 (listings by state, drift indicators, run history, live progress), **Calibrator**
-(SVG quad handles over the template, displacement/shading sliders, colour
-filmstrip, bundled test design with a grid-target toggle), **Runner** (plan/apply
-per listing or batch, streamed output).
+(below), **Runner** (plan/apply per listing or batch, streamed output).
+
+### The calibrator's shape
+
+Three columns — template rail, canvas, inspector. The rail replaces what was a
+template dropdown: it sorts templates that are not finished above the ones that
+are, and says what each is missing. That ordering is the screen's whole
+argument, and a dropdown cannot make it.
+
+`TemplateSummary.status` is **derived on every read**, never persisted. A
+`calibrated:` flag in `template.yaml` would be product state no PRD decision
+covers, and it could disagree with the config sitting beside it. Only
+`multiple` has states beyond "has a config at all": `placements: []` is what an
+upload writes, and a box can be positioned before anyone says which colour it
+depicts.
+
+The inspector names controls after what they do to a photograph rather than
+after the render pass behind them — "Follow fabric wrinkles" over `displace`,
+"Pick up garment shading" over `shade`, and preset names over blend modes. The
+raw values stay reachable under an *Advanced* disclosure, because the pass
+names are what the config, the goldens and every error message use.
+
+**Not surfaced yet, and owed:** `colour_coverage` (`exact`/`subset`) and the
+per-placement `artwork` override. Both change render output and both are
+currently editable only by hand in `template.yaml`. They were left out to keep
+the redesign's default view as clean as the wireframe intends, not because they
+stopped mattering; the *Advanced* disclosure is where they belong when they
+come back.
 
 Run endpoints call the same `engine` service functions the CLI calls, passing an
 event callback. There is no UI-only execution path.
