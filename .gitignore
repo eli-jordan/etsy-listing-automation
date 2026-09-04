@@ -19,3 +19,8 @@ src/etsy_listings/ui/frontend/dist/
 # Workspace-local secrets (never present in this repo, guarded anyway)
 .env
 .auth/
+
+# Derived render caches (luminance/displacement maps). Fully derivable from
+# the template photos, and regenerated on demand -- including under the test
+# fixtures, where a run leaves several MB of .npy behind.
+_derived/
