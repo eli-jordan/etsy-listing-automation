@@ -10,6 +10,9 @@ from etsy_listings.catalog.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
+    ShippingCost,
+    ShippingProfile,
+    ShippingRates,
     Variant,
     VariantOptions,
     VariantSet,
@@ -46,8 +49,21 @@ VARIANTS = {
 }
 
 
+SHIPPING = {
+    (6, 29): ShippingRates(
+        profiles=(
+            ShippingProfile(
+                variant_ids=(1, 2),
+                first_item=ShippingCost(currency="USD", cost=500),
+                additional_items=ShippingCost(currency="USD", cost=200),
+            ),
+        )
+    )
+}
+
+
 def make_fake() -> FakeCatalogClient:
-    return FakeCatalogClient(BLUEPRINTS, PROVIDERS, VARIANTS)
+    return FakeCatalogClient(BLUEPRINTS, PROVIDERS, VARIANTS, SHIPPING)
 
 
 def test_resolve_blueprint_by_name() -> None:
@@ -84,6 +100,12 @@ def test_fake_catalog_client_satisfies_protocol() -> None:
     assert fake.blueprints() == BLUEPRINTS
     assert fake.print_providers(6) == PROVIDERS[6]
     assert fake.variants(6, 29) == VARIANTS[(6, 29)]
+    assert fake.shipping(6, 29) == SHIPPING[(6, 29)]
+
+
+def test_fake_catalog_client_shipping_raises_for_an_unfixtured_key() -> None:
+    with pytest.raises(KeyError):
+        make_fake().shipping(999, 999)
 
 
 def test_cached_catalog_client_serves_from_cache_without_hitting_inner(tmp_path: Path) -> None:
@@ -150,3 +172,36 @@ def test_an_entry_this_build_wrote_is_served_back(tmp_path: Path) -> None:
     cached = CachedCatalogClient(make_fake(), cache_dir)
     assert cached.variants(6, 29) == cached.variants(6, 29) == VARIANTS[(6, 29)]
     assert cached.variants(6, 29).placeholder("front") is not None
+
+
+def test_cached_shipping_serves_from_cache_without_hitting_inner(tmp_path: Path) -> None:
+    calls: list[str] = []
+
+    class CountingCatalog(FakeCatalogClient):
+        def shipping(self, blueprint_id: int, provider_id: int) -> ShippingRates:
+            calls.append("shipping")
+            return super().shipping(blueprint_id, provider_id)
+
+    cache_dir = tmp_path / "catalog"
+    cached = CachedCatalogClient(
+        CountingCatalog(BLUEPRINTS, PROVIDERS, VARIANTS, SHIPPING), cache_dir
+    )
+
+    first = cached.shipping(6, 29)
+    second = cached.shipping(6, 29)
+
+    assert first == second == SHIPPING[(6, 29)]
+    assert calls == ["shipping"]
+
+
+def test_cached_shipping_refetches_after_ttl_expiry(tmp_path: Path) -> None:
+    from datetime import timedelta
+
+    clock = {"t": 1000.0}
+    cache_dir = tmp_path / "catalog"
+    cached = CachedCatalogClient(
+        make_fake(), cache_dir, ttl=timedelta(seconds=10), clock=lambda: clock["t"]
+    )
+    cached.shipping(6, 29)
+    clock["t"] += 20
+    assert cached.shipping(6, 29) == SHIPPING[(6, 29)]

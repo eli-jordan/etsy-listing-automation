@@ -189,3 +189,50 @@ def test_workspace_loads_profile_and_exceptions(workspace_root: Path) -> None:
     ws = Workspace.discover(root_override=workspace_root)
     assert ws.load_profile("comfort-colors-1717").blueprint == "Comfort Colors 1717"
     assert ws.load_exceptions().root == {}  # absent exceptions.yaml means "no exceptions"
+
+
+# --- pricing plans: discovery (PRD 34) --------------------------------------
+
+
+def test_pricing_plans_dir_is_a_workspace_top_level_directory(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.pricing_plans_dir() == ws.root / "pricing-plans"
+
+
+def test_pricing_plan_files_is_empty_without_a_pricing_plans_directory(
+    workspace_root: Path,
+) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.pricing_plan_files() == []
+
+
+def test_pricing_plan_files_finds_flat_and_nested_files(workspace_root: Path) -> None:
+    """Nested layouts are allowed here, unlike profiles/mockup-templates --
+    a plan's directory has no enforced meaning."""
+    plans_dir = workspace_root / "pricing-plans"
+    plans_dir.mkdir()
+    (plans_dir / "launch-low.yaml").write_text("profile: p\nprices: {}\n", encoding="utf-8")
+    nested = plans_dir / "comfort-colors-1717"
+    nested.mkdir()
+    (nested / "premium.yaml").write_text("profile: p\nprices: {}\n", encoding="utf-8")
+
+    ws = Workspace.discover(root_override=workspace_root)
+    found = ws.pricing_plan_files()
+
+    assert found == sorted(found)
+    assert plans_dir / "launch-low.yaml" in found
+    assert nested / "premium.yaml" in found
+    assert len(found) == 2
+
+
+def test_load_pricing_plan_attaches_the_workspace_currency(workspace_root: Path) -> None:
+    plans_dir = workspace_root / "pricing-plans"
+    plans_dir.mkdir()
+    path = plans_dir / "launch-low.yaml"
+    path.write_text("profile: comfort-colors-1717\nprices:\n  S: 100 NOK\n", encoding="utf-8")
+
+    ws = Workspace.discover(root_override=workspace_root)
+    plan = ws.load_pricing_plan(path)
+
+    assert plan.profile == "comfort-colors-1717"
+    assert plan.prices["S"].currency == ws.defaults.currency

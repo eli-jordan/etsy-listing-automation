@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.catalog.models import Blueprint, PrintProvider, ShippingRates, VariantSet
 
 
 class CatalogClient(Protocol):
@@ -14,3 +14,5 @@ class CatalogClient(Protocol):
     def print_providers(self, blueprint_id: int) -> list[PrintProvider]: ...
 
     def variants(self, blueprint_id: int, provider_id: int) -> VariantSet: ...
+
+    def shipping(self, blueprint_id: int, provider_id: int) -> ShippingRates: ...

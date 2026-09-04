@@ -557,11 +557,17 @@ def _replies(answers: list[str]):
 
 def _one_garment_catalog():
     """One blueprint, one provider, one colour in two sizes -- enough to walk
-    `new` end to end without a network."""
+    `new` end to end without a network. Carries an (empty) shipping fixture too
+    -- the pricing-plan picker's "create new" flow always calls
+    `catalog.shipping()`, and the fake raises on an unfixtured key rather than
+    degrading, unlike the real fail-soft cost/FX fetches."""
     from etsy_listings.catalog.fakes import FakeCatalogClient
     from etsy_listings.catalog.models import (
         PrintAreaPlaceholder,
         PrintProvider,
+        ShippingCost,
+        ShippingProfile,
+        ShippingRates,
         Variant,
         VariantOptions,
         VariantSet,
@@ -589,7 +595,29 @@ def _one_garment_catalog():
                 ),
             )
         },
+        {
+            (GILDAN_TEE.id, 29): ShippingRates(
+                profiles=(
+                    ShippingProfile(
+                        variant_ids=(1, 2),
+                        first_item=ShippingCost(currency="USD", cost=500),
+                        additional_items=ShippingCost(currency="USD", cost=200),
+                    ),
+                )
+            )
+        },
     )
+
+
+def _no_network_pricing_plan_generation(monkeypatch) -> None:
+    """The "create new pricing plan" flow always calls the undocumented cost
+    endpoint and a live FX API -- neither may run in a test. Both are
+    fail-soft by design, so stubbing them to "no data" still produces a
+    usable (all-zero-price) plan, matching the flow's own guarantees."""
+    from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
+
+    monkeypatch.setattr(unofficial_variant_costs, "fetch_variant_costs", lambda *a, **k: {})
+    monkeypatch.setattr(fx_rate, "fetch_usd_to", lambda *a, **k: None)
 
 
 def test_new_runs_end_to_end_without_prompt_toolkit(workspace_root: Path, monkeypatch) -> None:
@@ -599,11 +627,13 @@ def test_new_runs_end_to_end_without_prompt_toolkit(workspace_root: Path, monkey
 
     monkeypatch.setattr(prompts, "fzf_command", lambda: None)
     monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
+    _no_network_pricing_plan_generation(monkeypatch)
 
     catalog = _one_garment_catalog()
 
-    # garment, provider, template (2 = flat-lay-01), tone? (default no), price
-    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", ""]))
+    # garment, provider, template (2 = flat-lay-01), tone? (default no),
+    # pricing plan (1 = the only row, "create new"), plan name
+    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", "1", "launch-low"]))
 
     workspace = Workspace.discover(root_override=workspace_root)
     run_new(workspace, catalog, "brand-new-design", "tshirt")
@@ -612,6 +642,7 @@ def test_new_runs_end_to_end_without_prompt_toolkit(workspace_root: Path, monkey
     assert listing.is_file()
     assert "flat-lay-01" in listing.read_text(encoding="utf-8")
     assert (workspace_root / "profiles" / "unisex-heavy-cotton-tee.yaml").is_file()
+    assert (workspace_root / "pricing-plans" / "launch-low.yaml").is_file()
 
 
 def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
@@ -625,11 +656,12 @@ def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
 
     monkeypatch.setattr(prompts, "fzf_command", lambda: None)
     monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
+    _no_network_pricing_plan_generation(monkeypatch)
     _write_single_kind_template(workspace_root / "mockup-templates" / "lifestyle-01")
 
     # garment, provider, template (3 = lifestyle-01, after the two fixtures),
-    # tone? (no), price
-    monkeypatch.setattr("builtins.input", _replies(["1", "1", "3", "", ""]))
+    # tone? (no), pricing plan (1 = the only row, "create new"), plan name
+    monkeypatch.setattr("builtins.input", _replies(["1", "1", "3", "", "1", "single-kind-plan"]))
 
     workspace = Workspace.discover(root_override=workspace_root)
     run_new(workspace, _one_garment_catalog(), "single-kind-design", "tshirt")
@@ -640,6 +672,99 @@ def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
     assert len(listing.media) == 1
     assert listing.media[0].template == "lifestyle-01"
     assert listing.media[0].colour is None
+
+
+def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
+    workspace_root: Path, monkeypatch
+) -> None:
+    """The "create new pricing plan" flow end to end, with the two live
+    fetches stubbed to deterministic (non-empty) data instead of the
+    all-zero fail-soft path -- confirms the generated file and the listing's
+    `pricing_plan:` ref actually agree, and that a real price shows up."""
+    from datetime import UTC, datetime
+    from decimal import Decimal
+
+    from etsy_listings.config.listing import Listing
+    from etsy_listings.config.money import Money
+    from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
+    from etsy_listings.newcmd.fx_rate import FxRate
+    from etsy_listings.newcmd.interactive import run_new
+
+    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
+    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
+    monkeypatch.setattr(
+        unofficial_variant_costs, "fetch_variant_costs", lambda *a, **k: {1: 1000, 2: 1000}
+    )
+    fixed_rate = FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC))
+    monkeypatch.setattr(fx_rate, "fetch_usd_to", lambda *a, **k: fixed_rate)
+
+    catalog = _one_garment_catalog()
+    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", "1", "computed-plan"]))
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    run_new(workspace, catalog, "priced-design", "tshirt")
+
+    plan_path = workspace_root / "pricing-plans" / "computed-plan.yaml"
+    assert plan_path.is_file()
+    plan = workspace.load_pricing_plan(plan_path)
+    assert plan.profile == "unisex-heavy-cotton-tee"
+    zero = Money.parse(f"0 {workspace.defaults.currency}")
+    assert all(price != zero for price in plan.prices.values())  # real cost data was used
+
+    listing = Listing.load(
+        workspace_root / "listings" / "priced-design" / "listing.yaml", currency="NOK"
+    )
+    assert listing.pricing_plan == "../../pricing-plans/computed-plan.yaml"
+
+
+def test_new_offers_an_existing_compatible_pricing_plan(workspace_root: Path, monkeypatch) -> None:
+    """A plan already on disk for this garment profile is picked straight
+    from the list -- the wizard only needs to create one when none exist."""
+    from etsy_listings.config.listing import Listing
+    from etsy_listings.newcmd.interactive import run_new
+
+    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
+    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
+    _no_network_pricing_plan_generation(monkeypatch)
+
+    plans_dir = workspace_root / "pricing-plans"
+    plans_dir.mkdir()
+    (plans_dir / "existing.yaml").write_text(
+        "profile: unisex-heavy-cotton-tee\nprices:\n  S: 100 NOK\n  M: 100 NOK\n",
+        encoding="utf-8",
+    )
+
+    catalog = _one_garment_catalog()
+    # garment, provider, template, tone?, pricing plan (1 = the existing, compatible plan)
+    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", "1"]))
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    run_new(workspace, catalog, "reuses-a-plan", "tshirt")
+
+    listing = Listing.load(
+        workspace_root / "listings" / "reuses-a-plan" / "listing.yaml", currency="NOK"
+    )
+    assert listing.pricing_plan == "../../pricing-plans/existing.yaml"
+    assert not (plans_dir / "reuses-a-plan.yaml").exists()  # nothing new was written
+
+
+def test_cancelling_the_pricing_plan_picker_stops_new(workspace_root: Path, monkeypatch) -> None:
+    import typer
+
+    from etsy_listings.newcmd.interactive import run_new
+
+    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
+    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
+
+    catalog = _one_garment_catalog()
+    # garment, provider, template, tone?, then a blank reply cancels the picker
+    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", ""]))
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    with pytest.raises(typer.Exit):
+        run_new(workspace, catalog, "cancelled-at-pricing", "tshirt")
+
+    assert not (workspace_root / "listings" / "cancelled-at-pricing").exists()
 
 
 SINGLE_KIND_TEMPLATE = """\

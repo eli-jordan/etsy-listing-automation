@@ -16,6 +16,7 @@ from pathlib import Path, PureWindowsPath
 from etsy_listings.config.defaults import Defaults
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.profile import Profile
 from etsy_listings.config.slug import ColourExceptions
 from etsy_listings.workspace import layout
@@ -165,6 +166,21 @@ class Workspace:
     def profile_file(self, profile: str) -> Path:
         return self.root / layout.PROFILES_DIR / f"{_segment(profile)}.yaml"
 
+    def pricing_plans_dir(self) -> Path:
+        return self.root / layout.PRICING_PLANS_DIR
+
+    def pricing_plan_files(self) -> list[Path]:
+        """Every ``*.yaml`` under ``pricing-plans/``, recursively -- nested
+        layouts are allowed here (unlike ``profiles/``/``mockup-templates/``),
+        since a plan's directory has no enforced meaning; it's purely where
+        the user chose to file it. Discovery only -- a listing may reference
+        a plan anywhere in the workspace via its relative path, the same
+        flexibility ``design:`` already has."""
+        root = self.pricing_plans_dir()
+        if not root.is_dir():
+            return []
+        return sorted(p for p in root.rglob("*.yaml") if p.is_file())
+
     def exceptions_file(self) -> Path:
         return self.root / layout.EXCEPTIONS_FILE
 
@@ -243,6 +259,14 @@ class Workspace:
 
     def load_profile(self, profile: str) -> Profile:
         return Profile.load(self.profile_file(profile))
+
+    def load_pricing_plan(self, path: Path) -> PricingPlan:
+        """Attaches workspace currency, like ``load_profile``/``load_listing``
+        -- but path-based, not bare-name: pricing-plan refs are path refs
+        (see ``Listing.pricing_plan``'s docstring), so resolving a name to a
+        path is the caller's job, the same point ``design:`` refs are
+        resolved. This method only owns "attach currency, wrap load errors"."""
+        return PricingPlan.load(path, currency=self.defaults.currency)
 
     def load_exceptions(self) -> ColourExceptions:
         return load_exceptions(self.exceptions_file())

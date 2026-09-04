@@ -5,6 +5,8 @@ interactive path is thin enough to be obviously correct.\""""
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -13,24 +15,35 @@ from etsy_listings.catalog.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
+    ShippingCost,
+    ShippingProfile,
+    ShippingRates,
     Variant,
     VariantOptions,
     VariantSet,
 )
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import MAX_MEDIA_ENTRIES
+from etsy_listings.config.money import Money
+from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.slug import ColourExceptions, SlugCollisionError
+from etsy_listings.newcmd.fx_rate import FxRate
 from etsy_listings.newcmd.logic import (
     build_listing_stub,
     build_media_entries,
+    build_pricing_plan_choices,
     build_profile,
+    compute_starting_prices,
     filter_blueprints_by_category,
+    load_candidate_pricing_plans,
     load_template_kind,
+    pricing_plan_ref,
     profile_slug_for,
     resolve_colour_slugs,
     sort_sizes,
     validate_listing_stub,
     write_listing,
+    write_pricing_plan,
     write_profile_if_absent,
 )
 from etsy_listings.workspace.workspace import Workspace
@@ -175,19 +188,19 @@ def test_write_profile_if_absent_writes_once_then_reuses(workspace_root: Path) -
     assert (workspace.root / "profiles" / f"{slug}.yaml").is_file()
 
 
-def test_build_listing_stub_has_one_price_per_size_and_one_mockup_per_colour() -> None:
+def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() -> None:
     data = build_listing_stub(
         profile_slug="unisex-garment-dyed-heavy-weight-tee",
         design_ref="../../designs/take-a-hike.png",
         colours=["black", "blue-jean"],
-        sizes=["S", "M"],
-        base_price="0 NOK",
+        pricing_plan_ref="../../pricing-plans/launch-low.yaml",
         brief="",
         media=build_media_entries(
             template="flat-lay-01", kind="colour-matrix", colours=["black", "blue-jean"]
         ),
     )
-    assert data["prices"] == {"S": "0 NOK", "M": "0 NOK"}
+    assert data["pricing_plan"] == "../../pricing-plans/launch-low.yaml"
+    assert data["prices"] == {}
     assert data["media"] == [
         {"template": "flat-lay-01", "colour": "black"},
         {"template": "flat-lay-01", "colour": "blue-jean"},
@@ -195,18 +208,18 @@ def test_build_listing_stub_has_one_price_per_size_and_one_mockup_per_colour() -
     assert data["etsy"]["title"] == "<generate>"
 
 
-def test_validate_listing_stub_rejects_currency_mismatch() -> None:
+def test_validate_listing_stub_accepts_a_pricing_plan_reference_with_no_prices() -> None:
     data = build_listing_stub(
         profile_slug="p",
         design_ref="../../designs/x.png",
         colours=["black"],
-        sizes=["S"],
-        base_price="0 USD",
+        pricing_plan_ref="../../pricing-plans/x.yaml",
         brief="",
         media=[{"template": "flat-lay-01", "colour": "black"}],
     )
-    with pytest.raises(Exception, match="USD"):
-        validate_listing_stub(data, currency="NOK")
+    listing = validate_listing_stub(data, currency="NOK")
+    assert listing.pricing_plan == "../../pricing-plans/x.yaml"
+    assert listing.prices == {}
 
 
 # --- what goes in `media:` ---------------------------------------------------
@@ -246,8 +259,7 @@ def test_a_truncated_stub_still_validates_and_still_sells_every_colour() -> None
         profile_slug="p",
         design_ref="../../designs/x.png",
         colours=colours,
-        sizes=["S"],
-        base_price="0 NOK",
+        pricing_plan_ref="../../pricing-plans/x.yaml",
         brief="",
         media=build_media_entries(template="flat-lay-01", kind="colour-matrix", colours=colours),
     )
@@ -304,10 +316,170 @@ def test_write_listing_refuses_to_overwrite_an_existing_listing(workspace_root: 
         profile_slug="comfort-colors-1717",
         design_ref="../../designs/take-a-hike.png",
         colours=["black"],
-        sizes=["S"],
-        base_price="0 NOK",
+        pricing_plan_ref="../../pricing-plans/x.yaml",
         brief="",
         media=[{"template": "flat-lay-01", "colour": "black"}],
     )
     with pytest.raises(FileExistsError):
         write_listing(workspace, "take-a-hike", data)  # fixture already has this listing
+
+
+# --- pricing plans (PRD 33-36) -----------------------------------------------
+
+
+def test_build_pricing_plan_choices_marks_the_exact_profile_match(tmp_path: Path) -> None:
+    matching = PricingPlan(profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
+    other = PricingPlan(profile="a-different-profile", prices={"S": Money.parse("100 NOK")})
+    plans = [(tmp_path / "b-other.yaml", other), (tmp_path / "a-matching.yaml", matching)]
+
+    choices = build_pricing_plan_choices(plans, "comfort-colors-1717")
+
+    assert [c.is_compatible for c in choices] == [True, False]
+    assert choices[0].path.stem == "a-matching"
+    assert choices[0].label.strip().endswith("a-matching")
+    assert choices[1].label.startswith("  ")  # no marker for the non-matching row
+
+
+def test_load_candidate_pricing_plans_skips_a_broken_plan_not_the_whole_picker(
+    workspace_root: Path,
+) -> None:
+    plans_dir = workspace_root / "pricing-plans"
+    plans_dir.mkdir()
+    (plans_dir / "good.yaml").write_text(
+        "profile: comfort-colors-1717\nprices:\n  S: 100 NOK\n", encoding="utf-8"
+    )
+    (plans_dir / "bad.yaml").write_text("profile: x\nprices:\n  S: 100\n", encoding="utf-8")
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    candidates = load_candidate_pricing_plans(workspace)
+
+    assert [path.stem for path, _ in candidates] == ["good"]
+
+
+def test_pricing_plan_ref_is_relative_to_the_listing_directory(tmp_path: Path) -> None:
+    listing_dir = tmp_path / "listings" / "take-a-hike"
+    listing_dir.mkdir(parents=True)
+
+    flat = tmp_path / "pricing-plans" / "launch-low.yaml"
+    assert pricing_plan_ref(flat, listing_dir=listing_dir) == "../../pricing-plans/launch-low.yaml"
+
+    nested = tmp_path / "pricing-plans" / "comfort-colors-1717" / "launch-low.yaml"
+    assert (
+        pricing_plan_ref(nested, listing_dir=listing_dir)
+        == "../../pricing-plans/comfort-colors-1717/launch-low.yaml"
+    )
+
+
+def test_write_pricing_plan_sets_profile_from_the_chosen_garment_profile(
+    workspace_root: Path,
+) -> None:
+    workspace = Workspace.discover(root_override=workspace_root)
+    prices = {"S": Money.parse("100 NOK")}
+
+    path = write_pricing_plan(workspace, "Launch Low", "comfort-colors-1717", prices, ["a note"])
+
+    assert path == workspace.pricing_plans_dir() / "launch-low.yaml"
+    plan = workspace.load_pricing_plan(path)
+    assert plan.profile == "comfort-colors-1717"
+    assert plan.prices == prices
+    assert "a note" in path.read_text(encoding="utf-8")
+
+
+def test_write_pricing_plan_refuses_to_overwrite(workspace_root: Path) -> None:
+    workspace = Workspace.discover(root_override=workspace_root)
+    prices = {"S": Money.parse("100 NOK")}
+    write_pricing_plan(workspace, "dup", "comfort-colors-1717", prices, [])
+    with pytest.raises(FileExistsError):
+        write_pricing_plan(workspace, "dup", "comfort-colors-1717", prices, [])
+
+
+def _shipping_rates(*, small_cents: int, medium_cents: int) -> ShippingRates:
+    return ShippingRates(
+        profiles=(
+            ShippingProfile(
+                variant_ids=(1, 3),
+                first_item=ShippingCost(currency="USD", cost=small_cents),
+                additional_items=ShippingCost(currency="USD", cost=small_cents),
+            ),
+            ShippingProfile(
+                variant_ids=(2, 4),
+                first_item=ShippingCost(currency="USD", cost=medium_cents),
+                additional_items=ShippingCost(currency="USD", cost=medium_cents),
+            ),
+        )
+    )
+
+
+def test_compute_starting_prices_applies_margin_and_converts_currency() -> None:
+    # variants 1 (Black/S) and 3 (Blue Jean/S) both cost 1000c mfg + 500c shipping.
+    variant_costs = {1: 1000, 2: 1500, 3: 1000, 4: 1500}
+    shipping = _shipping_rates(small_cents=500, medium_cents=600)
+    rate = FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC))
+
+    prices, notes = compute_starting_prices(
+        sizes=["S", "M"],
+        variant_set=VARIANT_SET,
+        variant_costs=variant_costs,
+        shipping=shipping,
+        fx_rate=rate,
+        target_currency="NOK",
+    )
+
+    # S: (10.00 + 5.00) * 1.10 = 16.50 USD * 10 = 165.00 NOK
+    assert prices["S"] == Money.parse("165.00 NOK")
+    # M: (15.00 + 6.00) * 1.10 = 23.10 USD * 10 = 231.00 NOK
+    assert prices["M"] == Money.parse("231.00 NOK")
+    assert any("S" in note for note in notes)
+
+
+def test_compute_starting_prices_uses_the_max_when_colours_disagree() -> None:
+    # Both size-S variants (1 and 3) get different manufacturing costs.
+    variant_costs = {1: 1000, 3: 2000}
+    shipping = _shipping_rates(small_cents=0, medium_cents=0)
+    rate = FxRate(rate=Decimal("1"), source="test", fetched_at=datetime.now(UTC))
+
+    prices, notes = compute_starting_prices(
+        sizes=["S"],
+        variant_set=VARIANT_SET,
+        variant_costs=variant_costs,
+        shipping=shipping,
+        fx_rate=rate,
+        target_currency="USD",
+    )
+
+    # max(1000, 2000) = 2000c = $20.00, * 1.10 margin = $22.00
+    assert prices["S"] == Money.parse("22.00 USD")
+    assert any("varies by colour" in note for note in notes)
+
+
+def test_compute_starting_prices_is_fail_soft_with_no_cost_data() -> None:
+    shipping = _shipping_rates(small_cents=500, medium_cents=600)
+
+    prices, notes = compute_starting_prices(
+        sizes=["S"],
+        variant_set=VARIANT_SET,
+        variant_costs={},  # the undocumented endpoint returned nothing
+        shipping=shipping,
+        fx_rate=FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC)),
+        target_currency="NOK",
+    )
+
+    assert prices["S"] == Money.parse("0 NOK")
+    assert any("no cost data" in note for note in notes)
+
+
+def test_compute_starting_prices_is_fail_soft_with_no_fx_rate() -> None:
+    variant_costs = {1: 1000, 3: 1000}
+    shipping = _shipping_rates(small_cents=500, medium_cents=600)
+
+    prices, notes = compute_starting_prices(
+        sizes=["S"],
+        variant_set=VARIANT_SET,
+        variant_costs=variant_costs,
+        shipping=shipping,
+        fx_rate=None,  # the FX fetch failed
+        target_currency="NOK",
+    )
+
+    assert prices["S"] == Money.parse("0 NOK")
+    assert any("no FX rate" in note for note in notes)
