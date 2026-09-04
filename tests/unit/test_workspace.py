@@ -140,6 +140,27 @@ def test_listing_names_ignores_directories_without_a_listing_file(workspace_root
     assert ws.listing_names() == ["take-a-hike"]
 
 
+def test_template_names_can_include_uncalibrated_directories(workspace_root: Path) -> None:
+    """The calibrator is what writes template.yaml, so its UI has to see past
+    the default filter -- otherwise a directory could never be selected in
+    order to calibrate it. A stray file stays out either way.
+
+    The default (calibrated-only) behaviour the `new` picker relies on is
+    covered in tests/behaviour/test_new_picker.py.
+    """
+    templates = workspace_root / "mockup-templates"
+    (templates / "not-calibrated-yet").mkdir()
+    (templates / "stray.png").write_bytes(b"")
+    ws = Workspace.discover(root_override=workspace_root)
+
+    assert ws.template_names() == ["colour-chart-01", "flat-lay-01"]
+    assert ws.template_names(include_uncalibrated=True) == [
+        "colour-chart-01",
+        "flat-lay-01",
+        "not-calibrated-yet",
+    ]
+
+
 @pytest.mark.parametrize(
     "name",
     ["..", ".", "", "../escape", "nested/name", "back\\slash", "C:evil"],

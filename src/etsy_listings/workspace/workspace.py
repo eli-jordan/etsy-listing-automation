@@ -176,16 +176,26 @@ class Workspace:
     def templates_dir(self) -> Path:
         return self.root / layout.MOCKUP_TEMPLATES_DIR
 
-    def template_names(self) -> list[str]:
+    def template_names(self, *, include_uncalibrated: bool = False) -> list[str]:
         """Templates that are actually usable -- a directory only counts once
         the calibrator has written its ``template.yaml``, the same rule
         :meth:`listing_names` applies to ``listing.yaml``. An uncalibrated
         directory has no kind and no geometry, so offering it would only move
-        the failure later."""
+        the failure later.
+
+        ``include_uncalibrated=True`` lifts that filter for the one caller
+        that has to see past it: the calibrator UI is what *writes*
+        ``template.yaml``, so filtering on it there would hide exactly the
+        directories that still need calibrating.
+        """
         templates = self.templates_dir()
         if not templates.is_dir():
             return []
-        return sorted(p.name for p in templates.iterdir() if (p / layout.TEMPLATE_FILE).is_file())
+        return sorted(
+            p.name
+            for p in templates.iterdir()
+            if p.is_dir() and (include_uncalibrated or (p / layout.TEMPLATE_FILE).is_file())
+        )
 
     def template_dir(self, template: str) -> Path:
         return self.templates_dir() / _segment(template)

@@ -119,14 +119,10 @@ def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
 @router.get("", response_model=list[TemplateSummary])
 def list_templates(request: Request) -> list[TemplateSummary]:
     workspace = _workspace(request)
-    templates_root = workspace.templates_dir()
-    if not templates_root.is_dir():
-        return []
-    return [
-        _summarize(workspace, entry.name)
-        for entry in sorted(templates_root.iterdir())
-        if entry.is_dir()
-    ]
+    # include_uncalibrated: the calibrator is what writes template.yaml, so
+    # the directories with none are precisely the ones that need this UI.
+    names = workspace.template_names(include_uncalibrated=True)
+    return [_summarize(workspace, name) for name in names]
 
 
 @router.post("", response_model=UploadResponse)
