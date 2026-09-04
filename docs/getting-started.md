@@ -52,12 +52,21 @@ uv run etsy-listings plan take-a-hike --root tests/fixtures/workspace
 take-a-hike
 
   + render (no previous render)
+      render flat-lay-01/black
+        in   designs/take-a-hike.png
+             mockup-templates/flat-lay-01/template.yaml
+             mockup-templates/flat-lay-01/black.png
+        out  .cache/renders/take-a-hike/flat-lay-01/black.png
+      render flat-lay-01/blue-jean
+        ...
 
-  1 to run, 0 to change, 0 drift warning(s)
+  1 to run (4 actions), 0 to change, 0 drift warning(s)
 ```
 
 That's a genuine three-way diff — it's telling you the `render` stage hasn't
-run yet for this listing. Apply it:
+run yet for this listing, and then exactly what running it would do: one action
+per scene, the files each reads, the file each writes. Nothing is created until
+you apply it:
 
 ```bash
 uv run etsy-listings apply take-a-hike --root tests/fixtures/workspace
@@ -66,16 +75,38 @@ uv run etsy-listings apply take-a-hike --root tests/fixtures/workspace
 ```
 applying take-a-hike
   applying render
-  rendered flat-lay-01/black
-  rendered flat-lay-01/blue-jean
-  rendered flat-lay-01/ivory
-  rendered flat-lay-01/moss
+  ██ rendered flat-lay-01/black
+  ██ rendered flat-lay-01/blue-jean
+  ██ rendered flat-lay-01/ivory
+  ██ rendered flat-lay-01/moss
 ```
+
+Each block is the garment colour that scene actually rendered, sampled from the
+mockup photo inside the print area — a quick check that a template is calibrated
+onto the shirt and not onto the background. It appears only when the output is a
+colour terminal; pipe the run to a file, or set `NO_COLOR`, and you get the plain
+lines. If your terminal does render colour but the blocks never appear, set
+`FORCE_COLOR=1` — a cygwin pty is a named pipe, and native-Windows Python cannot
+tell it apart from a redirect. A `multiple`-kind scene prints one block per
+garment in the photo.
 
 Open the PNGs it wrote — `tests/fixtures/workspace/.cache/renders/take-a-hike/flat-lay-01/*.png`
 — and you'll see the grid/ruler test design warped onto each garment colour.
 Run `plan` again and it reports **no changes**: nothing about the inputs
 changed, so nothing reruns. That idempotency is the whole point of the tool.
+
+Now delete one of those PNGs and run `plan` again:
+
+```
+  + render (1 rendered file missing from the cache)
+      ...
+        out  .cache/renders/take-a-hike/flat-lay-01/black.png   (missing)
+```
+
+`plan` checks two separate things, and both have to hold for a run to be a
+no-op: that nothing about the inputs changed, *and* that every file the last
+apply produced is still on disk. The render cache is gitignored and fully
+derivable, so deleting it is a supported thing to do — `apply` rebuilds it.
 
 Don't commit anything under `.cache/` if you experiment here — it's
 gitignored and fully derivable, so `git status` should stay clean. If you want
@@ -134,7 +165,9 @@ Without either, the CLI walks up from your current directory looking for
 Drop an RGBA PNG into `designs/`, e.g. `designs/take-a-hike.png`. It needs to
 be large enough for ~300 DPI over your garment's print area — a 4500×5400
 print area wants a 4500×5400-or-larger design. Rendering never upscales; too
-small fails loudly, naming the required size.
+small fails loudly, naming the required size. Printify's print area varies by
+garment size, and `new` records the largest of them in the profile, so meeting
+the number in `print_area` covers every size you sell.
 
 A design that needs different ink for light vs. dark garments carries more
 than one file — that's configured per-listing (§7), not here.
@@ -211,17 +244,46 @@ photos, Etsy copy.
 uv run etsy-listings new take-a-hike --root ~/etsy-listings
 ```
 
-This talks to Printify's public catalog live (no auth token needed for
-read-only catalog calls) and interactively:
+This reads Printify's catalog live, so it needs a token first — the catalog
+endpoints are read-only but **not** public, and without one Printify answers
+`401 Unauthorized`. Generate a personal access token with the `catalog.read`
+scope at [printify.com/app/account/connections](https://printify.com/app/account/connections)
+(docs/setup.md §1.3) and put it in the **workspace's** `.env`:
 
-1. Lists garments (`--category` filters by blueprint category, default
-   `tshirt`) — pick one.
-2. Lists print providers for that garment — pick one (defaults to
-   `preferred_print_provider` from `shop.yaml` if it's offered).
+```
+PRINTIFY_API_TOKEN=...
+```
+
+`.env` belongs to the workspace, not this repository, and should be gitignored.
+Exporting `PRINTIFY_API_TOKEN` in your shell works too, and overrides the file.
+The catalog is cached under `.cache/catalog/` with a one-day TTL, so a repeat
+run of `new` may not call Printify at all.
+
+With that in place, `new` interactively:
+
+1. Offers garments (`--category` filters by blueprint category, default
+   `tshirt`) across three columns — brand, model, title:
+
+   ```
+     1  ⭐ Gildan          5000   Unisex Heavy Cotton Tee
+     2     Comfort Colors  1717   Unisex Garment-Dyed Heavy Weight Tee
+     3     Gildan          2400   Unisex Long Sleeve Tee
+     4     Gildan          18500  Unisex Pullover Hoodie
+   ```
+
+   Brand and model are how a blank is actually identified — “Gildan 18500” is
+   what you look up — while Printify's titles bury it, since half a dozen
+   brands sell a “Unisex Pullover Hoodie”. ⭐ means this workspace already has
+   a profile for that garment, and those rows sort to the top — a shop reuses
+   a handful of blueprints, so the one you used yesterday should not need
+   finding.
+2. Lists print providers for that garment — pick one
+   (`preferred_print_provider` from `shop.yaml` sorts first if it's offered).
 3. Resolves the provider's colours to slugs, flagging any collision against
    `exceptions.yaml` (see below).
-4. Asks which mockup template to reference (must already exist under
-   `mockup-templates/`).
+4. Lists the calibrated mockup templates under `mockup-templates/` — pick one.
+   A directory without a `template.yaml` isn't offered: it has no kind and no
+   geometry yet, so choosing it would only fail later.
 5. Optionally walks each colour asking light/dark, to seed the profile's
    `colour_tone` — skip this if every design you'll use on this garment needs
    only one ink file.
@@ -232,6 +294,47 @@ blueprint+provider already exists) and
 `listings/take-a-hike/listing.yaml` referencing `designs/take-a-hike.png`.
 Open the listing file afterwards and fill in `brief` (used by AI copy
 generation in a later phase) and adjust prices/media to taste.
+
+**What lands in `media:` depends on the template you picked**, and `new` says
+which case it took:
+
+| Template kind | `media:` |
+|---|---|
+| `colour-matrix` | One entry per colour — capped at Etsy's **10-image limit** |
+| `multiple`, `single` | Exactly one entry, no `colour` (one output each) |
+
+The cap matters in practice: Comfort Colors 1717 at Monster Digital offers 33
+colours, and Etsy accepts 10 images. `colors:` still lists all 33 — it decides
+which Printify *variants sell*, which is a different axis from which photos
+get rendered. The first 10 is an arbitrary starting point; edit `media:` to
+choose which colours are worth a photo.
+
+**Install `fzf` if you want to filter.** `new` uses it for the garment and
+provider pickers whenever this machine has one, and it is the only front-end
+that filters — full-screen, incremental, fuzzy, with space-separated words
+AND-ed so `gil hood` finds the Gildan hoodie. Without it you get a plain
+selector over the same rows in the same order: questionary's arrow-key list,
+or under cygwin a numbered list (`n`/`p` page, a number picks). The reason for
+that spread is in the next note.
+
+> **Under cygwin, prompts fall back to a numbered list.** prompt_toolkit —
+> which questionary is built on — only ever builds a Win32 console output on
+> Windows, and a cygwin pty is a named pipe with no console screen buffer
+> behind it, so it raises `NoConsoleScreenBufferError` before reading a key.
+> `new` detects this and asks its questions with plain `input()` instead. The
+> columns and the ⭐ marker still work; only filtering is lost, and cygwin's
+> `fzf` package brings it back. A *Windows* `fzf.exe` under mintty generally
+> needs `winpty` and is not worth the trouble.
+
+> **Finding that `fzf` needs cygwin's help.** The tool is native-Windows
+> Python, and cygwin's `fzf` package installs `/usr/bin/fzf` as a *shebang
+> script* with no `.exe` — a file Windows can neither find on `PATH` nor
+> execute. `shutil.which("fzf")` therefore says no while `ls | fzf` works
+> perfectly in the same shell. So when the native lookup fails, `new` asks
+> cygwin's own `sh` whether it has an `fzf` and runs it through that shell.
+> One consequence worth knowing: cygwin's package is fzf **0.12.1**, the Ruby
+> implementation, which rejects `--height`, so the picker always takes the
+> whole screen rather than opening inline.
 
 ### By hand
 

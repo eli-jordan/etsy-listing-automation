@@ -1,7 +1,16 @@
 """The ``Stage`` protocol. A1: a fixed ordered list of stages sharing one
-protocol; ``read_live()`` returning ``None`` marks a stage local-only, and the
-engine skips drift reporting for it rather than each stage having to remember.
-Dependencies between stages are list order, not a dependency graph."""
+protocol; ``local`` marks a stage as having no *remote* state, so the engine
+skips drift reporting for it rather than each stage having to remember.
+Dependencies between stages are list order, not a dependency graph.
+
+``local`` does not mean "reads nothing". A local stage still has state that
+exists outside its lockfile entry -- the render stage's PNGs are on disk, and
+they can be deleted or edited between runs. ``read_live()`` is where a stage
+observes that, local or not; what ``local`` decides is that any difference is
+work to redo, not *drift* to warn about (there is no second writer to have
+drifted from), and that the read is cheap and local, so it never joins A3's
+live-fetch thread pool.
+"""
 
 from __future__ import annotations
 
@@ -34,13 +43,13 @@ class StageApplyResult:
 
 class Stage(Protocol[D, A, L]):
     name: str
-    local: bool  # True => read_live() always returns None; drift is undefined
+    local: bool  # True => no remote state; differences are work, not drift
 
     def desired(self, ctx: RunContext, listing: str) -> D: ...
 
     def last_applied(self, lock: Lockfile) -> A | None: ...
 
-    def read_live(self, ctx: RunContext, lock: Lockfile) -> L | None: ...
+    def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> L | None: ...
 
     def plan(self, desired: D, applied: A | None, live: L | None) -> StagePlan: ...
 

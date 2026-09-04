@@ -8,16 +8,30 @@ stages and tests are unaffected.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from etsy_listings.catalog.client import CatalogClient
 from etsy_listings.workspace.workspace import Workspace
 
-EventSink = Callable[[str], None]
+Swatch = tuple[int, int, int]
+"""An 8-bit sRGB colour a sink may render next to an event. Structured, not an
+ANSI escape baked into the message: the CLI colours it, the UI's future SSE
+serialiser sends it as JSON, and a log file gets neither."""
 
 
-def _noop_sink(message: str) -> None:
+@dataclass(frozen=True)
+class Event:
+    """Progress reported by a stage while applying."""
+
+    message: str
+    swatches: tuple[Swatch, ...] = ()
+
+
+EventSink = Callable[[Event], None]
+
+
+def _noop_sink(event: Event) -> None:
     return None
 
 
@@ -27,5 +41,5 @@ class RunContext:
     catalog: CatalogClient
     on_event: EventSink = field(default=_noop_sink)
 
-    def emit(self, message: str) -> None:
-        self.on_event(message)
+    def emit(self, message: str, *, swatches: Sequence[Swatch] = ()) -> None:
+        self.on_event(Event(message=message, swatches=tuple(swatches)))

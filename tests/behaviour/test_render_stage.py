@@ -16,7 +16,7 @@ from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import build_plan
 from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.render import TemplateNotFoundError
+from etsy_listings.engine.stages.render import ArtworkResolutionError, TemplateNotFoundError
 from etsy_listings.workspace.workspace import Workspace
 
 LISTING = "take-a-hike"
@@ -158,3 +158,34 @@ def test_changing_the_design_triggers_a_rerender(workspace_root: Path) -> None:
     render_plan = next(sp for sp in plan_b.stage_plans if sp.stage == "render")
     assert render_plan.will_run is True
     assert render_plan.reason == "design or template changed"
+
+
+# --- artwork resolution errors point at the right file -----------------------
+
+
+def test_an_unsatisfiable_template_override_names_the_key_and_its_source() -> None:
+    """A `single` template carrying `artwork: on-light` over a single-file
+    design used to report only "colour 'white' needs an artwork but none
+    resolves" -- which reads as a problem with the colour or the listing,
+    while the demand came from the template and `on-light` appeared nowhere
+    in the message."""
+    error = ArtworkResolutionError(
+        "white",
+        None,
+        ["default"],
+        wanted="on-light",
+        source="the template's own artwork: override",
+    )
+    message = str(error)
+
+    assert "on-light" in message  # the key that was asked for
+    assert "template" in message  # where the demand came from
+    assert "['default']" in message  # what the design actually offers
+
+
+def test_an_unresolvable_artwork_still_reports_the_old_way() -> None:
+    """Nothing asked for a specific key -- a multi-key design with no tone,
+    no override and no sole key to fall back on."""
+    message = str(ArtworkResolutionError("moss", "dark", ["on-dark", "on-light"]))
+    assert "none resolves" in message
+    assert "tone: dark" in message

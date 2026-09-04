@@ -153,14 +153,39 @@ class Workspace:
     def lock_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LOCK_FILE
 
+    def design_file(self, design: str) -> Path:
+        return self.root / layout.DESIGNS_DIR / f"{_segment(design)}.png"
+
+    def profile_names(self) -> list[str]:
+        profiles = self.root / layout.PROFILES_DIR
+        if not profiles.is_dir():
+            return []
+        return sorted(p.stem for p in profiles.glob("*.yaml") if p.is_file())
+
     def profile_file(self, profile: str) -> Path:
         return self.root / layout.PROFILES_DIR / f"{_segment(profile)}.yaml"
 
     def exceptions_file(self) -> Path:
         return self.root / layout.EXCEPTIONS_FILE
 
+    def env_file(self) -> Path:
+        """The workspace's gitignored ``.env``. Secrets live in the *workspace*,
+        never in this repository -- see ``config/secrets.py``."""
+        return self.root / layout.ENV_FILE
+
     def templates_dir(self) -> Path:
         return self.root / layout.MOCKUP_TEMPLATES_DIR
+
+    def template_names(self) -> list[str]:
+        """Templates that are actually usable -- a directory only counts once
+        the calibrator has written its ``template.yaml``, the same rule
+        :meth:`listing_names` applies to ``listing.yaml``. An uncalibrated
+        directory has no kind and no geometry, so offering it would only move
+        the failure later."""
+        templates = self.templates_dir()
+        if not templates.is_dir():
+            return []
+        return sorted(p.name for p in templates.iterdir() if (p / layout.TEMPLATE_FILE).is_file())
 
     def template_dir(self, template: str) -> Path:
         return self.templates_dir() / _segment(template)

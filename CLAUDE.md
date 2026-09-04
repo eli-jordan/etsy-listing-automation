@@ -49,6 +49,34 @@ helper, so anything touching `origin` blocks until something kills it (see
 "GitHub access"). If a command is worth running, run it in cygwin zsh; if it
 fails there, that is a real failure, not an artefact.
 
+### The cygwin pty is not a Windows console
+
+Two consequences, both verified under a real pty (`script -q -c ... /dev/null`),
+not merely inferred from a redirect:
+
+- **prompt_toolkit cannot prompt at all.** On `sys.platform == "win32"` it
+  only ever builds a Win32/Windows-10-VT100/ConEmu output, and a cygwin pty is
+  a named pipe with no console screen buffer, so `create_output()` raises
+  `NoConsoleScreenBufferError` before a key is read. Anything interactive
+  (questionary, `rich.prompt`) therefore needs a fallback that goes through
+  plain `input()` — `newcmd/prompts.py` is the one that exists, and any new
+  prompt belongs behind it rather than calling questionary directly.
+- **`sys.stdout.isatty()` is False**, and the encoding is cp1252 — Python
+  reads the *console codepage*, and there is no console, so the answer
+  describes nothing about the terminal on the other end. mintty is UTF-8 and
+  says so in `LANG`, which is why `main()` calls
+  `glyphs.adopt_declared_encoding()`: it believes the shell's declared locale
+  over the codepage, so ⭐ and the `apply` swatches print as themselves.
+  `PYTHONIOENCODING` still wins if set. `cli/glyphs.py` remains the guard for
+  streams that genuinely cannot print a decoration, and `FORCE_COLOR` opts
+  colour back in past the `isatty()` check.
+- **A cygwin-only binary is invisible to `shutil.which`.** cygwin's `fzf` is
+  `/usr/bin/fzf`, a shebang script with no `.exe`; native-Windows Python can
+  neither find nor exec it. `newcmd/prompts.py` falls back to asking cygwin's
+  `sh.exe` (located beside `cygpath.exe`, the trick `workspace/userpath.py`
+  already uses) and runs the tool through it. Any future dependency on an
+  external command needs the same two-step lookup.
+
 The repo lives at `/home/Admin/code/etsy-listing-automation` from inside
 cygwin, and at `C:\cygwin64\home\Admin\code\etsy-listing-automation` from
 Windows tools. Use POSIX paths and shell syntax.
@@ -137,7 +165,7 @@ src/etsy_listings/
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, stages/
                                         [done; STAGES = [Render()], more stages later]
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
-  newcmd/       `new` picker: pure logic + a thin questionary wrapper       [done]
+  newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
                                                                             [Phase 2/3]
   ai/           prompts, generation, hard validation                      [Phase 4]
@@ -196,7 +224,16 @@ later. Each traces to a decision.
 - **`apply` is strictly sequential; only `plan`'s read-only live fetches fan out**
   over a thread pool (`A3`). Never parallelise writes.
 - **Secrets never enter the repo.** Tokens in `.auth/`, keys in `.env`, both
-  gitignored, and both in the *workspace*, not here.
+  gitignored, and both in the *workspace*, not here. `config/secrets.py` is the
+  only reader; a missing credential is reported by name and file, never as a
+  raw `401` traceback. Resolve tokens lazily — `plan` builds a catalog client
+  it never calls, and demanding a token there breaks every workspace that
+  hasn't needed one yet.
+- **`plan` checks two things, not one: would the output differ, and is the
+  output still there.** The render cache is gitignored and fully derivable, so
+  it is a directory users delete. A stage's `read_live()` is called even when
+  `local` is true — `local` means "no *remote* state", so no drift reporting
+  and no thread-pool fan-out, not "reads nothing" (`A1`).
 
 ## Workspace vs repo
 
