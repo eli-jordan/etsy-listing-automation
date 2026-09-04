@@ -203,6 +203,13 @@ print_area: { width: 4500, height: 5400 }   # px, from the catalog placeholders
 sizes: [S, M, L, XL, XXL, XXXL]
 ```
 
+One print area, and the catalog offers several: Printify's placeholders hang
+off each *variant* and differ by garment size (Comfort Colors 1717 / Monster
+Digital sells `front` at 3461×3955, 3839×4387 and 4200×4800). `new` records
+the **largest** and says so. The print area is a resolution target — art sized
+for the 3XL panel still covers the S panel, and the reverse prints soft on the
+sizes with the most shirt to cover.
+
 Mockup templates are **not** listed here. Only fields Printify's product
 creation actually needs live on the profile — `templates:` was tried and
 dropped (PRD 29): a template is a purely local, Etsy-facing rendering asset
@@ -295,7 +302,12 @@ new take-a-hike [--category tshirt]
    from `shop.yaml` is preselected when it appears in the list.
 4. Reads the chosen combination's variants to populate `sizes` and `print_area`
    automatically from the placeholder dimensions.
-5. Prompts for the mockup template set.
+5. Offers the calibrated mockup templates and reads the chosen one's kind — a
+   `colour-matrix` template gets one `media` entry per colour (capped at
+   Etsy's 10-image limit, since a provider can offer far more colours than
+   that), `multiple` and `single` get exactly one entry and no colour (PRD
+   28). `colors:` still carries every colour: it decides which variants sell,
+   not which photos get rendered (PRD 31).
 6. **Writes `profiles/{slug}.yaml` if absent; reuses it silently if present.**
 7. Writes `listings/take-a-hike/listing.yaml` referencing that profile, with a
    starting price table filled in and `<generate>` sentinels in place.
