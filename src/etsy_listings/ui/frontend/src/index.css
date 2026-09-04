@@ -341,15 +341,217 @@ button:not([class]):active:not(:disabled) {
 }
 
 .app {
-  max-width: 1100px;
+  max-width: 1400px;
   margin: 0 auto;
   padding: var(--space-6);
 }
 
+/* Wireframe 2a: rail | canvas | inspector. The inspector is the editors' own
+   `aside.app__controls` inside `.app__main`, so the third column is declared
+   there rather than here. */
+.app__workbench {
+  display: grid;
+  grid-template-columns: 228px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.app__workspace {
+  min-width: 0;
+}
+
 .app__header {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.app__title {
+  font-size: 25px;
+  margin: 0;
+}
+
+.app__crumb-sep {
+  color: color-mix(in srgb, var(--color-text) 35%, transparent);
+}
+
+.app__crumb {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.app__meta {
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* `margin-left: auto` rather than `justify-content: space-between`: the
+   breadcrumb is a variable number of spans, so the actions have to claim the
+   remaining space themselves. */
+.app__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* — the template rail — */
+.template-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  position: sticky;
+  top: var(--space-4);
+}
+
+.template-rail__banner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+}
+
+.template-rail__banner-text {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+}
+
+.template-rail__search {
+  width: 100%;
+}
+
+.template-rail__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* A filter pill is a button wearing `.tag`, so it needs the interactive states
+   `.tag` does not carry. */
+.template-rail__pill {
+  cursor: pointer;
+  border: 1px solid var(--color-divider);
+  background: transparent;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-family: var(--font-body);
+}
+
+.template-rail__pill:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.template-rail__pill--on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.template-rail__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.template-rail__heading {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  margin: 0 0 var(--space-1);
+}
+
+.template-rail__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  text-align: left;
+  font-family: var(--font-body);
+}
+
+.template-rail__item:hover {
+  border-color: var(--color-accent);
+}
+
+.template-rail__item--needs {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-neutral-100));
+}
+
+.template-rail__item--active {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.template-rail__thumb {
+  width: 26px;
+  height: 30px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-200);
+}
+
+/* The no-photo tile is a <span>, so it needs the box the <img> got for free. */
+.template-rail__thumb--empty {
+  display: block;
+  border: 1px dashed var(--color-neutral-400);
+}
+
+.template-rail__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.template-rail__name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-rail__meta {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-rail__more,
+.template-rail__empty {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  text-align: center;
+}
+
+.template-rail__more {
+  background: transparent;
+  border: none;
+  font-family: var(--font-body);
+}
+
+.template-rail__more:hover {
+  color: var(--color-accent);
 }
 
 .app__filmstrip {
@@ -375,10 +577,12 @@ button:not([class]):active:not(:disabled) {
   font-weight: 600;
 }
 
+/* The canvas takes what is left; the inspector is a fixed 250px, as 2a draws
+   it -- the controls do not get more useful when they get wider. */
 .app__main {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: var(--space-6);
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: var(--space-4);
   align-items: start;
 }
 

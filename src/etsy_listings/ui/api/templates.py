@@ -14,6 +14,7 @@ tool uses, instead of a second, bespoke check living in the web layer.
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
@@ -47,6 +48,11 @@ from etsy_listings.ui.api.schemas import (
 from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
+
+THUMBNAIL_MAX = 160
+"""Longest edge of a rail thumbnail, in px. The rail draws them at ~26x30 CSS
+px (wireframe 2a), so this leaves headroom for a HiDPI screen without turning
+the list into a megabyte of PNG."""
 
 STATIC_DIR = Path(__file__).parent / "static"
 BUNDLED_DESIGNS: dict[BundledDesign, Path] = {
@@ -101,10 +107,40 @@ def _write_template_config(
     path.write_text(yaml.safe_dump(dump_template_config(config), sort_keys=False), encoding="utf-8")
 
 
+def _status_reason(
+    config: ColourMatrixTemplate | MultipleTemplate | SingleTemplate,
+) -> str | None:
+    """Why this template is not ready to render from, or ``None`` if it is.
+
+    Only ``multiple`` has states beyond "has a config at all": a chart is
+    written with an empty ``placements`` list at upload, and a box can be
+    dragged into place before anyone says which colour it depicts. The other
+    two kinds get a bounding box at upload and are usable immediately -- a
+    badly positioned box is wrong, but it is not *incomplete*, and the
+    calibrator cannot tell the difference.
+    """
+    if not isinstance(config, MultipleTemplate):
+        return None
+    if not config.placements:
+        return "no boxes"
+    uncoloured = sum(1 for p in config.placements if not p.colour.strip())
+    if uncoloured:
+        noun, verb = ("box", "has") if uncoloured == 1 else ("boxes", "have")
+        return f"{uncoloured} {noun} {verb} no colour"
+    return None
+
+
 def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
     config_path = workspace.template_config_file(name)
     if not config_path.is_file():
-        return TemplateSummary(name=name, kind=None, colours=[], has_config=False)
+        return TemplateSummary(
+            name=name,
+            kind=None,
+            colours=[],
+            has_config=False,
+            status="needs-calibration",
+            status_reason="no kind set",
+        )
 
     config = _read_template_config(config_path)
     if isinstance(config, ColourMatrixTemplate):
@@ -113,7 +149,15 @@ def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
         colours = [p.colour for p in config.placements]
     else:
         colours = [config.colour] if config.colour is not None else []
-    return TemplateSummary(name=name, kind=config.kind, colours=colours, has_config=True)
+    reason = _status_reason(config)
+    return TemplateSummary(
+        name=name,
+        kind=config.kind,
+        colours=colours,
+        has_config=True,
+        status="needs-calibration" if reason else "calibrated",
+        status_reason=reason,
+    )
 
 
 @router.get("", response_model=list[TemplateSummary])
@@ -173,6 +217,46 @@ async def upload_template(
         else:
             _write_template_config(config_path, SingleTemplate(bounding_box=_default_box(size)))
     return UploadResponse(name=name, kind=kind, colours=[])
+
+
+@router.get("/{name}/thumbnail")
+def thumbnail(request: Request, name: str) -> Response:
+    """The template's own photo, downscaled, for the rail.
+
+    Not a render: the rail shows every template in the workspace at once, and
+    running the real pipeline once per row would make opening the calibrator
+    cost as much as calibrating. Which photo hardly matters -- a colour-matrix
+    set's colours are all the same garment -- so this takes ``scene.png`` when
+    there is one and the first colour otherwise, without reading the config.
+
+    Regenerated per request rather than cached on disk; the resize is cheap
+    next to the response, and a cache in the workspace would be one more
+    derived directory to invalidate. Repeat loads are handled by the
+    ``Cache-Control`` header instead.
+    """
+    workspace = _workspace(request)
+    try:
+        template_dir = workspace.template_dir(name)
+    except InvalidNameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not template_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"no template {name!r}")
+
+    scene = workspace.template_scene_image(name)
+    source = scene if scene.is_file() else next(iter(sorted(template_dir.glob("*.png"))), None)
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"no photo for {name!r}")
+
+    buffer = BytesIO()
+    with Image.open(source) as img:
+        img = img.convert("RGB")
+        img.thumbnail((THUMBNAIL_MAX, THUMBNAIL_MAX))
+        img.save(buffer, format="PNG")
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "no-cache"},
+    )
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)

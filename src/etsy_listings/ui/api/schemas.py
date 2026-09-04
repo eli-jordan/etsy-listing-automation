@@ -22,11 +22,24 @@ targets, so a mis-resolved artwork is visually obvious in the calibrator, not
 just described in a diff."""
 
 
+TemplateStatus = Literal["needs-calibration", "calibrated"]
+"""Whether a template is ready to render from. Derived on every read, never
+stored: the calibrator's rail sorts unfinished templates to the top, and a
+persisted ``calibrated:`` flag in ``template.yaml`` would be new product state
+no PRD decision covers -- as well as something that could disagree with the
+config sitting next to it."""
+
+
 class TemplateSummary(BaseModel):
     name: str
     kind: TemplateKind | None
     colours: list[str]
     has_config: bool
+    status: TemplateStatus
+    status_reason: str | None = None
+    """Why it is not calibrated yet, in the words the rail shows the user
+    ("no kind set", "no boxes", "1 box has no colour"). ``None`` when
+    ``status`` is ``calibrated`` -- there is nothing to explain."""
 
 
 class UploadResponse(BaseModel):

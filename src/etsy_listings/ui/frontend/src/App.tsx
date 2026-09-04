@@ -1,13 +1,26 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getTemplateConfig, listTemplates, saveTemplateConfig } from "./api/calibrator";
+import { TemplateRail } from "./components/TemplateRail";
 import { UploadForm } from "./components/UploadForm";
 import { ColourMatrixEditor } from "./editors/ColourMatrixEditor";
 import { MultipleEditor } from "./editors/MultipleEditor";
 import { SingleEditor } from "./editors/SingleEditor";
-import type { TemplateConfigState, TemplateSummary } from "./types";
+import type { TemplateConfigState, TemplateKind, TemplateSummary } from "./types";
 
 /** A thin router: loads the selected template's config and picks an editor
- * by `kind` -- a template.yaml is exactly one of three shapes, never a mix. */
+ * by `kind` -- a template.yaml is exactly one of three shapes, never a mix.
+ *
+ * Wireframe 2a turns the page into a workbench: the rail on the left picks the
+ * template (replacing the dropdown that used to sit in the header), and the
+ * header becomes a breadcrumb saying what is open, whether it is finished, and
+ * what it holds. */
+
+const KIND_LABELS: Record<TemplateKind, string> = {
+  "colour-matrix": "Colour Matrix",
+  multiple: "Multiple",
+  single: "Single",
+};
+
 export function App() {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [templateName, setTemplateName] = useState<string | null>(null);
@@ -15,6 +28,12 @@ export function App() {
   // briefly renders the previous template's config under the new name while
   // the fetch for the new one is still in flight.
   const [configEntry, setConfigEntry] = useState<{
+    name: string;
+    config: TemplateConfigState;
+  } | null>(null);
+  // What is on disk. Reset goes back to this, and comparing against it is what
+  // makes "are there unsaved edits?" answerable without a re-fetch.
+  const [savedEntry, setSavedEntry] = useState<{
     name: string;
     config: TemplateConfigState;
   } | null>(null);
@@ -36,11 +55,21 @@ export function App() {
   useEffect(() => {
     if (!templateName) return;
     getTemplateConfig(templateName)
-      .then((loaded) => setConfigEntry(loaded ? { name: templateName, config: loaded } : null))
+      .then((loaded) => {
+        const entry = loaded ? { name: templateName, config: loaded } : null;
+        setConfigEntry(entry);
+        setSavedEntry(entry);
+      })
       .catch(() => setStatus("failed to load template config"));
   }, [templateName]);
 
   const config = configEntry?.name === templateName ? configEntry.config : null;
+  const saved = savedEntry?.name === templateName ? savedEntry.config : null;
+
+  const dirty = useMemo(
+    () => config !== null && saved !== null && JSON.stringify(config) !== JSON.stringify(saved),
+    [config, saved],
+  );
 
   const setConfig = useCallback(
     (next: TemplateConfigState) => {
@@ -53,53 +82,91 @@ export function App() {
   const handleSave = useCallback(() => {
     if (!templateName || !config) return;
     saveTemplateConfig(templateName, config)
-      .then(() => setStatus("saved"))
+      .then(() => {
+        setSavedEntry({ name: templateName, config });
+        setStatus("saved");
+        // The save may have changed whether this template still counts as
+        // needing calibration, and the rail is what shows that.
+        refreshTemplates(templateName);
+      })
       .catch(() => setStatus("save failed"));
-  }, [templateName, config]);
+  }, [templateName, config, refreshTemplates]);
+
+  const handleReset = useCallback(() => {
+    if (!templateName || !saved) return;
+    setConfigEntry({ name: templateName, config: saved });
+    setStatus("reset");
+  }, [templateName, saved]);
 
   const selected = templates.find((t) => t.name === templateName);
+  const kindLabel = selected?.kind ? KIND_LABELS[selected.kind] : null;
 
   return (
     <div className="app">
       <header className="app__header">
-        <h1>Mockup calibrator</h1>
-        <select
-          aria-label="Template"
-          value={templateName ?? ""}
-          onChange={(e) => setTemplateName(e.target.value || null)}
-        >
-          {templates.map((t) => (
-            <option key={t.name} value={t.name}>
-              {t.name} {t.kind ? `(${t.kind})` : "(unconfigured)"}
-            </option>
-          ))}
-        </select>
-        <button className="btn btn-primary" onClick={handleSave} disabled={!config}>
-          Save template.yaml
-        </button>
-        <p className="app__status" role="status">
-          {status}
-        </p>
+        <h1 className="app__title">Mockup calibrator</h1>
+        {selected && (
+          <>
+            <span className="app__crumb-sep">/</span>
+            <span className="app__crumb">{selected.name}</span>
+            <span
+              className={
+                selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"
+              }
+            >
+              {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
+            </span>
+            <span className="app__meta">
+              {selected.status === "calibrated"
+                ? `${kindLabel ?? "Unknown"} · ${selected.colours.length} colour${
+                    selected.colours.length === 1 ? "" : "s"
+                  }`
+                : (selected.status_reason ?? "not calibrated")}
+            </span>
+          </>
+        )}
+
+        <div className="app__actions">
+          <p className="app__status" role="status">
+            {status}
+          </p>
+          <button onClick={handleReset} disabled={!dirty}>
+            Reset
+          </button>
+          <button className="btn btn-primary" onClick={handleSave} disabled={!config}>
+            Save template.yaml
+          </button>
+        </div>
       </header>
 
-      {templateName && config?.kind === "colour-matrix" && (
-        <ColourMatrixEditor
-          templateName={templateName}
-          config={config}
-          colours={selected?.colours ?? []}
-          onChange={setConfig}
+      <div className="app__workbench">
+        <TemplateRail
+          templates={templates}
+          selected={templateName}
+          onSelect={setTemplateName}
         />
-      )}
-      {templateName && config?.kind === "multiple" && (
-        <MultipleEditor templateName={templateName} config={config} onChange={setConfig} />
-      )}
-      {templateName && config?.kind === "single" && (
-        <SingleEditor templateName={templateName} config={config} onChange={setConfig} />
-      )}
-      {templateName && !config && <p>No template.yaml yet for {templateName}.</p>}
-      {!templateName && <p>No templates yet -- upload one below.</p>}
 
-      <UploadForm onUploaded={(name) => refreshTemplates(name)} />
+        <div className="app__workspace">
+          {templateName && config?.kind === "colour-matrix" && (
+            <ColourMatrixEditor
+              templateName={templateName}
+              config={config}
+              colours={selected?.colours ?? []}
+              onChange={setConfig}
+            />
+          )}
+          {templateName && config?.kind === "multiple" && (
+            <MultipleEditor templateName={templateName} config={config} onChange={setConfig} />
+          )}
+          {templateName && config?.kind === "single" && (
+            <SingleEditor templateName={templateName} config={config} onChange={setConfig} />
+          )}
+          {templateName && !config && <p>No template.yaml yet for {templateName}.</p>}
+          {!templateName && <p>No templates yet -- upload one below.</p>}
+
+          <UploadForm onUploaded={(name) => refreshTemplates(name)} />
+        </div>
+      </div>
     </div>
   );
 }

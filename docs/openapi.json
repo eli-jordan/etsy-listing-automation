@@ -497,13 +497,33 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "status": {
+            "enum": [
+              "needs-calibration",
+              "calibrated"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
           }
         },
         "required": [
           "name",
           "kind",
           "colours",
-          "has_config"
+          "has_config",
+          "status"
         ],
         "title": "TemplateSummary",
         "type": "object"
@@ -895,6 +915,47 @@
           }
         },
         "summary": "Preview",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/thumbnail": {
+      "get": {
+        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo hardly matters -- a colour-matrix\nset's colours are all the same garment -- so this takes ``scene.png`` when\nthere is one and the first colour otherwise, without reading the config.\n\nRegenerated per request rather than cached on disk; the resize is cheap\nnext to the response, and a cache in the workspace would be one more\nderived directory to invalidate. Repeat loads are handled by the\n``Cache-Control`` header instead.",
+        "operationId": "thumbnail_api_templates__name__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Thumbnail",
         "tags": [
           "templates"
         ]

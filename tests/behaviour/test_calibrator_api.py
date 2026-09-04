@@ -40,7 +40,107 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
         "kind": None,
         "colours": [],
         "has_config": False,
+        "status": "needs-calibration",
+        "status_reason": "no kind set",
     }
+
+
+class TestCalibrationStatus:
+    """The rail sorts uncalibrated templates to the top and explains why each
+    one is not done, so `status` has to be *derived* -- there is no
+    `calibrated:` flag in template.yaml and deliberately so, since that would
+    be new persisted product state the PRD has not agreed. Everything here is
+    computed from what the config already says.
+    """
+
+    def _status(self, client: TestClient, name: str) -> tuple[str, str | None]:
+        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+        return by_name[name]["status"], by_name[name]["status_reason"]
+
+    def test_a_fully_configured_colour_matrix_is_calibrated(self, client: TestClient) -> None:
+        assert self._status(client, "flat-lay-01") == ("calibrated", None)
+
+    def test_a_multiple_with_every_box_coloured_is_calibrated(self, client: TestClient) -> None:
+        assert self._status(client, "colour-chart-01") == ("calibrated", None)
+
+    def test_a_directory_with_no_config_needs_a_kind(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        (workspace_root / "mockup-templates" / "fresh-upload").mkdir()
+        assert self._status(client, "fresh-upload") == ("needs-calibration", "no kind set")
+
+    def test_a_multiple_with_no_placements_needs_boxes(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """`MultipleTemplate(placements=[])` is exactly what an upload writes,
+        so this is the state every fresh chart starts in."""
+        config = client.get("/api/templates/colour-chart-01/config").json()
+        config["placements"] = []
+        client.put("/api/templates/colour-chart-01/config", json=config)
+        assert self._status(client, "colour-chart-01") == ("needs-calibration", "no boxes")
+
+    def test_a_multiple_with_an_uncoloured_box_says_how_many(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """Wireframe 2a: "1 box has no colour -- can't mark calibrated yet".
+        The count matters; "some boxes" would not tell you when you were done."""
+        config = client.get("/api/templates/colour-chart-01/config").json()
+        config["placements"][0]["colour"] = ""
+        client.put("/api/templates/colour-chart-01/config", json=config)
+        assert self._status(client, "colour-chart-01") == (
+            "needs-calibration",
+            "1 box has no colour",
+        )
+
+    def test_the_uncoloured_box_count_is_plural_aware(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        config = client.get("/api/templates/colour-chart-01/config").json()
+        for placement in config["placements"]:
+            placement["colour"] = ""
+        client.put("/api/templates/colour-chart-01/config", json=config)
+        status, reason = self._status(client, "colour-chart-01")
+        assert status == "needs-calibration"
+        assert reason == "2 boxes have no colour"
+
+
+class TestThumbnails:
+    """The rail shows a photo per template. Rendering a full preview for each
+    would mean running the real pipeline once per row on every page load; a
+    thumbnail is the template's own scene photo, downscaled."""
+
+    def test_thumbnail_returns_a_png_for_a_colour_matrix_template(self, client: TestClient) -> None:
+        response = client.get("/api/templates/flat-lay-01/thumbnail")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+    def test_thumbnail_returns_a_png_for_a_scene_template(self, client: TestClient) -> None:
+        response = client.get("/api/templates/colour-chart-01/thumbnail")
+        assert response.status_code == 200
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+    def test_thumbnail_is_much_smaller_than_the_source_photo(self, client: TestClient) -> None:
+        """The point is the rail staying cheap -- a full-size photo per row
+        would defeat it."""
+        from io import BytesIO
+
+        from PIL import Image
+
+        with Image.open(BytesIO(client.get("/api/templates/flat-lay-01/thumbnail").content)) as img:
+            assert max(img.size) <= 160
+
+    def test_thumbnail_404s_for_a_template_with_no_photo(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        (workspace_root / "mockup-templates" / "photoless").mkdir()
+        assert client.get("/api/templates/photoless/thumbnail").status_code == 404
+
+    def test_thumbnail_rejects_a_name_that_escapes_the_workspace(self, client: TestClient) -> None:
+        """Template names arrive from the URL, so this endpoint goes through
+        the workspace accessors like every other one (A8)."""
+        response = client.get("/api/templates/..%2F..%2Fetc/thumbnail")
+        assert response.status_code in (400, 404)
 
 
 def test_get_config_returns_the_fixture_bounding_box(client: TestClient) -> None:

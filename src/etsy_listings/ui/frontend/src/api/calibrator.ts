@@ -72,6 +72,15 @@ export async function uploadTemplate(
   return (await response.json()) as UploadResponse;
 }
 
+/**
+ * The rail's per-template photo. A plain URL rather than a fetch: the browser
+ * loads, caches and evicts these itself, and there is no object URL for anyone
+ * to leak by forgetting to revoke it.
+ */
+export function templateThumbnailUrl(name: string): string {
+  return `/api/templates/${encodeURIComponent(name)}/thumbnail`;
+}
+
 type PreviewBody =
   | { colour: string; bounding_box: BoundingBox; displace: DisplaceConfig; shade: ShadeConfig }
   | { placements: Placement[]; displace: DisplaceConfig; shade: ShadeConfig }

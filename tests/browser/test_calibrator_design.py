@@ -166,3 +166,24 @@ def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:  # no
     target = screenshot_dir / "phase1-colour-matrix.png"
     page.screenshot(path=str(target), full_page=True)
     assert target.stat().st_size > 0
+
+
+def test_capture_workbench_screenshot(  # noqa: ANN001
+    page, screenshot_dir: Path, workspace_root: Path
+) -> None:
+    """The three-column workbench with an uncalibrated template present -- the
+    state wireframe 2a is drawn in. The fixture workspace is otherwise fully
+    calibrated, so the rail's banner and its whole top group would be missing
+    and the screenshot would not show what it is meant to show."""
+    (workspace_root / "mockup-templates" / "boxy-tee").mkdir(exist_ok=True)
+    page.reload()
+    # Open a calibrated template, or the canvas and inspector columns are
+    # empty and the shot shows only one of the three.
+    row = page.locator(".template-rail__item[data-template='flat-lay-01']")
+    row.wait_for()
+    row.click()
+    page.wait_for_selector(PREVIEW_IMAGE)
+    page.wait_for_timeout(600)
+    target = screenshot_dir / "phase2-workbench.png"
+    page.screenshot(path=str(target), full_page=True)
+    assert target.stat().st_size > 0
