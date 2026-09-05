@@ -516,6 +516,64 @@ def test_traversal_template_name_is_rejected_not_resolved(client: TestClient) ->
     assert "shop.yaml" not in response.text
 
 
+SINGLE_CONFIG: dict[str, object] = {
+    "kind": "single",
+    "colour": None,
+    "artwork": None,
+    "bounding_box": [
+        {"x": 0, "y": 0},
+        {"x": 100, "y": 0},
+        {"x": 100, "y": 100},
+        {"x": 0, "y": 100},
+    ],
+    "displace": {"enabled": False, "strength": 0.0},
+    "shade": {"enabled": True, "opacity": 0.6, "blend": "soft-light"},
+}
+"""A valid body, so the PUT below is refused for its *name* rather than
+bouncing off request validation before the name is ever looked at."""
+
+
+@pytest.mark.parametrize(
+    ("method", "path", "body"),
+    [
+        ("GET", "/api/templates/bad%3Aname/config", None),
+        ("GET", "/api/templates/bad%3Aname/thumbnail", None),
+        ("GET", "/api/templates/bad%3Aname/colour-report", None),
+        ("POST", "/api/templates/bad%3Aname/kind", {"kind": "single"}),
+        ("PUT", "/api/templates/bad%3Aname/config", SINGLE_CONFIG),
+        # Not a template name: a *design* id, reaching the same rule through
+        # the preview endpoint's test-design library (A19). The rest of the
+        # body is valid so the request gets past validation to the id.
+        (
+            "POST",
+            "/api/templates/flat-lay-01/preview",
+            {"colour": "black", "bounding_box": SINGLE_CONFIG["bounding_box"], "design": "a:b"},
+        ),
+    ],
+)
+def test_an_unusable_name_is_a_400_from_every_endpoint(
+    client: TestClient, method: str, path: str, body: dict[str, object] | None
+) -> None:
+    """One rule, stated once.
+
+    Nine endpoints used to wrap their own workspace call in the same
+    ``except InvalidNameError -> 400``; that now lives on the app. The
+    existing traversal tests accept ``400 or 404``, which passes whether the
+    handler is wired up or not -- these pin the status, so deleting the
+    handler fails here instead of quietly turning every unusable name into a
+    500.
+
+    A colon rather than ``../..``: it is a name ``_segment`` refuses outright,
+    where a traversal attempt may never reach the endpoint at all (httpx
+    normalises ``..`` out of the URL before it is sent, so that case tests the
+    client, not the server).
+    """
+    response = client.request(method, path, json=body)
+    assert response.status_code == 400
+    # The refusal names what it refused, and never leaks a resolved path.
+    assert "shop.yaml" not in response.text
+
+
 def test_health_endpoint(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200

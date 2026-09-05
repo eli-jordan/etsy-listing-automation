@@ -16,7 +16,7 @@ from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.templates import router as templates_router
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 
@@ -34,6 +34,19 @@ def create_app(workspace: Workspace) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    @app.exception_handler(InvalidNameError)
+    async def invalid_name(request: Request, exc: Exception) -> Response:
+        """A template, colour or design id from a URL that is not a single
+        path segment is the client's fault, so it is a 400 -- and it is one
+        rule, so it is stated once here.
+
+        Nine endpoints used to wrap their own ``workspace.…(name)`` call in
+        the same three lines to say so. The refusal itself still belongs to
+        ``Workspace`` (A8 makes it a security boundary, not a formatting
+        concern); all this does is decide the status code it surfaces as.
+        """
+        return JSONResponse(status_code=400, content={"detail": str(exc)})
 
     app.include_router(templates_router)
     app.include_router(designs_router)

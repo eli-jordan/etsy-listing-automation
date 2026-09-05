@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile
 from PIL import Image, UnidentifiedImageError
 
 from etsy_listings.ui.api.schemas import DesignSummary
-from etsy_listings.workspace.workspace import InvalidNameError, Workspace
+from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/designs", tags=["designs"])
 
@@ -62,10 +62,7 @@ def resolve_design(workspace: Workspace, design: str) -> Path:
     bundled = BUNDLED_DESIGNS.get(design)
     if bundled is not None:
         return bundled
-    try:
-        uploaded = workspace.test_design_file(design)
-    except InvalidNameError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    uploaded = workspace.test_design_file(design)
     if not uploaded.is_file():
         raise HTTPException(status_code=400, detail=f"unknown test design {design!r}")
     return uploaded
@@ -96,10 +93,7 @@ async def upload_design(request: Request, file: UploadFile) -> DesignSummary:
     if file.filename != Path(file.filename).name:
         raise HTTPException(status_code=400, detail=f"{file.filename!r} is not a plain filename")
 
-    try:
-        destination = workspace.test_design_file(Path(file.filename).stem)
-    except InvalidNameError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    destination = workspace.test_design_file(Path(file.filename).stem)
 
     payload = await file.read()
     # Decoded before it is written, so a file that is not an image is refused

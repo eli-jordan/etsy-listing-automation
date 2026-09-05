@@ -48,7 +48,7 @@ from etsy_listings.ui.api.schemas import (
     TemplateSummary,
     UploadResponse,
 )
-from etsy_listings.workspace.workspace import InvalidNameError, Workspace
+from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -61,14 +61,6 @@ the list into a megabyte of PNG."""
 def _workspace(request: Request) -> Workspace:
     workspace: Workspace = request.app.state.workspace
     return workspace
-
-
-def _template_config_path(workspace: Workspace, name: str) -> Path:
-    """Resolve a template name from a URL, turning a bad one into a 400."""
-    try:
-        return workspace.template_config_file(name)
-    except InvalidNameError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _colours_from_scene_files(template_dir: Path) -> list[str]:
@@ -88,16 +80,15 @@ def _default_box(size: tuple[int, int]) -> BoundingBox:
 
 
 def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
-    """This template's ``template.yaml``, or the right HTTP error.
+    """This template's ``template.yaml``, or a 404 if it has none yet.
 
-    Both failures a URL can cause are mapped here rather than at each call
-    site: a name that is not a single path segment is the client's fault
-    (400), and a template with no config yet is simply absent (404).
+    An unusable *name* needs nothing here -- ``InvalidNameError`` becomes a
+    400 through the app-wide handler in ``app.py``. This only decides that a
+    template with no config is absent rather than broken, which is a
+    calibrator-specific reading: it is the normal state of a fresh upload.
     """
     try:
         return workspace.load_template_config(name)
-    except InvalidNameError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except ConfigLoadError as exc:
         raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}") from exc
 
@@ -167,7 +158,7 @@ async def upload_template(
     request: Request, name: str, files: list[UploadFile], kind: TemplateKind | None = None
 ) -> UploadResponse:
     workspace = _workspace(request)
-    config_path = _template_config_path(workspace, name)
+    config_path = workspace.template_config_file(name)
     if not files:
         raise HTTPException(status_code=400, detail="upload at least one file")
     config_path.parent.mkdir(parents=True, exist_ok=True)
@@ -180,10 +171,7 @@ async def upload_template(
         for upload in files:
             if not upload.filename:
                 raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
-            try:
-                destination = workspace.template_base_image(name, Path(upload.filename).stem)
-            except InvalidNameError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            destination = workspace.template_base_image(name, Path(upload.filename).stem)
             destination.write_bytes(await upload.read())
         return UploadResponse(name=name, kind=None, colours=[])
 
@@ -193,10 +181,7 @@ async def upload_template(
             if not upload.filename:
                 raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
             colour = Path(upload.filename).stem
-            try:
-                destination = workspace.template_base_image(name, colour)
-            except InvalidNameError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            destination = workspace.template_base_image(name, colour)
             destination.write_bytes(await upload.read())
             colours.append(colour)
 
@@ -242,10 +227,7 @@ def colour_report(request: Request, name: str) -> list[ColourReportRow]:
     table to edit here.
     """
     workspace = _workspace(request)
-    try:
-        template_dir = workspace.template_dir(name)
-    except InvalidNameError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    template_dir = workspace.template_dir(name)
     if not template_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
 
@@ -268,7 +250,7 @@ def assign_kind(request: Request, name: str, body: AssignKindRequest) -> AnyTemp
     kind of data loss nobody would think to look for.
     """
     workspace = _workspace(request)
-    config_path = _template_config_path(workspace, name)
+    config_path = workspace.template_config_file(name)
     template_dir = workspace.template_dir(name)
     if not template_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
@@ -323,10 +305,7 @@ def thumbnail(request: Request, name: str) -> Response:
     ``Cache-Control`` header instead.
     """
     workspace = _workspace(request)
-    try:
-        template_dir = workspace.template_dir(name)
-    except InvalidNameError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    template_dir = workspace.template_dir(name)
     if not template_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
 
@@ -355,7 +334,7 @@ def get_config(request: Request, name: str) -> AnyTemplate:
 @router.put("/{name}/config", response_model=TemplateConfig)
 def put_config(request: Request, name: str, body: AnyTemplate) -> AnyTemplate:
     workspace = _workspace(request)
-    if not _template_config_path(workspace, name).parent.is_dir():
+    if not workspace.template_config_file(name).parent.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
     workspace.save_template_config(name, body)
     return body
@@ -396,10 +375,7 @@ def preview(request: Request, name: str, body: PreviewRequest) -> Response:
         raise HTTPException(status_code=400, detail=f"expected a {kind} preview body")
 
     colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
-    try:
-        photo = workspace.scene_photo(name, colour)
-    except InvalidNameError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    photo = workspace.scene_photo(name, colour)
     if not photo.path.is_file():
         missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
         raise HTTPException(status_code=404, detail=f"no mockup photo for {missing}")
