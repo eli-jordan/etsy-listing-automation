@@ -41,6 +41,7 @@ graph TD
     NEWCMD --> CATALOG
     NEWCMD --> WORKSPACE
     WORKSPACE --> CONFIG
+    WORKSPACE --> RENDER
     ENGINE --> CONFIG
     NEWCMD --> CONFIG
     CLI --> CONFIG
@@ -49,6 +50,13 @@ graph TD
 Dependencies point strictly downward; there are no cycles. `render`, `catalog`
 and `config` know nothing about workspaces, listings or each other, which is
 what makes them testable in isolation — and what lets `render` be pure.
+
+`workspace` depends on both `config` and `render` for the same reason: it knows
+where every file lives, and asks whichever module owns a file's *shape* to
+parse it. `shop.yaml`, `listing.yaml` and the pricing plans are `config`'s;
+`template.yaml` is `render`'s, because it is render geometry and render
+settings from top to bottom. The arrow only ever points that way — `render`
+still has no idea a workspace exists.
 
 | Module | Owns | Deliberately does *not* |
 |---|---|---|
@@ -67,7 +75,11 @@ Three boundaries carry most of the weight:
   else asks for "this listing's lockfile" rather than joining
   `listings/<name>/state.lock.json`. That is also what makes the UI safe:
   template names arriving from URLs are validated by the same rule that guards
-  every other path (A8), not by a second check in the web layer.
+  every other path (A8), not by a second check in the web layer. Reading a
+  config file is part of that: `load_listing`, `load_profile` and
+  `load_template_config` are how the tree's files are opened, so no caller
+  writes its own `yaml.safe_load(path.read_text(...))` against a path it
+  assembled.
 - **Only `engine` computes a diff.** `cli` and (later) `ui` consume `Plan` /
   `StagePlan` / `Change` objects and render them. Neither compares state, which
   is what guarantees the PRD's "one set of rules regardless of route".

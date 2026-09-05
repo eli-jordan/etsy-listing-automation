@@ -21,8 +21,10 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
+from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.slug import slugify
 from etsy_listings.render.config import (
+    AnyTemplate,
     BoundingBox,
     ColourMatrixTemplate,
     MultipleTemplate,
@@ -30,8 +32,6 @@ from etsy_listings.render.config import (
     RenderConfig,
     SingleTemplate,
     TemplateConfig,
-    dump_template_config,
-    load_template_config,
 )
 from etsy_listings.render.io import encode_png, load_design, load_template_base
 from etsy_listings.render.maps import DerivedMapCache
@@ -87,25 +87,22 @@ def _default_box(size: tuple[int, int]) -> BoundingBox:
     )
 
 
-def _read_template_config(
-    path: Path,
-) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
-    import yaml
+def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
+    """This template's ``template.yaml``, or the right HTTP error.
 
-    return load_template_config(yaml.safe_load(path.read_text(encoding="utf-8")))
+    Both failures a URL can cause are mapped here rather than at each call
+    site: a name that is not a single path segment is the client's fault
+    (400), and a template with no config yet is simply absent (404).
+    """
+    try:
+        return workspace.load_template_config(name)
+    except InvalidNameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except ConfigLoadError as exc:
+        raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}") from exc
 
 
-def _write_template_config(
-    path: Path, config: ColourMatrixTemplate | MultipleTemplate | SingleTemplate
-) -> None:
-    import yaml
-
-    path.write_text(yaml.safe_dump(dump_template_config(config), sort_keys=False), encoding="utf-8")
-
-
-def _status_reason(
-    config: ColourMatrixTemplate | MultipleTemplate | SingleTemplate,
-) -> str | None:
+def _status_reason(config: AnyTemplate) -> str | None:
     """Why this template is not ready to render from, or ``None`` if it is.
 
     Only ``multiple`` has states beyond "has a config at all": a chart is
@@ -127,8 +124,9 @@ def _status_reason(
 
 
 def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
-    config_path = workspace.template_config_file(name)
-    if not config_path.is_file():
+    try:
+        config = workspace.load_template_config(name)
+    except ConfigLoadError:
         return TemplateSummary(
             name=name,
             kind=None,
@@ -138,7 +136,6 @@ def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
             status_reason="no kind set",
         )
 
-    config = _read_template_config(config_path)
     if isinstance(config, ColourMatrixTemplate):
         colours = _colours_from_scene_files(workspace.template_dir(name))
     elif isinstance(config, MultipleTemplate):
@@ -208,8 +205,8 @@ async def upload_template(
         if not config_path.is_file():
             with Image.open(workspace.template_base_image(name, colours[0])) as img:
                 size = img.size
-            _write_template_config(
-                config_path, ColourMatrixTemplate(bounding_box=_default_box(size))
+            workspace.save_template_config(
+                name, ColourMatrixTemplate(bounding_box=_default_box(size))
             )
         return UploadResponse(name=name, kind="colour-matrix", colours=sorted(colours))
 
@@ -224,9 +221,9 @@ async def upload_template(
         with Image.open(destination) as img:
             size = img.size
         if kind == "multiple":
-            _write_template_config(config_path, MultipleTemplate(placements=[]))
+            workspace.save_template_config(name, MultipleTemplate(placements=[]))
         else:
-            _write_template_config(config_path, SingleTemplate(bounding_box=_default_box(size)))
+            workspace.save_template_config(name, SingleTemplate(bounding_box=_default_box(size)))
     return UploadResponse(name=name, kind=kind, colours=[])
 
 
@@ -261,9 +258,7 @@ def colour_report(request: Request, name: str) -> list[ColourReportRow]:
 
 
 @router.post("/{name}/kind", response_model=TemplateConfig)
-def assign_kind(
-    request: Request, name: str, body: AssignKindRequest
-) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
+def assign_kind(request: Request, name: str, body: AssignKindRequest) -> AnyTemplate:
     """The first calibration step: say what this template is, and get the
     starting ``template.yaml`` for that shape.
 
@@ -291,9 +286,7 @@ def assign_kind(
         # Nothing is renamed: these filenames already are the colours.
         with Image.open(photos[0]) as img:
             size = img.size
-        config: ColourMatrixTemplate | MultipleTemplate | SingleTemplate = ColourMatrixTemplate(
-            bounding_box=_default_box(size)
-        )
+        config: AnyTemplate = ColourMatrixTemplate(bounding_box=_default_box(size))
     else:
         if len(photos) != 1:
             raise HTTPException(
@@ -310,7 +303,7 @@ def assign_kind(
             else SingleTemplate(bounding_box=_default_box(size))
         )
 
-    _write_template_config(config_path, config)
+    workspace.save_template_config(name, config)
     return config
 
 
@@ -355,35 +348,23 @@ def thumbnail(request: Request, name: str) -> Response:
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)
-def get_config(
-    request: Request, name: str
-) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
-    config_path = _template_config_path(_workspace(request), name)
-    if not config_path.is_file():
-        raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}")
-    return _read_template_config(config_path)
+def get_config(request: Request, name: str) -> AnyTemplate:
+    return _load_config(_workspace(request), name)
 
 
 @router.put("/{name}/config", response_model=TemplateConfig)
-def put_config(
-    request: Request,
-    name: str,
-    body: ColourMatrixTemplate | MultipleTemplate | SingleTemplate,
-) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
-    config_path = _template_config_path(_workspace(request), name)
-    if not config_path.parent.is_dir():
+def put_config(request: Request, name: str, body: AnyTemplate) -> AnyTemplate:
+    workspace = _workspace(request)
+    if not _template_config_path(workspace, name).parent.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
-    _write_template_config(config_path, body)
+    workspace.save_template_config(name, body)
     return body
 
 
 @router.post("/{name}/preview")
 def preview(request: Request, name: str, body: PreviewRequest) -> Response:
     workspace = _workspace(request)
-    config_path = _template_config_path(workspace, name)
-    if not config_path.is_file():
-        raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}")
-    template_cfg = _read_template_config(config_path)
+    template_cfg = _load_config(workspace, name)
     design = load_design(resolve_design(workspace, body.design))
     cache = DerivedMapCache(workspace.template_derived_dir(name))
 

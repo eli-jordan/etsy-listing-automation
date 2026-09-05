@@ -30,8 +30,6 @@ import json
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
 from etsy_listings.config.listing import Listing, TemplateMediaEntry
 from etsy_listings.config.profile import Profile
 from etsy_listings.engine.change import Action, StagePlan
@@ -39,10 +37,10 @@ from etsy_listings.engine.context import RunContext, Swatch
 from etsy_listings.engine.lock import Lockfile, canonical_hash, to_workspace_relative_posix
 from etsy_listings.engine.stage import StageApplyResult
 from etsy_listings.render.config import (
+    AnyTemplate,
     ColourMatrixTemplate,
     MultipleTemplate,
     SingleTemplate,
-    load_template_config,
 )
 from etsy_listings.render.io import load_design, load_template_base, save_png
 from etsy_listings.render.maps import DerivedMapCache
@@ -51,8 +49,6 @@ from etsy_listings.render.pipeline import render as render_pipeline
 from etsy_listings.render.swatch import sample_swatch
 from etsy_listings.render.types import RGBA
 from etsy_listings.workspace.workspace import Workspace
-
-TemplateConfigT = ColourMatrixTemplate | MultipleTemplate | SingleTemplate
 
 
 class TemplateAssetError(FileNotFoundError):
@@ -225,7 +221,7 @@ class RenderStage:
                 referenced.setdefault((entry.template, entry.colour), None)
 
         template_texts: dict[str, str] = {}
-        template_configs: dict[str, TemplateConfigT] = {}
+        template_configs: dict[str, AnyTemplate] = {}
         template_hash: dict[str, str] = {}
         design_hash: dict[str, str] = {}
         scenes: list[str] = []
@@ -238,9 +234,11 @@ class RenderStage:
                 config_path = workspace.template_config_file(template_name)
                 if not config_path.is_file():
                     raise TemplateNotFoundError(template_name, config_path)
-                text = config_path.read_text(encoding="utf-8")
-                template_texts[template_name] = text
-                template_configs[template_name] = load_template_config(yaml.safe_load(text))
+                # The verbatim text is kept alongside the parsed config: it is
+                # what feeds template_hash, and re-serialising the model would
+                # hash a normalised form rather than the file on disk.
+                template_texts[template_name] = config_path.read_text(encoding="utf-8")
+                template_configs[template_name] = workspace.load_template_config(template_name)
 
             template_cfg = template_configs[template_name]
             kind = template_cfg.kind
@@ -445,7 +443,7 @@ class RenderStage:
                 design_cache[artwork_key] = load_design(path)
             return design_cache[artwork_key]
 
-        template_configs: dict[str, TemplateConfigT] = {}
+        template_configs: dict[str, AnyTemplate] = {}
         map_caches: dict[str, DerivedMapCache] = {}
         outputs: dict[str, str] = {}
 
@@ -453,8 +451,7 @@ class RenderStage:
             template_name, colour = _split_scene_key(scene)
 
             if template_name not in template_configs:
-                text = workspace.template_config_file(template_name).read_text(encoding="utf-8")
-                template_configs[template_name] = load_template_config(yaml.safe_load(text))
+                template_configs[template_name] = workspace.load_template_config(template_name)
                 map_caches[template_name] = DerivedMapCache(
                     workspace.template_derived_dir(template_name)
                 )

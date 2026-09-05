@@ -23,7 +23,6 @@ from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.profile import PrintArea, Profile
 from etsy_listings.config.slug import ColourExceptions, slug_map, slugify
 from etsy_listings.newcmd.fx_rate import FxRate
-from etsy_listings.render.config import load_template_config
 from etsy_listings.workspace.workspace import Workspace
 
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -198,10 +197,7 @@ def load_template_kind(workspace: Workspace, template: str) -> str:
     and writing the wrong shape produces a listing that only fails later, at
     render time, with nothing pointing back at ``new``.
     """
-    path = workspace.template_config_file(template)
-    if not path.is_file():
-        raise ConfigLoadError(path, "template config not found -- calibrate it with `ui` first")
-    return load_template_config(yaml.safe_load(path.read_text(encoding="utf-8"))).kind
+    return workspace.load_template_config(template).kind
 
 
 def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list[dict[str, str]]:
