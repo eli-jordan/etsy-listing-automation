@@ -69,6 +69,18 @@ still has no idea a workspace exists.
 | `catalog` | Printify blueprint/provider/variant reads, TTL cache, name→id | Anything shop-scoped or authenticated |
 | `config` | `shop.yaml` / profile / listing models, `Money`, slugs | Know where those files are on disk |
 
+Plus one leaf that is not a module: `etsy_listings/terminal.py` answers "can
+this stream print that character?" for anything that decorates output. Both
+`cli` (the `apply` swatches) and `newcmd` (the picker's local-profile marker)
+need it, and while it lived in `cli` the second of those was an import
+pointing *up* through the layering — the one place the "no cycles" claim above
+was not actually true. It depends on nothing but the standard library, so
+anything may depend on it.
+
+Each package's `__init__.py` states its own interface: what it exports, and
+what it deliberately withholds. Those docstrings are the short version of this
+table, kept next to the code.
+
 Three boundaries carry most of the weight:
 
 - **`workspace` is the only module that knows the tree's shape.** Everything

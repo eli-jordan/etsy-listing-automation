@@ -15,11 +15,10 @@ from typing import Any
 
 import typer
 
-from etsy_listings import __about__
+from etsy_listings import __about__, terminal
 from etsy_listings.catalog.cache import CachedCatalogClient
 from etsy_listings.catalog.client import CatalogClient
 from etsy_listings.catalog.http import CatalogAuthError, HttpCatalogClient
-from etsy_listings.cli import glyphs
 from etsy_listings.cli.render import format_plan
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.secrets import (
@@ -303,10 +302,10 @@ def ui(
 
 def main() -> None:
     # Before Typer, so every command's output is already on a stream that can
-    # print what `glyphs` is about to ask it for. Here rather than in the
+    # print what `terminal` is about to ask it for. Here rather than in the
     # Typer callback because it mutates process-global streams, which a test
     # driving `app` through CliRunner should not have done to it.
-    glyphs.adopt_declared_encoding()
+    terminal.adopt_declared_encoding()
     app()
 
 

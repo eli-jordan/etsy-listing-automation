@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
 import { usePreview } from "./usePreview";
 
-const BODY = {
+/** Non-nullable, because one test spreads it: the hook's parameter includes
+ * `null` (meaning "hold off"), and spreading that widens the whole thing to
+ * `{}`. */
+type Body = NonNullable<Parameters<typeof usePreview>[1]>;
+
+const BODY: Body = {
   bounding_box: [
     { x: 0, y: 0 },
     { x: 100, y: 0 },
@@ -12,7 +17,7 @@ const BODY = {
   ],
   displace: { enabled: false, strength: 0 },
   shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
-} as Parameters<typeof usePreview>[1];
+};
 
 beforeEach(() => {
   vi.mocked(URL.revokeObjectURL).mockClear();

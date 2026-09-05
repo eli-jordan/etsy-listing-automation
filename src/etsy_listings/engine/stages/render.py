@@ -296,15 +296,10 @@ def _hash_path(path: Path) -> str:
     return f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
 
 
-def _hash_bytes(data: bytes) -> str:
-    return f"sha256:{hashlib.sha256(data).hexdigest()}"
-
-
-# The one place template kind is consulted. It decides exactly three things --
-# which photo, which derived-map key, and which layers -- and everything after
-# it is shared. Compare the three near-identical ~40-line branches this
-# replaced, which each also rebuilt the hash payload, the input list and the
-# output path for themselves (see SceneWork's docstring).
+# The only thing left that reads a template's kind. Which photo a scene
+# composites over, and what its derived maps cache under, are the same
+# question asked at a different level -- `Workspace.scene_photo` answers both,
+# so the calibrator's preview reaches them the same way (A8).
 def _layer_specs(
     template_cfg: AnyTemplate, colour: str | None
 ) -> list[tuple[str | None, str | None, RenderConfig]]:

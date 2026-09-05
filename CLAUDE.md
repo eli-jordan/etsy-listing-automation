@@ -65,11 +65,11 @@ not merely inferred from a redirect:
   reads the *console codepage*, and there is no console, so the answer
   describes nothing about the terminal on the other end. mintty is UTF-8 and
   says so in `LANG`, which is why `main()` calls
-  `glyphs.adopt_declared_encoding()`: it believes the shell's declared locale
+  `terminal.adopt_declared_encoding()`: it believes the shell's declared locale
   over the codepage, so ⭐ and the `apply` swatches print as themselves.
-  `PYTHONIOENCODING` still wins if set. `cli/glyphs.py` remains the guard for
-  streams that genuinely cannot print a decoration, and `FORCE_COLOR` opts
-  colour back in past the `isatty()` check.
+  `PYTHONIOENCODING` still wins if set. `etsy_listings/terminal.py` remains
+  the guard for streams that genuinely cannot print a decoration, and
+  `FORCE_COLOR` opts colour back in past the `isatty()` check.
 - **A cygwin-only binary is invisible to `shutil.which`.** cygwin's `fzf` is
   `/usr/bin/fzf`, a shebang script with no `.exe`; native-Windows Python can
   neither find nor exec it. `newcmd/prompts.py` falls back to asking cygwin's
@@ -172,7 +172,12 @@ src/etsy_listings/
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
                              (dashboard/setup wizard/run runner: Phase 5)
+  terminal.py   stdlib-only leaf: can this stream print that character?     [done]
 ```
+
+Every package's `__init__.py` states its interface — what it exports and what
+it deliberately withholds. Read that before reaching into a submodule; if what
+you need isn't exported, that is usually the docstring telling you why.
 
 ## Invariants
 
