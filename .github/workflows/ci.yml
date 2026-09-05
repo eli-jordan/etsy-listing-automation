@@ -19,9 +19,10 @@ on:
   pull_request:
   push:
     branches: [main]
-  # Lets the main-only tier be run deliberately against a chosen ref --
-  # which is the only way to exercise it before it is merged. GitHub only
-  # offers a manual run for workflows that exist on the default branch.
+  # Lets the main-only tier be run deliberately against a chosen ref -- the
+  # only way to exercise it before merging, since a pull_request runs at
+  # refs/pull/<n>/merge and the gate rightly excludes that.
+  # `gh workflow run CI --ref <branch>` dispatches it from a branch.
   workflow_dispatch:
 
 concurrency:
