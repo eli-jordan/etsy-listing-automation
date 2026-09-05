@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { renderPreview } from "../api/calibrator";
+import { useCallback, useMemo, useState } from "react";
 import { PlacementsPanel } from "../components/PlacementsPanel";
 import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
+import { usePreview } from "../hooks/usePreview";
 import type { BoundingBox, MultipleTemplate, Placement } from "../types";
 
 interface Props {
@@ -17,8 +17,6 @@ interface Props {
    * the listing sells, which the calibrator does not know. */
   knownColours: string[];
 }
-
-const PREVIEW_DEBOUNCE_MS = 200;
 
 /** Where the very first box lands when the photo has none. Middle-ish and
  * comfortably grabbable; it is meant to be dragged, not to be right. */
@@ -51,28 +49,20 @@ export function MultipleEditor({
   knownColours,
 }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [showOutlines, setShowOutlines] = useState(true);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      renderPreview(
-        templateName,
-        {
-          placements: config.placements,
-          displace: config.displace,
-          shade: config.shade,
-        },
-        design,
-      ).then((url) => {
-        setPreviewUrl((previous) => {
-          if (previous) URL.revokeObjectURL(previous);
-          return url;
-        });
-      });
-    }, PREVIEW_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [templateName, config, design]);
+  const previewUrl = usePreview(
+    templateName,
+    useMemo(
+      () => ({
+        placements: config.placements,
+        displace: config.displace,
+        shade: config.shade,
+      }),
+      [config.placements, config.displace, config.shade],
+    ),
+    design,
+  );
 
   const handleBoxChange = useCallback(
     (index: number, box: BoundingBox) =>

@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
-import { renderPreview } from "../api/calibrator";
+import { useCallback, useMemo, useState } from "react";
 import { PreviewGrid } from "../components/PreviewGrid";
 import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
+import { usePreview } from "../hooks/usePreview";
 import type { BoundingBox, ColourMatrixTemplate } from "../types";
 
 interface Props {
@@ -19,8 +19,6 @@ interface Props {
    * "approved" flag, because status is derived (see TemplateSummary.status). */
   onApprove: () => void;
 }
-
-const PREVIEW_DEBOUNCE_MS = 200;
 
 export function ColourMatrixEditor({
   templateName,
@@ -39,29 +37,24 @@ export function ColourMatrixEditor({
   // covers both the initial mount and a colour list that changed underneath.
   const colour =
     selectedColour && colours.includes(selectedColour) ? selectedColour : (colours[0] ?? "");
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!colour) return;
-    const timer = setTimeout(() => {
-      renderPreview(
-        templateName,
-        {
-          colour,
-          bounding_box: config.bounding_box,
-          displace: config.displace,
-          shade: config.shade,
-        },
-        design,
-      ).then((url) => {
-        setPreviewUrl((previous) => {
-          if (previous) URL.revokeObjectURL(previous);
-          return url;
-        });
-      });
-    }, PREVIEW_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [templateName, colour, config, design]);
+  // No colour yet (an empty set, or a list that hasn't loaded) means there is
+  // no photo to composite over, so the hook is told to hold off entirely.
+  const previewUrl = usePreview(
+    templateName,
+    useMemo(
+      () =>
+        colour
+          ? {
+              colour,
+              bounding_box: config.bounding_box,
+              displace: config.displace,
+              shade: config.shade,
+            }
+          : null,
+      [colour, config.bounding_box, config.displace, config.shade],
+    ),
+    design,
+  );
 
   const handleBoxChange = useCallback(
     (_index: number, box: BoundingBox) => onChange({ ...config, bounding_box: box }),

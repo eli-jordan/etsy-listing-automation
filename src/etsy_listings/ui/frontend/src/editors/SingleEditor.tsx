@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useState } from "react";
-import { renderPreview } from "../api/calibrator";
+import { useCallback, useMemo } from "react";
 import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
+import { usePreview } from "../hooks/usePreview";
 import type { BoundingBox, SingleTemplate } from "../types";
 
 interface Props {
@@ -13,8 +13,6 @@ interface Props {
   onDesignChange: (design: string) => void;
 }
 
-const PREVIEW_DEBOUNCE_MS = 200;
-
 /** The simplest of the three: one box, sliders, no filmstrip, no placements
  * panel -- one photo, one garment, nothing to disambiguate. */
 export function SingleEditor({
@@ -24,27 +22,18 @@ export function SingleEditor({
   design,
   onDesignChange,
 }: Props) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      renderPreview(
-        templateName,
-        {
-          bounding_box: config.bounding_box,
-          displace: config.displace,
-          shade: config.shade,
-        },
-        design,
-      ).then((url) => {
-        setPreviewUrl((previous) => {
-          if (previous) URL.revokeObjectURL(previous);
-          return url;
-        });
-      });
-    }, PREVIEW_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [templateName, config, design]);
+  const previewUrl = usePreview(
+    templateName,
+    useMemo(
+      () => ({
+        bounding_box: config.bounding_box,
+        displace: config.displace,
+        shade: config.shade,
+      }),
+      [config.bounding_box, config.displace, config.shade],
+    ),
+    design,
+  );
 
   const handleBoxChange = useCallback(
     (_index: number, box: BoundingBox) => onChange({ ...config, bounding_box: box }),
