@@ -1,0 +1,159 @@
+# Two tiers, split by what a layer needs from the outside world.
+#
+# Pull requests get the hermetic layers -- unit, golden, behaviour, contract --
+# behind the same lint/type gates as `scripts/check.sh`, plus the coverage
+# floor. None of that touches a network or a browser, so a PR cannot go red on
+# somebody else's infrastructure.
+#
+# main gets the two expensive layers on top: `browser` (playwright over the
+# built SPA served by FastAPI) and `e2e` (the real Printify catalog, via the
+# repository's PRINTIFY_API_TOKEN secret). Phase 1's e2e tests are read-only
+# GETs, so running them on every push to main costs no state.
+#
+# The gates mirror scripts/check.sh rather than calling it: that script is bash
+# and reformats in place (`ruff format .`), neither of which suits a Windows
+# runner. Change one, change the other.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    # Both platforms, deliberately. Development happens on Windows and the
+    # render goldens were generated there; the exact OpenCV/Pillow pins exist so
+    # the bytes come out the same everywhere. ubuntu is what proves that rather
+    # than assuming it -- a golden that fails on one OS only is itself the
+    # finding.
+    name: python (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: src/etsy_listings/ui/frontend/package-lock.json
+
+      # Built before `uv sync` on purpose: hatch_build.py builds dist/ during
+      # the editable install when it is absent, and does it with `npm install`.
+      # Building first makes that hook a no-op, so every node install in CI
+      # comes from package-lock.json.
+      - name: build the calibrator frontend
+        working-directory: src/etsy_listings/ui/frontend
+        run: npm ci && npm run build
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      - name: install (locked)
+        run: uv sync --frozen
+
+      - name: ruff format
+        run: uv run ruff format --check .
+
+      - name: ruff check
+        run: uv run ruff check .
+
+      - name: mypy
+        run: uv run mypy src
+
+      # `not browser` leaves unit, golden, behaviour and contract; `e2e` is
+      # already excluded by pyproject's addopts. The 85% branch floor comes from
+      # `fail_under` in pyproject.toml, so this gate and a local `check.sh` can
+      # never disagree about the number.
+      - name: pytest + coverage (branch, fail under 85%)
+        run: uv run pytest -m "not browser" --cov --cov-report=term-missing
+
+  frontend:
+    name: frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: src/etsy_listings/ui/frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: src/etsy_listings/ui/frontend/package-lock.json
+
+      - name: install (locked)
+        run: npm ci
+
+      - name: eslint
+        run: npm run lint
+
+      - name: tsc
+        run: npm run typecheck
+
+      - name: vitest + coverage (branch, fail under 85%)
+        run: npm run test:coverage
+
+  integration:
+    # main only. These are the layers that need a browser or a credential, and
+    # `needs` keeps them from burning ten minutes on a commit whose lint is
+    # already broken.
+    name: browser + e2e
+    if: github.event_name == 'push'
+    needs: [python, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: src/etsy_listings/ui/frontend/package-lock.json
+
+      # The browser layer serves the built SPA, so dist/ is a hard requirement
+      # here -- without it `calibrator_server` skips every test in the layer.
+      - name: build the calibrator frontend
+        working-directory: src/etsy_listings/ui/frontend
+        run: npm ci && npm run build
+
+      - uses: astral-sh/setup-uv@v10
+        with:
+          enable-cache: true
+
+      - name: install (locked)
+        run: uv sync --frozen
+
+      - name: install chromium
+        run: uv run playwright install --with-deps chromium
+
+      - name: pytest -m browser
+        run: uv run pytest -m browser
+
+      # The e2e layer skips itself cleanly when the token is absent, which would
+      # make this step green while testing nothing. Say so out loud instead.
+      - name: check for Printify credentials
+        env:
+          PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
+        run: |
+          if [ -z "$PRINTIFY_API_TOKEN" ]; then
+            echo "::warning::PRINTIFY_API_TOKEN is not set; the e2e layer will skip every test."
+          fi
+
+      - name: pytest -m e2e
+        env:
+          PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
+        run: uv run pytest -m e2e

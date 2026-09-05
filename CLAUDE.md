@@ -299,13 +299,13 @@ instead. The e2e layer asks the live API the questions the offline suite
 answers from memory. The write-side tests that genuinely do cost state arrive
 with Phase 2, against a throwaway shop.
 
-### Coverage: 80% is a floor, not a target
+### Coverage: 85% is a floor, not a target
 
 `./scripts/check.sh` measures **branch** coverage over the whole suite and
-**fails under 80%** (`fail_under` in `pyproject.toml`). Line coverage is not
+**fails under 85%** (`fail_under` in `pyproject.toml`). Line coverage is not
 enough: a half-tested `if` is the shape most regressions hide in.
 
-It currently sits at ~84%, so there is real headroom. If a change drops it
+It currently sits at ~93%, so there is real headroom. If a change drops it
 below the floor, that change shipped untested logic — write the test. Do not
 lower the threshold, and do not add `# pragma: no cover` to make a number go
 up. The one legitimate use of an exclusion is code that genuinely cannot be
@@ -318,7 +318,7 @@ going to meet. The gate lives in the check script, which is what runs before a
 commit.
 
 **The frontend carries a matching gate** — Vitest + the v8 coverage provider,
-same 80%-branch floor, same "not in the default `npm run test`" reasoning
+same 85%-branch floor, same "not in the default `npm run test`" reasoning
 (`npm run test:coverage` is the enforced one). `./scripts/check.sh` runs both
 gates and skips the frontend one cleanly (not a failure) when `npm` isn't on
 `PATH`, so a Python-only contributor's `check.sh` run isn't blocked by a
@@ -331,7 +331,7 @@ All of these run in cygwin zsh (see Environment).
 ```
 uv sync                              # install deps + create .venv
 ./scripts/check.sh                   # format + lint + typecheck + test + coverage gate, Python and frontend
-uv run pytest --cov                  # coverage on demand, enforcing the 80% floor
+uv run pytest --cov                  # coverage on demand, enforcing the 85% floor
 uv run pytest --cov --cov-report=html  # then open htmlcov/index.html
 uv run pytest                        # full suite (excludes -m e2e by default)
 uv run pytest tests/unit/test_money.py                     # one file
@@ -350,6 +350,30 @@ Frontend (`src/etsy_listings/ui/frontend/`):
 `npm run dev|build|typecheck|lint|format|test|test:coverage`. See the
 README's "The calibrator" section for the full loop, including regenerating
 the typed API client after an endpoint change.
+
+### CI
+
+[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same gates,
+split in two by what a layer needs from the outside world.
+
+| Trigger | What runs |
+|---|---|
+| Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's eslint/tsc/vitest gate |
+| Push to `main` | all of the above, then `pytest -m browser` and `pytest -m e2e` |
+
+The PR tier is deliberately hermetic — unit, golden, behaviour and contract
+touch no network and no browser, so a PR cannot go red on somebody else's
+infrastructure. The `browser` and `e2e` layers need chromium and a real
+Printify token respectively, so they sit on `main`, where the token lives as
+the repository secret `PRINTIFY_API_TOKEN`. Phase 1's e2e tests are read-only
+catalog GETs, so running them on every push costs no state.
+
+Windows is in the matrix because it is where development happens and where the
+render goldens were generated; ubuntu is there to prove the exact OpenCV and
+Pillow pins really do produce the same bytes on both, rather than assuming it.
+
+CI mirrors `scripts/check.sh` rather than calling it — that script is bash and
+reformats in place. Change one, change the other.
 
 ## Commands
 

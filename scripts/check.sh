@@ -19,17 +19,17 @@ uv run mypy src
 # tests skip themselves when chromium or ui/frontend/dist is missing, which
 # costs about a point -- the gate has enough headroom to pass either way, so a
 # missing browser never fails the build for the wrong reason.
-echo "== pytest + coverage (branch, fail under 80%) =="
+echo "== pytest + coverage (branch, fail under 85%) =="
 uv run pytest --cov --cov-report=term-missing --cov-report=html
 
-# The frontend gate mirrors the Python one -- branch coverage, 80% floor --
+# The frontend gate mirrors the Python one -- branch coverage, 85% floor --
 # and skips cleanly (not a failure) when node/npm isn't on PATH, the same
 # self-skip pattern the browser pytest layer uses for missing chromium, so a
 # Python-only contributor's check.sh run isn't blocked by a toolchain they
 # don't have installed.
 FRONTEND_DIR="src/etsy_listings/ui/frontend"
 if command -v npm >/dev/null 2>&1; then
-  echo "== frontend: lint, typecheck, test + coverage (branch, fail under 80%) =="
+  echo "== frontend: lint, typecheck, test + coverage (branch, fail under 85%) =="
   (cd "$FRONTEND_DIR" && npm run lint && npm run typecheck && npm run test:coverage)
 else
   echo "== frontend checks skipped: npm not on PATH =="
