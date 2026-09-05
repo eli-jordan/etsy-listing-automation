@@ -19,7 +19,7 @@ DesignSource = Literal["bundled", "upload"]
 
 
 class DesignSummary(BaseModel):
-    """One entry in the calibrator's test-design library (A16).
+    """One entry in the calibrator's test-design library (A19).
 
     ``bundled-grid``: the grid/ruler target, for spotting warp/displacement
     errors. ``bundled-on-light``/``bundled-on-dark``: deterministic

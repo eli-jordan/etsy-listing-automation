@@ -1,4 +1,4 @@
-"""The calibrator's test-design library (A16).
+"""The calibrator's test-design library (A19).
 
 Calibration is judged by eye. The bundled grid target answers "is the warp
 right?" precisely and says nothing about how a real ink weight sits on a real

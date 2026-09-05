@@ -8,7 +8,7 @@ and the order of work. Where the two disagree, the PRD wins and this file is wro
 
 ## Architecture decision log
 
-Fifteen forks, resolved. Numbered `A#` so they can be cited from code comments
+Nineteen forks, resolved. Numbered `A#` so they can be cited from code comments
 and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
@@ -28,7 +28,10 @@ and commit messages without colliding with the PRD's own decision log.
 | A13 | Template ownership + media addressing | No profile-level registry — `Profile` carries no `templates` field. `listing.media` always references `{template, colour?}` explicitly, naming any template that exists in `mockup-templates/`; no default, no bare-colour shorthand. A template is purely local and Etsy-facing (Printify never sees it), unlike `blueprint`/`print_provider`/`sizes`, which genuinely are Printify product-creation inputs — that's why templates don't live on the profile the way those do. PRD 29. |
 | A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in the render stage (`engine/stages/render.py::_resolve_artwork`), reused unchanged by the future `printify_product` stage (Phase 2). PRD 30. |
 | A15 | Render cache namespacing | `.cache/renders/{listing}/{template}/...`, not `.cache/renders/{listing}/{colour}.png` — namespaced by template, since a listing can reference more than one `colour-matrix`-kind template and a bare colour is no longer unique across them. |
-| A16 | Calibrator test design | A **library**, not the fixed `BundledDesign` literal it replaces. The three bundled targets stay and keep their ids; the preview endpoint resolves an arbitrary id against those plus PNGs the user has uploaded into the workspace, and an unknown id is a 400 rather than a `KeyError`. The literal was right while the only designs were the ones shipped in `api/static/`, but calibration is judged by eye, and the grid target answers "is the warp right?" while saying nothing about how a real ink weight sits on a real garment. The set has to be open for the second question. Uploads land in the workspace, never the repo. |
+| A16 | Pricing plan resolution | `Listing.pricing_plan` stays a bare ref string, resolved by the caller via `Workspace.resolve()`, exactly like `design:` — `Listing` itself never touches `Workspace` or does I/O. `resolved_price()` takes an already-loaded `PricingPlan` as an optional keyword argument rather than loading it itself. Keeps `Listing` as pure and workspace-ignorant as it is today; the cost is every future price-resolving call site must remember to load and pass the plan, same cost `design:` resolution already carries. PRD 34. |
+| A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside `catalog/`'s documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
+| A18 | Wizard-time FX module placement | The one-off FX fetch lives in `newcmd/fx_rate.py`, not the package layout's reserved `fx/` (this doc's own deferred, cached full-margin module, PRD 10b) — avoids name collision with, and confusion against, that future work. PRD 36. |
+| A19 | Calibrator test design | A **library**, not the fixed `BundledDesign` literal it replaces. The three bundled targets stay and keep their ids; the preview endpoint resolves an arbitrary id against those plus PNGs the user has uploaded into the workspace, and an unknown id is a 400 rather than a `KeyError`. The literal was right while the only designs were the ones shipped in `api/static/`, but calibration is judged by eye, and the grid target answers "is the warp right?" while saying nothing about how a real ink weight sits on a real garment. The set has to be open for the second question. Uploads land in the workspace (`test-designs/`, kept apart from `designs/`), never the repo. |
 
 ### Toolchain
 
@@ -48,9 +51,17 @@ src/etsy_listings/
   cli/                  Typer app; one module per command
   workspace/            root discovery, path resolution, layout constants
   config/               pydantic models: defaults, profile, listing, exceptions
-    money.py            Money type — parsing, currency validation
+    money.py            Money type — parsing, currency validation; PriceField (A16)
+    pricing_plan.py     PricingPlan — reusable per-size price table (PRD 33)
     slug.py             slugification rules + exceptions file + collision detection
-  catalog/              Printify catalog fetch, TTL cache, name to id resolution
+  catalog/              Printify catalog fetch, TTL cache, name to id resolution;
+                        shipping() alongside blueprints/providers/variants (PRD 35)
+  newcmd/               the `new` picker: logic.py (pure) + interactive.py (terminal
+                        sequencing) + prompts.py (backend selection)
+    unofficial_variant_costs.py    undocumented per-variant cost fetch, fail-soft,
+                        isolated from catalog/'s documented surface (A17, PRD 35)
+    fx_rate.py          one-off uncached FX fetch for the pricing-plan wizard only
+                        — not the reserved fx/ package below (A18, PRD 36)
   engine/
     stage.py            Stage protocol
     change.py           Change vocabulary + comparison helpers
@@ -74,8 +85,16 @@ src/etsy_listings/
   runs/                 SQLite recorder, schema, event types
   ui/
     api/                FastAPI app, routers, schemas, SSE
+      templates.py      upload, kind assignment, colour report, config, preview,
+                        rail thumbnails
+      designs.py        the test-design library — bundled targets plus the
+                        user's own uploads (A19)
     frontend/           Vite project, dist/ shipped as package data
 ```
+
+The workspace gains one directory for the calibrator: `test-designs/`, holding
+uploaded preview targets. Deliberately not `designs/`, which is artwork that
+ships — a calibration target is not a product (A19).
 
 ---
 
@@ -230,11 +249,19 @@ class Workspace:
     def discover(cls, start: Path | None = None) -> Workspace: ...
     def resolve(self, ref: str, relative_to: Path) -> Path: ...   # never escapes root
     def cache(self, *parts: str) -> Path: ...
+
+    def pricing_plan_files(self) -> list[Path]: ...   # recursive discovery under pricing-plans/
+    def load_pricing_plan(self, path: Path) -> PricingPlan: ...   # attaches workspace currency
 ```
 
 Discovery walks up from cwd for `shop.yaml`, honouring `--root` then
 `ETSY_LISTINGS_ROOT` first. `resolve()` rejects paths that escape the root, which
 also makes the UI's file-serving endpoints safe by construction.
+
+`pricing_plan_files()`/`load_pricing_plan()` are `Workspace`'s only
+pricing-plan-specific surface (A16) — everything else about a plan reference
+goes through the same `resolve()` used for `design:`, since a plan is
+addressed by path, not by name.
 
 ---
 

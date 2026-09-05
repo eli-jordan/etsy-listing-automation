@@ -97,7 +97,7 @@ export async function assignKind(
 }
 
 /** The calibrator's test-design library: three bundled targets plus whatever
- * the user has uploaded into the workspace (A16). */
+ * the user has uploaded into the workspace (A19). */
 export async function listDesigns(): Promise<DesignSummary[]> {
   const { data, error } = await api.GET("/api/designs");
   if (error || !data) throw new CalibratorApiError("failed to list test designs");

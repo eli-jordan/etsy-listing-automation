@@ -144,7 +144,7 @@ class TestThumbnails:
 
 
 class TestDesignLibrary:
-    """A16: the test design is a library, not a fixed literal. The grid target
+    """A19: the test design is a library, not a fixed literal. The grid target
     answers "is the warp right?" and says nothing about how a real ink weight
     sits on a real garment, so the set has to be open."""
 

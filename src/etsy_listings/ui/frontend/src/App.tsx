@@ -39,7 +39,7 @@ export function App() {
     config: TemplateConfigState;
   } | null>(null);
   const [status, setStatus] = useState("");
-  // Which test artwork the previews render with (A16). A way of looking at a
+  // Which test artwork the previews render with (A19). A way of looking at a
   // template rather than a property of one, so it lives here and never enters
   // template.yaml -- and it deliberately survives switching template, since
   // "show me all of these against my real artwork" is the point of changing it.

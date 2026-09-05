@@ -3,7 +3,7 @@ import { listDesigns, uploadDesign } from "../api/calibrator";
 import type { DesignSummary } from "../types";
 
 /**
- * Which artwork the live preview is rendered with (A16).
+ * Which artwork the live preview is rendered with (A19).
  *
  * Not part of `template.yaml` -- it is a way of looking at the template, not a
  * property of it, which is why it lives in component state and only ever
