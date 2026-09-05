@@ -57,6 +57,38 @@ def _selected_template(page) -> str | None:  # noqa: ANN001
     return page.locator(".template-rail__item--active").first.get_attribute("data-template")
 
 
+class RequestLog:
+    """Records matching requests from the moment it is created.
+
+    `page.expect_request(...)` only listens for the duration of its `with`
+    block, which makes it a race whenever the thing being waited for can fire
+    early -- and under a fully loaded machine (the whole suite, with coverage)
+    these fired both early and late, failing a different test each run. This
+    starts listening before the action and polls afterwards, so *when* the
+    request happens stops mattering.
+    """
+
+    def __init__(self, page, needle: str) -> None:  # noqa: ANN001
+        self.page = page
+        self.entries: list[object] = []
+        page.on(
+            "request",
+            lambda request: self.entries.append(request) if needle in request.url else None,
+        )
+
+    def wait_for(self, predicate, timeout_ms: int = 60_000):  # noqa: ANN001, ANN201
+        for _ in range(timeout_ms // 100):
+            for request in list(self.entries):
+                if predicate(request):
+                    return request
+            self.page.wait_for_timeout(100)
+        raise AssertionError(f"no matching request in {timeout_ms}ms ({len(self.entries)} seen)")
+
+
+def _sent(request) -> dict:  # noqa: ANN001, ANN401
+    return json.loads(request.post_data or "{}")
+
+
 def _wait_for_filmstrip(page, count: int) -> None:  # noqa: ANN001
     """Wait for the filmstrip to be *fully* populated.
 
@@ -221,26 +253,23 @@ class TestColourMatrixKind:
         rename and did not quietly repoint the toggle."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
-        with page.expect_request(lambda r: "/preview" in r.url) as request_info:
-            page.get_by_label("Follow fabric wrinkles").check()
-        sent = json.loads(request_info.value.post_data or "{}")
-        assert sent["displace"]["enabled"] is True
+        log = RequestLog(page, "/preview")
+        page.get_by_label("Follow fabric wrinkles").check()
+        log.wait_for(lambda r: _sent(r).get("displace", {}).get("enabled") is True)
 
     def test_the_shading_presets_write_a_blend_mode(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
-        with page.expect_request(lambda r: "/preview" in r.url) as request_info:
-            page.get_by_role("button", name="Rich").click()
-        sent = json.loads(request_info.value.post_data or "{}")
-        assert sent["shade"]["blend"] == "multiply"
+        log = RequestLog(page, "/preview")
+        page.get_by_role("button", name="Rich").click()
+        log.wait_for(lambda r: _sent(r).get("shade", {}).get("blend") == "multiply")
 
     def test_choosing_a_test_design_rerenders_against_it(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
-        with page.expect_request(lambda r: "/preview" in r.url) as request_info:
-            page.get_by_label("Test design").select_option("bundled-on-dark")
-        sent = json.loads(request_info.value.post_data or "{}")
-        assert sent["design"] == "bundled-on-dark"
+        log = RequestLog(page, "/preview")
+        page.get_by_label("Test design").select_option("bundled-on-dark")
+        log.wait_for(lambda r: _sent(r).get("design") == "bundled-on-dark")
 
     def test_saving_writes_the_dragged_box_to_template_yaml(  # noqa: ANN001
         self, page, workspace_root: Path
@@ -260,8 +289,9 @@ class TestColourMatrixKind:
         page.mouse.move(box["x"] + 100, box["y"] + 70, steps=10)
         page.mouse.up()
 
-        with page.expect_response(lambda r: "/config" in r.url and r.request.method == "PUT"):
-            page.get_by_role("button", name="Save template.yaml").click()
+        save_log = RequestLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: r.method == "PUT")
         page.wait_for_selector("text=saved")
 
         saved = _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)
@@ -299,30 +329,84 @@ class TestMultipleKind:
             page.locator(".placements-panel__item").nth(1).get_attribute("class") or ""
         )
 
-    def test_duplicate_and_offset_adds_a_third_placement(self, page) -> None:  # noqa: ANN001
+    def test_duplicate_adds_a_third_placement(self, page) -> None:  # noqa: ANN001
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
-        page.get_by_role("button", name="Duplicate & offset selected").click()
+        page.get_by_role("button", name="Duplicate").click()
         assert page.locator(".placements-panel__item").count() == 3
         assert page.locator(".quad-editor__box").count() == 3
+
+    def test_adding_a_box_from_the_canvas_selects_it(self, page) -> None:  # noqa: ANN001
+        """2a puts Add box *on* the photo: a new box lands selected and
+        draggable, with no drawing mode to enter first."""
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        page.get_by_role("button", name="+ Add box").click()
+        page.wait_for_selector(".quad-editor__box:nth-of-type(3)")
+        assert page.locator(".placements-panel__item").count() == 3
+        assert "3 · new box" in page.locator(".placements-panel__item").nth(2).inner_text()
+
+    def test_the_delete_key_removes_the_selected_box(self, page) -> None:  # noqa: ANN001
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        page.locator(".quad-editor").click(position={"x": 5, "y": 5})
+        page.keyboard.press("Delete")
+        page.wait_for_function(
+            "() => document.querySelectorAll('.placements-panel__item').length === 1"
+        )
+
+    def test_right_clicking_a_box_opens_its_menu(self, page) -> None:  # noqa: ANN001
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        page.locator(".quad-editor__polygon").first.click(button="right")
+        page.wait_for_selector(".quad-editor__menu")
+        items = page.locator(".quad-editor__menu button").all_inner_texts()
+        assert items == ["Duplicate", "Bring to front", "Delete ⌫"]
+
+    def test_hiding_the_outlines_leaves_only_the_selected_box(self, page) -> None:  # noqa: ANN001
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        assert page.locator(".quad-editor__box").count() == 2
+        page.get_by_label("show all outlines").uncheck()
+        # The selected box keeps its handles -- the toggle is for judging the
+        # render, not for giving up the ability to fix it.
+        page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 1")
+        assert page.locator(HANDLE).count() == 4
 
     def test_saving_writes_every_placement(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".placements-panel__item")
-        page.get_by_role("button", name="Add placement").click()
-        colour_inputs = page.locator(".placements-panel__item input").nth(-2)
-        colour_inputs.fill("ivory")
+        page.get_by_role("button", name="+ Add").click()
+        page.get_by_label("Colour").fill("ivory")
 
-        with page.expect_response(lambda r: "/config" in r.url and r.request.method == "PUT"):
-            page.get_by_role("button", name="Save template.yaml").click()
+        save_log = RequestLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: r.method == "PUT")
         page.wait_for_selector("text=saved")
 
         saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)
         assert saved["kind"] == "multiple"
         assert len(saved["placements"]) == 3
         assert saved["placements"][-1]["colour"] == "ivory"
+
+    def test_editing_a_corner_by_number_writes_that_corner(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """The wireframe drew x/y/w/h. A box is a quad (PRD), so the panel
+        shows four corners -- and this proves the number reaches the file."""
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".placements-panel__item")
+        page.get_by_label("Corner 1 x").fill("123")
+
+        save_log = RequestLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: r.method == "PUT")
+        page.wait_for_selector("text=saved")
+
+        saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)
+        assert saved["placements"][0]["bounding_box"][0]["x"] == 123
 
 
 # --- creating a new template through the upload flow ---------------------
@@ -343,9 +427,17 @@ class TestUploadCreatesEachKind:
         config, so the picker takes over the workspace immediately -- taking
         the upload form and its status text with it. The picker appearing *is*
         the confirmation."""
-        page.get_by_label("Name").fill(name)
-        with page.expect_response(lambda r: r.url.endswith("/api/templates") and r.status == 200):
-            page.locator(".upload-form input[type=file]").set_input_files([str(s) for s in sources])
+        log = RequestLog(page, "/api/templates")
+        page.wait_for_selector(".upload-form")
+        name_field = page.get_by_label("Name")
+        name_field.fill(name)
+        # The form refuses to upload without a name, so if the field somehow
+        # did not take, say *that* rather than timing out on a request that was
+        # never going to be sent.
+        assert name_field.input_value() == name
+
+        page.locator(".upload-form input[type=file]").set_input_files([str(s) for s in sources])
+        log.wait_for(lambda r: r.method == "POST")
         page.wait_for_selector(".kind-picker")
 
     def test_uploading_a_single_photo_creates_a_single_kind_template(  # noqa: ANN001
@@ -358,12 +450,15 @@ class TestUploadCreatesEachKind:
         assert _selected_template(page) == "lifestyle-01"
 
         page.get_by_role("radio", name="Single one photo, one garment").check()
-        with page.expect_response(lambda r: r.url.endswith("/kind") and r.status == 200):
-            page.get_by_role("button", name="Start calibrating →").click()
+        kind_log = RequestLog(page, "/kind")
+        page.get_by_role("button", name="Start calibrating →").click()
+        kind_log.wait_for(lambda r: r.method == "POST")
 
+        page.wait_for_selector(PREVIEW_IMAGE)
         page.wait_for_selector(HANDLE)
-        with page.expect_response(lambda r: "/config" in r.url and r.request.method == "PUT"):
-            page.get_by_role("button", name="Save template.yaml").click()
+        save_log = RequestLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: r.method == "PUT")
 
         saved = _template_config(workspace_root, "lifestyle-01")
         assert saved["kind"] == "single"
@@ -385,8 +480,9 @@ class TestUploadCreatesEachKind:
         listed = page.locator(".kind-picker__filename").all_inner_texts()
         assert sorted(listed) == ["black.png", "ivory.png"]
 
-        with page.expect_response(lambda r: r.url.endswith("/kind") and r.status == 200):
-            page.get_by_role("button", name="Start calibrating →").click()
+        kind_log = RequestLog(page, "/kind")
+        page.get_by_role("button", name="Start calibrating →").click()
+        kind_log.wait_for(lambda r: r.method == "POST")
 
         _wait_for_filmstrip(page, 2)
         assert sorted(page.locator(".filmstrip__item").all_inner_texts()) == ["black", "ivory"]

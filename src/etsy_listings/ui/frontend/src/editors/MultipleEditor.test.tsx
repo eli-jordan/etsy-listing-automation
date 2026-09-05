@@ -34,7 +34,7 @@ beforeEach(() => {
 describe("MultipleEditor", () => {
   it("fetches a preview of the whole scene (all placements, no colour selector)", async () => {
     const spy = vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    render(<MultipleEditor templateName="colour-chart-01" config={CONFIG} onChange={vi.fn()} design="bundled-grid" onDesignChange={vi.fn()} />);
+    render(<MultipleEditor templateName="colour-chart-01" config={CONFIG} onChange={vi.fn()} design="bundled-grid" onDesignChange={vi.fn()} knownColours={[]} />);
 
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith(
@@ -52,9 +52,9 @@ describe("MultipleEditor", () => {
   it("adding a placement via the panel updates the config", async () => {
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
     const onChange = vi.fn();
-    render(<MultipleEditor templateName="colour-chart-01" config={CONFIG} onChange={onChange} design="bundled-grid" onDesignChange={vi.fn()} />);
+    render(<MultipleEditor templateName="colour-chart-01" config={CONFIG} onChange={onChange} design="bundled-grid" onDesignChange={vi.fn()} knownColours={[]} />);
 
-    fireEvent.click(screen.getByRole("button", { name: "Add placement" }));
+    fireEvent.click(screen.getByRole("button", { name: "+ Add" }));
     expect(onChange).toHaveBeenCalledWith(
       expect.objectContaining({ placements: expect.arrayContaining([expect.any(Object)]) }),
     );

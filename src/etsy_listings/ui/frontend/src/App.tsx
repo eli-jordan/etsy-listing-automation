@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTemplateConfig, listTemplates, saveTemplateConfig } from "./api/calibrator";
 import { KindPicker } from "./components/KindPicker";
 import { TemplateRail } from "./components/TemplateRail";
@@ -48,13 +48,25 @@ export function App() {
   // whose name has not changed but which now has a template.yaml.
   const [configVersion, setConfigVersion] = useState(0);
 
+  // Refreshes overlap: uploading fires one and assigning a kind fires another
+  // moments later. They are separate requests, so the *older* can resolve
+  // last -- putting the pre-assignment list back and reverting the template to
+  // "no kind set" on screen while the file on disk says otherwise. The
+  // sequence number makes a late response a no-op instead.
+  const refreshSeq = useRef(0);
+
   const refreshTemplates = useCallback((selectName?: string) => {
+    const seq = ++refreshSeq.current;
     listTemplates()
       .then((loaded) => {
+        if (seq !== refreshSeq.current) return;
         setTemplates(loaded);
         setTemplateName((current) => selectName ?? current ?? loaded[0]?.name ?? null);
       })
-      .catch(() => setStatus("failed to load templates"));
+      .catch(() => {
+        if (seq !== refreshSeq.current) return;
+        setStatus("failed to load templates");
+      });
   }, []);
 
   useEffect(() => {
@@ -63,13 +75,24 @@ export function App() {
 
   useEffect(() => {
     if (!templateName) return;
+    // Same guard as the template list: assigning a kind bumps configVersion
+    // while the previous fetch may still be in flight, and the stale answer
+    // (no template.yaml) would put the kind picker back over a template that
+    // now has one.
+    let current = true;
     getTemplateConfig(templateName)
       .then((loaded) => {
+        if (!current) return;
         const entry = loaded ? { name: templateName, config: loaded } : null;
         setConfigEntry(entry);
         setSavedEntry(entry);
       })
-      .catch(() => setStatus("failed to load template config"));
+      .catch(() => {
+        if (current) setStatus("failed to load template config");
+      });
+    return () => {
+      current = false;
+    };
   }, [templateName, configVersion]);
 
   const config = configEntry?.name === templateName ? configEntry.config : null;
@@ -108,6 +131,15 @@ export function App() {
   }, [templateName, saved]);
 
   const selected = templates.find((t) => t.name === templateName);
+
+  // Every colour already in use anywhere in the workspace, for the box
+  // colour field's suggestions. Suggestions rather than a closed list: a
+  // chart's colours are whatever the listing sells, and nothing here knows
+  // that -- wiring in the Printify catalog would be a much larger dependency.
+  const knownColours = useMemo(
+    () => [...new Set(templates.flatMap((t) => t.colours))].filter(Boolean).sort(),
+    [templates],
+  );
   const kindLabel = selected?.kind ? KIND_LABELS[selected.kind] : null;
 
   return (
@@ -188,6 +220,7 @@ export function App() {
               onChange={setConfig}
               design={design}
               onDesignChange={setDesign}
+              knownColours={knownColours}
             />
           )}
           {templateName && config?.kind === "single" && (

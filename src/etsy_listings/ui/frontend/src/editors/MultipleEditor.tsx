@@ -12,9 +12,30 @@ interface Props {
   onChange: (config: MultipleTemplate) => void;
   design: string;
   onDesignChange: (design: string) => void;
+  /** Colours already used across the workspace, offered as suggestions when
+   * assigning one to a box. Suggestions only: a chart's colours are whatever
+   * the listing sells, which the calibrator does not know. */
+  knownColours: string[];
 }
 
 const PREVIEW_DEBOUNCE_MS = 200;
+
+/** Where the very first box lands when the photo has none. Middle-ish and
+ * comfortably grabbable; it is meant to be dragged, not to be right. */
+const CENTRED_BOX: BoundingBox = [
+  { x: 200, y: 150 },
+  { x: 400, y: 150 },
+  { x: 400, y: 350 },
+  { x: 200, y: 350 },
+];
+
+function boxExtent(box: BoundingBox): string {
+  const xs = box.map((p) => p.x);
+  const ys = box.map((p) => p.y);
+  const width = Math.round(Math.max(...xs) - Math.min(...xs));
+  const height = Math.round(Math.max(...ys) - Math.min(...ys));
+  return `${width} × ${height}`;
+}
 
 /**
  * The one output *is* the live composite of every placement, so there's no
@@ -27,9 +48,11 @@ export function MultipleEditor({
   onChange,
   design,
   onDesignChange,
+  knownColours,
 }: Props) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [showOutlines, setShowOutlines] = useState(true);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -68,18 +91,123 @@ export function MultipleEditor({
   );
 
   const clampedIndex = Math.min(selectedIndex, Math.max(config.placements.length - 1, 0));
+  const selected = config.placements[clampedIndex];
+
+  /** The box-editing operations live on the panel, and the canvas reaches
+   * them through here -- one implementation, whether you used the right-click
+   * menu, the Delete key or the button. */
+  const mutate = useCallback(
+    (fn: (placements: Placement[]) => { placements: Placement[]; select: number }) => {
+      const result = fn(config.placements);
+      onChange({ ...config, placements: result.placements });
+      setSelectedIndex(result.select);
+    },
+    [config, onChange],
+  );
+
+  const addBox = useCallback(
+    () =>
+      mutate((placements) => {
+        const source = placements[clampedIndex] ?? placements[placements.length - 1];
+        // 2a: lands centred and selected -- no drawing mode, and every corner
+        // stays draggable afterwards. Offset from the last box when there is
+        // one, so a new box is never hidden exactly under its source.
+        const bounding_box = source
+          ? (source.bounding_box.map((p) => ({
+              x: p.x + (Math.max(...source.bounding_box.map((q) => q.x)) -
+                Math.min(...source.bounding_box.map((q) => q.x))),
+              y: p.y,
+            })) as BoundingBox)
+          : CENTRED_BOX;
+        return {
+          placements: [...placements, { colour: "", bounding_box, artwork: null }],
+          select: placements.length,
+        };
+      }),
+    [mutate, clampedIndex],
+  );
+
+  const deleteSelected = useCallback(
+    () =>
+      mutate((placements) => ({
+        placements: placements.filter((_, i) => i !== clampedIndex),
+        select: Math.max(0, clampedIndex - 1),
+      })),
+    [mutate, clampedIndex],
+  );
+
+  const duplicateSelected = useCallback(
+    () =>
+      mutate((placements) => {
+        const source = placements[clampedIndex];
+        if (!source) return { placements, select: clampedIndex };
+        const width =
+          Math.max(...source.bounding_box.map((p) => p.x)) -
+          Math.min(...source.bounding_box.map((p) => p.x));
+        const copy: Placement = {
+          ...source,
+          bounding_box: source.bounding_box.map((p) => ({ x: p.x + width, y: p.y })) as BoundingBox,
+        };
+        const next = [...placements];
+        next.splice(clampedIndex + 1, 0, copy);
+        return { placements: next, select: clampedIndex + 1 };
+      }),
+    [mutate, clampedIndex],
+  );
+
+  const bringToFront = useCallback(
+    () =>
+      mutate((placements) => {
+        const source = placements[clampedIndex];
+        if (!source) return { placements, select: clampedIndex };
+        const next = placements.filter((_, i) => i !== clampedIndex);
+        next.push(source);
+        return { placements: next, select: next.length - 1 };
+      }),
+    [mutate, clampedIndex],
+  );
 
   return (
     <main className="app__main">
       <div className="app__preview">
+        <div className="app__preview-bar">
+          <label className="app__outline-toggle">
+            <input
+              type="checkbox"
+              checked={showOutlines}
+              onChange={(e) => setShowOutlines(e.target.checked)}
+            />
+            show all outlines
+          </label>
+        </div>
         {previewUrl ? (
-          <QuadEditor
-            imageUrl={previewUrl}
-            boxes={config.placements.map((p) => p.bounding_box)}
-            selectedIndex={clampedIndex}
-            onSelect={setSelectedIndex}
-            onChangeBox={handleBoxChange}
-          />
+          config.placements.length === 0 ? (
+            <div className="quad-editor__empty">
+              <p>No bounding boxes on this photo</p>
+              <button type="button" className="btn btn-primary" onClick={addBox}>
+                + Add box
+              </button>
+              <p className="quad-editor__empty-hint">first box lands ready to drag</p>
+            </div>
+          ) : (
+            <QuadEditor
+              imageUrl={previewUrl}
+              boxes={config.placements.map((p) => p.bounding_box)}
+              selectedIndex={clampedIndex}
+              onSelect={setSelectedIndex}
+              onChangeBox={handleBoxChange}
+              onAddBox={addBox}
+              onDeleteSelected={deleteSelected}
+              onDuplicateSelected={duplicateSelected}
+              onBringSelectedToFront={bringToFront}
+              showOutlines={showOutlines}
+              selectedLabel={
+                selected
+                  ? `box ${clampedIndex + 1} selected · ${boxExtent(selected.bounding_box)}`
+                  : undefined
+              }
+            />
+          )
         ) : (
           <p>Loading preview…</p>
         )}
@@ -102,6 +230,7 @@ export function MultipleEditor({
           selectedIndex={clampedIndex}
           onSelect={setSelectedIndex}
           onChange={handlePlacementsChange}
+          knownColours={knownColours}
         />
       </aside>
     </main>

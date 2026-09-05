@@ -667,38 +667,219 @@ button:not([class]):active:not(:disabled) {
   border-radius: var(--radius-md);
 }
 
+/* — the bounding-box list — */
+.placements-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.placements-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.placements-panel__heading {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  margin: 0;
+}
+
+.placements-panel__add {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
 .placements-panel__list {
   list-style: none;
   padding: 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: var(--space-1);
+  gap: 3px;
 }
 
 .placements-panel__item {
   display: flex;
   gap: var(--space-1);
-  padding: var(--space-1);
+  padding: 5px var(--space-2);
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
   cursor: pointer;
+  font-size: 12px;
 }
 
 .placements-panel__item--active {
   border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-neutral-100));
 }
 
-.placements-panel__item input {
-  flex: 1;
+.placements-panel__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+.placements-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+}
+
+/* Four corners, two fields each: a box is a quad, so the panel shows the quad
+   rather than an x/y/w/h that would flatten every angled photo. */
+.placements-panel__corners {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+}
+
+.placements-panel__corner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+}
+
+.placements-panel__corner-label {
+  grid-column: 1 / -1;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.placements-panel__corner input {
+  min-height: 26px;
+  padding: 2px 8px;
+  font-size: 11px;
   min-width: 0;
+}
+
+.placements-panel__extent {
+  margin: 0;
+  font-size: 11px;
+  text-align: right;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }
 
 .placements-panel__actions {
   display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.placements-panel__actions button {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
+.placements-panel__warn {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-accent-700);
+}
+
+/* — canvas affordances — */
+.app__preview-bar {
+  display: flex;
+  justify-content: flex-end;
+  padding: var(--space-2) var(--space-3) 0;
+}
+
+.app__outline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  cursor: pointer;
+}
+
+.quad-editor__add {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  font-size: 12px;
+  padding: 5px 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.quad-editor__readout {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-3);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-bg);
+  background: color-mix(in srgb, var(--color-neutral-900) 65%, transparent);
+  padding: 3px 8px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.quad-editor__menu {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-100);
+  box-shadow: var(--shadow-lg);
+}
+
+.quad-editor__menu button {
+  justify-content: flex-start;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 5px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.quad-editor__menu button:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.quad-editor__menu-danger {
+  color: var(--color-accent-700);
+  border-top: 1px dashed var(--color-divider);
+}
+
+.quad-editor__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   gap: var(--space-2);
-  margin-top: var(--space-2);
+  min-height: 280px;
+  margin: var(--space-3);
+  border: 1.5px dashed var(--color-neutral-400);
+  border-radius: var(--radius-lg);
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.quad-editor__empty-hint {
+  margin: 0;
+  font-size: 11px;
 }
 
 /* — the kind picker, which takes over the workspace — */

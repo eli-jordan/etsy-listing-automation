@@ -6,12 +6,36 @@ import { UploadForm } from "./UploadForm";
 afterEach(() => vi.restoreAllMocks());
 
 describe("UploadForm", () => {
-  it("does nothing if no name has been entered", async () => {
+  it("says a name is needed rather than silently doing nothing", async () => {
     const spy = vi.spyOn(calibrator, "uploadTemplate");
     render(<UploadForm onUploaded={vi.fn()} />);
     const file = new File(["x"], "black.png", { type: "image/png" });
     fireEvent.change(screen.getByLabelText("Photos"), { target: { files: [file] } });
     expect(spy).not.toHaveBeenCalled();
+    // It used to just `return`, which looks exactly like a broken upload.
+    await screen.findByText("name the template first");
+  });
+
+  it("uploads under the name as it stands right now, not as it was last render", async () => {
+    // handleFiles used to close over `name` from the render that attached it.
+    // Type a name and pick files fast enough -- which automation always does --
+    // and the handler still saw "", so the upload silently never happened.
+    const spy = vi.spyOn(calibrator, "uploadTemplate").mockResolvedValue({
+      name: "quick",
+      kind: null,
+      colours: [],
+    });
+    render(<UploadForm onUploaded={vi.fn()} />);
+
+    const nameInput = screen.getByLabelText("Name");
+    const fileInput = screen.getByLabelText("Photos");
+    const file = new File(["x"], "black.png", { type: "image/png" });
+
+    // Both events dispatched back to back, with no render flushed between.
+    fireEvent.change(nameInput, { target: { value: "quick" } });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+
+    await waitFor(() => expect(spy).toHaveBeenCalledWith("quick", [file]));
   });
 
   it("uploads with the chosen name and files, then reports success", async () => {

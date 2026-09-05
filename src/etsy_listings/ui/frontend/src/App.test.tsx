@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import * as calibrator from "./api/calibrator";
@@ -120,7 +120,7 @@ describe("App", () => {
     await screen.findByText("Loading preview…");
 
     selectTemplate("colour-chart-01");
-    await waitFor(() => expect(screen.getByText("Placements")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Bounding boxes · 0")).toBeInTheDocument());
   });
 
   it("replaces the workspace with the kind picker when a template has no config", async () => {
@@ -172,6 +172,47 @@ describe("App", () => {
 
     await waitFor(() => expect(saveSpy).toHaveBeenCalledWith("flat-lay-01", COLOUR_MATRIX));
     await waitFor(() => expect(screen.getByText("saved")).toBeInTheDocument());
+  });
+
+  describe("racing refreshes", () => {
+    it("ignores a template list that arrives after a newer one", async () => {
+      // Uploading and then assigning a kind fires two listTemplates() calls in
+      // quick succession. If the first resolves last -- entirely possible, they
+      // are separate requests -- it puts the pre-assignment list back, and the
+      // template silently reverts to "no kind set" in the UI while the file on
+      // disk says otherwise. Under load this is what made the browser upload
+      // tests intermittent.
+      const initial = [summary({ name: "fresh", colours: ["black"] })];
+      const stale = [summary({ name: "fresh", colours: ["black"] })];
+      const newest = [summary({ name: "fresh", colours: ["black", "ivory", "moss"] })];
+
+      let resolveStale: (v: TemplateSummary[]) => void = () => {};
+      const pending = new Promise<TemplateSummary[]>((r) => (resolveStale = r));
+      vi.spyOn(calibrator, "listTemplates")
+        .mockResolvedValueOnce(initial) // mount
+        .mockReturnValueOnce(pending) // first save: in flight, resolves last
+        .mockResolvedValue(newest); // second save: lands first, and wins
+      vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+      vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+      vi.spyOn(calibrator, "saveTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+
+      render(<App />);
+      const save = await screen.findByRole("button", { name: "Save template.yaml" });
+      await waitFor(() => expect(save).toBeEnabled());
+
+      fireEvent.click(save); // refresh #2 -- hangs
+      fireEvent.click(save); // refresh #3 -- resolves now
+      await waitFor(() => expect(header().getByText(/3 colours/)).toBeInTheDocument());
+
+      // The older refresh finally lands. It must be discarded, not applied.
+      // `act` so React actually flushes the stale response's state update --
+      // a bare microtask tick would let this pass without the guard.
+      resolveStale(stale);
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 10));
+      });
+      expect(header().getByText(/3 colours/)).toBeInTheDocument();
+    });
   });
 
   describe("Reset", () => {

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { uploadTemplate } from "../api/calibrator";
 
 interface Props {
@@ -18,13 +18,24 @@ interface Props {
 export function UploadForm({ onUploaded }: Props) {
   const [name, setName] = useState("");
   const [status, setStatus] = useState("");
+  // The file input's handler closes over whatever `name` was when React last
+  // rendered it. Type a name and choose files quickly enough -- which any
+  // automation does, and an impatient person can -- and the handler still saw
+  // the empty string, so the upload silently never happened. The ref is
+  // written synchronously, so it is always current by the time files arrive.
+  const nameRef = useRef("");
 
   async function handleFiles(files: FileList | null) {
-    if (!files || files.length === 0 || !name) return;
+    const current = nameRef.current.trim();
+    if (!files || files.length === 0) return;
+    if (!current) {
+      setStatus("name the template first");
+      return;
+    }
     try {
-      await uploadTemplate(name, Array.from(files));
+      await uploadTemplate(current, Array.from(files));
       setStatus("uploaded");
-      onUploaded(name);
+      onUploaded(current);
     } catch {
       setStatus("upload failed");
     }
@@ -35,7 +46,14 @@ export function UploadForm({ onUploaded }: Props) {
       <legend>New template</legend>
       <label>
         Name
-        <input value={name} onChange={(e) => setName(e.target.value)} placeholder="flat-lay-02" />
+        <input
+          value={name}
+          onChange={(e) => {
+            nameRef.current = e.target.value;
+            setName(e.target.value);
+          }}
+          placeholder="flat-lay-02"
+        />
       </label>
       <label>
         Photos

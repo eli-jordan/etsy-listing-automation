@@ -130,8 +130,12 @@ class TestOrganicComponents:
         that never got one, and a transparent button is just text: no edge, no
         affordance. The app layer has to give them a default."""
         page.wait_for_selector(PREVIEW_IMAGE)
-        add = page.get_by_role("button", name="Add placement")
-        assert add.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
+        # "Duplicate" carries no variant class, which is exactly the case this
+        # guards -- the primary actions opt in to `.btn-primary` and would
+        # pass whether or not the fallback exists.
+        plain = page.get_by_role("button", name="Duplicate").first
+        plain.wait_for()
+        assert plain.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
 
     def test_the_preview_sits_on_the_surface_tone(self, page) -> None:  # noqa: ANN001
         """The photo frame was a cold #e5e5e5; on a warm ground that reads as
@@ -164,6 +168,20 @@ def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:  # no
     page.wait_for_selector(PREVIEW_IMAGE)
     page.wait_for_timeout(400)  # let the first preview render land
     target = screenshot_dir / "phase1-colour-matrix.png"
+    page.screenshot(path=str(target), full_page=True)
+    assert target.stat().st_size > 0
+
+
+def test_capture_multiple_editor_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
+    """The chart editor with a box selected -- the corner fields, the extent
+    readout and the Add box affordance are the parts of 2a that only exist
+    here."""
+    row = page.locator(".template-rail__item[data-template='colour-chart-01']")
+    row.wait_for()
+    row.click()
+    page.wait_for_selector(".placements-panel__item")
+    page.wait_for_timeout(600)
+    target = screenshot_dir / "phase5-multiple-editor.png"
     page.screenshot(path=str(target), full_page=True)
     assert target.stat().st_size > 0
 
