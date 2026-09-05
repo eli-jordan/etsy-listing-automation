@@ -795,11 +795,72 @@ button:not([class]):active:not(:disabled) {
   color: var(--color-accent-700);
 }
 
+/* — the preview-all grid — */
+.preview-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.preview-grid__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 11px;
+}
+
+.preview-grid__count {
+  font-weight: 600;
+}
+
+.preview-grid__status {
+  color: var(--color-accent-700);
+}
+
+.preview-grid__failed {
+  color: var(--color-accent-700);
+}
+
+/* The approve action sits at the end of the row, past the progress. */
+.preview-grid__head .btn {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.preview-grid__tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+
+.preview-grid__tile {
+  width: auto;
+}
+
 /* — canvas affordances — */
 .app__preview-bar {
   display: flex;
-  justify-content: flex-end;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
   padding: var(--space-2) var(--space-3) 0;
+}
+
+/* `.seg-opt` styles the checked state through `:has(input:checked)`, which
+   these tab buttons have no input for -- so they carry the state as a class.
+   `--on` must come *after* the base rule: same specificity, so source order
+   decides, and with it first the selected tab rendered as the grey one. */
+.seg-opt {
+  font-family: var(--font-body);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.seg-opt--on {
+  background: var(--color-accent);
+  color: var(--color-bg);
 }
 
 .app__outline-toggle {

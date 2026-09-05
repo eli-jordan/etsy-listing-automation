@@ -211,6 +211,7 @@ export function App() {
               onChange={setConfig}
               design={design}
               onDesignChange={setDesign}
+              onApprove={handleSave}
             />
           )}
           {templateName && config?.kind === "multiple" && (

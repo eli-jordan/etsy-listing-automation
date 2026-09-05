@@ -17,9 +17,12 @@ interface Props {
   onDeleteSelected?: () => void;
   onDuplicateSelected?: () => void;
   onBringSelectedToFront?: () => void;
-  /** When false, the unselected boxes' outlines are hidden -- 2a's "show
-   * placement outline" toggle, for judging the render without chrome. */
-  showOutlines?: boolean;
+  /** How much box chrome to draw. Three states rather than a boolean because
+   * 2a's two toggles mean different things: a chart's "show all outlines"
+   * hides the *other* boxes while you keep working on one ("selected"), and a
+   * colour set's "show placement outline" hides everything so you can judge
+   * the render clean ("none"). */
+  outlines?: "all" | "selected" | "none";
   /** Label for the selected box, shown with its extent. Explicitly admits
    * `undefined`: `exactOptionalPropertyTypes` is on, so "may be absent" and
    * "may be undefined" are different types here. */
@@ -46,7 +49,7 @@ export function QuadEditor({
   onDeleteSelected,
   onDuplicateSelected,
   onBringSelectedToFront,
-  showOutlines = true,
+  outlines = "all",
   selectedLabel,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
@@ -135,10 +138,8 @@ export function QuadEditor({
         >
           {boxes.map((box, boxIndex) => {
             const active = boxIndex === selectedIndex;
-            // Hiding the *unselected* outlines only: the selected box keeps
-            // its handles, because the toggle is for judging the render, not
-            // for giving up the ability to fix it.
-            if (!active && !showOutlines) return null;
+            if (outlines === "none") return null;
+            if (outlines === "selected" && !active) return null;
             return (
               <g
                 key={boxIndex}

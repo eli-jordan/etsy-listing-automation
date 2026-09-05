@@ -57,36 +57,45 @@ def _selected_template(page) -> str | None:  # noqa: ANN001
     return page.locator(".template-rail__item--active").first.get_attribute("data-template")
 
 
-class RequestLog:
-    """Records matching requests from the moment it is created.
+class TrafficLog:
+    """Records matching *responses* from the moment it is created.
 
-    `page.expect_request(...)` only listens for the duration of its `with`
-    block, which makes it a race whenever the thing being waited for can fire
-    early -- and under a fully loaded machine (the whole suite, with coverage)
-    these fired both early and late, failing a different test each run. This
-    starts listening before the action and polls afterwards, so *when* the
-    request happens stops mattering.
+    Two things this gets right that `page.expect_response(...)` does not.
+    It listens from construction rather than only inside a `with` block, so a
+    response that arrives early is still seen -- under the whole suite these
+    fired both early and late, failing a different test each run. And it waits
+    on the response, not the request: a test that reads template.yaml straight
+    after a PUT needs the server to have *finished*, not merely to have been
+    asked. (Waiting on the request instead made that read race the write, and
+    yaml.safe_load returned None on the half-written file.)
+
+    Responses carry their request, so a payload assertion still works.
     """
 
     def __init__(self, page, needle: str) -> None:  # noqa: ANN001
         self.page = page
         self.entries: list[object] = []
         page.on(
-            "request",
-            lambda request: self.entries.append(request) if needle in request.url else None,
+            "response",
+            lambda response: self.entries.append(response) if needle in response.url else None,
         )
 
     def wait_for(self, predicate, timeout_ms: int = 60_000):  # noqa: ANN001, ANN201
         for _ in range(timeout_ms // 100):
-            for request in list(self.entries):
-                if predicate(request):
-                    return request
+            for response in list(self.entries):
+                if predicate(response):
+                    return response
             self.page.wait_for_timeout(100)
-        raise AssertionError(f"no matching request in {timeout_ms}ms ({len(self.entries)} seen)")
+        raise AssertionError(f"no matching response in {timeout_ms}ms ({len(self.entries)} seen)")
 
 
-def _sent(request) -> dict:  # noqa: ANN001, ANN401
-    return json.loads(request.post_data or "{}")
+def _sent(response) -> dict:  # noqa: ANN001, ANN401
+    """The JSON body of the request that produced this response."""
+    return json.loads(response.request.post_data or "{}")
+
+
+def _method(response) -> str:  # noqa: ANN001
+    return str(response.request.method)
 
 
 def _wait_for_filmstrip(page, count: int) -> None:  # noqa: ANN001
@@ -223,10 +232,43 @@ class TestColourMatrixKind:
             page.locator(".filmstrip__item", has_text="moss").get_attribute("class") or ""
         )
 
-    def test_gallery_shows_a_thumbnail_per_colour(self, page) -> None:  # noqa: ANN001
+    def test_preview_all_renders_every_colour_in_the_set(self, page) -> None:  # noqa: ANN001
+        """2a's second tab: the always-on gallery becomes a view you switch to.
+        Every tile is a real server render, so this waits for the count rather
+        than for the tiles -- the placeholders are there from the start."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
-        page.wait_for_selector(".gallery__item")
-        assert page.locator(".gallery__item").count() == 4
+        page.wait_for_selector(PREVIEW_IMAGE)
+        page.get_by_role("tab", name="Preview all 4").click()
+
+        assert page.locator(".preview-grid__tile").count() == 4
+        page.wait_for_function(
+            "() => document.querySelectorAll('.preview-grid__tile img').length === 4"
+        )
+        page.wait_for_selector("text=4 / 4")
+
+    def test_approving_from_the_preview_tab_writes_the_config(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """ "Approve & mark calibrated" is a save. There is no separate stored
+        flag -- status is derived -- so the observable effect is template.yaml."""
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(PREVIEW_IMAGE)
+        page.get_by_role("tab", name="Preview all 4").click()
+
+        save_log = TrafficLog(page, "/config")
+        page.get_by_role("button", name="Approve & mark calibrated").click()
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+        assert _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["kind"] == "colour-matrix"
+
+    def test_hiding_the_placement_outline_leaves_a_clean_render(self, page) -> None:  # noqa: ANN001
+        """A colour set has one box and it is always selected, so "clean" here
+        means no chrome at all -- unlike a chart, where the toggle only hides
+        the boxes you are not working on."""
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(HANDLE)
+        page.get_by_label("show placement outline").uncheck()
+        page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
+        assert page.locator(HANDLE).count() == 0
 
     def test_dragging_a_handle_moves_it_and_rerenders(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
@@ -253,21 +295,21 @@ class TestColourMatrixKind:
         rename and did not quietly repoint the toggle."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
-        log = RequestLog(page, "/preview")
+        log = TrafficLog(page, "/preview")
         page.get_by_label("Follow fabric wrinkles").check()
         log.wait_for(lambda r: _sent(r).get("displace", {}).get("enabled") is True)
 
     def test_the_shading_presets_write_a_blend_mode(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
-        log = RequestLog(page, "/preview")
+        log = TrafficLog(page, "/preview")
         page.get_by_role("button", name="Rich").click()
         log.wait_for(lambda r: _sent(r).get("shade", {}).get("blend") == "multiply")
 
     def test_choosing_a_test_design_rerenders_against_it(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
-        log = RequestLog(page, "/preview")
+        log = TrafficLog(page, "/preview")
         page.get_by_label("Test design").select_option("bundled-on-dark")
         log.wait_for(lambda r: _sent(r).get("design") == "bundled-on-dark")
 
@@ -289,9 +331,9 @@ class TestColourMatrixKind:
         page.mouse.move(box["x"] + 100, box["y"] + 70, steps=10)
         page.mouse.up()
 
-        save_log = RequestLog(page, "/config")
+        save_log = TrafficLog(page, "/config")
         page.get_by_role("button", name="Save template.yaml").click()
-        save_log.wait_for(lambda r: r.method == "PUT")
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
         page.wait_for_selector("text=saved")
 
         saved = _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)
@@ -381,9 +423,9 @@ class TestMultipleKind:
         page.get_by_role("button", name="+ Add").click()
         page.get_by_label("Colour").fill("ivory")
 
-        save_log = RequestLog(page, "/config")
+        save_log = TrafficLog(page, "/config")
         page.get_by_role("button", name="Save template.yaml").click()
-        save_log.wait_for(lambda r: r.method == "PUT")
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
         page.wait_for_selector("text=saved")
 
         saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)
@@ -400,9 +442,9 @@ class TestMultipleKind:
         page.wait_for_selector(".placements-panel__item")
         page.get_by_label("Corner 1 x").fill("123")
 
-        save_log = RequestLog(page, "/config")
+        save_log = TrafficLog(page, "/config")
         page.get_by_role("button", name="Save template.yaml").click()
-        save_log.wait_for(lambda r: r.method == "PUT")
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
         page.wait_for_selector("text=saved")
 
         saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)
@@ -427,7 +469,7 @@ class TestUploadCreatesEachKind:
         config, so the picker takes over the workspace immediately -- taking
         the upload form and its status text with it. The picker appearing *is*
         the confirmation."""
-        log = RequestLog(page, "/api/templates")
+        log = TrafficLog(page, "/api/templates")
         page.wait_for_selector(".upload-form")
         name_field = page.get_by_label("Name")
         name_field.fill(name)
@@ -437,7 +479,7 @@ class TestUploadCreatesEachKind:
         assert name_field.input_value() == name
 
         page.locator(".upload-form input[type=file]").set_input_files([str(s) for s in sources])
-        log.wait_for(lambda r: r.method == "POST")
+        log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
         page.wait_for_selector(".kind-picker")
 
     def test_uploading_a_single_photo_creates_a_single_kind_template(  # noqa: ANN001
@@ -450,15 +492,15 @@ class TestUploadCreatesEachKind:
         assert _selected_template(page) == "lifestyle-01"
 
         page.get_by_role("radio", name="Single one photo, one garment").check()
-        kind_log = RequestLog(page, "/kind")
+        kind_log = TrafficLog(page, "/kind")
         page.get_by_role("button", name="Start calibrating →").click()
-        kind_log.wait_for(lambda r: r.method == "POST")
+        kind_log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
 
         page.wait_for_selector(PREVIEW_IMAGE)
         page.wait_for_selector(HANDLE)
-        save_log = RequestLog(page, "/config")
+        save_log = TrafficLog(page, "/config")
         page.get_by_role("button", name="Save template.yaml").click()
-        save_log.wait_for(lambda r: r.method == "PUT")
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
 
         saved = _template_config(workspace_root, "lifestyle-01")
         assert saved["kind"] == "single"
@@ -480,9 +522,9 @@ class TestUploadCreatesEachKind:
         listed = page.locator(".kind-picker__filename").all_inner_texts()
         assert sorted(listed) == ["black.png", "ivory.png"]
 
-        kind_log = RequestLog(page, "/kind")
+        kind_log = TrafficLog(page, "/kind")
         page.get_by_role("button", name="Start calibrating →").click()
-        kind_log.wait_for(lambda r: r.method == "POST")
+        kind_log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
 
         _wait_for_filmstrip(page, 2)
         assert sorted(page.locator(".filmstrip__item").all_inner_texts()) == ["black", "ivory"]

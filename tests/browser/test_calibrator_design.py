@@ -143,6 +143,19 @@ class TestOrganicComponents:
         page.wait_for_selector(PREVIEW_IMAGE)
         assert _computed(page, ".app__preview", "background-color") == _rgb(ORGANIC_SURFACE)
 
+    def test_the_selected_tab_is_the_one_that_looks_selected(self, page) -> None:  # noqa: ANN001
+        """`.seg-opt` and `.seg-opt--on` have the same specificity, so source
+        order decides -- and with the base rule last, the *active* tab rendered
+        as the grey one. Backwards, and invisible in a unit test."""
+        # The Calibrate/Preview tabs belong to the colour-matrix editor; the
+        # chart kind (which loads first) has no second view to switch to.
+        row = page.locator(".template-rail__item[data-template='flat-lay-01']")
+        row.wait_for()
+        row.click()
+        active = page.get_by_role("tab", name="Calibrate")
+        active.wait_for()
+        assert active.evaluate("el => getComputedStyle(el).backgroundColor") == _rgb(ORGANIC_ACCENT)
+
     def test_the_quad_overlay_is_drawn_in_the_accent(self, page) -> None:  # noqa: ANN001
         """The old overlay was hardcoded #3f7dff -- a blue that belongs to no
         token and fights the warm ground."""
@@ -168,6 +181,22 @@ def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:  # no
     page.wait_for_selector(PREVIEW_IMAGE)
     page.wait_for_timeout(400)  # let the first preview render land
     target = screenshot_dir / "phase1-colour-matrix.png"
+    page.screenshot(path=str(target), full_page=True)
+    assert target.stat().st_size > 0
+
+
+def test_capture_preview_all_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
+    """The Preview-all tab with every colour rendered -- the state you approve
+    from, and the only place the grid exists."""
+    row = page.locator(".template-rail__item[data-template='flat-lay-01']")
+    row.wait_for()
+    row.click()
+    page.wait_for_selector(PREVIEW_IMAGE)
+    page.get_by_role("tab", name="Preview all 4").click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('.preview-grid__tile img').length === 4"
+    )
+    target = screenshot_dir / "phase6-preview-all.png"
     page.screenshot(path=str(target), full_page=True)
     assert target.stat().st_size > 0
 

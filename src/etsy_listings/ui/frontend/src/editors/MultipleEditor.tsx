@@ -200,7 +200,7 @@ export function MultipleEditor({
               onDeleteSelected={deleteSelected}
               onDuplicateSelected={duplicateSelected}
               onBringSelectedToFront={bringToFront}
-              showOutlines={showOutlines}
+              outlines={showOutlines ? "all" : "selected"}
               selectedLabel={
                 selected
                   ? `box ${clampedIndex + 1} selected · ${boxExtent(selected.bounding_box)}`

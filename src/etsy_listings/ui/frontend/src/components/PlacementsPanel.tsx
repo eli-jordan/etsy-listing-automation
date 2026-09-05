@@ -36,7 +36,7 @@ function extent(box: BoundingBox): { width: number; height: number } {
 
 /** The same rule the server uses for `TemplateSummary.status_reason`, so the
  * panel and the rail can never disagree about whether this is finished. */
-export function uncolouredWarning(placements: Placement[]): string | null {
+function uncolouredWarning(placements: Placement[]): string | null {
   const count = placements.filter((p) => !p.colour.trim()).length;
   if (count === 0) return null;
   const [noun, verb] = count === 1 ? ["box", "has"] : ["boxes", "have"];
