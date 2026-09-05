@@ -64,10 +64,10 @@ branch = true
 
 [tool.coverage.report]
 # Branch coverage, not line coverage: a half-tested `if` is the shape most
-# regressions hide in. Currently ~85%, so the gate has real headroom -- if a
-# change drops it under 80, that is a change that shipped untested logic, not
+# regressions hide in. Currently ~93%, so the gate has real headroom -- if a
+# change drops it under 85, that is a change that shipped untested logic, not
 # a threshold to nudge downward.
-fail_under = 80
+fail_under = 85
 show_missing = true
 skip_covered = true
 exclude_also = [

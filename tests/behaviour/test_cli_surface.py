@@ -5,6 +5,7 @@ progress lines `apply` prints.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -17,10 +18,21 @@ from etsy_listings.engine.context import Event
 runner = CliRunner()
 
 
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+
+
 def _help(*args: str) -> str:
+    """The help text, with styling stripped.
+
+    rich turns colour on by itself when it detects CI, and its option
+    highlighter styles the leading dash as its own span -- so `--root` reaches
+    the buffer as `\x1b[1m-\x1b[0m\x1b[1m-root\x1b[0m` and a substring search
+    for the flag finds nothing. These assertions are about what the help
+    documents, not how it is painted.
+    """
     result = runner.invoke(app, [*args, "--help"])
     assert result.exit_code == 0, result.output
-    return result.output
+    return ANSI.sub("", result.output)
 
 
 def test_top_level_help_documents_every_environment_variable() -> None:
