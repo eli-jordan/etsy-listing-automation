@@ -19,6 +19,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Lets the main-only tier be run deliberately against a chosen ref --
+  # which is the only way to exercise it before it is merged. GitHub only
+  # offers a manual run for workflows that exist on the default branch.
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -109,7 +113,8 @@ jobs:
         run: npm run test:coverage
 
   integration:
-    # main only. Gated on the ref rather than merely on the event: `on.push`
+    # main, or a deliberate manual run. Gated on the ref rather than merely
+    # on the event: `on.push`
     # is filtered to main today, so `event_name == 'push'` would be equivalent
     # -- but only by a coupling to a filter twelve lines away, and adding a
     # release branch there would silently start spending the Printify token on
@@ -118,7 +123,7 @@ jobs:
     # `needs` keeps these from burning ten minutes on a commit whose lint is
     # already broken.
     name: browser + e2e
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     needs: [python, frontend]
     runs-on: ubuntu-latest
     steps:
@@ -147,20 +152,17 @@ jobs:
       - name: install chromium
         run: uv run playwright install --with-deps chromium
 
+      # Both layers skip themselves when a prerequisite is missing -- chromium,
+      # a built SPA, a Printify token -- and a layer that runs nothing still
+      # reports green. ETSY_LISTINGS_REQUIRE_EVERY_LAYER makes that a failure
+      # naming the prerequisite, so this tier cannot pass without doing its job.
       - name: pytest -m browser
-        run: uv run pytest -m browser
-
-      # The e2e layer skips itself cleanly when the token is absent, which would
-      # make this step green while testing nothing. Say so out loud instead.
-      - name: check for Printify credentials
         env:
-          PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
-        run: |
-          if [ -z "$PRINTIFY_API_TOKEN" ]; then
-            echo "::warning::PRINTIFY_API_TOKEN is not set; the e2e layer will skip every test."
-          fi
+          ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
+        run: uv run pytest -m browser
 
       - name: pytest -m e2e
         env:
+          ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
           PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
         run: uv run pytest -m e2e

@@ -27,26 +27,29 @@ def _free_port() -> int:
 
 
 @pytest.fixture(scope="session")
-def browser_type():  # noqa: ANN201 - playwright's type isn't worth importing at module scope
-    playwright = pytest.importorskip(
-        "playwright.sync_api", reason="playwright not installed; run `uv sync`"
-    )
+def browser_type(prerequisite_missing):  # noqa: ANN201 - playwright's type isn't worth importing at module scope
+    try:
+        from playwright import sync_api as playwright
+    except ImportError:
+        prerequisite_missing("playwright not installed; run `uv sync`")
     with playwright.sync_playwright() as p:
         try:
             browser = p.chromium.launch()
         except Exception as exc:  # pragma: no cover - environment-dependent
-            pytest.skip(f"no chromium available (`uv run playwright install chromium`): {exc}")
+            prerequisite_missing(
+                f"no chromium available (`uv run playwright install chromium`): {exc}"
+            )
         yield browser
         browser.close()
 
 
 @pytest.fixture
-def calibrator_server(workspace_root: Path) -> Iterator[str]:
+def calibrator_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]:
     """Runs the real app against a throwaway copy of the fixture workspace and
     yields its base URL. Any template.yaml the browser saves lands in that copy,
     so a test can assert on the file the UI actually wrote."""
     if not FRONTEND_DIST.is_dir():
-        pytest.skip(
+        prerequisite_missing(
             "ui/frontend/dist is absent -- run `npm run build` in "
             "src/etsy_listings/ui/frontend to exercise the browser tests"
         )

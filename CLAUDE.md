@@ -287,6 +287,12 @@ The E2E layer talks to the real Printify API. It is never part of a default run
 all — unless the machine has credentials: `PRINTIFY_API_TOKEN`, or
 `ETSY_LISTINGS_ROOT` pointing at a workspace whose `.env` carries it.
 
+That clean skip is right on a contributor's machine and wrong in CI, where a
+layer that runs nothing still reports green.
+`ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1` turns every such skip — this layer's
+missing token, the browser layer's missing chromium or unbuilt SPA — into a
+failure naming the prerequisite. CI sets it on the `main` tier.
+
 ```
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
 ```
@@ -360,6 +366,7 @@ split in two by what a layer needs from the outside world.
 |---|---|
 | Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's eslint/tsc/vitest gate |
 | Push to `main` | all of the above, then `pytest -m browser` and `pytest -m e2e` |
+| Manual (`workflow_dispatch`) | the same as a push to `main`, against whichever ref you pick |
 
 The PR tier is deliberately hermetic — unit, golden, behaviour and contract
 touch no network and no browser, so a PR cannot go red on somebody else's

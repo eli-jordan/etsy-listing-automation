@@ -42,10 +42,10 @@ def _token() -> str | None:
 
 
 @pytest.fixture(scope="session")
-def printify_token() -> str:
+def printify_token(prerequisite_missing) -> str:
     token = _token()
     if not token:
-        pytest.skip(
+        prerequisite_missing(
             f"no Printify credentials: set {PRINTIFY_TOKEN_VAR}, or point "
             f"{layout.ROOT_ENV_VAR} at a workspace whose .env has it"
         )
