@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -282,24 +283,35 @@ def test_no_native_fzf_and_no_cygwin_means_no_fzf(monkeypatch) -> None:
     assert prompts.fzf_command.__wrapped__() is None
 
 
+def _pretend_os_name(monkeypatch, name: str) -> None:
+    """Give `prompts` a stand-in `os`, rather than reaching into the real one.
+
+    `monkeypatch.setattr(prompts.os, "name", ...)` mutates the `os` module
+    itself, and pathlib picks `WindowsPath` over `PosixPath` off `os.name` --
+    so faking "nt" on a POSIX machine makes the next `Path(...)` raise
+    `NotImplementedError` instead of exercising the branch under test.
+    """
+    monkeypatch.setattr(prompts, "os", SimpleNamespace(name=name))
+
+
 def test_cygwins_shell_is_looked_for_beside_cygpath(monkeypatch, tmp_path: Path) -> None:
     """The same trick `workspace/userpath.py` uses: cygwin hands a Windows
     child a translated PATH, so its /usr/bin is reachable as a Windows
     directory even though `/usr/bin/sh` is not a name Windows can resolve."""
     (tmp_path / "sh.exe").write_text("", encoding="utf-8")
-    monkeypatch.setattr(prompts.os, "name", "nt")
+    _pretend_os_name(monkeypatch, "nt")
     monkeypatch.setattr(prompts.shutil, "which", lambda name: str(tmp_path / "cygpath.exe"))
     assert prompts._cygwin_sh() == str(tmp_path / "sh.exe")
 
 
 def test_no_cygpath_means_no_cygwin_shell(monkeypatch) -> None:
-    monkeypatch.setattr(prompts.os, "name", "nt")
+    _pretend_os_name(monkeypatch, "nt")
     monkeypatch.setattr(prompts.shutil, "which", lambda name: None)
     assert prompts._cygwin_sh() is None
 
 
 def test_a_cygwin_shell_is_only_looked_for_on_windows(monkeypatch) -> None:
-    monkeypatch.setattr(prompts.os, "name", "posix")
+    _pretend_os_name(monkeypatch, "posix")
     assert prompts._cygwin_sh() is None
 
 
