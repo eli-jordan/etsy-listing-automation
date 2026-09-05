@@ -109,11 +109,16 @@ jobs:
         run: npm run test:coverage
 
   integration:
-    # main only. These are the layers that need a browser or a credential, and
-    # `needs` keeps them from burning ten minutes on a commit whose lint is
+    # main only. Gated on the ref rather than merely on the event: `on.push`
+    # is filtered to main today, so `event_name == 'push'` would be equivalent
+    # -- but only by a coupling to a filter twelve lines away, and adding a
+    # release branch there would silently start spending the Printify token on
+    # it. A pull_request event runs at refs/pull/<n>/merge, so it cannot match.
+    #
+    # `needs` keeps these from burning ten minutes on a commit whose lint is
     # already broken.
     name: browser + e2e
-    if: github.event_name == 'push'
+    if: github.ref == 'refs/heads/main'
     needs: [python, frontend]
     runs-on: ubuntu-latest
     steps:
