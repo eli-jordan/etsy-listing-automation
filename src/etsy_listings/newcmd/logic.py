@@ -8,17 +8,21 @@ the terminal it was given.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
 
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.catalog.models import Blueprint, VariantSet
+from etsy_listings.catalog.models import Blueprint, ShippingRates, VariantSet
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.listing import GENERATE, MAX_MEDIA_ENTRIES, Listing
+from etsy_listings.config.money import Money
+from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.profile import PrintArea, Profile
 from etsy_listings.config.slug import ColourExceptions, slug_map, slugify
+from etsy_listings.newcmd.fx_rate import FxRate
 from etsy_listings.render.config import load_template_config
 from etsy_listings.workspace.workspace import Workspace
 
@@ -220,26 +224,205 @@ def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list
     return [{"template": template}]
 
 
+# ----------------------------------------------------------------------
+# Pricing plans (PRD 33-36): the picker's rows, the "create new plan" cost
+# calculation, and writing the resulting file. Pure logic only -- terminal
+# sequencing lives in newcmd/interactive.py, the same split as everything
+# else in this module.
+# ----------------------------------------------------------------------
+
+CREATE_NEW_PLAN_LABEL = "+ create a new pricing plan"
+
+PORTAL_VERIFICATION_NOTE = (
+    "Verify current costs on Printify's own portal: open this blueprint in "
+    "the product catalog, choose the print provider manually, and check the "
+    '"Product variants" tab\'s Price column.'
+)
+
+
+@dataclass(frozen=True)
+class PricingPlanChoice:
+    """One row of the pricing-plan picker."""
+
+    path: Path
+    is_compatible: bool
+    label: str
+
+
+def load_candidate_pricing_plans(workspace: Workspace) -> list[tuple[Path, PricingPlan]]:
+    """Every discovered plan that actually loads. A plan that won't parse or
+    fails currency validation is skipped, not fatal -- same precedent as
+    :func:`local_blueprint_titles` skipping a broken profile."""
+    result: list[tuple[Path, PricingPlan]] = []
+    for path in workspace.pricing_plan_files():
+        try:
+            result.append((path, workspace.load_pricing_plan(path)))
+        except (ConfigLoadError, ValidationError):
+            continue
+    return result
+
+
+def build_pricing_plan_choices(
+    plans: list[tuple[Path, PricingPlan]],
+    profile_slug: str,
+    *,
+    marker: str = LOCAL_MARKER,
+) -> list[PricingPlanChoice]:
+    """Rows for the picker: plans declaring this exact garment profile sort
+    first and carry the marker -- an *exact* ``plan.profile == profile_slug``
+    match, since a plan declares its garment directly (PRD 33), unlike the
+    blueprint picker's marker, which infers "already used here"."""
+    entries = [(path, plan.profile == profile_slug) for path, plan in plans]
+    entries.sort(key=lambda entry: (not entry[1], entry[0].stem.lower()))
+    return [
+        PricingPlanChoice(
+            path=path,
+            is_compatible=is_compatible,
+            label=f"{(marker if is_compatible else ' ' * MARKER_WIDTH)}  {path.stem}",
+        )
+        for path, is_compatible in entries
+    ]
+
+
+def pricing_plan_ref(plan_path: Path, *, listing_dir: Path) -> str:
+    """The write-side counterpart to :meth:`Workspace.resolve` -- a
+    ``listing_dir``-relative POSIX ref, e.g.
+    ``'../../pricing-plans/tee-basic.yaml'``. Needed because (unlike
+    ``design``/``profile``, which have one fixed depth) discovery under
+    ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the way
+    ``../../designs/{name}.png`` is."""
+    return plan_path.resolve().relative_to(listing_dir.resolve(), walk_up=True).as_posix()
+
+
+def compute_starting_prices(
+    *,
+    sizes: list[str],
+    variant_set: VariantSet,
+    variant_costs: dict[int, int],
+    shipping: ShippingRates,
+    fx_rate: FxRate | None,
+    target_currency: str,
+    margin_multiplier: Decimal = Decimal("1.10"),
+) -> tuple[dict[str, Money], list[str]]:
+    """size -> starting ``Money``, plus human-readable note lines for the
+    generated file's comment block. Never raises -- every failure mode
+    (missing cost, missing shipping, no fx rate) degrades to a 0-price entry
+    and a note explaining why (PRD 35/36).
+
+    Manufacturing + shipping cost is per (colour, size) variant, but a plan
+    has no colour axis: usually every colour offering a size costs the same,
+    so that shared figure is used; where colours disagree, the max is used
+    and the disagreement is called out in the notes, so the generated file
+    is honest about the simplification.
+    """
+    prices: dict[str, Money] = {}
+    notes: list[str] = [PORTAL_VERIFICATION_NOTE, ""]
+    for size in sizes:
+        totals_cents: dict[str, int] = {}
+        missing_colours: list[str] = []
+        for variant in variant_set.variants:
+            if variant.options.size != size:
+                continue
+            mfg = variant_costs.get(variant.id)
+            ship = shipping.first_item_cost_cents(variant.id)
+            if mfg is None or ship is None:
+                missing_colours.append(variant.options.color)
+                continue
+            totals_cents[variant.options.color] = mfg + ship
+
+        if missing_colours:
+            notes.append(
+                f"{size}: no cost/shipping data for colour(s) "
+                f"{', '.join(sorted(missing_colours))} -- excluded from the calculation"
+            )
+        if not totals_cents:
+            prices[size] = Money(Decimal(0), target_currency)
+            notes.append(f"{size}: no cost data available at all -- priced at 0, fill in manually")
+            continue
+
+        distinct = set(totals_cents.values())
+        chosen_cents = max(distinct)
+        if len(distinct) > 1:
+            breakdown = ", ".join(
+                f"{colour}=${cents / 100:.2f}" for colour, cents in sorted(totals_cents.items())
+            )
+            notes.append(f"{size}: cost varies by colour ({breakdown}); using the max")
+
+        usd_amount = (Decimal(chosen_cents) / Decimal(100)) * margin_multiplier
+        if fx_rate is None:
+            prices[size] = Money(Decimal(0), target_currency)
+            notes.append(
+                f"{size}: cost+shipping+margin is ${usd_amount:.2f} USD, but no FX rate could "
+                f"be fetched -- priced at 0, fill in manually using "
+                f"today's USD->{target_currency} rate"
+            )
+            continue
+
+        converted = (usd_amount * fx_rate.rate).quantize(Decimal("0.01"))
+        prices[size] = Money(converted, target_currency)
+        notes.append(
+            f"{size}: (${chosen_cents / 100:.2f} cost+shipping) x {margin_multiplier} margin "
+            f"x {fx_rate.rate} {target_currency}/USD ({fx_rate.source}, "
+            f"{fx_rate.fetched_at.isoformat()}) = {converted} {target_currency}"
+        )
+    return prices, notes
+
+
+def write_pricing_plan(
+    workspace: Workspace,
+    name: str,
+    profile_slug: str,
+    prices: dict[str, Money],
+    notes: list[str],
+) -> Path:
+    """Writes ``pricing-plans/{slugify(name)}.yaml``, refusing to overwrite
+    (mirrors :func:`write_listing`). ``price_overrides`` is written empty --
+    the wizard never guesses a per-colour markup, only the flat table."""
+    path = workspace.pricing_plans_dir() / f"{slugify(name)}.yaml"
+    if path.is_file():
+        raise FileExistsError(f"a pricing plan already exists at {path}")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    header = "\n".join(
+        [
+            "# Generated by `new` -- a starting point, not a final price. Formula",
+            "# per size: (manufacturing cost + shipping cost) x 1.10 margin,",
+            "# converted from USD at a one-off live FX rate. Adjust these numbers.",
+            "#",
+            *(f"# {line}" if line else "#" for line in notes),
+        ]
+    )
+    body = yaml.safe_dump(
+        {
+            "profile": profile_slug,
+            "prices": {size: str(price) for size, price in prices.items()},
+            "price_overrides": {},
+        },
+        sort_keys=False,
+    )
+    path.write_text(f"{header}\n{body}", encoding="utf-8")
+    return path
+
+
 def build_listing_stub(
     *,
     profile_slug: str,
     design_ref: str,
     colours: list[str],
-    sizes: list[str],
-    base_price: str,
+    pricing_plan_ref: str,
     brief: str,
     media: list[dict[str, str]],
 ) -> dict[str, Any]:
-    """A starting ``listing.yaml`` document: one price per size (all equal --
-    per-size and per-colour adjustment is a manual edit, PRD step 2), the
-    media entries :func:`build_media_entries` decided, and ``<generate>``
-    sentinels for the fields AI copy generation owns."""
+    """A starting ``listing.yaml`` document: prices come from the referenced
+    pricing plan (per-size/per-colour adjustment is a manual edit, PRD step
+    2), the media entries :func:`build_media_entries` decided, and
+    ``<generate>`` sentinels for the fields AI copy generation owns."""
     return {
         "profile": profile_slug,
         "design": design_ref,
         "colors": colours,
         "brief": brief,
-        "prices": dict.fromkeys(sizes, base_price),
+        "pricing_plan": pricing_plan_ref,
+        "prices": {},
         "etsy": {"title": GENERATE, "description": GENERATE, "tags": GENERATE, "materials": []},
         "media": media,
     }

@@ -8,6 +8,7 @@ from pydantic import ValidationError
 
 from etsy_listings.config.listing import Listing, TemplateMediaEntry
 from etsy_listings.config.money import Money
+from etsy_listings.config.pricing_plan import PricingPlan
 
 BASE: dict[str, object] = {
     "profile": "comfort-colors-1717",
@@ -135,3 +136,83 @@ def test_load_wraps_validation_error_with_path(tmp_path: Path) -> None:
     with pytest.raises(ConfigLoadError) as exc_info:
         Listing.load(bad_path, currency="NOK")
     assert str(bad_path) in str(exc_info.value)
+
+
+# --- pricing plans: prices becomes optional, resolved_price gains a fallback tier ---
+
+
+def test_pricing_plan_defaults_to_none() -> None:
+    listing = Listing.model_validate(BASE, context={"currency": "NOK"})
+    assert listing.pricing_plan is None
+
+
+def test_rejects_a_listing_with_neither_pricing_plan_nor_prices() -> None:
+    data = {**BASE}
+    del data["prices"]
+    with pytest.raises(ValidationError, match="pricing_plan"):
+        Listing.model_validate(data, context={"currency": "NOK"})
+
+
+def test_a_pricing_plan_reference_alone_satisfies_the_at_least_one_check() -> None:
+    data = {**BASE}
+    del data["prices"]
+    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    assert listing.prices == {}
+
+
+def test_resolved_price_prefers_listing_price_overrides_over_everything() -> None:
+    data = {
+        **BASE,
+        "colors": ["black"],
+        "prices": {"S": "349 NOK"},
+        "price_overrides": {"black": {"S": "300 NOK"}},
+    }
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    plan = PricingPlan(profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
+    assert listing.resolved_price("black", "S", pricing_plan=plan) == Money.parse("300 NOK")
+
+
+def test_resolved_price_prefers_listing_prices_over_the_plan() -> None:
+    data = {**BASE, "prices": {"S": "349 NOK"}}
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    plan = PricingPlan(profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
+    assert listing.resolved_price("black", "S", pricing_plan=plan) == Money.parse("349 NOK")
+
+
+def test_resolved_price_falls_back_to_the_plan_when_listing_has_no_price() -> None:
+    data = {**BASE}
+    del data["prices"]
+    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    plan = PricingPlan(profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
+    assert listing.resolved_price("black", "S", pricing_plan=plan) == Money.parse("100 NOK")
+
+
+def test_resolved_price_uses_the_plans_own_colour_override() -> None:
+    data = {**BASE}
+    del data["prices"]
+    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    plan = PricingPlan(
+        profile="comfort-colors-1717",
+        prices={"S": Money.parse("100 NOK")},
+        price_overrides={"black": {"S": "120 NOK"}},
+    )
+    assert listing.resolved_price("black", "S", pricing_plan=plan) == Money.parse("120 NOK")
+
+
+def test_resolved_price_raises_when_nothing_covers_the_size() -> None:
+    data = {**BASE}
+    del data["prices"]
+    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    plan = PricingPlan(profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
+    with pytest.raises(KeyError):
+        listing.resolved_price("black", "XXXL", pricing_plan=plan)
+
+
+def test_resolved_price_raises_without_a_plan_when_the_size_is_missing() -> None:
+    listing = Listing.model_validate(BASE, context={"currency": "NOK"})
+    with pytest.raises(KeyError):
+        listing.resolved_price("black", "XXXL")

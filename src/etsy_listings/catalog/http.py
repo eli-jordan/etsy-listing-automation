@@ -21,6 +21,9 @@ from etsy_listings.catalog.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
+    ShippingCost,
+    ShippingProfile,
+    ShippingRates,
     Variant,
     VariantOptions,
     VariantSet,
@@ -94,3 +97,18 @@ class HttpCatalogClient(CatalogClient):
             for item in payload["variants"]
         )
         return VariantSet(variants=variants)
+
+    def shipping(self, blueprint_id: int, provider_id: int) -> ShippingRates:
+        response = self._get(
+            f"/blueprints/{blueprint_id}/print_providers/{provider_id}/shipping.json"
+        )
+        payload = response.json()
+        profiles = tuple(
+            ShippingProfile(
+                variant_ids=tuple(item["variant_ids"]),
+                first_item=ShippingCost.model_validate(item["first_item"]),
+                additional_items=ShippingCost.model_validate(item["additional_items"]),
+            )
+            for item in payload.get("profiles", [])
+        )
+        return ShippingRates(profiles=profiles)

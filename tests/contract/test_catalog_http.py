@@ -184,6 +184,41 @@ def test_token_is_resolved_lazily_so_a_cache_hit_never_needs_one() -> None:
     assert calls == [1]
 
 
+SHIPPING_PAYLOAD = {
+    "handling_time": {"value": 10, "unit": "day"},
+    "profiles": [
+        {
+            "variant_ids": [1, 2],
+            "first_item": {"currency": "USD", "cost": 500},
+            "additional_items": {"currency": "USD", "cost": 200},
+            "countries": ["US"],
+        }
+    ],
+}
+
+
+def test_shipping_request_carries_the_bearer_token() -> None:
+    seen: list[tuple[str, str | None]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append((request.url.path, request.headers.get("authorization")))
+        return httpx.Response(200, json=SHIPPING_PAYLOAD)
+
+    _client(handler).shipping(6, 29)
+    assert seen[0][0].endswith("/blueprints/6/print_providers/29/shipping.json")
+    assert seen[0][1] == "Bearer test-token"
+
+
+def test_shipping_decodes_profiles_and_ignores_unknown_fields() -> None:
+    """`handling_time`/`countries` are in the real payload and mean nothing
+    here -- a third-party payload grows fields, decoding must not break."""
+    rates = _client(lambda request: httpx.Response(200, json=SHIPPING_PAYLOAD)).shipping(6, 29)
+
+    assert rates.first_item_cost_cents(1) == 500
+    assert rates.first_item_cost_cents(2) == 500
+    assert rates.first_item_cost_cents(999) is None
+
+
 def test_secrets_read_the_workspace_env_file(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
     env_file = tmp_path / ".env"

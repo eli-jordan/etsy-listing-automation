@@ -16,7 +16,8 @@ from pydantic import (
 )
 
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.money import Money, require_currency
+from etsy_listings.config.money import Money, PriceField, require_currency
+from etsy_listings.config.pricing_plan import PricingPlan
 
 GENERATE: Final = "<generate>"
 
@@ -24,13 +25,6 @@ MAX_MEDIA_ENTRIES = 10
 MAX_TAGS = 13
 MAX_TAG_LENGTH = 20
 MAX_TITLE_LENGTH = 140
-
-
-def _coerce_money(raw: Any) -> Money:  # noqa: ANN401 - pydantic validator boundary
-    return Money.parse(raw)
-
-
-PriceField = Annotated[Money, BeforeValidator(_coerce_money)]
 
 
 def _coerce_design(raw: Any) -> dict[str, str]:  # noqa: ANN401 - pydantic validator boundary
@@ -105,7 +99,15 @@ class Listing(BaseModel):
     design: DesignField
     colors: list[str]
     brief: str
-    prices: dict[str, PriceField]
+    prices: dict[str, PriceField] = {}
+    """Per-size overrides on top of ``pricing_plan`` -- optional and partial.
+    A listing with no ``pricing_plan`` must cover every size it needs here,
+    exactly as before this field became optional."""
+    pricing_plan: str | None = None
+    """Workspace-relative path to a ``pricing-plans/*.yaml`` file, resolved
+    the same way ``design`` is (not a bare name against a fixed directory,
+    unlike ``profile``/``media[].template``) -- see PRD 34. Resolution and
+    loading are the caller's job; ``Listing`` never touches ``Workspace``."""
     price_overrides: dict[str, dict[str, PriceField]] = {}
     artwork: dict[str, str] = {}
     """Explicit per-design artwork override, colour -> artwork key. Wins over
@@ -124,6 +126,9 @@ class Listing(BaseModel):
             for color, overrides in self.price_overrides.items():
                 for size, price in overrides.items():
                     require_currency(price, expected_currency, f"price_overrides.{color}.{size}")
+
+        if self.pricing_plan is None and not self.prices:
+            raise ValueError("listing has no pricing_plan and no prices -- set at least one")
 
         if len(self.media) > MAX_MEDIA_ENTRIES:
             raise ValueError(
@@ -162,11 +167,25 @@ class Listing(BaseModel):
         except ValidationError as exc:
             raise format_validation_error(path, exc) from exc
 
-    def resolved_price(self, color: str, size: str) -> Money:
+    def resolved_price(
+        self, color: str, size: str, *, pricing_plan: PricingPlan | None = None
+    ) -> Money:
+        """``price_overrides`` > ``prices`` > the referenced pricing plan's own
+        (override-then-flat) resolution. ``pricing_plan`` is an already-loaded
+        object, not the ``str`` ref -- loading it is the caller's job, the same
+        point ``design`` refs get resolved (see the ``pricing_plan`` field's
+        docstring)."""
         override = self.price_overrides.get(color, {}).get(size)
         if override is not None:
             return override
-        try:
-            return self.prices[size]
-        except KeyError as exc:
-            raise KeyError(f"no price for size {size!r} (colour {color!r})") from exc
+        direct = self.prices.get(size)
+        if direct is not None:
+            return direct
+        if pricing_plan is not None:
+            plan_price = pricing_plan.resolved_price(color, size)
+            if plan_price is not None:
+                return plan_price
+        raise KeyError(
+            f"no price for size {size!r} (colour {color!r}): not in price_overrides, "
+            f"prices, or the referenced pricing plan"
+        )

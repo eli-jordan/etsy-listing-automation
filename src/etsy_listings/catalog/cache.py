@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from etsy_listings.catalog.client import CatalogClient
-from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.catalog.models import Blueprint, PrintProvider, ShippingRates, VariantSet
 
 DEFAULT_TTL = timedelta(days=1)
 
@@ -88,3 +88,12 @@ class CachedCatalogClient(CatalogClient):
         variant_set = self._inner.variants(blueprint_id, provider_id)
         self._write(name, variant_set.model_dump())
         return variant_set
+
+    def shipping(self, blueprint_id: int, provider_id: int) -> ShippingRates:
+        name = f"shipping-{blueprint_id}-{provider_id}.json"
+        cached = self._read(name)
+        if cached is not None:
+            return ShippingRates.model_validate(cached)
+        rates = self._inner.shipping(blueprint_id, provider_id)
+        self._write(name, rates.model_dump())
+        return rates

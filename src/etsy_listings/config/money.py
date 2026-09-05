@@ -11,9 +11,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
-from typing import Any
+from typing import Annotated, Any
 
-from pydantic import GetCoreSchemaHandler
+from pydantic import BeforeValidator, GetCoreSchemaHandler
 from pydantic_core import core_schema
 
 _MONEY_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s+([A-Z]{3})\s*$")
@@ -86,3 +86,13 @@ def require_currency(money: Money, expected: str, field: str) -> None:
             f"currency is {expected} (set in shop.yaml); every price must be "
             f"written in {expected}"
         )
+
+
+def _coerce_money(raw: Any) -> Money:  # noqa: ANN401 - pydantic validator boundary
+    return Money.parse(raw)
+
+
+PriceField = Annotated[Money, BeforeValidator(_coerce_money)]
+"""A ``Money`` field as it appears on a config model -- shared by ``Listing``
+and ``PricingPlan`` so a size's price means the same thing, and validates the
+same way, in both places."""

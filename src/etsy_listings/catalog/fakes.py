@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from etsy_listings.catalog.client import CatalogClient
-from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.catalog.models import Blueprint, PrintProvider, ShippingRates, VariantSet
 
 
 class FakeCatalogClient(CatalogClient):
@@ -12,10 +12,12 @@ class FakeCatalogClient(CatalogClient):
         blueprints: list[Blueprint],
         providers_by_blueprint: dict[int, list[PrintProvider]],
         variants_by_key: dict[tuple[int, int], VariantSet],
+        shipping_by_key: dict[tuple[int, int], ShippingRates] | None = None,
     ) -> None:
         self._blueprints = blueprints
         self._providers_by_blueprint = providers_by_blueprint
         self._variants_by_key = variants_by_key
+        self._shipping_by_key = shipping_by_key or {}
 
     def blueprints(self) -> list[Blueprint]:
         return list(self._blueprints)
@@ -30,3 +32,11 @@ class FakeCatalogClient(CatalogClient):
                 f"no fixture variants for blueprint={blueprint_id} provider={provider_id}"
             )
         return self._variants_by_key[key]
+
+    def shipping(self, blueprint_id: int, provider_id: int) -> ShippingRates:
+        key = (blueprint_id, provider_id)
+        if key not in self._shipping_by_key:
+            raise KeyError(
+                f"no fixture shipping for blueprint={blueprint_id} provider={provider_id}"
+            )
+        return self._shipping_by_key[key]

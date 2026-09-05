@@ -8,6 +8,7 @@ drive the terminal it was given (questionary cannot, under cygwin).
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Literal, cast
 
 import typer
@@ -17,22 +18,30 @@ from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
 from etsy_listings.cli import glyphs
 from etsy_listings.config.listing import MAX_MEDIA_ENTRIES
 from etsy_listings.config.slug import SlugCollisionError
-from etsy_listings.newcmd import prompts
+from etsy_listings.newcmd import fx_rate, prompts, unofficial_variant_costs
 from etsy_listings.newcmd.logic import (
+    CREATE_NEW_PLAN_LABEL,
     LOCAL_MARKER,
     LOCAL_MARKER_FALLBACK,
     build_blueprint_choices,
     build_listing_stub,
     build_media_entries,
+    build_pricing_plan_choices,
     build_profile,
+    compute_starting_prices,
     filter_blueprints_by_category,
+    load_candidate_pricing_plans,
     load_template_kind,
     local_blueprint_titles,
     profile_slug_for,
     resolve_colour_slugs,
     validate_listing_stub,
     write_listing,
+    write_pricing_plan,
     write_profile_if_absent,
+)
+from etsy_listings.newcmd.logic import (
+    pricing_plan_ref as make_pricing_plan_ref,
 )
 from etsy_listings.workspace.workspace import Workspace
 
@@ -162,6 +171,57 @@ def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
     typer.echo(f"note: {path} does not exist yet.{hint}")
 
 
+def _pick_or_create_pricing_plan(
+    workspace: Workspace,
+    catalog: CatalogClient,
+    profile_slug: str,
+    blueprint: Blueprint,
+    provider: PrintProvider,
+    variant_set: VariantSet,
+    sizes: list[str],
+) -> Path:
+    """Returns the chosen/generated plan's absolute path -- turning that into
+    a listing-relative ref is the caller's job (`run_new` has `design_name`,
+    this function doesn't need it)."""
+    candidates = load_candidate_pricing_plans(workspace)
+    choices = build_pricing_plan_choices(candidates, profile_slug)
+    rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]
+    by_label = {c.label: c for c in choices}
+
+    marker = glyphs.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
+    answer = prompts.choose(
+        "Pricing plan", rows, marker_hint=f"{marker.strip()} = sizes match this garment exactly"
+    )
+    if answer is None:
+        raise _cancelled()
+
+    if answer == CREATE_NEW_PLAN_LABEL:
+        name = prompts.text("Pricing plan name:")
+        if not name:
+            raise _cancelled()
+        costs = unofficial_variant_costs.fetch_variant_costs(blueprint.id, provider.id)
+        shipping = catalog.shipping(blueprint.id, provider.id)
+        rate = fx_rate.fetch_usd_to(workspace.defaults.currency)
+        prices, notes = compute_starting_prices(
+            sizes=sizes,
+            variant_set=variant_set,
+            variant_costs=costs,
+            shipping=shipping,
+            fx_rate=rate,
+            target_currency=workspace.defaults.currency,
+        )
+        path = write_pricing_plan(workspace, name, profile_slug, prices, notes)
+        typer.echo(f"wrote {path}")
+        if not costs or rate is None:
+            typer.echo(
+                "  note: some prices could not be computed from live Printify/FX data "
+                "-- see the comment at the top of the file for what fell back to 0."
+            )
+        return path
+
+    return by_label[answer].path
+
+
 def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, category: str) -> None:
     _warn_if_design_missing(workspace, design_name)
     blueprints = filter_blueprints_by_category(catalog.blueprints(), category)
@@ -214,12 +274,10 @@ def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, cate
     written = write_profile_if_absent(workspace, slug, profile)
     typer.echo(f"{'wrote' if written else 'reusing existing'} profiles/{slug}.yaml")
 
-    base_price = prompts.text(
-        f"Starting price per size, {workspace.defaults.currency} (edit per-size later):",
-        default="0",
+    plan_path = _pick_or_create_pricing_plan(
+        workspace, catalog, slug, blueprint, provider, variant_set, profile.sizes
     )
-    if base_price is None:
-        raise _cancelled()
+    plan_ref = make_pricing_plan_ref(plan_path, listing_dir=workspace.listing_dir(design_name))
 
     colours = sorted(colour_slugs.values())
     media = build_media_entries(template=mockup_template, kind=template_kind, colours=colours)
@@ -228,8 +286,7 @@ def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, cate
         profile_slug=slug,
         design_ref=f"../../designs/{design_name}.png",
         colours=colours,
-        sizes=profile.sizes,
-        base_price=f"{base_price} {workspace.defaults.currency}",
+        pricing_plan_ref=plan_ref,
         brief="",
         media=media,
     )

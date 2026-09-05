@@ -110,3 +110,33 @@ class VariantSet(BaseModel):
         """
         sizes = self.placeholder_sizes(position)
         return sizes[0] if sizes else None
+
+
+class ShippingCost(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    currency: str
+    cost: int
+    """Cents, as Printify sends it -- not a ``Money`` (that type wants a
+    workspace-currency-checked amount; this is a raw USD catalog figure a
+    caller converts, it doesn't validate against ``shop.yaml`` itself)."""
+
+
+class ShippingProfile(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    variant_ids: tuple[int, ...]
+    first_item: ShippingCost
+    additional_items: ShippingCost
+
+
+class ShippingRates(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    profiles: tuple[ShippingProfile, ...]
+
+    def first_item_cost_cents(self, variant_id: int) -> int | None:
+        for profile in self.profiles:
+            if variant_id in profile.variant_ids:
+                return profile.first_item.cost
+        return None
