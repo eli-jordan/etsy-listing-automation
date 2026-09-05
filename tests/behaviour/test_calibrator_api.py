@@ -574,6 +574,123 @@ def test_an_unusable_name_is_a_400_from_every_endpoint(
     assert "shop.yaml" not in response.text
 
 
+class TestFilenamesBecomeColourSlugs:
+    """PRD 7a: a colour-matrix photo's filename *is* the slugified colour.
+
+    The calibrator used to only say so. `Heather Grey.png` was reported as a
+    colour literally called "Heather Grey", previewed happily under that name,
+    and left the template green and "calibrated" -- while `new` writes the
+    *slug* into a listing's media, so the render stage then looked for
+    `heather-grey.png` and failed on a template the UI had just declared
+    finished. The kind picker even labelled the row "(renamed)" while renaming
+    nothing.
+    """
+
+    @staticmethod
+    def _messy_set(workspace_root: Path, *filenames: str) -> Path:
+        from PIL import Image
+
+        directory = workspace_root / "mockup-templates" / "messy"
+        directory.mkdir()
+        for filename in filenames:
+            Image.new("RGB", (120, 90), (90, 90, 90)).save(directory / filename)
+        return directory
+
+    def test_assigning_colour_matrix_renames_photos_to_their_slugs(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        directory = self._messy_set(workspace_root, "Heather Grey.png", "forest.png")
+
+        assert (
+            client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"}).status_code
+            == 200
+        )
+        assert sorted(p.name for p in directory.glob("*.png")) == [
+            "forest.png",
+            "heather-grey.png",
+        ]
+
+    def test_the_renamed_colour_is_the_one_the_api_reports_and_can_preview(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """The whole point: what the rail lists is what `/preview` accepts and
+        what a listing may reference. Previously these three disagreed."""
+        self._messy_set(workspace_root, "Heather Grey.png")
+        client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"})
+
+        listed = {t["name"]: t for t in client.get("/api/templates").json()}["messy"]
+        assert listed["colours"] == ["heather-grey"]
+
+        config = client.get("/api/templates/messy/config").json()
+        rendered = client.post(
+            "/api/templates/messy/preview", json={**config, "colour": "heather-grey"}
+        )
+        assert rendered.status_code == 200
+        assert rendered.headers["content-type"] == "image/png"
+
+    def test_a_case_only_rename_still_happens(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """Windows filesystems are case-insensitive, so renaming straight onto
+        a path differing only in case is a no-op there and a rename
+        everywhere else. Going via a staging name makes both agree."""
+        directory = self._messy_set(workspace_root, "Forest.png")
+
+        assert (
+            client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"}).status_code
+            == 200
+        )
+        assert [p.name for p in directory.glob("*.png")] == ["forest.png"]
+
+    def test_the_report_previews_the_rename_before_it_happens(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        directory = self._messy_set(workspace_root, "Heather Grey.png", "forest.png")
+
+        rows = {r["filename"]: r for r in client.get("/api/templates/messy/colour-report").json()}
+        assert rows["Heather Grey.png"] == {
+            "filename": "Heather Grey.png",
+            "colour": "heather-grey",
+            "clean": False,
+        }
+        assert rows["forest.png"]["clean"] is True
+        # Reporting only -- nothing on disk moved until the kind was assigned.
+        assert (directory / "Heather Grey.png").is_file()
+
+    def test_two_photos_colliding_on_one_slug_are_refused(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """Renaming both would silently destroy one. `slug_map` already knows
+        how to say this; the endpoint just has to not swallow it."""
+        self._messy_set(workspace_root, "Heather Grey.png", "Heather-Grey.png")
+
+        response = client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"})
+        assert response.status_code == 400
+        assert "heather-grey" in response.json()["detail"]
+
+    def test_exceptions_yaml_decides_the_slug(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """PRD 7a's escape hatch: a sparse exceptions.yaml overrides names
+        that don't slugify usefully. The calibrator has to honour it, or it
+        renames a file to a slug no listing will ever reference -- a bare
+        `slugify` here would give `heather-grey`, and the workspace has said
+        it means something else."""
+        (workspace_root / "exceptions.yaml").write_text(
+            "Heather Grey: hthr-gry\n", encoding="utf-8"
+        )
+        directory = self._messy_set(workspace_root, "Heather Grey.png")
+
+        rows = client.get("/api/templates/messy/colour-report").json()
+        assert rows[0]["colour"] == "hthr-gry"
+
+        assert (
+            client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"}).status_code
+            == 200
+        )
+        assert [p.name for p in directory.glob("*.png")] == ["hthr-gry.png"]
+
+
 def test_health_endpoint(client: TestClient) -> None:
     response = client.get("/api/health")
     assert response.status_code == 200

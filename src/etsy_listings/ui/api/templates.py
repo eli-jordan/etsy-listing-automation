@@ -22,7 +22,7 @@ from fastapi.responses import Response
 from PIL import Image
 
 from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.slug import slugify
+from etsy_listings.config.slug import SlugCollisionError, slug_map
 from etsy_listings.render.config import (
     AnyTemplate,
     BoundingBox,
@@ -176,11 +176,23 @@ async def upload_template(
         return UploadResponse(name=name, kind=None, colours=[])
 
     if kind == "colour-matrix":
-        colours: list[str] = []
+        # Stored under the slug, not the uploaded stem, for the same reason
+        # `assign_kind` renames: PRD 7a makes the filename the slugified
+        # colour, and a set stored under "Heather Grey.png" is one no listing
+        # can ever reference.
+        stems: list[str] = []
         for upload in files:
             if not upload.filename:
                 raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
-            colour = Path(upload.filename).stem
+            stems.append(Path(upload.filename).stem)
+        try:
+            slugs = slug_map(stems, workspace.load_exceptions())
+        except SlugCollisionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        colours: list[str] = []
+        for upload, stem in zip(files, stems, strict=True):
+            colour = slugs[stem]
             destination = workspace.template_base_image(name, colour)
             destination.write_bytes(await upload.read())
             colours.append(colour)
@@ -217,26 +229,69 @@ def _template_photos(template_dir: Path) -> list[Path]:
     return sorted(p for p in template_dir.glob("*.png") if p.stem != "scene")
 
 
+def _colour_slugs(workspace: Workspace, photos: list[Path]) -> dict[Path, str]:
+    """Each photo mapped to the colour slug its filename means.
+
+    Goes through ``slug_map`` with the workspace's ``exceptions.yaml``, not a
+    bare ``slugify``, so the calibrator computes the *same* slug the rest of
+    the tool does -- including the names PRD 7a says will not slugify cleanly
+    and are overridden by hand. Two photos landing on one slug is refused
+    here rather than silently losing one of them at rename time.
+    """
+    try:
+        slugs = slug_map([photo.stem for photo in photos], workspace.load_exceptions())
+    except SlugCollisionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {photo: slugs[photo.stem] for photo in photos}
+
+
 @router.get("/{name}/colour-report", response_model=list[ColourReportRow])
 def colour_report(request: Request, name: str) -> list[ColourReportRow]:
-    """What each photo would be taken as if this became a colour-matrix set.
+    """What each photo will be taken as if this becomes a colour-matrix set.
 
-    Shown in the kind picker before committing, so a badly named file is
-    caught while it is still cheap to rename. Reporting only -- PRD 7a makes
-    the filename the source of truth and there is deliberately no mapping
-    table to edit here.
+    Shown in the kind picker before committing, so a badly named file is seen
+    while it is still cheap to think about. A row with ``clean: false`` is one
+    ``assign_kind`` will rename on disk (PRD 7a: the filename *is* the
+    slugified colour, and a directory whose filenames disagree with the
+    colours they mean is the state that rule exists to prevent).
     """
     workspace = _workspace(request)
     template_dir = workspace.template_dir(name)
     if not template_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
 
+    photos = _template_photos(template_dir)
+    slugs = _colour_slugs(workspace, photos)
     return [
-        ColourReportRow(
-            filename=photo.name, colour=slugify(photo.stem), clean=slugify(photo.stem) == photo.stem
-        )
-        for photo in _template_photos(template_dir)
+        ColourReportRow(filename=photo.name, colour=slugs[photo], clean=slugs[photo] == photo.stem)
+        for photo in photos
     ]
+
+
+def _rename_photos_to_slugs(workspace: Workspace, photos: list[Path]) -> list[Path]:
+    """Rename each photo to ``{slug}.png``, returning the new paths, sorted.
+
+    Case-only renames (``Forest.png`` -> ``forest.png``) go via a temporary
+    name: Windows filesystems are case-insensitive, so ``replace()`` straight
+    onto a path differing only in case is a no-op there and a rename
+    everywhere else -- which would make the calibrator behave differently on
+    the two platforms this tool runs on.
+    """
+    slugs = _colour_slugs(workspace, photos)
+    renamed: list[Path] = []
+    for photo in photos:
+        target = photo.with_name(f"{slugs[photo]}.png")
+        # Compared by *name*, not by Path: `WindowsPath("Forest.png") ==
+        # WindowsPath("forest.png")` is True, so a Path comparison here skips
+        # precisely the case-only rename the staging step below exists for.
+        if photo.name == target.name:
+            renamed.append(photo)
+            continue
+        staging = photo.with_name(f".{slugs[photo]}.renaming.png")
+        photo.replace(staging)
+        staging.replace(target)
+        renamed.append(target)
+    return sorted(renamed)
 
 
 @router.post("/{name}/kind", response_model=TemplateConfig)
@@ -265,7 +320,18 @@ def assign_kind(request: Request, name: str, body: AssignKindRequest) -> AnyTemp
         raise HTTPException(status_code=400, detail=f"no photos uploaded for {name!r}")
 
     if body.kind == "colour-matrix":
-        # Nothing is renamed: these filenames already are the colours.
+        # Rename each photo to the slug its name means, which is what the
+        # colour report just told the user would happen.
+        #
+        # This used to be a no-op comment claiming "these filenames already
+        # are the colours". They are not, for anything a human named:
+        # `Heather Grey.png` left the set calibrated and green with a colour
+        # called "Heather Grey", while `new` writes the *slug* into a
+        # listing's media -- so rendering failed with "no mockup base image
+        # for colour 'heather-grey'" against a template the calibrator had
+        # just declared finished. PRD 7a makes the filename the slug; this is
+        # where that becomes true.
+        photos = _rename_photos_to_slugs(workspace, photos)
         with Image.open(photos[0]) as img:
             size = img.size
         config: AnyTemplate = ColourMatrixTemplate(bounding_box=_default_box(size))

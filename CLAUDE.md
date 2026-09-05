@@ -282,8 +282,22 @@ checkout) — `scripts/generate_test_assets.py` procedurally generates a
 grid/ruler test design and a tiny synthetic mockup template set, deterministically
 (fixed seed, no clock input), committed as ordinary test fixtures.
 
-The E2E test hits real Printify and Etsy and costs real state. It is never part of
-a default run. It also doubles as the cassette recorder.
+The E2E layer talks to the real Printify API. It is never part of a default run
+(`addopts = "-m 'not e2e'"`), and it skips cleanly — every test, no network at
+all — unless the machine has credentials: `PRINTIFY_API_TOKEN`, or
+`ETSY_LISTINGS_ROOT` pointing at a workspace whose `.env` carries it.
+
+```
+ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
+```
+
+Phase 1's e2e tests are **read-only** catalog GETs, so they cost no state and
+can be re-run freely. Their job is that the contract layer's transcripts are
+photographs nobody re-takes: if Printify moves a field, every offline test
+stays green and the failure surfaces as a user's `new` run falling over
+instead. The e2e layer asks the live API the questions the offline suite
+answers from memory. The write-side tests that genuinely do cost state arrive
+with Phase 2, against a throwaway shop.
 
 ### Coverage: 80% is a floor, not a target
 

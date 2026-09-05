@@ -94,7 +94,7 @@ export function KindPicker({ templateName, onAssigned }: Props) {
                     row.clean ? "kind-picker__colour" : "kind-picker__colour kind-picker__colour--warn"
                   }
                 >
-                  {row.colour} {row.clean ? "✓" : "(renamed)"}
+                  {row.colour} {row.clean ? "✓" : "(will rename)"}
                 </span>
               </li>
             ))}
