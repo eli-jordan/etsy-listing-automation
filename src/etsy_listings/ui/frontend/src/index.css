@@ -991,6 +991,13 @@ button:not([class]):active:not(:disabled) {
   background: color-mix(in srgb, var(--color-accent) 8%, var(--color-neutral-100));
 }
 
+/* A single photo cannot be a colour set. Dimmed rather than removed, so the
+   three kinds stay in the same places and the blurb can say why. */
+.kind-picker__option--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
 .kind-picker__option input {
   accent-color: var(--color-accent);
 }

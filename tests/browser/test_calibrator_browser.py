@@ -532,12 +532,39 @@ class TestUploadCreatesEachKind:
     def test_the_picker_warns_about_a_filename_that_is_not_a_slug(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
-        """A photo called `Heather Grey.png` still yields a colour, but not the
-        name on disk. The calibrator says so rather than renaming it quietly."""
+        """A photo called `Heather Grey.png` yields the colour `heather-grey`,
+        which is not the name on disk. The picker says so before you commit,
+        and `assign_kind` then renames the file to match (PRD 7a).
+
+        Two photos, not one: a single-photo set cannot be a colour matrix at
+        all now, so the report it belongs to is not on screen for one.
+        """
         source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
         messy = workspace_root / "Heather Grey.png"
         messy.write_bytes(source.read_bytes())
+        clean = workspace_root / "forest.png"
+        clean.write_bytes(source.read_bytes())
 
-        self._upload(page, "flat-lay-03", [messy])
+        self._upload(page, "flat-lay-03", [messy, clean])
         page.wait_for_selector(".kind-picker__warn")
         assert "not a colour slug" in page.locator(".kind-picker__warn").inner_text()
+
+    def test_a_single_photo_cannot_be_a_colour_matrix(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """One photo per colour, over one photo, is a matrix of one -- which is
+        what `single` already is. Worse, it names the colour after the
+        filename, so `photo.png` became a garment colour called "photo"."""
+        source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
+        lone = workspace_root / "just-the-one.png"
+        lone.write_bytes(source.read_bytes())
+
+        self._upload(page, "flat-lay-04", [lone])
+        page.wait_for_selector(".kind-picker")
+
+        colour_matrix = page.locator('.kind-picker input[value="colour-matrix"]')
+        assert colour_matrix.is_disabled()
+        assert page.locator('.kind-picker input[value="single"]').is_checked()
+        # `multiple` is a chart: one photo with several garments in it, so it
+        # is exactly the single-photo case and must stay offered.
+        assert page.locator('.kind-picker input[value="multiple"]').is_enabled()
