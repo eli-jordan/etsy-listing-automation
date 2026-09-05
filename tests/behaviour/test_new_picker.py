@@ -146,7 +146,7 @@ def test_build_profile_reads_print_area_from_the_largest_placeholder() -> None:
     garment size -- the largest wins, so the design is sized for the panel
     that needs the most pixels."""
     profile = build_profile(
-        blueprint_title=TSHIRT.title,
+        blueprint=TSHIRT,
         provider_title=PROVIDER.title,
         placeholder="front",
         variant_set=VARIANT_SET,
@@ -159,26 +159,38 @@ def test_build_profile_reads_print_area_from_the_largest_placeholder() -> None:
 def test_build_profile_raises_actionable_error_for_missing_placeholder() -> None:
     with pytest.raises(ValueError, match="back"):
         build_profile(
-            blueprint_title=TSHIRT.title,
+            blueprint=TSHIRT,
             provider_title=PROVIDER.title,
             placeholder="back",
             variant_set=VARIANT_SET,
         )
 
 
-def test_profile_slug_for_matches_config_slug_rules() -> None:
-    assert profile_slug_for(TSHIRT) == "unisex-garment-dyed-heavy-weight-tee"
+def test_profile_slug_for_is_brand_and_model_not_the_title() -> None:
+    """PRD 23. A title slug would file every brand's version of the same shirt
+    under one name -- Printify calls the Comfort Colors 1717 "Unisex
+    Garment-Dyed T-shirt", and so do several other brands' entries."""
+    assert profile_slug_for(TSHIRT) == "comfort-colors-1717"
+
+
+def test_profile_slug_drops_the_trademark_sign() -> None:
+    """The catalog's brand really is "Comfort Colors®"; a filename with a ® in
+    it is not one anyone wants to type at a shell."""
+    catalog_entry = Blueprint(
+        id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
+    )
+    assert profile_slug_for(catalog_entry) == "comfort-colors-1717"
 
 
 def test_write_profile_if_absent_writes_once_then_reuses(workspace_root: Path) -> None:
     workspace = Workspace.discover(root_override=workspace_root)
     profile = build_profile(
-        blueprint_title=TSHIRT.title,
+        blueprint=HOODIE,
         provider_title=PROVIDER.title,
         placeholder="front",
         variant_set=VARIANT_SET,
     )
-    slug = profile_slug_for(TSHIRT)
+    slug = profile_slug_for(HOODIE)  # gildan-18500: not in the fixture workspace
 
     first = write_profile_if_absent(workspace, slug, profile)
     second = write_profile_if_absent(workspace, slug, profile)
@@ -186,6 +198,29 @@ def test_write_profile_if_absent_writes_once_then_reuses(workspace_root: Path) -
     assert first is True
     assert second is False
     assert (workspace.root / "profiles" / f"{slug}.yaml").is_file()
+
+
+def test_an_existing_profile_for_the_same_garment_is_reused_untouched(
+    workspace_root: Path,
+) -> None:
+    """PRD: `new` "writes profiles/{slug}.yaml if absent; reuses it silently if
+    present". Since the slug is brand+model, a second listing on the garment
+    the workspace already has a profile for finds it -- which is the whole
+    point of the profile being shared. The fixture's Comfort Colors 1717 is
+    that case."""
+    workspace = Workspace.discover(root_override=workspace_root)
+    existing = workspace.profile_file(profile_slug_for(TSHIRT))
+    assert existing.is_file(), "fixture should already hold this garment's profile"
+    before = existing.read_bytes()
+
+    profile = build_profile(
+        blueprint=TSHIRT,
+        provider_title=PROVIDER.title,
+        placeholder="front",
+        variant_set=VARIANT_SET,
+    )
+    assert write_profile_if_absent(workspace, profile_slug_for(TSHIRT), profile) is False
+    assert existing.read_bytes() == before, "an existing profile must not be rewritten"
 
 
 def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() -> None:

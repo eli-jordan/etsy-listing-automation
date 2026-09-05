@@ -18,14 +18,17 @@ from etsy_listings.catalog.models import (
     VariantSet,
 )
 from etsy_listings.catalog.resolve import (
+    AmbiguousBlueprintError,
     CatalogResolutionError,
     resolve_blueprint,
     resolve_print_provider,
 )
 
 BLUEPRINTS = [
-    Blueprint(id=6, title="Comfort Colors 1717", brand="Comfort Colors", model="1717"),
-    Blueprint(id=12, title="Gildan 5000", brand="Gildan", model="5000"),
+    # Titles as Printify really returns them: generic, and shared between
+    # brands. That is exactly why they are not what resolution matches on.
+    Blueprint(id=6, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors", model="1717"),
+    Blueprint(id=12, title="Unisex Heavy Cotton Tee", brand="Gildan", model="5000"),
 ]
 PROVIDERS = {6: [PrintProvider(id=29, title="Monster Digital")]}
 FRONT = (PrintAreaPlaceholder(position="front", width=4500, height=5400),)
@@ -66,16 +69,49 @@ def make_fake() -> FakeCatalogClient:
     return FakeCatalogClient(BLUEPRINTS, PROVIDERS, VARIANTS, SHIPPING)
 
 
-def test_resolve_blueprint_by_name() -> None:
-    assert resolve_blueprint("Comfort Colors 1717", BLUEPRINTS).id == 6
+def test_resolve_blueprint_by_brand_and_model() -> None:
+    assert resolve_blueprint("Comfort Colors", "1717", BLUEPRINTS).id == 6
 
 
-def test_resolve_blueprint_unknown_lists_valid_names() -> None:
+@pytest.mark.parametrize(
+    ("brand", "model"),
+    [
+        ("Comfort Colors®", "1717"),  # the catalog's own spelling
+        ("comfort colors", "1717"),  # a hand-written profile
+        ("  Comfort   Colors  ", " 1717 "),  # sloppy YAML
+    ],
+)
+def test_resolve_blueprint_normalises_case_whitespace_and_trademarks(
+    brand: str, model: str
+) -> None:
+    """PRD 23: nobody should have to type ® into a YAML file to make their
+    profile resolve."""
+    assert resolve_blueprint(brand, model, BLUEPRINTS).id == 6
+
+
+def test_resolve_blueprint_ignores_the_title_entirely() -> None:
+    """The whole point of the change: a retitled garment still resolves."""
+    retitled = [b.model_copy(update={"title": "Something Else Entirely"}) for b in BLUEPRINTS]
+    assert resolve_blueprint("Comfort Colors", "1717", retitled).id == 6
+
+
+def test_resolve_blueprint_unknown_lists_the_brand_model_pairs() -> None:
+    """Listed as pairs, not titles: a list of titles cannot be pasted into a
+    `blueprint:` block."""
     with pytest.raises(CatalogResolutionError) as exc_info:
-        resolve_blueprint("Not A Real Shirt", BLUEPRINTS)
+        resolve_blueprint("Nope", "0000", BLUEPRINTS)
     message = str(exc_info.value)
     assert "Comfort Colors 1717" in message
     assert "Gildan 5000" in message
+
+
+def test_two_blueprints_sharing_brand_and_model_is_an_error_not_a_guess() -> None:
+    """Picking one arbitrarily would bind a profile to a garment nobody chose."""
+    twin = BLUEPRINTS[0].model_copy(update={"id": 999, "title": "A Different Shirt"})
+    with pytest.raises(AmbiguousBlueprintError) as exc_info:
+        resolve_blueprint("Comfort Colors", "1717", [*BLUEPRINTS, twin])
+    assert "A Different Shirt" in str(exc_info.value)
+    assert "999" in str(exc_info.value)
 
 
 def test_resolve_print_provider_unknown_lists_valid_names() -> None:

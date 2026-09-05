@@ -38,9 +38,77 @@ def _template_config(workspace_root: Path, template: str) -> dict:  # noqa: ANN4
     )
 
 
+def _rail_row(page, name: str):  # noqa: ANN001, ANN201
+    """Wireframe 2a replaced the template dropdown with the rail, so picking a
+    template is a click on its row. `data-template` is the hook rather than a
+    presentational class: the row's look is still being worked on, and a test
+    that breaks when a border-radius changes is worse than no test."""
+    return page.locator(f".template-rail__item[data-template='{name}']")
+
+
 def _select_template(page, name: str) -> None:  # noqa: ANN001
-    page.wait_for_selector("select[aria-label='Template']")
-    page.select_option("select[aria-label='Template']", name)
+    row = _rail_row(page, name)
+    row.wait_for()
+    row.click()
+
+
+def _selected_template(page) -> str | None:  # noqa: ANN001
+    page.wait_for_selector(".template-rail__item--active")
+    return page.locator(".template-rail__item--active").first.get_attribute("data-template")
+
+
+class TrafficLog:
+    """Records matching *responses* from the moment it is created.
+
+    Two things this gets right that `page.expect_response(...)` does not.
+    It listens from construction rather than only inside a `with` block, so a
+    response that arrives early is still seen -- under the whole suite these
+    fired both early and late, failing a different test each run. And it waits
+    on the response, not the request: a test that reads template.yaml straight
+    after a PUT needs the server to have *finished*, not merely to have been
+    asked. (Waiting on the request instead made that read race the write, and
+    yaml.safe_load returned None on the half-written file.)
+
+    Responses carry their request, so a payload assertion still works.
+    """
+
+    def __init__(self, page, needle: str) -> None:  # noqa: ANN001
+        self.page = page
+        self.entries: list[object] = []
+        page.on(
+            "response",
+            lambda response: self.entries.append(response) if needle in response.url else None,
+        )
+
+    def wait_for(self, predicate, timeout_ms: int = 60_000):  # noqa: ANN001, ANN201
+        for _ in range(timeout_ms // 100):
+            for response in list(self.entries):
+                if predicate(response):
+                    return response
+            self.page.wait_for_timeout(100)
+        raise AssertionError(f"no matching response in {timeout_ms}ms ({len(self.entries)} seen)")
+
+
+def _sent(response) -> dict:  # noqa: ANN001, ANN401
+    """The JSON body of the request that produced this response."""
+    return json.loads(response.request.post_data or "{}")
+
+
+def _method(response) -> str:  # noqa: ANN001
+    return str(response.request.method)
+
+
+def _wait_for_filmstrip(page, count: int) -> None:  # noqa: ANN001
+    """Wait for the filmstrip to be *fully* populated.
+
+    `wait_for_selector` returns on the first item, but the colours arrive with
+    the template list refresh -- so reading `all_inner_texts()` straight after
+    it can catch the strip mid-build. That is a genuinely intermittent failure,
+    not a slow machine, so the wait has to be on the count.
+    """
+    page.wait_for_function(
+        f"() => document.querySelectorAll('.filmstrip__item').length === {count}"
+    )
 
 
 def _image_natural_size(page) -> list[int]:  # noqa: ANN001
@@ -56,9 +124,11 @@ def _image_natural_size(page) -> list[int]:  # noqa: ANN001
 def test_calibrator_loads_the_workspace_templates(page) -> None:  # noqa: ANN001
     page.wait_for_selector(PREVIEW_IMAGE)
     assert page.locator("h1").inner_text() == "Mockup calibrator"
-    options = page.locator("select[aria-label='Template'] option").all_inner_texts()
-    assert any(COLOUR_MATRIX_TEMPLATE in o for o in options)
-    assert any(MULTIPLE_TEMPLATE in o for o in options)
+    listed = page.locator(".template-rail__item").evaluate_all(
+        "rows => rows.map(r => r.dataset.template)"
+    )
+    assert COLOUR_MATRIX_TEMPLATE in listed
+    assert MULTIPLE_TEMPLATE in listed
 
 
 def test_no_console_errors_on_load(page) -> None:  # noqa: ANN001
@@ -72,10 +142,70 @@ def test_no_console_errors_on_load(page) -> None:  # noqa: ANN001
 # --- colour-matrix kind ------------------------------------------------
 
 
+class TestTemplateRail:
+    """The rail is the template picker now, so the things worth proving in a
+    real browser are that it lists the workspace, that its thumbnails are
+    images the browser can actually decode (a broken <img> still has a DOM
+    node), and that picking a row loads that template."""
+
+    def test_rail_lists_the_workspace_and_groups_by_state(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        (workspace_root / "mockup-templates" / "needs-a-kind").mkdir()
+        page.reload()
+        page.wait_for_selector(".template-rail__item")
+
+        # inner_text() is the *rendered* text, and the heading is uppercased in
+        # CSS -- the casing is presentation, so compare without it.
+        headings = [h.lower() for h in page.locator(".template-rail__heading").all_inner_texts()]
+        assert "needs calibration · 1" in headings
+        assert "calibrated · 2" in headings
+
+    def test_the_banner_offers_the_next_uncalibrated_template(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        (workspace_root / "mockup-templates" / "needs-a-kind").mkdir()
+        page.reload()
+        page.wait_for_selector(".template-rail__banner")
+        assert "1 template needs calibration" in page.locator(".template-rail__banner").inner_text()
+
+        page.get_by_role("button", name="Calibrate next →").click()
+        assert _selected_template(page) == "needs-a-kind"
+
+    def test_rail_thumbnails_decode_as_real_images(self, page) -> None:  # noqa: ANN001
+        """Served by /thumbnail off the template's own photo -- if the endpoint
+        404s or returns something that isn't a PNG, naturalWidth stays 0."""
+        # `img.` explicitly: a template with no photo renders a <span> tile
+        # wearing the same class, and a span has no naturalWidth.
+        page.wait_for_selector("img.template-rail__thumb")
+        page.wait_for_function(
+            "() => [...document.querySelectorAll('img.template-rail__thumb')]"
+            ".every(i => i.complete && i.naturalWidth > 0)"
+        )
+        widths = page.locator("img.template-rail__thumb").evaluate_all(
+            "imgs => imgs.map(i => i.naturalWidth)"
+        )
+        assert widths and all(0 < w <= 160 for w in widths)
+
+    def test_searching_narrows_the_rail(self, page) -> None:  # noqa: ANN001
+        page.wait_for_selector(".template-rail__item")
+        page.get_by_label("Search templates").fill("chart")
+        listed = page.locator(".template-rail__item").evaluate_all(
+            "rows => rows.map(r => r.dataset.template)"
+        )
+        assert listed == [MULTIPLE_TEMPLATE]
+
+    def test_picking_a_row_loads_that_template(self, page) -> None:  # noqa: ANN001
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(".filmstrip__item")
+        assert _selected_template(page) == COLOUR_MATRIX_TEMPLATE
+        assert list(_image_natural_size(page)) == list(COLOUR_MATRIX_SIZE)
+
+
 class TestColourMatrixKind:
     def test_filmstrip_lists_every_colour_in_the_template_set(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
-        page.wait_for_selector(".filmstrip__item")
+        _wait_for_filmstrip(page, 4)
         colours = page.locator(".filmstrip__item").all_inner_texts()
         assert colours == ["black", "blue-jean", "ivory", "moss"]
 
@@ -102,10 +232,43 @@ class TestColourMatrixKind:
             page.locator(".filmstrip__item", has_text="moss").get_attribute("class") or ""
         )
 
-    def test_gallery_shows_a_thumbnail_per_colour(self, page) -> None:  # noqa: ANN001
+    def test_preview_all_renders_every_colour_in_the_set(self, page) -> None:  # noqa: ANN001
+        """2a's second tab: the always-on gallery becomes a view you switch to.
+        Every tile is a real server render, so this waits for the count rather
+        than for the tiles -- the placeholders are there from the start."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
-        page.wait_for_selector(".gallery__item")
-        assert page.locator(".gallery__item").count() == 4
+        page.wait_for_selector(PREVIEW_IMAGE)
+        page.get_by_role("tab", name="Preview all 4").click()
+
+        assert page.locator(".preview-grid__tile").count() == 4
+        page.wait_for_function(
+            "() => document.querySelectorAll('.preview-grid__tile img').length === 4"
+        )
+        page.wait_for_selector("text=4 / 4")
+
+    def test_approving_from_the_preview_tab_writes_the_config(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """ "Approve & mark calibrated" is a save. There is no separate stored
+        flag -- status is derived -- so the observable effect is template.yaml."""
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(PREVIEW_IMAGE)
+        page.get_by_role("tab", name="Preview all 4").click()
+
+        save_log = TrafficLog(page, "/config")
+        page.get_by_role("button", name="Approve & mark calibrated").click()
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+        assert _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["kind"] == "colour-matrix"
+
+    def test_hiding_the_placement_outline_leaves_a_clean_render(self, page) -> None:  # noqa: ANN001
+        """A colour set has one box and it is always selected, so "clean" here
+        means no chrome at all -- unlike a chart, where the toggle only hides
+        the boxes you are not working on."""
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(HANDLE)
+        page.get_by_label("show placement outline").uncheck()
+        page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
+        assert page.locator(HANDLE).count() == 0
 
     def test_dragging_a_handle_moves_it_and_rerenders(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
@@ -124,16 +287,31 @@ class TestColourMatrixKind:
         assert after is not None
         assert (after["x"], after["y"]) != (before["x"], before["y"])
 
-    def test_toggling_displace_rerenders_with_the_new_setting(self, page) -> None:  # noqa: ANN001
+    def test_toggling_the_wrinkle_pass_rerenders_with_the_new_setting(  # noqa: ANN001
+        self, page
+    ) -> None:
+        """The control is named for what it does to the photograph now, but it
+        still writes `displace` -- this is the test that the rename stayed a
+        rename and did not quietly repoint the toggle."""
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
         page.wait_for_selector(PREVIEW_IMAGE)
-        displace_toggle = page.locator("fieldset", has_text="Displace").locator(
-            "input[type=checkbox]"
-        )
-        with page.expect_request(lambda r: "/preview" in r.url) as request_info:
-            displace_toggle.check()
-        sent = json.loads(request_info.value.post_data or "{}")
-        assert sent["displace"]["enabled"] is True
+        log = TrafficLog(page, "/preview")
+        page.get_by_label("Follow fabric wrinkles").check()
+        log.wait_for(lambda r: _sent(r).get("displace", {}).get("enabled") is True)
+
+    def test_the_shading_presets_write_a_blend_mode(self, page) -> None:  # noqa: ANN001
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(PREVIEW_IMAGE)
+        log = TrafficLog(page, "/preview")
+        page.get_by_role("button", name="Rich").click()
+        log.wait_for(lambda r: _sent(r).get("shade", {}).get("blend") == "multiply")
+
+    def test_choosing_a_test_design_rerenders_against_it(self, page) -> None:  # noqa: ANN001
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(PREVIEW_IMAGE)
+        log = TrafficLog(page, "/preview")
+        page.get_by_label("Test design").select_option("bundled-on-dark")
+        log.wait_for(lambda r: _sent(r).get("design") == "bundled-on-dark")
 
     def test_saving_writes_the_dragged_box_to_template_yaml(  # noqa: ANN001
         self, page, workspace_root: Path
@@ -153,8 +331,9 @@ class TestColourMatrixKind:
         page.mouse.move(box["x"] + 100, box["y"] + 70, steps=10)
         page.mouse.up()
 
-        with page.expect_response(lambda r: "/config" in r.url and r.request.method == "PUT"):
-            page.get_by_role("button", name="Save template.yaml").click()
+        save_log = TrafficLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
         page.wait_for_selector("text=saved")
 
         saved = _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)
@@ -192,24 +371,61 @@ class TestMultipleKind:
             page.locator(".placements-panel__item").nth(1).get_attribute("class") or ""
         )
 
-    def test_duplicate_and_offset_adds_a_third_placement(self, page) -> None:  # noqa: ANN001
+    def test_duplicate_adds_a_third_placement(self, page) -> None:  # noqa: ANN001
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
-        page.get_by_role("button", name="Duplicate & offset selected").click()
+        page.get_by_role("button", name="Duplicate").click()
         assert page.locator(".placements-panel__item").count() == 3
         assert page.locator(".quad-editor__box").count() == 3
+
+    def test_adding_a_box_from_the_canvas_selects_it(self, page) -> None:  # noqa: ANN001
+        """2a puts Add box *on* the photo: a new box lands selected and
+        draggable, with no drawing mode to enter first."""
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        page.get_by_role("button", name="+ Add box").click()
+        page.wait_for_selector(".quad-editor__box:nth-of-type(3)")
+        assert page.locator(".placements-panel__item").count() == 3
+        assert "3 · new box" in page.locator(".placements-panel__item").nth(2).inner_text()
+
+    def test_the_delete_key_removes_the_selected_box(self, page) -> None:  # noqa: ANN001
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        page.locator(".quad-editor").click(position={"x": 5, "y": 5})
+        page.keyboard.press("Delete")
+        page.wait_for_function(
+            "() => document.querySelectorAll('.placements-panel__item').length === 1"
+        )
+
+    def test_right_clicking_a_box_opens_its_menu(self, page) -> None:  # noqa: ANN001
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        page.locator(".quad-editor__polygon").first.click(button="right")
+        page.wait_for_selector(".quad-editor__menu")
+        items = page.locator(".quad-editor__menu button").all_inner_texts()
+        assert items == ["Duplicate", "Bring to front", "Delete ⌫"]
+
+    def test_hiding_the_outlines_leaves_only_the_selected_box(self, page) -> None:  # noqa: ANN001
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        assert page.locator(".quad-editor__box").count() == 2
+        page.get_by_label("show all outlines").uncheck()
+        # The selected box keeps its handles -- the toggle is for judging the
+        # render, not for giving up the ability to fix it.
+        page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 1")
+        assert page.locator(HANDLE).count() == 4
 
     def test_saving_writes_every_placement(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".placements-panel__item")
-        page.get_by_role("button", name="Add placement").click()
-        colour_inputs = page.locator(".placements-panel__item input").nth(-2)
-        colour_inputs.fill("ivory")
+        page.get_by_role("button", name="+ Add").click()
+        page.get_by_label("Colour").fill("ivory")
 
-        with page.expect_response(lambda r: "/config" in r.url and r.request.method == "PUT"):
-            page.get_by_role("button", name="Save template.yaml").click()
+        save_log = TrafficLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
         page.wait_for_selector("text=saved")
 
         saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)
@@ -217,14 +433,54 @@ class TestMultipleKind:
         assert len(saved["placements"]) == 3
         assert saved["placements"][-1]["colour"] == "ivory"
 
+    def test_editing_a_corner_by_number_writes_that_corner(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """The wireframe drew x/y/w/h. A box is a quad (PRD), so the panel
+        shows four corners -- and this proves the number reaches the file."""
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".placements-panel__item")
+        page.get_by_label("Corner 1 x").fill("123")
+
+        save_log = TrafficLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+        page.wait_for_selector("text=saved")
+
+        saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)
+        assert saved["placements"][0]["bounding_box"][0]["x"] == 123
+
 
 # --- creating a new template through the upload flow ---------------------
 
 
 class TestUploadCreatesEachKind:
     """The plan's explicit ask: browser automation validating that each kind
-    can actually be *created* through the calibrator, not just edited once
-    it already exists."""
+    can actually be *created* through the calibrator, not just edited once it
+    already exists.
+
+    The flow has two steps now (wireframe 2a): photos in, then the kind picker
+    takes over the workspace and asks what they are.
+    """
+
+    def _upload(self, page, name: str, sources: list[Path]) -> None:  # noqa: ANN001
+        """Upload, and wait for the kind picker rather than for an 'uploaded'
+        message: a successful upload selects the new template, which has no
+        config, so the picker takes over the workspace immediately -- taking
+        the upload form and its status text with it. The picker appearing *is*
+        the confirmation."""
+        log = TrafficLog(page, "/api/templates")
+        page.wait_for_selector(".upload-form")
+        name_field = page.get_by_label("Name")
+        name_field.fill(name)
+        # The form refuses to upload without a name, so if the field somehow
+        # did not take, say *that* rather than timing out on a request that was
+        # never going to be sent.
+        assert name_field.input_value() == name
+
+        page.locator(".upload-form input[type=file]").set_input_files([str(s) for s in sources])
+        log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
+        page.wait_for_selector(".kind-picker")
 
     def test_uploading_a_single_photo_creates_a_single_kind_template(  # noqa: ANN001
         self, page, workspace_root: Path
@@ -232,35 +488,83 @@ class TestUploadCreatesEachKind:
         source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
         assert source.is_file()
 
-        page.get_by_label("Name").fill("lifestyle-01")
-        page.get_by_label("Kind").select_option("single")
-        with page.expect_response(lambda r: r.url.endswith("/api/templates") and r.status == 200):
-            page.locator("input[type=file]").set_input_files(str(source))
-        page.wait_for_selector("text=uploaded")
+        self._upload(page, "lifestyle-01", [source])
+        assert _selected_template(page) == "lifestyle-01"
 
-        assert page.locator("select[aria-label='Template']").input_value() == "lifestyle-01"
+        page.get_by_role("radio", name="Single one photo, one garment").check()
+        kind_log = TrafficLog(page, "/kind")
+        page.get_by_role("button", name="Start calibrating →").click()
+        kind_log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
+
+        page.wait_for_selector(PREVIEW_IMAGE)
         page.wait_for_selector(HANDLE)
-
-        with page.expect_response(lambda r: "/config" in r.url and r.request.method == "PUT"):
-            page.get_by_role("button", name="Save template.yaml").click()
+        save_log = TrafficLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
 
         saved = _template_config(workspace_root, "lifestyle-01")
         assert saved["kind"] == "single"
+        # PRD 28: a scene kind uses the fixed filename, so the upload's own
+        # name is gone by now.
         assert (workspace_root / "mockup-templates" / "lifestyle-01" / "scene.png").is_file()
+        assert not (workspace_root / "mockup-templates" / "lifestyle-01" / "black.png").exists()
 
     def test_uploading_two_photos_creates_a_colour_matrix_template(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
         base_dir = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE
-        black = base_dir / "black.png"
-        ivory = base_dir / "ivory.png"
+        self._upload(page, "flat-lay-02", [base_dir / "black.png", base_dir / "ivory.png"])
+        assert _selected_template(page) == "flat-lay-02"
 
-        page.get_by_label("Name").fill("flat-lay-02")
-        page.get_by_label("Kind").select_option("colour-matrix")
-        with page.expect_response(lambda r: r.url.endswith("/api/templates") and r.status == 200):
-            page.locator("input[type=file]").set_input_files([str(black), str(ivory)])
-        page.wait_for_selector("text=uploaded")
+        # The picker reports what each filename will be taken as (PRD 7a)
+        # before anything is committed.
+        page.wait_for_selector(".kind-picker__file")
+        listed = page.locator(".kind-picker__filename").all_inner_texts()
+        assert sorted(listed) == ["black.png", "ivory.png"]
 
-        assert page.locator("select[aria-label='Template']").input_value() == "flat-lay-02"
-        page.wait_for_selector(".filmstrip__item")
+        kind_log = TrafficLog(page, "/kind")
+        page.get_by_role("button", name="Start calibrating →").click()
+        kind_log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
+
+        _wait_for_filmstrip(page, 2)
         assert sorted(page.locator(".filmstrip__item").all_inner_texts()) == ["black", "ivory"]
+
+    def test_the_picker_warns_about_a_filename_that_is_not_a_slug(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """A photo called `Heather Grey.png` yields the colour `heather-grey`,
+        which is not the name on disk. The picker says so before you commit,
+        and `assign_kind` then renames the file to match (PRD 7a).
+
+        Two photos, not one: a single-photo set cannot be a colour matrix at
+        all now, so the report it belongs to is not on screen for one.
+        """
+        source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
+        messy = workspace_root / "Heather Grey.png"
+        messy.write_bytes(source.read_bytes())
+        clean = workspace_root / "forest.png"
+        clean.write_bytes(source.read_bytes())
+
+        self._upload(page, "flat-lay-03", [messy, clean])
+        page.wait_for_selector(".kind-picker__warn")
+        assert "not a colour slug" in page.locator(".kind-picker__warn").inner_text()
+
+    def test_a_single_photo_cannot_be_a_colour_matrix(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """One photo per colour, over one photo, is a matrix of one -- which is
+        what `single` already is. Worse, it names the colour after the
+        filename, so `photo.png` became a garment colour called "photo"."""
+        source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
+        lone = workspace_root / "just-the-one.png"
+        lone.write_bytes(source.read_bytes())
+
+        self._upload(page, "flat-lay-04", [lone])
+        page.wait_for_selector(".kind-picker")
+
+        colour_matrix = page.locator('.kind-picker input[value="colour-matrix"]')
+        assert colour_matrix.is_disabled()
+        assert page.locator('.kind-picker input[value="single"]').is_checked()
+        # `multiple` is a chart: one photo with several garments in it, so it
+        # is exactly the single-photo case and must stay offered.
+        assert page.locator('.kind-picker input[value="multiple"]').is_enabled()

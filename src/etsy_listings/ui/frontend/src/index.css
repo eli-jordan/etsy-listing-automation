@@ -1,60 +1,596 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   The "Organic" design system, vendored.
+
+   Everything between here and the "calibrator layer" marker below is a COPY of
+   `_ds/organic-1148f1b2-ec2a-48e4-90d2-bab73bfda90a/styles.css` from the
+   Claude Design project this UI was designed in (wireframe 2a, "Mockup
+   Calibrator Wireframes.dc.html"). It is a copy on purpose: the calibrator is
+   a localhost tool that has to work with no network, so it cannot link the
+   design system's stylesheet or pull its webfonts at runtime.
+
+   The cost of that is drift -- change the design system upstream and nothing
+   here notices. If you re-sync, replace this whole block rather than editing
+   values in place, and keep the ramps together: they are generated in OKLCH on
+   one shared lightness scale, so the same step of any role has the same visual
+   weight. Hand-tuning one step breaks that.
+
+   The system's own rule, from its readme: take every colour, font, spacing and
+   radius from a variable. Never hard-code a hex, a font name, or a px value
+   the tokens already carry.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* Linked at runtime rather than self-hosted, by decision. The trade is
+   explicit: with no network the two faces fall back to `system-ui` via the
+   stacks in `--font-heading` / `--font-body`, so the page stays legible but
+   loses its typographic voice. Must stay the first rule in the file -- CSS
+   ignores an `@import` that follows any other rule. */
+@import url("https://fonts.googleapis.com/css2?family=Caprasimo:wght@400&family=Figtree:wght@400;600;700&display=swap");
+
 :root {
-  color-scheme: light dark;
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    sans-serif;
+  --color-bg: #f5ead8;
+  --color-surface: #ebddc5;
+  --color-text: #201e1d;
+  --color-accent: #c67139;
+  --color-accent-2: #7a8a5e;
+  --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
+
+  /* Tonal ramps -- generated in OKLCH on one shared lightness scale, so the
+     same step of any role matches the others in visual value. */
+  --color-neutral-100: #f9f4ed;
+  --color-neutral-200: #eee7db;
+  --color-neutral-300: #dcd3c4;
+  --color-neutral-400: #c0b6a5;
+  --color-neutral-500: #a19786;
+  --color-neutral-600: #82796a;
+  --color-neutral-700: #645c50;
+  --color-neutral-800: #474238;
+  --color-neutral-900: #2e2b25;
+
+  --color-accent-100: #fff2eb;
+  --color-accent-200: #ffe1d0;
+  --color-accent-300: #ffc6a5;
+  --color-accent-400: #f6a06b;
+  --color-accent-500: #d67f48;
+  --color-accent-600: #b2622d;
+  --color-accent-700: #8c491a;
+  --color-accent-800: #643312;
+  --color-accent-900: #402310;
+
+  --color-accent-2-100: #f0fae1;
+  --color-accent-2-200: #e1eecc;
+  --color-accent-2-300: #ccdbb2;
+  --color-accent-2-400: #aebf92;
+  --color-accent-2-500: #8fa073;
+  --color-accent-2-600: #728157;
+  --color-accent-2-700: #56633f;
+  --color-accent-2-800: #3d472b;
+  --color-accent-2-900: #272e1b;
+
+  --font-heading: "Caprasimo", system-ui, sans-serif;
+  --font-heading-weight: 400;
+  --font-body: "Figtree", system-ui, sans-serif;
+
+  --space-1: 4.4px;
+  --space-2: 8.8px;
+  --space-3: 13.2px;
+  --space-4: 17.6px;
+  --space-6: 26.4px;
+  --space-8: 35.2px;
+
+  --radius-sm: 8px;
+  --radius-md: 16px;
+  --radius-lg: 28px;
+
+  /* Elevation -- derived from the ground: soft ink-tinted shadows. */
+  --shadow-sm: 0 1px 2px color-mix(in srgb, #2e2b25 14%, transparent);
+  --shadow-md: 0 3px 10px color-mix(in srgb, #2e2b25 16%, transparent);
+  --shadow-lg: 0 12px 32px color-mix(in srgb, #2e2b25 22%, transparent);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  background: #f4f4f5;
-  color: #1a1a1a;
+  background: var(--color-bg);
+  color: var(--color-text);
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.55;
+  font-weight: 400;
+}
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  line-height: 1.12;
+  letter-spacing: -0.015em;
+  margin: 0 0 var(--space-2);
+}
+h1 {
+  font-size: 42px;
+}
+h2 {
+  font-size: 32px;
+}
+h3 {
+  font-size: 25px;
+}
+h4 {
+  font-size: 20px;
+}
+
+p {
+  margin: 0 0 var(--space-3);
+}
+img {
+  display: block;
+  max-width: 100%;
+}
+figure {
+  margin: 0;
+}
+figcaption {
+  font-size: 11px;
+  margin-top: var(--space-1);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.text-muted {
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* Interaction states are themed, never browser defaults. */
+:focus {
+  outline: none;
+}
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+::selection {
+  background: color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+/* — buttons — */
+.btn,
+button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  text-decoration: none;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 14px;
+  line-height: 1.2;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid transparent;
+  padding: var(--space-2) calc(var(--space-3) * 1.2);
+  border-radius: 999px;
+}
+.btn:disabled,
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+.btn-primary {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+.btn-primary:hover:not(:disabled) {
+  background: var(--color-accent-600);
+}
+.btn-primary:active:not(:disabled) {
+  background: var(--color-accent-700);
+}
+.btn-secondary {
+  border-color: var(--color-divider);
+}
+.btn-secondary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.btn-secondary:active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-text) 14%, transparent);
+}
+.btn-ghost {
+  color: var(--color-accent);
+  padding-inline: var(--space-1);
+}
+.btn-ghost:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+/* — forms — */
+.field > label {
+  display: block;
+  font-size: 12px;
+  margin-bottom: 5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.input,
+input[type="text"],
+input[type="search"],
+select {
+  min-height: 36px;
+  padding: 6px 14px;
+  font: inherit;
+  font-size: 14px;
+  color: var(--color-text);
+  caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+}
+.input:hover,
+input[type="text"]:hover,
+select:hover {
+  border-color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.input:focus-visible,
+input[type="text"]:focus-visible,
+select:focus-visible {
+  border-color: var(--color-accent);
+  outline-offset: 0;
+}
+
+/* Range inputs carry the accent rather than the browser's blue. */
+input[type="range"] {
+  accent-color: var(--color-accent);
+}
+input[type="checkbox"] {
+  accent-color: var(--color-accent);
+}
+
+/* — cards — */
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: calc(var(--radius-lg) * 1.15);
+  background: var(--color-surface);
+}
+.elev-sm {
+  box-shadow: var(--shadow-sm);
+}
+.elev-md {
+  box-shadow: var(--shadow-md);
+}
+.elev-lg {
+  box-shadow: var(--shadow-lg);
+}
+
+/* — tags — */
+.tag {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  letter-spacing: 0.02em;
+  padding: 3px 10px;
+  border-radius: 999px;
+}
+.tag-accent {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+.tag-accent-2 {
+  background: var(--color-accent-2-100);
+  color: var(--color-accent-2-800);
+}
+.tag-neutral {
+  background: var(--color-neutral-100);
+  color: var(--color-neutral-800);
+}
+
+/* — segmented control — */
+.seg {
+  display: inline-flex;
+  overflow: hidden;
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+}
+.seg-opt {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.seg-opt + .seg-opt {
+  border-left: 1px solid var(--color-divider);
+}
+.seg-opt:has(input:checked) {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Calibrator layer -- the app's own structure, expressed in the tokens above.
+   Phase 1 keeps every class name and every element exactly as it was; only the
+   values change. The layout moves in Phase 2.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+/* The design system's `.btn` is transparent until a variant class lands on it,
+   which is right for a system and wrong for a page: the calibrator's action
+   buttons are plain `<button>`s, and a transparent button is indistinguishable
+   from a label. Anything unclassed therefore falls back to the secondary
+   treatment. `:not([class])` and not `button` alone, so `.filmstrip__item`,
+   `.btn-primary` and friends keep their own look. */
+button:not([class]) {
+  border-color: var(--color-divider);
+  background: var(--color-neutral-100);
+}
+button:not([class]):hover:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 12%, var(--color-neutral-100));
+  border-color: var(--color-accent);
+}
+button:not([class]):active:not(:disabled) {
+  background: color-mix(in srgb, var(--color-accent) 22%, var(--color-neutral-100));
 }
 
 .app {
-  max-width: 1100px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 1.5rem;
+  padding: var(--space-6);
+}
+
+/* Wireframe 2a: rail | canvas | inspector. The inspector is the editors' own
+   `aside.app__controls` inside `.app__main`, so the third column is declared
+   there rather than here. */
+.app__workbench {
+  display: grid;
+  grid-template-columns: 228px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.app__workspace {
+  min-width: 0;
 }
 
 .app__header {
   display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.app__title {
+  font-size: 25px;
+  margin: 0;
+}
+
+.app__crumb-sep {
+  color: color-mix(in srgb, var(--color-text) 35%, transparent);
+}
+
+.app__crumb {
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.app__meta {
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* `margin-left: auto` rather than `justify-content: space-between`: the
+   breadcrumb is a variable number of spans, so the actions have to claim the
+   remaining space themselves. */
+.app__actions {
+  margin-left: auto;
+  display: flex;
   align-items: center;
-  gap: 1rem;
+  gap: var(--space-2);
+}
+
+/* — the template rail — */
+.template-rail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  position: sticky;
+  top: var(--space-4);
+}
+
+.template-rail__banner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+}
+
+.template-rail__banner-text {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+}
+
+.template-rail__search {
+  width: 100%;
+}
+
+.template-rail__filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+/* A filter pill is a button wearing `.tag`, so it needs the interactive states
+   `.tag` does not carry. */
+.template-rail__pill {
+  cursor: pointer;
+  border: 1px solid var(--color-divider);
+  background: transparent;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-family: var(--font-body);
+}
+
+.template-rail__pill:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.template-rail__pill--on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.template-rail__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-top: var(--space-2);
+}
+
+.template-rail__heading {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  margin: 0 0 var(--space-1);
+}
+
+.template-rail__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-2);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  text-align: left;
+  font-family: var(--font-body);
+}
+
+.template-rail__item:hover {
+  border-color: var(--color-accent);
+}
+
+.template-rail__item--needs {
+  border-color: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-neutral-100));
+}
+
+.template-rail__item--active {
+  border-color: var(--color-accent);
+  box-shadow: inset 0 0 0 1px var(--color-accent);
+}
+
+.template-rail__thumb {
+  width: 26px;
+  height: 30px;
+  flex: none;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-200);
+}
+
+/* The no-photo tile is a <span>, so it needs the box the <img> got for free. */
+.template-rail__thumb--empty {
+  display: block;
+  border: 1px dashed var(--color-neutral-400);
+}
+
+.template-rail__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.template-rail__name {
+  font-size: 12px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-rail__meta {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.template-rail__more,
+.template-rail__empty {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  text-align: center;
+}
+
+.template-rail__more {
+  background: transparent;
+  border: none;
+  font-family: var(--font-body);
+}
+
+.template-rail__more:hover {
+  color: var(--color-accent);
 }
 
 .app__filmstrip {
   display: flex;
-  gap: 0.5rem;
-  margin: 1rem 0;
+  gap: var(--space-2);
+  margin: var(--space-4) 0;
 }
 
 .filmstrip__item {
-  padding: 0.4rem 0.8rem;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  background: white;
-  cursor: pointer;
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-100);
+}
+
+.filmstrip__item:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
 }
 
 .filmstrip__item--active {
-  border-color: #333;
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
   font-weight: 600;
 }
 
+/* The canvas takes what is left; the inspector is a fixed 250px, as 2a draws
+   it -- the controls do not get more useful when they get wider. */
 .app__main {
   display: grid;
-  grid-template-columns: 2fr 1fr;
-  gap: 1.5rem;
+  grid-template-columns: minmax(0, 1fr) 250px;
+  gap: var(--space-4);
   align-items: start;
 }
 
 .app__preview {
-  background: #e5e5e5;
-  border-radius: 8px;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg);
   overflow: hidden;
+  box-shadow: var(--shadow-sm);
 }
 
 .quad-editor {
@@ -76,15 +612,15 @@ body {
 }
 
 .quad-editor__polygon {
-  fill: rgba(80, 140, 255, 0.15);
-  stroke: #3f7dff;
+  fill: color-mix(in srgb, var(--color-accent) 15%, transparent);
+  stroke: var(--color-accent);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
 }
 
 .quad-editor__handle {
-  fill: #3f7dff;
-  stroke: white;
+  fill: var(--color-accent);
+  stroke: var(--color-bg);
   stroke-width: 2;
   vector-effect: non-scaling-stroke;
   cursor: grab;
@@ -95,21 +631,21 @@ body {
 }
 
 .quad-editor__box--dimmed .quad-editor__polygon {
-  fill: rgba(120, 120, 120, 0.1);
-  stroke: rgba(120, 120, 120, 0.5);
+  fill: color-mix(in srgb, var(--color-neutral-700) 10%, transparent);
+  stroke: color-mix(in srgb, var(--color-neutral-700) 50%, transparent);
 }
 
 .app__controls {
   display: flex;
   flex-direction: column;
-  gap: 1rem;
+  gap: var(--space-3);
 }
 
 .gallery {
   display: flex;
   flex-wrap: wrap;
-  gap: 0.75rem;
-  margin-top: 1.5rem;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
 }
 
 .gallery__item {
@@ -120,21 +656,48 @@ body {
 
 .gallery__item img {
   width: 100%;
-  border-radius: 6px;
+  border-radius: var(--radius-md);
   display: block;
 }
 
 .gallery__placeholder {
   width: 100%;
   aspect-ratio: 1;
-  background: #e0e0e0;
-  border-radius: 6px;
+  background: var(--color-neutral-200);
+  border-radius: var(--radius-md);
 }
 
-.gallery__item figcaption {
-  font-size: 0.85rem;
-  color: #555;
-  margin-top: 0.25rem;
+/* — the bounding-box list — */
+.placements-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.placements-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.placements-panel__heading {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  margin: 0;
+}
+
+.placements-panel__add {
+  font-size: 11px;
+  padding: 3px 10px;
 }
 
 .placements-panel__list {
@@ -143,53 +706,557 @@ body {
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
+  gap: 3px;
 }
 
 .placements-panel__item {
   display: flex;
-  gap: 0.4rem;
-  padding: 0.4rem;
-  border: 1px solid #ddd;
-  border-radius: 4px;
+  gap: var(--space-1);
+  padding: 5px var(--space-2);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
   cursor: pointer;
+  font-size: 12px;
 }
 
 .placements-panel__item--active {
-  border-color: #3f7dff;
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-neutral-100));
 }
 
-.placements-panel__item input {
-  flex: 1;
+.placements-panel__detail {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1px solid var(--color-accent);
+  border-radius: var(--radius-md);
+  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
+}
+
+.placements-panel__field {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  font-size: 11px;
+}
+
+/* Four corners, two fields each: a box is a quad, so the panel shows the quad
+   rather than an x/y/w/h that would flatten every angled photo. */
+.placements-panel__corners {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-1);
+}
+
+.placements-panel__corner {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 3px;
+}
+
+.placements-panel__corner-label {
+  grid-column: 1 / -1;
+  font-size: 9px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.placements-panel__corner input {
+  min-height: 26px;
+  padding: 2px 8px;
+  font-size: 11px;
   min-width: 0;
+}
+
+.placements-panel__extent {
+  margin: 0;
+  font-size: 11px;
+  text-align: right;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }
 
 .placements-panel__actions {
   display: flex;
-  gap: 0.5rem;
-  margin-top: 0.6rem;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.placements-panel__actions button {
+  font-size: 11px;
+  padding: 3px 10px;
+}
+
+.placements-panel__warn {
+  margin: 0;
+  font-size: 11px;
+  color: var(--color-accent-700);
+}
+
+/* — the preview-all grid — */
+.preview-grid {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+
+.preview-grid__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 11px;
+}
+
+.preview-grid__count {
+  font-weight: 600;
+}
+
+.preview-grid__status {
+  color: var(--color-accent-700);
+}
+
+.preview-grid__failed {
+  color: var(--color-accent-700);
+}
+
+/* The approve action sits at the end of the row, past the progress. */
+.preview-grid__head .btn {
+  margin-left: auto;
+  font-size: 12px;
+}
+
+.preview-grid__tiles {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: var(--space-2);
+}
+
+.preview-grid__tile {
+  width: auto;
+}
+
+/* — canvas affordances — */
+.app__preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3) 0;
+}
+
+/* `.seg-opt` styles the checked state through `:has(input:checked)`, which
+   these tab buttons have no input for -- so they carry the state as a class.
+   `--on` must come *after* the base rule: same specificity, so source order
+   decides, and with it first the selected tab rendered as the grey one. */
+.seg-opt {
+  font-family: var(--font-body);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.seg-opt--on {
+  background: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.app__outline-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  cursor: pointer;
+}
+
+.quad-editor__add {
+  position: absolute;
+  top: var(--space-2);
+  right: var(--space-2);
+  font-size: 12px;
+  padding: 5px 12px;
+  box-shadow: var(--shadow-md);
+}
+
+.quad-editor__readout {
+  position: absolute;
+  top: var(--space-2);
+  left: var(--space-3);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-bg);
+  background: color-mix(in srgb, var(--color-neutral-900) 65%, transparent);
+  padding: 3px 8px;
+  border-radius: 999px;
+  line-height: 1.4;
+}
+
+.quad-editor__menu {
+  position: absolute;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-100);
+  box-shadow: var(--shadow-lg);
+}
+
+.quad-editor__menu button {
+  justify-content: flex-start;
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 5px var(--space-2);
+  border-radius: var(--radius-sm);
+}
+
+.quad-editor__menu button:hover {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+}
+
+.quad-editor__menu-danger {
+  color: var(--color-accent-700);
+  border-top: 1px dashed var(--color-divider);
+}
+
+.quad-editor__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 280px;
+  margin: var(--space-3);
+  border: 1.5px dashed var(--color-neutral-400);
+  border-radius: var(--radius-lg);
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.quad-editor__empty-hint {
+  margin: 0;
+  font-size: 11px;
+}
+
+/* — the kind picker, which takes over the workspace — */
+.kind-picker {
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--color-divider);
+  border-radius: calc(var(--radius-lg) * 1.15);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.kind-picker__question {
+  margin: 0;
+  font-size: 25px;
+}
+
+.kind-picker__sub {
+  margin: 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.kind-picker__options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.kind-picker__option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  cursor: pointer;
+}
+
+.kind-picker__option--active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-neutral-100));
+}
+
+/* A single photo cannot be a colour set. Dimmed rather than removed, so the
+   three kinds stay in the same places and the blurb can say why. */
+.kind-picker__option--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.kind-picker__option input {
+  accent-color: var(--color-accent);
+}
+
+.kind-picker__label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.kind-picker__blurb {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.kind-picker__report {
+  border: 1px dashed var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.kind-picker__report-heading {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.kind-picker__files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kind-picker__file {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 12px;
+}
+
+.kind-picker__filename {
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+
+.kind-picker__colour {
+  color: var(--color-accent-2-700);
+}
+
+.kind-picker__colour--warn {
+  color: var(--color-accent-700);
+}
+
+.kind-picker__warn {
+  margin: var(--space-1) 0 0;
+  font-size: 11px;
+  color: var(--color-accent-700);
+}
+
+.kind-picker__note {
+  margin: 0;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.kind-picker__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.kind-picker__status {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* — the inspector's panels — */
+.realism,
+.design-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+}
+
+.realism__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.realism__heading,
+.design-picker__heading {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  margin: 0;
+}
+
+.realism__pass {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.realism__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.realism__row input[type="range"] {
+  flex: 1;
+  min-width: 0;
+}
+
+.realism__title {
+  font-size: 13px;
+  font-weight: 600;
+  margin-right: auto;
+  cursor: pointer;
+}
+
+.realism__value {
+  font-size: 11px;
+  width: 3ch;
+  text-align: right;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+/* The endpoint captions say which way the slider runs -- "45%" alone does not
+   tell you what more of it looks like. */
+.realism__scale {
+  margin: 0;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.realism__presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.realism__divider {
+  border: 0;
+  height: 1px;
+  background: var(--color-divider);
+  margin: var(--space-1) 0;
+  width: 100%;
+}
+
+.realism__advanced {
+  font-size: 11px;
+  border-top: 1px dashed var(--color-divider);
+  padding-top: var(--space-2);
+}
+
+.realism__advanced summary {
+  cursor: pointer;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+/* Two columns so the pass names line up against their values -- these are
+   read as a table of what is actually in template.yaml. */
+.realism__raw {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px var(--space-2);
+  margin: var(--space-2) 0 0;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 10.5px;
+}
+
+.realism__raw dt {
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.realism__raw dd {
+  margin: 0;
+  text-align: right;
+}
+
+.design-picker__select {
+  width: 100%;
+}
+
+.design-picker__upload {
+  font-size: 11px;
+  color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+/* The native file input is replaced by its label, which reads as the
+   wireframe's "＋ Upload a PNG…" row. */
+.design-picker__upload input[type="file"] {
+  display: none;
+}
+
+.design-picker__status {
+  margin: 0;
+  min-height: 1em;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
 .upload-form {
-  margin-top: 2rem;
+  margin-top: var(--space-8);
 }
 
 .upload-form label {
   display: block;
-  margin: 0.5rem 0;
+  margin: var(--space-2) 0;
 }
 
+/* `fieldset` is the calibrator's grouping element throughout -- Displace,
+   Shade, Placements and the upload form all lean on it, so it carries the
+   card treatment rather than each panel restating one. */
 fieldset {
-  border: 1px solid #ddd;
-  border-radius: 6px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  padding: var(--space-3) var(--space-4);
+}
+
+fieldset legend {
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 13px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  padding: 0 var(--space-1);
 }
 
 fieldset label {
   display: block;
-  margin: 0.5rem 0;
+  margin: var(--space-2) 0;
+  font-size: 14px;
 }
 
 .app__status {
   min-height: 1.2em;
-  color: #555;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  font-size: 13px;
 }

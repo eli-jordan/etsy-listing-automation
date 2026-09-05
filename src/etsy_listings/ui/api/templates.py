@@ -14,13 +14,17 @@ tool uses, instead of a second, bespoke check living in the web layer.
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
+from etsy_listings.config.errors import ConfigLoadError
+from etsy_listings.config.slug import SlugCollisionError, slug_map
 from etsy_listings.render.config import (
+    AnyTemplate,
     BoundingBox,
     ColourMatrixTemplate,
     MultipleTemplate,
@@ -28,15 +32,15 @@ from etsy_listings.render.config import (
     RenderConfig,
     SingleTemplate,
     TemplateConfig,
-    dump_template_config,
-    load_template_config,
 )
 from etsy_listings.render.io import encode_png, load_design, load_template_base
 from etsy_listings.render.maps import DerivedMapCache
-from etsy_listings.render.pipeline import Layer, render, render_scene
+from etsy_listings.render.pipeline import Layer, render_scene
+from etsy_listings.ui.api.designs import resolve_design
 from etsy_listings.ui.api.schemas import (
-    BundledDesign,
+    AssignKindRequest,
     ColourMatrixPreviewRequest,
+    ColourReportRow,
     MultiplePreviewRequest,
     PreviewRequest,
     SinglePreviewRequest,
@@ -44,29 +48,19 @@ from etsy_listings.ui.api.schemas import (
     TemplateSummary,
     UploadResponse,
 )
-from etsy_listings.workspace.workspace import InvalidNameError, Workspace
+from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
-STATIC_DIR = Path(__file__).parent / "static"
-BUNDLED_DESIGNS: dict[BundledDesign, Path] = {
-    "bundled-grid": STATIC_DIR / "bundled-test-design.png",
-    "bundled-on-light": STATIC_DIR / "bundled-test-design-on-light.png",
-    "bundled-on-dark": STATIC_DIR / "bundled-test-design-on-dark.png",
-}
+THUMBNAIL_MAX = 160
+"""Longest edge of a rail thumbnail, in px. The rail draws them at ~26x30 CSS
+px (wireframe 2a), so this leaves headroom for a HiDPI screen without turning
+the list into a megabyte of PNG."""
 
 
 def _workspace(request: Request) -> Workspace:
     workspace: Workspace = request.app.state.workspace
     return workspace
-
-
-def _template_config_path(workspace: Workspace, name: str) -> Path:
-    """Resolve a template name from a URL, turning a bad one into a 400."""
-    try:
-        return workspace.template_config_file(name)
-    except InvalidNameError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 def _colours_from_scene_files(template_dir: Path) -> list[str]:
@@ -85,35 +79,69 @@ def _default_box(size: tuple[int, int]) -> BoundingBox:
     )
 
 
-def _read_template_config(
-    path: Path,
-) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
-    import yaml
+def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
+    """This template's ``template.yaml``, or a 404 if it has none yet.
 
-    return load_template_config(yaml.safe_load(path.read_text(encoding="utf-8")))
+    An unusable *name* needs nothing here -- ``InvalidNameError`` becomes a
+    400 through the app-wide handler in ``app.py``. This only decides that a
+    template with no config is absent rather than broken, which is a
+    calibrator-specific reading: it is the normal state of a fresh upload.
+    """
+    try:
+        return workspace.load_template_config(name)
+    except ConfigLoadError as exc:
+        raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}") from exc
 
 
-def _write_template_config(
-    path: Path, config: ColourMatrixTemplate | MultipleTemplate | SingleTemplate
-) -> None:
-    import yaml
+def _status_reason(config: AnyTemplate) -> str | None:
+    """Why this template is not ready to render from, or ``None`` if it is.
 
-    path.write_text(yaml.safe_dump(dump_template_config(config), sort_keys=False), encoding="utf-8")
+    Only ``multiple`` has states beyond "has a config at all": a chart is
+    written with an empty ``placements`` list at upload, and a box can be
+    dragged into place before anyone says which colour it depicts. The other
+    two kinds get a bounding box at upload and are usable immediately -- a
+    badly positioned box is wrong, but it is not *incomplete*, and the
+    calibrator cannot tell the difference.
+    """
+    if not isinstance(config, MultipleTemplate):
+        return None
+    if not config.placements:
+        return "no boxes"
+    uncoloured = sum(1 for p in config.placements if not p.colour.strip())
+    if uncoloured:
+        noun, verb = ("box", "has") if uncoloured == 1 else ("boxes", "have")
+        return f"{uncoloured} {noun} {verb} no colour"
+    return None
 
 
 def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
-    config_path = workspace.template_config_file(name)
-    if not config_path.is_file():
-        return TemplateSummary(name=name, kind=None, colours=[], has_config=False)
+    try:
+        config = workspace.load_template_config(name)
+    except ConfigLoadError:
+        return TemplateSummary(
+            name=name,
+            kind=None,
+            colours=[],
+            has_config=False,
+            status="needs-calibration",
+            status_reason="no kind set",
+        )
 
-    config = _read_template_config(config_path)
     if isinstance(config, ColourMatrixTemplate):
         colours = _colours_from_scene_files(workspace.template_dir(name))
     elif isinstance(config, MultipleTemplate):
         colours = [p.colour for p in config.placements]
     else:
         colours = [config.colour] if config.colour is not None else []
-    return TemplateSummary(name=name, kind=config.kind, colours=colours, has_config=True)
+    reason = _status_reason(config)
+    return TemplateSummary(
+        name=name,
+        kind=config.kind,
+        colours=colours,
+        has_config=True,
+        status="needs-calibration" if reason else "calibrated",
+        status_reason=reason,
+    )
 
 
 @router.get("", response_model=list[TemplateSummary])
@@ -127,24 +155,45 @@ def list_templates(request: Request) -> list[TemplateSummary]:
 
 @router.post("", response_model=UploadResponse)
 async def upload_template(
-    request: Request, name: str, kind: TemplateKind, files: list[UploadFile]
+    request: Request, name: str, files: list[UploadFile], kind: TemplateKind | None = None
 ) -> UploadResponse:
     workspace = _workspace(request)
-    config_path = _template_config_path(workspace, name)
+    config_path = workspace.template_config_file(name)
     if not files:
         raise HTTPException(status_code=400, detail="upload at least one file")
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    if kind == "colour-matrix":
-        colours: list[str] = []
+    if kind is None:
+        # Photos in, question later. They keep their own filenames until a
+        # kind is assigned, because which name is *correct* depends entirely
+        # on the answer: a colour-matrix set's filenames are its colours
+        # (PRD 7a), while a scene kind wants the fixed scene.png (PRD 28).
         for upload in files:
             if not upload.filename:
                 raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
-            colour = Path(upload.filename).stem
-            try:
-                destination = workspace.template_base_image(name, colour)
-            except InvalidNameError as exc:
-                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            destination = workspace.template_base_image(name, Path(upload.filename).stem)
+            destination.write_bytes(await upload.read())
+        return UploadResponse(name=name, kind=None, colours=[])
+
+    if kind == "colour-matrix":
+        # Stored under the slug, not the uploaded stem, for the same reason
+        # `assign_kind` renames: PRD 7a makes the filename the slugified
+        # colour, and a set stored under "Heather Grey.png" is one no listing
+        # can ever reference.
+        stems: list[str] = []
+        for upload in files:
+            if not upload.filename:
+                raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
+            stems.append(Path(upload.filename).stem)
+        try:
+            slugs = slug_map(stems, workspace.load_exceptions())
+        except SlugCollisionError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+        colours: list[str] = []
+        for upload, stem in zip(files, stems, strict=True):
+            colour = slugs[stem]
+            destination = workspace.template_base_image(name, colour)
             destination.write_bytes(await upload.read())
             colours.append(colour)
 
@@ -153,8 +202,8 @@ async def upload_template(
         if not config_path.is_file():
             with Image.open(workspace.template_base_image(name, colours[0])) as img:
                 size = img.size
-            _write_template_config(
-                config_path, ColourMatrixTemplate(bounding_box=_default_box(size))
+            workspace.save_template_config(
+                name, ColourMatrixTemplate(bounding_box=_default_box(size))
             )
         return UploadResponse(name=name, kind="colour-matrix", colours=sorted(colours))
 
@@ -169,99 +218,250 @@ async def upload_template(
         with Image.open(destination) as img:
             size = img.size
         if kind == "multiple":
-            _write_template_config(config_path, MultipleTemplate(placements=[]))
+            workspace.save_template_config(name, MultipleTemplate(placements=[]))
         else:
-            _write_template_config(config_path, SingleTemplate(bounding_box=_default_box(size)))
+            workspace.save_template_config(name, SingleTemplate(bounding_box=_default_box(size)))
     return UploadResponse(name=name, kind=kind, colours=[])
 
 
+def _template_photos(template_dir: Path) -> list[Path]:
+    """Every photo in the directory except the scene, sorted."""
+    return sorted(p for p in template_dir.glob("*.png") if p.stem != "scene")
+
+
+def _colour_slugs(workspace: Workspace, photos: list[Path]) -> dict[Path, str]:
+    """Each photo mapped to the colour slug its filename means.
+
+    Goes through ``slug_map`` with the workspace's ``exceptions.yaml``, not a
+    bare ``slugify``, so the calibrator computes the *same* slug the rest of
+    the tool does -- including the names PRD 7a says will not slugify cleanly
+    and are overridden by hand. Two photos landing on one slug is refused
+    here rather than silently losing one of them at rename time.
+    """
+    try:
+        slugs = slug_map([photo.stem for photo in photos], workspace.load_exceptions())
+    except SlugCollisionError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    return {photo: slugs[photo.stem] for photo in photos}
+
+
+@router.get("/{name}/colour-report", response_model=list[ColourReportRow])
+def colour_report(request: Request, name: str) -> list[ColourReportRow]:
+    """What each photo will be taken as if this becomes a colour-matrix set.
+
+    Shown in the kind picker before committing, so a badly named file is seen
+    while it is still cheap to think about. A row with ``clean: false`` is one
+    ``assign_kind`` will rename on disk (PRD 7a: the filename *is* the
+    slugified colour, and a directory whose filenames disagree with the
+    colours they mean is the state that rule exists to prevent).
+    """
+    workspace = _workspace(request)
+    template_dir = workspace.template_dir(name)
+    if not template_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"no template {name!r}")
+
+    photos = _template_photos(template_dir)
+    slugs = _colour_slugs(workspace, photos)
+    return [
+        ColourReportRow(filename=photo.name, colour=slugs[photo], clean=slugs[photo] == photo.stem)
+        for photo in photos
+    ]
+
+
+def _rename_photos_to_slugs(workspace: Workspace, photos: list[Path]) -> list[Path]:
+    """Rename each photo to ``{slug}.png``, returning the new paths, sorted.
+
+    Case-only renames (``Forest.png`` -> ``forest.png``) go via a temporary
+    name: Windows filesystems are case-insensitive, so ``replace()`` straight
+    onto a path differing only in case is a no-op there and a rename
+    everywhere else -- which would make the calibrator behave differently on
+    the two platforms this tool runs on.
+    """
+    slugs = _colour_slugs(workspace, photos)
+    renamed: list[Path] = []
+    for photo in photos:
+        target = photo.with_name(f"{slugs[photo]}.png")
+        # Compared by *name*, not by Path: `WindowsPath("Forest.png") ==
+        # WindowsPath("forest.png")` is True, so a Path comparison here skips
+        # precisely the case-only rename the staging step below exists for.
+        if photo.name == target.name:
+            renamed.append(photo)
+            continue
+        staging = photo.with_name(f".{slugs[photo]}.renaming.png")
+        photo.replace(staging)
+        staging.replace(target)
+        renamed.append(target)
+    return sorted(renamed)
+
+
+@router.post("/{name}/kind", response_model=TemplateConfig)
+def assign_kind(request: Request, name: str, body: AssignKindRequest) -> AnyTemplate:
+    """The first calibration step: say what this template is, and get the
+    starting ``template.yaml`` for that shape.
+
+    Refuses a template that already has a config. Kind decides the whole file
+    shape (A11), so changing it would discard whatever calibration was done in
+    the old shape's fields -- and doing that silently, from a picker, is the
+    kind of data loss nobody would think to look for.
+    """
+    workspace = _workspace(request)
+    config_path = workspace.template_config_file(name)
+    template_dir = workspace.template_dir(name)
+    if not template_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"no template {name!r}")
+    if config_path.is_file():
+        raise HTTPException(
+            status_code=409,
+            detail=f"{name!r} already has a template.yaml; delete it to change kind",
+        )
+
+    photos = _template_photos(template_dir)
+    if not photos:
+        raise HTTPException(status_code=400, detail=f"no photos uploaded for {name!r}")
+
+    if body.kind == "colour-matrix":
+        # Rename each photo to the slug its name means, which is what the
+        # colour report just told the user would happen.
+        #
+        # This used to be a no-op comment claiming "these filenames already
+        # are the colours". They are not, for anything a human named:
+        # `Heather Grey.png` left the set calibrated and green with a colour
+        # called "Heather Grey", while `new` writes the *slug* into a
+        # listing's media -- so rendering failed with "no mockup base image
+        # for colour 'heather-grey'" against a template the calibrator had
+        # just declared finished. PRD 7a makes the filename the slug; this is
+        # where that becomes true.
+        photos = _rename_photos_to_slugs(workspace, photos)
+        with Image.open(photos[0]) as img:
+            size = img.size
+        config: AnyTemplate = ColourMatrixTemplate(bounding_box=_default_box(size))
+    else:
+        if len(photos) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{body.kind} kind expects one photo, found {len(photos)}",
+            )
+        scene = workspace.template_scene_image(name)
+        photos[0].replace(scene)
+        with Image.open(scene) as img:
+            size = img.size
+        config = (
+            MultipleTemplate(placements=[])
+            if body.kind == "multiple"
+            else SingleTemplate(bounding_box=_default_box(size))
+        )
+
+    workspace.save_template_config(name, config)
+    return config
+
+
+@router.get("/{name}/thumbnail")
+def thumbnail(request: Request, name: str) -> Response:
+    """The template's own photo, downscaled, for the rail.
+
+    Not a render: the rail shows every template in the workspace at once, and
+    running the real pipeline once per row would make opening the calibrator
+    cost as much as calibrating. Which photo hardly matters -- a colour-matrix
+    set's colours are all the same garment -- so this takes ``scene.png`` when
+    there is one and the first colour otherwise, without reading the config.
+
+    Regenerated per request rather than cached on disk; the resize is cheap
+    next to the response, and a cache in the workspace would be one more
+    derived directory to invalidate. Repeat loads are handled by the
+    ``Cache-Control`` header instead.
+    """
+    workspace = _workspace(request)
+    template_dir = workspace.template_dir(name)
+    if not template_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"no template {name!r}")
+
+    scene = workspace.template_scene_image(name)
+    source = scene if scene.is_file() else next(iter(sorted(template_dir.glob("*.png"))), None)
+    if source is None:
+        raise HTTPException(status_code=404, detail=f"no photo for {name!r}")
+
+    buffer = BytesIO()
+    with Image.open(source) as img:
+        img = img.convert("RGB")
+        img.thumbnail((THUMBNAIL_MAX, THUMBNAIL_MAX))
+        img.save(buffer, format="PNG")
+    return Response(
+        content=buffer.getvalue(),
+        media_type="image/png",
+        headers={"Cache-Control": "no-cache"},
+    )
+
+
 @router.get("/{name}/config", response_model=TemplateConfig)
-def get_config(
-    request: Request, name: str
-) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
-    config_path = _template_config_path(_workspace(request), name)
-    if not config_path.is_file():
-        raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}")
-    return _read_template_config(config_path)
+def get_config(request: Request, name: str) -> AnyTemplate:
+    return _load_config(_workspace(request), name)
 
 
 @router.put("/{name}/config", response_model=TemplateConfig)
-def put_config(
-    request: Request,
-    name: str,
-    body: ColourMatrixTemplate | MultipleTemplate | SingleTemplate,
-) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
-    config_path = _template_config_path(_workspace(request), name)
-    if not config_path.parent.is_dir():
+def put_config(request: Request, name: str, body: AnyTemplate) -> AnyTemplate:
+    workspace = _workspace(request)
+    if not workspace.template_config_file(name).parent.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
-    _write_template_config(config_path, body)
+    workspace.save_template_config(name, body)
     return body
+
+
+PREVIEW_BODIES: dict[TemplateKind, type[PreviewRequest]] = {
+    "colour-matrix": ColourMatrixPreviewRequest,
+    "multiple": MultiplePreviewRequest,
+    "single": SinglePreviewRequest,
+}
+"""Which request shape each kind's preview takes. The endpoint validates the
+body against the kind the target template already *is*, rather than
+shape-sniffing across all three."""
+
+
+def _preview_configs(body: PreviewRequest) -> list[RenderConfig]:
+    """The layers to composite, from the *unsaved* geometry in the request.
+
+    This is the one thing the preview cannot share with the render stage: it
+    renders what is currently under the user's cursor, not what
+    ``template.yaml`` says. Everything else about the scene -- which photo,
+    which derived maps, how they combine -- comes from the same place the
+    stage gets it.
+    """
+    if isinstance(body, MultiplePreviewRequest):
+        return [
+            RenderConfig(bounding_box=p.bounding_box, displace=body.displace, shade=body.shade)
+            for p in body.placements
+        ]
+    return [RenderConfig(bounding_box=body.bounding_box, displace=body.displace, shade=body.shade)]
 
 
 @router.post("/{name}/preview")
 def preview(request: Request, name: str, body: PreviewRequest) -> Response:
     workspace = _workspace(request)
-    config_path = _template_config_path(workspace, name)
-    if not config_path.is_file():
-        raise HTTPException(status_code=404, detail=f"no template.yaml for {name!r}")
-    template_cfg = _read_template_config(config_path)
-    design = load_design(BUNDLED_DESIGNS[body.design])
+    kind = _load_config(workspace, name).kind
+    if not isinstance(body, PREVIEW_BODIES[kind]):
+        raise HTTPException(status_code=400, detail=f"expected a {kind} preview body")
+
+    colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
+    photo = workspace.scene_photo(name, colour)
+    if not photo.path.is_file():
+        missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
+        raise HTTPException(status_code=404, detail=f"no mockup photo for {missing}")
+
+    base = load_template_base(photo.path)
+    design = load_design(resolve_design(workspace, body.design))
+    configs = _preview_configs(body)
     cache = DerivedMapCache(workspace.template_derived_dir(name))
-
-    if isinstance(template_cfg, ColourMatrixTemplate):
-        if not isinstance(body, ColourMatrixPreviewRequest):
-            raise HTTPException(status_code=400, detail="expected a colour-matrix preview body")
-        try:
-            base_path = workspace.template_base_image(name, body.colour)
-        except InvalidNameError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if not base_path.is_file():
-            raise HTTPException(status_code=404, detail=f"no base image for colour {body.colour!r}")
-        base = load_template_base(base_path)
-        cfg = RenderConfig(bounding_box=body.bounding_box, displace=body.displace, shade=body.shade)
-        image = render(
-            design,
-            base,
-            cfg,
-            height=cache.height(body.colour, base) if cfg.displace.enabled else None,
-            luminance=cache.luminance(body.colour, base) if cfg.shade.enabled else None,
-        )
-        return Response(content=encode_png(image), media_type="image/png")
-
-    if isinstance(template_cfg, SingleTemplate):
-        if not isinstance(body, SinglePreviewRequest):
-            raise HTTPException(status_code=400, detail="expected a single preview body")
-        base_path = workspace.template_scene_image(name)
-        if not base_path.is_file():
-            raise HTTPException(status_code=404, detail=f"no scene image for {name!r}")
-        base = load_template_base(base_path)
-        cfg = RenderConfig(bounding_box=body.bounding_box, displace=body.displace, shade=body.shade)
-        image = render(
-            design,
-            base,
-            cfg,
-            height=cache.height(name, base) if cfg.displace.enabled else None,
-            luminance=cache.luminance(name, base) if cfg.shade.enabled else None,
-        )
-        return Response(content=encode_png(image), media_type="image/png")
-
-    if not isinstance(body, MultiplePreviewRequest):
-        raise HTTPException(status_code=400, detail="expected a multiple preview body")
-    base_path = workspace.template_scene_image(name)
-    if not base_path.is_file():
-        raise HTTPException(status_code=404, detail=f"no scene image for {name!r}")
-    base = load_template_base(base_path)
-    layers = [
-        Layer(
-            design=design,
-            cfg=RenderConfig(bounding_box=p.bounding_box, displace=body.displace, shade=body.shade),
-        )
-        for p in body.placements
-    ]
     image = render_scene(
         base,
-        layers,
-        height=cache.height(name, base) if body.displace.enabled else None,
-        luminance=cache.luminance(name, base) if body.shade.enabled else None,
+        [Layer(design=design, cfg=cfg) for cfg in configs],
+        height=(
+            cache.height(photo.map_key, base)
+            if any(cfg.displace.enabled for cfg in configs)
+            else None
+        ),
+        luminance=(
+            cache.luminance(photo.map_key, base)
+            if any(cfg.shade.enabled for cfg in configs)
+            else None
+        ),
     )
     return Response(content=encode_png(image), media_type="image/png")

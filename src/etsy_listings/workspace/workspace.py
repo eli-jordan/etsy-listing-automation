@@ -11,14 +11,27 @@ future file-serving endpoints safe), not a tidiness rule.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
+import yaml
+from pydantic import ValidationError
+
 from etsy_listings.config.defaults import Defaults
+from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.profile import Profile
 from etsy_listings.config.slug import ColourExceptions
+
+# `template.yaml` is render geometry and render settings from top to bottom, so
+# its models belong to `render`, next to the passes that consume them -- not to
+# `config`, which owns the commercial/product files. Loading it here is the same
+# edge `load_listing` already has to `config`: the workspace knows where every
+# file lives, and asks whichever module owns a file's shape to parse it.
+from etsy_listings.render.config import AnyTemplate, dump_template_config
+from etsy_listings.render.config import load_template_config as parse_template_config
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.userpath import to_native_path
 
@@ -65,6 +78,15 @@ def _looks_like_windows_absolute(ref: str) -> bool:
     """
     p = PureWindowsPath(ref)
     return p.drive != "" or ref.startswith("\\\\") or ref.startswith("//")
+
+
+@dataclass(frozen=True)
+class ScenePhoto:
+    """A scene's blank mockup photo, and the name its derived maps cache under
+    (see :meth:`Workspace.scene_photo`)."""
+
+    path: Path
+    map_key: str
 
 
 class Workspace:
@@ -232,6 +254,30 @@ class Workspace:
         filename -- there's no per-colour name to derive it from."""
         return self.template_dir(template) / "scene.png"
 
+    def scene_photo(self, template: str, colour: str | None) -> ScenePhoto:
+        """Which photo a scene composites over, and what its derived maps are
+        cached under.
+
+        The two answers are one rule, so they are given together: a
+        colour-matrix scene has a photo *per colour* and therefore a height
+        and luminance map per colour, while the other two kinds have one of
+        each for the whole template. Both the render stage and the
+        calibrator's preview endpoint ask here, rather than each re-deriving
+        it from the template's kind -- which is what previously let the two
+        drift.
+        """
+        if colour is not None:
+            return ScenePhoto(path=self.template_base_image(template, colour), map_key=colour)
+        return ScenePhoto(path=self.template_scene_image(template), map_key=template)
+
+    def test_designs_dir(self) -> Path:
+        """Where the calibrator's uploaded test targets live (A19). Separate
+        from ``designs/``, which holds artwork that actually ships."""
+        return self.root / layout.TEST_DESIGNS_DIR
+
+    def test_design_file(self, name: str) -> Path:
+        return self.test_designs_dir() / f"{_segment(name)}.png"
+
     def render_file(self, listing: str, template: str, colour: str | None = None) -> Path:
         """Namespaced by template: a listing can reference several templates
         (item 4), including more than one ``colour-matrix``-kind set, so a
@@ -270,3 +316,31 @@ class Workspace:
 
     def load_exceptions(self) -> ColourExceptions:
         return load_exceptions(self.exceptions_file())
+
+    def load_template_config(self, template: str) -> AnyTemplate:
+        """One ``template.yaml``, parsed into whichever of the three kinds it is.
+
+        The read used to be open-coded at each of its four call sites -- the
+        render stage's ``desired`` and ``apply``, the calibrator's endpoints
+        and ``new``'s kind lookup -- each doing its own
+        ``yaml.safe_load(path.read_text(...))``. That is exactly the joining
+        of a layout that the layout accessors above exist to prevent, so it
+        lives here with ``load_listing`` and ``load_profile``.
+        """
+        path = self.template_config_file(template)
+        if not path.is_file():
+            raise ConfigLoadError(path, "template config not found -- calibrate it with `ui` first")
+        try:
+            return parse_template_config(yaml.safe_load(path.read_text(encoding="utf-8")))
+        except ValidationError as exc:
+            raise format_validation_error(path, exc) from exc
+
+    def save_template_config(self, template: str, config: AnyTemplate) -> None:
+        """Write ``template.yaml``. The calibrator is the only caller -- it is
+        what produces this file (PRD: the calibrator's artefact) -- but the
+        path and the serialisation belong here, beside the read."""
+        path = self.template_config_file(template)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            yaml.safe_dump(dump_template_config(config), sort_keys=False), encoding="utf-8"
+        )

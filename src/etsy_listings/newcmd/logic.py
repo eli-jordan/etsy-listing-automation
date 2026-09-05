@@ -16,14 +16,14 @@ import yaml
 from pydantic import ValidationError
 
 from etsy_listings.catalog.models import Blueprint, ShippingRates, VariantSet
+from etsy_listings.catalog.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.listing import GENERATE, MAX_MEDIA_ENTRIES, Listing
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.profile import PrintArea, Profile
+from etsy_listings.config.profile import BlueprintRef, PrintArea, Profile
 from etsy_listings.config.slug import ColourExceptions, slug_map, slugify
 from etsy_listings.newcmd.fx_rate import FxRate
-from etsy_listings.render.config import load_template_config
 from etsy_listings.workspace.workspace import Workspace
 
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
@@ -81,25 +81,31 @@ class BlueprintChoice:
     label: str
 
 
-def local_blueprint_titles(workspace: Workspace) -> set[str]:
-    """Blueprint titles this workspace already has a profile for.
+def local_blueprint_keys(workspace: Workspace) -> set[tuple[str, str]]:
+    """The ``(brand, model)`` pairs this workspace already has a profile for,
+    normalised for comparison.
 
-    A profile that will not parse is skipped rather than fatal: it makes a row
-    lose its marker, and refusing to open the picker over an unrelated broken
-    file would be a poor trade.
+    Keyed on brand+model rather than title, because that is what a profile now
+    identifies a blueprint by (PRD 23) -- and it is what makes the marker
+    survive Printify retitling a garment.
+
+    A profile that will not parse is skipped rather than fatal: it costs a row
+    its marker, and refusing to open the picker over one unrelated broken file
+    would be a poor trade.
     """
-    titles: set[str] = set()
+    keys: set[tuple[str, str]] = set()
     for name in workspace.profile_names():
         try:
-            titles.add(workspace.load_profile(name).blueprint)
+            ref = workspace.load_profile(name).blueprint
         except (ConfigLoadError, ValidationError):
             continue
-    return titles
+        keys.add((normalise(ref.brand), normalise(ref.model)))
+    return keys
 
 
 def build_blueprint_choices(
     blueprints: list[Blueprint],
-    local_titles: set[str],
+    local_keys: set[tuple[str, str]],
     *,
     marker: str = LOCAL_MARKER,
 ) -> list[BlueprintChoice]:
@@ -114,7 +120,10 @@ def build_blueprint_choices(
     common job. Within each group, rows sort by brand then title, so the brand
     column reads as blocks rather than as noise.
     """
-    entries = [(blueprint, blueprint.title in local_titles) for blueprint in blueprints]
+    entries = [
+        (blueprint, (normalise(blueprint.brand), normalise(blueprint.model)) in local_keys)
+        for blueprint in blueprints
+    ]
     entries.sort(key=lambda entry: (not entry[1], entry[0].brand.lower(), entry[0].title.lower()))
 
     brand_width = max((len(b.brand) for b, _ in entries), default=0)
@@ -148,27 +157,46 @@ def resolve_colour_slugs(variant_set: VariantSet, exceptions: ColourExceptions) 
 
 
 def profile_slug_for(blueprint: Blueprint) -> str:
-    return slugify(blueprint.title)
+    """``profiles/{slug}.yaml``, from brand and model.
+
+    Not from the title: Printify's is generic, so a title slug would file the
+    Comfort Colors 1717 under ``unisex-garment-dyed-t-shirt.yaml`` alongside
+    every other brand's version of the same shirt. Brand and model give
+    ``comfort-colors-1717`` -- the name the docs have always shown, and one
+    that survives a retitle.
+    """
+    return slugify(f"{blueprint.brand} {blueprint.model}")
+
+
+def blueprint_ref(blueprint: Blueprint) -> BlueprintRef:
+    """The catalog entry as a profile records it (PRD 23).
+
+    Brand and model are written verbatim, ® and all, because that is what the
+    catalog says; resolution normalises both sides, so a human editing the
+    file afterwards need not reproduce the symbol.
+    """
+    return BlueprintRef(brand=blueprint.brand, model=blueprint.model, title=blueprint.title)
 
 
 def build_profile(
     *,
-    blueprint_title: str,
+    blueprint: Blueprint,
     provider_title: str,
     placeholder: str,
     variant_set: VariantSet,
     colour_tone: dict[str, Literal["light", "dark"]] | None = None,
 ) -> Profile:
+    ref = blueprint_ref(blueprint)
     area = variant_set.placeholder(placeholder)
     if area is None:
         available = ", ".join(variant_set.positions()) or "(none)"
         raise ValueError(
-            f"blueprint {blueprint_title!r} / provider {provider_title!r} has no "
+            f"blueprint {str(ref)!r} / provider {provider_title!r} has no "
             f"{placeholder!r} placeholder. Available: {available}"
         )
     sizes = sort_sizes({v.options.size for v in variant_set.variants})
     return Profile(
-        blueprint=blueprint_title,
+        blueprint=ref,
         print_provider=provider_title,
         placeholder=placeholder,
         print_area=PrintArea(width=area.width, height=area.height),
@@ -198,10 +226,7 @@ def load_template_kind(workspace: Workspace, template: str) -> str:
     and writing the wrong shape produces a listing that only fails later, at
     render time, with nothing pointing back at ``new``.
     """
-    path = workspace.template_config_file(template)
-    if not path.is_file():
-        raise ConfigLoadError(path, "template config not found -- calibrate it with `ui` first")
-    return load_template_config(yaml.safe_load(path.read_text(encoding="utf-8"))).kind
+    return workspace.load_template_config(template).kind
 
 
 def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list[dict[str, str]]:

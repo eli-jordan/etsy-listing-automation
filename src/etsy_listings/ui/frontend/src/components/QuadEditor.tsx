@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import type { BoundingBox, Point } from "../types";
 
 const NUDGE_PX = 1;
@@ -10,6 +10,23 @@ interface Props {
   selectedIndex: number;
   onSelect: (index: number) => void;
   onChangeBox: (index: number, box: BoundingBox) => void;
+  /** `multiple`-kind only. Given these, the canvas grows the box-editing
+   * affordances 2a puts *on* it -- add, delete, and a right-click menu -- so
+   * you never have to leave the photo to change what you are looking at. */
+  onAddBox?: () => void;
+  onDeleteSelected?: () => void;
+  onDuplicateSelected?: () => void;
+  onBringSelectedToFront?: () => void;
+  /** How much box chrome to draw. Three states rather than a boolean because
+   * 2a's two toggles mean different things: a chart's "show all outlines"
+   * hides the *other* boxes while you keep working on one ("selected"), and a
+   * colour set's "show placement outline" hides everything so you can judge
+   * the render clean ("none"). */
+  outlines?: "all" | "selected" | "none";
+  /** Label for the selected box, shown with its extent. Explicitly admits
+   * `undefined`: `exactOptionalPropertyTypes` is on, so "may be absent" and
+   * "may be undefined" are different types here. */
+  selectedLabel?: string | undefined;
 }
 
 /**
@@ -22,10 +39,76 @@ interface Props {
  * through the SVG's own CTM rather than a hand-rolled scale factor --
  * correct regardless of how the browser scales the displayed image.
  */
-export function QuadEditor({ imageUrl, boxes, selectedIndex, onSelect, onChangeBox }: Props) {
+
+interface Menu {
+  /** Where the menu opens, in `.quad-editor` px. */
+  x: number;
+  y: number;
+}
+
+function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
+  const host = svg?.getBoundingClientRect();
+  return { x: clientX - (host?.left ?? 0), y: clientY - (host?.top ?? 0) };
+}
+
+/** The rectangle the menu has to stay inside: the nearest ancestor that clips
+ * its overflow, or the viewport if nothing does.
+ *
+ * Not the canvas. The canvas is a child of `.app__preview`, which is
+ * `overflow: hidden` and is often the *shorter* of the two -- so anything
+ * measured against the canvas gets the vertical case wrong, which is exactly
+ * the bug the first attempt at this shipped. */
+function clipRect(from: HTMLElement): DOMRect {
+  for (let el = from.parentElement; el && el !== document.body; el = el.parentElement) {
+    const style = getComputedStyle(el);
+    if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+      return el.getBoundingClientRect();
+    }
+  }
+  return new DOMRect(0, 0, window.innerWidth, window.innerHeight);
+}
+
+/** Place the menu at the click, then pull it back inside the clipping box.
+ *
+ * Measured rather than guessed from which half was clicked: the menu is
+ * ~90px tall and the preview pane can be barely more than that, so "past the
+ * midpoint" answers the wrong question. Written to the node in a layout
+ * effect, before paint, so there is no state churn and nothing is ever seen
+ * in the wrong place.
+ *
+ * Left unfixed, `.app__preview`'s clipping cut two of the three items off a
+ * menu opened on the rightmost box -- "Delete" was simply unreachable for the
+ * last garment in a chart. */
+function positionMenu(el: HTMLElement, menu: Menu): void {
+  Object.assign(el.style, { left: `${menu.x}px`, top: `${menu.y}px` });
+  const rect = el.getBoundingClientRect();
+  const clip = clipRect(el);
+  if (rect.right > clip.right) el.style.left = `${Math.max(0, menu.x - rect.width)}px`;
+  if (rect.bottom > clip.bottom) el.style.top = `${Math.max(0, menu.y - rect.height)}px`;
+}
+
+export function QuadEditor({
+  imageUrl,
+  boxes,
+  selectedIndex,
+  onSelect,
+  onChangeBox,
+  onAddBox,
+  onDeleteSelected,
+  onDuplicateSelected,
+  onBringSelectedToFront,
+  outlines = "all",
+  selectedLabel,
+}: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [naturalSize, setNaturalSize] = useState<[number, number] | null>(null);
   const [dragPointIndex, setDragPointIndex] = useState<number | null>(null);
+  const [menu, setMenu] = useState<Menu | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (menu && menuRef.current) positionMenu(menuRef.current, menu);
+  }, [menu]);
 
   function toImageSpace(clientX: number, clientY: number): Point | null {
     const svg = svgRef.current;
@@ -61,6 +144,11 @@ export function QuadEditor({ imageUrl, boxes, selectedIndex, onSelect, onChangeB
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    if ((event.key === "Delete" || event.key === "Backspace") && onDeleteSelected) {
+      event.preventDefault();
+      onDeleteSelected();
+      return;
+    }
     const box = boxes[selectedIndex];
     if (!box) return;
     const step = event.shiftKey ? NUDGE_PX_FAST : NUDGE_PX;
@@ -76,8 +164,15 @@ export function QuadEditor({ imageUrl, boxes, selectedIndex, onSelect, onChangeB
     onChangeBox(selectedIndex, next);
   }
 
+  const hasBoxMenu = Boolean(onDuplicateSelected || onBringSelectedToFront || onDeleteSelected);
+
   return (
-    <div className="quad-editor" tabIndex={0} onKeyDown={handleKeyDown}>
+    <div
+      className="quad-editor"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      onClick={() => setMenu(null)}
+    >
       <img
         src={imageUrl}
         alt="Rendered preview"
@@ -96,6 +191,8 @@ export function QuadEditor({ imageUrl, boxes, selectedIndex, onSelect, onChangeB
         >
           {boxes.map((box, boxIndex) => {
             const active = boxIndex === selectedIndex;
+            if (outlines === "none") return null;
+            if (outlines === "selected" && !active) return null;
             return (
               <g
                 key={boxIndex}
@@ -103,6 +200,12 @@ export function QuadEditor({ imageUrl, boxes, selectedIndex, onSelect, onChangeB
                   active ? "quad-editor__box" : "quad-editor__box quad-editor__box--dimmed"
                 }
                 onClick={() => onSelect(boxIndex)}
+                onContextMenu={(event) => {
+                  if (!hasBoxMenu) return;
+                  event.preventDefault();
+                  onSelect(boxIndex);
+                  setMenu(menuAnchor(event.clientX, event.clientY, svgRef.current));
+                }}
               >
                 <polygon
                   points={box.map((p) => `${p.x},${p.y}`).join(" ")}
@@ -123,6 +226,39 @@ export function QuadEditor({ imageUrl, boxes, selectedIndex, onSelect, onChangeB
             );
           })}
         </svg>
+      )}
+
+      {selectedLabel && <span className="quad-editor__readout">{selectedLabel}</span>}
+
+      {onAddBox && (
+        <button type="button" className="btn btn-primary quad-editor__add" onClick={onAddBox}>
+          + Add box
+        </button>
+      )}
+
+      {menu && (
+        <div className="quad-editor__menu" ref={menuRef} role="menu">
+          {onDuplicateSelected && (
+            <button type="button" role="menuitem" onClick={onDuplicateSelected}>
+              Duplicate
+            </button>
+          )}
+          {onBringSelectedToFront && (
+            <button type="button" role="menuitem" onClick={onBringSelectedToFront}>
+              Bring to front
+            </button>
+          )}
+          {onDeleteSelected && (
+            <button
+              type="button"
+              role="menuitem"
+              className="quad-editor__menu-danger"
+              onClick={onDeleteSelected}
+            >
+              Delete ⌫
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

@@ -74,9 +74,23 @@ def calibrator_server(workspace_root: Path) -> Iterator[str]:
         thread.join(timeout=10)
 
 
+DEFAULT_TIMEOUT_MS = 60_000
+"""Headroom over Playwright's 30s default, because every wait in this layer
+sits behind the *real* render pipeline running in-process -- and under
+`pytest --cov`, which is how `scripts/check.sh` runs it, that is meaningfully
+slower than a normal browser interaction.
+
+It buys margin; it is not a fix for anything. A wait here that actually
+exhausts 60s is reporting a bug, not a slow machine -- the last one to do so
+was a stale closure in the upload form that meant the request was never sent
+at all."""
+
+
 @pytest.fixture
 def page(browser_type, calibrator_server: str):  # noqa: ANN001, ANN201
     context = browser_type.new_context(viewport={"width": 1280, "height": 900})
+    context.set_default_timeout(DEFAULT_TIMEOUT_MS)
+    context.set_default_navigation_timeout(DEFAULT_TIMEOUT_MS)
     page = context.new_page()
     page.goto(calibrator_server)
     yield page

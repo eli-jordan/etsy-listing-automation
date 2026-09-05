@@ -198,12 +198,39 @@ geometry. Nothing commercial lives here. It is created by `new` (below) and
 reused by every subsequent listing for that shirt.
 
 ```yaml
-blueprint: Comfort Colors 1717      # authoritative; id resolved from cache
+blueprint:                          # authoritative; id resolved from cache
+  brand: Comfort Colors             # brand + model identify the blank
+  model: "1717"
+  title: Unisex Garment-Dyed T-shirt   # descriptive; not matched on
 print_provider: Monster Digital     # authoritative; id resolved from cache
 placeholder: front
 print_area: { width: 4500, height: 5400 }   # px, from the catalog placeholders
 sizes: [S, M, L, XL, XXL, XXXL]
 ```
+
+**A blueprint is identified by brand and model, not by title.** This was a
+bare `blueprint: Comfort Colors 1717` until the e2e layer asked Printify and
+found no blueprint by that title — the catalog calls 706 *"Unisex Garment-Dyed
+T-shirt"*, with the brand *"Comfort Colors®"* and the model *"1717"*. Two
+things were wrong with a title:
+
+- **Printify's titles are generic and shared.** "Unisex Garment-Dyed T-shirt"
+  does not say which shirt; half a dozen brands sell one. Brand and model are
+  what anyone buying blanks actually quotes, which is why `new`'s picker
+  already columns them.
+- **Titles are marketing copy and get rewritten.** A retitle silently breaks
+  every profile that named one, and the failure surfaces much later.
+
+`title` is still recorded, and `new` refreshes it, because a file saying only
+`brand: Comfort Colors / model: "1717"` is harder to read than one that also
+says what the garment is. It is **not** part of the match — a title that has
+drifted is stale prose, not a broken profile.
+
+Matching normalises: case, surrounding whitespace, and the ® / ™ signs
+Printify puts in brand names. So a hand-written `brand: Comfort Colors`
+resolves against the catalog's `Comfort Colors®` without anyone having to
+type the symbol. If brand and model somehow match more than one blueprint,
+that is an error naming the candidates rather than an arbitrary pick.
 
 One print area, and the catalog offers several: Printify's placeholders hang
 off each *variant* and differ by garment size (Comfort Colors 1717 / Monster
@@ -810,7 +837,7 @@ whether Norway is among them needs checking, not assuming).
 | 20 | UI scope | Read-only dashboard + template authoring + plan/apply runner. |
 | 21 | Live listings | `plan` marks LIVE and shows the diff; `apply` proceeds without a special flag. |
 | 22 | Mockup storage | Rendered mockups persist in gitignored `.cache/renders/` — not regenerated every run, not committed. |
-| 23 | Provider references | Blueprints and print providers referred to by name in all config; names resolve to Printify IDs via a cached lookup. |
+| 23 | Provider references | Print providers referred to by name in all config; blueprints by a `{brand, model, title}` object, matched on brand + model. Both resolve to Printify IDs via a cached lookup. Revised after the e2e layer found that Printify has no blueprint titled "Comfort Colors 1717": titles there are generic ("Unisex Garment-Dyed T-shirt"), shared across brands, and rewritten over time, so a title is not an identifier. `title` stays on the object as readable context and is not matched. |
 | 24 | Price units | Every price carries an explicit currency (`349 NOK`); bare numbers and mismatched currencies are rejected. |
 | 25 | Media references | Superseded by #29 — always-explicit `{template, colour?}` references, no bare-colour shorthand. |
 | 26 | First run | The `ui` opens a setup wizard when no shop is connected — Etsy and Printify auth, Anthropic credentials, and guided `shop.yaml` generation. |

@@ -1,37 +1,39 @@
-import { useCallback, useEffect, useState } from "react";
-import { renderPreview } from "../api/calibrator";
+import { useCallback, useMemo } from "react";
+import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
-import { DisplaceControls, ShadeControls } from "../components/RenderControls";
+import { TestDesignPicker } from "../components/TestDesignPicker";
+import { usePreview } from "../hooks/usePreview";
 import type { BoundingBox, SingleTemplate } from "../types";
 
 interface Props {
   templateName: string;
   config: SingleTemplate;
   onChange: (config: SingleTemplate) => void;
+  design: string;
+  onDesignChange: (design: string) => void;
 }
-
-const PREVIEW_DEBOUNCE_MS = 200;
 
 /** The simplest of the three: one box, sliders, no filmstrip, no placements
  * panel -- one photo, one garment, nothing to disambiguate. */
-export function SingleEditor({ templateName, config, onChange }: Props) {
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      renderPreview(templateName, {
+export function SingleEditor({
+  templateName,
+  config,
+  onChange,
+  design,
+  onDesignChange,
+}: Props) {
+  const previewUrl = usePreview(
+    templateName,
+    useMemo(
+      () => ({
         bounding_box: config.bounding_box,
         displace: config.displace,
         shade: config.shade,
-      }).then((url) => {
-        setPreviewUrl((previous) => {
-          if (previous) URL.revokeObjectURL(previous);
-          return url;
-        });
-      });
-    }, PREVIEW_DEBOUNCE_MS);
-    return () => clearTimeout(timer);
-  }, [templateName, config]);
+      }),
+      [config.bounding_box, config.displace, config.shade],
+    ),
+    design,
+  );
 
   const handleBoxChange = useCallback(
     (_index: number, box: BoundingBox) => onChange({ ...config, bounding_box: box }),
@@ -63,11 +65,13 @@ export function SingleEditor({ templateName, config, onChange }: Props) {
             placeholder="for artwork resolution, if relevant"
           />
         </label>
-        <DisplaceControls
-          value={config.displace}
-          onChange={(displace) => onChange({ ...config, displace })}
+        <TestDesignPicker value={design} onChange={onDesignChange} />
+        <PrintRealismPanel
+          displace={config.displace}
+          shade={config.shade}
+          onDisplaceChange={(displace) => onChange({ ...config, displace })}
+          onShadeChange={(shade) => onChange({ ...config, shade })}
         />
-        <ShadeControls value={config.shade} onChange={(shade) => onChange({ ...config, shade })} />
       </aside>
     </main>
   );

@@ -8,7 +8,7 @@ and the order of work. Where the two disagree, the PRD wins and this file is wro
 
 ## Architecture decision log
 
-Eighteen forks, resolved. Numbered `A#` so they can be cited from code comments
+Nineteen forks, resolved. Numbered `A#` so they can be cited from code comments
 and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
@@ -31,6 +31,7 @@ and commit messages without colliding with the PRD's own decision log.
 | A16 | Pricing plan resolution | `Listing.pricing_plan` stays a bare ref string, resolved by the caller via `Workspace.resolve()`, exactly like `design:` — `Listing` itself never touches `Workspace` or does I/O. `resolved_price()` takes an already-loaded `PricingPlan` as an optional keyword argument rather than loading it itself. Keeps `Listing` as pure and workspace-ignorant as it is today; the cost is every future price-resolving call site must remember to load and pass the plan, same cost `design:` resolution already carries. PRD 34. |
 | A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside `catalog/`'s documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
 | A18 | Wizard-time FX module placement | The one-off FX fetch lives in `newcmd/fx_rate.py`, not the package layout's reserved `fx/` (this doc's own deferred, cached full-margin module, PRD 10b) — avoids name collision with, and confusion against, that future work. PRD 36. |
+| A19 | Calibrator test design | A **library**, not the fixed `BundledDesign` literal it replaces. The three bundled targets stay and keep their ids; the preview endpoint resolves an arbitrary id against those plus PNGs the user has uploaded into the workspace, and an unknown id is a 400 rather than a `KeyError`. The literal was right while the only designs were the ones shipped in `api/static/`, but calibration is judged by eye, and the grid target answers "is the warp right?" while saying nothing about how a real ink weight sits on a real garment. The set has to be open for the second question. Uploads land in the workspace (`test-designs/`, kept apart from `designs/`), never the repo. |
 
 ### Toolchain
 
@@ -84,8 +85,16 @@ src/etsy_listings/
   runs/                 SQLite recorder, schema, event types
   ui/
     api/                FastAPI app, routers, schemas, SSE
+      templates.py      upload, kind assignment, colour report, config, preview,
+                        rail thumbnails
+      designs.py        the test-design library — bundled targets plus the
+                        user's own uploads (A19)
     frontend/           Vite project, dist/ shipped as package data
 ```
+
+The workspace gains one directory for the calibrator: `test-designs/`, holding
+uploaded preview targets. Deliberately not `designs/`, which is artwork that
+ships — a calibration target is not a product (A19).
 
 ---
 
@@ -381,9 +390,34 @@ POST /api/setup/defaults                  writes shop.yaml
 
 Screens: **Setup wizard** (shown whenever no shop is connected), **Dashboard**
 (listings by state, drift indicators, run history, live progress), **Calibrator**
-(SVG quad handles over the template, displacement/shading sliders, colour
-filmstrip, bundled test design with a grid-target toggle), **Runner** (plan/apply
-per listing or batch, streamed output).
+(below), **Runner** (plan/apply per listing or batch, streamed output).
+
+### The calibrator's shape
+
+Three columns — template rail, canvas, inspector. The rail replaces what was a
+template dropdown: it sorts templates that are not finished above the ones that
+are, and says what each is missing. That ordering is the screen's whole
+argument, and a dropdown cannot make it.
+
+`TemplateSummary.status` is **derived on every read**, never persisted. A
+`calibrated:` flag in `template.yaml` would be product state no PRD decision
+covers, and it could disagree with the config sitting beside it. Only
+`multiple` has states beyond "has a config at all": `placements: []` is what an
+upload writes, and a box can be positioned before anyone says which colour it
+depicts.
+
+The inspector names controls after what they do to a photograph rather than
+after the render pass behind them — "Follow fabric wrinkles" over `displace`,
+"Pick up garment shading" over `shade`, and preset names over blend modes. The
+raw values stay reachable under an *Advanced* disclosure, because the pass
+names are what the config, the goldens and every error message use.
+
+**Not surfaced yet, and owed:** `colour_coverage` (`exact`/`subset`) and the
+per-placement `artwork` override. Both change render output and both are
+currently editable only by hand in `template.yaml`. They were left out to keep
+the redesign's default view as clean as the wireframe intends, not because they
+stopped mattering; the *Advanced* disclosure is where they belong when they
+come back.
 
 Run endpoints call the same `engine` service functions the CLI calls, passing an
 event callback. There is no UI-only execution path.

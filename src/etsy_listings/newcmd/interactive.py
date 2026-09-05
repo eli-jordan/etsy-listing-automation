@@ -13,9 +13,9 @@ from typing import Literal, cast
 
 import typer
 
+from etsy_listings import terminal
 from etsy_listings.catalog.client import CatalogClient
 from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
-from etsy_listings.cli import glyphs
 from etsy_listings.config.listing import MAX_MEDIA_ENTRIES
 from etsy_listings.config.slug import SlugCollisionError
 from etsy_listings.newcmd import fx_rate, prompts, unofficial_variant_costs
@@ -32,7 +32,7 @@ from etsy_listings.newcmd.logic import (
     filter_blueprints_by_category,
     load_candidate_pricing_plans,
     load_template_kind,
-    local_blueprint_titles,
+    local_blueprint_keys,
     profile_slug_for,
     resolve_colour_slugs,
     validate_listing_stub,
@@ -62,8 +62,8 @@ def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Bluepr
     shop reuses a handful of blueprints, and re-finding the one used yesterday
     is this picker's most common job.
     """
-    marker = glyphs.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
-    choices = build_blueprint_choices(blueprints, local_blueprint_titles(workspace), marker=marker)
+    marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
+    choices = build_blueprint_choices(blueprints, local_blueprint_keys(workspace), marker=marker)
     by_label = {choice.label: choice for choice in choices}
 
     answer = prompts.choose(
@@ -188,7 +188,7 @@ def _pick_or_create_pricing_plan(
     rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]
     by_label = {c.label: c for c in choices}
 
-    marker = glyphs.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
+    marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
     answer = prompts.choose(
         "Pricing plan", rows, marker_hint=f"{marker.strip()} = sizes match this garment exactly"
     )
@@ -264,7 +264,7 @@ def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, cate
             colour_tone[colour] = cast('Literal["light", "dark"]', tone)
 
     profile = build_profile(
-        blueprint_title=blueprint.title,
+        blueprint=blueprint,
         provider_title=provider.title,
         placeholder=DEFAULT_PLACEHOLDER,
         variant_set=variant_set,

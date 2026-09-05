@@ -41,6 +41,7 @@ graph TD
     NEWCMD --> CATALOG
     NEWCMD --> WORKSPACE
     WORKSPACE --> CONFIG
+    WORKSPACE --> RENDER
     ENGINE --> CONFIG
     NEWCMD --> CONFIG
     CLI --> CONFIG
@@ -49,6 +50,13 @@ graph TD
 Dependencies point strictly downward; there are no cycles. `render`, `catalog`
 and `config` know nothing about workspaces, listings or each other, which is
 what makes them testable in isolation — and what lets `render` be pure.
+
+`workspace` depends on both `config` and `render` for the same reason: it knows
+where every file lives, and asks whichever module owns a file's *shape* to
+parse it. `shop.yaml`, `listing.yaml` and the pricing plans are `config`'s;
+`template.yaml` is `render`'s, because it is render geometry and render
+settings from top to bottom. The arrow only ever points that way — `render`
+still has no idea a workspace exists.
 
 | Module | Owns | Deliberately does *not* |
 |---|---|---|
@@ -61,13 +69,29 @@ what makes them testable in isolation — and what lets `render` be pure.
 | `catalog` | Printify blueprint/provider/variant reads, TTL cache, name→id | Anything shop-scoped or authenticated |
 | `config` | `shop.yaml` / profile / listing models, `Money`, slugs | Know where those files are on disk |
 
+Plus one leaf that is not a module: `etsy_listings/terminal.py` answers "can
+this stream print that character?" for anything that decorates output. Both
+`cli` (the `apply` swatches) and `newcmd` (the picker's local-profile marker)
+need it, and while it lived in `cli` the second of those was an import
+pointing *up* through the layering — the one place the "no cycles" claim above
+was not actually true. It depends on nothing but the standard library, so
+anything may depend on it.
+
+Each package's `__init__.py` states its own interface: what it exports, and
+what it deliberately withholds. Those docstrings are the short version of this
+table, kept next to the code.
+
 Three boundaries carry most of the weight:
 
 - **`workspace` is the only module that knows the tree's shape.** Everything
   else asks for "this listing's lockfile" rather than joining
   `listings/<name>/state.lock.json`. That is also what makes the UI safe:
   template names arriving from URLs are validated by the same rule that guards
-  every other path (A8), not by a second check in the web layer.
+  every other path (A8), not by a second check in the web layer. Reading a
+  config file is part of that: `load_listing`, `load_profile` and
+  `load_template_config` are how the tree's files are opened, so no caller
+  writes its own `yaml.safe_load(path.read_text(...))` against a path it
+  assembled.
 - **Only `engine` computes a diff.** `cli` and (later) `ui` consume `Plan` /
   `StagePlan` / `Change` objects and render them. Neither compares state, which
   is what guarantees the PRD's "one set of rules regardless of route".
@@ -173,6 +197,13 @@ The preview is the real renderer, not an approximation — that is the whole
 point of calibrating in a browser. `template.yaml` is the artefact the
 calibrator produces and the render stage consumes; nothing else passes between
 them.
+
+"Real renderer" is now structural rather than a claim maintained by hand. Both
+routes ask `Workspace.scene_photo()` which photo a scene composites over and
+what its derived maps cache under, and both composite through
+`render_scene()`. The one thing the preview does differently is where its
+geometry comes from — the unsaved boxes under the user's cursor, not the file
+on disk — which is exactly the difference that makes it a preview.
 
 ## Testing layers
 

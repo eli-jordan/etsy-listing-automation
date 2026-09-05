@@ -166,26 +166,31 @@ class SingleTemplate(BaseModel):
         )
 
 
-TemplateConfig = Annotated[
-    ColourMatrixTemplate | MultipleTemplate | SingleTemplate, Field(discriminator="kind")
-]
+AnyTemplate = ColourMatrixTemplate | MultipleTemplate | SingleTemplate
+"""One loaded ``template.yaml``, whichever kind it turned out to be.
+
+The plain union, for annotating variables and return types. Use
+:data:`TemplateConfig` -- the same union carrying pydantic's discriminator --
+wherever pydantic itself does the dispatch (a FastAPI ``response_model``, a
+request body, a ``TypeAdapter``)."""
+
+TemplateConfig = Annotated[AnyTemplate, Field(discriminator="kind")]
 """``mockup-templates/{name}/template.yaml``, written by the calibrator. A
 discriminated union, not a wrapping model -- the file *is* one of the three
-shapes. Load with :func:`load_template_config`."""
+shapes. Parse with :func:`load_template_config`; read one off disk with
+``Workspace.load_template_config``, which is the only thing that knows where
+the file lives."""
 
-_TEMPLATE_CONFIG_ADAPTER: TypeAdapter[ColourMatrixTemplate | MultipleTemplate | SingleTemplate] = (
-    TypeAdapter(TemplateConfig)
-)
+_TEMPLATE_CONFIG_ADAPTER: TypeAdapter[AnyTemplate] = TypeAdapter(TemplateConfig)
 
 
-def load_template_config(
-    data: object,
-) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
+def load_template_config(data: object) -> AnyTemplate:
+    """Parse already-read YAML/JSON data. The file-level read lives on
+    ``Workspace`` -- this half stays pure, so ``render`` still knows nothing
+    about where a workspace keeps its templates."""
     return _TEMPLATE_CONFIG_ADAPTER.validate_python(data)
 
 
-def dump_template_config(
-    config: ColourMatrixTemplate | MultipleTemplate | SingleTemplate,
-) -> dict[str, object]:
+def dump_template_config(config: AnyTemplate) -> dict[str, object]:
     result: dict[str, object] = _TEMPLATE_CONFIG_ADAPTER.dump_python(config, mode="json")
     return result

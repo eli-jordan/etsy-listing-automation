@@ -342,12 +342,23 @@ Equivalent, written directly:
 
 ```yaml
 # profiles/comfort-colors-1717.yaml
-blueprint: Comfort Colors 1717
+blueprint:
+  brand: Comfort Colors
+  model: "1717"
+  title: Unisex Garment-Dyed T-shirt
 print_provider: Monster Digital
 placeholder: front
 print_area: { width: 4500, height: 5400 }
 sizes: [S, M, L, XL, XXL, XXXL]
 ```
+
+`blueprint` is matched on **brand and model** — the pair you'd quote to order
+blanks. `title` is there so the file reads as something rather than a part
+number, and is ignored when resolving: Printify's titles are generic ("Unisex
+Garment-Dyed T-shirt" is sold by several brands) and get rewritten, so one is
+not an identifier (PRD 23). Case, surrounding spaces and the ® Printify puts
+in brand names are all normalised away, so `Comfort Colors` matches its
+`Comfort Colors®`.
 
 ```yaml
 # listings/take-a-hike/listing.yaml

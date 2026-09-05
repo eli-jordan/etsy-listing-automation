@@ -13,14 +13,15 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings import terminal
 from etsy_listings.catalog.models import Blueprint
-from etsy_listings.cli import glyphs
+from etsy_listings.catalog.resolve import normalise
 from etsy_listings.newcmd import prompts
 from etsy_listings.newcmd.logic import (
     LOCAL_MARKER,
     LOCAL_MARKER_FALLBACK,
     build_blueprint_choices,
-    local_blueprint_titles,
+    local_blueprint_keys,
 )
 from etsy_listings.workspace.workspace import Workspace
 
@@ -28,6 +29,13 @@ COMFORT_TEE = Blueprint(
     id=6, title="Unisex Garment-Dyed Heavy Weight Tee", brand="Comfort Colors", model="1717"
 )
 GILDAN_TEE = Blueprint(id=12, title="Unisex Heavy Cotton Tee", brand="Gildan", model="5000")
+
+
+def _key(blueprint: Blueprint) -> tuple[str, str]:
+    """A blueprint as `local_blueprint_keys` reports it: normalised brand+model."""
+    return (normalise(blueprint.brand), normalise(blueprint.model))
+
+
 GILDAN_HOODIE = Blueprint(id=99, title="Unisex Pullover Hoodie", brand="Gildan", model="18500")
 GILDAN_LONG = Blueprint(id=13, title="Unisex Long Sleeve Tee", brand="Gildan", model="2400")
 ALL = [COMFORT_TEE, GILDAN_HOODIE, GILDAN_TEE, GILDAN_LONG]
@@ -37,7 +45,7 @@ ALL = [COMFORT_TEE, GILDAN_HOODIE, GILDAN_TEE, GILDAN_LONG]
 
 
 def test_locally_used_garments_come_first_and_carry_the_marker() -> None:
-    choices = build_blueprint_choices(ALL, {GILDAN_HOODIE.title}, marker="* ")
+    choices = build_blueprint_choices(ALL, {_key(GILDAN_HOODIE)}, marker="* ")
 
     assert choices[0].blueprint == GILDAN_HOODIE
     assert choices[0].is_local is True
@@ -70,7 +78,7 @@ def test_the_model_column_sits_between_the_brand_and_the_title() -> None:
 
 
 def test_rows_without_a_local_profile_still_reserve_the_marker_column() -> None:
-    choices = build_blueprint_choices(ALL, {GILDAN_HOODIE.title}, marker="* ")
+    choices = build_blueprint_choices(ALL, {_key(GILDAN_HOODIE)}, marker="* ")
     marked, unmarked = choices[0], choices[1]
     assert marked.label.index(marked.blueprint.brand) == unmarked.label.index(
         unmarked.blueprint.brand
@@ -94,20 +102,38 @@ def test_no_blueprints_produces_no_rows() -> None:
 # --- which garments count as "already used here" -----------------------------
 
 
-def test_local_blueprint_titles_reads_the_workspace_profiles(workspace_root: Path) -> None:
+def test_local_blueprint_keys_reads_the_workspace_profiles(workspace_root: Path) -> None:
     workspace = Workspace.discover(root_override=workspace_root)
-    titles = local_blueprint_titles(workspace)
-    assert titles == {workspace.load_profile(name).blueprint for name in workspace.profile_names()}
-    assert titles
+    keys = local_blueprint_keys(workspace)
+    assert keys == {
+        (
+            normalise(workspace.load_profile(name).blueprint.brand),
+            normalise(workspace.load_profile(name).blueprint.model),
+        )
+        for name in workspace.profile_names()
+    }
+    assert keys
+
+
+def test_a_local_key_ignores_case_and_the_trademark_sign(workspace_root: Path) -> None:
+    """The catalog says "Comfort Colors®"; a hand-written profile says
+    "Comfort Colors". The marker has to survive that, or the garment you used
+    yesterday stops sorting to the top for a reason nobody can see."""
+    workspace = Workspace.discover(root_override=workspace_root)
+    catalog_entry = Blueprint(
+        id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
+    )
+    choices = build_blueprint_choices([catalog_entry], local_blueprint_keys(workspace))
+    assert choices[0].is_local is True
 
 
 def test_a_broken_profile_costs_a_marker_not_the_whole_picker(workspace_root: Path) -> None:
     (workspace_root / "profiles" / "broken.yaml").write_text("not: a profile\n", encoding="utf-8")
     workspace = Workspace.discover(root_override=workspace_root)
-    assert local_blueprint_titles(workspace)  # the valid ones still resolve
+    assert local_blueprint_keys(workspace)  # the valid ones still resolve
 
 
-def test_a_workspace_with_no_profiles_directory_has_no_local_titles(tmp_path: Path) -> None:
+def test_a_workspace_with_no_profiles_directory_has_no_local_keys(tmp_path: Path) -> None:
     (tmp_path / "shop.yaml").write_text(
         "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
         "  is_supply: false\ncurrency: NOK\n",
@@ -115,7 +141,7 @@ def test_a_workspace_with_no_profiles_directory_has_no_local_titles(tmp_path: Pa
     )
     workspace = Workspace.discover(root_override=tmp_path)
     assert workspace.profile_names() == []
-    assert local_blueprint_titles(workspace) == set()
+    assert local_blueprint_keys(workspace) == set()
 
 
 # --- picking a backend -------------------------------------------------------
@@ -427,10 +453,10 @@ def test_plain_prompts_treat_eof_as_cancellation(monkeypatch) -> None:
 
 
 def test_the_marker_falls_back_to_ascii_on_a_terminal_that_cannot_print_it() -> None:
-    assert glyphs.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK, stream=_Stream("cp1252")) == (
+    assert terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK, stream=_Stream("cp1252")) == (
         LOCAL_MARKER_FALLBACK
     )
-    assert glyphs.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK, stream=_Stream("utf-8")) == (
+    assert terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK, stream=_Stream("utf-8")) == (
         LOCAL_MARKER
     )
 
@@ -444,7 +470,7 @@ def test_both_marker_forms_occupy_the_same_width() -> None:
 
 
 def test_an_unknown_encoding_is_treated_as_unable_to_print() -> None:
-    assert glyphs.encodable("x", stream=_Stream("not-a-real-codec")) is False
+    assert terminal.encodable("x", stream=_Stream("not-a-real-codec")) is False
 
 
 # --- believing the shell about its encoding ----------------------------------
@@ -470,25 +496,25 @@ def test_an_unknown_encoding_is_treated_as_unable_to_print() -> None:
     ],
 )
 def test_declared_utf8_reads_the_locale_the_shell_set(environ, expected: bool) -> None:
-    assert glyphs.declared_utf8(environ) is expected
+    assert terminal.declared_utf8(environ) is expected
 
 
 def test_a_utf8_locale_re_encodes_the_output_streams(monkeypatch) -> None:
     seen: list[str] = []
-    monkeypatch.setattr(glyphs.sys, "stdout", _Reconfigurable(seen))
-    monkeypatch.setattr(glyphs.sys, "stderr", _Reconfigurable(seen))
+    monkeypatch.setattr(terminal.sys, "stdout", _Reconfigurable(seen))
+    monkeypatch.setattr(terminal.sys, "stderr", _Reconfigurable(seen))
 
-    glyphs.adopt_declared_encoding({"LANG": "en_GB.UTF-8"})
+    terminal.adopt_declared_encoding({"LANG": "en_GB.UTF-8"})
 
     assert seen == ["utf-8", "utf-8"]
 
 
 def test_a_non_utf8_locale_leaves_the_streams_alone(monkeypatch) -> None:
     seen: list[str] = []
-    monkeypatch.setattr(glyphs.sys, "stdout", _Reconfigurable(seen))
-    monkeypatch.setattr(glyphs.sys, "stderr", _Reconfigurable(seen))
+    monkeypatch.setattr(terminal.sys, "stdout", _Reconfigurable(seen))
+    monkeypatch.setattr(terminal.sys, "stderr", _Reconfigurable(seen))
 
-    glyphs.adopt_declared_encoding({"LANG": "C"})
+    terminal.adopt_declared_encoding({"LANG": "C"})
 
     assert seen == []
 
@@ -497,10 +523,10 @@ def test_an_explicit_pythonioencoding_wins(monkeypatch) -> None:
     """Someone naming an encoding on purpose is exactly what this must not
     second-guess."""
     seen: list[str] = []
-    monkeypatch.setattr(glyphs.sys, "stdout", _Reconfigurable(seen))
-    monkeypatch.setattr(glyphs.sys, "stderr", _Reconfigurable(seen))
+    monkeypatch.setattr(terminal.sys, "stdout", _Reconfigurable(seen))
+    monkeypatch.setattr(terminal.sys, "stderr", _Reconfigurable(seen))
 
-    glyphs.adopt_declared_encoding({"LANG": "en_GB.UTF-8", "PYTHONIOENCODING": "cp1252"})
+    terminal.adopt_declared_encoding({"LANG": "en_GB.UTF-8", "PYTHONIOENCODING": "cp1252"})
 
     assert seen == []
 
@@ -509,18 +535,18 @@ def test_a_stream_that_cannot_be_reconfigured_is_skipped(monkeypatch) -> None:
     """pytest's own capture, a StringIO, a pipe wrapper: no `reconfigure`, and
     a decoration is never worth an AttributeError over."""
     seen: list[str] = []
-    monkeypatch.setattr(glyphs.sys, "stdout", _Stream("cp1252"))
-    monkeypatch.setattr(glyphs.sys, "stderr", _Reconfigurable(seen))
+    monkeypatch.setattr(terminal.sys, "stdout", _Stream("cp1252"))
+    monkeypatch.setattr(terminal.sys, "stderr", _Reconfigurable(seen))
 
-    glyphs.adopt_declared_encoding({"LANG": "en_GB.UTF-8"})
+    terminal.adopt_declared_encoding({"LANG": "en_GB.UTF-8"})
 
     assert seen == ["utf-8"]
 
 
 def test_a_stream_that_refuses_to_be_reconfigured_is_survived(monkeypatch) -> None:
-    monkeypatch.setattr(glyphs.sys, "stdout", _Reconfigurable(None))
-    monkeypatch.setattr(glyphs.sys, "stderr", _Reconfigurable(None))
-    glyphs.adopt_declared_encoding({"LANG": "en_GB.UTF-8"})  # does not raise
+    monkeypatch.setattr(terminal.sys, "stdout", _Reconfigurable(None))
+    monkeypatch.setattr(terminal.sys, "stderr", _Reconfigurable(None))
+    terminal.adopt_declared_encoding({"LANG": "en_GB.UTF-8"})  # does not raise
 
 
 class _Stream:
@@ -641,7 +667,7 @@ def test_new_runs_end_to_end_without_prompt_toolkit(workspace_root: Path, monkey
     listing = workspace_root / "listings" / "brand-new-design" / "listing.yaml"
     assert listing.is_file()
     assert "flat-lay-01" in listing.read_text(encoding="utf-8")
-    assert (workspace_root / "profiles" / "unisex-heavy-cotton-tee.yaml").is_file()
+    assert (workspace_root / "profiles" / "gildan-5000.yaml").is_file()
     assert (workspace_root / "pricing-plans" / "launch-low.yaml").is_file()
 
 
@@ -707,7 +733,7 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     plan_path = workspace_root / "pricing-plans" / "computed-plan.yaml"
     assert plan_path.is_file()
     plan = workspace.load_pricing_plan(plan_path)
-    assert plan.profile == "unisex-heavy-cotton-tee"
+    assert plan.profile == "gildan-5000"
     zero = Money.parse(f"0 {workspace.defaults.currency}")
     assert all(price != zero for price in plan.prices.values())  # real cost data was used
 
@@ -730,7 +756,7 @@ def test_new_offers_an_existing_compatible_pricing_plan(workspace_root: Path, mo
     plans_dir = workspace_root / "pricing-plans"
     plans_dir.mkdir()
     (plans_dir / "existing.yaml").write_text(
-        "profile: unisex-heavy-cotton-tee\nprices:\n  S: 100 NOK\n  M: 100 NOK\n",
+        "profile: gildan-5000\nprices:\n  S: 100 NOK\n  M: 100 NOK\n",
         encoding="utf-8",
     )
 

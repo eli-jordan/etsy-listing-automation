@@ -11,7 +11,7 @@ import yaml
 from etsy_listings.render.config import load_template_config
 from etsy_listings.render.io import load_design, load_template_base
 from etsy_listings.render.maps import height_map, luminance_map
-from etsy_listings.render.pipeline import render
+from etsy_listings.render.pipeline import Layer, render_scene
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 DESIGN_PATH = FIXTURES / "render" / "grid-target.png"
@@ -31,7 +31,7 @@ def test_e2e_composite_golden(colour: str, assert_matches_golden) -> None:  # no
     luminance = luminance_map(base)
     height = height_map(base)
 
-    result = render(design, base, cfg, height=height, luminance=luminance)
+    result = render_scene(base, [Layer(design=design, cfg=cfg)], height=height, luminance=luminance)
     assert_matches_golden(result, GOLDENS / f"{colour}.png")
 
 
@@ -52,5 +52,5 @@ def test_e2e_composite_with_displace_enabled_golden(assert_matches_golden) -> No
     luminance = luminance_map(base)
     height = height_map(base)
 
-    result = render(design, base, cfg, height=height, luminance=luminance)
+    result = render_scene(base, [Layer(design=design, cfg=cfg)], height=height, luminance=luminance)
     assert_matches_golden(result, GOLDENS / "black-displaced.png")

@@ -1,6 +1,38 @@
 {
   "components": {
     "schemas": {
+      "AssignKindRequest": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "colour-matrix",
+              "multiple",
+              "single"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "AssignKindRequest",
+        "type": "object"
+      },
+      "Body_upload_design_api_designs_post": {
+        "properties": {
+          "file": {
+            "contentMediaType": "application/octet-stream",
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_design_api_designs_post",
+        "type": "object"
+      },
       "Body_upload_template_api_templates_post": {
         "properties": {
           "files": {
@@ -47,11 +79,6 @@
           },
           "design": {
             "default": "bundled-grid",
-            "enum": [
-              "bundled-grid",
-              "bundled-on-light",
-              "bundled-on-dark"
-            ],
             "title": "Design",
             "type": "string"
           },
@@ -129,6 +156,58 @@
         "title": "ColourMatrixTemplate",
         "type": "object"
       },
+      "ColourReportRow": {
+        "description": "What one photo in a candidate ``colour-matrix`` set will be taken as.\n\nReporting only: PRD 7a makes the filename the source of truth, so there is\nno manual mapping to offer and nothing here changes a name.",
+        "properties": {
+          "clean": {
+            "title": "Clean",
+            "type": "boolean"
+          },
+          "colour": {
+            "title": "Colour",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "colour",
+          "clean"
+        ],
+        "title": "ColourReportRow",
+        "type": "object"
+      },
+      "DesignSummary": {
+        "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "source": {
+            "enum": [
+              "bundled",
+              "upload"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "source"
+        ],
+        "title": "DesignSummary",
+        "type": "object"
+      },
       "DisplaceConfig": {
         "description": "PRD: implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
@@ -163,11 +242,6 @@
         "properties": {
           "design": {
             "default": "bundled-grid",
-            "enum": [
-              "bundled-grid",
-              "bundled-on-light",
-              "bundled-on-dark"
-            ],
             "title": "Design",
             "type": "string"
           },
@@ -362,11 +436,6 @@
           },
           "design": {
             "default": "bundled-grid",
-            "enum": [
-              "bundled-grid",
-              "bundled-on-light",
-              "bundled-on-dark"
-            ],
             "title": "Design",
             "type": "string"
           },
@@ -497,13 +566,33 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "status": {
+            "enum": [
+              "needs-calibration",
+              "calibrated"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "status_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status Reason"
           }
         },
         "required": [
           "name",
           "kind",
           "colours",
-          "has_config"
+          "has_config",
+          "status"
         ],
         "title": "TemplateSummary",
         "type": "object"
@@ -518,13 +607,20 @@
             "type": "array"
           },
           "kind": {
-            "enum": [
-              "colour-matrix",
-              "multiple",
-              "single"
+            "anyOf": [
+              {
+                "enum": [
+                  "colour-matrix",
+                  "multiple",
+                  "single"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Kind",
-            "type": "string"
+            "title": "Kind"
           },
           "name": {
             "title": "Name",
@@ -587,6 +683,70 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/designs": {
+      "get": {
+        "operationId": "list_designs_api_designs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/DesignSummary"
+                  },
+                  "title": "Response List Designs Api Designs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Designs",
+        "tags": [
+          "designs"
+        ]
+      },
+      "post": {
+        "operationId": "upload_design_api_designs_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_design_api_designs_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Upload Design",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_api_health_get",
@@ -648,15 +808,22 @@
           {
             "in": "query",
             "name": "kind",
-            "required": true,
+            "required": false,
             "schema": {
-              "enum": [
-                "colour-matrix",
-                "multiple",
-                "single"
+              "anyOf": [
+                {
+                  "enum": [
+                    "colour-matrix",
+                    "multiple",
+                    "single"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
               ],
-              "title": "Kind",
-              "type": "string"
+              "title": "Kind"
             }
           }
         ],
@@ -693,6 +860,53 @@
           }
         },
         "summary": "Upload Template",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/colour-report": {
+      "get": {
+        "description": "What each photo would be taken as if this became a colour-matrix set.\n\nShown in the kind picker before committing, so a badly named file is\ncaught while it is still cheap to rename. Reporting only -- PRD 7a makes\nthe filename the source of truth and there is deliberately no mapping\ntable to edit here.",
+        "operationId": "colour_report_api_templates__name__colour_report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ColourReportRow"
+                  },
+                  "title": "Response Colour Report Api Templates  Name  Colour Report Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Colour Report",
         "tags": [
           "templates"
         ]
@@ -839,6 +1053,78 @@
         ]
       }
     },
+    "/api/templates/{name}/kind": {
+      "post": {
+        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.\n\nRefuses a template that already has a config. Kind decides the whole file\nshape (A11), so changing it would discard whatever calibration was done in\nthe old shape's fields -- and doing that silently, from a picker, is the\nkind of data loss nobody would think to look for.",
+        "operationId": "assign_kind_api_templates__name__kind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignKindRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "colour-matrix": "#/components/schemas/ColourMatrixTemplate",
+                      "multiple": "#/components/schemas/MultipleTemplate",
+                      "single": "#/components/schemas/SingleTemplate"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ColourMatrixTemplate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MultipleTemplate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SingleTemplate"
+                    }
+                  ],
+                  "title": "Response Assign Kind Api Templates  Name  Kind Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Kind",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
     "/api/templates/{name}/preview": {
       "post": {
         "operationId": "preview_api_templates__name__preview_post",
@@ -895,6 +1181,47 @@
           }
         },
         "summary": "Preview",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/thumbnail": {
+      "get": {
+        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo hardly matters -- a colour-matrix\nset's colours are all the same garment -- so this takes ``scene.png`` when\nthere is one and the first colour otherwise, without reading the config.\n\nRegenerated per request rather than cached on disk; the resize is cheap\nnext to the response, and a cache in the workspace would be one more\nderived directory to invalidate. Repeat loads are handled by the\n``Cache-Control`` header instead.",
+        "operationId": "thumbnail_api_templates__name__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Thumbnail",
         "tags": [
           "templates"
         ]

@@ -65,11 +65,11 @@ not merely inferred from a redirect:
   reads the *console codepage*, and there is no console, so the answer
   describes nothing about the terminal on the other end. mintty is UTF-8 and
   says so in `LANG`, which is why `main()` calls
-  `glyphs.adopt_declared_encoding()`: it believes the shell's declared locale
+  `terminal.adopt_declared_encoding()`: it believes the shell's declared locale
   over the codepage, so ⭐ and the `apply` swatches print as themselves.
-  `PYTHONIOENCODING` still wins if set. `cli/glyphs.py` remains the guard for
-  streams that genuinely cannot print a decoration, and `FORCE_COLOR` opts
-  colour back in past the `isatty()` check.
+  `PYTHONIOENCODING` still wins if set. `etsy_listings/terminal.py` remains
+  the guard for streams that genuinely cannot print a decoration, and
+  `FORCE_COLOR` opts colour back in past the `isatty()` check.
 - **A cygwin-only binary is invisible to `shutil.which`.** cygwin's `fzf` is
   `/usr/bin/fzf`, a shebang script with no `.exe`; native-Windows Python can
   neither find nor exec it. `newcmd/prompts.py` falls back to asking cygwin's
@@ -172,7 +172,12 @@ src/etsy_listings/
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
                              (dashboard/setup wizard/run runner: Phase 5)
+  terminal.py   stdlib-only leaf: can this stream print that character?     [done]
 ```
+
+Every package's `__init__.py` states its interface — what it exports and what
+it deliberately withholds. Read that before reaching into a submodule; if what
+you need isn't exported, that is usually the docstring telling you why.
 
 ## Invariants
 
@@ -277,8 +282,22 @@ checkout) — `scripts/generate_test_assets.py` procedurally generates a
 grid/ruler test design and a tiny synthetic mockup template set, deterministically
 (fixed seed, no clock input), committed as ordinary test fixtures.
 
-The E2E test hits real Printify and Etsy and costs real state. It is never part of
-a default run. It also doubles as the cassette recorder.
+The E2E layer talks to the real Printify API. It is never part of a default run
+(`addopts = "-m 'not e2e'"`), and it skips cleanly — every test, no network at
+all — unless the machine has credentials: `PRINTIFY_API_TOKEN`, or
+`ETSY_LISTINGS_ROOT` pointing at a workspace whose `.env` carries it.
+
+```
+ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
+```
+
+Phase 1's e2e tests are **read-only** catalog GETs, so they cost no state and
+can be re-run freely. Their job is that the contract layer's transcripts are
+photographs nobody re-takes: if Printify moves a field, every offline test
+stays green and the failure surfaces as a user's `new` run falling over
+instead. The e2e layer asks the live API the questions the offline suite
+answers from memory. The write-side tests that genuinely do cost state arrive
+with Phase 2, against a throwaway shop.
 
 ### Coverage: 80% is a floor, not a target
 
