@@ -187,7 +187,9 @@ def test_workspace_loads_listing_with_the_workspace_currency(workspace_root: Pat
 
 def test_workspace_loads_profile_and_exceptions(workspace_root: Path) -> None:
     ws = Workspace.discover(root_override=workspace_root)
-    assert ws.load_profile("comfort-colors-1717").blueprint == "Comfort Colors 1717"
+    blueprint = ws.load_profile("comfort-colors-1717").blueprint
+    assert (blueprint.brand, blueprint.model) == ("Comfort Colors", "1717")
+    assert blueprint.title == "Unisex Garment-Dyed T-shirt"
     assert ws.load_exceptions().root == {}  # absent exceptions.yaml means "no exceptions"
 
 

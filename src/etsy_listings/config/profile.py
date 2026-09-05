@@ -22,10 +22,34 @@ class PrintArea(BaseModel):
     height: int
 
 
+class BlueprintRef(BaseModel):
+    """Which blank this garment is, as a human orders one (PRD 23).
+
+    ``brand`` and ``model`` identify it; ``title`` is readable context and
+    takes no part in matching. Printify's titles are generic ("Unisex
+    Garment-Dyed T-shirt" is sold by several brands) and are rewritten over
+    time, so one is not an identifier -- a profile naming only a title could
+    never resolve, which is what the e2e layer caught.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    brand: str
+    model: str
+    title: str = ""
+    """Optional, and refreshed by ``new``. A profile identifying a garment
+    only by part number is hard to read; a drifted one is stale prose, not a
+    broken profile."""
+
+    def __str__(self) -> str:
+        """How the pair is quoted in an error or a log line: "Comfort Colors 1717"."""
+        return f"{self.brand} {self.model}".strip()
+
+
 class Profile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    blueprint: str
+    blueprint: BlueprintRef
     print_provider: str
     placeholder: str
     print_area: PrintArea

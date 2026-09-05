@@ -25,6 +25,7 @@ from etsy_listings.catalog.models import (
     VariantSet,
 )
 from etsy_listings.catalog.resolve import (
+    AmbiguousBlueprintError,
     CatalogResolutionError,
     resolve_blueprint,
     resolve_print_provider,
@@ -48,6 +49,7 @@ __all__ = [
     "ShippingProfile",
     "ShippingRates",
     # Name -> id resolution, with an error that lists the near misses.
+    "AmbiguousBlueprintError",
     "CatalogResolutionError",
     "resolve_blueprint",
     "resolve_print_provider",

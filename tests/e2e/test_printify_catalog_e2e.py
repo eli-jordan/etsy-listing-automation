@@ -95,52 +95,69 @@ class TestTheCatalogAnswers:
         assert provider.title
 
 
-class TestCatalogReadsNeedNoCredentials:
-    """The catalog API is public, and the tool should not pretend otherwise.
+class TestWhatTheCatalogActuallyRequires:
+    """What the catalog checks, measured rather than assumed.
 
-    ``catalog/http.py`` is built on the opposite claim -- that every
-    ``/v1/catalog/*.json`` call needs a token with the ``catalog.read`` scope
-    and a token-less client gets "a bare 401". Against the live API today that
-    is false: all four endpoints answer 200 with a junk token and with no
-    ``Authorization`` header at all.
+    ``catalog/http.py`` and docs/setup.md say every ``/v1/catalog/*.json`` call
+    needs a personal access token with the ``catalog.read`` scope, and that a
+    token-less client "gets a bare 401". The live API is doing something
+    stranger than either that or "it's all public":
 
-    These tests assert the behaviour that is actually there. If they start
-    failing, Printify has made the catalog private, ``CatalogAuthError``'s
-    branch is live again, and ``new`` genuinely does need a token before it
-    can prompt for anything.
+    - ``blueprints`` and ``print_providers`` are served with no
+      ``Authorization`` header at all.
+    - ``variants`` and ``shipping`` answer 401 with no header -- but 200 with
+      a header carrying obvious rubbish.
+
+    So the header is required in places, and the *token in it is never
+    validated anywhere*. Whatever the ``catalog.read`` scope is doing, it is
+    not gating these reads. That matters for how hard ``new`` should push a
+    user to get a token before it will run, and it is the sort of thing that
+    changes without announcement -- so it is measured here rather than
+    believed.
+
+    These take ``printify_token`` despite not needing one, so they skip with
+    the rest of the layer: an e2e run on an unconfigured machine should reach
+    the network exactly nowhere.
     """
 
-    ENDPOINTS = [
+    PUBLIC = [
         "/blueprints.json",
         "/blueprints/706/print_providers.json",
+    ]
+    HEADER_REQUIRED = [
         "/blueprints/706/print_providers/29/variants.json",
         "/blueprints/706/print_providers/29/shipping.json",
     ]
 
-    # These need no credential to *prove their point* -- that is the point --
-    # but they still take `printify_token` so they skip with the rest of the
-    # layer. The gate is "is this machine set up to talk to the live API at
-    # all", not "does this particular request need a token"; an e2e run on an
-    # unconfigured machine should reach the network exactly nowhere.
-
-    @pytest.mark.parametrize("path", ENDPOINTS)
-    def test_an_invalid_token_is_still_served(self, printify_token: str, path: str) -> None:
+    @pytest.mark.parametrize("path", PUBLIC + HEADER_REQUIRED)
+    def test_a_junk_token_is_accepted_everywhere(self, printify_token: str, path: str) -> None:
+        """The headline: the token is not checked. If this starts failing,
+        Printify began validating it and ``CatalogAuthError`` is live again."""
         response = httpx.get(
             BASE_URL + path, headers={"Authorization": "Bearer not-a-real-token"}, timeout=30.0
         )
         assert response.status_code == 200
 
-    @pytest.mark.parametrize("path", ENDPOINTS)
-    def test_no_authorization_header_at_all_is_still_served(
+    @pytest.mark.parametrize("path", PUBLIC)
+    def test_the_listing_endpoints_need_no_header_at_all(
         self, printify_token: str, path: str
     ) -> None:
-        response = httpx.get(BASE_URL + path, timeout=30.0)
-        assert response.status_code == 200
+        assert httpx.get(BASE_URL + path, timeout=30.0).status_code == 200
 
-    def test_the_client_works_with_a_junk_token(self, printify_token: str) -> None:
-        """The practical consequence: nothing in Phase 0/1 needs a credential.
-        Demanding one is friction, not security."""
-        assert HttpCatalogClient("not-a-real-token").blueprints()
+    @pytest.mark.parametrize("path", HEADER_REQUIRED)
+    def test_the_per_provider_endpoints_do_need_the_header_present(
+        self, printify_token: str, path: str
+    ) -> None:
+        """Present, not valid -- see the junk-token test above. This is the
+        only part of the documented auth story that holds up."""
+        assert httpx.get(BASE_URL + path, timeout=30.0).status_code == 401
+
+    def test_the_client_works_end_to_end_with_a_junk_token(self, printify_token: str) -> None:
+        """The practical consequence, through the real client rather than raw
+        httpx: nothing in Phase 0/1 needs a *valid* credential."""
+        client = HttpCatalogClient("not-a-real-token")
+        assert client.blueprints()
+        assert client.variants(706, 29).variants
 
 
 class TestVariantsMatchWhatTheCodeAssumes:
@@ -243,32 +260,48 @@ class TestTheOfflineTranscriptsStillMatchReality:
 
 
 class TestTheDocumentedExampleProfileResolves:
-    """``Profile.blueprint`` is a *title*, resolved against the live catalog by
-    ``resolve_blueprint``. So every blueprint title this repo puts in front of
-    a user -- the PRD's example config, the getting-started guide, the fixture
-    workspace -- has to be one Printify actually returns.
+    """Every blueprint this repo puts in front of a user -- the PRD's example
+    profile, the getting-started guide, the fixture workspace -- has to be one
+    Printify actually returns.
+
+    This is where that gets checked against the catalog rather than against a
+    fixture agreeing with itself. It is what caught the previous value: a bare
+    ``blueprint: Comfort Colors 1717``, a title Printify has never used, which
+    made every profile written by following the guide unresolvable (PRD 23,
+    since revised to brand + model).
     """
 
-    def test_the_title_the_docs_tell_users_to_write_resolves(
+    DOCUMENTED_BRAND = "Comfort Colors"
+    DOCUMENTED_MODEL = "1717"
+
+    def test_the_brand_and_model_the_docs_tell_users_to_write_resolve(
+        self, catalog: HttpCatalogClient, garment: Blueprint
+    ) -> None:
+        resolved = resolve_blueprint(
+            self.DOCUMENTED_BRAND, self.DOCUMENTED_MODEL, catalog.blueprints()
+        )
+        assert resolved.id == garment.id
+
+    def test_it_resolves_without_the_trademark_sign_the_catalog_carries(
         self, catalog: HttpCatalogClient
     ) -> None:
-        """Currently FAILS, and correctly so.
+        """The catalog's brand is "Comfort Colors®". The docs tell users to
+        write "Comfort Colors", and that has to be enough."""
+        assert "®" not in self.DOCUMENTED_BRAND
+        assert resolve_blueprint(self.DOCUMENTED_BRAND, self.DOCUMENTED_MODEL, catalog.blueprints())
 
-        docs/prd.md, docs/getting-started.md and the fixture profile all say
-        ``blueprint: Comfort Colors 1717``. Printify has no blueprint with
-        that title: 706 is titled "Unisex Garment-Dyed T-shirt", with the
-        brand "Comfort Colors®" and the model "1717". A user following the
-        guide writes a profile that can never resolve.
-        """
-        resolve_blueprint("Comfort Colors 1717", catalog.blueprints())
+    def test_the_recorded_title_is_still_what_printify_calls_it(self, garment: Blueprint) -> None:
+        """``title`` takes no part in matching, so a drift here is not a broken
+        profile -- but the docs and fixture quote it, and prose that has gone
+        stale is worth knowing about."""
+        assert garment.title == "Unisex Garment-Dyed T-shirt"
 
-    def test_the_real_title_resolves(self, catalog: HttpCatalogClient, garment: Blueprint) -> None:
-        """The same call with the title Printify actually returns, so the
-        failure above is pinned to the *value* in the docs and not to
-        ``resolve_blueprint`` being broken."""
-        assert resolve_blueprint(garment.title, catalog.blueprints()).id == garment.id
-
-    def test_resolution_failure_names_the_near_misses(self, catalog: HttpCatalogClient) -> None:
+    def test_an_unknown_garment_lists_brand_model_pairs_to_choose_from(
+        self, catalog: HttpCatalogClient
+    ) -> None:
         with pytest.raises(CatalogResolutionError) as caught:
-            resolve_blueprint("Comfort Colors 1717", catalog.blueprints())
-        assert "Comfort Colors 1717" in str(caught.value)
+            resolve_blueprint("Not A Real Brand", "0000", catalog.blueprints())
+        message = str(caught.value)
+        assert "Not A Real Brand 0000" in message
+        # Pairs, not titles: what it lists must be pasteable into a profile.
+        assert f"{self.DOCUMENTED_BRAND}® {self.DOCUMENTED_MODEL}" in message

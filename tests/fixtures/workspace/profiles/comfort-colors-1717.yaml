@@ -1,4 +1,7 @@
-blueprint: Comfort Colors 1717
+blueprint:
+  brand: Comfort Colors
+  model: "1717"
+  title: Unisex Garment-Dyed T-shirt
 print_provider: Monster Digital
 placeholder: front
 print_area: { width: 4500, height: 5400 }

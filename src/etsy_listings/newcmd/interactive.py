@@ -32,7 +32,7 @@ from etsy_listings.newcmd.logic import (
     filter_blueprints_by_category,
     load_candidate_pricing_plans,
     load_template_kind,
-    local_blueprint_titles,
+    local_blueprint_keys,
     profile_slug_for,
     resolve_colour_slugs,
     validate_listing_stub,
@@ -63,7 +63,7 @@ def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Bluepr
     is this picker's most common job.
     """
     marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
-    choices = build_blueprint_choices(blueprints, local_blueprint_titles(workspace), marker=marker)
+    choices = build_blueprint_choices(blueprints, local_blueprint_keys(workspace), marker=marker)
     by_label = {choice.label: choice for choice in choices}
 
     answer = prompts.choose(
@@ -264,7 +264,7 @@ def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, cate
             colour_tone[colour] = cast('Literal["light", "dark"]', tone)
 
     profile = build_profile(
-        blueprint_title=blueprint.title,
+        blueprint=blueprint,
         provider_title=provider.title,
         placeholder=DEFAULT_PLACEHOLDER,
         variant_set=variant_set,
