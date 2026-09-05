@@ -160,6 +160,31 @@ def test_changing_the_design_triggers_a_rerender(workspace_root: Path) -> None:
     assert render_plan.reason == "design or template changed"
 
 
+@pytest.mark.parametrize("colour", ["black", "moss"])
+def test_replacing_any_colours_photo_triggers_a_rerender(workspace_root: Path, colour: str) -> None:
+    """Every colour's photo is an input, not just the first one.
+
+    `template_hash` used to be one digest per *template*, built with
+    `setdefault` while looping over (template, colour) pairs -- so a
+    colour-matrix set hashed its template.yaml concatenated with whichever
+    colour happened to come first, and the other photos entered no hash at
+    all. Replacing `moss.png` therefore changed nothing `plan` looked at: it
+    reported "No changes." and left the stale render sitting in the cache.
+    Photos are now hashed per scene (`base_hash`), so both cases re-run.
+    """
+    ctx = _ctx(workspace_root)
+    lock = execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock(), STAGES)
+
+    photo = workspace_root / "mockup-templates" / "flat-lay-01" / f"{colour}.png"
+    photo.write_bytes(photo.read_bytes() + b"\x00")
+
+    render_plan = next(
+        sp for sp in build_plan(ctx, LISTING, lock, STAGES).stage_plans if sp.stage == "render"
+    )
+    assert render_plan.will_run is True
+    assert render_plan.reason == "design or template changed"
+
+
 # --- artwork resolution errors point at the right file -----------------------
 
 
