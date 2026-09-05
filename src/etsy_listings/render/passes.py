@@ -126,11 +126,15 @@ def export(base: RGB, print_layer: RGBA) -> Image.Image:
 
 def export_many(base: RGB, print_layers: Sequence[RGBA]) -> Image.Image:
     """Alpha-composite several canvas-sized RGBA layers over ``base`` in list
-    order (``multiple``-kind scenes only -- a separate function rather than a
-    generalisation of :func:`export`, so the single-layer path used by
-    ``colour-matrix``/``single`` kinds, and every golden that exercises it,
-    stays untouched). Same straight-alpha, float32, round-not-truncate
-    arithmetic as :func:`export`, folded across every layer in turn."""
+    order. The compositor for every template kind: a one-layer
+    ``colour-matrix``/``single`` scene is just the single-element case.
+
+    Same straight-alpha, float32, round-not-truncate arithmetic as
+    :func:`export`, folded across every layer in turn -- which is why the
+    one-layer case is byte-identical to it, and why
+    ``test_export_many_with_one_layer_matches_export`` pins that. :func:`export`
+    is kept as the two-operand statement of the same rule: it is the definition
+    this function is checked against, and dropping it would drop the check."""
     composite = base[..., :3].astype(np.float32)
     for layer in print_layers:
         layer_rgb = layer[..., :3].astype(np.float32)

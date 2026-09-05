@@ -35,7 +35,7 @@ from etsy_listings.render.config import (
 )
 from etsy_listings.render.io import encode_png, load_design, load_template_base
 from etsy_listings.render.maps import DerivedMapCache
-from etsy_listings.render.pipeline import Layer, render, render_scene
+from etsy_listings.render.pipeline import Layer, render_scene
 from etsy_listings.ui.api.designs import resolve_design
 from etsy_listings.ui.api.schemas import (
     AssignKindRequest,
@@ -361,67 +361,65 @@ def put_config(request: Request, name: str, body: AnyTemplate) -> AnyTemplate:
     return body
 
 
+PREVIEW_BODIES: dict[TemplateKind, type[PreviewRequest]] = {
+    "colour-matrix": ColourMatrixPreviewRequest,
+    "multiple": MultiplePreviewRequest,
+    "single": SinglePreviewRequest,
+}
+"""Which request shape each kind's preview takes. The endpoint validates the
+body against the kind the target template already *is*, rather than
+shape-sniffing across all three."""
+
+
+def _preview_configs(body: PreviewRequest) -> list[RenderConfig]:
+    """The layers to composite, from the *unsaved* geometry in the request.
+
+    This is the one thing the preview cannot share with the render stage: it
+    renders what is currently under the user's cursor, not what
+    ``template.yaml`` says. Everything else about the scene -- which photo,
+    which derived maps, how they combine -- comes from the same place the
+    stage gets it.
+    """
+    if isinstance(body, MultiplePreviewRequest):
+        return [
+            RenderConfig(bounding_box=p.bounding_box, displace=body.displace, shade=body.shade)
+            for p in body.placements
+        ]
+    return [RenderConfig(bounding_box=body.bounding_box, displace=body.displace, shade=body.shade)]
+
+
 @router.post("/{name}/preview")
 def preview(request: Request, name: str, body: PreviewRequest) -> Response:
     workspace = _workspace(request)
-    template_cfg = _load_config(workspace, name)
+    kind = _load_config(workspace, name).kind
+    if not isinstance(body, PREVIEW_BODIES[kind]):
+        raise HTTPException(status_code=400, detail=f"expected a {kind} preview body")
+
+    colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
+    try:
+        photo = workspace.scene_photo(name, colour)
+    except InvalidNameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not photo.path.is_file():
+        missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
+        raise HTTPException(status_code=404, detail=f"no mockup photo for {missing}")
+
+    base = load_template_base(photo.path)
     design = load_design(resolve_design(workspace, body.design))
+    configs = _preview_configs(body)
     cache = DerivedMapCache(workspace.template_derived_dir(name))
-
-    if isinstance(template_cfg, ColourMatrixTemplate):
-        if not isinstance(body, ColourMatrixPreviewRequest):
-            raise HTTPException(status_code=400, detail="expected a colour-matrix preview body")
-        try:
-            base_path = workspace.template_base_image(name, body.colour)
-        except InvalidNameError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-        if not base_path.is_file():
-            raise HTTPException(status_code=404, detail=f"no base image for colour {body.colour!r}")
-        base = load_template_base(base_path)
-        cfg = RenderConfig(bounding_box=body.bounding_box, displace=body.displace, shade=body.shade)
-        image = render(
-            design,
-            base,
-            cfg,
-            height=cache.height(body.colour, base) if cfg.displace.enabled else None,
-            luminance=cache.luminance(body.colour, base) if cfg.shade.enabled else None,
-        )
-        return Response(content=encode_png(image), media_type="image/png")
-
-    if isinstance(template_cfg, SingleTemplate):
-        if not isinstance(body, SinglePreviewRequest):
-            raise HTTPException(status_code=400, detail="expected a single preview body")
-        base_path = workspace.template_scene_image(name)
-        if not base_path.is_file():
-            raise HTTPException(status_code=404, detail=f"no scene image for {name!r}")
-        base = load_template_base(base_path)
-        cfg = RenderConfig(bounding_box=body.bounding_box, displace=body.displace, shade=body.shade)
-        image = render(
-            design,
-            base,
-            cfg,
-            height=cache.height(name, base) if cfg.displace.enabled else None,
-            luminance=cache.luminance(name, base) if cfg.shade.enabled else None,
-        )
-        return Response(content=encode_png(image), media_type="image/png")
-
-    if not isinstance(body, MultiplePreviewRequest):
-        raise HTTPException(status_code=400, detail="expected a multiple preview body")
-    base_path = workspace.template_scene_image(name)
-    if not base_path.is_file():
-        raise HTTPException(status_code=404, detail=f"no scene image for {name!r}")
-    base = load_template_base(base_path)
-    layers = [
-        Layer(
-            design=design,
-            cfg=RenderConfig(bounding_box=p.bounding_box, displace=body.displace, shade=body.shade),
-        )
-        for p in body.placements
-    ]
     image = render_scene(
         base,
-        layers,
-        height=cache.height(name, base) if body.displace.enabled else None,
-        luminance=cache.luminance(name, base) if body.shade.enabled else None,
+        [Layer(design=design, cfg=cfg) for cfg in configs],
+        height=(
+            cache.height(photo.map_key, base)
+            if any(cfg.displace.enabled for cfg in configs)
+            else None
+        ),
+        luminance=(
+            cache.luminance(photo.map_key, base)
+            if any(cfg.shade.enabled for cfg in configs)
+            else None
+        ),
     )
     return Response(content=encode_png(image), media_type="image/png")

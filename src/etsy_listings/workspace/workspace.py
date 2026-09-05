@@ -11,6 +11,7 @@ future file-serving endpoints safe), not a tidiness rule.
 from __future__ import annotations
 
 import os
+from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
 import yaml
@@ -77,6 +78,15 @@ def _looks_like_windows_absolute(ref: str) -> bool:
     """
     p = PureWindowsPath(ref)
     return p.drive != "" or ref.startswith("\\\\") or ref.startswith("//")
+
+
+@dataclass(frozen=True)
+class ScenePhoto:
+    """A scene's blank mockup photo, and the name its derived maps cache under
+    (see :meth:`Workspace.scene_photo`)."""
+
+    path: Path
+    map_key: str
 
 
 class Workspace:
@@ -243,6 +253,22 @@ class Workspace:
         """``multiple``/``single``-kind templates: exactly one photo, fixed
         filename -- there's no per-colour name to derive it from."""
         return self.template_dir(template) / "scene.png"
+
+    def scene_photo(self, template: str, colour: str | None) -> ScenePhoto:
+        """Which photo a scene composites over, and what its derived maps are
+        cached under.
+
+        The two answers are one rule, so they are given together: a
+        colour-matrix scene has a photo *per colour* and therefore a height
+        and luminance map per colour, while the other two kinds have one of
+        each for the whole template. Both the render stage and the
+        calibrator's preview endpoint ask here, rather than each re-deriving
+        it from the template's kind -- which is what previously let the two
+        drift.
+        """
+        if colour is not None:
+            return ScenePhoto(path=self.template_base_image(template, colour), map_key=colour)
+        return ScenePhoto(path=self.template_scene_image(template), map_key=template)
 
     def test_designs_dir(self) -> Path:
         """Where the calibrator's uploaded test targets live (A19). Separate

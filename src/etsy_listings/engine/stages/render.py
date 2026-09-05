@@ -336,15 +336,9 @@ def _resolve_scene(
     if (kind == "colour-matrix") != (colour is not None):
         raise MediaColourMismatchError(template_name, kind, colour)
 
-    if isinstance(template_cfg, ColourMatrixTemplate):
-        assert colour is not None
-        base_image = workspace.template_base_image(template_name, colour)
-        map_key = colour
-    else:
-        base_image = workspace.template_scene_image(template_name)
-        map_key = template_name
-    if not base_image.is_file():
-        raise TemplateAssetError(template_name, colour, base_image)
+    photo = workspace.scene_photo(template_name, colour)
+    if not photo.path.is_file():
+        raise TemplateAssetError(template_name, colour, photo.path)
 
     layers = []
     for layer_colour, override, cfg in _layer_specs(template_cfg, colour):
@@ -366,8 +360,8 @@ def _resolve_scene(
         colour=colour,
         kind=kind,
         config_file=workspace.template_config_file(template_name),
-        base_image=base_image,
-        map_key=map_key,
+        base_image=photo.path,
+        map_key=photo.map_key,
         layers=tuple(layers),
         output=workspace.render_file(listing, template_name, colour),
     )

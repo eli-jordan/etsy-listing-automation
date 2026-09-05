@@ -186,6 +186,13 @@ point of calibrating in a browser. `template.yaml` is the artefact the
 calibrator produces and the render stage consumes; nothing else passes between
 them.
 
+"Real renderer" is now structural rather than a claim maintained by hand. Both
+routes ask `Workspace.scene_photo()` which photo a scene composites over and
+what its derived maps cache under, and both composite through
+`render_scene()`. The one thing the preview does differently is where its
+geometry comes from — the unsaved boxes under the user's cursor, not the file
+on disk — which is exactly the difference that makes it a preview.
+
 ## Testing layers
 
 | Layer | Answers |
