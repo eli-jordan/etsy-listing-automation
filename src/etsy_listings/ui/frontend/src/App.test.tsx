@@ -123,7 +123,7 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("Placements")).toBeInTheDocument());
   });
 
-  it("shows a message when a template has no config yet", async () => {
+  it("replaces the workspace with the kind picker when a template has no config", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
       summary({
         name: "brand-new",
@@ -135,11 +135,15 @@ describe("App", () => {
       }),
     ]);
     vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(null);
+    vi.spyOn(calibrator, "getColourReport").mockResolvedValue([]);
 
     render(<App />);
     await waitFor(() =>
-      expect(screen.getByText("No template.yaml yet for brand-new.")).toBeInTheDocument(),
+      expect(screen.getByText("What kind of template is this?")).toBeInTheDocument(),
     );
+    // A takeover, not a panel: nothing else may be touched until it is answered.
+    expect(screen.queryByRole("button", { name: /Upload/ })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Photos")).not.toBeInTheDocument();
   });
 
   it("shows a prompt to upload when there are no templates", async () => {

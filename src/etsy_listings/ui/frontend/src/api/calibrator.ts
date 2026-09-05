@@ -1,6 +1,7 @@
 import { api } from "./client";
 import type {
   BoundingBox,
+  ColourReportRow,
   DesignSummary,
   DisplaceConfig,
   Placement,
@@ -56,20 +57,43 @@ export async function saveTemplateConfig(
  * through the generated client, since openapi-fetch's multipart support
  * doesn't cover repeated array fields cleanly.
  */
-export async function uploadTemplate(
-  name: string,
-  kind: TemplateKind,
-  files: File[],
-): Promise<UploadResponse> {
+export async function uploadTemplate(name: string, files: File[]): Promise<UploadResponse> {
   const form = new FormData();
   for (const file of files) form.append("files", file);
 
-  const response = await fetch(`/api/templates?${new URLSearchParams({ name, kind })}`, {
+  // No `kind`: it is asked afterwards, in the KindPicker, once the photos are
+  // on screen. The server stores them under their own names until then.
+  const response = await fetch(`/api/templates?${new URLSearchParams({ name })}`, {
     method: "POST",
     body: form,
   });
   if (!response.ok) throw new CalibratorApiError(`upload failed for ${name}`);
   return (await response.json()) as UploadResponse;
+}
+
+/** What each photo will be taken as if this becomes a colour-matrix set.
+ * Reporting only -- PRD 7a makes the filename the source of truth. */
+export async function getColourReport(name: string): Promise<ColourReportRow[]> {
+  const { data, error } = await api.GET("/api/templates/{name}/colour-report", {
+    params: { path: { name } },
+  });
+  if (error || !data) throw new CalibratorApiError(`could not read the colour report for ${name}`);
+  return data;
+}
+
+/** The first calibration step. Writes the starting template.yaml for that
+ * shape; refused if one already exists, since kind decides the whole file
+ * shape (A11) and changing it would discard the old shape's calibration. */
+export async function assignKind(
+  name: string,
+  kind: TemplateKind,
+): Promise<TemplateConfigState> {
+  const { data, error } = await api.POST("/api/templates/{name}/kind", {
+    params: { path: { name } },
+    body: { kind },
+  });
+  if (error) throw new CalibratorApiError(`could not set the kind for ${name}`);
+  return data as unknown as TemplateConfigState;
 }
 
 /** The calibrator's test-design library: three bundled targets plus whatever

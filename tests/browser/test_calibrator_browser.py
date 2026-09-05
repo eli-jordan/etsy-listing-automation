@@ -57,6 +57,19 @@ def _selected_template(page) -> str | None:  # noqa: ANN001
     return page.locator(".template-rail__item--active").first.get_attribute("data-template")
 
 
+def _wait_for_filmstrip(page, count: int) -> None:  # noqa: ANN001
+    """Wait for the filmstrip to be *fully* populated.
+
+    `wait_for_selector` returns on the first item, but the colours arrive with
+    the template list refresh -- so reading `all_inner_texts()` straight after
+    it can catch the strip mid-build. That is a genuinely intermittent failure,
+    not a slow machine, so the wait has to be on the count.
+    """
+    page.wait_for_function(
+        f"() => document.querySelectorAll('.filmstrip__item').length === {count}"
+    )
+
+
 def _image_natural_size(page) -> list[int]:  # noqa: ANN001
     page.wait_for_function(
         "() => document.querySelector('img.quad-editor__image')?.naturalWidth > 0"
@@ -151,7 +164,7 @@ class TestTemplateRail:
 class TestColourMatrixKind:
     def test_filmstrip_lists_every_colour_in_the_template_set(self, page) -> None:  # noqa: ANN001
         _select_template(page, COLOUR_MATRIX_TEMPLATE)
-        page.wait_for_selector(".filmstrip__item")
+        _wait_for_filmstrip(page, 4)
         colours = page.locator(".filmstrip__item").all_inner_texts()
         assert colours == ["black", "blue-jean", "ivory", "moss"]
 
@@ -317,8 +330,23 @@ class TestMultipleKind:
 
 class TestUploadCreatesEachKind:
     """The plan's explicit ask: browser automation validating that each kind
-    can actually be *created* through the calibrator, not just edited once
-    it already exists."""
+    can actually be *created* through the calibrator, not just edited once it
+    already exists.
+
+    The flow has two steps now (wireframe 2a): photos in, then the kind picker
+    takes over the workspace and asks what they are.
+    """
+
+    def _upload(self, page, name: str, sources: list[Path]) -> None:  # noqa: ANN001
+        """Upload, and wait for the kind picker rather than for an 'uploaded'
+        message: a successful upload selects the new template, which has no
+        config, so the picker takes over the workspace immediately -- taking
+        the upload form and its status text with it. The picker appearing *is*
+        the confirmation."""
+        page.get_by_label("Name").fill(name)
+        with page.expect_response(lambda r: r.url.endswith("/api/templates") and r.status == 200):
+            page.locator(".upload-form input[type=file]").set_input_files([str(s) for s in sources])
+        page.wait_for_selector(".kind-picker")
 
     def test_uploading_a_single_photo_creates_a_single_kind_template(  # noqa: ANN001
         self, page, workspace_root: Path
@@ -326,35 +354,52 @@ class TestUploadCreatesEachKind:
         source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
         assert source.is_file()
 
-        page.get_by_label("Name").fill("lifestyle-01")
-        page.get_by_label("Kind").select_option("single")
-        with page.expect_response(lambda r: r.url.endswith("/api/templates") and r.status == 200):
-            page.locator(".upload-form input[type=file]").set_input_files(str(source))
-        page.wait_for_selector("text=uploaded")
-
+        self._upload(page, "lifestyle-01", [source])
         assert _selected_template(page) == "lifestyle-01"
-        page.wait_for_selector(HANDLE)
 
+        page.get_by_role("radio", name="Single one photo, one garment").check()
+        with page.expect_response(lambda r: r.url.endswith("/kind") and r.status == 200):
+            page.get_by_role("button", name="Start calibrating →").click()
+
+        page.wait_for_selector(HANDLE)
         with page.expect_response(lambda r: "/config" in r.url and r.request.method == "PUT"):
             page.get_by_role("button", name="Save template.yaml").click()
 
         saved = _template_config(workspace_root, "lifestyle-01")
         assert saved["kind"] == "single"
+        # PRD 28: a scene kind uses the fixed filename, so the upload's own
+        # name is gone by now.
         assert (workspace_root / "mockup-templates" / "lifestyle-01" / "scene.png").is_file()
+        assert not (workspace_root / "mockup-templates" / "lifestyle-01" / "black.png").exists()
 
     def test_uploading_two_photos_creates_a_colour_matrix_template(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
         base_dir = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE
-        black = base_dir / "black.png"
-        ivory = base_dir / "ivory.png"
-
-        page.get_by_label("Name").fill("flat-lay-02")
-        page.get_by_label("Kind").select_option("colour-matrix")
-        with page.expect_response(lambda r: r.url.endswith("/api/templates") and r.status == 200):
-            page.locator(".upload-form input[type=file]").set_input_files([str(black), str(ivory)])
-        page.wait_for_selector("text=uploaded")
-
+        self._upload(page, "flat-lay-02", [base_dir / "black.png", base_dir / "ivory.png"])
         assert _selected_template(page) == "flat-lay-02"
-        page.wait_for_selector(".filmstrip__item")
+
+        # The picker reports what each filename will be taken as (PRD 7a)
+        # before anything is committed.
+        page.wait_for_selector(".kind-picker__file")
+        listed = page.locator(".kind-picker__filename").all_inner_texts()
+        assert sorted(listed) == ["black.png", "ivory.png"]
+
+        with page.expect_response(lambda r: r.url.endswith("/kind") and r.status == 200):
+            page.get_by_role("button", name="Start calibrating →").click()
+
+        _wait_for_filmstrip(page, 2)
         assert sorted(page.locator(".filmstrip__item").all_inner_texts()) == ["black", "ivory"]
+
+    def test_the_picker_warns_about_a_filename_that_is_not_a_slug(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """A photo called `Heather Grey.png` still yields a colour, but not the
+        name on disk. The calibrator says so rather than renaming it quietly."""
+        source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
+        messy = workspace_root / "Heather Grey.png"
+        messy.write_bytes(source.read_bytes())
+
+        self._upload(page, "flat-lay-03", [messy])
+        page.wait_for_selector(".kind-picker__warn")
+        assert "not a colour slug" in page.locator(".kind-picker__warn").inner_text()

@@ -1,6 +1,24 @@
 {
   "components": {
     "schemas": {
+      "AssignKindRequest": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "colour-matrix",
+              "multiple",
+              "single"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind"
+        ],
+        "title": "AssignKindRequest",
+        "type": "object"
+      },
       "Body_upload_design_api_designs_post": {
         "properties": {
           "file": {
@@ -136,6 +154,30 @@
           "bounding_box"
         ],
         "title": "ColourMatrixTemplate",
+        "type": "object"
+      },
+      "ColourReportRow": {
+        "description": "What one photo in a candidate ``colour-matrix`` set will be taken as.\n\nReporting only: PRD 7a makes the filename the source of truth, so there is\nno manual mapping to offer and nothing here changes a name.",
+        "properties": {
+          "clean": {
+            "title": "Clean",
+            "type": "boolean"
+          },
+          "colour": {
+            "title": "Colour",
+            "type": "string"
+          },
+          "filename": {
+            "title": "Filename",
+            "type": "string"
+          }
+        },
+        "required": [
+          "filename",
+          "colour",
+          "clean"
+        ],
+        "title": "ColourReportRow",
         "type": "object"
       },
       "DesignSummary": {
@@ -565,13 +607,20 @@
             "type": "array"
           },
           "kind": {
-            "enum": [
-              "colour-matrix",
-              "multiple",
-              "single"
+            "anyOf": [
+              {
+                "enum": [
+                  "colour-matrix",
+                  "multiple",
+                  "single"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
             ],
-            "title": "Kind",
-            "type": "string"
+            "title": "Kind"
           },
           "name": {
             "title": "Name",
@@ -759,15 +808,22 @@
           {
             "in": "query",
             "name": "kind",
-            "required": true,
+            "required": false,
             "schema": {
-              "enum": [
-                "colour-matrix",
-                "multiple",
-                "single"
+              "anyOf": [
+                {
+                  "enum": [
+                    "colour-matrix",
+                    "multiple",
+                    "single"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
               ],
-              "title": "Kind",
-              "type": "string"
+              "title": "Kind"
             }
           }
         ],
@@ -804,6 +860,53 @@
           }
         },
         "summary": "Upload Template",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/colour-report": {
+      "get": {
+        "description": "What each photo would be taken as if this became a colour-matrix set.\n\nShown in the kind picker before committing, so a badly named file is\ncaught while it is still cheap to rename. Reporting only -- PRD 7a makes\nthe filename the source of truth and there is deliberately no mapping\ntable to edit here.",
+        "operationId": "colour_report_api_templates__name__colour_report_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ColourReportRow"
+                  },
+                  "title": "Response Colour Report Api Templates  Name  Colour Report Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Colour Report",
         "tags": [
           "templates"
         ]
@@ -945,6 +1048,78 @@
           }
         },
         "summary": "Put Config",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/kind": {
+      "post": {
+        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.\n\nRefuses a template that already has a config. Kind decides the whole file\nshape (A11), so changing it would discard whatever calibration was done in\nthe old shape's fields -- and doing that silently, from a picker, is the\nkind of data loss nobody would think to look for.",
+        "operationId": "assign_kind_api_templates__name__kind_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignKindRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "discriminator": {
+                    "mapping": {
+                      "colour-matrix": "#/components/schemas/ColourMatrixTemplate",
+                      "multiple": "#/components/schemas/MultipleTemplate",
+                      "single": "#/components/schemas/SingleTemplate"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/ColourMatrixTemplate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MultipleTemplate"
+                    },
+                    {
+                      "$ref": "#/components/schemas/SingleTemplate"
+                    }
+                  ],
+                  "title": "Response Assign Kind Api Templates  Name  Kind Post"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Assign Kind",
         "tags": [
           "templates"
         ]

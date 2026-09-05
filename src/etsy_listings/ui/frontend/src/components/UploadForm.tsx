@@ -1,29 +1,28 @@
 import { useState } from "react";
 import { uploadTemplate } from "../api/calibrator";
-import type { TemplateKind } from "../types";
 
 interface Props {
   onUploaded: (name: string) => void;
 }
 
-const KINDS: { value: TemplateKind; label: string }[] = [
-  { value: "colour-matrix", label: "Colour set (one photo per colour)" },
-  { value: "multiple", label: "Chart (several garments in one photo)" },
-  { value: "single", label: "Single shot (one photo, one garment)" },
-];
-
-/** Kind is chosen up front -- it decides the upload widget (colour-matrix:
- * several files, named by colour; multiple/single: exactly one photo) and
- * the starting template.yaml shape. */
+/**
+ * Photos in; the kind question comes afterwards, in the KindPicker.
+ *
+ * It used to be asked here, which meant answering it before the photos were
+ * on screen -- fine when you assembled the set yourself five seconds ago,
+ * guesswork for anything else. So the input always takes several files and
+ * they keep their own names: which name is *correct* depends on the answer
+ * (a colour-matrix set's filenames are its colours, PRD 7a; a scene kind
+ * wants the fixed scene.png, PRD 28), and that is not known yet.
+ */
 export function UploadForm({ onUploaded }: Props) {
   const [name, setName] = useState("");
-  const [kind, setKind] = useState<TemplateKind>("colour-matrix");
   const [status, setStatus] = useState("");
 
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0 || !name) return;
     try {
-      await uploadTemplate(name, kind, Array.from(files));
+      await uploadTemplate(name, Array.from(files));
       setStatus("uploaded");
       onUploaded(name);
     } catch {
@@ -39,21 +38,11 @@ export function UploadForm({ onUploaded }: Props) {
         <input value={name} onChange={(e) => setName(e.target.value)} placeholder="flat-lay-02" />
       </label>
       <label>
-        Kind
-        <select value={kind} onChange={(e) => setKind(e.target.value as TemplateKind)}>
-          {KINDS.map((k) => (
-            <option key={k.value} value={k.value}>
-              {k.label}
-            </option>
-          ))}
-        </select>
-      </label>
-      <label>
-        {kind === "colour-matrix" ? "Photos (one per colour)" : "Photo"}
+        Photos
         <input
           type="file"
           accept="image/png"
-          multiple={kind === "colour-matrix"}
+          multiple
           onChange={(e) => handleFiles(e.target.files)}
         />
       </label>

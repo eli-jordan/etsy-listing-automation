@@ -701,6 +701,139 @@ button:not([class]):active:not(:disabled) {
   margin-top: var(--space-2);
 }
 
+/* — the kind picker, which takes over the workspace — */
+.kind-picker {
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--color-divider);
+  border-radius: calc(var(--radius-lg) * 1.15);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+
+.kind-picker__question {
+  margin: 0;
+  font-size: 25px;
+}
+
+.kind-picker__sub {
+  margin: 0;
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.kind-picker__options {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-2);
+}
+
+.kind-picker__option {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: var(--space-1);
+  padding: var(--space-3);
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  cursor: pointer;
+}
+
+.kind-picker__option--active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-neutral-100));
+}
+
+.kind-picker__option input {
+  accent-color: var(--color-accent);
+}
+
+.kind-picker__label {
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.kind-picker__blurb {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.kind-picker__report {
+  border: 1px dashed var(--color-divider);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.kind-picker__report-heading {
+  margin: 0 0 var(--space-1);
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.kind-picker__files {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.kind-picker__file {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-2);
+  font-size: 12px;
+}
+
+.kind-picker__filename {
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+
+.kind-picker__colour {
+  color: var(--color-accent-2-700);
+}
+
+.kind-picker__colour--warn {
+  color: var(--color-accent-700);
+}
+
+.kind-picker__warn {
+  margin: var(--space-1) 0 0;
+  font-size: 11px;
+  color: var(--color-accent-700);
+}
+
+.kind-picker__note {
+  margin: 0;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.kind-picker__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-2);
+}
+
+.kind-picker__status {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 /* — the inspector's panels — */
 .realism,
 .design-picker {

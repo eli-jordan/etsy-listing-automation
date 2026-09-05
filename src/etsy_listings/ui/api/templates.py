@@ -21,6 +21,7 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from PIL import Image
 
+from etsy_listings.config.slug import slugify
 from etsy_listings.render.config import (
     BoundingBox,
     ColourMatrixTemplate,
@@ -37,7 +38,9 @@ from etsy_listings.render.maps import DerivedMapCache
 from etsy_listings.render.pipeline import Layer, render, render_scene
 from etsy_listings.ui.api.designs import resolve_design
 from etsy_listings.ui.api.schemas import (
+    AssignKindRequest,
     ColourMatrixPreviewRequest,
+    ColourReportRow,
     MultiplePreviewRequest,
     PreviewRequest,
     SinglePreviewRequest,
@@ -164,13 +167,28 @@ def list_templates(request: Request) -> list[TemplateSummary]:
 
 @router.post("", response_model=UploadResponse)
 async def upload_template(
-    request: Request, name: str, kind: TemplateKind, files: list[UploadFile]
+    request: Request, name: str, files: list[UploadFile], kind: TemplateKind | None = None
 ) -> UploadResponse:
     workspace = _workspace(request)
     config_path = _template_config_path(workspace, name)
     if not files:
         raise HTTPException(status_code=400, detail="upload at least one file")
     config_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if kind is None:
+        # Photos in, question later. They keep their own filenames until a
+        # kind is assigned, because which name is *correct* depends entirely
+        # on the answer: a colour-matrix set's filenames are its colours
+        # (PRD 7a), while a scene kind wants the fixed scene.png (PRD 28).
+        for upload in files:
+            if not upload.filename:
+                raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
+            try:
+                destination = workspace.template_base_image(name, Path(upload.filename).stem)
+            except InvalidNameError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            destination.write_bytes(await upload.read())
+        return UploadResponse(name=name, kind=None, colours=[])
 
     if kind == "colour-matrix":
         colours: list[str] = []
@@ -210,6 +228,90 @@ async def upload_template(
         else:
             _write_template_config(config_path, SingleTemplate(bounding_box=_default_box(size)))
     return UploadResponse(name=name, kind=kind, colours=[])
+
+
+def _template_photos(template_dir: Path) -> list[Path]:
+    """Every photo in the directory except the scene, sorted."""
+    return sorted(p for p in template_dir.glob("*.png") if p.stem != "scene")
+
+
+@router.get("/{name}/colour-report", response_model=list[ColourReportRow])
+def colour_report(request: Request, name: str) -> list[ColourReportRow]:
+    """What each photo would be taken as if this became a colour-matrix set.
+
+    Shown in the kind picker before committing, so a badly named file is
+    caught while it is still cheap to rename. Reporting only -- PRD 7a makes
+    the filename the source of truth and there is deliberately no mapping
+    table to edit here.
+    """
+    workspace = _workspace(request)
+    try:
+        template_dir = workspace.template_dir(name)
+    except InvalidNameError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not template_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"no template {name!r}")
+
+    return [
+        ColourReportRow(
+            filename=photo.name, colour=slugify(photo.stem), clean=slugify(photo.stem) == photo.stem
+        )
+        for photo in _template_photos(template_dir)
+    ]
+
+
+@router.post("/{name}/kind", response_model=TemplateConfig)
+def assign_kind(
+    request: Request, name: str, body: AssignKindRequest
+) -> ColourMatrixTemplate | MultipleTemplate | SingleTemplate:
+    """The first calibration step: say what this template is, and get the
+    starting ``template.yaml`` for that shape.
+
+    Refuses a template that already has a config. Kind decides the whole file
+    shape (A11), so changing it would discard whatever calibration was done in
+    the old shape's fields -- and doing that silently, from a picker, is the
+    kind of data loss nobody would think to look for.
+    """
+    workspace = _workspace(request)
+    config_path = _template_config_path(workspace, name)
+    template_dir = workspace.template_dir(name)
+    if not template_dir.is_dir():
+        raise HTTPException(status_code=404, detail=f"no template {name!r}")
+    if config_path.is_file():
+        raise HTTPException(
+            status_code=409,
+            detail=f"{name!r} already has a template.yaml; delete it to change kind",
+        )
+
+    photos = _template_photos(template_dir)
+    if not photos:
+        raise HTTPException(status_code=400, detail=f"no photos uploaded for {name!r}")
+
+    if body.kind == "colour-matrix":
+        # Nothing is renamed: these filenames already are the colours.
+        with Image.open(photos[0]) as img:
+            size = img.size
+        config: ColourMatrixTemplate | MultipleTemplate | SingleTemplate = ColourMatrixTemplate(
+            bounding_box=_default_box(size)
+        )
+    else:
+        if len(photos) != 1:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{body.kind} kind expects one photo, found {len(photos)}",
+            )
+        scene = workspace.template_scene_image(name)
+        photos[0].replace(scene)
+        with Image.open(scene) as img:
+            size = img.size
+        config = (
+            MultipleTemplate(placements=[])
+            if body.kind == "multiple"
+            else SingleTemplate(bounding_box=_default_box(size))
+        )
+
+    _write_template_config(config_path, config)
+    return config
 
 
 @router.get("/{name}/thumbnail")

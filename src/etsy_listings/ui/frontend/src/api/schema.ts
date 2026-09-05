@@ -57,6 +57,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/templates/{name}/colour-report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Colour Report
+         * @description What each photo would be taken as if this became a colour-matrix set.
+         *
+         *     Shown in the kind picker before committing, so a badly named file is
+         *     caught while it is still cheap to rename. Reporting only -- PRD 7a makes
+         *     the filename the source of truth and there is deliberately no mapping
+         *     table to edit here.
+         */
+        get: operations["colour_report_api_templates__name__colour_report_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/templates/{name}/config": {
         parameters: {
             query?: never;
@@ -69,6 +94,32 @@ export interface paths {
         /** Put Config */
         put: operations["put_config_api_templates__name__config_put"];
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/templates/{name}/kind": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Assign Kind
+         * @description The first calibration step: say what this template is, and get the
+         *     starting ``template.yaml`` for that shape.
+         *
+         *     Refuses a template that already has a config. Kind decides the whole file
+         *     shape (A11), so changing it would discard whatever calibration was done in
+         *     the old shape's fields -- and doing that silently, from a picker, is the
+         *     kind of data loss nobody would think to look for.
+         */
+        post: operations["assign_kind_api_templates__name__kind_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -144,6 +195,14 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
     schemas: {
+        /** AssignKindRequest */
+        AssignKindRequest: {
+            /**
+             * Kind
+             * @enum {string}
+             */
+            kind: "colour-matrix" | "multiple" | "single";
+        };
         /** Body_upload_design_api_designs_post */
         Body_upload_design_api_designs_post: {
             /** File */
@@ -228,6 +287,21 @@ export interface components {
              *     }
              */
             shade: components["schemas"]["ShadeConfig"];
+        };
+        /**
+         * ColourReportRow
+         * @description What one photo in a candidate ``colour-matrix`` set will be taken as.
+         *
+         *     Reporting only: PRD 7a makes the filename the source of truth, so there is
+         *     no manual mapping to offer and nothing here changes a name.
+         */
+        ColourReportRow: {
+            /** Clean */
+            clean: boolean;
+            /** Colour */
+            colour: string;
+            /** Filename */
+            filename: string;
         };
         /**
          * DesignSummary
@@ -476,11 +550,8 @@ export interface components {
         UploadResponse: {
             /** Colours */
             colours: string[];
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "colour-matrix" | "multiple" | "single";
+            /** Kind */
+            kind: ("colour-matrix" | "multiple" | "single") | null;
             /** Name */
             name: string;
         };
@@ -605,7 +676,7 @@ export interface operations {
         parameters: {
             query: {
                 name: string;
-                kind: "colour-matrix" | "multiple" | "single";
+                kind?: ("colour-matrix" | "multiple" | "single") | null;
             };
             header?: never;
             path?: never;
@@ -624,6 +695,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["UploadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    colour_report_api_templates__name__colour_report_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColourReportRow"][];
                 };
             };
             /** @description Validation Error */
@@ -680,6 +782,41 @@ export interface operations {
         requestBody: {
             content: {
                 "application/json": components["schemas"]["ColourMatrixTemplate"] | components["schemas"]["MultipleTemplate"] | components["schemas"]["SingleTemplate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ColourMatrixTemplate"] | components["schemas"]["MultipleTemplate"] | components["schemas"]["SingleTemplate"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    assign_kind_api_templates__name__kind_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                name: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AssignKindRequest"];
             };
         };
         responses: {

@@ -224,6 +224,148 @@ class TestDesignLibrary:
         assert response.status_code == 400
 
 
+def _png(colour: tuple[int, int, int] = (200, 60, 60)) -> bytes:
+    from io import BytesIO
+
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new("RGB", (64, 80), colour).save(buffer, format="PNG")
+    return buffer.getvalue()
+
+
+class TestKindChosenAfterUpload:
+    """Wireframe 2a asks what kind a template is *after* the photos are in,
+    as the first calibration step, instead of demanding it at upload. You can
+    see the photos by then, which is the only way the question is answerable
+    for a set someone else assembled.
+    """
+
+    def _upload(self, client: TestClient, name: str, files: list[tuple[str, bytes]]):  # noqa: ANN202
+        return client.post(
+            "/api/templates",
+            params={"name": name},
+            files=[("files", (filename, data, "image/png")) for filename, data in files],
+        )
+
+    def test_upload_without_a_kind_stores_the_photos_and_no_config(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        response = self._upload(client, "fresh", [("black.png", _png()), ("ivory.png", _png())])
+        assert response.status_code == 200
+        assert response.json()["kind"] is None
+
+        directory = workspace_root / "mockup-templates" / "fresh"
+        assert sorted(p.name for p in directory.glob("*.png")) == ["black.png", "ivory.png"]
+        assert not (directory / "template.yaml").exists()
+
+    def test_such_a_template_is_listed_as_needing_a_kind(self, client: TestClient) -> None:
+        self._upload(client, "fresh", [("black.png", _png())])
+        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+        assert by_name["fresh"]["status_reason"] == "no kind set"
+
+    def test_assigning_colour_matrix_writes_a_config_with_a_starting_box(
+        self, client: TestClient
+    ) -> None:
+        self._upload(client, "fresh", [("black.png", _png()), ("ivory.png", _png())])
+        response = client.post("/api/templates/fresh/kind", json={"kind": "colour-matrix"})
+        assert response.status_code == 200
+
+        config = client.get("/api/templates/fresh/config").json()
+        assert config["kind"] == "colour-matrix"
+        assert len(config["bounding_box"]) == 4
+
+    def test_assigning_colour_matrix_leaves_the_photos_named_as_colours(
+        self, client: TestClient
+    ) -> None:
+        """PRD 7a: the filename *is* the colour, so nothing is renamed."""
+        self._upload(client, "fresh", [("black.png", _png()), ("ivory.png", _png())])
+        client.post("/api/templates/fresh/kind", json={"kind": "colour-matrix"})
+        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+        assert by_name["fresh"]["colours"] == ["black", "ivory"]
+
+    def test_assigning_single_renames_the_lone_photo_to_the_scene(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """PRD 28: multiple/single kinds use a fixed scene.png -- there is no
+        per-colour photo to name."""
+        self._upload(client, "fresh", [("some-shot.png", _png())])
+        assert client.post("/api/templates/fresh/kind", json={"kind": "single"}).status_code == 200
+
+        directory = workspace_root / "mockup-templates" / "fresh"
+        assert (directory / "scene.png").is_file()
+        assert not (directory / "some-shot.png").exists()
+
+    def test_assigning_multiple_starts_with_no_boxes(self, client: TestClient) -> None:
+        self._upload(client, "fresh", [("chart.png", _png())])
+        client.post("/api/templates/fresh/kind", json={"kind": "multiple"})
+        assert client.get("/api/templates/fresh/config").json()["placements"] == []
+        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+        assert by_name["fresh"]["status_reason"] == "no boxes"
+
+    def test_a_scene_kind_refuses_a_set_of_photos(self, client: TestClient) -> None:
+        """One photo, one scene -- picking `single` for a four-photo colour set
+        is a mistake worth reporting rather than silently keeping one."""
+        self._upload(client, "fresh", [("a.png", _png()), ("b.png", _png())])
+        response = client.post("/api/templates/fresh/kind", json={"kind": "single"})
+        assert response.status_code == 400
+        assert "one photo" in response.json()["detail"]
+
+    def test_assigning_a_kind_to_an_already_configured_template_is_refused(
+        self, client: TestClient
+    ) -> None:
+        """Changing kind would silently discard the calibration already done
+        in the old shape's fields."""
+        response = client.post("/api/templates/flat-lay-01/kind", json={"kind": "single"})
+        assert response.status_code == 409
+
+    def test_assigning_a_kind_to_an_unknown_template_404s(self, client: TestClient) -> None:
+        assert client.post("/api/templates/nope/kind", json={"kind": "single"}).status_code == 404
+
+
+class TestColourReport:
+    """The kind picker shows what colour each photo will be taken as, before
+    committing to `colour-matrix`. PRD 7a makes the filename the source of
+    truth, so this only *reports* that rule -- there is no manual mapping.
+    """
+
+    def test_reports_the_colour_each_filename_yields(self, client: TestClient) -> None:
+        response = client.get("/api/templates/flat-lay-01/colour-report")
+        assert response.status_code == 200
+        assert response.json() == [
+            {"filename": "black.png", "colour": "black", "clean": True},
+            {"filename": "blue-jean.png", "colour": "blue-jean", "clean": True},
+            {"filename": "ivory.png", "colour": "ivory", "clean": True},
+            {"filename": "moss.png", "colour": "moss", "clean": True},
+        ]
+
+    def test_flags_a_filename_that_is_not_already_a_slug(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """`Heather Grey.png` still yields a colour, but not the one on disk --
+        the calibrator says so rather than quietly renaming the user's file."""
+        (workspace_root / "mockup-templates" / "flat-lay-01" / "Heather Grey.png").write_bytes(
+            _png()
+        )
+        by_filename = {
+            row["filename"]: row
+            for row in client.get("/api/templates/flat-lay-01/colour-report").json()
+        }
+        assert by_filename["Heather Grey.png"] == {
+            "filename": "Heather Grey.png",
+            "colour": "heather-grey",
+            "clean": False,
+        }
+
+    def test_excludes_the_scene_photo(self, client: TestClient) -> None:
+        """A scene is not a colour (PRD 28)."""
+        rows = client.get("/api/templates/colour-chart-01/colour-report").json()
+        assert all(row["filename"] != "scene.png" for row in rows)
+
+    def test_404s_for_an_unknown_template(self, client: TestClient) -> None:
+        assert client.get("/api/templates/nope/colour-report").status_code == 404
+
+
 def test_get_config_returns_the_fixture_bounding_box(client: TestClient) -> None:
     response = client.get("/api/templates/flat-lay-01/config")
     assert response.status_code == 200

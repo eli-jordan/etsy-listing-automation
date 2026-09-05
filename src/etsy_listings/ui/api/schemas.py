@@ -56,8 +56,31 @@ class TemplateSummary(BaseModel):
 
 class UploadResponse(BaseModel):
     name: str
-    kind: TemplateKind
+    kind: TemplateKind | None
+    """``None`` when the upload did not name a kind. Wireframe 2a asks for it
+    afterwards, as the first calibration step, so the photos are on screen
+    when the question is put -- which is the only way it is answerable for a
+    set someone else assembled."""
     colours: list[str]
+
+
+class AssignKindRequest(BaseModel):
+    kind: TemplateKind
+
+
+class ColourReportRow(BaseModel):
+    """What one photo in a candidate ``colour-matrix`` set will be taken as.
+
+    Reporting only: PRD 7a makes the filename the source of truth, so there is
+    no manual mapping to offer and nothing here changes a name.
+    """
+
+    filename: str
+    colour: str
+    clean: bool
+    """False when the filename is not already the slug -- ``Heather Grey.png``
+    still yields ``heather-grey``, but not the name sitting on disk, and the
+    user should hear that from the calibrator rather than discover it later."""
 
 
 class ColourMatrixPreviewRequest(BaseModel):

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getTemplateConfig, listTemplates, saveTemplateConfig } from "./api/calibrator";
+import { KindPicker } from "./components/KindPicker";
 import { TemplateRail } from "./components/TemplateRail";
 import { UploadForm } from "./components/UploadForm";
 import { ColourMatrixEditor } from "./editors/ColourMatrixEditor";
@@ -43,6 +44,9 @@ export function App() {
   // template.yaml -- and it deliberately survives switching template, since
   // "show me all of these against my real artwork" is the point of changing it.
   const [design, setDesign] = useState("bundled-grid");
+  // Bumped when a kind is assigned, to re-run the config fetch for a template
+  // whose name has not changed but which now has a template.yaml.
+  const [configVersion, setConfigVersion] = useState(0);
 
   const refreshTemplates = useCallback((selectName?: string) => {
     listTemplates()
@@ -66,7 +70,7 @@ export function App() {
         setSavedEntry(entry);
       })
       .catch(() => setStatus("failed to load template config"));
-  }, [templateName]);
+  }, [templateName, configVersion]);
 
   const config = configEntry?.name === templateName ? configEntry.config : null;
   const saved = savedEntry?.name === templateName ? savedEntry.config : null;
@@ -152,6 +156,21 @@ export function App() {
         />
 
         <div className="app__workspace">
+          {/* 2a: an uncalibrated template replaces the workspace with a single
+              choice, so nothing else can be touched yet. Kind decides the
+              whole shape of template.yaml (A11) -- every other control is
+              meaningless or wrong until it is answered. */}
+          {templateName && !config ? (
+            <KindPicker
+              key={templateName}
+              templateName={templateName}
+              onAssigned={() => {
+                setConfigVersion((v) => v + 1);
+                refreshTemplates(templateName);
+              }}
+            />
+          ) : (
+            <>
           {templateName && config?.kind === "colour-matrix" && (
             <ColourMatrixEditor
               templateName={templateName}
@@ -180,10 +199,11 @@ export function App() {
               onDesignChange={setDesign}
             />
           )}
-          {templateName && !config && <p>No template.yaml yet for {templateName}.</p>}
           {!templateName && <p>No templates yet -- upload one below.</p>}
 
-          <UploadForm onUploaded={(name) => refreshTemplates(name)} />
+              <UploadForm onUploaded={(name) => refreshTemplates(name)} />
+            </>
+          )}
         </div>
       </div>
     </div>

@@ -83,12 +83,13 @@ describe("uploadTemplate", () => {
 
     const { uploadTemplate } = await import("./calibrator");
     const file = new File(["x"], "black.png", { type: "image/png" });
-    const result = await uploadTemplate("flat-lay-02", "colour-matrix", [file]);
+    const result = await uploadTemplate("flat-lay-02", [file]);
 
     expect(result.name).toBe("flat-lay-02");
     const [url, init] = must(fetchMock.mock.calls[0]);
     expect(url).toContain("name=flat-lay-02");
-    expect(url).toContain("kind=colour-matrix");
+    // No kind: it is asked afterwards, once the photos are on screen.
+    expect(url).not.toContain("kind=");
     expect(init.method).toBe("POST");
     expect((init.body as FormData).getAll("files")).toEqual([file]);
   });
@@ -96,7 +97,7 @@ describe("uploadTemplate", () => {
   it("throws CalibratorApiError when the upload fails", async () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
     const { uploadTemplate, CalibratorApiError } = await import("./calibrator");
-    await expect(uploadTemplate("x", "single", [new File(["x"], "a.png")])).rejects.toBeInstanceOf(
+    await expect(uploadTemplate("x", [new File(["x"], "a.png")])).rejects.toBeInstanceOf(
       CalibratorApiError,
     );
   });

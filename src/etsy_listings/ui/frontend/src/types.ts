@@ -15,6 +15,8 @@ export type TemplateKind = "colour-matrix" | "multiple" | "single";
  * uses its filename stem. */
 export type DesignSummary = components["schemas"]["DesignSummary"];
 
+export type ColourReportRow = components["schemas"]["ColourReportRow"];
+
 export type ColourMatrixTemplate = components["schemas"]["ColourMatrixTemplate"];
 export type MultipleTemplate = components["schemas"]["MultipleTemplate"];
 export type SingleTemplate = components["schemas"]["SingleTemplate"];
