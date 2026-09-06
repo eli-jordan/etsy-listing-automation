@@ -556,16 +556,23 @@ guided flow.
   currently running.
 
 ### Template authoring
-- Upload a new mockup template set.
+- **A template is a folder the user puts in the workspace; the calibrator does
+  not create one.** An upload form was the original answer here, and it would
+  have earned its place if the browser were the only way in. It is not: a
+  template set is photographs, and whatever produced them already wrote them to
+  disk. A form that asks for a name and then copies files from one directory
+  into another is a second, worse file manager, and it puts a naming decision
+  (PRD 7a, PRD 28) in front of the photos instead of beside them. The
+  calibrator starts where the folder exists and the kind is unanswered.
 - Define the design bounding box on the four-corner quad, with draggable handles.
 - Filmstrip of all colour variants in the set.
 - Sliders for displacement strength and shading blend mode/opacity.
 - The Python backend re-runs the **real renderer** on each change and streams
   back the composite, so the preview is the actual output, not an approximation.
-- **Ships with a bundled test design** so a newly uploaded template can be
-  calibrated immediately, with nothing to prepare. A toggle switches to a
-  grid/ruler target, which makes warp and displacement errors more obvious than
-  artwork does. You can also upload your own test design at any point.
+- **Ships with a bundled test design** so a new template can be calibrated
+  immediately, with nothing to prepare. A toggle switches to a grid/ruler
+  target, which makes warp and displacement errors more obvious than artwork
+  does. You can also upload your own test design at any point.
 - Writes `template.yaml` and caches derived maps into `_derived/`.
 
 Colour variants are **usually** the same photograph recoloured, so

@@ -374,7 +374,8 @@ GET  /api/runs                            history, paginated
 GET  /api/runs/{id}/events                SSE, resumable via Last-Event-ID
 
 GET  /api/templates
-POST /api/templates                       upload a set
+POST /api/templates                       upload a set (server-side only; no UI
+                                          calls it -- see PRD, Template authoring)
 GET  /api/templates/{name}/config
 PUT  /api/templates/{name}/config         writes template.yaml
 POST /api/templates/{name}/preview        returns PNG through the real renderer
@@ -402,9 +403,28 @@ argument, and a dropdown cannot make it.
 `TemplateSummary.status` is **derived on every read**, never persisted. A
 `calibrated:` flag in `template.yaml` would be product state no PRD decision
 covers, and it could disagree with the config sitting beside it. Only
-`multiple` has states beyond "has a config at all": `placements: []` is what an
-upload writes, and a box can be positioned before anyone says which colour it
-depicts.
+`multiple` has states beyond "has a config at all": `placements: []` is what
+assigning the kind writes, and a box can be positioned before anyone says which
+colour it depicts.
+
+**Every box is edited on the photo, and only there.** A `multiple` chart had a
+bounding-box panel beside the canvas listing its placements with corner fields,
+reorder buttons and a colour field. Everything on it except the colour was
+already a gesture on the canvas — select, add, duplicate, reorder, delete,
+drag — so the panel was a second place to look and a second place to be wrong
+about which box is which. The colour was the exception because it is the one
+fact about a box the photograph cannot show; it is a caption under the box now,
+clicked to edit, drawn under exactly the boxes whose outline is drawn.
+
+A box moves as a whole by dragging its interior or by the arrow keys, and
+deforms only by its corner handles. Placing a box is the commonest move there
+is, and dragging four corners the same distance by eye is not a way to do it.
+Both gestures belong to the canvas, so every kind has them.
+
+Every kind can also hide its box chrome. What that means differs — a chart
+hides the boxes you are *not* working on, a colour set and a single scene hide
+everything — but the reason is the same in all three: the outline and its
+handles sit on top of the very artwork being judged.
 
 The inspector names controls after what they do to a photograph rather than
 after the render pass behind them — "Follow fabric wrinkles" over `displace`,
@@ -476,9 +496,9 @@ Render passes, `RenderConfig`, derived maps and `_derived/` caching; the golden
 harness at both levels; the render stage wired into plan/apply; the FastAPI +
 React skeleton carrying **only** the calibrator; the `new` interactive picker.
 
-*Exit:* a template can be uploaded, calibrated in the browser against the bundled
-test design, and produce full-resolution mockups for every colour; goldens are
-committed; `new` writes a profile and listing with no integer IDs typed by hand.
+*Exit:* a folder of photos can be given a kind, calibrated in the browser
+against the bundled test design, and produce full-resolution mockups for every
+colour; goldens are committed; `new` writes a profile and listing with no integer IDs typed by hand.
 
 ### Phase 2 — Printify
 
