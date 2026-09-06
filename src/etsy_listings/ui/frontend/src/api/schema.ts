@@ -4,937 +4,902 @@
  */
 
 export interface paths {
-    "/api/designs": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Designs */
-        get: operations["list_designs_api_designs_get"];
-        put?: never;
-        /** Upload Design */
-        post: operations["upload_design_api_designs_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+  "/api/designs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Health */
-        get: operations["health_api_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List Designs */
+    get: operations["list_designs_api_designs_get"];
+    put?: never;
+    /** Upload Design */
+    post: operations["upload_design_api_designs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/health": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/templates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Templates */
-        get: operations["list_templates_api_templates_get"];
-        put?: never;
-        /** Upload Template */
-        post: operations["upload_template_api_templates_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Health */
+    get: operations["health_api_health_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/templates/{name}/colour-report": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Colour Report
-         * @description What each photo would be taken as if this became a colour-matrix set.
-         *
-         *     Shown in the kind picker before committing, so a badly named file is
-         *     caught while it is still cheap to rename. Reporting only -- PRD 7a makes
-         *     the filename the source of truth and there is deliberately no mapping
-         *     table to edit here.
-         */
-        get: operations["colour_report_api_templates__name__colour_report_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** List Templates */
+    get: operations["list_templates_api_templates_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/colour-report": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/templates/{name}/config": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Config */
-        get: operations["get_config_api_templates__name__config_get"];
-        /** Put Config */
-        put: operations["put_config_api_templates__name__config_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Colour Report
+     * @description What each photo will be taken as if this becomes a colour-matrix set.
+     *
+     *     Shown in the kind picker before committing, so a badly named file is seen
+     *     while it is still cheap to think about. A row with ``clean: false`` is one
+     *     ``assign_kind`` will rename on disk (PRD 7a: the filename *is* the
+     *     slugified colour, and a directory whose filenames disagree with the
+     *     colours they mean is the state that rule exists to prevent).
+     */
+    get: operations["colour_report_api_templates__name__colour_report_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/config": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/templates/{name}/kind": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Assign Kind
-         * @description The first calibration step: say what this template is, and get the
-         *     starting ``template.yaml`` for that shape.
-         *
-         *     Refuses a template that already has a config. Kind decides the whole file
-         *     shape (A11), so changing it would discard whatever calibration was done in
-         *     the old shape's fields -- and doing that silently, from a picker, is the
-         *     kind of data loss nobody would think to look for.
-         */
-        post: operations["assign_kind_api_templates__name__kind_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /** Get Config */
+    get: operations["get_config_api_templates__name__config_get"];
+    /** Put Config */
+    put: operations["put_config_api_templates__name__config_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/kind": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/templates/{name}/preview": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Preview */
-        post: operations["preview_api_templates__name__preview_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /**
+     * Assign Kind
+     * @description The first calibration step: say what this template is, and get the
+     *     starting ``template.yaml`` for that shape.
+     *
+     *     Refuses a template that already has a config. Kind decides the whole file
+     *     shape (A11), so changing it would discard whatever calibration was done in
+     *     the old shape's fields -- and doing that silently, from a picker, is the
+     *     kind of data loss nobody would think to look for.
+     */
+    post: operations["assign_kind_api_templates__name__kind_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/api/templates/{name}/thumbnail": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Thumbnail
-         * @description The template's own photo, downscaled, for the rail.
-         *
-         *     Not a render: the rail shows every template in the workspace at once, and
-         *     running the real pipeline once per row would make opening the calibrator
-         *     cost as much as calibrating. Which photo hardly matters -- a colour-matrix
-         *     set's colours are all the same garment -- so this takes ``scene.png`` when
-         *     there is one and the first colour otherwise, without reading the config.
-         *
-         *     Regenerated per request rather than cached on disk; the resize is cheap
-         *     next to the response, and a cache in the workspace would be one more
-         *     derived directory to invalidate. Repeat loads are handled by the
-         *     ``Cache-Control`` header instead.
-         */
-        get: operations["thumbnail_api_templates__name__thumbnail_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    get?: never;
+    put?: never;
+    /** Preview */
+    post: operations["preview_api_templates__name__preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    "/{full_path}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Spa Fallback */
-        get: operations["spa_fallback__full_path__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
+    /**
+     * Thumbnail
+     * @description The template's own photo, downscaled, for the rail.
+     *
+     *     Not a render: the rail shows every template in the workspace at once, and
+     *     running the real pipeline once per row would make opening the calibrator
+     *     cost as much as calibrating. Which photo hardly matters -- a colour-matrix
+     *     set's colours are all the same garment -- so this takes ``scene.png`` when
+     *     there is one and the first colour otherwise, without reading the config.
+     *
+     *     Regenerated per request rather than cached on disk; the resize is cheap
+     *     next to the response, and a cache in the workspace would be one more
+     *     derived directory to invalidate. Repeat loads are handled by the
+     *     ``Cache-Control`` header instead.
+     */
+    get: operations["thumbnail_api_templates__name__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/{full_path}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
+    /** Spa Fallback */
+    get: operations["spa_fallback__full_path__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
-    schemas: {
-        /** AssignKindRequest */
-        AssignKindRequest: {
-            /**
-             * Kind
-             * @enum {string}
-             */
-            kind: "colour-matrix" | "multiple" | "single";
-        };
-        /** Body_upload_design_api_designs_post */
-        Body_upload_design_api_designs_post: {
-            /** File */
-            file: string;
-        };
-        /** Body_upload_template_api_templates_post */
-        Body_upload_template_api_templates_post: {
-            /** Files */
-            files: string[];
-        };
-        /**
-         * ColourMatrixPreviewRequest
-         * @description Disambiguated from the other two preview shapes by required fields
-         *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
-         *     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
-         *     than forbidden, since a natural client pattern is spreading a whole
-         *     ``GET .../config`` response (which includes ``kind``) into the body.
-         */
-        ColourMatrixPreviewRequest: {
-            /** Bounding Box */
-            bounding_box: [
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"]
-            ];
-            /** Colour */
-            colour: string;
-            /**
-             * Design
-             * @default bundled-grid
-             */
-            design: string;
-            /**
-             * @default {
-             *       "enabled": false,
-             *       "strength": 0
-             *     }
-             */
-            displace: components["schemas"]["DisplaceConfig"];
-            /**
-             * @default {
-             *       "blend": "soft-light",
-             *       "enabled": true,
-             *       "opacity": 0.6
-             *     }
-             */
-            shade: components["schemas"]["ShadeConfig"];
-        };
-        /**
-         * ColourMatrixTemplate
-         * @description One photo per colour, same design position in all of them. Scene
-         *     images are ``{colour-slug}.png`` per colour (PRD 7a) -- there is no
-         *     ``colours:`` list in the YAML, since the filenames present in the
-         *     directory *are* the colour set.
-         */
-        ColourMatrixTemplate: {
-            /** Bounding Box */
-            bounding_box: [
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"]
-            ];
-            /**
-             * @default {
-             *       "enabled": false,
-             *       "strength": 0
-             *     }
-             */
-            displace: components["schemas"]["DisplaceConfig"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "colour-matrix";
-            /**
-             * @default {
-             *       "blend": "soft-light",
-             *       "enabled": true,
-             *       "opacity": 0.6
-             *     }
-             */
-            shade: components["schemas"]["ShadeConfig"];
-        };
-        /**
-         * ColourReportRow
-         * @description What one photo in a candidate ``colour-matrix`` set will be taken as.
-         *
-         *     Reporting only: PRD 7a makes the filename the source of truth, so there is
-         *     no manual mapping to offer and nothing here changes a name.
-         */
-        ColourReportRow: {
-            /** Clean */
-            clean: boolean;
-            /** Colour */
-            colour: string;
-            /** Filename */
-            filename: string;
-        };
-        /**
-         * DesignSummary
-         * @description One entry in the calibrator's test-design library (A19).
-         *
-         *     ``bundled-grid``: the grid/ruler target, for spotting warp/displacement
-         *     errors. ``bundled-on-light``/``bundled-on-dark``: deterministic
-         *     ink-coloured targets, so a mis-resolved artwork is visually obvious in the
-         *     calibrator, not just described in a diff. ``upload``: a PNG the user added,
-         *     for judging a real ink weight on a real garment -- the question the grid
-         *     cannot answer.
-         */
-        DesignSummary: {
-            /** Id */
-            id: string;
-            /** Label */
-            label: string;
-            /**
-             * Source
-             * @enum {string}
-             */
-            source: "bundled" | "upload";
-        };
-        /**
-         * DisplaceConfig
-         * @description PRD: implemented but off by default -- over-strong displacement looks
-         *     melted, so it's tuned per template in the calibrator's live preview.
-         */
-        DisplaceConfig: {
-            /**
-             * Enabled
-             * @default false
-             */
-            enabled: boolean;
-            /**
-             * Strength
-             * @default 0
-             */
-            strength: number;
-        };
-        /** HTTPValidationError */
-        HTTPValidationError: {
-            /** Detail */
-            detail?: components["schemas"]["ValidationError"][];
-        };
-        /** MultiplePreviewRequest */
-        MultiplePreviewRequest: {
-            /**
-             * Design
-             * @default bundled-grid
-             */
-            design: string;
-            /**
-             * @default {
-             *       "enabled": false,
-             *       "strength": 0
-             *     }
-             */
-            displace: components["schemas"]["DisplaceConfig"];
-            /** Placements */
-            placements: components["schemas"]["Placement"][];
-            /**
-             * @default {
-             *       "blend": "soft-light",
-             *       "enabled": true,
-             *       "opacity": 0.6
-             *     }
-             */
-            shade: components["schemas"]["ShadeConfig"];
-        };
-        /**
-         * MultipleTemplate
-         * @description Several garments in one photo. ``displace``/``shade`` are scene-level
-         *     only -- one photo, one lighting pass; a placement needing different
-         *     rendering treatment belongs in its own template instead.
-         */
-        MultipleTemplate: {
-            /**
-             * Colour Coverage
-             * @default exact
-             * @enum {string}
-             */
-            colour_coverage: "exact" | "subset";
-            /**
-             * @default {
-             *       "enabled": false,
-             *       "strength": 0
-             *     }
-             */
-            displace: components["schemas"]["DisplaceConfig"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "multiple";
-            /** Placements */
-            placements: components["schemas"]["Placement"][];
-            /**
-             * @default {
-             *       "blend": "soft-light",
-             *       "enabled": true,
-             *       "opacity": 0.6
-             *     }
-             */
-            shade: components["schemas"]["ShadeConfig"];
-        };
-        /**
-         * Placement
-         * @description One garment within a ``multiple``-kind scene.
-         */
-        Placement: {
-            /** Artwork */
-            artwork?: string | null;
-            /** Bounding Box */
-            bounding_box: [
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"]
-            ];
-            /** Colour */
-            colour: string;
-        };
-        /** Point */
-        Point: {
-            /** X */
-            x: number;
-            /** Y */
-            y: number;
-        };
-        /**
-         * ShadeConfig
-         * @description Blends the base mockup photo's own greyscale lighting over the printed
-         *     design, so a flat design picks up the garment's real fold shadows and
-         *     light falloff instead of looking pasted on as a flat rectangle -- this is
-         *     why a plain flat-lay PNG is enough to mock up, with no purchased
-         *     Photoshop lighting map needed. On by default: almost every mockup needs
-         *     it. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a
-         *     mid-grey pivot is used for those instead.
-         */
-        ShadeConfig: {
-            /**
-             * Blend
-             * @default soft-light
-             * @enum {string}
-             */
-            blend: "multiply" | "soft-light" | "grey-pivot";
-            /**
-             * Enabled
-             * @default true
-             */
-            enabled: boolean;
-            /**
-             * Opacity
-             * @default 0.6
-             */
-            opacity: number;
-        };
-        /** SinglePreviewRequest */
-        SinglePreviewRequest: {
-            /** Bounding Box */
-            bounding_box: [
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"]
-            ];
-            /**
-             * Design
-             * @default bundled-grid
-             */
-            design: string;
-            /**
-             * @default {
-             *       "enabled": false,
-             *       "strength": 0
-             *     }
-             */
-            displace: components["schemas"]["DisplaceConfig"];
-            /**
-             * @default {
-             *       "blend": "soft-light",
-             *       "enabled": true,
-             *       "opacity": 0.6
-             *     }
-             */
-            shade: components["schemas"]["ShadeConfig"];
-        };
-        /**
-         * SingleTemplate
-         * @description One photo, one garment -- a lifestyle shot, a folded product photo,
-         *     anything that isn't part of a colour set.
-         */
-        SingleTemplate: {
-            /** Artwork */
-            artwork?: string | null;
-            /** Bounding Box */
-            bounding_box: [
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"],
-                components["schemas"]["Point"]
-            ];
-            /** Colour */
-            colour?: string | null;
-            /**
-             * @default {
-             *       "enabled": false,
-             *       "strength": 0
-             *     }
-             */
-            displace: components["schemas"]["DisplaceConfig"];
-            /**
-             * @description discriminator enum property added by openapi-typescript
-             * @enum {string}
-             */
-            kind: "single";
-            /**
-             * @default {
-             *       "blend": "soft-light",
-             *       "enabled": true,
-             *       "opacity": 0.6
-             *     }
-             */
-            shade: components["schemas"]["ShadeConfig"];
-        };
-        /** TemplateSummary */
-        TemplateSummary: {
-            /** Colours */
-            colours: string[];
-            /** Has Config */
-            has_config: boolean;
-            /** Kind */
-            kind: ("colour-matrix" | "multiple" | "single") | null;
-            /** Name */
-            name: string;
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "needs-calibration" | "calibrated";
-            /** Status Reason */
-            status_reason?: string | null;
-        };
-        /** UploadResponse */
-        UploadResponse: {
-            /** Colours */
-            colours: string[];
-            /** Kind */
-            kind: ("colour-matrix" | "multiple" | "single") | null;
-            /** Name */
-            name: string;
-        };
-        /** ValidationError */
-        ValidationError: {
-            /** Context */
-            ctx?: Record<string, never>;
-            /** Input */
-            input?: unknown;
-            /** Location */
-            loc: (string | number)[];
-            /** Message */
-            msg: string;
-            /** Error Type */
-            type: string;
-        };
+  schemas: {
+    /** AssignKindRequest */
+    AssignKindRequest: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "colour-matrix" | "multiple" | "single";
     };
-    responses: never;
-    parameters: never;
-    requestBodies: never;
-    headers: never;
-    pathItems: never;
+    /** Body_upload_design_api_designs_post */
+    Body_upload_design_api_designs_post: {
+      /** File */
+      file: string;
+    };
+    /**
+     * ColourMatrixPreviewRequest
+     * @description Disambiguated from the other two preview shapes by required fields
+     *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
+     *     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
+     *     than forbidden, since a natural client pattern is spreading a whole
+     *     ``GET .../config`` response (which includes ``kind``) into the body.
+     */
+    ColourMatrixPreviewRequest: {
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /** Colour */
+      colour: string;
+      /**
+       * Design
+       * @default bundled-grid
+       */
+      design: string;
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
+     * ColourMatrixTemplate
+     * @description One photo per colour, same design position in all of them. Scene
+     *     images are ``{colour-slug}.png`` per colour (PRD 7a) -- there is no
+     *     ``colours:`` list in the YAML, since the filenames present in the
+     *     directory *are* the colour set.
+     */
+    ColourMatrixTemplate: {
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "colour-matrix";
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
+     * ColourReportRow
+     * @description What one photo in a candidate ``colour-matrix`` set will be taken as.
+     *
+     *     Reporting only: PRD 7a makes the filename the source of truth, so there is
+     *     no manual mapping to offer and nothing here changes a name.
+     */
+    ColourReportRow: {
+      /** Clean */
+      clean: boolean;
+      /** Colour */
+      colour: string;
+      /** Filename */
+      filename: string;
+    };
+    /**
+     * DesignSummary
+     * @description One entry in the calibrator's test-design library (A19).
+     *
+     *     ``bundled-grid``: the grid/ruler target, for spotting warp/displacement
+     *     errors. ``bundled-on-light``/``bundled-on-dark``: deterministic
+     *     ink-coloured targets, so a mis-resolved artwork is visually obvious in the
+     *     calibrator, not just described in a diff. ``upload``: a PNG the user added,
+     *     for judging a real ink weight on a real garment -- the question the grid
+     *     cannot answer.
+     */
+    DesignSummary: {
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
+      /**
+       * Source
+       * @enum {string}
+       */
+      source: "bundled" | "upload";
+    };
+    /**
+     * DisplaceConfig
+     * @description PRD: implemented but off by default -- over-strong displacement looks
+     *     melted, so it's tuned per template in the calibrator's live preview.
+     */
+    DisplaceConfig: {
+      /**
+       * Enabled
+       * @default false
+       */
+      enabled: boolean;
+      /**
+       * Strength
+       * @default 0
+       */
+      strength: number;
+    };
+    /** HTTPValidationError */
+    HTTPValidationError: {
+      /** Detail */
+      detail?: components["schemas"]["ValidationError"][];
+    };
+    /** MultiplePreviewRequest */
+    MultiplePreviewRequest: {
+      /**
+       * Design
+       * @default bundled-grid
+       */
+      design: string;
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /** Placements */
+      placements: components["schemas"]["Placement"][];
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
+     * MultipleTemplate
+     * @description Several garments in one photo. ``displace``/``shade`` are scene-level
+     *     only -- one photo, one lighting pass; a placement needing different
+     *     rendering treatment belongs in its own template instead.
+     */
+    MultipleTemplate: {
+      /**
+       * Colour Coverage
+       * @default exact
+       * @enum {string}
+       */
+      colour_coverage: "exact" | "subset";
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "multiple";
+      /** Placements */
+      placements: components["schemas"]["Placement"][];
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
+     * Placement
+     * @description One garment within a ``multiple``-kind scene.
+     */
+    Placement: {
+      /** Artwork */
+      artwork?: string | null;
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /** Colour */
+      colour: string;
+    };
+    /** Point */
+    Point: {
+      /** X */
+      x: number;
+      /** Y */
+      y: number;
+    };
+    /**
+     * ShadeConfig
+     * @description Blends the base mockup photo's own greyscale lighting over the printed
+     *     design, so a flat design picks up the garment's real fold shadows and
+     *     light falloff instead of looking pasted on as a flat rectangle -- this is
+     *     why a plain flat-lay PNG is enough to mock up, with no purchased
+     *     Photoshop lighting map needed. On by default: almost every mockup needs
+     *     it. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a
+     *     mid-grey pivot is used for those instead.
+     */
+    ShadeConfig: {
+      /**
+       * Blend
+       * @default soft-light
+       * @enum {string}
+       */
+      blend: "multiply" | "soft-light" | "grey-pivot";
+      /**
+       * Enabled
+       * @default true
+       */
+      enabled: boolean;
+      /**
+       * Opacity
+       * @default 0.6
+       */
+      opacity: number;
+    };
+    /** SinglePreviewRequest */
+    SinglePreviewRequest: {
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /**
+       * Design
+       * @default bundled-grid
+       */
+      design: string;
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
+     * SingleTemplate
+     * @description One photo, one garment -- a lifestyle shot, a folded product photo,
+     *     anything that isn't part of a colour set.
+     */
+    SingleTemplate: {
+      /** Artwork */
+      artwork?: string | null;
+      /** Bounding Box */
+      bounding_box: [
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+        components["schemas"]["Point"],
+      ];
+      /** Colour */
+      colour?: string | null;
+      /**
+       * @default {
+       *       "enabled": false,
+       *       "strength": 0
+       *     }
+       */
+      displace: components["schemas"]["DisplaceConfig"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "single";
+      /**
+       * @default {
+       *       "blend": "soft-light",
+       *       "enabled": true,
+       *       "opacity": 0.6
+       *     }
+       */
+      shade: components["schemas"]["ShadeConfig"];
+    };
+    /** TemplateSummary */
+    TemplateSummary: {
+      /** Colours */
+      colours: string[];
+      /** Has Config */
+      has_config: boolean;
+      /** Kind */
+      kind: ("colour-matrix" | "multiple" | "single") | null;
+      /** Name */
+      name: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "needs-calibration" | "calibrated";
+      /** Status Reason */
+      status_reason?: string | null;
+    };
+    /** ValidationError */
+    ValidationError: {
+      /** Context */
+      ctx?: Record<string, never>;
+      /** Input */
+      input?: unknown;
+      /** Location */
+      loc: (string | number)[];
+      /** Message */
+      msg: string;
+      /** Error Type */
+      type: string;
+    };
+  };
+  responses: never;
+  parameters: never;
+  requestBodies: never;
+  headers: never;
+  pathItems: never;
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    list_designs_api_designs_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DesignSummary"][];
-                };
-            };
-        };
+  list_designs_api_designs_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    upload_design_api_designs_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_design_api_designs_post"];
-            };
+        content: {
+          "application/json": components["schemas"]["DesignSummary"][];
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["DesignSummary"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
+      };
     };
-    health_api_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: string;
-                    };
-                };
-            };
-        };
+  };
+  upload_design_api_designs_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    list_templates_api_templates_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TemplateSummary"][];
-                };
-            };
-        };
+    requestBody: {
+      content: {
+        "multipart/form-data": components["schemas"]["Body_upload_design_api_designs_post"];
+      };
     };
-    upload_template_api_templates_post: {
-        parameters: {
-            query: {
-                name: string;
-                kind?: ("colour-matrix" | "multiple" | "single") | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "multipart/form-data": components["schemas"]["Body_upload_template_api_templates_post"];
-            };
+        content: {
+          "application/json": components["schemas"]["DesignSummary"];
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UploadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
         };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
     };
-    colour_report_api_templates__name__colour_report_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ColourReportRow"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
+  };
+  health_api_health_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    get_config_api_templates__name__config_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ColourMatrixTemplate"] | components["schemas"]["MultipleTemplate"] | components["schemas"]["SingleTemplate"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
+        content: {
+          "application/json": {
+            [key: string]: string;
+          };
         };
+      };
     };
-    put_config_api_templates__name__config_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ColourMatrixTemplate"] | components["schemas"]["MultipleTemplate"] | components["schemas"]["SingleTemplate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ColourMatrixTemplate"] | components["schemas"]["MultipleTemplate"] | components["schemas"]["SingleTemplate"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
+  };
+  list_templates_api_templates_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
     };
-    assign_kind_api_templates__name__kind_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AssignKindRequest"];
-            };
+        content: {
+          "application/json": components["schemas"]["TemplateSummary"][];
         };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ColourMatrixTemplate"] | components["schemas"]["MultipleTemplate"] | components["schemas"]["SingleTemplate"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
+      };
     };
-    preview_api_templates__name__preview_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ColourMatrixPreviewRequest"] | components["schemas"]["MultiplePreviewRequest"] | components["schemas"]["SinglePreviewRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
+  };
+  colour_report_api_templates__name__colour_report_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
     };
-    thumbnail_api_templates__name__thumbnail_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                name: string;
-            };
-            cookie?: never;
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
         };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
+        content: {
+          "application/json": components["schemas"]["ColourReportRow"][];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
     };
-    spa_fallback__full_path__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                full_path: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
+  };
+  get_config_api_templates__name__config_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
     };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["ColourMatrixTemplate"]
+            | components["schemas"]["MultipleTemplate"]
+            | components["schemas"]["SingleTemplate"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  put_config_api_templates__name__config_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json":
+          | components["schemas"]["ColourMatrixTemplate"]
+          | components["schemas"]["MultipleTemplate"]
+          | components["schemas"]["SingleTemplate"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["ColourMatrixTemplate"]
+            | components["schemas"]["MultipleTemplate"]
+            | components["schemas"]["SingleTemplate"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  assign_kind_api_templates__name__kind_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["AssignKindRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json":
+            | components["schemas"]["ColourMatrixTemplate"]
+            | components["schemas"]["MultipleTemplate"]
+            | components["schemas"]["SingleTemplate"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  preview_api_templates__name__preview_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json":
+          | components["schemas"]["ColourMatrixPreviewRequest"]
+          | components["schemas"]["MultiplePreviewRequest"]
+          | components["schemas"]["SinglePreviewRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  thumbnail_api_templates__name__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  spa_fallback__full_path__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        full_path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
 }

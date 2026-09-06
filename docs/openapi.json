@@ -33,23 +33,6 @@
         "title": "Body_upload_design_api_designs_post",
         "type": "object"
       },
-      "Body_upload_template_api_templates_post": {
-        "properties": {
-          "files": {
-            "items": {
-              "contentMediaType": "application/octet-stream",
-              "type": "string"
-            },
-            "title": "Files",
-            "type": "array"
-          }
-        },
-        "required": [
-          "files"
-        ],
-        "title": "Body_upload_template_api_templates_post",
-        "type": "object"
-      },
       "ColourMatrixPreviewRequest": {
         "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET .../config`` response (which includes ``kind``) into the body.",
         "properties": {
@@ -597,44 +580,6 @@
         "title": "TemplateSummary",
         "type": "object"
       },
-      "UploadResponse": {
-        "properties": {
-          "colours": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Colours",
-            "type": "array"
-          },
-          "kind": {
-            "anyOf": [
-              {
-                "enum": [
-                  "colour-matrix",
-                  "multiple",
-                  "single"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Kind"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "kind",
-          "colours"
-        ],
-        "title": "UploadResponse",
-        "type": "object"
-      },
       "ValidationError": {
         "properties": {
           "ctx": {
@@ -792,82 +737,11 @@
         "tags": [
           "templates"
         ]
-      },
-      "post": {
-        "operationId": "upload_template_api_templates_post",
-        "parameters": [
-          {
-            "in": "query",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "kind",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "colour-matrix",
-                    "multiple",
-                    "single"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Kind"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "$ref": "#/components/schemas/Body_upload_template_api_templates_post"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UploadResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Upload Template",
-        "tags": [
-          "templates"
-        ]
       }
     },
     "/api/templates/{name}/colour-report": {
       "get": {
-        "description": "What each photo would be taken as if this became a colour-matrix set.\n\nShown in the kind picker before committing, so a badly named file is\ncaught while it is still cheap to rename. Reporting only -- PRD 7a makes\nthe filename the source of truth and there is deliberately no mapping\ntable to edit here.",
+        "description": "What each photo will be taken as if this becomes a colour-matrix set.\n\nShown in the kind picker before committing, so a badly named file is seen\nwhile it is still cheap to think about. A row with ``clean: false`` is one\n``assign_kind`` will rename on disk (PRD 7a: the filename *is* the\nslugified colour, and a directory whose filenames disagree with the\ncolours they mean is the state that rule exists to prevent).",
         "operationId": "colour_report_api_templates__name__colour_report_get",
         "parameters": [
           {

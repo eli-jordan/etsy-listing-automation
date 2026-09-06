@@ -1,10 +1,14 @@
-"""Template authoring endpoints: upload, config, and a live preview through
-the *real* renderer (PRD: "the Python backend re-runs the real renderer on
-each change and streams back the composite, so the preview is the actual
-output, not an approximation").
+"""Template authoring endpoints: listing, kind assignment, config, and a live
+preview through the *real* renderer (PRD: "the Python backend re-runs the real
+renderer on each change and streams back the composite, so the preview is the
+actual output, not an approximation").
 
-A template is exactly one of three kinds; the upload widget, the config
-shape and the preview request shape all follow which kind is in play.
+Nothing here creates a template. A template is a folder of photos the user
+puts in the workspace (PRD, Template authoring), so these endpoints all name
+one that already exists.
+
+A template is exactly one of three kinds; the config shape and the preview
+request shape both follow which kind is in play.
 
 Every path here comes from ``Workspace``. That is deliberate: template names
 arrive from URLs, and routing them through the workspace's accessors means the
@@ -17,7 +21,7 @@ from __future__ import annotations
 from io import BytesIO
 from pathlib import Path
 
-from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from PIL import Image
 
@@ -46,7 +50,6 @@ from etsy_listings.ui.api.schemas import (
     SinglePreviewRequest,
     TemplateKind,
     TemplateSummary,
-    UploadResponse,
 )
 from etsy_listings.workspace.workspace import Workspace
 
@@ -85,7 +88,8 @@ def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
     An unusable *name* needs nothing here -- ``InvalidNameError`` becomes a
     400 through the app-wide handler in ``app.py``. This only decides that a
     template with no config is absent rather than broken, which is a
-    calibrator-specific reading: it is the normal state of a fresh upload.
+    calibrator-specific reading: it is the normal state of a folder of photos
+    nobody has given a kind yet.
     """
     try:
         return workspace.load_template_config(name)
@@ -97,9 +101,9 @@ def _status_reason(config: AnyTemplate) -> str | None:
     """Why this template is not ready to render from, or ``None`` if it is.
 
     Only ``multiple`` has states beyond "has a config at all": a chart is
-    written with an empty ``placements`` list at upload, and a box can be
-    dragged into place before anyone says which colour it depicts. The other
-    two kinds get a bounding box at upload and are usable immediately -- a
+    written with an empty ``placements`` list when its kind is assigned, and a
+    box can be dragged into place before anyone says which colour it depicts.
+    The other two kinds get a bounding box then and are usable immediately -- a
     badly positioned box is wrong, but it is not *incomplete*, and the
     calibrator cannot tell the difference.
     """
@@ -151,77 +155,6 @@ def list_templates(request: Request) -> list[TemplateSummary]:
     # the directories with none are precisely the ones that need this UI.
     names = workspace.template_names(include_uncalibrated=True)
     return [_summarize(workspace, name) for name in names]
-
-
-@router.post("", response_model=UploadResponse)
-async def upload_template(
-    request: Request, name: str, files: list[UploadFile], kind: TemplateKind | None = None
-) -> UploadResponse:
-    workspace = _workspace(request)
-    config_path = workspace.template_config_file(name)
-    if not files:
-        raise HTTPException(status_code=400, detail="upload at least one file")
-    config_path.parent.mkdir(parents=True, exist_ok=True)
-
-    if kind is None:
-        # Photos in, question later. They keep their own filenames until a
-        # kind is assigned, because which name is *correct* depends entirely
-        # on the answer: a colour-matrix set's filenames are its colours
-        # (PRD 7a), while a scene kind wants the fixed scene.png (PRD 28).
-        for upload in files:
-            if not upload.filename:
-                raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
-            destination = workspace.template_base_image(name, Path(upload.filename).stem)
-            destination.write_bytes(await upload.read())
-        return UploadResponse(name=name, kind=None, colours=[])
-
-    if kind == "colour-matrix":
-        # Stored under the slug, not the uploaded stem, for the same reason
-        # `assign_kind` renames: PRD 7a makes the filename the slugified
-        # colour, and a set stored under "Heather Grey.png" is one no listing
-        # can ever reference.
-        stems: list[str] = []
-        for upload in files:
-            if not upload.filename:
-                raise HTTPException(status_code=400, detail="every uploaded file needs a filename")
-            stems.append(Path(upload.filename).stem)
-        try:
-            slugs = slug_map(stems, workspace.load_exceptions())
-        except SlugCollisionError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
-
-        colours: list[str] = []
-        for upload, stem in zip(files, stems, strict=True):
-            colour = slugs[stem]
-            destination = workspace.template_base_image(name, colour)
-            destination.write_bytes(await upload.read())
-            colours.append(colour)
-
-        # A freshly uploaded set gets a starting box so the calibrator has
-        # something to drag; an existing template.yaml is never overwritten.
-        if not config_path.is_file():
-            with Image.open(workspace.template_base_image(name, colours[0])) as img:
-                size = img.size
-            workspace.save_template_config(
-                name, ColourMatrixTemplate(bounding_box=_default_box(size))
-            )
-        return UploadResponse(name=name, kind="colour-matrix", colours=sorted(colours))
-
-    if len(files) != 1:
-        raise HTTPException(
-            status_code=400, detail=f"{kind} kind expects exactly one photo, got {len(files)}"
-        )
-    destination = workspace.template_scene_image(name)
-    destination.write_bytes(await files[0].read())
-
-    if not config_path.is_file():
-        with Image.open(destination) as img:
-            size = img.size
-        if kind == "multiple":
-            workspace.save_template_config(name, MultipleTemplate(placements=[]))
-        else:
-            workspace.save_template_config(name, SingleTemplate(bounding_box=_default_box(size)))
-    return UploadResponse(name=name, kind=kind, colours=[])
 
 
 def _template_photos(template_dir: Path) -> list[Path]:
@@ -317,7 +250,7 @@ def assign_kind(request: Request, name: str, body: AssignKindRequest) -> AnyTemp
 
     photos = _template_photos(template_dir)
     if not photos:
-        raise HTTPException(status_code=400, detail=f"no photos uploaded for {name!r}")
+        raise HTTPException(status_code=400, detail=f"no photos in {name!r}")
 
     if body.kind == "colour-matrix":
         # Rename each photo to the slug its name means, which is what the

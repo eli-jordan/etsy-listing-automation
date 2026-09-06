@@ -85,7 +85,7 @@ src/etsy_listings/
   runs/                 SQLite recorder, schema, event types
   ui/
     api/                FastAPI app, routers, schemas, SSE
-      templates.py      upload, kind assignment, colour report, config, preview,
+      templates.py      kind assignment, colour report, config, preview,
                         rail thumbnails
       designs.py        the test-design library — bundled targets plus the
                         user's own uploads (A19)
@@ -374,8 +374,7 @@ GET  /api/runs                            history, paginated
 GET  /api/runs/{id}/events                SSE, resumable via Last-Event-ID
 
 GET  /api/templates
-POST /api/templates                       upload a set (server-side only; no UI
-                                          calls it -- see PRD, Template authoring)
+POST /api/templates/{name}/kind           writes the starting template.yaml
 GET  /api/templates/{name}/config
 PUT  /api/templates/{name}/config         writes template.yaml
 POST /api/templates/{name}/preview        returns PNG through the real renderer
