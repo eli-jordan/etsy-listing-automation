@@ -612,6 +612,9 @@ button:not([class]):active:not(:disabled) {
 }
 
 .quad-editor__polygon {
+  /* Pressing anywhere inside slides the whole box, so the interior is a
+     grab target and not just decoration. */
+  cursor: move;
   fill: color-mix(in srgb, var(--color-accent) 15%, transparent);
   stroke: var(--color-accent);
   stroke-width: 2;
@@ -667,130 +670,72 @@ button:not([class]):active:not(:disabled) {
   border-radius: var(--radius-md);
 }
 
-/* — the bounding-box list — */
-.placements-panel {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-lg);
-  background: var(--color-surface);
+/* — the on-canvas box captions —
+
+   A `multiple` box's colour lives here rather than in a side panel: it is the
+   one fact about a box the photo cannot show you, so it is written on the box.
+   The layer is positioned in percentages of the image's natural size, which
+   is exactly what the overlay's viewBox maps to, so a caption tracks its box
+   at any display scale. */
+.quad-editor__labels {
+  position: absolute;
+  inset: 0;
+  /* Only the captions themselves take the pointer -- the gaps between them
+     must still reach the boxes underneath. */
+  pointer-events: none;
+  line-height: normal;
 }
 
-.placements-panel__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-}
-
-.placements-panel__heading {
+.quad-editor__label {
+  position: absolute;
+  transform: translate(-50%, 6px);
+  pointer-events: auto;
+  max-width: 40%;
   font-family: var(--font-body);
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  font-size: 11px;
+  text-align: center;
+  color: var(--color-bg);
+  /* Opaque enough to stay a control over a near-black garment as well as a
+     pale one -- the photo underneath is the whole range. */
+  background: color-mix(in srgb, var(--color-neutral-900) 85%, transparent);
+  border: none;
+  border-radius: 999px;
+  padding: 2px 9px;
+  cursor: text;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.quad-editor__label:hover {
+  background: var(--color-accent);
+}
+
+/* An unassigned box says so, quietly -- it is a prompt, not a value. */
+.quad-editor__label--empty {
+  font-style: italic;
+  background: color-mix(in srgb, var(--color-neutral-900) 60%, transparent);
+}
+
+/* The caption you are about to edit is the selected box's, so it wears the
+   same accent as that box's outline. After --empty: a new box is both. */
+.quad-editor__label--active {
+  background: var(--color-accent);
+}
+
+.quad-editor__label--editing {
+  width: 120px;
+  color: var(--color-text);
+  background: var(--color-bg);
+  box-shadow: var(--shadow-md);
+  outline: 2px solid var(--color-accent);
+}
+
+/* Not `.quad-editor__label--empty`'s italics: this is the tally, and it has to
+   be readable under the photo rather than blend into it. */
+.app__warn {
   margin: 0;
-}
-
-.placements-panel__add {
-  font-size: 11px;
-  padding: 3px 10px;
-}
-
-.placements-panel__list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-}
-
-.placements-panel__item {
-  display: flex;
-  gap: var(--space-1);
-  padding: 5px var(--space-2);
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-md);
-  background: var(--color-neutral-100);
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.placements-panel__item--active {
-  border-color: var(--color-accent);
-  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-neutral-100));
-}
-
-.placements-panel__detail {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  border: 1px solid var(--color-accent);
-  border-radius: var(--radius-md);
-  background: color-mix(in srgb, var(--color-accent) 6%, transparent);
-}
-
-.placements-panel__field {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  font-size: 11px;
-}
-
-/* Four corners, two fields each: a box is a quad, so the panel shows the quad
-   rather than an x/y/w/h that would flatten every angled photo. */
-.placements-panel__corners {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: var(--space-1);
-}
-
-.placements-panel__corner {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 3px;
-}
-
-.placements-panel__corner-label {
-  grid-column: 1 / -1;
-  font-size: 9px;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 50%, transparent);
-}
-
-.placements-panel__corner input {
-  min-height: 26px;
-  padding: 2px 8px;
-  font-size: 11px;
-  min-width: 0;
-}
-
-.placements-panel__extent {
-  margin: 0;
-  font-size: 11px;
-  text-align: right;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
-}
-
-.placements-panel__actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-1);
-}
-
-.placements-panel__actions button {
-  font-size: 11px;
-  padding: 3px 10px;
-}
-
-.placements-panel__warn {
-  margin: 0;
+  padding: var(--space-2) var(--space-3);
   font-size: 11px;
   color: var(--color-accent-700);
 }
@@ -1220,18 +1165,9 @@ button:not([class]):active:not(:disabled) {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
-.upload-form {
-  margin-top: var(--space-8);
-}
-
-.upload-form label {
-  display: block;
-  margin: var(--space-2) 0;
-}
-
 /* `fieldset` is the calibrator's grouping element throughout -- Displace,
-   Shade, Placements and the upload form all lean on it, so it carries the
-   card treatment rather than each panel restating one. */
+   Shade and the test-design picker all lean on it, so it carries the card
+   treatment rather than each panel restating one. */
 fieldset {
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-lg);

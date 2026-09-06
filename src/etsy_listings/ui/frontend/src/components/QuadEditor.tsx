@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { BoundingBox, Point } from "../types";
 
 const NUDGE_PX = 1;
@@ -27,6 +27,20 @@ interface Props {
    * `undefined`: `exactOptionalPropertyTypes` is on, so "may be absent" and
    * "may be undefined" are different types here. */
   selectedLabel?: string | undefined;
+  /** Per-box caption drawn under the box and edited by clicking it.
+   *
+   * This is where a `multiple`-kind placement's colour lives now. It used to
+   * be a field in a side panel, which meant the one thing a box *cannot* show
+   * you -- which garment it is -- was the one thing you had to look away from
+   * the photo to read. A caption on the box says it in place.
+   *
+   * Drawn under exactly the boxes whose outline is drawn, so `outlines`
+   * governs both: hiding the chrome to judge a render hides the captions too. */
+  labels?: (string | undefined)[];
+  onLabelChange?: (index: number, value: string) => void;
+  labelPlaceholder?: string;
+  /** Offered in the label input's datalist. Suggestions, not a closed list. */
+  labelSuggestions?: string[];
 }
 
 /**
@@ -38,6 +52,11 @@ interface Props {
  * the image's natural pixel size, so screen-to-image coordinate mapping goes
  * through the SVG's own CTM rather than a hand-rolled scale factor --
  * correct regardless of how the browser scales the displayed image.
+ *
+ * A box moves as a whole in two ways -- dragging its interior, or the arrow
+ * keys -- and deforms only by its corner handles. Both apply to every kind:
+ * getting a box to the right *place* is the common move, and before this the
+ * only way to do it was to drag four corners the same distance by eye.
  */
 
 interface Menu {
@@ -46,9 +65,23 @@ interface Menu {
   y: number;
 }
 
+/** What a pointer is currently doing: reshaping one corner of the selected
+ * box, or sliding a whole box (which need not be the selected one -- pressing
+ * on a dimmed box selects and drags it in one gesture). */
+type Drag =
+  | { kind: "corner"; pointIndex: number }
+  | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox };
+
 function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
   const host = svg?.getBoundingClientRect();
   return { x: clientX - (host?.left ?? 0), y: clientY - (host?.top ?? 0) };
+}
+
+/** Where a box's caption hangs: centred under its lowest edge. */
+function labelAnchor(box: BoundingBox): Point {
+  const xs = box.map((p) => p.x);
+  const ys = box.map((p) => p.y);
+  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: Math.max(...ys) };
 }
 
 /** The rectangle the menu has to stay inside: the nearest ancestor that clips
@@ -99,16 +132,30 @@ export function QuadEditor({
   onBringSelectedToFront,
   outlines = "all",
   selectedLabel,
+  labels,
+  onLabelChange,
+  labelPlaceholder,
+  labelSuggestions,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
   const [naturalSize, setNaturalSize] = useState<[number, number] | null>(null);
-  const [dragPointIndex, setDragPointIndex] = useState<number | null>(null);
+  const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
+  const [editingLabel, setEditingLabel] = useState<number | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const labelInputRef = useRef<HTMLInputElement>(null);
+  const suggestionsId = useId();
 
   useLayoutEffect(() => {
     if (menu && menuRef.current) positionMenu(menuRef.current, menu);
   }, [menu]);
+
+  // A caption only becomes an input when it is clicked, so the caret has to be
+  // put there afterwards -- otherwise the click that opened the field leaves
+  // it unfocused and the next keystroke nudges the box instead.
+  useEffect(() => {
+    if (editingLabel !== null) labelInputRef.current?.focus();
+  }, [editingLabel]);
 
   function toImageSpace(clientX: number, clientY: number): Point | null {
     const svg = svgRef.current;
@@ -122,28 +169,54 @@ export function QuadEditor({
     return { x: transformed.x, y: transformed.y };
   }
 
-  function handlePointerDown(pointIndex: number) {
+  function handleCornerPointerDown(pointIndex: number) {
     return (event: React.PointerEvent<SVGCircleElement>) => {
       event.currentTarget.setPointerCapture(event.pointerId);
-      setDragPointIndex(pointIndex);
+      setDrag({ kind: "corner", pointIndex });
+    };
+  }
+
+  /** Pressing inside a box selects it and starts sliding it. The whole box
+   * moves; the corners keep their offsets, so a skewed quad stays skewed. */
+  function handleBoxPointerDown(boxIndex: number) {
+    return (event: React.PointerEvent<SVGPolygonElement>) => {
+      if (event.button !== 0) return;
+      const origin = toImageSpace(event.clientX, event.clientY);
+      const start = boxes[boxIndex];
+      if (!origin || !start) return;
+      event.currentTarget.setPointerCapture(event.pointerId);
+      onSelect(boxIndex);
+      setDrag({ kind: "box", boxIndex, origin, start });
     };
   }
 
   function handlePointerMove(event: React.PointerEvent<SVGSVGElement>) {
-    if (dragPointIndex === null) return;
+    if (!drag) return;
     const point = toImageSpace(event.clientX, event.clientY);
     if (!point) return;
+    if (drag.kind === "box") {
+      const dx = point.x - drag.origin.x;
+      const dy = point.y - drag.origin.y;
+      onChangeBox(
+        drag.boxIndex,
+        drag.start.map((p) => ({ x: p.x + dx, y: p.y + dy })) as BoundingBox,
+      );
+      return;
+    }
     const box = boxes[selectedIndex];
     if (!box) return;
-    const next = box.map((p, i) => (i === dragPointIndex ? point : p)) as BoundingBox;
+    const next = box.map((p, i) => (i === drag.pointIndex ? point : p)) as BoundingBox;
     onChangeBox(selectedIndex, next);
   }
 
   function handlePointerUp() {
-    setDragPointIndex(null);
+    setDrag(null);
   }
 
   function handleKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    // The caption editor lives inside the canvas, so its arrows, Backspace and
+    // Delete would otherwise reach the box while you are typing a colour name.
+    if ((event.target as Element).closest("input, textarea")) return;
     if ((event.key === "Delete" || event.key === "Backspace") && onDeleteSelected) {
       event.preventDefault();
       onDeleteSelected();
@@ -165,6 +238,11 @@ export function QuadEditor({
   }
 
   const hasBoxMenu = Boolean(onDuplicateSelected || onBringSelectedToFront || onDeleteSelected);
+
+  /** One rule for both the outline and the caption: chrome is drawn for a box
+   * when all outlines are on, or when it is the selected one. */
+  const chromeVisible = (index: number): boolean =>
+    outlines === "all" || (outlines === "selected" && index === selectedIndex);
 
   return (
     <div
@@ -191,8 +269,7 @@ export function QuadEditor({
         >
           {boxes.map((box, boxIndex) => {
             const active = boxIndex === selectedIndex;
-            if (outlines === "none") return null;
-            if (outlines === "selected" && !active) return null;
+            if (!chromeVisible(boxIndex)) return null;
             return (
               <g
                 key={boxIndex}
@@ -210,6 +287,7 @@ export function QuadEditor({
                 <polygon
                   points={box.map((p) => `${p.x},${p.y}`).join(" ")}
                   className="quad-editor__polygon"
+                  onPointerDown={handleBoxPointerDown(boxIndex)}
                 />
                 {active &&
                   box.map((p, pointIndex) => (
@@ -219,13 +297,74 @@ export function QuadEditor({
                       cy={p.y}
                       r={Math.max(naturalSize[0], naturalSize[1]) * 0.015}
                       className="quad-editor__handle"
-                      onPointerDown={handlePointerDown(pointIndex)}
+                      onPointerDown={handleCornerPointerDown(pointIndex)}
                     />
                   ))}
               </g>
             );
           })}
         </svg>
+      )}
+
+      {naturalSize && labels && (
+        <div className="quad-editor__labels">
+          {boxes.map((box, boxIndex) => {
+            if (!chromeVisible(boxIndex)) return null;
+            const anchor = labelAnchor(box);
+            const style = {
+              left: `${(anchor.x / naturalSize[0]) * 100}%`,
+              top: `${(anchor.y / naturalSize[1]) * 100}%`,
+            };
+            const text = labels[boxIndex] ?? "";
+            if (editingLabel === boxIndex && onLabelChange) {
+              return (
+                <input
+                  key={boxIndex}
+                  ref={labelInputRef}
+                  className="quad-editor__label quad-editor__label--editing"
+                  style={style}
+                  value={text}
+                  aria-label={`Colour for box ${boxIndex + 1}`}
+                  placeholder={labelPlaceholder}
+                  list={suggestionsId}
+                  onChange={(event) => onLabelChange(boxIndex, event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === "Escape") setEditingLabel(null);
+                  }}
+                  onBlur={() => setEditingLabel(null)}
+                />
+              );
+            }
+            return (
+              <button
+                key={boxIndex}
+                type="button"
+                style={style}
+                className={[
+                  "quad-editor__label",
+                  text ? "" : "quad-editor__label--empty",
+                  boxIndex === selectedIndex ? "quad-editor__label--active" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+                title={onLabelChange ? "Click to edit" : undefined}
+                onClick={() => {
+                  onSelect(boxIndex);
+                  if (onLabelChange) setEditingLabel(boxIndex);
+                }}
+              >
+                {text || labelPlaceholder || "unnamed"}
+              </button>
+            );
+          })}
+          {labelSuggestions && labelSuggestions.length > 0 && (
+            <datalist id={suggestionsId}>
+              {labelSuggestions.map((suggestion) => (
+                <option key={suggestion} value={suggestion} />
+              ))}
+            </datalist>
+          )}
+        </div>
       )}
 
       {selectedLabel && <span className="quad-editor__readout">{selectedLabel}</span>}
