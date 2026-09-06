@@ -30,9 +30,7 @@ const ONE_PHOTO: ColourReportRow[] = [{ filename: "photo.png", colour: "photo", 
 describe("the default kind follows the photo count", () => {
   it("defaults to colour matrix when there are several photos", async () => {
     renderPicker();
-    await waitFor(() =>
-      expect(screen.getByRole("radio", { name: /Colour Matrix/ })).toBeChecked(),
-    );
+    await waitFor(() => expect(screen.getByRole("radio", { name: /Colour Matrix/ })).toBeChecked());
   });
 
   it("defaults to single, and disables colour matrix, for one photo", async () => {

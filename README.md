@@ -87,8 +87,8 @@ npm run dev          # Vite dev server
 npm run build         # production build -> dist/ (tsc -b, then vite build)
 npm run typecheck     # tsc -b --noEmit, strict mode
 npm run lint          # eslint .
-npm run format        # prettier --write .
-npm run format:check  # prettier --check .
+npm run format        # prettier --write .  (check.sh runs this)
+npm run format:check  # prettier --check .  (CI runs this)
 npm run gen:api       # regenerate src/api/schema.ts from docs/openapi.json
 ```
 

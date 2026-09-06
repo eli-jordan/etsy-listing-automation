@@ -82,11 +82,7 @@ export function TestDesignPicker({ value, onChange }: Props) {
 
       <label className="design-picker__upload">
         <span>＋ Upload a PNG…</span>
-        <input
-          type="file"
-          accept="image/png"
-          onChange={(e) => handleUpload(e.target.files?.[0])}
-        />
+        <input type="file" accept="image/png" onChange={(e) => handleUpload(e.target.files?.[0])} />
       </label>
 
       <p className="design-picker__status" role="status">

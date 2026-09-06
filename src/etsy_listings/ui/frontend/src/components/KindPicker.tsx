@@ -116,7 +116,9 @@ export function KindPicker({ templateName, onAssigned }: Props) {
                 <span className="kind-picker__filename">{row.filename}</span>
                 <span
                   className={
-                    row.clean ? "kind-picker__colour" : "kind-picker__colour kind-picker__colour--warn"
+                    row.clean
+                      ? "kind-picker__colour"
+                      : "kind-picker__colour kind-picker__colour--warn"
                   }
                 >
                   {row.colour} {row.clean ? "✓" : "(will rename)"}
@@ -130,7 +132,9 @@ export function KindPicker({ templateName, onAssigned }: Props) {
               {" — rename to <colour>.png so the file on disk matches the colour it means."}
             </p>
           )}
-          <p className="kind-picker__note">The filename is the colour; there is no mapping to set.</p>
+          <p className="kind-picker__note">
+            The filename is the colour; there is no mapping to set.
+          </p>
         </div>
       )}
 

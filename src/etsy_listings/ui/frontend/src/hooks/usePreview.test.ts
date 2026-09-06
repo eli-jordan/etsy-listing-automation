@@ -36,9 +36,7 @@ describe("usePreview", () => {
 
   it("revokes the displayed object URL when the editor unmounts", async () => {
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:one");
-    const { result, unmount } = renderHook(() =>
-      usePreview("lifestyle-01", BODY, "bundled-grid"),
-    );
+    const { result, unmount } = renderHook(() => usePreview("lifestyle-01", BODY, "bundled-grid"));
     await waitFor(() => expect(result.current).toBe("blob:one"));
 
     // The leak this hook was extracted to fix: each editor's own cleanup

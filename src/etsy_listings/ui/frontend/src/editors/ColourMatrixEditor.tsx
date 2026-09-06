@@ -116,9 +116,7 @@ export function ColourMatrixEditor({
                     <button
                       key={c}
                       className={
-                        c === colour
-                          ? "filmstrip__item filmstrip__item--active"
-                          : "filmstrip__item"
+                        c === colour ? "filmstrip__item filmstrip__item--active" : "filmstrip__item"
                       }
                       onClick={() => setSelectedColour(c)}
                     >

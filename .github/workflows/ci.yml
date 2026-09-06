@@ -104,6 +104,9 @@ jobs:
       - name: install (locked)
         run: npm ci
 
+      - name: prettier
+        run: npm run format:check
+
       - name: eslint
         run: npm run lint
 
