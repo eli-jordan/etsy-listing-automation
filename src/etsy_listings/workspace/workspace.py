@@ -176,8 +176,25 @@ class Workspace:
     def lock_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LOCK_FILE
 
+    def designs_dir(self) -> Path:
+        return self.root / layout.DESIGNS_DIR
+
     def design_file(self, design: str) -> Path:
-        return self.root / layout.DESIGNS_DIR / f"{_segment(design)}.png"
+        return self.designs_dir() / f"{_segment(design)}.png"
+
+    def design_files(self) -> list[Path]:
+        """Every ``designs/*.png``, the artwork a listing can be built from.
+
+        Paths rather than names, because the ``new`` picker orders them by
+        modification time -- a design is usually made minutes before the
+        listing that ships it -- and only a path carries that. Flat, not
+        recursive: :meth:`design_file` derives one fixed path per name, so a
+        nested design would be listed and then not resolvable.
+        """
+        designs = self.designs_dir()
+        if not designs.is_dir():
+            return []
+        return sorted(p for p in designs.glob("*.png") if p.is_file())
 
     def profile_names(self) -> list[str]:
         profiles = self.root / layout.PROFILES_DIR

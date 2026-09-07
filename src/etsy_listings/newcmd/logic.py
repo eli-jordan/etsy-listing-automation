@@ -8,6 +8,7 @@ the terminal it was given.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Literal
@@ -203,6 +204,59 @@ def build_profile(
         sizes=sizes,
         colour_tone=colour_tone or {},
     )
+
+
+# ----------------------------------------------------------------------
+# The design picker's rows.
+#
+# `new` is a wizard, so the design it builds a listing for is picked from
+# what is on disk rather than typed -- the same reasoning that moved the
+# mockup template off a typed name. Ordering is by modification time,
+# newest first: artwork is made minutes before the listing that ships it, so
+# the design you want is nearly always the one you just saved.
+# ----------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class DesignChoice:
+    """One row of the design picker."""
+
+    name: str
+    path: Path
+    modified: float
+    has_listing: bool
+    label: str
+
+
+def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[DesignChoice]:
+    """Designs as ``date  name`` rows, newest first.
+
+    The date is in the row rather than implied by the order because "newest
+    first" is invisible otherwise -- and fzf reorders the rows the moment a
+    query is typed, at which point the only thing still saying how fresh a
+    design is, is the row itself. Ties (a batch exported in one go all carry
+    the same second) break on name, so the order is stable rather than
+    filesystem-dependent.
+
+    A design that already has a listing is marked: ``new`` refuses to
+    overwrite one (:func:`write_listing`), so the row would otherwise look
+    like a choice and behave like a dead end.
+    """
+    entries = [(path, path.stat().st_mtime) for path in paths]
+    entries.sort(key=lambda entry: (-entry[1], entry[0].stem.lower()))
+    return [
+        DesignChoice(
+            name=path.stem,
+            path=path,
+            modified=modified,
+            has_listing=path.stem in listing_names,
+            label=(
+                f"{datetime.fromtimestamp(modified):%Y-%m-%d %H:%M}  {path.stem}"
+                f"{'  (listing exists)' if path.stem in listing_names else ''}"
+            ),
+        )
+        for path, modified in entries
+    ]
 
 
 def write_profile_if_absent(workspace: Workspace, slug: str, profile: Profile) -> bool:

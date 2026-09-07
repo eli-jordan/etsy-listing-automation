@@ -36,7 +36,7 @@ def test_decodes_the_rate_as_a_decimal() -> None:
     )
     assert rate is not None
     assert rate.rate == Decimal("10.5")
-    assert rate.source == "frankfurter.app"
+    assert rate.source == "frankfurter.dev"
 
 
 def test_a_non_200_response_returns_none_not_raises() -> None:
@@ -62,3 +62,40 @@ def test_a_transport_error_returns_none_not_raises() -> None:
         raise httpx.ConnectError("connection refused", request=request)
 
     assert fetch_usd_to("NOK", client=_client(handler)) is None
+
+
+def test_the_request_goes_to_the_versioned_dev_host() -> None:
+    """``api.frankfurter.app/latest`` answers 301 now. Asking for the old URL
+    cost a whole pricing plan its prices, so the host is asserted, not just
+    the query."""
+    seen: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json=FRANKFURTER_PAYLOAD)
+
+    fetch_usd_to("NOK", client=_client(handler))
+
+    assert seen[0].url.host == "api.frankfurter.dev"
+    assert seen[0].url.path == "/v1/latest"
+
+
+def test_a_redirect_is_followed_rather_than_read_as_a_failure() -> None:
+    """A 3xx is not an error, but ``raise_for_status`` treats it as one -- so
+    an unfollowed redirect reached the fail-soft branch and priced every size
+    at 0. That is exactly how the .app host broke."""
+    seen: list[httpx.URL] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url)
+        if request.url.host == "api.frankfurter.dev" and "moved" not in request.url.path:
+            return httpx.Response(
+                301, headers={"location": "https://api.frankfurter.dev/moved?from=USD&to=NOK"}
+            )
+        return httpx.Response(200, json=FRANKFURTER_PAYLOAD)
+
+    rate = fetch_usd_to("NOK", client=_client(handler))
+
+    assert len(seen) == 2, "the redirect was not followed"
+    assert rate is not None
+    assert rate.rate == Decimal("10.5")

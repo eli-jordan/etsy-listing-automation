@@ -56,7 +56,8 @@ ships `dist/` already, so *installing* the package never needs node.
 uv run etsy-listings plan <listing-name>
 uv run etsy-listings plan --all
 uv run etsy-listings apply <listing-name>   # runs the render stage; writes state.lock.json
-uv run etsy-listings new <design-name>      # interactive garment/provider picker
+uv run etsy-listings new                    # interactive design/garment/provider picker
+uv run etsy-listings new <design-name>      # ...or name the design up front
 uv run etsy-listings ui --root <workspace>  # serves the calibrator at :8000
 ```
 
