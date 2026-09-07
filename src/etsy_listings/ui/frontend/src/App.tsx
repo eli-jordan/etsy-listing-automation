@@ -141,6 +141,15 @@ export function App() {
   );
   const kindLabel = selected?.kind ? KIND_LABELS[selected.kind] : null;
 
+  // The photo's true pixel size, which is the coordinate space every bounding
+  // box in template.yaml is written in. It has to come from the API: the
+  // editors' canvas renders a downscale now, so measuring the image on screen
+  // would put the boxes in the preview's space and save them several times too
+  // small. `null` for a directory with no readable photo -- there is nothing
+  // to calibrate against, and the editors say so rather than guessing.
+  const space: [number, number] | null =
+    selected?.width && selected.height ? [selected.width, selected.height] : null;
+
   return (
     <div className="app">
       <header className="app__header">
@@ -200,6 +209,7 @@ export function App() {
                 <ColourMatrixEditor
                   templateName={templateName}
                   config={config}
+                  space={space}
                   colours={selected?.colours ?? []}
                   onChange={setConfig}
                   design={design}
@@ -211,6 +221,7 @@ export function App() {
                 <MultipleEditor
                   templateName={templateName}
                   config={config}
+                  space={space}
                   onChange={setConfig}
                   design={design}
                   onDesignChange={setDesign}
@@ -221,6 +232,7 @@ export function App() {
                 <SingleEditor
                   templateName={templateName}
                   config={config}
+                  space={space}
                   onChange={setConfig}
                   design={design}
                   onDesignChange={setDesign}

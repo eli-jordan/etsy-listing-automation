@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from io import BytesIO
 from pathlib import Path
+from typing import Literal
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
@@ -37,10 +38,14 @@ from etsy_listings.render.config import (
     SingleTemplate,
     TemplateConfig,
 )
-from etsy_listings.render.io import encode_png, load_design, load_template_base
-from etsy_listings.render.maps import DerivedMapCache
+from etsy_listings.render.io import encode_png
 from etsy_listings.render.pipeline import Layer, render_scene
 from etsy_listings.ui.api.designs import resolve_design
+from etsy_listings.ui.api.imagecache import (
+    EDITOR_MAX_EDGE,
+    PREVIEW_IMAGES,
+    ScaledBase,
+)
 from etsy_listings.ui.api.schemas import (
     AssignKindRequest,
     ColourMatrixPreviewRequest,
@@ -82,6 +87,44 @@ def _default_box(size: tuple[int, int]) -> BoundingBox:
     )
 
 
+def _representative_photo(template_dir: Path) -> Path | None:
+    """The one photo that stands for the whole template.
+
+    Which one hardly matters: a colour-matrix set's colours are the same
+    garment at the same size, and the other two kinds have exactly one photo.
+    So this takes ``scene.png`` when there is one and the first colour
+    otherwise, without reading the config -- which is what lets both callers
+    (the rail's thumbnail and the summary's pixel size) answer for a directory
+    that has not been given a kind yet.
+    """
+    if not template_dir.is_dir():
+        return None
+    scene = template_dir / "scene.png"
+    if scene.is_file():
+        return scene
+    return next(iter(sorted(template_dir.glob("*.png"))), None)
+
+
+def _photo_size(template_dir: Path) -> tuple[int | None, int | None]:
+    """The template's true pixel size, from the image header alone.
+
+    ``Image.open`` is lazy, so this reads a few dozen bytes per template
+    rather than decoding one image per row of the rail. An unreadable file
+    answers ``None`` rather than raising: a directory with a stray or
+    truncated PNG in it should still be listable, since listing it is how the
+    user reaches the UI that fixes it.
+    """
+    photo = _representative_photo(template_dir)
+    if photo is None:
+        return None, None
+    try:
+        with Image.open(photo) as image:
+            width, height = image.size
+    except OSError:
+        return None, None
+    return int(width), int(height)
+
+
 def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
     """This template's ``template.yaml``, or a 404 if it has none yet.
 
@@ -119,6 +162,7 @@ def _status_reason(config: AnyTemplate) -> str | None:
 
 
 def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
+    width, height = _photo_size(workspace.template_dir(name))
     try:
         config = workspace.load_template_config(name)
     except ConfigLoadError:
@@ -129,6 +173,8 @@ def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
             has_config=False,
             status="needs-calibration",
             status_reason="no kind set",
+            width=width,
+            height=height,
         )
 
     if isinstance(config, ColourMatrixTemplate):
@@ -145,6 +191,8 @@ def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
         has_config=True,
         status="needs-calibration" if reason else "calibrated",
         status_reason=reason,
+        width=width,
+        height=height,
     )
 
 
@@ -308,8 +356,7 @@ def thumbnail(request: Request, name: str) -> Response:
     if not template_dir.is_dir():
         raise HTTPException(status_code=404, detail=f"no template {name!r}")
 
-    scene = workspace.template_scene_image(name)
-    source = scene if scene.is_file() else next(iter(sorted(template_dir.glob("*.png"))), None)
+    source = _representative_photo(template_dir)
     if source is None:
         raise HTTPException(status_code=404, detail=f"no photo for {name!r}")
 
@@ -366,8 +413,88 @@ def _preview_configs(body: PreviewRequest) -> list[RenderConfig]:
     return [RenderConfig(bounding_box=body.bounding_box, displace=body.displace, shade=body.shade)]
 
 
+PreviewScale = Literal["editor", "full"]
+"""How big a preview to render.
+
+Two named sizes, not a pixel count from the client. ``full`` is the photo's
+own resolution -- what ``apply`` will write, and what the Preview tab shows
+when you have stopped adjusting and started judging. ``editor`` is the
+downscale the canvas drags against, capped at
+:data:`~etsy_listings.ui.api.imagecache.EDITOR_MAX_EDGE`.
+
+Naming the sizes rather than accepting an ``?max_edge=`` keeps the number the
+server's business: each distinct base size grows its own pair of cached
+derived maps in the template's ``_derived/``, so a client free to ask for any
+width would quietly fill that directory with one pair per window size.
+"""
+
+EDITOR_MEDIA_TYPE = "image/webp"
+"""What an editor frame comes back as.
+
+``encode_png``'s determinism (fixed compression level, no metadata chunks)
+exists so a render's bytes can be hashed and compared against the last applied
+ones. An editor frame is looked at once and thrown away, so it buys nothing
+there -- and PNG's entropy coding is the single most expensive step in
+producing one. WebP at this quality is visually indistinguishable for judging
+placement, and roughly an order of magnitude cheaper to encode and to send.
+
+A ``full`` preview stays PNG: that one *is* meant to be the output you are
+approving, so it should not be the only image in the loop that has been
+through a lossy codec.
+"""
+
+EDITOR_WEBP_QUALITY = 88
+EDITOR_WEBP_METHOD = 1
+"""Encoder effort, 0 (fastest) to 6. Low on purpose: this runs inside the
+frame budget of a drag, and the few percent of file size a higher setting
+saves costs more milliseconds than the transfer does over loopback."""
+
+
+def _scaled(cfg: RenderConfig, scale: float) -> RenderConfig:
+    """``cfg`` restated on a canvas ``scale`` times the photo's true size.
+
+    Bounding boxes arrive in the template's true pixel space -- that is what
+    ``template.yaml`` stores and what the editor's overlay works in -- so
+    rendering onto a downscaled base means scaling them to match.
+
+    ``displace.strength`` scales with them. It is multiplied by
+    ``DISPLACE_MAX_PX``, an absolute pixel figure, so leaving it alone would
+    show three times as much fabric distortion in the editor as the render it
+    is meant to be predicting -- exactly the wrong direction for a control you
+    calibrate by eye.
+
+    ``shade`` is per-pixel and needs no adjustment. ``model_copy`` skips
+    revalidation deliberately: the incoming box was already checked for
+    degeneracy at its true size, and a valid box must not become a 400 because
+    the *preview* happens to be small.
+    """
+    if scale == 1.0:
+        return cfg
+    return cfg.model_copy(
+        update={
+            "bounding_box": tuple(Point(x=p.x * scale, y=p.y * scale) for p in cfg.bounding_box),
+            "displace": cfg.displace.model_copy(update={"strength": cfg.displace.strength * scale}),
+        }
+    )
+
+
+def _encode_preview(image: Image.Image, scale: PreviewScale) -> Response:
+    if scale == "full":
+        return Response(content=encode_png(image), media_type="image/png")
+    buffer = BytesIO()
+    image.save(
+        buffer,
+        format="WEBP",
+        quality=EDITOR_WEBP_QUALITY,
+        method=EDITOR_WEBP_METHOD,
+    )
+    return Response(content=buffer.getvalue(), media_type=EDITOR_MEDIA_TYPE)
+
+
 @router.post("/{name}/preview")
-def preview(request: Request, name: str, body: PreviewRequest) -> Response:
+def preview(
+    request: Request, name: str, body: PreviewRequest, scale: PreviewScale = "full"
+) -> Response:
     workspace = _workspace(request)
     kind = _load_config(workspace, name).kind
     if not isinstance(body, PREVIEW_BODIES[kind]):
@@ -379,22 +506,28 @@ def preview(request: Request, name: str, body: PreviewRequest) -> Response:
         missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
         raise HTTPException(status_code=404, detail=f"no mockup photo for {missing}")
 
-    base = load_template_base(photo.path)
-    design = load_design(resolve_design(workspace, body.design))
-    configs = _preview_configs(body)
-    cache = DerivedMapCache(workspace.template_derived_dir(name))
+    # Everything the render needs comes out of the shared memo rather than off
+    # disk: a drag is a burst of requests for the same photo, the same design
+    # and the same derived maps, and re-reading them is what made the old
+    # editor take seconds per frame.
+    base: ScaledBase = PREVIEW_IMAGES.base(
+        photo.path, EDITOR_MAX_EDGE if scale == "editor" else None
+    )
+    design = PREVIEW_IMAGES.design(resolve_design(workspace, body.design))
+    configs = [_scaled(cfg, base.scale) for cfg in _preview_configs(body)]
+    derived = workspace.template_derived_dir(name)
     image = render_scene(
-        base,
+        base.image,
         [Layer(design=design, cfg=cfg) for cfg in configs],
         height=(
-            cache.height(photo.map_key, base)
+            PREVIEW_IMAGES.height(derived, photo.map_key, base)
             if any(cfg.displace.enabled for cfg in configs)
             else None
         ),
         luminance=(
-            cache.luminance(photo.map_key, base)
+            PREVIEW_IMAGES.luminance(derived, photo.map_key, base)
             if any(cfg.shade.enabled for cfg in configs)
             else None
         ),
     )
-    return Response(content=encode_png(image), media_type="image/png")
+    return _encode_preview(image, scale)

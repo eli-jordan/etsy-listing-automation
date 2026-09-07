@@ -1,13 +1,18 @@
 import { useCallback, useMemo, useState } from "react";
+import { PreviewPanel, type PreviewJob } from "../components/PreviewPanel";
 import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
+import { ViewTabs, type View } from "../components/ViewTabs";
 import { usePreview } from "../hooks/usePreview";
 import type { BoundingBox, MultipleTemplate, Placement } from "../types";
 
 interface Props {
   templateName: string;
   config: MultipleTemplate;
+  /** The scene photo's true pixel size -- the space every placement's box is
+   * in. See `QuadEditor`'s `space`. */
+  space: [number, number] | null;
   onChange: (config: MultipleTemplate) => void;
   design: string;
   onDesignChange: (design: string) => void;
@@ -25,14 +30,6 @@ const CENTRED_BOX: BoundingBox = [
   { x: 400, y: 350 },
   { x: 200, y: 350 },
 ];
-
-function boxExtent(box: BoundingBox): string {
-  const xs = box.map((p) => p.x);
-  const ys = box.map((p) => p.y);
-  const width = Math.round(Math.max(...xs) - Math.min(...xs));
-  const height = Math.round(Math.max(...ys) - Math.min(...ys));
-  return `${width} × ${height}`;
-}
 
 /** The same rule the server uses for `TemplateSummary.status_reason`, so the
  * canvas and the rail can never disagree about whether this is finished. */
@@ -57,11 +54,13 @@ function uncolouredWarning(placements: Placement[]): string | null {
 export function MultipleEditor({
   templateName,
   config,
+  space,
   onChange,
   design,
   onDesignChange,
   knownColours,
 }: Props) {
+  const [tab, setTab] = useState<View>("calibrate");
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [showOutlines, setShowOutlines] = useState(true);
 
@@ -76,6 +75,24 @@ export function MultipleEditor({
       [config.placements, config.displace, config.shade],
     ),
     design,
+  );
+
+  // A chart composites every placement into one photo, so its preview is a
+  // single full-size render -- what changes versus the canvas is the pixels,
+  // not the composition.
+  const jobs: PreviewJob[] = useMemo(
+    () => [
+      {
+        id: templateName,
+        label: templateName,
+        body: {
+          placements: config.placements,
+          displace: config.displace,
+          shade: config.shade,
+        },
+      },
+    ],
+    [templateName, config.placements, config.displace, config.shade],
   );
 
   const handleBoxChange = useCallback(
@@ -99,7 +116,6 @@ export function MultipleEditor({
   );
 
   const clampedIndex = Math.min(selectedIndex, Math.max(config.placements.length - 1, 0));
-  const selected = config.placements[clampedIndex];
   const warning = uncolouredWarning(config.placements);
 
   /** The box-editing operations, reached from the canvas -- one
@@ -182,51 +198,59 @@ export function MultipleEditor({
     <main className="app__main">
       <div className="app__preview">
         <div className="app__preview-bar">
-          <label className="app__outline-toggle">
-            <input
-              type="checkbox"
-              checked={showOutlines}
-              onChange={(e) => setShowOutlines(e.target.checked)}
-            />
-            show all outlines
-          </label>
+          <ViewTabs value={tab} onChange={setTab} />
+          {tab === "calibrate" && (
+            <label className="app__outline-toggle">
+              <input
+                type="checkbox"
+                checked={showOutlines}
+                onChange={(e) => setShowOutlines(e.target.checked)}
+              />
+              show all outlines
+            </label>
+          )}
         </div>
-        {previewUrl ? (
-          config.placements.length === 0 ? (
-            <div className="quad-editor__empty">
-              <p>No bounding boxes on this photo</p>
-              <button type="button" className="btn btn-primary" onClick={addBox}>
-                + Add box
-              </button>
-              <p className="quad-editor__empty-hint">first box lands ready to drag</p>
-            </div>
+        {tab === "calibrate" &&
+          (previewUrl && space ? (
+            config.placements.length === 0 ? (
+              <div className="quad-editor__empty">
+                <p>No bounding boxes on this photo</p>
+                <button type="button" className="btn btn-primary" onClick={addBox}>
+                  + Add box
+                </button>
+                <p className="quad-editor__empty-hint">first box lands ready to drag</p>
+              </div>
+            ) : (
+              <QuadEditor
+                imageUrl={previewUrl}
+                space={space}
+                boxes={config.placements.map((p) => p.bounding_box)}
+                selectedIndex={clampedIndex}
+                onSelect={setSelectedIndex}
+                onChangeBox={handleBoxChange}
+                onAddBox={addBox}
+                onDeleteSelected={deleteSelected}
+                onDuplicateSelected={duplicateSelected}
+                onBringSelectedToFront={bringToFront}
+                outlines={showOutlines ? "all" : "selected"}
+                labels={config.placements.map((p) => p.colour)}
+                onLabelChange={handleColourChange}
+                labelPlaceholder="assign colour…"
+                labelSuggestions={knownColours}
+              />
+            )
           ) : (
-            <QuadEditor
-              imageUrl={previewUrl}
-              boxes={config.placements.map((p) => p.bounding_box)}
-              selectedIndex={clampedIndex}
-              onSelect={setSelectedIndex}
-              onChangeBox={handleBoxChange}
-              onAddBox={addBox}
-              onDeleteSelected={deleteSelected}
-              onDuplicateSelected={duplicateSelected}
-              onBringSelectedToFront={bringToFront}
-              outlines={showOutlines ? "all" : "selected"}
-              labels={config.placements.map((p) => p.colour)}
-              onLabelChange={handleColourChange}
-              labelPlaceholder="assign colour…"
-              labelSuggestions={knownColours}
-              selectedLabel={
-                selected
-                  ? `box ${clampedIndex + 1} selected · ${boxExtent(selected.bounding_box)}`
-                  : undefined
-              }
-            />
-          )
-        ) : (
-          <p>Loading preview…</p>
-        )}
-        {warning && <p className="app__warn">{warning}</p>}
+            <p className="app__loading">Loading preview…</p>
+          ))}
+        {/* Mounted either way, so flicking back to Calibrate and returning
+            does not throw away renders that cost real seconds. */}
+        <PreviewPanel
+          templateName={templateName}
+          jobs={jobs}
+          design={design}
+          active={tab === "preview"}
+        />
+        {tab === "calibrate" && warning && <p className="app__warn">{warning}</p>}
       </div>
 
       <aside className="app__controls">

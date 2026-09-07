@@ -5,6 +5,8 @@ import { must } from "../test/helpers";
 import type { MultipleTemplate } from "../types";
 import { MultipleEditor } from "./MultipleEditor";
 
+const SPACE: [number, number] = [400, 200];
+
 const CONFIG: MultipleTemplate = {
   kind: "multiple",
   colour_coverage: "exact",
@@ -47,6 +49,7 @@ describe("MultipleEditor", () => {
       <MultipleEditor
         templateName="colour-chart-01"
         config={CONFIG}
+        space={SPACE}
         onChange={vi.fn()}
         design="bundled-grid"
         onDesignChange={vi.fn()}
@@ -63,6 +66,7 @@ describe("MultipleEditor", () => {
           shade: CONFIG.shade,
         },
         "bundled-grid",
+        "editor",
       ),
     );
   });
@@ -74,6 +78,7 @@ describe("MultipleEditor", () => {
       <MultipleEditor
         templateName="colour-chart-01"
         config={CONFIG}
+        space={SPACE}
         onChange={onChange}
         design="bundled-grid"
         onDesignChange={vi.fn()}
@@ -94,6 +99,7 @@ describe("MultipleEditor", () => {
       <MultipleEditor
         templateName="colour-chart-01"
         config={CONFIG}
+        space={SPACE}
         onChange={onChange}
         design="bundled-grid"
         onDesignChange={vi.fn()}
@@ -118,6 +124,7 @@ describe("MultipleEditor", () => {
       <MultipleEditor
         templateName="colour-chart-01"
         config={config}
+        space={SPACE}
         onChange={vi.fn()}
         design="bundled-grid"
         onDesignChange={vi.fn()}
@@ -136,6 +143,7 @@ describe("MultipleEditor", () => {
       <MultipleEditor
         templateName="colour-chart-01"
         config={{ ...CONFIG, placements: [] }}
+        space={SPACE}
         onChange={vi.fn()}
         design="bundled-grid"
         onDesignChange={vi.fn()}

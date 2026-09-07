@@ -108,6 +108,19 @@ type PreviewBody =
   | { placements: Placement[]; displace: DisplaceConfig; shade: ShadeConfig }
   | { bounding_box: BoundingBox; displace: DisplaceConfig; shade: ShadeConfig };
 
+/** Which of the server's two preview sizes to ask for.
+ *
+ * `editor` is the downscale the canvas drags against -- capped at a fixed
+ * longest edge the server owns, and encoded as WebP, because a frame produced
+ * five times a second is looked at once and thrown away. `full` is the photo's
+ * own resolution as a PNG: the thing you approve.
+ *
+ * Boxes are in the template's true pixel space either way. A scaled preview
+ * does not change the coordinates -- only how many pixels the server spends
+ * drawing them.
+ */
+export type PreviewScale = "editor" | "full";
+
 /**
  * Renders a preview through the real server-side pipeline. The body shape
  * must match the target template's actual kind -- the endpoint rejects a
@@ -118,12 +131,16 @@ export async function renderPreview(
   name: string,
   body: PreviewBody,
   design: string = "bundled-grid",
+  scale: PreviewScale = "full",
 ): Promise<string> {
-  const response = await fetch(`/api/templates/${encodeURIComponent(name)}/preview`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ...body, design }),
-  });
+  const response = await fetch(
+    `/api/templates/${encodeURIComponent(name)}/preview?scale=${scale}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...body, design }),
+    },
+  );
   if (!response.ok) {
     throw new CalibratorApiError(`preview failed for ${name}`);
   }

@@ -90,10 +90,26 @@ describe("renderPreview", () => {
 
     expect(url).toBe("blob:mock-url");
     const [requestUrl, init] = must(fetchMock.mock.calls[0]);
-    expect(requestUrl).toBe("/api/templates/flat-lay-01/preview");
+    // `full` is the default: an explicit caller (the Preview tab) and an
+    // absent one both mean "the size that is actually the output".
+    expect(requestUrl).toBe("/api/templates/flat-lay-01/preview?scale=full");
     const body = JSON.parse(init.body as string);
     expect(body.design).toBe("bundled-on-dark");
     expect(body.colour).toBe("black");
+  });
+
+  it("asks for the editor size when told to", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: async () => new Blob(["webp-bytes"]),
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const { renderPreview } = await import("./calibrator");
+    await renderPreview("flat-lay-01", { colour: "black", ...CONFIG }, "bundled-grid", "editor");
+
+    const [requestUrl] = must(fetchMock.mock.calls[0]);
+    expect(requestUrl).toBe("/api/templates/flat-lay-01/preview?scale=editor");
   });
 
   it("throws CalibratorApiError when the preview request fails", async () => {

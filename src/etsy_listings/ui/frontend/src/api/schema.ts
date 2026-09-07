@@ -529,6 +529,8 @@ export interface components {
       colours: string[];
       /** Has Config */
       has_config: boolean;
+      /** Height */
+      height?: number | null;
       /** Kind */
       kind: ("colour-matrix" | "multiple" | "single") | null;
       /** Name */
@@ -540,6 +542,8 @@ export interface components {
       status: "needs-calibration" | "calibrated";
       /** Status Reason */
       status_reason?: string | null;
+      /** Width */
+      width?: number | null;
     };
     /** ValidationError */
     ValidationError: {
@@ -804,7 +808,9 @@ export interface operations {
   };
   preview_api_templates__name__preview_post: {
     parameters: {
-      query?: never;
+      query?: {
+        scale?: "editor" | "full";
+      };
       header?: never;
       path: {
         name: string;

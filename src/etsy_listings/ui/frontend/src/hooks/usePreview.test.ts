@@ -31,7 +31,7 @@ describe("usePreview", () => {
     const { result } = renderHook(() => usePreview("lifestyle-01", BODY, "bundled-grid"));
 
     await waitFor(() => expect(result.current).toBe("blob:one"));
-    expect(spy).toHaveBeenCalledWith("lifestyle-01", BODY, "bundled-grid");
+    expect(spy).toHaveBeenCalledWith("lifestyle-01", BODY, "bundled-grid", "editor");
   });
 
   it("revokes the displayed object URL when the editor unmounts", async () => {
@@ -98,5 +98,53 @@ describe("usePreview", () => {
     rerender({ design: "bundled-on-dark" });
     await new Promise((resolve) => setTimeout(resolve, 250));
     expect(result.current).toBe("blob:one");
+  });
+});
+
+describe("usePreview's one-at-a-time rule", () => {
+  it("coalesces edits made during a render into a single follow-up", async () => {
+    let release: (url: string) => void = () => {};
+    const spy = vi
+      .spyOn(calibrator, "renderPreview")
+      .mockImplementationOnce(() => new Promise<string>((resolve) => (release = resolve)))
+      .mockResolvedValue("blob:final");
+
+    const { result, rerender } = renderHook(
+      ({ design }) => usePreview("flat-lay-01", BODY, design),
+      {
+        initialProps: { design: "d0" },
+      },
+    );
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+
+    // Three edits while the first render is still out. None of them may be
+    // sent -- queueing them would make every frame arrive later than the last.
+    for (const design of ["d1", "d2", "d3"]) rerender({ design });
+    await new Promise((resolve) => setTimeout(resolve, 200));
+    expect(spy).toHaveBeenCalledTimes(1);
+
+    release("blob:first");
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(2));
+    // The newest, not the oldest of the three.
+    expect(spy).toHaveBeenLastCalledWith("flat-lay-01", BODY, "d3", "editor");
+    await waitFor(() => expect(result.current).toBe("blob:final"));
+  });
+
+  it("drops a render that lands after the editor has moved to another template", async () => {
+    let release: (url: string) => void = () => {};
+    vi.spyOn(calibrator, "renderPreview")
+      .mockImplementationOnce(() => new Promise<string>((resolve) => (release = resolve)))
+      .mockResolvedValue("blob:other");
+
+    const { result, rerender } = renderHook(({ name }) => usePreview(name, BODY, "bundled-grid"), {
+      initialProps: { name: "flat-lay-01" },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 150));
+
+    rerender({ name: "lifestyle-01" });
+    release("blob:stale");
+
+    await waitFor(() => expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:stale"));
+    expect(result.current).not.toBe("blob:stale");
   });
 });

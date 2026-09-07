@@ -6,6 +6,19 @@ const NUDGE_PX_FAST = 8;
 
 interface Props {
   imageUrl: string;
+  /** The template photo's **true** `[width, height]`, from the API.
+   *
+   * Not measured off `imageUrl`. The editor renders at a downscale, so the
+   * image on screen is smaller than the photo -- but `template.yaml` stores
+   * boxes at the photo's true size, and so does everything in this component.
+   * Reading `naturalWidth` instead (which is what this used to do) would put
+   * the overlay in the *preview's* space and silently save every box a few
+   * times too small.
+   *
+   * Nothing breaks visually if it is a little wrong, which is exactly why it
+   * is a required prop rather than an optional override: the failure is in the
+   * saved file, not on the screen. */
+  space: [number, number];
   boxes: BoundingBox[];
   selectedIndex: number;
   onSelect: (index: number) => void;
@@ -23,10 +36,6 @@ interface Props {
    * colour set's "show placement outline" hides everything so you can judge
    * the render clean ("none"). */
   outlines?: "all" | "selected" | "none";
-  /** Label for the selected box, shown with its extent. Explicitly admits
-   * `undefined`: `exactOptionalPropertyTypes` is on, so "may be absent" and
-   * "may be undefined" are different types here. */
-  selectedLabel?: string | undefined;
   /** Per-box caption drawn under the box and edited by clicking it.
    *
    * This is where a `multiple`-kind placement's colour lives now. It used to
@@ -57,6 +66,26 @@ interface Props {
  * keys -- and deforms only by its corner handles. Both apply to every kind:
  * getting a box to the right *place* is the common move, and before this the
  * only way to do it was to drag four corners the same distance by eye.
+ *
+ * A corner handle does three things, chosen by modifier:
+ *
+ * | gesture | effect |
+ * |---|---|
+ * | drag | moves that corner alone -- the quad deforms, which is what makes it a *perspective* placement and not a rectangle |
+ * | shift-drag | scales the whole box about the opposite corner, shape preserved |
+ * | alt-drag | scales it about its own centre |
+ *
+ * Nothing on the canvas announces that, and nothing labels the selected box
+ * either. Both used to sit in a pill over the photo, and both were in the way
+ * of the one thing this view exists for -- looking at the render. The selected
+ * box is the one wearing handles, which is the answer already.
+ *
+ * Free-corner is the unmodified gesture because it is the one only this
+ * control can do. But "same shape, bigger" is the far more common wish -- a
+ * print that is placed right and simply too small -- and doing it by hand
+ * means dragging four corners by four different amounts and re-checking the
+ * skew after each. Scaling keeps the corners' offsets from the anchor exactly
+ * proportional, so an already-skewed quad stays exactly as skewed.
  */
 
 interface Menu {
@@ -65,12 +94,64 @@ interface Menu {
   y: number;
 }
 
-/** What a pointer is currently doing: reshaping one corner of the selected
- * box, or sliding a whole box (which need not be the selected one -- pressing
- * on a dimmed box selects and drags it in one gesture). */
+/** What a pointer is currently doing: working one corner of the selected box,
+ * or sliding a whole box (which need not be the selected one -- pressing on a
+ * dimmed box selects and drags it in one gesture).
+ *
+ * Both carry the box as it was when the gesture started. A corner drag needs
+ * it because scaling is defined against the *original* offsets: derived from
+ * the live box instead, every mouse move would compound on the last one and
+ * the box would race away from the pointer. */
 type Drag =
-  | { kind: "corner"; pointIndex: number }
+  | { kind: "corner"; pointIndex: number; start: BoundingBox }
   | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox };
+
+/** How far a box may be shrunk in one gesture. Not zero: at zero the box
+ * collapses to a point, and a point has no corners left to drag it back
+ * out by. */
+const MIN_SCALE = 0.05;
+
+function centre(box: BoundingBox): Point {
+  return {
+    x: box.reduce((sum, p) => sum + p.x, 0) / box.length,
+    y: box.reduce((sum, p) => sum + p.y, 0) / box.length,
+  };
+}
+
+/**
+ * `start`, scaled about `anchor` so that its `pointIndex` corner sits as close
+ * to `pointer` as a shape-preserving scale allows.
+ *
+ * The factor is the pointer's projection onto the anchor-to-corner vector, so
+ * dragging along that diagonal tracks the cursor exactly and dragging across
+ * it does nothing -- which is what "same shape, bigger or smaller" means. Every
+ * corner is then moved by the same factor, so all four angles, and therefore
+ * any perspective skew the box already had, are preserved exactly.
+ */
+function scaledAbout(
+  start: BoundingBox,
+  pointIndex: number,
+  anchor: Point,
+  pointer: Point,
+): BoundingBox {
+  const corner = start[pointIndex];
+  if (!corner) return start;
+  const vx = corner.x - anchor.x;
+  const vy = corner.y - anchor.y;
+  const lengthSquared = vx * vx + vy * vy;
+  // A corner sitting on its own anchor has no direction to scale along --
+  // only reachable from a degenerate box, but dividing by it would produce
+  // NaN coordinates and a box that vanishes.
+  if (lengthSquared === 0) return start;
+  const factor = Math.max(
+    MIN_SCALE,
+    ((pointer.x - anchor.x) * vx + (pointer.y - anchor.y) * vy) / lengthSquared,
+  );
+  return start.map((p) => ({
+    x: anchor.x + (p.x - anchor.x) * factor,
+    y: anchor.y + (p.y - anchor.y) * factor,
+  })) as BoundingBox;
+}
 
 function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
   const host = svg?.getBoundingClientRect();
@@ -122,6 +203,7 @@ function positionMenu(el: HTMLElement, menu: Menu): void {
 
 export function QuadEditor({
   imageUrl,
+  space,
   boxes,
   selectedIndex,
   onSelect,
@@ -131,14 +213,16 @@ export function QuadEditor({
   onDuplicateSelected,
   onBringSelectedToFront,
   outlines = "all",
-  selectedLabel,
   labels,
   onLabelChange,
   labelPlaceholder,
   labelSuggestions,
 }: Props) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const [naturalSize, setNaturalSize] = useState<[number, number] | null>(null);
+  // Purely a gate on drawing the overlay: the SVG is stretched over the image,
+  // so it has no size of its own until the image has laid out. Deliberately
+  // not a measurement -- `space` is where coordinates come from.
+  const [loaded, setLoaded] = useState(false);
   const [drag, setDrag] = useState<Drag | null>(null);
   const [menu, setMenu] = useState<Menu | null>(null);
   const [editingLabel, setEditingLabel] = useState<number | null>(null);
@@ -171,8 +255,10 @@ export function QuadEditor({
 
   function handleCornerPointerDown(pointIndex: number) {
     return (event: React.PointerEvent<SVGCircleElement>) => {
+      const start = boxes[selectedIndex];
+      if (!start) return;
       event.currentTarget.setPointerCapture(event.pointerId);
-      setDrag({ kind: "corner", pointIndex });
+      setDrag({ kind: "corner", pointIndex, start });
     };
   }
 
@@ -203,10 +289,20 @@ export function QuadEditor({
       );
       return;
     }
-    const box = boxes[selectedIndex];
-    if (!box) return;
-    const next = box.map((p, i) => (i === drag.pointIndex ? point : p)) as BoundingBox;
-    onChangeBox(selectedIndex, next);
+    // The modifier is read per move, not per press, so shift can be taken
+    // and released mid-gesture -- reach for a corner, discover you wanted the
+    // whole box bigger, hold shift.
+    const { start, pointIndex } = drag;
+    const opposite = start[(pointIndex + 2) % start.length];
+    if (event.shiftKey && opposite) {
+      onChangeBox(selectedIndex, scaledAbout(start, pointIndex, opposite, point));
+      return;
+    }
+    if (event.altKey) {
+      onChangeBox(selectedIndex, scaledAbout(start, pointIndex, centre(start), point));
+      return;
+    }
+    onChangeBox(selectedIndex, start.map((p, i) => (i === pointIndex ? point : p)) as BoundingBox);
   }
 
   function handlePointerUp() {
@@ -254,16 +350,14 @@ export function QuadEditor({
       <img
         src={imageUrl}
         alt="Rendered preview"
-        onLoad={(e) =>
-          setNaturalSize([e.currentTarget.naturalWidth, e.currentTarget.naturalHeight])
-        }
+        onLoad={() => setLoaded(true)}
         className="quad-editor__image"
       />
-      {naturalSize && (
+      {loaded && (
         <svg
           ref={svgRef}
           className="quad-editor__overlay"
-          viewBox={`0 0 ${naturalSize[0]} ${naturalSize[1]}`}
+          viewBox={`0 0 ${space[0]} ${space[1]}`}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
         >
@@ -295,7 +389,7 @@ export function QuadEditor({
                       key={pointIndex}
                       cx={p.x}
                       cy={p.y}
-                      r={Math.max(naturalSize[0], naturalSize[1]) * 0.015}
+                      r={Math.max(space[0], space[1]) * 0.015}
                       className="quad-editor__handle"
                       onPointerDown={handleCornerPointerDown(pointIndex)}
                     />
@@ -306,14 +400,14 @@ export function QuadEditor({
         </svg>
       )}
 
-      {naturalSize && labels && (
+      {loaded && labels && (
         <div className="quad-editor__labels">
           {boxes.map((box, boxIndex) => {
             if (!chromeVisible(boxIndex)) return null;
             const anchor = labelAnchor(box);
             const style = {
-              left: `${(anchor.x / naturalSize[0]) * 100}%`,
-              top: `${(anchor.y / naturalSize[1]) * 100}%`,
+              left: `${(anchor.x / space[0]) * 100}%`,
+              top: `${(anchor.y / space[1]) * 100}%`,
             };
             const text = labels[boxIndex] ?? "";
             if (editingLabel === boxIndex && onLabelChange) {
@@ -366,8 +460,6 @@ export function QuadEditor({
           )}
         </div>
       )}
-
-      {selectedLabel && <span className="quad-editor__readout">{selectedLabel}</span>}
 
       {onAddBox && (
         <button type="button" className="btn btn-primary quad-editor__add" onClick={onAddBox}>

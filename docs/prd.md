@@ -569,6 +569,11 @@ guided flow.
 - Sliders for displacement strength and shading blend mode/opacity.
 - The Python backend re-runs the **real renderer** on each change and streams
   back the composite, so the preview is the actual output, not an approximation.
+  It is served at two *sizes*, which is not the same as two renderers: the
+  editing canvas gets a downscale, because a full-resolution render per frame
+  of a drag is slower than the drag and nobody sees the frames it costs, and a
+  separate Preview view renders at the photo's own size on demand. Both run the
+  same pipeline over the same photo; only the pixel count differs.
 - **Ships with a bundled test design** so a new template can be calibrated
   immediately, with nothing to prepare. A toggle switches to a grid/ruler
   target, which makes warp and displacement errors more obvious than artwork

@@ -188,18 +188,39 @@ def test_capture_full_page_screenshot(page, screenshot_dir: Path) -> None:  # no
 
 
 def test_capture_preview_all_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
-    """The Preview-all tab with every colour rendered -- the state you approve
-    from, and the only place the grid exists."""
+    """The Preview tab with every colour rendered -- the state you approve
+    from, and the only place the grid exists.
+
+    Opening the tab is what asks for it; there is no separate button for a
+    first look, only a Re-render for afterwards."""
     row = page.locator(".template-rail__item[data-template='flat-lay-01']")
     row.wait_for()
     row.click()
     page.wait_for_selector(PREVIEW_IMAGE)
-    page.get_by_role("tab", name="Preview all 4").click()
+    page.get_by_role("tab", name="Preview").click()
     page.wait_for_function(
         "() => document.querySelectorAll('.preview-grid__tile img').length === 4"
     )
     target = screenshot_dir / "phase6-preview-all.png"
     page.screenshot(path=str(target), full_page=True)
+    assert target.stat().st_size > 0
+
+
+def test_capture_lightbox_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
+    """A rendered preview opened large -- where a calibration is actually
+    judged, and the reason the Preview tab renders at full size at all."""
+    row = page.locator(".template-rail__item[data-template='flat-lay-01']")
+    row.wait_for()
+    row.click()
+    page.wait_for_selector(PREVIEW_IMAGE)
+    page.get_by_role("tab", name="Preview").click()
+    page.wait_for_function(
+        "() => document.querySelectorAll('.preview-grid__tile img').length === 4"
+    )
+    page.locator(".preview-grid__open").first.click()
+    page.wait_for_function("() => document.querySelector('.lightbox__image')?.naturalWidth > 0")
+    target = screenshot_dir / "phase7-lightbox.png"
+    page.screenshot(path=str(target))
     assert target.stat().st_size > 0
 
 

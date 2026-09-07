@@ -530,6 +530,17 @@
             "title": "Has Config",
             "type": "boolean"
           },
+          "height": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Height"
+          },
           "kind": {
             "anyOf": [
               {
@@ -568,6 +579,17 @@
               }
             ],
             "title": "Status Reason"
+          },
+          "width": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Width"
           }
         },
         "required": [
@@ -1009,6 +1031,20 @@
             "required": true,
             "schema": {
               "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scale",
+            "required": false,
+            "schema": {
+              "default": "full",
+              "enum": [
+                "editor",
+                "full"
+              ],
+              "title": "Scale",
               "type": "string"
             }
           }
