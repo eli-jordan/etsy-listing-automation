@@ -393,7 +393,7 @@ PRD's agreed CLI surface for reference when building later phases — do not
 assume a command exists because it is listed here.
 
 ```
-new <design>       interactive garment/provider picker; writes profile + listing   [done]
+new [<design>]     interactive design/garment/provider picker; writes profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified          [done; only `render` exists]
 render / generate      force a single local stage                    [render: via apply; generate: Phase 4]

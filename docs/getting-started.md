@@ -248,8 +248,13 @@ photos, Etsy copy.
 ### The easy way: `new`
 
 ```bash
-uv run etsy-listings new take-a-hike --root ~/etsy-listings
+uv run etsy-listings new --root ~/etsy-listings
 ```
+
+It asks which design first — `designs/*.png`, newest first, since the artwork
+you just exported is nearly always the one you want. Name it instead
+(`new take-a-hike --root ~/etsy-listings`) to skip that question, which is also
+how you start a listing for artwork you have not drawn yet.
 
 This reads Printify's catalog live, so it needs a token first — the catalog
 endpoints are read-only but **not** public, and without one Printify answers

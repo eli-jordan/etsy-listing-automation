@@ -348,33 +348,40 @@ cleanly (ampersands, slashes, parenthesised names) or that collide on one slug.
 ## `new` — interactive garment picker
 
 ```
-new take-a-hike [--category tshirt]
+new [take-a-hike] [--category tshirt]
 ```
 
-1. Fetches Printify's blueprint catalog and filters to the category (defaults to
+1. Picks the design. Omitting the argument is the normal way in: `new` is a
+   wizard, and requiring one answer on the command line meant knowing the exact
+   stem of a file just exported. `designs/*.png` is offered newest first — a
+   design is made minutes before the listing that ships it — with the date in
+   the row and a mark on any design that already has a listing, which `new`
+   refuses to overwrite. Naming a design explicitly still works, and is the
+   only way to start a listing for artwork that does not exist yet.
+2. Fetches Printify's blueprint catalog and filters to the category (defaults to
    `tshirt`). *Note: the catalog endpoint returns `title`/`brand`/`model` without
    a category facet, so filtering is client-side keyword matching over those
    fields — verify during implementation whether a better facet exists.*
-2. Interactive fuzzy-search picker for the garment.
-3. Fetches print providers offering that blueprint. `preferred_print_provider`
+3. Interactive fuzzy-search picker for the garment.
+4. Fetches print providers offering that blueprint. `preferred_print_provider`
    from `shop.yaml` is preselected when it appears in the list.
-4. Reads the chosen combination's variants to populate `sizes` and `print_area`
+5. Reads the chosen combination's variants to populate `sizes` and `print_area`
    automatically from the placeholder dimensions.
-5. Offers the calibrated mockup templates and reads the chosen one's kind — a
+6. Offers the calibrated mockup templates and reads the chosen one's kind — a
    `colour-matrix` template gets one `media` entry per colour (capped at
    Etsy's 10-image limit, since a provider can offer far more colours than
    that), `multiple` and `single` get exactly one entry and no colour (PRD
    28). `colors:` still carries every colour: it decides which variants sell,
    not which photos get rendered (PRD 31).
-6. **Writes `profiles/{slug}.yaml` if absent; reuses it silently if present.**
-7. **Requires a pricing plan.** Offers every discovered `pricing-plans/*.yaml`
+7. **Writes `profiles/{slug}.yaml` if absent; reuses it silently if present.**
+8. **Requires a pricing plan.** Offers every discovered `pricing-plans/*.yaml`
    file, annotated for whether its size keys match this garment's `sizes`
    exactly, plus an always-available "create a new pricing plan" choice. That
    choice reads Printify's manufacturing cost and shipping cost for the
    chosen blueprint/provider (see #35/#36) and writes a starting table at a
    10% margin over cost — a generated file, not a final price, and its
    comment says so.
-8. Writes `listings/take-a-hike/listing.yaml` referencing that profile and the
+9. Writes `listings/take-a-hike/listing.yaml` referencing that profile and the
    chosen pricing plan, with `<generate>` sentinels in place.
 
 This removes the only genuinely opaque step in the whole system — nothing is
@@ -652,7 +659,7 @@ photo, acceptable at this volume.
 
 | Command | Purpose |
 |---|---|
-| `new <design> [--category tshirt]` | Interactive garment/provider picker; writes profile (if absent) + listing |
+| `new [<design>] [--category tshirt]` | Interactive garment/provider picker; writes profile (if absent) + listing |
 | `ui` | Serve setup, dashboard, template authoring and plan/apply runner |
 | `plan <listing\|--all>` | Three-way diff against live remote state; decides which stages need to run |
 | `apply <listing\|--all>` | Execute every stage the plan identified, render and generate included |
