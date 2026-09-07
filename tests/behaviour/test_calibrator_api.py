@@ -4,13 +4,25 @@ network, no browser."""
 
 from __future__ import annotations
 
+from io import BytesIO
 from pathlib import Path
 
+import numpy as np
 import pytest
 from fastapi.testclient import TestClient
+from PIL import Image
 
+from etsy_listings.render.config import DisplaceConfig, Point, RenderConfig
+from etsy_listings.ui.api import templates
 from etsy_listings.ui.api.app import create_app
 from etsy_listings.workspace.workspace import Workspace
+
+
+@pytest.fixture(autouse=True)
+def _cold_preview_cache() -> None:
+    """The preview memo is process-wide, and these tests write photos under
+    it. Cleared per test so one can never be served another's bytes."""
+    templates.PREVIEW_IMAGES.clear()
 
 
 @pytest.fixture
@@ -42,6 +54,10 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
         "has_config": False,
         "status": "needs-calibration",
         "status_reason": "no kind set",
+        # An empty directory: no photo to measure, and nothing to calibrate
+        # against until one arrives.
+        "width": None,
+        "height": None,
     }
 
 
@@ -428,6 +444,151 @@ def test_preview_renders_the_full_composite_for_multiple_kind(client: TestClient
     response = client.post("/api/templates/colour-chart-01/preview", json=config)
     assert response.status_code == 200
     assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+class TestPreviewScale:
+    """The editor's canvas and the Preview tab are the *same* render at two
+    sizes -- and the smaller one is why dragging a box stopped taking seconds
+    a frame.
+
+    The thing that can go silently wrong here is the coordinate space. Boxes
+    arrive at the photo's true size, so rendering onto a downscaled base means
+    scaling them to match; forget it and the preview is wrong in a way that
+    looks like a badly calibrated template rather than a bug.
+    """
+
+    CHART_SIZE = (960, 576)
+    """``colour-chart-01`` in the fixture workspace (generate_test_assets.py)."""
+
+    def _size(self, content: bytes) -> tuple[int, int]:
+        with Image.open(BytesIO(content)) as image:
+            return image.size
+
+    def test_full_is_the_default_and_is_the_photo_own_size(self, client: TestClient) -> None:
+        config = client.get("/api/templates/colour-chart-01/config").json()
+        response = client.post("/api/templates/colour-chart-01/preview", json=config)
+        assert response.headers["content-type"] == "image/png"
+        assert self._size(response.content) == self.CHART_SIZE
+
+    def test_editor_scale_caps_the_longest_edge_and_comes_back_as_webp(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(templates, "EDITOR_MAX_EDGE", 240)
+        config = client.get("/api/templates/colour-chart-01/config").json()
+        response = client.post("/api/templates/colour-chart-01/preview?scale=editor", json=config)
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/webp"
+        # 960x576 capped on the width, aspect preserved.
+        assert self._size(response.content) == (240, 144)
+
+    def test_a_photo_smaller_than_the_cap_is_not_blown_up(self, client: TestClient) -> None:
+        """The fixture colour set is 480x576, well inside the cap. Upscaling it
+        would make a small mockup look worse than it is for no gain."""
+        config = client.get("/api/templates/flat-lay-01/config").json()
+        response = client.post(
+            "/api/templates/flat-lay-01/preview?scale=editor",
+            json={"colour": "black", **config},
+        )
+        assert self._size(response.content) == (480, 576)
+
+    def test_the_box_is_scaled_onto_the_smaller_canvas(
+        self, client: TestClient, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A box in the bottom-right quadrant must still print in the bottom-
+        right quadrant of a canvas an eighth the size.
+
+        Left unscaled, coordinates meant for a 960px photo would land entirely
+        outside a 120px one and the preview would come back as the bare
+        garment -- which is what comparing against the photo catches.
+        """
+        monkeypatch.setattr(templates, "EDITOR_MAX_EDGE", 120)
+        width, height = self.CHART_SIZE
+        config = client.get("/api/templates/colour-chart-01/config").json()
+        config["placements"] = [
+            {
+                "colour": "black",
+                "bounding_box": [
+                    {"x": width * 0.55, "y": height * 0.55},
+                    {"x": width * 0.95, "y": height * 0.55},
+                    {"x": width * 0.95, "y": height * 0.95},
+                    {"x": width * 0.55, "y": height * 0.95},
+                ],
+                "artwork": None,
+            }
+        ]
+        response = client.post("/api/templates/colour-chart-01/preview?scale=editor", json=config)
+        assert response.status_code == 200
+
+        with Image.open(BytesIO(response.content)) as rendered:
+            painted = np.asarray(rendered.convert("RGB"), dtype=np.int16)
+        scene = workspace_root / "mockup-templates" / "colour-chart-01" / "scene.png"
+        with Image.open(scene) as photo:
+            bare = np.asarray(
+                photo.convert("RGB").resize(painted.shape[1::-1], Image.Resampling.LANCZOS),
+                dtype=np.int16,
+            )
+
+        changed = np.abs(painted - bare).sum(axis=2) > 24
+        assert changed.any(), "nothing was printed -- the box missed the canvas entirely"
+        rows, cols = np.nonzero(changed)
+        h, w = changed.shape
+        # Every printed pixel in the bottom-right quadrant, and the design
+        # reaching most of the way across it.
+        assert rows.min() >= h * 0.5
+        assert cols.min() >= w * 0.5
+        assert cols.max() >= w * 0.85
+
+    def test_an_unknown_scale_is_a_client_error(self, client: TestClient) -> None:
+        config = client.get("/api/templates/flat-lay-01/config").json()
+        response = client.post(
+            "/api/templates/flat-lay-01/preview?scale=thumbnail",
+            json={"colour": "black", **config},
+        )
+        assert response.status_code == 422
+
+    def test_displacement_is_scaled_with_the_canvas(self) -> None:
+        """``DISPLACE_MAX_PX`` is an absolute pixel figure, so an unscaled
+        strength would show several times more fabric distortion in the editor
+        than in the render it is meant to predict -- the wrong direction for a
+        control calibrated by eye."""
+        cfg = RenderConfig(
+            bounding_box=(
+                Point(x=0, y=0),
+                Point(x=100, y=0),
+                Point(x=100, y=100),
+                Point(x=0, y=100),
+            ),
+            displace=DisplaceConfig(enabled=True, strength=0.8),
+        )
+        scaled = templates._scaled(cfg, 0.25)
+        assert scaled.displace.strength == pytest.approx(0.2)
+        assert scaled.bounding_box[2].x == pytest.approx(25)
+        # Unchanged at full size, object and all.
+        assert templates._scaled(cfg, 1.0) is cfg
+
+
+class TestTemplatePhotoSize:
+    """The client cannot measure the editor's image to learn what space its
+    boxes are in -- that image is a downscale -- so the size travels with the
+    summary instead."""
+
+    def test_the_summary_carries_the_photo_true_pixel_size(self, client: TestClient) -> None:
+        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+        chart = by_name["colour-chart-01"]
+        assert (chart["width"], chart["height"]) == (960, 576)
+        flat = by_name["flat-lay-01"]
+        assert (flat["width"], flat["height"]) == (480, 576)
+
+    def test_an_unreadable_photo_leaves_the_template_listable(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """Listing it is how the user reaches the UI that would fix it, so a
+        truncated PNG must not take the whole rail down."""
+        broken = workspace_root / "mockup-templates" / "broken"
+        broken.mkdir()
+        (broken / "scene.png").write_bytes(b"not a png")
+        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+        assert by_name["broken"]["width"] is None
 
 
 def test_preview_wrong_body_shape_for_kind_is_rejected(client: TestClient) -> None:

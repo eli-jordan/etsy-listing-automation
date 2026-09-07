@@ -77,8 +77,26 @@ cd src/etsy_listings/ui/frontend && npm run dev            # frontend, proxies /
 
 Open the Vite dev server's URL (default `http://localhost:5173`). Every quad
 drag or slider change debounces a request to the backend, which re-renders
-through the same pipeline `apply` uses and streams back a PNG — there is no
-approximate/preview-only render path. "Save" writes `template.yaml`.
+through the same pipeline `apply` uses — there is no approximate/preview-only
+render path. "Save" writes `template.yaml`.
+
+Each editor has two views of the same template:
+
+- **Calibrate** — the draggable canvas. Renders downscaled (longest edge
+  900px, WebP) so a drag is live rather than a slideshow. Corner handles
+  reshape the quad; hold **shift** to resize the whole box about the opposite
+  corner, or **alt** to resize about its centre, keeping the shape. A
+  colour-matrix set picks which colour to work against from the dropdown
+  beside the tabs.
+- **Preview** — full-size PNG renders, exactly what `apply` will write.
+  Opening the tab renders the set; *changing a box afterwards does not*,
+  because a twelve-colour set is real work and because a view you approve from
+  must never quietly be a picture of an older box than the one on screen. It
+  turns **Re-render** red instead. Click any preview to open it large, with a
+  1:1 view and arrow keys to step through the set.
+
+Boxes are always in the photo's true pixel space, whatever size the canvas is
+drawing.
 
 Frontend commands (run from `src/etsy_listings/ui/frontend/`):
 

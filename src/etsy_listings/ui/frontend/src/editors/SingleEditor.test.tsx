@@ -4,6 +4,8 @@ import * as calibrator from "../api/calibrator";
 import type { SingleTemplate } from "../types";
 import { SingleEditor } from "./SingleEditor";
 
+const SPACE: [number, number] = [400, 200];
+
 const CONFIG: SingleTemplate = {
   kind: "single",
   colour: null,
@@ -33,6 +35,7 @@ describe("SingleEditor", () => {
       <SingleEditor
         templateName="lifestyle-01"
         config={CONFIG}
+        space={SPACE}
         onChange={vi.fn()}
         design="bundled-grid"
         onDesignChange={vi.fn()}
@@ -48,6 +51,7 @@ describe("SingleEditor", () => {
           shade: CONFIG.shade,
         },
         "bundled-grid",
+        "editor",
       ),
     );
     await screen.findByAltText("Rendered preview");
@@ -60,6 +64,7 @@ describe("SingleEditor", () => {
       <SingleEditor
         templateName="lifestyle-01"
         config={CONFIG}
+        space={SPACE}
         onChange={onChange}
         design="bundled-grid"
         onDesignChange={vi.fn()}
@@ -80,6 +85,7 @@ describe("SingleEditor", () => {
       <SingleEditor
         templateName="lifestyle-01"
         config={CONFIG}
+        space={SPACE}
         onChange={vi.fn()}
         design="bundled-grid"
         onDesignChange={vi.fn()}

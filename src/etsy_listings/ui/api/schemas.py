@@ -52,6 +52,17 @@ class TemplateSummary(BaseModel):
     """Why it is not calibrated yet, in the words the rail shows the user
     ("no kind set", "no boxes", "1 box has no colour"). ``None`` when
     ``status`` is ``calibrated`` -- there is nothing to explain."""
+    width: int | None = None
+    height: int | None = None
+    """The template photo's **true** pixel size, or ``None`` for a directory
+    with no photo in it yet.
+
+    The editor renders its canvas downscaled (``?scale=editor``), so the
+    preview image it draws is no longer the answer to "what coordinate space
+    are these boxes in?" -- ``template.yaml`` stores them at the photo's true
+    size, and this is where the client learns what that is. Measuring the
+    displayed image instead is the bug this field exists to make impossible:
+    it would silently write every box a few times too small."""
 
 
 class AssignKindRequest(BaseModel):

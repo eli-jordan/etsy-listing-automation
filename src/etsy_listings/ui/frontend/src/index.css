@@ -322,11 +322,34 @@ input[type="checkbox"] {
    values change. The layout moves in Phase 2.
    ═══════════════════════════════════════════════════════════════════════ */
 
+/* The vendored ramps are warm: an orange accent and a green second accent,
+   and no red at all. The calibrator needs one -- a preview that is no longer
+   of the boxes on screen is the one state worth interrupting for -- so it is
+   defined here rather than invented inside the copied block, which is
+   replaced wholesale on a re-sync. Kept warm and muted so it reads as part of
+   the same palette and not as a browser default. */
+:root {
+  --color-danger: #b23a2d;
+  --color-danger-600: #99301f;
+  --color-danger-700: #7d2617;
+}
+
+.btn-danger {
+  background: var(--color-danger);
+  color: var(--color-bg);
+}
+.btn-danger:hover:not(:disabled) {
+  background: var(--color-danger-600);
+}
+.btn-danger:active:not(:disabled) {
+  background: var(--color-danger-700);
+}
+
 /* The design system's `.btn` is transparent until a variant class lands on it,
    which is right for a system and wrong for a page: the calibrator's action
    buttons are plain `<button>`s, and a transparent button is indistinguishable
    from a label. Anything unclassed therefore falls back to the secondary
-   treatment. `:not([class])` and not `button` alone, so `.filmstrip__item`,
+   treatment. `:not([class])` and not `button` alone, so `.seg-opt`,
    `.btn-primary` and friends keep their own look. */
 button:not([class]) {
   border-color: var(--color-divider);
@@ -554,29 +577,6 @@ button:not([class]):active:not(:disabled) {
   color: var(--color-accent);
 }
 
-.app__filmstrip {
-  display: flex;
-  gap: var(--space-2);
-  margin: var(--space-4) 0;
-}
-
-.filmstrip__item {
-  padding: var(--space-1) var(--space-3);
-  border: 1px solid var(--color-divider);
-  background: var(--color-neutral-100);
-}
-
-.filmstrip__item:hover {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-}
-
-.filmstrip__item--active {
-  background: var(--color-accent);
-  border-color: var(--color-accent);
-  color: var(--color-bg);
-  font-weight: 600;
-}
-
 /* The canvas takes what is left; the inspector is a fixed 250px, as 2a draws
    it -- the controls do not get more useful when they get wider. */
 .app__main {
@@ -748,6 +748,15 @@ button:not([class]):active:not(:disabled) {
   padding: var(--space-3);
 }
 
+/* The panel stays mounted while the Calibrate tab is in front, so that
+   flicking between tabs does not throw away renders that cost real seconds --
+   which means it has to actually hide. `display: flex` above beats the user
+   agent's `[hidden] { display: none }`, since an author rule always does, so
+   the hidden case has to be stated here or the tab does nothing at all. */
+.preview-grid[hidden] {
+  display: none;
+}
+
 .preview-grid__head {
   display: flex;
   align-items: center;
@@ -767,10 +776,130 @@ button:not([class]):active:not(:disabled) {
   color: var(--color-accent-700);
 }
 
-/* The approve action sits at the end of the row, past the progress. */
-.preview-grid__head .btn {
+/* The actions sit at the end of the row, past the progress and the banners. */
+.preview-grid__actions {
   margin-left: auto;
+  display: flex;
+  gap: var(--space-2);
+}
+
+.preview-grid__head .btn {
   font-size: 12px;
+}
+
+.preview-grid__empty {
+  margin: 0;
+  max-width: 60ch;
+  font-size: 12px;
+  line-height: 1.5;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+/* A tile is a button so that opening it large is reachable by keyboard as
+   well as by click -- the large view is where a render is actually judged. */
+.preview-grid__open {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  border-radius: var(--radius-md);
+  cursor: zoom-in;
+}
+
+.preview-grid__open img {
+  display: block;
+  width: 100%;
+  border-radius: var(--radius-md);
+}
+
+/* One output, so the tile is the panel rather than a lonely thumbnail in a
+   four-column grid. */
+.preview-grid--single .preview-grid__tiles {
+  grid-template-columns: 1fr;
+}
+
+.preview-grid--single .gallery__item {
+  width: auto;
+}
+
+/* — the large view — */
+.lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  background: color-mix(in srgb, var(--color-neutral-900) 90%, transparent);
+}
+
+.lightbox__bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--color-bg);
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+
+.lightbox__label {
+  font-weight: 600;
+}
+
+.lightbox__count {
+  color: color-mix(in srgb, var(--color-bg) 65%, transparent);
+}
+
+.lightbox__actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+}
+
+.lightbox__actions button {
+  font-family: var(--font-body);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid color-mix(in srgb, var(--color-bg) 35%, transparent);
+  background: transparent;
+  color: var(--color-bg);
+  cursor: pointer;
+}
+
+.lightbox__actions button:hover {
+  background: color-mix(in srgb, var(--color-bg) 15%, transparent);
+}
+
+.lightbox__stage {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+.lightbox__image {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+}
+
+/* 1:1. Fit-to-screen has the browser downsampling a 4000px render, which is
+   the one thing guaranteed to hide a resampling artefact -- so the true-pixel
+   view scrolls rather than shrinking. */
+.lightbox__stage--actual {
+  overflow: auto;
+  align-items: flex-start;
+  justify-content: flex-start;
+}
+
+.lightbox__stage--actual .lightbox__image {
+  max-width: none;
+  max-height: none;
+  object-fit: none;
 }
 
 .preview-grid__tiles {
@@ -787,9 +916,55 @@ button:not([class]):active:not(:disabled) {
 .app__preview-bar {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  /* Wraps rather than overflowing. `.app__preview` clips, so a third control
+     in this row -- the colour select -- pushed the view tabs out of reach
+     entirely on a narrow window rather than merely looking cramped. */
+  flex-wrap: wrap;
   gap: var(--space-2);
-  padding: var(--space-2) var(--space-3) 0;
+  /* Bottom padding as well as top: with none, the tab pill sat directly on
+     the edge of the photograph, which read as a rendering fault rather than a
+     control. */
+  padding: var(--space-2) var(--space-3);
+}
+
+/* A labelled control in the bar -- currently just the colour select. The
+   label is small and quiet: it disambiguates a dropdown reading "black" next
+   to two view tabs, and is not itself worth looking at. */
+.app__bar-field {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 11px;
+}
+
+.app__bar-field > span {
+  font-family: var(--font-body);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.app__bar-field select {
+  min-height: 30px;
+  padding: 3px 12px;
+  font-size: 12px;
+}
+
+/* Pushed to the far end. Was `justify-content: space-between` on the bar,
+   which stopped working once a third control landed between the two. */
+.app__outline-toggle {
+  margin-left: auto;
+}
+
+/* Same box as the canvas it stands in for, so switching template does not
+   collapse the pane to a line of text and bounce the page. */
+.app__loading {
+  margin: 0;
+  padding: var(--space-6) var(--space-3);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  font-size: 12px;
 }
 
 /* `.seg-opt` styles the checked state through `:has(input:checked)`, which
@@ -824,20 +999,6 @@ button:not([class]):active:not(:disabled) {
   font-size: 12px;
   padding: 5px 12px;
   box-shadow: var(--shadow-md);
-}
-
-.quad-editor__readout {
-  position: absolute;
-  top: var(--space-2);
-  left: var(--space-3);
-  font-size: 10px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--color-bg);
-  background: color-mix(in srgb, var(--color-neutral-900) 65%, transparent);
-  padding: 3px 8px;
-  border-radius: 999px;
-  line-height: 1.4;
 }
 
 .quad-editor__menu {

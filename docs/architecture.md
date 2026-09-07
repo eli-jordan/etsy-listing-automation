@@ -185,10 +185,13 @@ forward-slashed, so a Windows machine and a Linux runner agree.
 
 ```mermaid
 graph LR
-    Browser["React app<br/>quad handles + sliders"] -->|"POST /preview<br/>(debounced)"| API["ui/api"]
-    API --> RenderPipe["render.pipeline<br/><i>the same code apply runs</i>"]
-    RenderPipe -->|PNG| Browser
-    Browser -->|"PUT /config"| API
+    Canvas["Calibrate tab<br/>quad handles + sliders"] -->|"POST /preview?scale=editor<br/>(debounced)"| API["ui/api"]
+    Tab["Preview tab<br/><i>on demand</i>"] -->|"POST /preview?scale=full"| API
+    API --> Cache["ui.api.imagecache<br/><i>decoded photo, design, maps</i>"]
+    Cache --> RenderPipe["render.pipeline<br/><i>the same code apply runs</i>"]
+    RenderPipe -->|WebP| Canvas
+    RenderPipe -->|PNG| Tab
+    Canvas -->|"PUT /config"| API
     API -->|writes| Yaml["mockup-templates/&lt;set&gt;/template.yaml"]
     Yaml -->|read by| Stage["engine render stage"]
 ```
@@ -204,6 +207,48 @@ what its derived maps cache under, and both composite through
 `render_scene()`. The one thing the preview does differently is where its
 geometry comes from — the unsaved boxes under the user's cursor, not the file
 on disk — which is exactly the difference that makes it a preview.
+
+### Two sizes, one pipeline
+
+A drag emits a preview request every few frames, and at a real garment photo's
+resolution each one re-decoded the mockup PNG and the design PNG from disk,
+warped at full size, and PNG-encoded several megabytes — seconds of work per
+frame, for an image about to be replaced. So the two things a preview is *for*
+were separated:
+
+| | Calibrate tab | Preview tab |
+|---|---|---|
+| Request | `?scale=editor` | `?scale=full` |
+| Base | downscaled to `EDITOR_MAX_EDGE` (900px) | the photo's own size |
+| Encoding | WebP, low effort | `encode_png`, as `apply` writes |
+| When | debounced, one in flight at a time | on opening the tab, then only on Re-render |
+
+Both run `render_scene()` over the same photo and derived maps. What differs
+is how many pixels the server is asked to spend, which is why the fast one is
+still honest: it is the output, at a size you can drag against.
+
+The Preview tab renders itself on first sight and then holds still. A config
+edit afterwards does not re-run it — a full-size set is minutes of work, and a
+nudged box is not a request for it — but it must not silently become a picture
+of geometry that has moved on either, so Re-render turns red. The panel stays
+mounted behind the canvas rather than unmounting, or flicking between tabs
+would throw the renders away and "there is none, so render" would fire on a
+set that had just been rendered.
+
+Two consequences worth knowing:
+
+- **Bounding boxes stay in the photo's true pixel space.** `template.yaml`
+  stores them there, so the endpoint scales them (and `displace.strength`,
+  which is denominated in absolute pixels) onto the smaller canvas, and the
+  client is *told* the true size in `TemplateSummary.width`/`height` rather
+  than measuring the image it is drawing over. Measuring it would save every
+  box a few times too small, with nothing on screen looking wrong.
+- **`ui.api.imagecache` memoises what the loop re-reads** — the decoded photo
+  at each size, the decoded design, and the derived maps — keyed on path and
+  mtime, bounded by total bytes rather than entry count. It sits in `ui`, not
+  in `render.io`: the render stage reads each file once per run and needs no
+  cache, and giving it one would put mutable process state under the pure
+  layer for nobody's benefit.
 
 ## Testing layers
 

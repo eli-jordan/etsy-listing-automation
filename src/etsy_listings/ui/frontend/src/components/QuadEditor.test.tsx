@@ -4,6 +4,11 @@ import { must } from "../test/helpers";
 import type { BoundingBox } from "../types";
 import { QuadEditor } from "./QuadEditor";
 
+/** The template photo's true pixel size. `loadImage()` stubs the *displayed*
+ * image at the same size, so every geometric expectation below reads the same
+ * as it did when the overlay measured the image instead of being told. */
+const SPACE: [number, number] = [400, 200];
+
 const BOX_A: BoundingBox = [
   { x: 0, y: 0 },
   { x: 100, y: 0 },
@@ -29,6 +34,7 @@ describe("QuadEditor", () => {
     const { container } = render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A]}
         selectedIndex={0}
         onSelect={vi.fn()}
@@ -38,10 +44,32 @@ describe("QuadEditor", () => {
     expect(container.querySelector(".quad-editor__overlay")).toBeNull();
   });
 
+  it("puts the overlay in the template's space, not the displayed image's", () => {
+    // The editor's canvas is a *downscaled* render, so the two differ. If the
+    // overlay ever measured the image again, every box dragged on a real
+    // template would be saved several times too small -- and nothing on
+    // screen would look wrong while it happened.
+    const { container } = render(
+      <QuadEditor
+        imageUrl="preview.webp"
+        space={[4000, 5000]}
+        boxes={[BOX_A]}
+        selectedIndex={0}
+        onSelect={vi.fn()}
+        onChangeBox={vi.fn()}
+      />,
+    );
+    loadImage(); // reports a 400x200 image
+    expect(must(container.querySelector(".quad-editor__overlay")).getAttribute("viewBox")).toBe(
+      "0 0 4000 5000",
+    );
+  });
+
   it("renders one box group per box, once loaded", () => {
     const { container } = render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A, BOX_B]}
         selectedIndex={0}
         onSelect={vi.fn()}
@@ -57,6 +85,7 @@ describe("QuadEditor", () => {
     const { container } = render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A, BOX_B]}
         selectedIndex={0}
         onSelect={onSelect}
@@ -73,6 +102,7 @@ describe("QuadEditor", () => {
     const { container } = render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A, BOX_B]}
         selectedIndex={1}
         onSelect={vi.fn()}
@@ -92,6 +122,7 @@ describe("QuadEditor", () => {
     render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A]}
         selectedIndex={0}
         onSelect={vi.fn()}
@@ -115,6 +146,7 @@ describe("QuadEditor", () => {
     render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A]}
         selectedIndex={0}
         onSelect={vi.fn()}
@@ -176,6 +208,7 @@ describe("QuadEditor", () => {
       render(
         <QuadEditor
           imageUrl="preview.png"
+          space={SPACE}
           boxes={[BOX_A]}
           selectedIndex={0}
           onSelect={vi.fn()}
@@ -244,6 +277,7 @@ describe("QuadEditor", () => {
       render(
         <QuadEditor
           imageUrl="preview.png"
+          space={SPACE}
           boxes={[BOX_A]}
           selectedIndex={0}
           onSelect={vi.fn()}
@@ -264,6 +298,7 @@ describe("QuadEditor", () => {
     render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A]}
         selectedIndex={0}
         onSelect={vi.fn()}
@@ -309,6 +344,7 @@ describe("sliding a whole box", () => {
     const { container } = render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A, BOX_B]}
         selectedIndex={0}
         onSelect={onSelect}
@@ -375,6 +411,7 @@ describe("the on-canvas box captions", () => {
     const view = render(
       <QuadEditor
         imageUrl="preview.png"
+        space={SPACE}
         boxes={[BOX_A, BOX_B]}
         selectedIndex={0}
         onSelect={vi.fn()}
@@ -442,5 +479,141 @@ describe("the on-canvas box captions", () => {
     const { container } = renderLabelled({ outlines: "selected" });
     expect(container.querySelectorAll(".quad-editor__label")).toHaveLength(1);
     expect(screen.getByRole("button", { name: "black" })).toBeInTheDocument();
+  });
+});
+
+describe("resizing a box from a corner", () => {
+  let restore = () => {};
+  beforeEach(() => {
+    restore = stubSvgGeometry();
+  });
+  afterEach(() => restore());
+
+  /** BOX_A is the unit square scaled to 100 -- corners at (0,0), (100,0),
+   * (100,100), (0,100) -- so a factor of `f` about the opposite corner lands
+   * on numbers you can read straight off the assertion. */
+  function renderResizable(onChangeBox = vi.fn()) {
+    const { container } = render(
+      <QuadEditor
+        imageUrl="preview.png"
+        space={SPACE}
+        boxes={[BOX_A]}
+        selectedIndex={0}
+        onSelect={vi.fn()}
+        onChangeBox={onChangeBox}
+      />,
+    );
+    loadImage();
+    return container;
+  }
+
+  const overlay = (container: HTMLElement) =>
+    must(container.querySelector(".quad-editor__overlay"));
+
+  /** Grabs the bottom-right handle, whose opposite corner is the origin. */
+  const grabBottomRight = (container: HTMLElement) =>
+    fireEvent.pointerDown(must(container.querySelectorAll(".quad-editor__handle")[2]), {
+      button: 0,
+      clientX: 100,
+      clientY: 100,
+      pointerId: 1,
+    });
+
+  it("plain-drags one corner and leaves the other three alone", () => {
+    const onChangeBox = vi.fn();
+    const container = renderResizable(onChangeBox);
+    grabBottomRight(container);
+    fireEvent.pointerMove(overlay(container), { clientX: 160, clientY: 40 });
+
+    expect(onChangeBox).toHaveBeenLastCalledWith(0, [
+      { x: 0, y: 0 },
+      { x: 100, y: 0 },
+      { x: 160, y: 40 },
+      { x: 0, y: 100 },
+    ]);
+  });
+
+  it("shift-drag scales the whole box about the opposite corner", () => {
+    const onChangeBox = vi.fn();
+    const container = renderResizable(onChangeBox);
+    grabBottomRight(container);
+    // Straight out along the diagonal to (200, 200): twice as far from the
+    // anchor at the origin, so every corner doubles.
+    fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
+
+    expect(onChangeBox).toHaveBeenLastCalledWith(0, [
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+      { x: 200, y: 200 },
+      { x: 0, y: 200 },
+    ]);
+  });
+
+  it("shift-drag keeps the shape when the pointer leaves the diagonal", () => {
+    const onChangeBox = vi.fn();
+    const container = renderResizable(onChangeBox);
+    grabBottomRight(container);
+    // Half-way along the diagonal, then well off it sideways. Only the
+    // projection counts, so the box is still square -- which is the whole
+    // promise of the gesture.
+    fireEvent.pointerMove(overlay(container), { clientX: 100, clientY: 0, shiftKey: true });
+
+    const [, box] = must(onChangeBox.mock.calls.at(-1)) as [number, typeof BOX_A];
+    const width = box[1].x - box[0].x;
+    const height = box[3].y - box[0].y;
+    expect(width).toBeCloseTo(height);
+    expect(width).toBeCloseTo(50);
+  });
+
+  it("alt-drag scales about the box's own centre", () => {
+    const onChangeBox = vi.fn();
+    const container = renderResizable(onChangeBox);
+    grabBottomRight(container);
+    // The centre is (50,50) and the grabbed corner is 50 away on each axis;
+    // dragging to (150,150) doubles that distance, so the box doubles around
+    // the centre and its top-left goes negative.
+    fireEvent.pointerMove(overlay(container), { clientX: 150, clientY: 150, altKey: true });
+
+    expect(onChangeBox).toHaveBeenLastCalledWith(0, [
+      { x: -50, y: -50 },
+      { x: 150, y: -50 },
+      { x: 150, y: 150 },
+      { x: -50, y: 150 },
+    ]);
+  });
+
+  it("will not shrink a box past the point of having corners to grab", () => {
+    const onChangeBox = vi.fn();
+    const container = renderResizable(onChangeBox);
+    grabBottomRight(container);
+    // Dragged past the anchor entirely, which would otherwise invert the box.
+    fireEvent.pointerMove(overlay(container), { clientX: -400, clientY: -400, shiftKey: true });
+
+    const [, box] = must(onChangeBox.mock.calls.at(-1)) as [number, typeof BOX_A];
+    expect(box[2].x).toBeGreaterThan(0);
+    expect(box[2].y).toBeGreaterThan(0);
+  });
+
+  it("scales from the box as it was when the gesture started, not compounding", () => {
+    const onChangeBox = vi.fn();
+    const container = renderResizable(onChangeBox);
+    grabBottomRight(container);
+    fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
+    fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
+
+    // Same pointer position twice means the same box twice. Derived from the
+    // live box instead, the second move would have doubled the doubling.
+    const calls = onChangeBox.mock.calls;
+    expect(calls.at(-1)).toEqual(calls.at(-2));
+  });
+
+  it("puts nothing over the photograph to explain itself", () => {
+    /* The gesture hint and the "box N selected" readout both used to sit in
+     * pills on the canvas. This view exists to be looked at, and the box
+     * wearing handles is already the answer to which one is selected. */
+    const container = renderResizable();
+    expect(container.querySelector(".quad-editor__status")).toBeNull();
+    expect(container.querySelector(".quad-editor__hint")).toBeNull();
+    expect(container.querySelector(".quad-editor__readout")).toBeNull();
   });
 });
