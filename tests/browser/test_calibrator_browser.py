@@ -346,10 +346,15 @@ class TestColourMatrixKind:
 
 
 class TestMultipleKind:
-    def test_placements_panel_lists_every_placement(self, page) -> None:  # noqa: ANN001
+    """A chart's boxes are edited entirely on the photo now -- there is no
+    bounding-box panel. Everything the panel offered was already on the canvas
+    except assigning a colour, and that is a caption on the box itself."""
+
+    def test_every_placement_is_a_box_with_its_colour_written_on_it(self, page) -> None:  # noqa: ANN001
         _select_template(page, MULTIPLE_TEMPLATE)
-        page.wait_for_selector(".placements-panel__item")
-        assert page.locator(".placements-panel__item").count() == 2
+        page.wait_for_selector(".quad-editor__box")
+        assert page.locator(".quad-editor__box").count() == 2
+        assert page.locator(".quad-editor__label").count() == 2
 
     def test_preview_is_the_full_composite_at_the_scene_pixel_size(self, page) -> None:  # noqa: ANN001
         _select_template(page, MULTIPLE_TEMPLATE)
@@ -367,16 +372,18 @@ class TestMultipleKind:
         boxes = page.locator(".quad-editor__box")
         assert boxes.count() == 2
         boxes.nth(1).click()
-        assert "placements-panel__item--active" in (
-            page.locator(".placements-panel__item").nth(1).get_attribute("class") or ""
-        )
+        # The readout is the canvas's own answer to "which one am I editing?",
+        # now that no panel repeats it. inner_text() is the *rendered* text and
+        # the readout is uppercased in CSS, so compare without the casing.
+        readout = page.locator(".quad-editor__readout").inner_text().lower()
+        assert readout.startswith("box 2 selected")
 
-    def test_duplicate_adds_a_third_placement(self, page) -> None:  # noqa: ANN001
+    def test_duplicate_from_the_box_menu_adds_a_third(self, page) -> None:  # noqa: ANN001
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
-        page.get_by_role("button", name="Duplicate").click()
-        assert page.locator(".placements-panel__item").count() == 3
-        assert page.locator(".quad-editor__box").count() == 3
+        page.locator(".quad-editor__polygon").first.click(button="right")
+        page.get_by_role("menuitem", name="Duplicate").click()
+        page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 3")
 
     def test_adding_a_box_from_the_canvas_selects_it(self, page) -> None:  # noqa: ANN001
         """2a puts Add box *on* the photo: a new box lands selected and
@@ -384,18 +391,19 @@ class TestMultipleKind:
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         page.get_by_role("button", name="+ Add box").click()
-        page.wait_for_selector(".quad-editor__box:nth-of-type(3)")
-        assert page.locator(".placements-panel__item").count() == 3
-        assert "3 · new box" in page.locator(".placements-panel__item").nth(2).inner_text()
+        page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 3")
+        readout = page.locator(".quad-editor__readout").inner_text().lower()
+        assert readout.startswith("box 3 selected")
+        # A box with no colour yet says so, in place, rather than leaving you
+        # to work out which row of a list it was.
+        assert page.locator(".quad-editor__label--empty").count() == 1
 
     def test_the_delete_key_removes_the_selected_box(self, page) -> None:  # noqa: ANN001
         _select_template(page, MULTIPLE_TEMPLATE)
         page.wait_for_selector(".quad-editor__box")
         page.locator(".quad-editor").click(position={"x": 5, "y": 5})
         page.keyboard.press("Delete")
-        page.wait_for_function(
-            "() => document.querySelectorAll('.placements-panel__item').length === 1"
-        )
+        page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 1")
 
     def test_right_clicking_a_box_opens_its_menu(self, page) -> None:  # noqa: ANN001
         _select_template(page, MULTIPLE_TEMPLATE)
@@ -414,14 +422,20 @@ class TestMultipleKind:
         # render, not for giving up the ability to fix it.
         page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 1")
         assert page.locator(HANDLE).count() == 4
+        # The captions are chrome too, so they go with the outlines.
+        assert page.locator(".quad-editor__label").count() == 1
 
-    def test_saving_writes_every_placement(  # noqa: ANN001
+    def test_a_colour_typed_on_the_box_reaches_template_yaml(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
+        """The one thing the panel could do that the canvas could not. The
+        caption *is* the field now: click it, type, and it is that placement's
+        colour."""
         _select_template(page, MULTIPLE_TEMPLATE)
-        page.wait_for_selector(".placements-panel__item")
-        page.get_by_role("button", name="+ Add").click()
-        page.get_by_label("Colour").fill("ivory")
+        page.wait_for_selector(".quad-editor__box")
+        page.get_by_role("button", name="+ Add box").click()
+        page.locator(".quad-editor__label--empty").click()
+        page.get_by_label("Colour for box 3").fill("ivory")
 
         save_log = TrafficLog(page, "/config")
         page.get_by_role("button", name="Save template.yaml").click()
@@ -433,63 +447,106 @@ class TestMultipleKind:
         assert len(saved["placements"]) == 3
         assert saved["placements"][-1]["colour"] == "ivory"
 
-    def test_editing_a_corner_by_number_writes_that_corner(  # noqa: ANN001
+
+# --- moving a whole box, in every editor ---------------------------------
+
+
+class TestMovingABox:
+    """Getting a box to the right *place* is the commonest move there is, and
+    until now the only way to do it was to drag four corners the same distance
+    by eye. Both gestures work in every editor, so one is proven on a colour
+    set and the other on a chart."""
+
+    def test_dragging_a_box_moves_every_corner_by_the_same_delta(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
-        """The wireframe drew x/y/w/h. A box is a quad (PRD), so the panel
-        shows four corners -- and this proves the number reaches the file."""
-        _select_template(page, MULTIPLE_TEMPLATE)
-        page.wait_for_selector(".placements-panel__item")
-        page.get_by_label("Corner 1 x").fill("123")
+        original = _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["bounding_box"]
+        _select_template(page, COLOUR_MATRIX_TEMPLATE)
+        page.wait_for_selector(HANDLE)
+
+        # Press in the middle, well away from any corner handle, and slide.
+        area = page.locator(".quad-editor__polygon").first.bounding_box()
+        assert area is not None
+        centre = (area["x"] + area["width"] / 2, area["y"] + area["height"] / 2)
+        page.mouse.move(*centre)
+        page.mouse.down()
+        page.mouse.move(centre[0] + 60, centre[1] + 40, steps=10)
+        page.mouse.up()
 
         save_log = TrafficLog(page, "/config")
         page.get_by_role("button", name="Save template.yaml").click()
         save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
         page.wait_for_selector("text=saved")
 
-        saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)
-        assert saved["placements"][0]["bounding_box"][0]["x"] == 123
+        saved = _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["bounding_box"]
+        moved = {
+            (round(after["x"] - before["x"]), round(after["y"] - before["y"]))
+            for before, after in zip(original, saved, strict=True)
+        }
+        # One delta shared by all four corners: the box moved, and kept its
+        # shape. Four separate corner drags never gave that.
+        assert len(moved) == 1
+        assert moved != {(0, 0)}
 
-
-# --- creating a new template through the upload flow ---------------------
-
-
-class TestUploadCreatesEachKind:
-    """The plan's explicit ask: browser automation validating that each kind
-    can actually be *created* through the calibrator, not just edited once it
-    already exists.
-
-    The flow has two steps now (wireframe 2a): photos in, then the kind picker
-    takes over the workspace and asks what they are.
-    """
-
-    def _upload(self, page, name: str, sources: list[Path]) -> None:  # noqa: ANN001
-        """Upload, and wait for the kind picker rather than for an 'uploaded'
-        message: a successful upload selects the new template, which has no
-        config, so the picker takes over the workspace immediately -- taking
-        the upload form and its status text with it. The picker appearing *is*
-        the confirmation."""
-        log = TrafficLog(page, "/api/templates")
-        page.wait_for_selector(".upload-form")
-        name_field = page.get_by_label("Name")
-        name_field.fill(name)
-        # The form refuses to upload without a name, so if the field somehow
-        # did not take, say *that* rather than timing out on a request that was
-        # never going to be sent.
-        assert name_field.input_value() == name
-
-        page.locator(".upload-form input[type=file]").set_input_files([str(s) for s in sources])
-        log.wait_for(lambda r: _method(r) == "POST" and r.status == 200)
-        page.wait_for_selector(".kind-picker")
-
-    def test_uploading_a_single_photo_creates_a_single_kind_template(  # noqa: ANN001
+    def test_arrow_keys_nudge_the_selected_box(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
-        source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
-        assert source.is_file()
+        original = _template_config(workspace_root, MULTIPLE_TEMPLATE)["placements"][0]
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(HANDLE)
+        page.locator(".quad-editor").click(position={"x": 5, "y": 5})
+        page.keyboard.press("ArrowRight")
+        page.keyboard.press("ArrowRight")
+        page.keyboard.press("Shift+ArrowDown")
 
-        self._upload(page, "lifestyle-01", [source])
-        assert _selected_template(page) == "lifestyle-01"
+        save_log = TrafficLog(page, "/config")
+        page.get_by_role("button", name="Save template.yaml").click()
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+        page.wait_for_selector("text=saved")
+
+        saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)["placements"][0]
+        deltas = {
+            (round(after["x"] - before["x"]), round(after["y"] - before["y"]))
+            for before, after in zip(original["bounding_box"], saved["bounding_box"], strict=True)
+        }
+        # Two single-pixel steps right, one fast step down.
+        assert deltas == {(2, 8)}
+
+
+# --- giving a folder of photos a kind ------------------------------------
+
+
+class TestKindPickerCreatesEachKind:
+    """The plan's explicit ask: browser automation validating that each kind
+    can actually be *calibrated* from scratch, not just edited once it already
+    has a template.yaml.
+
+    A template is a folder of photos the user puts in the workspace -- the
+    calibrator does not create them -- so these put the folder there and start
+    where the calibrator starts: the kind picker taking over the workspace.
+    """
+
+    def _open_picker(self, page, workspace_root: Path, name: str, files: dict[str, Path]) -> None:  # noqa: ANN001
+        folder = workspace_root / "mockup-templates" / name
+        folder.mkdir()
+        for filename, source in files.items():
+            (folder / filename).write_bytes(source.read_bytes())
+        page.reload()
+        _select_template(page, name)
+        page.wait_for_selector(".kind-picker")
+        assert _selected_template(page) == name
+
+    def _source(self, workspace_root: Path, colour: str = "black") -> Path:
+        source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / f"{colour}.png"
+        assert source.is_file()
+        return source
+
+    def test_one_photo_becomes_a_single_kind_template(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        self._open_picker(
+            page, workspace_root, "lifestyle-01", {"black.png": self._source(workspace_root)}
+        )
 
         page.get_by_role("radio", name="Single one photo, one garment").check()
         kind_log = TrafficLog(page, "/kind")
@@ -504,17 +561,38 @@ class TestUploadCreatesEachKind:
 
         saved = _template_config(workspace_root, "lifestyle-01")
         assert saved["kind"] == "single"
-        # PRD 28: a scene kind uses the fixed filename, so the upload's own
-        # name is gone by now.
+        # PRD 28: a scene kind uses the fixed filename, so whatever the folder
+        # called its photo is gone by now.
         assert (workspace_root / "mockup-templates" / "lifestyle-01" / "scene.png").is_file()
         assert not (workspace_root / "mockup-templates" / "lifestyle-01" / "black.png").exists()
 
-    def test_uploading_two_photos_creates_a_colour_matrix_template(  # noqa: ANN001
+    def test_a_single_kind_template_can_hide_its_placement_outline(  # noqa: ANN001
         self, page, workspace_root: Path
     ) -> None:
-        base_dir = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE
-        self._upload(page, "flat-lay-02", [base_dir / "black.png", base_dir / "ivory.png"])
-        assert _selected_template(page) == "flat-lay-02"
+        """One box, always selected: without the toggle there was no way to
+        get the outline and its four handles off the artwork being judged."""
+        self._open_picker(
+            page, workspace_root, "lifestyle-02", {"black.png": self._source(workspace_root)}
+        )
+        page.get_by_role("button", name="Start calibrating →").click()
+        page.wait_for_selector(HANDLE)
+
+        page.get_by_label("show placement outline").uncheck()
+        page.wait_for_function("() => document.querySelectorAll('.quad-editor__box').length === 0")
+        assert page.locator(HANDLE).count() == 0
+
+    def test_two_photos_become_a_colour_matrix_template(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        self._open_picker(
+            page,
+            workspace_root,
+            "flat-lay-02",
+            {
+                "black.png": self._source(workspace_root),
+                "ivory.png": self._source(workspace_root, "ivory"),
+            },
+        )
 
         # The picker reports what each filename will be taken as (PRD 7a)
         # before anything is committed.
@@ -539,13 +617,13 @@ class TestUploadCreatesEachKind:
         Two photos, not one: a single-photo set cannot be a colour matrix at
         all now, so the report it belongs to is not on screen for one.
         """
-        source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
-        messy = workspace_root / "Heather Grey.png"
-        messy.write_bytes(source.read_bytes())
-        clean = workspace_root / "forest.png"
-        clean.write_bytes(source.read_bytes())
-
-        self._upload(page, "flat-lay-03", [messy, clean])
+        source = self._source(workspace_root)
+        self._open_picker(
+            page,
+            workspace_root,
+            "flat-lay-03",
+            {"Heather Grey.png": source, "forest.png": source},
+        )
         page.wait_for_selector(".kind-picker__warn")
         assert "not a colour slug" in page.locator(".kind-picker__warn").inner_text()
 
@@ -555,12 +633,12 @@ class TestUploadCreatesEachKind:
         """One photo per colour, over one photo, is a matrix of one -- which is
         what `single` already is. Worse, it names the colour after the
         filename, so `photo.png` became a garment colour called "photo"."""
-        source = workspace_root / "mockup-templates" / COLOUR_MATRIX_TEMPLATE / "black.png"
-        lone = workspace_root / "just-the-one.png"
-        lone.write_bytes(source.read_bytes())
-
-        self._upload(page, "flat-lay-04", [lone])
-        page.wait_for_selector(".kind-picker")
+        self._open_picker(
+            page,
+            workspace_root,
+            "flat-lay-04",
+            {"just-the-one.png": self._source(workspace_root)},
+        )
 
         colour_matrix = page.locator('.kind-picker input[value="colour-matrix"]')
         assert colour_matrix.is_disabled()

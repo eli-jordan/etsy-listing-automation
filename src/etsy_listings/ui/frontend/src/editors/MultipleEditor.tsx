@@ -1,5 +1,4 @@
 import { useCallback, useMemo, useState } from "react";
-import { PlacementsPanel } from "../components/PlacementsPanel";
 import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
@@ -35,10 +34,25 @@ function boxExtent(box: BoundingBox): string {
   return `${width} × ${height}`;
 }
 
+/** The same rule the server uses for `TemplateSummary.status_reason`, so the
+ * canvas and the rail can never disagree about whether this is finished. */
+function uncolouredWarning(placements: Placement[]): string | null {
+  const count = placements.filter((p) => !p.colour.trim()).length;
+  if (count === 0) return null;
+  const [noun, verb] = count === 1 ? ["box", "has"] : ["boxes", "have"];
+  return `${count} ${noun} ${verb} no colour — can't mark calibrated yet`;
+}
+
 /**
  * The one output *is* the live composite of every placement, so there's no
  * separate gallery need here (unlike colour-matrix kind) -- the main preview
  * already shows everything at once.
+ *
+ * There is no bounding-box list panel any more. Everything it offered was
+ * already reachable on the photo -- select, add, duplicate, reorder, delete,
+ * drag -- except assigning a colour, and a colour is now a caption on the box
+ * itself. A panel that duplicates the canvas is a second place to look and a
+ * second place to be wrong about which box is which.
  */
 export function MultipleEditor({
   templateName,
@@ -75,17 +89,22 @@ export function MultipleEditor({
     [config, onChange],
   );
 
-  const handlePlacementsChange = useCallback(
-    (placements: Placement[]) => onChange({ ...config, placements }),
+  const handleColourChange = useCallback(
+    (index: number, colour: string) =>
+      onChange({
+        ...config,
+        placements: config.placements.map((p, i) => (i === index ? { ...p, colour } : p)),
+      }),
     [config, onChange],
   );
 
   const clampedIndex = Math.min(selectedIndex, Math.max(config.placements.length - 1, 0));
   const selected = config.placements[clampedIndex];
+  const warning = uncolouredWarning(config.placements);
 
-  /** The box-editing operations live on the panel, and the canvas reaches
-   * them through here -- one implementation, whether you used the right-click
-   * menu, the Delete key or the button. */
+  /** The box-editing operations, reached from the canvas -- one
+   * implementation, whether you used the right-click menu, the Delete key or
+   * the button. */
   const mutate = useCallback(
     (fn: (placements: Placement[]) => { placements: Placement[]; select: number }) => {
       const result = fn(config.placements);
@@ -104,8 +123,10 @@ export function MultipleEditor({
         // one, so a new box is never hidden exactly under its source.
         const bounding_box = source
           ? (source.bounding_box.map((p) => ({
-              x: p.x + (Math.max(...source.bounding_box.map((q) => q.x)) -
-                Math.min(...source.bounding_box.map((q) => q.x))),
+              x:
+                p.x +
+                (Math.max(...source.bounding_box.map((q) => q.x)) -
+                  Math.min(...source.bounding_box.map((q) => q.x))),
               y: p.y,
             })) as BoundingBox)
           : CENTRED_BOX;
@@ -191,6 +212,10 @@ export function MultipleEditor({
               onDuplicateSelected={duplicateSelected}
               onBringSelectedToFront={bringToFront}
               outlines={showOutlines ? "all" : "selected"}
+              labels={config.placements.map((p) => p.colour)}
+              onLabelChange={handleColourChange}
+              labelPlaceholder="assign colour…"
+              labelSuggestions={knownColours}
               selectedLabel={
                 selected
                   ? `box ${clampedIndex + 1} selected · ${boxExtent(selected.bounding_box)}`
@@ -201,6 +226,7 @@ export function MultipleEditor({
         ) : (
           <p>Loading preview…</p>
         )}
+        {warning && <p className="app__warn">{warning}</p>}
       </div>
 
       <aside className="app__controls">
@@ -214,13 +240,6 @@ export function MultipleEditor({
           shade={config.shade}
           onDisplaceChange={(displace) => onChange({ ...config, displace })}
           onShadeChange={(shade) => onChange({ ...config, shade })}
-        />
-        <PlacementsPanel
-          placements={config.placements}
-          selectedIndex={clampedIndex}
-          onSelect={setSelectedIndex}
-          onChange={handlePlacementsChange}
-          knownColours={knownColours}
         />
       </aside>
     </main>

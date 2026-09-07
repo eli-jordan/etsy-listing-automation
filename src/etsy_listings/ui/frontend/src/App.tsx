@@ -2,7 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getTemplateConfig, listTemplates, saveTemplateConfig } from "./api/calibrator";
 import { KindPicker } from "./components/KindPicker";
 import { TemplateRail } from "./components/TemplateRail";
-import { UploadForm } from "./components/UploadForm";
 import { ColourMatrixEditor } from "./editors/ColourMatrixEditor";
 import { MultipleEditor } from "./editors/MultipleEditor";
 import { SingleEditor } from "./editors/SingleEditor";
@@ -48,7 +47,7 @@ export function App() {
   // whose name has not changed but which now has a template.yaml.
   const [configVersion, setConfigVersion] = useState(0);
 
-  // Refreshes overlap: uploading fires one and assigning a kind fires another
+  // Refreshes overlap: assigning a kind fires one and saving fires another
   // moments later. They are separate requests, so the *older* can resolve
   // last -- putting the pre-assignment list back and reverting the template to
   // "no kind set" on screen while the file on disk says otherwise. The
@@ -151,9 +150,7 @@ export function App() {
             <span className="app__crumb-sep">/</span>
             <span className="app__crumb">{selected.name}</span>
             <span
-              className={
-                selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"
-              }
+              className={selected.status === "calibrated" ? "tag tag-accent-2" : "tag tag-accent"}
             >
               {selected.status === "calibrated" ? "calibrated" : "needs calibration"}
             </span>
@@ -181,11 +178,7 @@ export function App() {
       </header>
 
       <div className="app__workbench">
-        <TemplateRail
-          templates={templates}
-          selected={templateName}
-          onSelect={setTemplateName}
-        />
+        <TemplateRail templates={templates} selected={templateName} onSelect={setTemplateName} />
 
         <div className="app__workspace">
           {/* 2a: an uncalibrated template replaces the workspace with a single
@@ -203,39 +196,41 @@ export function App() {
             />
           ) : (
             <>
-          {templateName && config?.kind === "colour-matrix" && (
-            <ColourMatrixEditor
-              templateName={templateName}
-              config={config}
-              colours={selected?.colours ?? []}
-              onChange={setConfig}
-              design={design}
-              onDesignChange={setDesign}
-              onApprove={handleSave}
-            />
-          )}
-          {templateName && config?.kind === "multiple" && (
-            <MultipleEditor
-              templateName={templateName}
-              config={config}
-              onChange={setConfig}
-              design={design}
-              onDesignChange={setDesign}
-              knownColours={knownColours}
-            />
-          )}
-          {templateName && config?.kind === "single" && (
-            <SingleEditor
-              templateName={templateName}
-              config={config}
-              onChange={setConfig}
-              design={design}
-              onDesignChange={setDesign}
-            />
-          )}
-          {!templateName && <p>No templates yet -- upload one below.</p>}
-
-              <UploadForm onUploaded={(name) => refreshTemplates(name)} />
+              {templateName && config?.kind === "colour-matrix" && (
+                <ColourMatrixEditor
+                  templateName={templateName}
+                  config={config}
+                  colours={selected?.colours ?? []}
+                  onChange={setConfig}
+                  design={design}
+                  onDesignChange={setDesign}
+                  onApprove={handleSave}
+                />
+              )}
+              {templateName && config?.kind === "multiple" && (
+                <MultipleEditor
+                  templateName={templateName}
+                  config={config}
+                  onChange={setConfig}
+                  design={design}
+                  onDesignChange={setDesign}
+                  knownColours={knownColours}
+                />
+              )}
+              {templateName && config?.kind === "single" && (
+                <SingleEditor
+                  templateName={templateName}
+                  config={config}
+                  onChange={setConfig}
+                  design={design}
+                  onDesignChange={setDesign}
+                />
+              )}
+              {/* Templates are folders in the workspace, not something this
+                  page creates: the calibrator calibrates. */}
+              {!templateName && (
+                <p>No templates yet -- add a folder of photos under mockup-templates/.</p>
+              )}
             </>
           )}
         </div>

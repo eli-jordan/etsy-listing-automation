@@ -120,7 +120,9 @@ describe("App", () => {
     await screen.findByText("Loading preview…");
 
     selectTemplate("colour-chart-01");
-    await waitFor(() => expect(screen.getByText("Bounding boxes · 0")).toBeInTheDocument());
+    // "show all outlines" is the multiple editor's toggle, and only its own --
+    // a colour set says "show placement outline".
+    await waitFor(() => expect(screen.getByText("show all outlines")).toBeInTheDocument());
   });
 
   it("replaces the workspace with the kind picker when a template has no config", async () => {
@@ -142,15 +144,16 @@ describe("App", () => {
       expect(screen.getByText("What kind of template is this?")).toBeInTheDocument(),
     );
     // A takeover, not a panel: nothing else may be touched until it is answered.
-    expect(screen.queryByRole("button", { name: /Upload/ })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Photos")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("Test design")).not.toBeInTheDocument();
   });
 
-  it("shows a prompt to upload when there are no templates", async () => {
+  it("says where templates come from when there are none", async () => {
+    // The calibrator no longer creates them: a template is a folder in the
+    // workspace, so the empty state points at the workspace.
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
     render(<App />);
     await waitFor(() =>
-      expect(screen.getByText("No templates yet -- upload one below.")).toBeInTheDocument(),
+      expect(screen.getByText(/add a folder of photos under mockup-templates/)).toBeInTheDocument(),
     );
   });
 
@@ -176,12 +179,12 @@ describe("App", () => {
 
   describe("racing refreshes", () => {
     it("ignores a template list that arrives after a newer one", async () => {
-      // Uploading and then assigning a kind fires two listTemplates() calls in
+      // Assigning a kind and then saving fires two listTemplates() calls in
       // quick succession. If the first resolves last -- entirely possible, they
       // are separate requests -- it puts the pre-assignment list back, and the
       // template silently reverts to "no kind set" in the UI while the file on
-      // disk says otherwise. Under load this is what made the browser upload
-      // tests intermittent.
+      // disk says otherwise. Under load this is what made the browser tests
+      // intermittent.
       const initial = [summary({ name: "fresh", colours: ["black"] })];
       const stale = [summary({ name: "fresh", colours: ["black"] })];
       const newest = [summary({ name: "fresh", colours: ["black", "ivory", "moss"] })];

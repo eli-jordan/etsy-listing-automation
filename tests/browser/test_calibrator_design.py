@@ -132,8 +132,10 @@ class TestOrganicComponents:
         page.wait_for_selector(PREVIEW_IMAGE)
         # "Duplicate" carries no variant class, which is exactly the case this
         # guards -- the primary actions opt in to `.btn-primary` and would
-        # pass whether or not the fallback exists.
-        plain = page.get_by_role("button", name="Duplicate").first
+        # pass whether or not the fallback exists. It lives in the box's
+        # right-click menu, now that a chart has no side panel.
+        page.locator(".quad-editor__polygon").first.click(button="right")
+        plain = page.get_by_role("menuitem", name="Duplicate")
         plain.wait_for()
         assert plain.evaluate("el => getComputedStyle(el).backgroundColor") != "rgba(0, 0, 0, 0)"
 
@@ -202,13 +204,12 @@ def test_capture_preview_all_screenshot(page, screenshot_dir: Path) -> None:  # 
 
 
 def test_capture_multiple_editor_screenshot(page, screenshot_dir: Path) -> None:  # noqa: ANN001
-    """The chart editor with a box selected -- the corner fields, the extent
-    readout and the Add box affordance are the parts of 2a that only exist
-    here."""
+    """The chart editor with a box selected -- the colour captions, the extent
+    readout and the Add box affordance are the parts that only exist here."""
     row = page.locator(".template-rail__item[data-template='colour-chart-01']")
     row.wait_for()
     row.click()
-    page.wait_for_selector(".placements-panel__item")
+    page.wait_for_selector(".quad-editor__label")
     page.wait_for_timeout(600)
     target = screenshot_dir / "phase5-multiple-editor.png"
     page.screenshot(path=str(target), full_page=True)

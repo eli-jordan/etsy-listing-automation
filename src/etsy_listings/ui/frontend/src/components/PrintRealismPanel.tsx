@@ -96,12 +96,7 @@ interface Props {
   onShadeChange: (next: ShadeConfig) => void;
 }
 
-export function PrintRealismPanel({
-  displace,
-  shade,
-  onDisplaceChange,
-  onShadeChange,
-}: Props) {
+export function PrintRealismPanel({ displace, shade, onDisplaceChange, onShadeChange }: Props) {
   return (
     <section className="realism" aria-label="Print realism">
       <div className="realism__head">

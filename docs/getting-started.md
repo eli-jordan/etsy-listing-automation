@@ -194,16 +194,23 @@ cd src/etsy_listings/ui/frontend && npm install && npm run build && cd -
 uv run etsy-listings ui --root ~/etsy-listings --port 8000
 ```
 
+A template is a folder you create yourself — `mockup-templates/<name>/` with
+the photo(s) in it: one file for `multiple`/`single`, one per colour for
+`colour-matrix`. The calibrator calibrates; it does not copy your files about.
+
 Open `http://localhost:8000`. From there:
 
-1. Pick (or create) a template, choose its kind, and upload the photo(s) —
-   one file for `multiple`/`single`, one per colour for `colour-matrix`.
-2. Drag the corner handles of the bounding box (or boxes, for `multiple`) onto
-   where the design should sit; use the shade/displace sliders to match the
+1. Pick the template from the rail and answer what kind it is. Uncalibrated
+   ones sort to the top and say what they are missing.
+2. Put the bounding box where the design should sit: drag inside a box to move
+   it whole, its corner handles to reshape it, or nudge it with the arrow keys
+   (hold shift for a bigger step). Use the shade/displace sliders to match the
    fabric's lighting and texture.
-3. Toggle to the grid/ruler test design if you want warp errors to be more
+3. On a `multiple` chart, click the caption under a box to say which garment
+   colour it depicts. Untick the outline toggle to see the render clean.
+4. Toggle to the grid/ruler test design if you want warp errors to be more
    obvious than your real artwork makes them.
-4. **Save** — this writes `mockup-templates/<name>/template.yaml`.
+5. **Save** — this writes `mockup-templates/<name>/template.yaml`.
 
 If you'd rather iterate with hot-reload while working on the frontend itself,
 run the dev server instead of the built one in a second terminal (it proxies

@@ -29,8 +29,11 @@ uv run pytest --cov --cov-report=term-missing --cov-report=html
 # don't have installed.
 FRONTEND_DIR="src/etsy_listings/ui/frontend"
 if command -v npm >/dev/null 2>&1; then
-  echo "== frontend: lint, typecheck, test + coverage (branch, fail under 85%) =="
-  (cd "$FRONTEND_DIR" && npm run lint && npm run typecheck && npm run test:coverage)
+  echo "== frontend: prettier, lint, typecheck, test + coverage (branch, fail under 85%) =="
+  # `npm run format` writes, exactly as `ruff format .` does above: this script
+  # is what you run before committing, so it fixes rather than reports. CI runs
+  # `format:check` instead -- the same split as ruff.
+  (cd "$FRONTEND_DIR" && npm run format && npm run lint && npm run typecheck && npm run test:coverage)
 else
   echo "== frontend checks skipped: npm not on PATH =="
 fi

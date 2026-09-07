@@ -73,36 +73,6 @@ describe("saveTemplateConfig", () => {
   });
 });
 
-describe("uploadTemplate", () => {
-  it("posts a multipart form with the repeated files field and query params", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ name: "flat-lay-02", kind: "colour-matrix", colours: ["black"] }),
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const { uploadTemplate } = await import("./calibrator");
-    const file = new File(["x"], "black.png", { type: "image/png" });
-    const result = await uploadTemplate("flat-lay-02", [file]);
-
-    expect(result.name).toBe("flat-lay-02");
-    const [url, init] = must(fetchMock.mock.calls[0]);
-    expect(url).toContain("name=flat-lay-02");
-    // No kind: it is asked afterwards, once the photos are on screen.
-    expect(url).not.toContain("kind=");
-    expect(init.method).toBe("POST");
-    expect((init.body as FormData).getAll("files")).toEqual([file]);
-  });
-
-  it("throws CalibratorApiError when the upload fails", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false }));
-    const { uploadTemplate, CalibratorApiError } = await import("./calibrator");
-    await expect(uploadTemplate("x", [new File(["x"], "a.png")])).rejects.toBeInstanceOf(
-      CalibratorApiError,
-    );
-  });
-});
-
 describe("renderPreview", () => {
   it("posts the body with the design selector and returns an object URL", async () => {
     const fetchMock = vi.fn().mockResolvedValue({

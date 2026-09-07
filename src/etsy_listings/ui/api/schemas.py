@@ -54,16 +54,6 @@ class TemplateSummary(BaseModel):
     ``status`` is ``calibrated`` -- there is nothing to explain."""
 
 
-class UploadResponse(BaseModel):
-    name: str
-    kind: TemplateKind | None
-    """``None`` when the upload did not name a kind. Wireframe 2a asks for it
-    afterwards, as the first calibration step, so the photos are on screen
-    when the question is put -- which is the only way it is answerable for a
-    set someone else assembled."""
-    colours: list[str]
-
-
 class AssignKindRequest(BaseModel):
     kind: TemplateKind
 

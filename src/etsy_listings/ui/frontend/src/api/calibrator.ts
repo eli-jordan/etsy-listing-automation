@@ -9,7 +9,6 @@ import type {
   TemplateConfigState,
   TemplateKind,
   TemplateSummary,
-  UploadResponse,
 } from "../types";
 
 /**
@@ -26,7 +25,8 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
 }
 
 /**
- * Returns null when the template has no template.yaml yet (a fresh upload).
+ * Returns null when the template has no template.yaml yet -- a folder of
+ * photos that has not been given a kind.
  *
  * The cast is because openapi-fetch widens `bounding_box`'s 4-tuple to a
  * plain array when inferring the response type of a 3-way discriminated
@@ -52,25 +52,6 @@ export async function saveTemplateConfig(
   return data as unknown as TemplateConfigState;
 }
 
-/**
- * Multipart upload with a repeated `files` field -- built by hand rather than
- * through the generated client, since openapi-fetch's multipart support
- * doesn't cover repeated array fields cleanly.
- */
-export async function uploadTemplate(name: string, files: File[]): Promise<UploadResponse> {
-  const form = new FormData();
-  for (const file of files) form.append("files", file);
-
-  // No `kind`: it is asked afterwards, in the KindPicker, once the photos are
-  // on screen. The server stores them under their own names until then.
-  const response = await fetch(`/api/templates?${new URLSearchParams({ name })}`, {
-    method: "POST",
-    body: form,
-  });
-  if (!response.ok) throw new CalibratorApiError(`upload failed for ${name}`);
-  return (await response.json()) as UploadResponse;
-}
-
 /** What each photo will be taken as if this becomes a colour-matrix set.
  * Reporting only -- PRD 7a makes the filename the source of truth. */
 export async function getColourReport(name: string): Promise<ColourReportRow[]> {
@@ -84,10 +65,7 @@ export async function getColourReport(name: string): Promise<ColourReportRow[]> 
 /** The first calibration step. Writes the starting template.yaml for that
  * shape; refused if one already exists, since kind decides the whole file
  * shape (A11) and changing it would discard the old shape's calibration. */
-export async function assignKind(
-  name: string,
-  kind: TemplateKind,
-): Promise<TemplateConfigState> {
+export async function assignKind(name: string, kind: TemplateKind): Promise<TemplateConfigState> {
   const { data, error } = await api.POST("/api/templates/{name}/kind", {
     params: { path: { name } },
     body: { kind },
@@ -104,8 +82,8 @@ export async function listDesigns(): Promise<DesignSummary[]> {
   return data;
 }
 
-/** Adds a PNG to the library. Hand-rolled like `uploadTemplate` -- the
- * generated client cannot describe a multipart body. */
+/** Adds a PNG to the library. Hand-rolled multipart -- the generated client
+ * cannot describe one. */
 export async function uploadDesign(file: File): Promise<DesignSummary> {
   const body = new FormData();
   body.append("file", file);

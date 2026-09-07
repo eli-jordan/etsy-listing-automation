@@ -82,9 +82,7 @@ describe("PreviewGrid", () => {
     renderGrid();
     await screen.findByText("rendering the rest…");
     release("blob:2");
-    await waitFor(() =>
-      expect(screen.queryByText("rendering the rest…")).not.toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.queryByText("rendering the rest…")).not.toBeInTheDocument());
   });
 
   it("offers approval, which is a save and not a new stored flag", async () => {

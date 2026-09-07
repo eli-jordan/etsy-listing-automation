@@ -39,8 +39,7 @@ function setup(props: Partial<Props> = {}) {
     onApprove,
     /** Re-render with some props changed -- for the colour list moving
      * underneath the editor. */
-    update: (next: Partial<Props>) =>
-      view.rerender(<ColourMatrixEditor {...full} {...next} />),
+    update: (next: Partial<Props>) => view.rerender(<ColourMatrixEditor {...full} {...next} />),
   };
 }
 

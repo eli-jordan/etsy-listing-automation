@@ -323,6 +323,10 @@ Coverage is deliberately **not** in `addopts`, so running one file
 going to meet. The gate lives in the check script, which is what runs before a
 commit.
 
+Prettier is wired in the same way ruff is: `check.sh` runs `npm run format`,
+which writes, and CI runs `npm run format:check`, which reports. `gen:api`
+formats its own output, so regenerating the typed client cannot fail the gate.
+
 **The frontend carries a matching gate** — Vitest + the v8 coverage provider,
 same 85%-branch floor, same "not in the default `npm run test`" reasoning
 (`npm run test:coverage` is the enforced one). `./scripts/check.sh` runs both
@@ -364,7 +368,7 @@ split in two by what a layer needs from the outside world.
 
 | Trigger | What runs |
 |---|---|
-| Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's eslint/tsc/vitest gate |
+| Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's prettier/eslint/tsc/vitest gate |
 | Push to `main` | all of the above, then `pytest -m browser` and `pytest -m e2e` |
 | Manual (`workflow_dispatch`) | the same as a push to `main`, against whichever ref you pick |
 

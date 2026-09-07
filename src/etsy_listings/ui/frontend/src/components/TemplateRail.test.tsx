@@ -41,9 +41,7 @@ const ALL = [DONE_MATRIX, NEEDS_KIND, DONE_CHART, NEEDS_BOXES];
 
 function renderRail(over: Partial<Parameters<typeof TemplateRail>[0]> = {}) {
   const onSelect = vi.fn();
-  render(
-    <TemplateRail templates={ALL} selected={null} onSelect={onSelect} {...over} />,
-  );
+  render(<TemplateRail templates={ALL} selected={null} onSelect={onSelect} {...over} />);
   return { onSelect };
 }
 

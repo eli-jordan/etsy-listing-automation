@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { PrintRealismPanel } from "../components/PrintRealismPanel";
 import { QuadEditor } from "../components/QuadEditor";
 import { TestDesignPicker } from "../components/TestDesignPicker";
@@ -14,14 +14,15 @@ interface Props {
 }
 
 /** The simplest of the three: one box, sliders, no filmstrip, no placements
- * panel -- one photo, one garment, nothing to disambiguate. */
-export function SingleEditor({
-  templateName,
-  config,
-  onChange,
-  design,
-  onDesignChange,
-}: Props) {
+ * panel -- one photo, one garment, nothing to disambiguate.
+ *
+ * It carries the same "show placement outline" toggle as a colour set, for
+ * the same reason: the box and its handles sit on top of the very artwork you
+ * are judging, and with one always-selected box there was previously no way
+ * to get them out of the way. */
+export function SingleEditor({ templateName, config, onChange, design, onDesignChange }: Props) {
+  const [showOutlines, setShowOutlines] = useState(true);
+
   const previewUrl = usePreview(
     templateName,
     useMemo(
@@ -43,6 +44,16 @@ export function SingleEditor({
   return (
     <main className="app__main">
       <div className="app__preview">
+        <div className="app__preview-bar">
+          <label className="app__outline-toggle">
+            <input
+              type="checkbox"
+              checked={showOutlines}
+              onChange={(e) => setShowOutlines(e.target.checked)}
+            />
+            show placement outline
+          </label>
+        </div>
         {previewUrl ? (
           <QuadEditor
             imageUrl={previewUrl}
@@ -50,6 +61,7 @@ export function SingleEditor({
             selectedIndex={0}
             onSelect={() => {}}
             onChangeBox={handleBoxChange}
+            outlines={showOutlines ? "all" : "none"}
           />
         ) : (
           <p>Loading preview…</p>

@@ -29,7 +29,15 @@ beforeEach(() => {
 describe("SingleEditor", () => {
   it("fetches a preview with no colour selector and renders the box editor", async () => {
     const spy = vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    render(<SingleEditor templateName="lifestyle-01" config={CONFIG} onChange={vi.fn()} design="bundled-grid" onDesignChange={vi.fn()} />);
+    render(
+      <SingleEditor
+        templateName="lifestyle-01"
+        config={CONFIG}
+        onChange={vi.fn()}
+        design="bundled-grid"
+        onDesignChange={vi.fn()}
+      />,
+    );
 
     await waitFor(() =>
       expect(spy).toHaveBeenCalledWith(
@@ -48,11 +56,44 @@ describe("SingleEditor", () => {
   it("editing the colour field updates the config", async () => {
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
     const onChange = vi.fn();
-    render(<SingleEditor templateName="lifestyle-01" config={CONFIG} onChange={onChange} design="bundled-grid" onDesignChange={vi.fn()} />);
+    render(
+      <SingleEditor
+        templateName="lifestyle-01"
+        config={CONFIG}
+        onChange={onChange}
+        design="bundled-grid"
+        onDesignChange={vi.fn()}
+      />,
+    );
 
     fireEvent.change(screen.getByLabelText("Garment colour (optional)"), {
       target: { value: "black" },
     });
     expect(onChange).toHaveBeenCalledWith({ ...CONFIG, colour: "black" });
+  });
+
+  /** One box, always selected: without this there was no way to get the
+   * outline and its four handles off the artwork being judged. */
+  it("hiding the placement outline leaves the render with no chrome", async () => {
+    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+    const { container } = render(
+      <SingleEditor
+        templateName="lifestyle-01"
+        config={CONFIG}
+        onChange={vi.fn()}
+        design="bundled-grid"
+        onDesignChange={vi.fn()}
+      />,
+    );
+
+    const img = await screen.findByAltText("Rendered preview");
+    Object.defineProperty(img, "naturalWidth", { value: 480, configurable: true });
+    Object.defineProperty(img, "naturalHeight", { value: 576, configurable: true });
+    fireEvent.load(img);
+    expect(container.querySelectorAll(".quad-editor__box")).toHaveLength(1);
+
+    fireEvent.click(screen.getByLabelText("show placement outline"));
+    expect(container.querySelectorAll(".quad-editor__box")).toHaveLength(0);
+    expect(container.querySelectorAll(".quad-editor__handle")).toHaveLength(0);
   });
 });

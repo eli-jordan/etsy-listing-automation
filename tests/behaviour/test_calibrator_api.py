@@ -234,40 +234,33 @@ def _png(colour: tuple[int, int, int] = (200, 60, 60)) -> bytes:
     return buffer.getvalue()
 
 
-class TestKindChosenAfterUpload:
-    """Wireframe 2a asks what kind a template is *after* the photos are in,
-    as the first calibration step, instead of demanding it at upload. You can
-    see the photos by then, which is the only way the question is answerable
-    for a set someone else assembled.
+def _template_folder(workspace_root: Path, name: str, *filenames: str) -> Path:
+    """A template the way one actually comes into being: a folder of photos
+    the user put in the workspace. Nothing in the API creates one."""
+    directory = workspace_root / "mockup-templates" / name
+    directory.mkdir(parents=True, exist_ok=True)
+    for filename in filenames:
+        (directory / filename).write_bytes(_png())
+    return directory
+
+
+class TestAssigningAKind:
+    """Wireframe 2a asks what kind a template is as the first calibration
+    step, with the photos already on screen -- which is the only way the
+    question is answerable for a set someone else assembled.
     """
 
-    def _upload(self, client: TestClient, name: str, files: list[tuple[str, bytes]]):  # noqa: ANN202
-        return client.post(
-            "/api/templates",
-            params={"name": name},
-            files=[("files", (filename, data, "image/png")) for filename, data in files],
-        )
-
-    def test_upload_without_a_kind_stores_the_photos_and_no_config(
+    def test_a_folder_with_no_config_is_listed_as_needing_a_kind(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        response = self._upload(client, "fresh", [("black.png", _png()), ("ivory.png", _png())])
-        assert response.status_code == 200
-        assert response.json()["kind"] is None
-
-        directory = workspace_root / "mockup-templates" / "fresh"
-        assert sorted(p.name for p in directory.glob("*.png")) == ["black.png", "ivory.png"]
-        assert not (directory / "template.yaml").exists()
-
-    def test_such_a_template_is_listed_as_needing_a_kind(self, client: TestClient) -> None:
-        self._upload(client, "fresh", [("black.png", _png())])
+        _template_folder(workspace_root, "fresh", "black.png")
         by_name = {t["name"]: t for t in client.get("/api/templates").json()}
         assert by_name["fresh"]["status_reason"] == "no kind set"
 
     def test_assigning_colour_matrix_writes_a_config_with_a_starting_box(
-        self, client: TestClient
+        self, client: TestClient, workspace_root: Path
     ) -> None:
-        self._upload(client, "fresh", [("black.png", _png()), ("ivory.png", _png())])
+        _template_folder(workspace_root, "fresh", "black.png", "ivory.png")
         response = client.post("/api/templates/fresh/kind", json={"kind": "colour-matrix"})
         assert response.status_code == 200
 
@@ -276,10 +269,10 @@ class TestKindChosenAfterUpload:
         assert len(config["bounding_box"]) == 4
 
     def test_assigning_colour_matrix_leaves_the_photos_named_as_colours(
-        self, client: TestClient
+        self, client: TestClient, workspace_root: Path
     ) -> None:
         """PRD 7a: the filename *is* the colour, so nothing is renamed."""
-        self._upload(client, "fresh", [("black.png", _png()), ("ivory.png", _png())])
+        _template_folder(workspace_root, "fresh", "black.png", "ivory.png")
         client.post("/api/templates/fresh/kind", json={"kind": "colour-matrix"})
         by_name = {t["name"]: t for t in client.get("/api/templates").json()}
         assert by_name["fresh"]["colours"] == ["black", "ivory"]
@@ -289,27 +282,40 @@ class TestKindChosenAfterUpload:
     ) -> None:
         """PRD 28: multiple/single kinds use a fixed scene.png -- there is no
         per-colour photo to name."""
-        self._upload(client, "fresh", [("some-shot.png", _png())])
+        directory = _template_folder(workspace_root, "fresh", "some-shot.png")
         assert client.post("/api/templates/fresh/kind", json={"kind": "single"}).status_code == 200
 
-        directory = workspace_root / "mockup-templates" / "fresh"
         assert (directory / "scene.png").is_file()
         assert not (directory / "some-shot.png").exists()
 
-    def test_assigning_multiple_starts_with_no_boxes(self, client: TestClient) -> None:
-        self._upload(client, "fresh", [("chart.png", _png())])
+    def test_assigning_multiple_starts_with_no_boxes(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        _template_folder(workspace_root, "fresh", "chart.png")
         client.post("/api/templates/fresh/kind", json={"kind": "multiple"})
         assert client.get("/api/templates/fresh/config").json()["placements"] == []
         by_name = {t["name"]: t for t in client.get("/api/templates").json()}
         assert by_name["fresh"]["status_reason"] == "no boxes"
 
-    def test_a_scene_kind_refuses_a_set_of_photos(self, client: TestClient) -> None:
+    def test_a_scene_kind_refuses_a_set_of_photos(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
         """One photo, one scene -- picking `single` for a four-photo colour set
         is a mistake worth reporting rather than silently keeping one."""
-        self._upload(client, "fresh", [("a.png", _png()), ("b.png", _png())])
+        _template_folder(workspace_root, "fresh", "a.png", "b.png")
         response = client.post("/api/templates/fresh/kind", json={"kind": "single"})
         assert response.status_code == 400
         assert "one photo" in response.json()["detail"]
+
+    def test_assigning_a_kind_to_an_empty_folder_is_refused(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """A directory with no photos is not a template yet, and saying so
+        beats writing a config for a scene that does not exist."""
+        _template_folder(workspace_root, "empty")
+        response = client.post("/api/templates/empty/kind", json={"kind": "single"})
+        assert response.status_code == 400
+        assert "no photos" in response.json()["detail"]
 
     def test_assigning_a_kind_to_an_already_configured_template_is_refused(
         self, client: TestClient
@@ -440,71 +446,6 @@ def test_preview_wrong_body_shape_for_kind_is_rejected(client: TestClient) -> No
         },
     )
     assert response.status_code in (400, 422)
-
-
-def test_upload_colour_matrix_creates_a_new_template_with_default_config(
-    client: TestClient, tmp_path: Path
-) -> None:
-    from PIL import Image
-
-    image_path = tmp_path / "teal.png"
-    Image.new("RGB", (200, 240), (10, 100, 120)).save(image_path)
-
-    with image_path.open("rb") as f:
-        response = client.post(
-            "/api/templates",
-            params={"name": "brand-new-template", "kind": "colour-matrix"},
-            files=[("files", ("teal.png", f, "image/png"))],
-        )
-    assert response.status_code == 200
-    body = response.json()
-    assert body["name"] == "brand-new-template"
-    assert body["kind"] == "colour-matrix"
-    assert body["colours"] == ["teal"]
-
-    config_response = client.get("/api/templates/brand-new-template/config")
-    assert config_response.status_code == 200
-    assert config_response.json()["kind"] == "colour-matrix"
-
-
-def test_upload_single_kind_saves_scene_png_regardless_of_uploaded_filename(
-    client: TestClient, tmp_path: Path
-) -> None:
-    from PIL import Image
-
-    image_path = tmp_path / "lifestyle-shot.png"
-    Image.new("RGB", (200, 240), (10, 100, 120)).save(image_path)
-
-    with image_path.open("rb") as f:
-        response = client.post(
-            "/api/templates",
-            params={"name": "lifestyle-01", "kind": "single"},
-            files=[("files", ("lifestyle-shot.png", f, "image/png"))],
-        )
-    assert response.status_code == 200
-    assert response.json()["kind"] == "single"
-
-    config_response = client.get("/api/templates/lifestyle-01/config")
-    assert config_response.json()["kind"] == "single"
-
-
-def test_upload_multiple_kind_rejects_more_than_one_file(
-    client: TestClient, tmp_path: Path
-) -> None:
-    from PIL import Image
-
-    a = tmp_path / "a.png"
-    b = tmp_path / "b.png"
-    Image.new("RGB", (100, 100), (0, 0, 0)).save(a)
-    Image.new("RGB", (100, 100), (0, 0, 0)).save(b)
-
-    with a.open("rb") as fa, b.open("rb") as fb:
-        response = client.post(
-            "/api/templates",
-            params={"name": "two-photo-chart", "kind": "multiple"},
-            files=[("files", ("a.png", fa, "image/png")), ("files", ("b.png", fb, "image/png"))],
-        )
-    assert response.status_code == 400
 
 
 def test_traversal_template_name_is_rejected_not_resolved(client: TestClient) -> None:

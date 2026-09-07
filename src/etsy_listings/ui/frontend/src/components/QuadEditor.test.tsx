@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { must } from "../test/helpers";
 import type { BoundingBox } from "../types";
 import { QuadEditor } from "./QuadEditor";
@@ -275,5 +275,172 @@ describe("QuadEditor", () => {
       key: "a",
     });
     expect(onChangeBox).not.toHaveBeenCalled();
+  });
+});
+
+/** jsdom implements no SVG geometry, so the two calls the editor maps screen
+ * pixels through have to be supplied. Identity, so image space *is* client
+ * space and the arithmetic in the assertions stays readable. */
+function stubSvgGeometry(): () => void {
+  const proto = SVGSVGElement.prototype as unknown as {
+    createSVGPoint: () => DOMPoint;
+    getScreenCTM: () => DOMMatrix | null;
+  };
+  const original = { point: proto.createSVGPoint, ctm: proto.getScreenCTM };
+  proto.createSVGPoint = () => {
+    const p = { x: 0, y: 0, matrixTransform: () => ({ x: p.x, y: p.y }) };
+    return p as unknown as DOMPoint;
+  };
+  proto.getScreenCTM = () => ({ inverse: () => ({}) }) as unknown as DOMMatrix;
+  return () => {
+    proto.createSVGPoint = original.point;
+    proto.getScreenCTM = original.ctm;
+  };
+}
+
+describe("sliding a whole box", () => {
+  let restore = () => {};
+  beforeEach(() => {
+    restore = stubSvgGeometry();
+  });
+  afterEach(() => restore());
+
+  function renderDraggable(onChangeBox = vi.fn(), onSelect = vi.fn()) {
+    const { container } = render(
+      <QuadEditor
+        imageUrl="preview.png"
+        boxes={[BOX_A, BOX_B]}
+        selectedIndex={0}
+        onSelect={onSelect}
+        onChangeBox={onChangeBox}
+      />,
+    );
+    loadImage();
+    return container;
+  }
+
+  const overlay = (container: HTMLElement) =>
+    must(container.querySelector(".quad-editor__overlay"));
+
+  const press = (target: Element, clientX: number, clientY: number, button = 0) =>
+    fireEvent.pointerDown(target, { button, clientX, clientY, pointerId: 1 });
+
+  it("dragging inside a box translates all four corners by the same delta", () => {
+    const onChangeBox = vi.fn();
+    const container = renderDraggable(onChangeBox);
+    press(must(container.querySelector(".quad-editor__polygon")), 10, 10);
+    fireEvent.pointerMove(overlay(container), { clientX: 40, clientY: 25 });
+
+    expect(onChangeBox).toHaveBeenCalledWith(0, [
+      { x: 30, y: 15 },
+      { x: 130, y: 15 },
+      { x: 130, y: 115 },
+      { x: 30, y: 115 },
+    ]);
+  });
+
+  it("pressing a dimmed box selects it and drags that one", () => {
+    const onChangeBox = vi.fn();
+    const onSelect = vi.fn();
+    const container = renderDraggable(onChangeBox, onSelect);
+    press(must(container.querySelectorAll(".quad-editor__polygon")[1]), 0, 0);
+    expect(onSelect).toHaveBeenCalledWith(1);
+
+    fireEvent.pointerMove(overlay(container), { clientX: 5, clientY: 0 });
+    const [index] = must(onChangeBox.mock.calls[0]);
+    expect(index).toBe(1);
+  });
+
+  it("stops moving once the pointer is released", () => {
+    const onChangeBox = vi.fn();
+    const container = renderDraggable(onChangeBox);
+    press(must(container.querySelector(".quad-editor__polygon")), 0, 0);
+    fireEvent.pointerUp(overlay(container));
+    fireEvent.pointerMove(overlay(container), { clientX: 90, clientY: 90 });
+    expect(onChangeBox).not.toHaveBeenCalled();
+  });
+
+  it("ignores a right-press, which is the context-menu gesture", () => {
+    const onChangeBox = vi.fn();
+    const container = renderDraggable(onChangeBox);
+    press(must(container.querySelector(".quad-editor__polygon")), 0, 0, 2);
+    fireEvent.pointerMove(overlay(container), { clientX: 90, clientY: 90 });
+    expect(onChangeBox).not.toHaveBeenCalled();
+  });
+});
+
+describe("the on-canvas box captions", () => {
+  function renderLabelled(props: Partial<Parameters<typeof QuadEditor>[0]> = {}) {
+    const onLabelChange = vi.fn();
+    const view = render(
+      <QuadEditor
+        imageUrl="preview.png"
+        boxes={[BOX_A, BOX_B]}
+        selectedIndex={0}
+        onSelect={vi.fn()}
+        onChangeBox={vi.fn()}
+        labels={["black", ""]}
+        onLabelChange={onLabelChange}
+        labelPlaceholder="assign colour…"
+        labelSuggestions={["ivory"]}
+        {...props}
+      />,
+    );
+    loadImage();
+    return { ...view, onLabelChange };
+  }
+
+  it("captions every box, and prompts on the ones with no colour", () => {
+    renderLabelled();
+    expect(screen.getByRole("button", { name: "black" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "assign colour…" })).toBeInTheDocument();
+  });
+
+  it("positions a caption under its box, in percentages of the image", () => {
+    const { container } = renderLabelled();
+    // BOX_A spans x 0-100 of a 400px-wide image, and reaches y 100 of 200.
+    const caption = must(container.querySelector<HTMLElement>(".quad-editor__label"));
+    expect(caption.style.left).toBe("12.5%");
+    expect(caption.style.top).toBe("50%");
+  });
+
+  it("clicking a caption opens it for editing and reports what is typed", () => {
+    const { onLabelChange } = renderLabelled();
+    fireEvent.click(screen.getByRole("button", { name: "black" }));
+    const field = screen.getByLabelText("Colour for box 1");
+    expect(field).toHaveFocus();
+
+    fireEvent.change(field, { target: { value: "moss" } });
+    expect(onLabelChange).toHaveBeenCalledWith(0, "moss");
+  });
+
+  it("Enter closes the editor", () => {
+    renderLabelled();
+    fireEvent.click(screen.getByRole("button", { name: "black" }));
+    fireEvent.keyDown(screen.getByLabelText("Colour for box 1"), { key: "Enter" });
+    expect(screen.queryByLabelText("Colour for box 1")).not.toBeInTheDocument();
+  });
+
+  it("arrow keys typed into a caption do not nudge the box", () => {
+    const onChangeBox = vi.fn();
+    const onDeleteSelected = vi.fn();
+    renderLabelled({ onChangeBox, onDeleteSelected });
+    fireEvent.click(screen.getByRole("button", { name: "black" }));
+    const field = screen.getByLabelText("Colour for box 1");
+    fireEvent.keyDown(field, { key: "ArrowRight" });
+    fireEvent.keyDown(field, { key: "Backspace" });
+    expect(onChangeBox).not.toHaveBeenCalled();
+    expect(onDeleteSelected).not.toHaveBeenCalled();
+  });
+
+  it("hiding the chrome hides the captions with the outlines", () => {
+    const { container } = renderLabelled({ outlines: "none" });
+    expect(container.querySelectorAll(".quad-editor__label")).toHaveLength(0);
+  });
+
+  it("with only the selected outline shown, only its caption is", () => {
+    const { container } = renderLabelled({ outlines: "selected" });
+    expect(container.querySelectorAll(".quad-editor__label")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "black" })).toBeInTheDocument();
   });
 });

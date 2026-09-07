@@ -25,4 +25,3 @@ export type SingleTemplate = components["schemas"]["SingleTemplate"];
 export type TemplateConfigState = ColourMatrixTemplate | MultipleTemplate | SingleTemplate;
 
 export type TemplateSummary = components["schemas"]["TemplateSummary"];
-export type UploadResponse = components["schemas"]["UploadResponse"];
