@@ -14,6 +14,7 @@ from typer.testing import CliRunner
 from etsy_listings.cli import app as cli
 from etsy_listings.cli.app import app
 from etsy_listings.engine.context import Event
+from etsy_listings.newcmd import prompts
 
 runner = CliRunner()
 
@@ -106,9 +107,10 @@ def test_a_clean_workspace_plans_as_no_changes(workspace_root: Path) -> None:
 def test_new_without_a_token_explains_what_to_do(workspace_root: Path, monkeypatch) -> None:
     """The reported failure was a raw httpx `401 Unauthorized` traceback out of
     `blueprints()`. The catalog needs a token; not having one is a setup step,
-    not a crash."""
+    not a crash. A design the fixture has no listing for, so the run reaches
+    the catalog rather than stopping at the already-exists guard."""
     monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
-    result = runner.invoke(app, ["new", "take-a-hike", "--root", str(workspace_root)])
+    result = runner.invoke(app, ["new", "second-design", "--root", str(workspace_root)])
 
     assert result.exit_code == 1
     assert "PRINTIFY_API_TOKEN" in result.output
@@ -200,3 +202,47 @@ def test_the_ansi_escapes_survive_to_the_terminal(plain_env, capsys) -> None:
 def test_an_event_with_no_swatch_is_printed_plainly(capsys) -> None:
     cli._echo_event(Event(message="applying render"))
     assert capsys.readouterr().out == "  applying render\n"
+
+
+def test_new_takes_no_design_and_offers_a_picker(workspace_root: Path, monkeypatch) -> None:
+    """`new` is a wizard: the design is picked from `designs/` like every
+    other answer, so the argument is optional."""
+    monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
+    asked: list[tuple[str, list[str]]] = []
+
+    def fake_choose(message: str, rows, **kwargs: object) -> str:
+        asked.append((message, list(rows)))
+        return list(rows)[0]
+
+    monkeypatch.setattr(prompts, "choose", fake_choose)
+    (workspace_root / "designs" / "brand-new.png").write_bytes(b"")
+
+    result = runner.invoke(app, ["new", "--root", str(workspace_root)])
+
+    assert asked and asked[0][0] == "Design"
+    assert any(row.endswith("brand-new") for row in asked[0][1])
+    # Stopped at the catalog, i.e. the design question was answered without one.
+    assert "PRINTIFY_API_TOKEN" in result.output
+
+
+def test_new_refuses_a_design_that_already_has_a_listing(workspace_root: Path, monkeypatch) -> None:
+    """Before, this ran the whole wizard and failed on the final write."""
+    monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
+    result = runner.invoke(app, ["new", "take-a-hike", "--root", str(workspace_root)])
+
+    assert result.exit_code == 1
+    assert "a listing already exists" in result.output
+    assert "PRINTIFY_API_TOKEN" not in result.output
+
+
+def test_new_without_any_designs_says_where_to_put_one(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
+    (tmp_path / "shop.yaml").write_text(
+        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
+        "  is_supply: false\ncurrency: NOK\n",
+        encoding="utf-8",
+    )
+    result = runner.invoke(app, ["new", "--root", str(tmp_path)])
+
+    assert result.exit_code == 1
+    assert "no designs under" in result.output

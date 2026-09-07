@@ -5,6 +5,7 @@ interactive path is thin enough to be obviously correct.\""""
 
 from __future__ import annotations
 
+import os
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -29,6 +30,7 @@ from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.slug import ColourExceptions, SlugCollisionError
 from etsy_listings.newcmd.fx_rate import FxRate
 from etsy_listings.newcmd.logic import (
+    build_design_choices,
     build_listing_stub,
     build_media_entries,
     build_pricing_plan_choices,
@@ -518,3 +520,74 @@ def test_compute_starting_prices_is_fail_soft_with_no_fx_rate() -> None:
 
     assert prices["S"] == Money.parse("0 NOK")
     assert any("no FX rate" in note for note in notes)
+
+
+# ----------------------------------------------------------------------
+# The design picker: newest artwork first, since a design is usually made
+# minutes before the listing that ships it.
+# ----------------------------------------------------------------------
+
+
+def _design(workspace_root: Path, name: str, *, mtime: float) -> Path:
+    path = workspace_root / "designs" / f"{name}.png"
+    path.write_bytes(b"")
+    os.utime(path, (mtime, mtime))
+    return path
+
+
+def test_design_choices_put_the_newest_design_first(workspace_root: Path) -> None:
+    base = datetime(2026, 3, 1, 9, 0, tzinfo=UTC).timestamp()
+    _design(workspace_root, "oldest", mtime=base)
+    _design(workspace_root, "newest", mtime=base + 7200)
+    _design(workspace_root, "middle", mtime=base + 3600)
+    workspace = Workspace.discover(root_override=workspace_root)
+
+    choices = build_design_choices(workspace.design_files(), set())
+
+    # take-a-hike is the fixture's own design, checked out just now, so it
+    # sorts above every backdated one.
+    assert [c.name for c in choices][-3:] == ["newest", "middle", "oldest"]
+
+
+def test_design_choices_break_ties_on_name(workspace_root: Path) -> None:
+    same = datetime(2026, 3, 1, 9, 0, tzinfo=UTC).timestamp()
+    for name in ("beta", "alpha", "gamma"):
+        _design(workspace_root, name, mtime=same)
+    workspace = Workspace.discover(root_override=workspace_root)
+
+    choices = build_design_choices(workspace.design_files(), set())
+
+    assert [c.name for c in choices if c.name != "take-a-hike"] == ["alpha", "beta", "gamma"]
+
+
+def test_design_rows_carry_the_date_and_mark_designs_that_already_have_a_listing(
+    workspace_root: Path,
+) -> None:
+    _design(workspace_root, "fresh", mtime=datetime(2026, 3, 1, 9, 30).timestamp())
+    workspace = Workspace.discover(root_override=workspace_root)
+
+    rows = {c.name: c for c in build_design_choices(workspace.design_files(), {"take-a-hike"})}
+
+    assert rows["fresh"].label == "2026-03-01 09:30  fresh"
+    assert not rows["fresh"].has_listing
+    assert rows["take-a-hike"].has_listing
+    assert rows["take-a-hike"].label.endswith("  take-a-hike  (listing exists)")
+
+
+def test_design_files_lists_only_flat_pngs(workspace_root: Path) -> None:
+    (workspace_root / "designs" / "notes.txt").write_text("not artwork", encoding="utf-8")
+    nested = workspace_root / "designs" / "archive"
+    nested.mkdir()
+    (nested / "old.png").write_bytes(b"")
+    workspace = Workspace.discover(root_override=workspace_root)
+
+    assert [p.name for p in workspace.design_files()] == ["take-a-hike.png"]
+
+
+def test_design_files_is_empty_without_a_designs_directory(tmp_path: Path) -> None:
+    (tmp_path / "shop.yaml").write_text(
+        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
+        "  is_supply: false\ncurrency: NOK\n",
+        encoding="utf-8",
+    )
+    assert Workspace.discover(root_override=tmp_path).design_files() == []

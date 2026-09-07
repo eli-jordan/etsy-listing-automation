@@ -24,6 +24,7 @@ from etsy_listings.newcmd.logic import (
     LOCAL_MARKER,
     LOCAL_MARKER_FALLBACK,
     build_blueprint_choices,
+    build_design_choices,
     build_listing_stub,
     build_media_entries,
     build_pricing_plan_choices,
@@ -107,6 +108,31 @@ def _report_print_area_choice(variant_set: VariantSet) -> None:
         f"{smallest.width}x{smallest.height} to {largest.width}x{largest.height}. "
         f"Recording the largest."
     )
+
+
+def _pick_design(workspace: Workspace) -> str:
+    """Pick the design from what is in ``designs/``, newest first.
+
+    ``new`` is a wizard, and the design was the one answer it still demanded
+    up front on the command line -- which meant knowing the exact stem of a
+    file you had just exported. Everything the picker needs is on disk, so it
+    asks like it asks everything else. The argument still works, for scripting
+    and for naming artwork that does not exist yet.
+    """
+    choices = build_design_choices(workspace.design_files(), set(workspace.listing_names()))
+    if not choices:
+        typer.echo(
+            f"no designs under {workspace.designs_dir()}.\n"
+            f"  Put the artwork there as <name>.png, or pass a name: "
+            f"`etsy-listings new <design>`.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    by_label = {choice.label: choice for choice in choices}
+    answer = prompts.choose("Design", list(by_label), marker_hint="newest first")
+    if answer is None:
+        raise _cancelled()
+    return by_label[answer].name
 
 
 def _pick_template(workspace: Workspace) -> str:
@@ -222,8 +248,25 @@ def _pick_or_create_pricing_plan(
     return by_label[answer].path
 
 
-def run_new(workspace: Workspace, catalog: CatalogClient, design_name: str, category: str) -> None:
-    _warn_if_design_missing(workspace, design_name)
+def _reject_existing_listing(workspace: Workspace, design_name: str) -> None:
+    """``write_listing`` refuses to overwrite, but it is the *last* thing
+    ``new`` does -- so without this the whole wizard runs before saying no.
+    Checked here rather than only on the picked row, because the argument
+    reaches the same dead end."""
+    path = workspace.listing_file(design_name)
+    if path.is_file():
+        typer.echo(f"a listing already exists at {path}", err=True)
+        raise typer.Exit(code=1)
+
+
+def run_new(
+    workspace: Workspace, catalog: CatalogClient, design_name: str | None, category: str
+) -> None:
+    if design_name is None:
+        design_name = _pick_design(workspace)
+    else:
+        _warn_if_design_missing(workspace, design_name)
+    _reject_existing_listing(workspace, design_name)
     blueprints = filter_blueprints_by_category(catalog.blueprints(), category)
     if not blueprints:
         typer.echo(f"no blueprints match category {category!r}", err=True)

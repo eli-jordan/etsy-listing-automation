@@ -263,13 +263,15 @@ def apply(
 
 @app.command(epilog=EPILOG)
 def new(
-    design: str = typer.Argument(..., help="Design name, matching designs/<name>.png"),
+    design: str | None = typer.Argument(
+        None, help="Design name, matching designs/<name>.png. Omit to pick from designs/"
+    ),
     category: str = typer.Option(
         "tshirt", "--category", help="Blueprint category filter, matched against title/brand/model"
     ),
     root: str | None = _root_option(),
 ) -> None:
-    """Interactive garment/provider picker; writes profile (if absent) + listing.
+    """Interactive design/garment/provider picker; writes profile (if absent) + listing.
 
     Reads Printify's catalog, so it needs PRINTIFY_API_TOKEN with the
     `catalog.read` scope (see the environment variables below).
