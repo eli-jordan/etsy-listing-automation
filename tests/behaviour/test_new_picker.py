@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.catalog.models import (
+from etsy_listings.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,

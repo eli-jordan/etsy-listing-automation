@@ -29,12 +29,6 @@ from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Any
 
-from etsy_listings.catalog.resolve import (
-    VariantResolution,
-    resolve_blueprint,
-    resolve_print_provider,
-    resolve_variants,
-)
 from etsy_listings.clients.printify.models import (
     PlacedImage,
     Placeholder,
@@ -43,6 +37,12 @@ from etsy_listings.clients.printify.models import (
     ProductSpec,
 )
 from etsy_listings.clients.printify.protocol import PrintifyClient
+from etsy_listings.clients.printify.resolve import (
+    VariantResolution,
+    resolve_blueprint,
+    resolve_print_provider,
+    resolve_variants,
+)
 from etsy_listings.config.money import Money
 from etsy_listings.engine.change import (
     Action,

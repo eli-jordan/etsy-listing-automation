@@ -40,9 +40,9 @@ import httpx
 import pytest
 from PIL import Image, ImageDraw
 
-from etsy_listings.catalog.http import HttpCatalogClient
-from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
-from etsy_listings.catalog.resolve import resolve_blueprint
+from etsy_listings.clients.printify.catalog import HttpCatalogClient
+from etsy_listings.clients.printify.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.clients.printify.resolve import resolve_blueprint
 
 pytestmark = pytest.mark.e2e
 

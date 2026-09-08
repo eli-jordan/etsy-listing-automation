@@ -1,6 +1,6 @@
 """Printify's undocumented product-catalog-service per-variant cost endpoint.
 
-**Not** part of the documented catalog surface in ``catalog/`` -- no auth, no
+**Not** part of the documented ``CatalogClient`` surface -- no auth, no
 official docs, confirmed working against a live 238-variant response
 (blueprint 706 / provider 29) but liable to change or vanish without notice.
 Every caller in ``new``'s pricing-plan wizard must treat this as fail-soft:

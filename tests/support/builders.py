@@ -25,9 +25,8 @@ import yaml
 from PIL import Image
 
 from etsy_listings import __about__
-from etsy_listings.catalog.client import CatalogClient
-from etsy_listings.catalog.fakes import FakeCatalogClient
-from etsy_listings.clients.printify.protocol import PrintifyClient
+from etsy_listings.clients.printify.fakes import FakeCatalogClient
+from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
 from etsy_listings.engine.context import Event, RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.workspace.workspace import Workspace

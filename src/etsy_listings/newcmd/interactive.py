@@ -14,8 +14,8 @@ from typing import Literal, cast
 import typer
 
 from etsy_listings import prompts, terminal
-from etsy_listings.catalog.client import CatalogClient
-from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.clients.printify.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.clients.printify.protocol import CatalogClient
 from etsy_listings.config.listing import MAX_MEDIA_ENTRIES
 from etsy_listings.config.slug import SlugCollisionError
 from etsy_listings.newcmd import fx_rate, unofficial_variant_costs

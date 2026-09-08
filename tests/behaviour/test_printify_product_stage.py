@@ -12,17 +12,16 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.catalog.fakes import FakeCatalogClient
-from etsy_listings.catalog.models import (
+from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
+from etsy_listings.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
+    Shop,
     Variant,
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
-from etsy_listings.clients.printify.models import Shop
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.change import PriceChange
 from etsy_listings.engine.context import RunContext

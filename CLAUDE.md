@@ -21,7 +21,7 @@ command or test exists.
 | Document | Authority |
 |---|---|
 | [docs/prd.md](docs/prd.md) | *What* the tool does. 48 numbered product decisions in its appendix. |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 21 architecture decisions, `A1`–`A21`. |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 22 architecture decisions, `A1`–`A22`. |
 
 When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.
 
@@ -154,21 +154,23 @@ user-writable directory with no installer.
 
 ## Code layout
 
-Per `A1`–`A21`. Full detail in the plan; the shape:
+Per `A1`–`A22`. Full detail in the plan; the shape:
 
 ```
 src/etsy_listings/
   cli/          Typer app, one module per command  [setup/plan/apply/new/ui done]
   workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
-  catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run, stages/
                    [done; STAGES = [Render(), PrintifyProduct()], more stages later]
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
-  clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
-                       [printify/ + retry done; etsy/ and the limiter Phase 3/6]
+  clients/      printify/ — one package for everything said to Printify (A22):
+                  transport (token/retry/errors), two protocols (CatalogClient
+                  reads, PrintifyClient writes), models, catalog, products,
+                  cache, resolve, fakes                                      [done]
+                etsy/ and limiter Phase 3/6; retry.py done
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]

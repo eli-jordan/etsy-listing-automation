@@ -16,8 +16,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.catalog.models import Blueprint, ShippingRates, VariantSet
-from etsy_listings.catalog.resolve import normalise
+from etsy_listings.clients.printify.models import Blueprint, ShippingRates, VariantSet
+from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.listing import GENERATE, MAX_MEDIA_ENTRIES, Listing
 from etsy_listings.config.money import Money

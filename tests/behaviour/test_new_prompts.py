@@ -15,8 +15,8 @@ from types import SimpleNamespace
 import pytest
 
 from etsy_listings import prompts, terminal
-from etsy_listings.catalog.models import Blueprint
-from etsy_listings.catalog.resolve import normalise
+from etsy_listings.clients.printify.models import Blueprint
+from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.newcmd.logic import (
     LOCAL_MARKER,
     LOCAL_MARKER_FALLBACK,
@@ -600,8 +600,8 @@ def _one_garment_catalog():
     -- the pricing-plan picker's "create new" flow always calls
     `catalog.shipping()`, and the fake raises on an unfixtured key rather than
     degrading, unlike the real fail-soft cost/FX fetches."""
-    from etsy_listings.catalog.fakes import FakeCatalogClient
-    from etsy_listings.catalog.models import (
+    from etsy_listings.clients.printify.fakes import FakeCatalogClient
+    from etsy_listings.clients.printify.models import (
         PrintAreaPlaceholder,
         PrintProvider,
         ShippingCost,
@@ -873,7 +873,7 @@ def _write_single_kind_template(directory: Path) -> None:
 def test_cancelling_the_garment_picker_stops_new(workspace_root: Path, scripted) -> None:
     import typer
 
-    from etsy_listings.catalog.fakes import FakeCatalogClient
+    from etsy_listings.clients.printify.fakes import FakeCatalogClient
     from etsy_listings.newcmd.interactive import run_new
 
     scripted({**NEW_WIZARD, "Garment": None})

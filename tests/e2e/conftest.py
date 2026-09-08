@@ -19,7 +19,7 @@ from typing import Any
 import httpx
 import pytest
 
-from etsy_listings.catalog.http import HttpCatalogClient
+from etsy_listings.clients.printify import HttpCatalogClient, Transport
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError, Secrets
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import layout
@@ -67,7 +67,7 @@ def catalog(printify_token: str) -> HttpCatalogClient:
     ``printify_api`` below is the one that writes -- the Phase 2 product tests
     create a throwaway product in ``printify_shop`` and delete it in teardown.
     """
-    return HttpCatalogClient(printify_token)
+    return HttpCatalogClient(Transport(printify_token))
 
 
 @pytest.fixture(scope="session")

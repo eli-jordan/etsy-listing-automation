@@ -27,7 +27,7 @@ import typer
 import yaml
 
 from etsy_listings import prompts
-from etsy_listings.clients.printify.http import HttpPrintifyClient, PrintifyAuthError
+from etsy_listings.clients.printify import HttpPrintifyClient, PrintifyAuthError, Transport
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, Secrets
@@ -60,7 +60,7 @@ def _cancelled() -> typer.Exit:
 
 
 def _default_client_factory(token: str) -> PrintifyClient:
-    return HttpPrintifyClient(token)
+    return HttpPrintifyClient(Transport(token))
 
 
 def _existing_token(root: Path) -> str | None:

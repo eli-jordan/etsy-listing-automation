@@ -14,20 +14,19 @@ import base64
 
 import httpx
 
-from etsy_listings.clients.printify.http import BASE_URL, HttpPrintifyClient
+from etsy_listings.clients.printify import HttpPrintifyClient
 from etsy_listings.clients.printify.models import (
     PlacedImage,
     Placeholder,
     PrintAreaSpec,
     ProductSpec,
 )
-from etsy_listings.clients.retry import RetryPolicy
+
+from tests.support.http import INSTANT, transport
 
 SHOP_ID = 28819281
 PRODUCT_ID = "6a9ffdbfecfdc9324d023442"
 UPLOAD_ID = "6a9ffd8a2c8e5a0d3f1b0c11"
-
-INSTANT = RetryPolicy(attempts=2, base_delay=0.0, max_delay=0.0, jitter=0.0)
 
 
 def _variant(id: int, *, enabled: bool, price: int = 2499, sku: str = "auto-1") -> dict:
@@ -92,12 +91,7 @@ PRODUCT_PAYLOAD = {
 
 
 def _client(handler) -> HttpPrintifyClient:
-    return HttpPrintifyClient(
-        "test-token",
-        client=httpx.Client(transport=httpx.MockTransport(handler), base_url=BASE_URL),
-        policy=INSTANT,
-        sleep=lambda _: None,
-    )
+    return HttpPrintifyClient(transport(handler, policy=INSTANT))
 
 
 SPEC = ProductSpec(

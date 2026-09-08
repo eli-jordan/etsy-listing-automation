@@ -11,8 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
-from etsy_listings.catalog.client import CatalogClient
-from etsy_listings.clients.printify.protocol import PrintifyClient
+from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
 from etsy_listings.workspace.workspace import Workspace
 
 Swatch = tuple[int, int, int]

@@ -1,28 +1,70 @@
-"""The shop-scoped Printify write boundary (A4).
+"""The two Printify boundaries (A4). One host, one token, two authorities.
 
-Narrow by design: methods land as a stage needs them, not in one speculative
-batch. ``shops()`` came first because every other call here is scoped to a
-shop id, and that one discovers it (PRD 42).
+**This split is the whole point of having two protocols.** A caller that reads
+reference data holds a :class:`CatalogClient` and cannot reach a call that
+creates, updates or deletes anything -- not by discipline, but because the
+method is not on the type it was handed. The plumbing underneath them is
+shared (:mod:`~etsy_listings.clients.printify.transport`); the authority is
+not, and that is the half worth keeping apart.
 
-``update_product`` takes the live product rather than fetching it, which looks
-redundant and is not. Printify's update coverage rule needs every variant the
-product carries, and the retire path needs the price of each variant being
-switched off -- both only knowable from a read. Passing it in keeps the read
-where the caller can see it happen, instead of hiding a second round trip
-inside a write.
+The two also differ in what may be done *with* a result. A catalog read is
+large, rarely changes, is idempotent and is safe to cache on disk (PRD 22) and
+to fan out (A3). A shop's products are the state this tool is converging on,
+so a cached read of one would make ``plan`` diff against a stale world --
+which is why :class:`~...cache.CachedCatalogClient` exists for one and
+deliberately has no counterpart for the other.
+
+Both surfaces are narrow, and grow one method at a time as a stage needs them
+rather than in one speculative batch.
 """
 
 from __future__ import annotations
 
 from typing import Protocol
 
-from etsy_listings.clients.printify.models import Product, ProductSpec, Shop, Upload
+from etsy_listings.clients.printify.models import (
+    Blueprint,
+    PrintProvider,
+    Product,
+    ProductSpec,
+    ShippingRates,
+    Shop,
+    Upload,
+    VariantSet,
+)
+
+
+class CatalogClient(Protocol):
+    """Printify's reference data: read-only and shop-agnostic (PRD 7b).
+
+    Any implementation satisfies this without the rest of the codebase knowing
+    which -- real HTTP, TTL-cached, or a test fake.
+    """
+
+    def blueprints(self) -> list[Blueprint]: ...
+
+    def print_providers(self, blueprint_id: int) -> list[PrintProvider]: ...
+
+    def variants(self, blueprint_id: int, provider_id: int) -> VariantSet: ...
+
+    def shipping(self, blueprint_id: int, provider_id: int) -> ShippingRates: ...
 
 
 class PrintifyClient(Protocol):
+    """Printify's shop-scoped half: the calls that write, and the ones that
+    read state a shop owns.
+
+    ``update_product`` takes the live product rather than fetching it, which
+    looks redundant and is not. Printify's update coverage rule needs every
+    variant the product carries, and the retire path needs the price of each
+    variant being switched off -- both only knowable from a read. Passing it
+    in keeps the read where the caller can see it happen, instead of hiding a
+    second round trip inside a write.
+    """
+
     def shops(self) -> list[Shop]:
         """Every shop the token can reach. Not shop-scoped, unlike the rest of
-        this protocol -- it is what tells you which shop to scope to."""
+        this protocol -- it is what tells you which shop to scope to (PRD 42)."""
         ...
 
     def upload_image(self, file_name: str, contents: bytes) -> Upload:

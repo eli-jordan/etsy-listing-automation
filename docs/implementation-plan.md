@@ -8,7 +8,7 @@ and the order of work. Where the two disagree, the PRD wins and this file is wro
 
 ## Architecture decision log
 
-Twenty-one forks, resolved. Numbered `A#` so they can be cited from code comments
+Twenty-two forks, resolved. Numbered `A#` so they can be cited from code comments
 and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
@@ -29,11 +29,12 @@ and commit messages without colliding with the PRD's own decision log.
 | A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in `engine/stages/placement.py::DesignPlacement.artwork_for`, and used by both stages that place a design — the render stage's mockup and the product stage's print file. It lived privately inside the render stage until Phase 2, when the product stage had to import it through the underscore; a mockup and a print file disagreeing about which ink a colour gets is a failure neither stage's own tests would catch, so the rule got its own module rather than a second implementation. The order itself is unchanged. PRD 30. |
 | A15 | Render cache namespacing | `.cache/renders/{listing}/{template}/...`, not `.cache/renders/{listing}/{colour}.png` — namespaced by template, since a listing can reference more than one `colour-matrix`-kind template and a bare colour is no longer unique across them. |
 | A16 | Pricing plan resolution | `Listing.pricing_plan` stays a bare ref string, resolved by the caller via `Workspace.resolve()`, exactly like `design:` — `Listing` itself never touches `Workspace` or does I/O. `resolved_price()` takes an already-loaded `PricingPlan` as an optional keyword argument rather than loading it itself. Keeps `Listing` as pure and workspace-ignorant as it is today; the cost is every future price-resolving call site must remember to load and pass the plan, same cost `design:` resolution already carries. PRD 34. |
-| A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside `catalog/`'s documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
+| A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside the documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
 | A18 | Wizard-time FX module placement | The one-off FX fetch lives in `newcmd/fx_rate.py`, not the package layout's reserved `fx/` (this doc's own deferred, cached full-margin module, PRD 10b) — avoids name collision with, and confusion against, that future work. PRD 36. |
 | A19 | Calibrator test design | A **library**, not the fixed `BundledDesign` literal it replaces. The three bundled targets stay and keep their ids; the preview endpoint resolves an arbitrary id against those plus PNGs the user has uploaded into the workspace, and an unknown id is a 400 rather than a `KeyError`. The literal was right while the only designs were the ones shipped in `api/static/`, but calibration is judged by eye, and the grid target answers "is the warp right?" while saying nothing about how a real ink weight sits on a real garment. The set has to be open for the second question. Uploads land in the workspace (`test-designs/`, kept apart from `designs/`), never the repo. |
 | A20 | Stage-produced remote state | `StageApplyResult` gains a `remote: dict[str, Any]`, merged into the lockfile's `remote` block the same way `outputs` already is, with each stage owning a documented key prefix (`printify_*`, `etsy_*`). Until Phase 2 no stage produced remote ids, so `apply` copied `lock.remote` through untouched and there was no channel at all — `printify_product` is the first stage that has to write one. A dict merged by the engine, rather than the stage mutating a lockfile it was handed, keeps the rule that a stage returns a value and the engine decides what becomes of it. |
 | A21 | Phase 2 concurrency scope | Retry-with-backoff lands in Phase 2, because it is needed the moment anything writes; the token buckets and the persisted daily budget stay in Phase 6 as planned. A3's `plan` thread-pool fan-out also stays unbuilt: with one remote stage and a single live read per listing there is nothing to overlap, and a pool that fans out over one call is machinery pretending to be an optimisation. Recorded as a decision rather than left as an omission, so the next reader does not take the empty pool for an oversight. |
+| A22 | One Printify package, two protocols | `catalog/` and `clients/printify/` are **one package**, `clients/printify/`, over one shared `Transport`. The authority split that justified two packages is real and is kept — but it is a property of the *protocols*, not of the directory: a caller holding `CatalogClient` cannot reach `create_product` because the method is not on its type. What the two packages actually duplicated was plumbing — a `TokenSource` alias, a lazy token resolve, a `401/403` branch, an auth error, a base URL, an `httpx.Client` — and the copies had already drifted: the catalog reader had **no retries at all**, so a 429 on `blueprints.json` failed a `new` run outright while the identical 429 on a write rode out its backoff (A21). One transport, two protocols, one auth error naming every scope the single token needs. |
 
 ### Toolchain
 
@@ -56,8 +57,6 @@ src/etsy_listings/
     money.py            Money type — parsing, currency validation; PriceField (A16)
     pricing_plan.py     PricingPlan — reusable per-size price table (PRD 33)
     slug.py             slugification rules + exceptions file + collision detection
-  catalog/              Printify catalog fetch, TTL cache, name to id resolution;
-                        shipping() alongside blueprints/providers/variants (PRD 35)
   prompts.py            which prompt backend can drive this terminal at all --
                         shared by `new` and `setup`, a package-root leaf like
                         terminal.py rather than a member of either
@@ -83,7 +82,15 @@ src/etsy_listings/
     maps.py             derived height/luminance maps + _derived/ cache
     pipeline.py         render()
   clients/
-    printify/           protocol.py http.py models.py fakes.py
+    printify/           everything said to Printify, catalog and shop alike (A22)
+      transport.py      token, retries, auth + error decoding -- the shared half
+      protocol.py       CatalogClient (reads) and PrintifyClient (writes)
+      models.py         reference data and shop state
+      catalog.py        blueprints/providers/variants/shipping (PRD 35)
+      products.py       shops, uploads, product CRUD
+      cache.py          TTL disk cache -- catalog only, deliberately
+      resolve.py        name to id, the only place a config name becomes an int
+      fakes.py          in-memory implementations of both protocols
     etsy/               protocol.py http.py models.py fakes.py oauth.py
     limiter.py          token buckets, incl. persisted daily budget
     retry.py            backoff policy
