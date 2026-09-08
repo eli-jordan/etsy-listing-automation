@@ -11,10 +11,7 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
-from PIL import Image
 
-from etsy_listings import __about__
 from etsy_listings.catalog.fakes import FakeCatalogClient
 from etsy_listings.catalog.models import (
     Blueprint,
@@ -33,7 +30,16 @@ from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, build_plan
 from etsy_listings.engine.stages.printify_product import PrintifyProductStage
 from etsy_listings.engine.stages.render import RenderStage
-from etsy_listings.workspace.workspace import Workspace
+
+from tests.support.builders import FIXTURE_LISTING as LISTING
+from tests.support.builders import (
+    a_context,
+    a_lock,
+    edit_listing,
+    set_copy,
+    set_shop_id,
+    write_design,
+)
 
 BLUEPRINT = Blueprint(
     id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
@@ -43,11 +49,15 @@ COLOURS = ["Black", "Blue Jean", "Ivory", "Moss"]
 SIZES = ["S", "M", "L", "XL", "XXL", "XXXL"]
 SHOP_ID = 28819281
 STAGE = PrintifyProductStage()
-LISTING = "take-a-hike"
+PRINT_AREA = (4500, 5400)
+"""The profile's front print area. A design at exactly this size passes the
+resolution gate; anything smaller is what `write_design` is asked for when a
+test wants the refusal."""
+TOO_SMALL = (120, 140)
 
 
 def _variants() -> VariantSet:
-    placeholder = PrintAreaPlaceholder(position="front", width=4500, height=5400)
+    placeholder = PrintAreaPlaceholder(position="front", width=PRINT_AREA[0], height=PRINT_AREA[1])
     return VariantSet(
         variants=tuple(
             Variant(
@@ -83,43 +93,14 @@ def root(workspace_root: Path) -> Path:
 
     All three are things `plan` refuses without, and each has its own test
     below -- these are the *passing* values."""
-    shop = workspace_root / "shop.yaml"
-    document = yaml.safe_load(shop.read_text(encoding="utf-8"))
-    document["printify"] = {"shop_id": SHOP_ID}
-    shop.write_text(yaml.safe_dump(document), encoding="utf-8")
-
-    _write_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
-    _write_design(workspace_root, (4500, 5400))
+    set_shop_id(workspace_root, SHOP_ID)
+    set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
+    write_design(workspace_root, PRINT_AREA)
     return workspace_root
 
 
-def _write_copy(root: Path, *, title: str, description: str) -> None:
-    path = root / "listings" / LISTING / "listing.yaml"
-    document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    document["etsy"]["title"] = title
-    document["etsy"]["description"] = description
-    path.write_text(yaml.safe_dump(document), encoding="utf-8")
-
-
-def _write_listing(root: Path, **updates: object) -> None:
-    path = root / "listings" / LISTING / "listing.yaml"
-    document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    document.update(updates)
-    path.write_text(yaml.safe_dump(document), encoding="utf-8")
-
-
-def _write_design(root: Path, size: tuple[int, int]) -> None:
-    Image.new("RGBA", size, (10, 20, 30, 255)).save(root / "designs" / "take-a-hike.png")
-
-
 def _ctx(root: Path, catalog: FakeCatalogClient, printify: FakePrintifyClient) -> RunContext:
-    return RunContext(
-        workspace=Workspace.discover(root_override=root), catalog=catalog, printify=printify
-    )
-
-
-def _lock(**kwargs: object) -> Lockfile:
-    return Lockfile(tool_version=__about__.VERSION, applied_at="2026-09-08T00:00:00Z", **kwargs)
+    return a_context(root, catalog=catalog, printify=printify)
 
 
 def _plan(ctx: RunContext, lock: Lockfile) -> PlannedRun:
@@ -138,7 +119,7 @@ def _apply(ctx: RunContext, lock: Lockfile) -> Lockfile:
 
 
 def test_the_first_plan_says_it_will_create_a_product(root, catalog, printify) -> None:
-    stage_plan = _stage_plan(_ctx(root, catalog, printify), _lock())
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
 
     assert stage_plan.will_run
     assert "create" in (stage_plan.reason or "").lower()
@@ -148,14 +129,14 @@ def test_planning_touches_no_remote_state(root, catalog, printify) -> None:
     """`plan` is read-only, and with no product id there is nothing even to
     read -- so it must not ask, or a fresh workspace needs a token to run a
     command that changes nothing."""
-    _plan(_ctx(root, catalog, printify), _lock())
+    _plan(_ctx(root, catalog, printify), a_lock())
 
     assert printify.created == []
     assert printify.products == {}
 
 
 def test_apply_creates_the_product_with_the_whole_matrix(root, catalog, printify) -> None:
-    lock = _apply(_ctx(root, catalog, printify), _lock())
+    lock = _apply(_ctx(root, catalog, printify), a_lock())
 
     assert len(printify.created) == 1
     spec = printify.created[0]
@@ -163,17 +144,43 @@ def test_apply_creates_the_product_with_the_whole_matrix(root, catalog, printify
     assert lock.remote["printify_product_id"] == "fake-product-1"
 
 
+FIXTURE_PRICES_MINOR = {
+    "S": 34900,
+    "M": 34900,
+    "L": 34900,
+    "XL": 35900,
+    "XXL": 36900,
+    "XXXL": 37900,
+}
+"""``listing.yaml``'s ``prices:`` in NOK øre. Transcribed from the fixture, not
+computed from it -- a helper that multiplied by 100 the way the code does would
+agree with a broken conversion."""
+
+
 def test_prices_reach_printify_as_minor_units_of_the_shop_currency(root, catalog, printify) -> None:
     """PRD 39/40: NOK goes to Printify verbatim. `349 NOK` is `34900`, not a
-    converted USD figure -- no rate reaches `apply`, and none reaches a hash."""
-    _apply(_ctx(root, catalog, printify), _lock())
+    converted USD figure -- no rate reaches `apply`, and none reaches a hash.
 
-    assert 34900 in printify.created[0].variants.values()
-    assert 37900 in printify.created[0].variants.values(), "XXXL at 379 NOK"
+    Asserted per variant rather than as "34900 turns up somewhere in the
+    values". The failure worth catching is a price landing on the wrong *size*,
+    and every size shares a price with at least one other, so a membership test
+    cannot see it: the whole matrix could be priced at 349 and still pass.
+    """
+    _apply(_ctx(root, catalog, printify), a_lock())
+
+    by_id = {variant.id: variant.options for variant in _variants().variants}
+    priced = {
+        (by_id[variant_id].color, by_id[variant_id].size): price
+        for variant_id, price in printify.created[0].variants.items()
+    }
+
+    assert priced == {
+        (colour, size): FIXTURE_PRICES_MINOR[size] for colour in COLOURS for size in SIZES
+    }
 
 
 def test_the_design_is_uploaded_once_and_placed_centred(root, catalog, printify) -> None:
-    _apply(_ctx(root, catalog, printify), _lock())
+    _apply(_ctx(root, catalog, printify), a_lock())
 
     assert len(printify.uploads) == 1
     placed = printify.created[0].print_areas[0].placeholders[0].images[0]
@@ -181,7 +188,7 @@ def test_the_design_is_uploaded_once_and_placed_centred(root, catalog, printify)
 
 
 def test_the_print_area_uses_the_profiles_placeholder(root, catalog, printify) -> None:
-    _apply(_ctx(root, catalog, printify), _lock())
+    _apply(_ctx(root, catalog, printify), a_lock())
 
     assert printify.created[0].print_areas[0].placeholders[0].position == "front"
 
@@ -192,12 +199,12 @@ def test_the_upload_id_is_remembered_so_a_re_run_does_not_ship_it_again(
     """Uploads are content-addressed, so re-uploading is safe -- and wasteful,
     since it still ships the megabytes."""
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
 
     assert lock.remote["printify_upload_ids"]
 
     calls_before = len(printify.uploads)
-    _write_copy(root, title="Take A Hike Tee v2", description="A retro sunset.")
+    set_copy(root, title="Take A Hike Tee v2", description="A retro sunset.")
     _apply(ctx, lock)
 
     assert len(printify.uploads) == calls_before, "same bytes, no second upload"
@@ -208,7 +215,7 @@ def test_the_upload_id_is_remembered_so_a_re_run_does_not_ship_it_again(
 
 def test_a_second_plan_reports_no_changes(root, catalog, printify) -> None:
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
 
     stage_plan = _stage_plan(ctx, lock)
 
@@ -218,7 +225,7 @@ def test_a_second_plan_reports_no_changes(root, catalog, printify) -> None:
 
 def test_a_second_apply_writes_nothing(root, catalog, printify) -> None:
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
 
     _apply(ctx, lock)
 
@@ -228,7 +235,7 @@ def test_a_second_apply_writes_nothing(root, catalog, printify) -> None:
 
 def test_the_product_id_never_reaches_the_hash(root, catalog, printify) -> None:
     ctx = _ctx(root, catalog, printify)
-    first = _apply(ctx, _lock())
+    first = _apply(ctx, a_lock())
     second = _apply(ctx, first)
 
     assert first.input_hash() == second.input_hash()
@@ -239,9 +246,9 @@ def test_the_product_id_never_reaches_the_hash(root, catalog, printify) -> None:
 
 def test_a_price_change_is_reported_and_applied(root, catalog, printify) -> None:
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
 
-    _write_listing(root, prices={**dict.fromkeys(SIZES, "349 NOK"), "S": "399 NOK"})
+    edit_listing(root, prices={**dict.fromkeys(SIZES, "349 NOK"), "S": "399 NOK"})
     planned = _plan(ctx, lock)
 
     assert any(isinstance(change, PriceChange) for change in planned.plan.stage_plans[0].changes)
@@ -254,11 +261,12 @@ def test_dropping_a_colour_disables_its_variants_explicitly(root, catalog, print
     """Omission means "no opinion" to Printify, not "off". A dropped colour
     that is merely left out of the payload keeps selling."""
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
 
-    _write_listing(root, colors=["black", "blue-jean", "ivory"])
-    _write_listing(
-        root, media=[{"template": "flat-lay-01", "colour": c} for c in ("black", "blue-jean")]
+    edit_listing(
+        root,
+        colors=["black", "blue-jean", "ivory"],
+        media=[{"template": "flat-lay-01", "colour": c} for c in ("black", "blue-jean")],
     )
     lock = _apply(ctx, lock)
 
@@ -272,9 +280,9 @@ def test_an_update_reads_the_product_before_writing_it(root, catalog, printify) 
     """The coverage rule makes the read mandatory: an update's print areas
     must name every variant the product has, which only a read knows."""
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
 
-    _write_listing(root, prices={**dict.fromkeys(SIZES, "359 NOK")})
+    edit_listing(root, prices={**dict.fromkeys(SIZES, "359 NOK")})
     _apply(ctx, lock)
 
     assert printify.updated, "it updated rather than created a second product"
@@ -285,18 +293,18 @@ def test_an_update_reads_the_product_before_writing_it(root, catalog, printify) 
 
 
 def test_a_generate_sentinel_blocks_the_stage(root, catalog, printify) -> None:
-    _write_copy(root, title="<generate>", description="A retro sunset.")
+    set_copy(root, title="<generate>", description="A retro sunset.")
 
-    stage_plan = _stage_plan(_ctx(root, catalog, printify), _lock())
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
 
     assert stage_plan.will_run is False
     assert "<generate>" in (stage_plan.blocked or "")
 
 
 def test_an_undersized_design_blocks_the_stage(root, catalog, printify) -> None:
-    _write_design(root, (120, 140))
+    write_design(root, TOO_SMALL)
 
-    stage_plan = _stage_plan(_ctx(root, catalog, printify), _lock())
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
 
     assert stage_plan.will_run is False
     assert "too small" in (stage_plan.blocked or "")
@@ -306,7 +314,7 @@ def test_a_changed_garment_blocks_the_stage(root, catalog, printify) -> None:
     """And blocks *before* anything is sent, since Printify would answer 200
     and change nothing."""
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
     lock.applied["printify_product"]["blueprint_id"] = 6
 
     stage_plan = _stage_plan(ctx, lock)
@@ -320,9 +328,9 @@ def test_a_blocked_stage_sends_nothing(root, catalog, printify) -> None:
     exception, so the thing that stops the payload is `will_run=False` and
     `execute` honouring it -- not the traceback that used to."""
     ctx = _ctx(root, catalog, printify)
-    _write_design(root, (120, 140))
+    write_design(root, TOO_SMALL)
 
-    _apply(ctx, _lock())
+    _apply(ctx, a_lock())
 
     assert printify.created == []
     assert not printify.uploads
@@ -333,10 +341,10 @@ def test_a_refusal_does_not_cost_the_other_stages_their_plan(root, catalog, prin
     pipeline used to end at the first refusal, so an undersized design cost
     the user the render stage's plan as well and printed one line where a
     listing's worth of intent belonged."""
-    _write_design(root, (120, 140))
+    write_design(root, TOO_SMALL)
     stages = [RenderStage(), STAGE]
 
-    plan = build_plan(_ctx(root, catalog, printify), LISTING, _lock(), stages).plan
+    plan = build_plan(_ctx(root, catalog, printify), LISTING, a_lock(), stages).plan
 
     by_stage = {sp.stage: sp for sp in plan.stage_plans}
     assert by_stage["render"].will_run is True, "the local stage still reports its work"
@@ -344,14 +352,14 @@ def test_a_refusal_does_not_cost_the_other_stages_their_plan(root, catalog, prin
 
 
 def test_a_colour_the_catalog_does_not_offer_is_refused(root, catalog, printify) -> None:
-    _write_listing(
+    edit_listing(
         root,
         colors=["black", "chartreuse"],
         media=[{"template": "flat-lay-01", "colour": "black"}],
     )
 
     with pytest.raises(ValueError, match="chartreuse"):
-        _plan(_ctx(root, catalog, printify), _lock())
+        _plan(_ctx(root, catalog, printify), a_lock())
 
 
 # ------------------------------------------------- the duplicate-create guard
@@ -364,18 +372,18 @@ def test_a_lost_lockfile_adopts_the_existing_product_rather_than_duplicating(
     written, and the next run has no id. Creating again would leave two
     products for one listing, and Printify prevents nothing."""
     ctx = _ctx(root, catalog, printify)
-    _apply(ctx, _lock())
+    _apply(ctx, a_lock())
 
-    _apply(ctx, _lock())  # a fresh lockfile: the crash case
+    _apply(ctx, a_lock())  # a fresh lockfile: the crash case
 
     assert len(printify.created) == 1, "it found the product it had already made"
 
 
 def test_the_adopted_product_id_is_recorded(root, catalog, printify) -> None:
     ctx = _ctx(root, catalog, printify)
-    _apply(ctx, _lock())
+    _apply(ctx, a_lock())
 
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
 
     assert lock.remote["printify_product_id"] == "fake-product-1"
 
@@ -384,7 +392,7 @@ def test_a_product_deleted_in_printify_is_created_again(root, catalog, printify)
     """The other direction: the lockfile names a product that is gone, which
     means create, not crash."""
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
     printify.products.clear()
 
     _apply(ctx, lock)
@@ -397,7 +405,7 @@ def test_a_product_deleted_in_printify_is_created_again(root, catalog, printify)
 
 def test_a_title_changed_in_printify_is_reported_as_drift(root, catalog, printify) -> None:
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
     live = printify.products["fake-product-1"]
     printify.products["fake-product-1"] = live.model_copy(update={"title": "Changed by hand"})
 
@@ -411,7 +419,7 @@ def test_a_product_that_came_back_visible_is_reported(root, catalog, printify) -
     this tool, so a managed product turning visible is the one signal that
     something changed the setting that matters."""
     ctx = _ctx(root, catalog, printify)
-    lock = _apply(ctx, _lock())
+    lock = _apply(ctx, a_lock())
     live = printify.products["fake-product-1"]
     printify.products["fake-product-1"] = live.model_copy(update={"visible": True})
 
@@ -435,8 +443,13 @@ def test_a_discontinued_cell_is_reported_rather_than_fatal(root, catalog, printi
     )
     catalog._variants_by_key[(706, 29)] = dropped  # noqa: SLF001 - fixture surgery
 
-    stage_plan = _stage_plan(_ctx(root, catalog, printify), _lock())
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
 
-    actions = " ".join(a.description for a in stage_plan.actions)
-    assert "Moss" in actions or "moss" in actions
-    assert "XXXL" in actions
+    # The exact sentence, not "Moss appears somewhere in the actions". A
+    # report that names the count but not the cell, or the cell but not which
+    # size, is the report this test is supposed to be checking -- and either
+    # would satisfy a substring search for "Moss".
+    skipped = [a.description for a in stage_plan.actions if a.description.startswith("skip ")]
+    assert skipped == ["skip 1 colour/size combination(s) this garment no longer offers: moss/XXXL"]
+    # ...and the product is still created, without the cell.
+    assert any(a.description.startswith("create ") for a in stage_plan.actions)

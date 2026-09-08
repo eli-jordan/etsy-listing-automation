@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 import httpx
@@ -78,7 +77,8 @@ def contract_fixtures() -> dict[str, object]:
     Imported from the contract test rather than duplicated, because the whole
     point of comparing them here is that there is exactly one copy: if
     Printify's real response stops matching, the file the *offline* tests
-    trust is the file this layer names.
+    trust is the file this layer names. (``pythonpath = ["."]`` in
+    pyproject.toml is what makes ``tests.contract`` importable from here.)
     """
     from tests.contract import test_catalog_http as contract
 
@@ -87,15 +87,6 @@ def contract_fixtures() -> dict[str, object]:
         "providers": contract.PROVIDERS_PAYLOAD,
         "variants": contract.VARIANTS_PAYLOAD,
     }
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    """Make ``tests`` importable so ``contract_fixtures`` can reach the
-    transcripts. ``rootdir`` is on ``sys.path`` under pytest's default import
-    mode, but only once a package marker exists -- this keeps that explicit."""
-    root = Path(__file__).resolve().parents[2]
-    if str(root) not in os.sys.path:
-        os.sys.path.insert(0, str(root))
 
 
 @pytest.fixture(scope="session")

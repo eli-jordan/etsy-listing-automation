@@ -152,11 +152,17 @@ class TestThumbnails:
         (workspace_root / "mockup-templates" / "photoless").mkdir()
         assert client.get("/api/templates/photoless/thumbnail").status_code == 404
 
-    def test_thumbnail_rejects_a_name_that_escapes_the_workspace(self, client: TestClient) -> None:
-        """Template names arrive from the URL, so this endpoint goes through
-        the workspace accessors like every other one (A8)."""
-        response = client.get("/api/templates/..%2F..%2Fetc/thumbnail")
-        assert response.status_code in (400, 404)
+    def test_a_dot_dot_thumbnail_url_reaches_no_template_at_all(self, client: TestClient) -> None:
+        """404, and pinned as 404 rather than "400 or 404".
+
+        Note what this does *not* prove. httpx normalises `..` out of the path
+        before the request is sent, so no handler ever sees the name -- the URL
+        layer ate it, and the assertion is about that. The server-side refusal
+        is `test_an_unusable_name_is_a_400_from_every_endpoint`, which uses a
+        name that survives normalisation. Accepting either code here meant this
+        passed whether or not that refusal existed.
+        """
+        assert client.get("/api/templates/..%2F..%2Fetc/thumbnail").status_code == 404
 
 
 class TestDesignLibrary:
@@ -593,7 +599,15 @@ class TestTemplatePhotoSize:
 
 def test_preview_wrong_body_shape_for_kind_is_rejected(client: TestClient) -> None:
     """Posting a colour-matrix-shaped body at a multiple-kind template is a
-    client error, not silently mis-rendered."""
+    client error, not silently mis-rendered.
+
+    400 and the sentence, not "400 or 422". The two codes mean different
+    things: 422 is request validation refusing a malformed body, 400 is the
+    endpoint noticing that a well-formed body is the wrong *kind* for this
+    template. Only the second is the behaviour under test, and accepting
+    either would let a body that stopped being valid at all pass as if the
+    kind check had run.
+    """
     response = client.post(
         "/api/templates/colour-chart-01/preview",
         json={
@@ -606,15 +620,19 @@ def test_preview_wrong_body_shape_for_kind_is_rejected(client: TestClient) -> No
             ],
         },
     )
-    assert response.status_code in (400, 422)
+    assert response.status_code == 400
+    assert response.json()["detail"] == "expected a multiple preview body"
 
 
-def test_traversal_template_name_is_rejected_not_resolved(client: TestClient) -> None:
-    """Template names arrive from the URL. They go through the workspace's
-    layout accessors, so a traversal attempt is refused by the same rule that
-    guards every other path (A8) rather than by a check local to the web layer."""
+def test_a_dot_dot_config_url_reaches_no_template_at_all(client: TestClient) -> None:
+    """The config endpoint's half of the thumbnail case above: httpx
+    normalises the `..` away, so this pins that nothing is served for it and
+    that the response body never leaks a resolved workspace path. The
+    server-side refusal of a name that *does* reach a handler is
+    `test_an_unusable_name_is_a_400_from_every_endpoint`.
+    """
     response = client.get("/api/templates/..%2F..%2Fetc/config")
-    assert response.status_code in (400, 404)
+    assert response.status_code == 404
     assert "shop.yaml" not in response.text
 
 

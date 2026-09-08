@@ -20,21 +20,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
 from typer.testing import CliRunner
 
 from etsy_listings.cli.app import app
 
+from tests.support.builders import copy_listing, set_copy, set_shop_id
+
 runner = CliRunner()
 SHOP_ID = 28819281
-
-
-def _with_shop_id(root: Path) -> Path:
-    shop = root / "shop.yaml"
-    document = yaml.safe_load(shop.read_text(encoding="utf-8"))
-    document["printify"] = {"shop_id": SHOP_ID}
-    shop.write_text(yaml.safe_dump(document), encoding="utf-8")
-    return root
 
 
 def _plan(root: Path, *args: str):
@@ -115,20 +108,12 @@ def result_lines(root: Path) -> list[str]:
 
 
 def test_a_configured_workspace_does_not_report_a_block(workspace_root: Path) -> None:
-    root = _with_shop_id(workspace_root)
-    _write_copy(root)
+    root = set_shop_id(workspace_root, SHOP_ID)
+    set_copy(root, title="Take A Hike Tee", description="A retro sunset.")
 
     result = _plan(root, "take-a-hike")
 
     assert "run `etsy-listings setup`" not in result.output
-
-
-def _write_copy(root: Path) -> None:
-    path = root / "listings" / "take-a-hike" / "listing.yaml"
-    document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    document["etsy"]["title"] = "Take A Hike Tee"
-    document["etsy"]["description"] = "A retro sunset."
-    path.write_text(yaml.safe_dump(document), encoding="utf-8")
 
 
 # ------------------------------------------------------------ gate refusals
@@ -139,7 +124,7 @@ def test_a_gate_refusal_is_an_actionable_message_not_a_traceback(
 ) -> None:
     """The fixture's copy is still `<generate>`, which PRD 44 refuses. The
     user needs the sentence, not a stack."""
-    root = _with_shop_id(workspace_root)
+    root = set_shop_id(workspace_root, SHOP_ID)
 
     result = _plan(root, "take-a-hike")
 
@@ -151,7 +136,7 @@ def test_a_gate_refusal_reads_as_a_blocked_stage(workspace_root: Path) -> None:
     """One vocabulary, not two. A refusal and an unconfigured shop are both
     reasons a stage cannot run, so `plan` renders them identically -- and
     counts them in the same place."""
-    root = _with_shop_id(workspace_root)
+    root = set_shop_id(workspace_root, SHOP_ID)
 
     result = _plan(root, "take-a-hike")
 
@@ -165,7 +150,7 @@ def test_a_gate_refusal_leaves_the_rest_of_the_plan_standing(workspace_root: Pat
     """The bug that made the refusal a returned value. It was raised, so it
     unwound the stage walk: a listing whose copy was not written yet reported
     one line of error and nothing at all about the mockups it would render."""
-    root = _with_shop_id(workspace_root)
+    root = set_shop_id(workspace_root, SHOP_ID)
 
     result = _plan(root, "take-a-hike")
 
@@ -176,14 +161,9 @@ def test_a_gate_refusal_leaves_the_rest_of_the_plan_standing(workspace_root: Pat
 def test_a_gate_refusal_does_not_halt_a_batch(workspace_root: Path) -> None:
     """PRD 16: continue-on-error. One listing that cannot be planned must not
     stop the rest -- which is the whole reason `--all` is safe to run."""
-    root = _with_shop_id(workspace_root)
-    second = root / "listings" / "second-listing"
-    second.mkdir()
-    source = (root / "listings" / "take-a-hike" / "listing.yaml").read_text(encoding="utf-8")
-    document = yaml.safe_load(source)
-    document["etsy"]["title"] = "A Real Title"
-    document["etsy"]["description"] = "Real copy."
-    (second / "listing.yaml").write_text(yaml.safe_dump(document), encoding="utf-8")
+    root = set_shop_id(workspace_root, SHOP_ID)
+    copy_listing(root, "second-listing")
+    set_copy(root, title="A Real Title", description="Real copy.", listing="second-listing")
 
     result = _plan(root, "--all")
 

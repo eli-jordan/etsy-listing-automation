@@ -103,16 +103,18 @@ def test_no_blueprints_produces_no_rows() -> None:
 
 
 def test_local_blueprint_keys_reads_the_workspace_profiles(workspace_root: Path) -> None:
+    """The fixture workspace holds one profile, `comfort-colors-1717`, whose
+    `blueprint:` says `brand: Comfort Colors` / `model: "1717"`.
+
+    Written out as a literal. Deriving the expected set the way the code does
+    -- `normalise(profile.blueprint.brand)` over `profile_names()` -- passes
+    for *any* behaviour `normalise` might have, including none: both sides move
+    together, so the assertion can never disagree with the implementation. The
+    casefolding it is really claiming is only visible when one side is fixed.
+    """
     workspace = Workspace.discover(root_override=workspace_root)
-    keys = local_blueprint_keys(workspace)
-    assert keys == {
-        (
-            normalise(workspace.load_profile(name).blueprint.brand),
-            normalise(workspace.load_profile(name).blueprint.model),
-        )
-        for name in workspace.profile_names()
-    }
-    assert keys
+
+    assert local_blueprint_keys(workspace) == {("comfort colors", "1717")}
 
 
 def test_a_local_key_ignores_case_and_the_trademark_sign(workspace_root: Path) -> None:
@@ -657,23 +659,74 @@ def _no_network_pricing_plan_generation(monkeypatch) -> None:
     monkeypatch.setattr(fx_rate, "fetch_usd_to", lambda *a, **k: None)
 
 
-def test_new_runs_end_to_end_without_prompt_toolkit(workspace_root: Path, monkeypatch) -> None:
-    """`new` sequenced through the plain-input backend: the one that runs when
-    prompt_toolkit cannot open a console, which is every cygwin session."""
+NEW_WIZARD: dict[str, object] = {
+    "Garment": "Gildan",
+    "Print provider": "Monster Digital",
+    "Mockup template set": "flat-lay-01",
+    "different artwork for light vs dark": False,
+    "Pricing plan": "create a new",
+    "Pricing plan name": "launch-low",
+}
+"""Answers to every question `new` asks on its main path, keyed by what it
+asked rather than by when.
+
+Not listed, because neither is on that path: `Design`, asked only when no
+design name was given, and the per-colour `light or dark garment?`, asked only
+after answering yes above. A test that wants either adds its own key.
+
+The two pricing keys look ambiguous and are not: a fragment that is the whole
+question wins outright, and otherwise the longest match does, so "Pricing plan
+name:" takes the second and the bare "Pricing plan" picker takes the first.
+See ``tests/support/scripted.py``.
+"""
+
+
+def _ordinal(rows: list[str], wanted: str) -> str:
+    """``wanted``'s answer in the plain-input backend: its 1-based position.
+
+    Derived rather than written down. A literal ``"2"`` means `flat-lay-01`
+    only while it happens to be second in the fixture workspace's template
+    list; add a template and every later reply shifts by one, so the run
+    answers questions it was never meant to and fails somewhere that has
+    nothing to do with the cause.
+    """
+    return str(rows.index(wanted) + 1)
+
+
+def test_new_runs_end_to_end_through_the_plain_input_backend(
+    workspace_root: Path, monkeypatch
+) -> None:
+    """The one test that drives `new` through a prompt *backend*.
+
+    Everything below answers `prompts.choose`/`text`/`confirm` directly, which
+    is the seam for what `new` decides and writes. This one goes the whole way
+    down: no fzf, no prompt_toolkit, so every question is a numbered list read
+    off `input()` -- the path every cygwin session takes, and the reason the
+    fallback exists at all. Answers are positions here because positions are
+    genuinely that backend's interface.
+    """
     from etsy_listings.newcmd.interactive import run_new
 
     monkeypatch.setattr(prompts, "fzf_command", lambda: None)
     monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
     _no_network_pricing_plan_generation(monkeypatch)
 
-    catalog = _one_garment_catalog()
-
-    # garment, provider, template (2 = flat-lay-01), tone? (default no),
-    # pricing plan (1 = the only row, "create new"), plan name
-    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", "1", "launch-low"]))
-
     workspace = Workspace.discover(root_override=workspace_root)
-    run_new(workspace, catalog, "brand-new-design", "tshirt")
+    monkeypatch.setattr(
+        "builtins.input",
+        _replies(
+            [
+                "1",  # Garment -- the fake catalog offers exactly one
+                "1",  # Print provider -- likewise
+                _ordinal(workspace.template_names(), "flat-lay-01"),
+                "",  # no light/dark artwork split; blank takes the default
+                "1",  # Pricing plan -- none on disk, so row 1 is "create a new"
+                "launch-low",  # ...and its name
+            ]
+        ),
+    )
+
+    run_new(workspace, _one_garment_catalog(), "brand-new-design", "tshirt")
 
     listing = workspace_root / "listings" / "brand-new-design" / "listing.yaml"
     assert listing.is_file()
@@ -683,7 +736,7 @@ def test_new_runs_end_to_end_without_prompt_toolkit(workspace_root: Path, monkey
 
 
 def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
-    workspace_root: Path, monkeypatch
+    workspace_root: Path, monkeypatch, scripted
 ) -> None:
     """A `single`-kind template has one output and no colour to name (PRD 28).
     `new` used to write one `{template, colour}` entry per colour regardless of
@@ -691,14 +744,15 @@ def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
     from etsy_listings.config.listing import Listing
     from etsy_listings.newcmd.interactive import run_new
 
-    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
-    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
     _no_network_pricing_plan_generation(monkeypatch)
     _write_single_kind_template(workspace_root / "mockup-templates" / "lifestyle-01")
-
-    # garment, provider, template (3 = lifestyle-01, after the two fixtures),
-    # tone? (no), pricing plan (1 = the only row, "create new"), plan name
-    monkeypatch.setattr("builtins.input", _replies(["1", "1", "3", "", "1", "single-kind-plan"]))
+    scripted(
+        {
+            **NEW_WIZARD,
+            "Mockup template set": "lifestyle-01",
+            "Pricing plan name": "single-kind-plan",
+        }
+    )
 
     workspace = Workspace.discover(root_override=workspace_root)
     run_new(workspace, _one_garment_catalog(), "single-kind-design", "tshirt")
@@ -712,7 +766,7 @@ def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
 
 
 def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
-    workspace_root: Path, monkeypatch
+    workspace_root: Path, monkeypatch, scripted
 ) -> None:
     """The "create new pricing plan" flow end to end, with the two live
     fetches stubbed to deterministic (non-empty) data instead of the
@@ -727,17 +781,14 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     from etsy_listings.newcmd.fx_rate import FxRate
     from etsy_listings.newcmd.interactive import run_new
 
-    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
-    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
     monkeypatch.setattr(
         unofficial_variant_costs, "fetch_variant_costs", lambda *a, **k: {1: 1000, 2: 1000}
     )
     fixed_rate = FxRate(rate=Decimal("10"), source="test", fetched_at=datetime.now(UTC))
     monkeypatch.setattr(fx_rate, "fetch_usd_to", lambda *a, **k: fixed_rate)
+    scripted({**NEW_WIZARD, "Pricing plan name": "computed-plan"})
 
     catalog = _one_garment_catalog()
-    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", "1", "computed-plan"]))
-
     workspace = Workspace.discover(root_override=workspace_root)
     run_new(workspace, catalog, "priced-design", "tshirt")
 
@@ -754,14 +805,14 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     assert listing.pricing_plan == "../../pricing-plans/computed-plan.yaml"
 
 
-def test_new_offers_an_existing_compatible_pricing_plan(workspace_root: Path, monkeypatch) -> None:
+def test_new_offers_an_existing_compatible_pricing_plan(
+    workspace_root: Path, monkeypatch, scripted
+) -> None:
     """A plan already on disk for this garment profile is picked straight
     from the list -- the wizard only needs to create one when none exist."""
     from etsy_listings.config.listing import Listing
     from etsy_listings.newcmd.interactive import run_new
 
-    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
-    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
     _no_network_pricing_plan_generation(monkeypatch)
 
     plans_dir = workspace_root / "pricing-plans"
@@ -770,36 +821,34 @@ def test_new_offers_an_existing_compatible_pricing_plan(workspace_root: Path, mo
         "profile: gildan-5000\nprices:\n  S: 100 NOK\n  M: 100 NOK\n",
         encoding="utf-8",
     )
-
-    catalog = _one_garment_catalog()
-    # garment, provider, template, tone?, pricing plan (1 = the existing, compatible plan)
-    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", "1"]))
+    script = scripted({**NEW_WIZARD, "Pricing plan": "existing"})
 
     workspace = Workspace.discover(root_override=workspace_root)
-    run_new(workspace, catalog, "reuses-a-plan", "tshirt")
+    run_new(workspace, _one_garment_catalog(), "reuses-a-plan", "tshirt")
 
     listing = Listing.load(
         workspace_root / "listings" / "reuses-a-plan" / "listing.yaml", currency="NOK"
     )
     assert listing.pricing_plan == "../../pricing-plans/existing.yaml"
     assert not (plans_dir / "reuses-a-plan.yaml").exists()  # nothing new was written
+    # It was offered as a *compatible* plan, marked and sorted above the
+    # create-new row -- which is what makes reusing it the obvious answer.
+    assert script.rows_for("Pricing plan")[0].endswith("existing")
+    assert "Pricing plan name:" not in script.asked, "it never reached the create-new branch"
 
 
-def test_cancelling_the_pricing_plan_picker_stops_new(workspace_root: Path, monkeypatch) -> None:
+def test_cancelling_the_pricing_plan_picker_stops_new(
+    workspace_root: Path, monkeypatch, scripted
+) -> None:
     import typer
 
     from etsy_listings.newcmd.interactive import run_new
 
-    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
-    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
-
-    catalog = _one_garment_catalog()
-    # garment, provider, template, tone?, then a blank reply cancels the picker
-    monkeypatch.setattr("builtins.input", _replies(["1", "1", "2", "", ""]))
+    scripted({**NEW_WIZARD, "Pricing plan": None})
 
     workspace = Workspace.discover(root_override=workspace_root)
     with pytest.raises(typer.Exit):
-        run_new(workspace, catalog, "cancelled-at-pricing", "tshirt")
+        run_new(workspace, _one_garment_catalog(), "cancelled-at-pricing", "tshirt")
 
     assert not (workspace_root / "listings" / "cancelled-at-pricing").exists()
 
@@ -821,15 +870,13 @@ def _write_single_kind_template(directory: Path) -> None:
     (directory / "template.yaml").write_text(SINGLE_KIND_TEMPLATE, encoding="utf-8")
 
 
-def test_cancelling_the_garment_picker_stops_new(workspace_root: Path, monkeypatch) -> None:
+def test_cancelling_the_garment_picker_stops_new(workspace_root: Path, scripted) -> None:
     import typer
 
     from etsy_listings.catalog.fakes import FakeCatalogClient
     from etsy_listings.newcmd.interactive import run_new
 
-    monkeypatch.setattr(prompts, "fzf_command", lambda: None)
-    monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
-    monkeypatch.setattr("builtins.input", _replies([""]))
+    scripted({**NEW_WIZARD, "Garment": None})
 
     workspace = Workspace.discover(root_override=workspace_root)
     with pytest.raises(typer.Exit):

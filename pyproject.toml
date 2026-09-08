@@ -52,6 +52,12 @@ dev = [
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+# The repo root, so `tests.support` (shared builders and prompt doubles) and
+# `tests.contract` (whose payload transcripts the e2e layer re-checks against
+# the live API) are importable from any layer. `tests/` is deliberately not a
+# package -- the layers stay flat directories -- so they resolve as namespace
+# packages off the root, which is what this puts on `sys.path`.
+pythonpath = ["."]
 markers = [
     "e2e: exercises real Printify/Etsy APIs against a throwaway shop; skipped by default",
     "browser: drives the calibrator in a real browser via playwright; skipped when it is unavailable",
@@ -106,6 +112,10 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["etsy_listings"]
+# `tests.support` is shared test scaffolding, not a dependency and not part of
+# the package. Its own section keeps it below the imports of the thing under
+# test, where it reads as scaffolding rather than as another module of the app.
+known-local-folder = ["tests"]
 
 [tool.mypy]
 python_version = "3.12"
