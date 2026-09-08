@@ -11,10 +11,10 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from etsy_listings import prompts
 from etsy_listings.cli import app as cli
 from etsy_listings.cli.app import app
 from etsy_listings.engine.context import Event
-from etsy_listings.newcmd import prompts
 
 runner = CliRunner()
 
@@ -50,11 +50,11 @@ def test_top_level_help_documents_every_environment_variable() -> None:
 
 def test_top_level_help_lists_every_command() -> None:
     output = _help()
-    for command in ("plan", "apply", "new", "ui"):
+    for command in ("setup", "plan", "apply", "new", "ui"):
         assert command in output
 
 
-@pytest.mark.parametrize("command", ["plan", "apply", "new", "ui"])
+@pytest.mark.parametrize("command", ["setup", "plan", "apply", "new", "ui"])
 def test_every_command_documents_root_and_its_environment_variable(command: str) -> None:
     output = _help(command)
     assert "--root" in output

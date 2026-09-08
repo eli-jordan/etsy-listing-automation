@@ -51,7 +51,6 @@ needs no node.
 ```
 src/etsy_listings/
   cli/                  Typer app; one module per command
-                        setup.py -- workspace init + credential capture (PRD 43)
   workspace/            root discovery, path resolution, layout constants
   config/               pydantic models: defaults, profile, listing, exceptions
     money.py            Money type — parsing, currency validation; PriceField (A16)
@@ -59,12 +58,17 @@ src/etsy_listings/
     slug.py             slugification rules + exceptions file + collision detection
   catalog/              Printify catalog fetch, TTL cache, name to id resolution;
                         shipping() alongside blueprints/providers/variants (PRD 35)
+  prompts.py            which prompt backend can drive this terminal at all --
+                        shared by `new` and `setup`, a package-root leaf like
+                        terminal.py rather than a member of either
   newcmd/               the `new` picker: logic.py (pure) + interactive.py (terminal
-                        sequencing) + prompts.py (backend selection)
+                        sequencing)
     unofficial_variant_costs.py    undocumented per-variant cost fetch, fail-soft,
                         isolated from catalog/'s documented surface (A17, PRD 35)
     fx_rate.py          one-off uncached FX fetch for the pricing-plan wizard only
                         — not the reserved fx/ package below (A18, PRD 36)
+  setupcmd/             `setup` (PRD 43): logic.py (pure — skeleton, shop.yaml
+                        merge, .env editing) + interactive.py (sequencing, I/O)
   engine/
     stage.py            Stage protocol
     change.py           Change vocabulary + comparison helpers

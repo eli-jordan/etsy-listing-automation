@@ -121,20 +121,27 @@ uv run etsy-listings apply take-a-hike --root /tmp/try-workspace
 ## 3. Set up your own workspace
 
 The workspace is a directory **you** own, entirely separate from this repo —
-never point `--root` at the repo itself for real work. Create it anywhere:
+never point `--root` at the repo itself for real work. One command creates it:
 
 ```bash
-mkdir -p ~/etsy-listings/{designs,mockup-templates,listings,common-media}
-cd ~/etsy-listings
+uv run etsy-listings setup --root ~/etsy-listings
 ```
 
-Write `shop.yaml` at the root. Only `currency` and the `etsy.*` fields shown
-below are required today — `shop_section_id`/`return_policy_id` are Phase 3
-fields, leave them out until then:
+`setup` makes the directory skeleton, asks for your Printify token and
+**verifies it against the API before storing it**, reads back which shop it
+can reach and writes that id, then collects the currency and Etsy defaults and
+writes `shop.yaml`. It is safe to re-run: every question arrives pre-filled
+with what the file already says, so pressing enter through it changes nothing.
+
+It stops before Etsy sign-in, which arrives with `auth` in Phase 3. A
+workspace without that is complete for everything up to publishing.
+
+The `shop.yaml` it writes looks like this, and hand-editing it is fine:
 
 ```yaml
+printify:
+  shop_id: 28819281          # discovered from your token, not typed
 etsy:
-  shop_id: 12345678
   who_made: i_did
   when_made: made_to_order
   is_supply: false
@@ -143,8 +150,9 @@ currency: NOK
 preferred_print_provider: Monster Digital   # optional; used by `new`'s default
 ```
 
-`shop_id` is a placeholder for now — nothing in Phase 0/1 calls Printify or
-Etsy, so any number works. Every price you write anywhere in this workspace
+`etsy.shop_id`, `shop_section_id` and `return_policy_id` are Phase 3 fields and
+are simply absent until you have them — the tool asks for each by name at the
+point it actually needs one. Every price you write anywhere in this workspace
 must be in the currency you set here (`349 NOK`, never a bare `349` — see
 `Money` in [config/money.py](../src/etsy_listings/config/money.py)).
 

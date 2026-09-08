@@ -11,6 +11,7 @@ import os
 import sys
 from collections.abc import Callable
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import typer
@@ -218,6 +219,35 @@ def _run_over_listings(
         action(ctx, name, Lockfile.read(workspace.lock_file(name)) or _empty_lock())
 
     raise typer.Exit(code=1 if failed else 0)
+
+
+@app.command(epilog=EPILOG)
+def setup(
+    root: str | None = typer.Option(
+        None,
+        "--root",
+        help=(
+            "Where to create the workspace. Defaults to the current directory. "
+            "Unlike every other command, this one does not need a shop.yaml to "
+            "exist there already -- it is the command that writes one."
+        ),
+        envvar=layout.ROOT_ENV_VAR,
+        show_envvar=True,
+        metavar="PATH",
+    ),
+) -> None:
+    """Initialise a workspace: directories, shop.yaml, and the Printify token.
+
+    Safe to re-run: it fills in what is missing and leaves existing answers
+    alone. Verifies the token against Printify before storing it, and reads
+    the shop id back from the same call rather than asking you to find one.
+
+    Stops before Etsy sign-in, which arrives with `auth` in Phase 3.
+    """
+    from etsy_listings.setupcmd import run_setup
+
+    target = to_native_path(root) if root else Path.cwd()
+    run_setup(target)
 
 
 @app.command(epilog=EPILOG)

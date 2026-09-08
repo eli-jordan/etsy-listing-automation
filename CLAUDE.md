@@ -154,11 +154,11 @@ user-writable directory with no installer.
 
 ## Code layout
 
-Per `A1`–`A10`. Full detail in the plan; the shape:
+Per `A1`–`A21`. Full detail in the plan; the shape:
 
 ```
 src/etsy_listings/
-  cli/          Typer app, one module per command        [plan/apply/new/ui done]
+  cli/          Typer app, one module per command  [setup/plan/apply/new/ui done]
   workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
   catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
@@ -166,12 +166,14 @@ src/etsy_listings/
                                         [done; STAGES = [Render()], more stages later]
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
+  setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
   clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
-                                                                            [Phase 2/3]
+                             [printify.shops() done; products Phase 2, etsy Phase 3]
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
                              (dashboard/setup wizard/run runner: Phase 5)
+  prompts.py    which prompt backend can drive this terminal at all          [done]
   terminal.py   stdlib-only leaf: can this stream print that character?     [done]
 ```
 
@@ -393,7 +395,7 @@ PRD's agreed CLI surface for reference when building later phases — do not
 assume a command exists because it is listed here.
 
 ```
-setup              initialise a workspace: skeleton, shop.yaml, credentials    [Phase 2]
+setup              initialise a workspace: skeleton, shop.yaml, credentials      [done]
 new [<design>]     interactive design/garment/provider picker; writes profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified          [done; only `render` exists]

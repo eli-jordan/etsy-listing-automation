@@ -14,10 +14,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from etsy_listings import terminal
+from etsy_listings import prompts, terminal
 from etsy_listings.catalog.models import Blueprint
 from etsy_listings.catalog.resolve import normalise
-from etsy_listings.newcmd import prompts
 from etsy_listings.newcmd.logic import (
     LOCAL_MARKER,
     LOCAL_MARKER_FALLBACK,

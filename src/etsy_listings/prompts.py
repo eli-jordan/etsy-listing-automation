@@ -1,4 +1,10 @@
-"""How ``new`` asks a question, given the terminal it actually got.
+"""How an interactive command asks a question, given the terminal it got.
+
+A package-root leaf like :mod:`etsy_listings.terminal`, and for the same
+reason: it answers a question about the terminal rather than about any one
+command. It lived in ``newcmd/`` while ``new`` was the only thing that
+prompted; ``setup`` (PRD 43) is the second, and reaching into another
+package's submodule for it would have been the wrong way to share this.
 
 This module exists because of a hard constraint discovered while building the
 garment picker: **questionary cannot prompt at all under cygwin.**
