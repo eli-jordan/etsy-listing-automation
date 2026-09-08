@@ -1,11 +1,8 @@
-import { useCallback, useMemo, useState } from "react";
-import { PreviewPanel, type PreviewJob } from "../components/PreviewPanel";
-import { PrintRealismPanel } from "../components/PrintRealismPanel";
-import { QuadEditor } from "../components/QuadEditor";
-import { TestDesignPicker } from "../components/TestDesignPicker";
-import { ViewTabs, type View } from "../components/ViewTabs";
+import { useCallback, useMemo } from "react";
+import type { PreviewJob } from "../components/PreviewPanel";
 import { usePreview } from "../hooks/usePreview";
-import type { BoundingBox, SingleTemplate } from "../types";
+import type { SingleTemplate } from "../types";
+import { EditorShell, OneBoxCanvas } from "./EditorShell";
 
 interface Props {
   templateName: string;
@@ -18,13 +15,9 @@ interface Props {
   onDesignChange: (design: string) => void;
 }
 
-/** The simplest of the three: one box, sliders, no filmstrip, no placements
- * panel -- one photo, one garment, nothing to disambiguate.
- *
- * It carries the same "show placement outline" toggle as a colour set, for
- * the same reason: the box and its handles sit on top of the very artwork you
- * are judging, and with one always-selected box there was previously no way
- * to get them out of the way. */
+/** The simplest of the three: one box over one photo, nothing to
+ * disambiguate. Everything it adds to the shell is the optional garment
+ * colour, which exists only so artwork resolution has something to key on. */
 export function SingleEditor({
   templateName,
   config,
@@ -33,84 +26,42 @@ export function SingleEditor({
   design,
   onDesignChange,
 }: Props) {
-  const [tab, setTab] = useState<View>("calibrate");
-  const [showOutlines, setShowOutlines] = useState(true);
-
-  const previewUrl = usePreview(
-    templateName,
-    useMemo(
-      () => ({
-        bounding_box: config.bounding_box,
-        displace: config.displace,
-        shade: config.shade,
-      }),
-      [config.bounding_box, config.displace, config.shade],
-    ),
-    design,
+  const body = useMemo(
+    () => ({
+      bounding_box: config.bounding_box,
+      displace: config.displace,
+      shade: config.shade,
+    }),
+    [config.bounding_box, config.displace, config.shade],
   );
 
-  // One output, so one job -- but the same on-demand full-size render as a
+  const previewUrl = usePreview(templateName, body, design);
+
+  // One output, so one job -- but the same on-demand full-size render a
   // colour set gets, because the reason for it (the canvas draws a downscale)
   // has nothing to do with how many photos a kind has.
   const jobs: PreviewJob[] = useMemo(
-    () => [
-      {
-        id: templateName,
-        label: config.colour ?? templateName,
-        body: {
-          bounding_box: config.bounding_box,
-          displace: config.displace,
-          shade: config.shade,
-        },
-      },
-    ],
-    [templateName, config.colour, config.bounding_box, config.displace, config.shade],
+    () => [{ id: templateName, label: config.colour ?? templateName, body }],
+    [templateName, config.colour, body],
   );
 
-  const handleBoxChange = useCallback(
-    (_index: number, box: BoundingBox) => onChange({ ...config, bounding_box: box }),
+  const setBox = useCallback(
+    (bounding_box: SingleTemplate["bounding_box"]) => onChange({ ...config, bounding_box }),
     [config, onChange],
   );
 
   return (
-    <main className="app__main">
-      <div className="app__preview">
-        <div className="app__preview-bar">
-          <ViewTabs value={tab} onChange={setTab} />
-          {tab === "calibrate" && (
-            <label className="app__outline-toggle">
-              <input
-                type="checkbox"
-                checked={showOutlines}
-                onChange={(e) => setShowOutlines(e.target.checked)}
-              />
-              show placement outline
-            </label>
-          )}
-        </div>
-        {tab === "calibrate" &&
-          (previewUrl && space ? (
-            <QuadEditor
-              imageUrl={previewUrl}
-              space={space}
-              boxes={[config.bounding_box]}
-              selectedIndex={0}
-              onSelect={() => {}}
-              onChangeBox={handleBoxChange}
-              outlines={showOutlines ? "all" : "none"}
-            />
-          ) : (
-            <p className="app__loading">Loading preview…</p>
-          ))}
-        <PreviewPanel
-          templateName={templateName}
-          jobs={jobs}
-          design={design}
-          active={tab === "preview"}
-        />
-      </div>
-
-      <aside className="app__controls">
+    <EditorShell
+      templateName={templateName}
+      config={config}
+      onChange={onChange}
+      design={design}
+      onDesignChange={onDesignChange}
+      space={space}
+      previewUrl={previewUrl}
+      jobs={jobs}
+      canvas={(ctx) => <OneBoxCanvas {...ctx} box={config.bounding_box} onChange={setBox} />}
+      controls={
         <label>
           Garment colour (optional)
           <input
@@ -119,14 +70,7 @@ export function SingleEditor({
             placeholder="for artwork resolution, if relevant"
           />
         </label>
-        <TestDesignPicker value={design} onChange={onDesignChange} />
-        <PrintRealismPanel
-          displace={config.displace}
-          shade={config.shade}
-          onDisplaceChange={(displace) => onChange({ ...config, displace })}
-          onShadeChange={(shade) => onChange({ ...config, shade })}
-        />
-      </aside>
-    </main>
+      }
+    />
   );
 }

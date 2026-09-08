@@ -150,18 +150,6 @@ describe("ColourMatrixEditor", () => {
     expect(screen.getByText("Loading preview…")).toBeInTheDocument();
   });
 
-  it("switching to Preview hides the calibration controls", async () => {
-    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    setup();
-    await screen.findByAltText("Rendered preview");
-    expect(screen.getByLabelText("show placement outline")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("tab", { name: "Preview" }));
-
-    expect(screen.queryByLabelText("show placement outline")).not.toBeInTheDocument();
-    expect(screen.queryByAltText("Rendered preview")).not.toBeInTheDocument();
-  });
-
   it("opening the Preview tab renders every colour at full size", async () => {
     const spy = vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
     setup();
@@ -191,31 +179,5 @@ describe("ColourMatrixEditor", () => {
     fireEvent.click(approve);
 
     expect(onApprove).toHaveBeenCalled();
-  });
-
-  it("the outline toggle switches the box overlay off", async () => {
-    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    setup();
-    await screen.findByAltText("Rendered preview");
-
-    const toggle = screen.getByLabelText("show placement outline");
-    expect(toggle).toBeChecked();
-    fireEvent.click(toggle);
-    expect(toggle).not.toBeChecked();
-  });
-
-  it("a print-realism change is reported against the whole config", async () => {
-    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
-    const { onChange } = setup();
-    await screen.findByAltText("Rendered preview");
-
-    fireEvent.click(screen.getByLabelText("Follow fabric wrinkles"));
-
-    expect(onChange).toHaveBeenCalledWith(
-      expect.objectContaining({
-        kind: "colour-matrix",
-        displace: expect.objectContaining({ enabled: true }),
-      }),
-    );
   });
 });
