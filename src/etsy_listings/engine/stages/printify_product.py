@@ -25,10 +25,8 @@ to upload id, from the lockfile where it can and by uploading where it cannot.
 
 from __future__ import annotations
 
-import hashlib
 from dataclasses import dataclass, field
 from decimal import Decimal
-from pathlib import Path
 from typing import Any
 
 from etsy_listings.catalog.resolve import (
@@ -45,9 +43,7 @@ from etsy_listings.clients.printify.models import (
     ProductSpec,
 )
 from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.config.listing import Listing
 from etsy_listings.config.money import Money
-from etsy_listings.config.profile import Profile
 from etsy_listings.engine.change import (
     Action,
     Change,
@@ -60,14 +56,13 @@ from etsy_listings.engine.change import (
 )
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stage import StageApplyResult
+from etsy_listings.engine.stage import Blocked, StageApplyResult, StageBlockedError
 from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
     check_garment_unchanged,
 )
-from etsy_listings.engine.stages.render import _resolve_artwork
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.engine.stages.placement import ArtworkGroup, DesignPlacement
 
 PRODUCT_ID_KEY = "printify_product_id"
 UPLOAD_IDS_KEY = "printify_upload_ids"
@@ -77,11 +72,20 @@ content, not on artwork name, because uploads are content-addressed and a
 renamed file is the same upload."""
 
 
-class MissingPrintifyShopError(RuntimeError):
-    def __init__(self) -> None:
-        super().__init__(
-            "no Printify shop is configured for this workspace. Run `etsy-listings setup`."
-        )
+NO_SHOP_BLOCKED = Blocked(
+    "this listing will not be uploaded to Printify: no Printify "
+    "shop is configured for this workspace.\n"
+    "Run `etsy-listings setup` to point it at one."
+)
+"""A workspace that has not opted into Phase 2.
+
+Reported as a blocked stage rather than an error, because the alternative is
+that adding this stage to the pipeline breaks every Phase 1 workflow: a
+listing whose copy is still ``<generate>`` is perfectly valid for rendering
+mockups, and `plan` refusing to run at all would be a regression dressed as a
+validation. The gates below fire only once ``setup`` has pointed the workspace
+at a shop -- which is exactly when a product becomes a thing that could exist.
+"""
 
 
 class MissingPrintifyClientError(RuntimeError):
@@ -90,23 +94,6 @@ class MissingPrintifyClientError(RuntimeError):
             "this run has no Printify client, so the product stage cannot run. "
             "That is a wiring bug, not a configuration problem."
         )
-
-
-@dataclass(frozen=True)
-class ArtworkGroup:
-    """One design, and the variants it prints on.
-
-    A group per artwork rather than one print area for everything, because
-    PRD 30's ``on-light``/``on-dark`` split is exactly this: two files on one
-    product, partitioned by colour. Printify accepts it (measured), and a
-    single-artwork listing is simply the one-group case.
-    """
-
-    artwork: str
-    design: Path
-    design_hash: str
-    variant_ids: tuple[int, ...]
-    colours: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -123,6 +110,15 @@ class PrintifyProductDesired:
     price_labels: dict[int, tuple[str, str]] = field(default_factory=dict)
     """``variant_id -> (colour_slug, size)``, so a ``PriceChange`` can name the
     cell a human recognises instead of an integer they have never seen."""
+
+    def variant_ids(self, group: ArtworkGroup) -> tuple[int, ...]:
+        """The Printify variants a group's colours resolve to.
+
+        The group itself knows only colours -- which ink a colour gets is a
+        fact about the listing, not about Printify -- so turning them into ids
+        is this stage's half of the job, and it is the one place that does it.
+        """
+        return self.resolution.ids(colours=set(group.colours))
 
     def document(self) -> dict[str, Any]:
         """The hashable ``applied`` form: no paths, no upload ids, no clock.
@@ -145,7 +141,7 @@ class PrintifyProductDesired:
                 {
                     "artwork": group.artwork,
                     "design_hash": group.design_hash,
-                    "variant_ids": list(group.variant_ids),
+                    "variant_ids": list(self.variant_ids(group)),
                 }
                 for group in self.groups
             ],
@@ -157,76 +153,22 @@ def _money(minor_units: int, currency: str) -> Money:
     return Money(Decimal(minor_units) / 100, currency)
 
 
-def _hash_file(path: Path) -> str:
-    return f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
-
-
-def _resolve_design_paths(workspace: Workspace, listing: str, config: Listing) -> dict[str, Path]:
-    listing_dir = workspace.listing_dir(listing)
-    return {
-        artwork: workspace.resolve(ref, relative_to=listing_dir)
-        for artwork, ref in config.design.items()
-    }
-
-
-def _group_by_artwork(
-    resolution: VariantResolution,
-    *,
-    listing_config: Listing,
-    profile: Profile,
-    design_paths: dict[str, Path],
-) -> tuple[ArtworkGroup, ...]:
-    """Partition the variants by which design file prints on them.
-
-    Artwork resolution is A14's, reused unchanged from the render stage --
-    ``listing.artwork[colour]`` > ``profile.colour_tone`` > the design's sole
-    key. Implementing it a second time here is how the mockup and the print
-    file end up disagreeing about which ink a colour gets.
-    """
-    by_artwork: dict[str, list[str]] = {}
-    for colour in dict.fromkeys(v.colour_slug for v in resolution.variants):
-        artwork = _resolve_artwork(
-            colour=colour,
-            listing=listing_config,
-            profile=profile,
-            template_override=None,
-        )
-        by_artwork.setdefault(artwork, []).append(colour)
-
-    return tuple(
-        ArtworkGroup(
-            artwork=artwork,
-            design=design_paths[artwork],
-            design_hash=_hash_file(design_paths[artwork]),
-            variant_ids=resolution.ids(colours=set(colours)),
-            colours=tuple(colours),
-        )
-        for artwork, colours in by_artwork.items()
-    )
-
-
 class PrintifyProductStage:
     name = "printify_product"
     local = False
 
-    def desired(self, ctx: RunContext, listing: str) -> PrintifyProductDesired | None:
-        """``None`` when this workspace has not opted into Phase 2.
+    def desired(self, ctx: RunContext, listing: str) -> PrintifyProductDesired | Blocked:
+        """The product this listing wants, or why there cannot be one.
 
-        A workspace with no ``printify.shop_id`` has nowhere to create a
-        product, so there is nothing to want. Reported as an unconfigured
-        stage rather than an error, because the alternative is that adding
-        this stage to the pipeline breaks every Phase 1 workflow: a listing
-        whose copy is still ``<generate>`` is perfectly valid for rendering
-        mockups, and `plan` refusing to run at all would be a regression
-        dressed as a validation.
-
-        The gates below therefore fire only once ``setup`` has pointed the
-        workspace at a shop -- which is exactly when a product becomes a thing
-        that could be created.
+        Every reason this stage cannot run comes back as a
+        :class:`~etsy_listings.engine.stage.Blocked` -- the unconfigured
+        workspace and the gate refusals alike. One vocabulary: `plan` reports
+        all of them the same way, and none of them can unwind the stage walk
+        and take the render stage's plan down with it.
         """
         workspace = ctx.workspace
         if workspace.defaults.printify.shop_id is None:
-            return None
+            return NO_SHOP_BLOCKED
 
         config = workspace.load_listing(listing)
         profile = workspace.load_profile(config.profile)
@@ -234,10 +176,17 @@ class PrintifyProductStage:
         # The gates that do not need the lockfile run here, so `plan` refuses
         # before it has built a payload nobody wants sent. The garment check
         # needs `applied` and runs in `plan()`.
-        check_copy_is_concrete(title=config.etsy.title, description=config.etsy.description)
-        design_paths = _resolve_design_paths(workspace, listing, config)
-        for path in design_paths.values():
-            check_design_resolution(path, profile)
+        blocked = check_copy_is_concrete(
+            title=config.etsy.title, description=config.etsy.description
+        )
+        if blocked is not None:
+            return blocked
+
+        placement = DesignPlacement.resolve(workspace, listing, config, profile)
+        for path in placement.paths.values():
+            blocked = check_design_resolution(path, profile)
+            if blocked is not None:
+                return blocked
 
         blueprint = resolve_blueprint(
             profile.blueprint.brand, profile.blueprint.model, ctx.catalog.blueprints()
@@ -274,19 +223,11 @@ class PrintifyProductStage:
             print_provider_id=provider.id,
             position=profile.placeholder,
             prices=prices,
-            groups=_group_by_artwork(
-                resolution,
-                listing_config=config,
-                profile=profile,
-                design_paths=design_paths,
-            ),
+            groups=placement.group_by_artwork([v.colour_slug for v in resolution.variants]),
             resolution=resolution,
             currency=workspace.defaults.currency,
             price_labels={v.id: (v.colour_slug, v.size) for v in resolution.variants},
         )
-
-    def last_applied(self, lock: Lockfile) -> dict[str, Any] | None:
-        return lock.applied.get(self.name)
 
     def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> Product | None:
         """The product, or ``None``.
@@ -303,26 +244,20 @@ class PrintifyProductStage:
 
     def plan(
         self,
-        desired: PrintifyProductDesired | None,
+        desired: PrintifyProductDesired | Blocked,
         applied: dict[str, Any] | None,
         live: Product | None,
     ) -> StagePlan:
-        if desired is None:
-            return StagePlan(
-                stage=self.name,
-                will_run=False,
-                blocked=(
-                    "this listing will not be uploaded to Printify: no Printify "
-                    "shop is configured for this workspace.\n"
-                    "Run `etsy-listings setup` to point it at one."
-                ),
-            )
+        if isinstance(desired, Blocked):
+            return StagePlan(stage=self.name, will_run=False, blocked=desired.message)
 
-        check_garment_unchanged(
+        blocked = check_garment_unchanged(
             applied,
             blueprint_id=desired.blueprint_id,
             print_provider_id=desired.print_provider_id,
         )
+        if blocked is not None:
+            return StagePlan(stage=self.name, will_run=False, blocked=blocked.message)
 
         document = desired.document()
         changes = _changes(desired, document, applied)
@@ -341,11 +276,14 @@ class PrintifyProductStage:
         self,
         ctx: RunContext,
         stage_plan: StagePlan,
-        desired: PrintifyProductDesired | None,
+        desired: PrintifyProductDesired | Blocked,
+        live: Product | None,
         lock: Lockfile,
     ) -> StageApplyResult:
-        if desired is None:  # pragma: no cover - `plan` never schedules it
-            raise MissingPrintifyShopError
+        """``live`` is the product ``read_live`` already fetched during
+        planning, not a second ``GET`` for the same id."""
+        if isinstance(desired, Blocked):  # pragma: no cover - `plan` never schedules it
+            raise StageBlockedError(desired.message)
         client = _client(ctx)
         shop_id = _shop_id(ctx)
 
@@ -358,8 +296,6 @@ class PrintifyProductStage:
                 ).id
 
         spec = _spec(desired, uploads)
-        product_id = lock.remote.get(PRODUCT_ID_KEY)
-        live = client.get_product(shop_id, str(product_id)) if product_id else None
 
         if live is None:
             # PRD 48: the lockfile is the primary guard, and this walk closes
@@ -408,7 +344,7 @@ def _spec(desired: PrintifyProductDesired, uploads: dict[str, str]) -> ProductSp
         variants=desired.prices,
         print_areas=tuple(
             PrintAreaSpec(
-                variant_ids=group.variant_ids,
+                variant_ids=desired.variant_ids(group),
                 placeholders=(
                     Placeholder(
                         position=desired.position,

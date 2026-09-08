@@ -60,9 +60,9 @@ still has no idea a workspace exists.
 
 | Module | Owns | Deliberately does *not* |
 |---|---|---|
-| `cli` | Typer commands; turning a `Plan` into terminal text | Compare state, or know the directory layout |
+| `cli` | Typer commands; turning a `Plan` / `RunReport` into terminal text | Compare state, run a batch, or know the directory layout |
 | `ui` | The calibrator's HTTP API and its React front end | Contain a second execution path — it calls the same renderer |
-| `engine` | Stage protocol, the three-way diff, the lockfile and its hashing | Format output, or talk HTTP directly |
+| `engine` | Stage protocol, the three-way diff, the lockfile and its hashing, and the shape of a run over N listings | Format output, or talk HTTP directly |
 | `newcmd` | Turning a catalog choice into a profile + listing stub | Prompt (that is a thin questionary shell over pure logic) |
 | `workspace` | Where every file lives, path safety, loading config | Know what a render or a Printify product is |
 | `render` | warp → displace → shade → export, and derived maps | Any I/O, globals or clock (A7) |
@@ -94,7 +94,12 @@ Three boundaries carry most of the weight:
   assembled.
 - **Only `engine` computes a diff.** `cli` and (later) `ui` consume `Plan` /
   `StagePlan` / `Change` objects and render them. Neither compares state, which
-  is what guarantees the PRD's "one set of rules regardless of route".
+  is what guarantees the PRD's "one set of rules regardless of route". The same
+  rule applies one level up, to the shape of a *run*: `plan_listings` and
+  `apply_listings` own each lockfile's lifecycle and PRD 16's
+  continue-on-error, and an entry point only formats the `RunReport` they
+  return. Both of those lived in `cli/app.py` until they were lifted, which is
+  why the rule is worth stating twice.
 - **`render` is pure.** Arrays and frozen config in, an image out. The stage
   around it does the I/O. This is what makes both the input hash and the
   goldens meaningful.
@@ -113,25 +118,32 @@ sequenceDiagram
 
     User->>CLI: etsy-listings plan take-a-hike
     CLI->>WS: discover(--root / env / walk up)
-    CLI->>WS: load_listing + load_profile (fail fast on bad config)
-    CLI->>Lock: read (or start empty)
-    CLI->>Engine: build_plan(ctx, listing, lock, STAGES)
+    CLI->>Engine: plan_listings(ctx, names, STAGES)
 
-    loop each stage, in pipeline order (A1)
-        Engine->>Stage: desired(ctx, listing)
-        Engine->>Stage: last_applied(lock)
-        alt stage is not local
-            Engine->>Stage: read_live(ctx, lock)
+    loop each listing, continue-on-error (PRD 16)
+        Engine->>Lock: read (or start empty)
+        Engine->>Engine: build_plan(ctx, listing, lock, STAGES)
+
+        loop each stage, in pipeline order (A1)
+            Engine->>Stage: desired(ctx, listing)
+            Engine->>Lock: applied_for(stage.name)
+            alt stage is not local
+                Engine->>Stage: read_live(ctx, lock)
+            end
+            Engine->>Stage: plan(desired, applied, live) → StagePlan
         end
-        Engine->>Stage: plan(desired, applied, live) → StagePlan
+
+        Engine-->>CLI: on_planned(listing, PlannedRun)
+        CLI->>User: format_plan(plan)
     end
 
-    Engine-->>CLI: Plan
-    CLI->>User: format_plan(plan)
+    Engine-->>CLI: RunReport
+    CLI->>User: exit 1 if report.failed
 
-    Note over User,Lock: apply reuses the same Plan
+    Note over User,Lock: apply is the same walk, then the writes
     User->>CLI: etsy-listings apply take-a-hike
-    CLI->>Engine: execute(ctx, plan, lock, STAGES)
+    CLI->>Engine: apply_listings(ctx, names, STAGES)
+    Engine->>Engine: build_plan(...), then execute(ctx, planned, lock)
     Engine->>Stage: apply(...) — strictly sequential (A3)
     Stage->>Render: render(design, base, cfg) per colour
     Stage-->>Engine: StageApplyResult(applied, outputs)

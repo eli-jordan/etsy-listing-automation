@@ -32,17 +32,22 @@ describing the same thing.
 
 from __future__ import annotations
 
-import hashlib
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
-from etsy_listings.config.listing import Listing, TemplateMediaEntry
-from etsy_listings.config.profile import Profile
+from etsy_listings.config.listing import TemplateMediaEntry
 from etsy_listings.engine.change import Action, StagePlan
 from etsy_listings.engine.context import RunContext, Swatch
-from etsy_listings.engine.lock import Lockfile, canonical_hash, to_workspace_relative_posix
+from etsy_listings.engine.lock import (
+    Lockfile,
+    canonical_hash,
+    hash_file,
+    to_workspace_relative_posix,
+)
 from etsy_listings.engine.stage import StageApplyResult
+from etsy_listings.engine.stages.placement import DesignPlacement
 from etsy_listings.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
@@ -83,84 +88,14 @@ class MediaColourMismatchError(ValueError):
             )
 
 
-class ArtworkResolutionError(ValueError):
-    """Names *which* key was asked for and *who* asked for it.
-
-    Without both, the message sends you to the wrong file. A template with
-    ``artwork: on-light`` over a single-file design used to report only
-    "colour 'white' needs an artwork but none resolves", which reads as a
-    problem with the colour or the listing -- while the demand actually came
-    from the template, and ``on-light`` appeared nowhere in the message.
-    """
-
-    def __init__(
-        self,
-        colour: str | None,
-        tone: str | None,
-        available: list[str],
-        *,
-        wanted: str | None = None,
-        source: str = "",
-    ) -> None:
-        detail = f"colour {colour!r}" if colour is not None else "this template"
-        tone_note = f" (tone: {tone})" if tone else ""
-        if wanted is not None:
-            super().__init__(
-                f"{detail}{tone_note}: {source} asks for artwork {wanted!r}, which the "
-                f"design does not have -- it offers {available!r}. Add {wanted!r} to the "
-                f"listing's design:, or remove the override."
-            )
-        else:
-            super().__init__(
-                f"{detail}{tone_note} needs an artwork but none resolves -- design offers "
-                f"{available!r}; add a listing.artwork override or a matching key"
-            )
-
-
-def _resolve_artwork(
-    *,
-    colour: str | None,
-    listing: Listing,
-    profile: Profile,
-    template_override: str | None,
-) -> str:
-    """Resolution order (docs/multi-placement-rendering.md item 2):
-    1. ``listing.artwork[colour]`` -- explicit per-design override, wins even
-       over the template's own override (deliberately -- see the doc).
-    2. The template/placement's own ``artwork`` override.
-    3. ``on-{profile.colour_tone[colour]}``, if that key exists in the design map.
-    4. The design map's sole key, if it has exactly one entry.
-    """
-    keys = list(listing.design.keys())
-    key_set = set(keys)
-
-    candidate: str | None = None
-    source = ""
-    if colour is not None and colour in listing.artwork:
-        candidate, source = listing.artwork[colour], f"the listing's artwork[{colour!r}]"
-    elif template_override is not None:
-        candidate, source = template_override, "the template's own artwork: override"
-    elif colour is not None and colour in profile.colour_tone:
-        toned = f"on-{profile.colour_tone[colour]}"
-        if toned in key_set:
-            candidate, source = toned, f"the profile's colour_tone[{colour!r}]"
-
-    if candidate is None and len(keys) == 1:
-        candidate, source = keys[0], "the design's sole key"
-
-    if candidate is None or candidate not in key_set:
-        tone = profile.colour_tone.get(colour) if colour is not None else None
-        raise ArtworkResolutionError(colour, tone, sorted(keys), wanted=candidate, source=source)
-    return candidate
-
-
 @dataclass(frozen=True)
 class ResolvedLayer:
     """One design, placed at one bounding box, inside a scene.
 
-    ``artwork`` has already been resolved through :func:`_resolve_artwork` and
-    ``design`` is the file it landed on -- so nothing downstream repeats that
-    resolution, and the answer that got hashed is the answer that gets
+    ``artwork`` has already been resolved through
+    :meth:`~etsy_listings.engine.stages.placement.DesignPlacement.artwork_for`
+    and ``design`` is the file it landed on -- so nothing downstream repeats
+    that resolution, and the answer that got hashed is the answer that gets
     rendered.
     """
 
@@ -266,6 +201,20 @@ class RenderApplied:
     input_hash: str
     scenes: tuple[str, ...]
 
+    @classmethod
+    def parse(cls, data: dict[str, Any] | None) -> RenderApplied | None:
+        """The stage's lockfile subtree, as the two fields ``plan()`` compares.
+
+        ``None`` in, ``None`` out -- a stage that has never run has no applied
+        document, and that is not an error to distinguish from a malformed
+        one. The written document also carries ``scene_config``, which nothing
+        reads back: it is there because A2 says the lockfile records the
+        verbatim last-applied document, not because this comparison needs it.
+        """
+        if data is None:
+            return None
+        return cls(input_hash=data["input_hash"], scenes=tuple(data["scenes"]))
+
 
 @dataclass(frozen=True)
 class RenderLive:
@@ -292,10 +241,6 @@ def _render_path(workspace: Workspace, listing: str, scene: str) -> Path:
     return workspace.render_file(listing, template, colour)
 
 
-def _hash_path(path: Path) -> str:
-    return f"sha256:{hashlib.sha256(path.read_bytes()).hexdigest()}"
-
-
 # The only thing left that reads a template's kind. Which photo a scene
 # composites over, and what its derived maps cache under, are the same
 # question asked at a different level -- `Workspace.scene_photo` answers both,
@@ -320,9 +265,7 @@ def _resolve_scene(
     *,
     workspace: Workspace,
     listing: str,
-    listing_cfg: Listing,
-    profile: Profile,
-    design_paths: dict[str, Path],
+    placement: DesignPlacement,
     template_name: str,
     template_cfg: AnyTemplate,
     colour: str | None,
@@ -337,15 +280,10 @@ def _resolve_scene(
 
     layers = []
     for layer_colour, override, cfg in _layer_specs(template_cfg, colour):
-        artwork = _resolve_artwork(
-            colour=layer_colour,
-            listing=listing_cfg,
-            profile=profile,
-            template_override=override,
-        )
+        artwork = placement.artwork_for(layer_colour, template_override=override)
         layers.append(
             ResolvedLayer(
-                colour=layer_colour, artwork=artwork, design=design_paths[artwork], cfg=cfg
+                colour=layer_colour, artwork=artwork, design=placement.paths[artwork], cfg=cfg
             )
         )
 
@@ -370,11 +308,7 @@ class RenderStage:
         workspace = ctx.workspace
         listing_cfg = workspace.load_listing(listing)
         profile = workspace.load_profile(listing_cfg.profile)
-
-        design_paths: dict[str, Path] = {
-            key: workspace.resolve(ref, relative_to=workspace.listing_dir(listing))
-            for key, ref in listing_cfg.design.items()
-        }
+        placement = DesignPlacement.resolve(workspace, listing, listing_cfg, profile)
 
         referenced: dict[tuple[str, str | None], None] = {}
         for entry in listing_cfg.media:
@@ -395,15 +329,13 @@ class RenderStage:
                 # The file's own bytes, not the re-serialised model: hashing a
                 # normalised dump would miss an edit that pydantic round-trips
                 # away, and the question here is "did the file change?".
-                template_hash[template_name] = _hash_path(config_path)
+                template_hash[template_name] = hash_file(config_path)
                 template_configs[template_name] = workspace.load_template_config(template_name)
 
             work = _resolve_scene(
                 workspace=workspace,
                 listing=listing,
-                listing_cfg=listing_cfg,
-                profile=profile,
-                design_paths=design_paths,
+                placement=placement,
                 template_name=template_name,
                 template_cfg=template_configs[template_name],
                 colour=colour,
@@ -415,9 +347,9 @@ class RenderStage:
             # `setdefault` over the template name used to do) meant replacing
             # any *other* colour's photo changed no hash at all -- so `plan`
             # reported "No changes." and the stale render stayed in the cache.
-            base_hash[work.key] = _hash_path(work.base_image)
+            base_hash[work.key] = hash_file(work.base_image)
             for layer in work.layers:
-                design_hash[layer.artwork] = _hash_path(layer.design)
+                design_hash[layer.artwork] = hash_file(layer.design)
 
         return RenderDesired(
             listing=listing,
@@ -428,12 +360,6 @@ class RenderStage:
             base_hash=base_hash,
         )
 
-    def last_applied(self, lock: Lockfile) -> RenderApplied | None:
-        data = lock.applied.get(self.name)
-        if data is None:
-            return None
-        return RenderApplied(input_hash=data["input_hash"], scenes=tuple(data["scenes"]))
-
     def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> RenderLive | None:
         """Does what the lockfile claims was rendered still exist?
 
@@ -442,24 +368,25 @@ class RenderStage:
         rendered megabyte on every invocation, to answer a question the
         separate ``outputs`` axis already exists to answer at upload time.
         """
-        applied = self.last_applied(lock)
-        if applied is None:
+        last = RenderApplied.parse(lock.applied_for(self.name))
+        if last is None:
             return None
         return RenderLive(
             outputs_present={
                 scene: _render_path(ctx.workspace, listing, scene).is_file()
-                for scene in applied.scenes
+                for scene in last.scenes
             }
         )
 
     def plan(
-        self, desired: RenderDesired, applied: RenderApplied | None, live: RenderLive | None
+        self, desired: RenderDesired, applied: dict[str, Any] | None, live: RenderLive | None
     ) -> StagePlan:
-        if applied is None:
+        last = RenderApplied.parse(applied)
+        if last is None:
             return self._will_run(desired, "no previous render", missing=())
-        if applied.input_hash != self._input_hash(desired):
+        if last.input_hash != self._input_hash(desired):
             return self._will_run(desired, "design or template changed", missing=())
-        if applied.scenes != desired.scenes:
+        if last.scenes != desired.scenes:
             return self._will_run(desired, "referenced scenes changed", missing=())
 
         missing = tuple(
@@ -502,6 +429,7 @@ class RenderStage:
         ctx: RunContext,
         stage_plan: StagePlan,
         desired: RenderDesired,
+        live: RenderLive | None = None,
         lock: Lockfile | None = None,
     ) -> StageApplyResult:
         """A flat loop over already-resolved work.
@@ -533,7 +461,7 @@ class RenderStage:
 
             image = render_scene(base, layers, height=height, luminance=luminance)
             save_png(image, work.output)
-            outputs[desired.relative(work.output)] = _hash_path(work.output)
+            outputs[desired.relative(work.output)] = hash_file(work.output)
 
             swatches: tuple[Swatch, ...] = tuple(
                 sample_swatch(base, layer.cfg.bounding_box) for layer in work.layers

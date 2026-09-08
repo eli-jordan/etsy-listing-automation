@@ -21,6 +21,7 @@ from etsy_listings.engine.apply import execute
 from etsy_listings.engine.change import Plan, StagePlan
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
+from etsy_listings.engine.plan import PlannedRun, StageState
 from etsy_listings.engine.stage import StageApplyResult
 from etsy_listings.workspace.workspace import Workspace
 
@@ -38,9 +39,6 @@ class RecordingStage:
     def desired(self, ctx: RunContext, listing: str) -> dict[str, Any]:
         return {"desired": True}
 
-    def last_applied(self, lock: Lockfile) -> dict[str, Any] | None:
-        return lock.applied.get(self.name)
-
     def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> None:
         return None
 
@@ -48,7 +46,12 @@ class RecordingStage:
         return StagePlan(stage=self.name, will_run=True)
 
     def apply(
-        self, ctx: RunContext, stage_plan: StagePlan, desired: Any, lock: Lockfile
+        self,
+        ctx: RunContext,
+        stage_plan: StagePlan,
+        desired: Any,
+        live: Any,
+        lock: Lockfile,
     ) -> StageApplyResult:
         return StageApplyResult(
             applied=self.applied if self.applied is not None else {"ok": True},
@@ -63,13 +66,25 @@ def _lock(**kwargs: Any) -> Lockfile:
 
 def _run(stage: RecordingStage, lock: Lockfile, root: Path) -> Lockfile:
     ctx = RunContext(workspace=Workspace.discover(root_override=root), catalog=None)  # type: ignore[arg-type]
-    plan = Plan(
-        listing="take-a-hike",
-        is_live=False,
-        etsy_listing_id=None,
-        stage_plans=(StagePlan(stage=stage.name, will_run=True),),
+    stage_plan = StagePlan(stage=stage.name, will_run=True)
+    planned = PlannedRun(
+        plan=Plan(
+            listing="take-a-hike",
+            is_live=False,
+            etsy_listing_id=None,
+            stage_plans=(stage_plan,),
+        ),
+        states=(
+            StageState(
+                stage=stage,  # type: ignore[arg-type]
+                desired={"desired": True},
+                applied=None,
+                live=None,
+                stage_plan=stage_plan,
+            ),
+        ),
     )
-    return execute(ctx, plan, lock, [stage])  # type: ignore[list-item]
+    return execute(ctx, planned, lock)
 
 
 def test_a_stage_can_report_a_remote_id(workspace_root: Path) -> None:

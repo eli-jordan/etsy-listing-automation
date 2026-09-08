@@ -16,7 +16,8 @@ from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import build_plan
 from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.render import ArtworkResolutionError, TemplateNotFoundError
+from etsy_listings.engine.stages.placement import ArtworkResolutionError
+from etsy_listings.engine.stages.render import TemplateNotFoundError
 from etsy_listings.workspace.workspace import Workspace
 
 LISTING = "take-a-hike"
@@ -33,16 +34,16 @@ def _empty_lock() -> Lockfile:
 
 def test_first_plan_says_render_needs_to_run(workspace_root: Path) -> None:
     ctx = _ctx(workspace_root)
-    plan = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    render_plan = next(sp for sp in plan.stage_plans if sp.stage == "render")
+    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    render_plan = next(sp for sp in planned.plan.stage_plans if sp.stage == "render")
     assert render_plan.will_run is True
     assert render_plan.reason == "no previous render"
 
 
 def test_apply_renders_a_file_per_colour(workspace_root: Path) -> None:
     ctx = _ctx(workspace_root)
-    plan = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock = execute(ctx, plan, _empty_lock(), STAGES)
+    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    lock = execute(ctx, planned, _empty_lock())
 
     renders_dir = workspace_root / ".cache" / "renders" / LISTING / "flat-lay-01"
     for colour in ("black", "blue-jean", "ivory", "moss"):
@@ -63,8 +64,8 @@ def test_apply_only_renders_scenes_referenced_by_media(workspace_root: Path) -> 
     )
 
     ctx = _ctx(workspace_root)
-    plan = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock = execute(ctx, plan, _empty_lock(), STAGES)
+    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    lock = execute(ctx, planned, _empty_lock())
 
     renders_dir = workspace_root / ".cache" / "renders" / LISTING / "flat-lay-01"
     for colour in ("black", "blue-jean", "ivory"):
@@ -75,11 +76,11 @@ def test_apply_only_renders_scenes_referenced_by_media(workspace_root: Path) -> 
 
 def test_second_plan_after_apply_is_a_no_op(workspace_root: Path) -> None:
     ctx = _ctx(workspace_root)
-    first_plan = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock = execute(ctx, first_plan, _empty_lock(), STAGES)
+    first_planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    lock = execute(ctx, first_planned, _empty_lock())
 
-    second_plan = build_plan(ctx, LISTING, lock, STAGES)
-    render_plan = next(sp for sp in second_plan.stage_plans if sp.stage == "render")
+    second_planned = build_plan(ctx, LISTING, lock, STAGES)
+    render_plan = next(sp for sp in second_planned.plan.stage_plans if sp.stage == "render")
     assert render_plan.will_run is False
 
 
@@ -87,11 +88,11 @@ def test_apply_twice_produces_byte_identical_applied_subtree(workspace_root: Pat
     """The PRD's idempotency check: apply twice in a row, the second is a no-op
     -- here specifically, the lockfile's hashed `applied` subtree is unchanged."""
     ctx = _ctx(workspace_root)
-    plan_a = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock_a = execute(ctx, plan_a, _empty_lock(), STAGES)
+    planned_a = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    lock_a = execute(ctx, planned_a, _empty_lock())
 
-    plan_b = build_plan(ctx, LISTING, lock_a, STAGES)
-    lock_b = execute(ctx, plan_b, lock_a, STAGES)
+    planned_b = build_plan(ctx, LISTING, lock_a, STAGES)
+    lock_b = execute(ctx, planned_b, lock_a)
 
     assert lock_a.input_hash() == lock_b.input_hash()
 
@@ -133,8 +134,8 @@ def test_apply_renders_a_multiple_kind_scene_as_one_composite(workspace_root: Pa
     )
 
     ctx = _ctx(workspace_root)
-    plan = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock = execute(ctx, plan, _empty_lock(), STAGES)
+    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    lock = execute(ctx, planned, _empty_lock())
 
     chart_file = workspace_root / ".cache" / "renders" / LISTING / "colour-chart-01" / "scene.png"
     assert chart_file.is_file()
@@ -143,8 +144,8 @@ def test_apply_renders_a_multiple_kind_scene_as_one_composite(workspace_root: Pa
 
 def test_changing_the_design_triggers_a_rerender(workspace_root: Path) -> None:
     ctx = _ctx(workspace_root)
-    plan_a = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock_a = execute(ctx, plan_a, _empty_lock(), STAGES)
+    planned_a = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    lock_a = execute(ctx, planned_a, _empty_lock())
 
     design_path = workspace_root / "designs" / "take-a-hike.png"
     design_path.write_bytes(
@@ -154,8 +155,8 @@ def test_changing_the_design_triggers_a_rerender(workspace_root: Path) -> None:
     # A byte appended to a PNG doesn't change what PIL decodes, but the render
     # stage hashes the file's raw bytes (not decoded pixels) -- input_hash must
     # differ even though the pixels would render identically.
-    plan_b = build_plan(ctx, LISTING, lock_a, STAGES)
-    render_plan = next(sp for sp in plan_b.stage_plans if sp.stage == "render")
+    planned_b = build_plan(ctx, LISTING, lock_a, STAGES)
+    render_plan = next(sp for sp in planned_b.plan.stage_plans if sp.stage == "render")
     assert render_plan.will_run is True
     assert render_plan.reason == "design or template changed"
 
@@ -173,13 +174,13 @@ def test_replacing_any_colours_photo_triggers_a_rerender(workspace_root: Path, c
     Photos are now hashed per scene (`base_hash`), so both cases re-run.
     """
     ctx = _ctx(workspace_root)
-    lock = execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock(), STAGES)
+    lock = execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock())
 
     photo = workspace_root / "mockup-templates" / "flat-lay-01" / f"{colour}.png"
     photo.write_bytes(photo.read_bytes() + b"\x00")
 
     render_plan = next(
-        sp for sp in build_plan(ctx, LISTING, lock, STAGES).stage_plans if sp.stage == "render"
+        sp for sp in build_plan(ctx, LISTING, lock, STAGES).plan.stage_plans if sp.stage == "render"
     )
     assert render_plan.will_run is True
     assert render_plan.reason == "design or template changed"

@@ -31,7 +31,7 @@ def format_plan(plan: Plan) -> str:
     # half, and burying it under "No changes." is exactly how a listing goes
     # un-uploaded without anyone noticing.
     for stage_plan in blocked:
-        lines.extend(_format_blocked(stage_plan))
+        lines.extend(format_blocked(stage_plan))
 
     for stage_plan in runs:
         reason = f" ({stage_plan.reason})" if stage_plan.reason else ""
@@ -56,13 +56,18 @@ def format_plan(plan: Plan) -> str:
     return "\n".join(lines)
 
 
-def _format_blocked(stage_plan: StagePlan) -> list[str]:
+def format_blocked(stage_plan: StagePlan) -> list[str]:
     """A stage that cannot run, as a warning rather than a footnote.
 
     The first line is the consequence in the user's terms -- what will not
     happen to their listing -- and any further lines are the remedy, indented
     under it. The stage supplies both, because *why* a stage is blocked is
     engine knowledge; only the shape of it belongs here.
+
+    Public because ``apply`` shows these too. A blocked stage is the one thing
+    ``apply`` must not stay quiet about: it is doing less than it was asked
+    to, and the whole point of the ``blocked`` vocabulary is that both routes
+    say so in the same words.
     """
     message = (stage_plan.blocked or "").splitlines()
     head, *rest = message or [""]

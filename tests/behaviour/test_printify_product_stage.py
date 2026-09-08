@@ -27,16 +27,12 @@ from etsy_listings.catalog.models import (
 from etsy_listings.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import Plan, PriceChange
+from etsy_listings.engine.change import PriceChange
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import build_plan
-from etsy_listings.engine.stages.gates import (
-    DesignResolutionError,
-    GarmentChangedError,
-    UnresolvedCopyError,
-)
+from etsy_listings.engine.plan import PlannedRun, build_plan
 from etsy_listings.engine.stages.printify_product import PrintifyProductStage
+from etsy_listings.engine.stages.render import RenderStage
 from etsy_listings.workspace.workspace import Workspace
 
 BLUEPRINT = Blueprint(
@@ -126,21 +122,24 @@ def _lock(**kwargs: object) -> Lockfile:
     return Lockfile(tool_version=__about__.VERSION, applied_at="2026-09-08T00:00:00Z", **kwargs)
 
 
-def _plan(ctx: RunContext, lock: Lockfile) -> Plan:
+def _plan(ctx: RunContext, lock: Lockfile) -> PlannedRun:
     return build_plan(ctx, LISTING, lock, [STAGE])
 
 
+def _stage_plan(ctx: RunContext, lock: Lockfile):
+    return _plan(ctx, lock).plan.stage_plans[0]
+
+
 def _apply(ctx: RunContext, lock: Lockfile) -> Lockfile:
-    return execute(ctx, _plan(ctx, lock), lock, [STAGE])
+    return execute(ctx, _plan(ctx, lock), lock)
 
 
 # ------------------------------------------------------------------ creating
 
 
 def test_the_first_plan_says_it_will_create_a_product(root, catalog, printify) -> None:
-    plan = _plan(_ctx(root, catalog, printify), _lock())
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), _lock())
 
-    stage_plan = plan.stage_plans[0]
     assert stage_plan.will_run
     assert "create" in (stage_plan.reason or "").lower()
 
@@ -211,10 +210,10 @@ def test_a_second_plan_reports_no_changes(root, catalog, printify) -> None:
     ctx = _ctx(root, catalog, printify)
     lock = _apply(ctx, _lock())
 
-    plan = _plan(ctx, lock)
+    stage_plan = _stage_plan(ctx, lock)
 
-    assert not plan.stage_plans[0].will_run
-    assert plan.stage_plans[0].changes == ()
+    assert not stage_plan.will_run
+    assert stage_plan.changes == ()
 
 
 def test_a_second_apply_writes_nothing(root, catalog, printify) -> None:
@@ -243,11 +242,11 @@ def test_a_price_change_is_reported_and_applied(root, catalog, printify) -> None
     lock = _apply(ctx, _lock())
 
     _write_listing(root, prices={**dict.fromkeys(SIZES, "349 NOK"), "S": "399 NOK"})
-    plan = _plan(ctx, lock)
+    planned = _plan(ctx, lock)
 
-    assert any(isinstance(change, PriceChange) for change in plan.stage_plans[0].changes)
+    assert any(isinstance(change, PriceChange) for change in planned.plan.stage_plans[0].changes)
 
-    execute(ctx, plan, lock, [STAGE])
+    execute(ctx, planned, lock)
     assert 39900 in printify.updated[0].variants.values()
 
 
@@ -285,29 +284,63 @@ def test_an_update_reads_the_product_before_writing_it(root, catalog, printify) 
 # --------------------------------------------------------------- the gates
 
 
-def test_a_generate_sentinel_is_refused_at_plan_time(root, catalog, printify) -> None:
+def test_a_generate_sentinel_blocks_the_stage(root, catalog, printify) -> None:
     _write_copy(root, title="<generate>", description="A retro sunset.")
 
-    with pytest.raises(UnresolvedCopyError):
-        _plan(_ctx(root, catalog, printify), _lock())
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), _lock())
+
+    assert stage_plan.will_run is False
+    assert "<generate>" in (stage_plan.blocked or "")
 
 
-def test_an_undersized_design_is_refused_at_plan_time(root, catalog, printify) -> None:
+def test_an_undersized_design_blocks_the_stage(root, catalog, printify) -> None:
     _write_design(root, (120, 140))
 
-    with pytest.raises(DesignResolutionError):
-        _plan(_ctx(root, catalog, printify), _lock())
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), _lock())
+
+    assert stage_plan.will_run is False
+    assert "too small" in (stage_plan.blocked or "")
 
 
-def test_a_changed_garment_is_refused_at_plan_time(root, catalog, printify) -> None:
-    """And refused *before* anything is sent, since Printify would answer 200
+def test_a_changed_garment_blocks_the_stage(root, catalog, printify) -> None:
+    """And blocks *before* anything is sent, since Printify would answer 200
     and change nothing."""
     ctx = _ctx(root, catalog, printify)
     lock = _apply(ctx, _lock())
     lock.applied["printify_product"]["blueprint_id"] = 6
 
-    with pytest.raises(GarmentChangedError):
-        _plan(ctx, lock)
+    stage_plan = _stage_plan(ctx, lock)
+
+    assert stage_plan.will_run is False
+    assert "different garment" in (stage_plan.blocked or "")
+
+
+def test_a_blocked_stage_sends_nothing(root, catalog, printify) -> None:
+    """The half that has to stay hard. A refusal is now a value rather than an
+    exception, so the thing that stops the payload is `will_run=False` and
+    `execute` honouring it -- not the traceback that used to."""
+    ctx = _ctx(root, catalog, printify)
+    _write_design(root, (120, 140))
+
+    _apply(ctx, _lock())
+
+    assert printify.created == []
+    assert not printify.uploads
+
+
+def test_a_refusal_does_not_cost_the_other_stages_their_plan(root, catalog, printify) -> None:
+    """The reason a gate returns rather than raises. Planning the whole
+    pipeline used to end at the first refusal, so an undersized design cost
+    the user the render stage's plan as well and printed one line where a
+    listing's worth of intent belonged."""
+    _write_design(root, (120, 140))
+    stages = [RenderStage(), STAGE]
+
+    plan = build_plan(_ctx(root, catalog, printify), LISTING, _lock(), stages).plan
+
+    by_stage = {sp.stage: sp for sp in plan.stage_plans}
+    assert by_stage["render"].will_run is True, "the local stage still reports its work"
+    assert by_stage["printify_product"].blocked
 
 
 def test_a_colour_the_catalog_does_not_offer_is_refused(root, catalog, printify) -> None:
@@ -368,9 +401,9 @@ def test_a_title_changed_in_printify_is_reported_as_drift(root, catalog, printif
     live = printify.products["fake-product-1"]
     printify.products["fake-product-1"] = live.model_copy(update={"title": "Changed by hand"})
 
-    plan = _plan(ctx, lock)
+    stage_plan = _stage_plan(ctx, lock)
 
-    assert any("title" in d.path for d in plan.stage_plans[0].drift)
+    assert any("title" in d.path for d in stage_plan.drift)
 
 
 def test_a_product_that_came_back_visible_is_reported(root, catalog, printify) -> None:
@@ -382,9 +415,9 @@ def test_a_product_that_came_back_visible_is_reported(root, catalog, printify) -
     live = printify.products["fake-product-1"]
     printify.products["fake-product-1"] = live.model_copy(update={"visible": True})
 
-    plan = _plan(ctx, lock)
+    stage_plan = _stage_plan(ctx, lock)
 
-    assert any("visible" in d.path for d in plan.stage_plans[0].drift)
+    assert any("visible" in d.path for d in stage_plan.drift)
 
 
 # ------------------------------------------------------- missing cells (46)
@@ -402,8 +435,8 @@ def test_a_discontinued_cell_is_reported_rather_than_fatal(root, catalog, printi
     )
     catalog._variants_by_key[(706, 29)] = dropped  # noqa: SLF001 - fixture surgery
 
-    plan = _plan(_ctx(root, catalog, printify), _lock())
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), _lock())
 
-    actions = " ".join(a.description for a in plan.stage_plans[0].actions)
+    actions = " ".join(a.description for a in stage_plan.actions)
     assert "Moss" in actions or "moss" in actions
     assert "XXXL" in actions

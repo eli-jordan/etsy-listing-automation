@@ -162,7 +162,7 @@ src/etsy_listings/
   workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
   catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
-  engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, stages/
+  engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run, stages/
                    [done; STAGES = [Render(), PrintifyProduct()], more stages later]
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
@@ -189,6 +189,15 @@ later. Each traces to a decision.
 - **Only `engine` computes a diff.** The CLI renderer and the UI serialiser both
   consume `Plan` / `StagePlan` / `Change` objects. Neither may compare states
   itself — that is what makes the CLI and UI enforce identical rules (`A2`, PRD 20).
+- **Only `engine` runs a run.** The same rule, one level up: reading a
+  listing's lockfile, planning it, executing it, writing the lockfile back and
+  carrying on past a failure (PRD 16) all live in `engine/run.py`, behind
+  `plan_listings` / `apply_listings`. An entry point supplies the listings and
+  formats the resulting `RunReport`; it never opens a lockfile itself.
+- **Only the lockfile merges a lockfile.** `Lockfile.fold()` owns the
+  replace-versus-merge rules for all four axes and `applied_for()` owns the
+  per-stage lookup. A stage returns a `StageApplyResult` and never touches the
+  file; `execute` decides only which stages run, in what order.
 - **Nothing volatile enters a hash.** No timestamps, no absolute paths, no model
   output, no `tool_version`. Only the lockfile's `applied` subtree is hashed, via
   the single `canonical_hash()` helper. Violating this makes every run show a

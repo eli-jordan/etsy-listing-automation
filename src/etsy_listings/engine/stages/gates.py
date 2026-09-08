@@ -9,6 +9,15 @@ literal string and published as one.
 They live here rather than inside ``printify_product`` because `plan` has to
 be able to run them before it builds a desired document -- a refusal is more
 useful than a well-formed payload nobody wants sent.
+
+**Each returns a** :class:`~etsy_listings.engine.stage.Blocked` **rather than
+raising one.** A refusal is something `plan` has to report, and raising made
+it something `plan` could only die of: the exception unwound the stage walk,
+so a design a hundred pixels short took the render stage's plan with it and
+the user saw a single line where a whole listing's intent belonged. Returned,
+a refusal is a blocked stage like any other -- the same vocabulary an
+unconfigured shop already used. ``apply`` still refuses to run a blocked
+stage, which is the half that has to stay hard.
 """
 
 from __future__ import annotations
@@ -20,7 +29,7 @@ from PIL import Image, UnidentifiedImageError
 
 from etsy_listings.config.listing import GENERATE
 from etsy_listings.config.profile import Profile
-from etsy_listings.errors import UserFacingError
+from etsy_listings.engine.stage import Blocked
 
 RESOLUTION_TOLERANCE = 0.9
 """A design must reach 90% of the print area on each axis (PRD 38).
@@ -32,18 +41,6 @@ fires on work nobody would call wrong is a rule that gets switched off.
 """
 
 
-class DesignResolutionError(UserFacingError, ValueError):
-    """The design cannot make a good print, and nothing later will say so."""
-
-
-class GarmentChangedError(UserFacingError, ValueError):
-    """The profile now names a different blank than the product was made with."""
-
-
-class UnresolvedCopyError(UserFacingError, ValueError):
-    """Copy that is still a sentinel, or empty."""
-
-
 def _required_pixels(profile: Profile) -> tuple[int, int]:
     return (
         int(profile.print_area.width * RESOLUTION_TOLERANCE),
@@ -51,7 +48,7 @@ def _required_pixels(profile: Profile) -> tuple[int, int]:
     )
 
 
-def check_design_resolution(design: Path, profile: Profile) -> None:
+def check_design_resolution(design: Path, profile: Profile) -> Blocked | None:
     """Refuse a design that will print soft, or print its background.
 
     Never auto-upscaled and never converted (PRD 17): a silently upscaled
@@ -59,37 +56,38 @@ def check_design_resolution(design: Path, profile: Profile) -> None:
     the one failure mode this whole gate exists to make impossible.
     """
     if not design.is_file():
-        raise DesignResolutionError(f"design file not found: {design}")
+        return Blocked(f"design file not found: {design}")
 
     try:
         with Image.open(design) as image:
             width, height = image.size
             mode = image.mode
     except (UnidentifiedImageError, OSError) as exc:
-        raise DesignResolutionError(f"{design} is not readable as an image: {exc}") from exc
+        return Blocked(f"{design} is not readable as an image: {exc}")
 
     if "A" not in mode:
-        raise DesignResolutionError(
+        return Blocked(
             f"{design.name} has no alpha channel (mode {mode!r}). A print file without "
-            f"transparency prints its background as a rectangle of ink on the shirt. "
+            f"transparency prints its background as a rectangle of ink on the shirt.\n"
             f"Export it as RGBA."
         )
 
     need_width, need_height = _required_pixels(profile)
     if width < need_width or height < need_height:
-        raise DesignResolutionError(
+        return Blocked(
             f"{design.name} is {width}x{height}, too small for this garment's "
             f"{profile.print_area.width}x{profile.print_area.height} print area.\n"
-            f"  It needs at least {need_width}x{need_height} "
+            f"It needs at least {need_width}x{need_height} "
             f"({RESOLUTION_TOLERANCE:.0%} of the print area on each axis).\n"
-            f"  Re-export the design at that size or larger -- it is never upscaled "
+            f"Re-export the design at that size or larger -- it is never upscaled "
             f"for you, because a blurry print is only ever discovered by a customer."
         )
+    return None
 
 
 def check_garment_unchanged(
     applied: dict[str, Any] | None, *, blueprint_id: int, print_provider_id: int
-) -> None:
+) -> Blocked | None:
     """Refuse a garment or printer change on a listing that already has a product.
 
     A deliberate refusal, not a missing feature (PRD 37). Printify ignores both
@@ -99,7 +97,7 @@ def check_garment_unchanged(
     file. A listing is cheap; the listing's history is not.
     """
     if not applied:
-        return
+        return None
 
     changes: list[str] = []
     was_blueprint = applied.get("blueprint_id")
@@ -109,20 +107,20 @@ def check_garment_unchanged(
     if was_provider is not None and was_provider != print_provider_id:
         changes.append(f"print provider {was_provider} -> {print_provider_id}")
     if not changes:
-        return
+        return None
 
-    raise GarmentChangedError(
+    return Blocked(
         f"this listing's Printify product was created with a different garment: "
         f"{', '.join(changes)}.\n"
-        f"  Printify cannot change either on an existing product -- it accepts the "
+        f"Printify cannot change either on an existing product -- it accepts the "
         f"request, answers 200, and changes nothing.\n"
-        f"  Start a new listing for the new garment, or make the change by hand in "
+        f"Start a new listing for the new garment, or make the change by hand in "
         f"Printify and Etsy. Recreating the product here would discard the Etsy "
         f"listing's reviews and favourites."
     )
 
 
-def check_copy_is_concrete(*, title: str, description: str) -> None:
+def check_copy_is_concrete(*, title: str, description: str) -> Blocked | None:
     """Refuse a `<generate>` sentinel or blank copy before a product is created.
 
     The product carries the listing's own title and description (PRD 44) --
@@ -132,13 +130,12 @@ def check_copy_is_concrete(*, title: str, description: str) -> None:
     """
     for field, value in (("title", title), ("description", description)):
         if value == GENERATE:
-            raise UnresolvedCopyError(
+            return Blocked(
                 f"etsy.{field} is still <generate>, and Printify needs a real one to "
                 f"create the product with (it is also how a re-run recognises the "
                 f"product as this listing's).\n"
-                f"  Write it in listing.yaml. Copy generation arrives in Phase 4."
+                f"Write it in listing.yaml. Copy generation arrives in Phase 4."
             )
         if not value.strip():
-            raise UnresolvedCopyError(
-                f"etsy.{field} is empty, and Printify requires it to create a product."
-            )
+            return Blocked(f"etsy.{field} is empty, and Printify requires it to create a product.")
+    return None

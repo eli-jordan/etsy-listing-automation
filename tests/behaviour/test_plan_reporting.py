@@ -6,8 +6,14 @@ terminal said nothing useful.
 
 - A stage that opts out (no Printify shop configured) rendered as *silence*,
   so a workspace with a whole unrun stage reported "No changes."
-- A gate refusal escaped `plan` as a traceback, which is both unreadable and
-  fatal to a `--all` batch that PRD 16 requires to continue on error.
+- A gate refusal escaped `plan` as a traceback, which is both unreadable and,
+  worse, fatal to the *rest of the plan*: the exception unwound the stage
+  walk, so an undersized design cost the user the render stage's report too.
+
+Both are now the same thing -- a blocked stage -- and `plan` reports either
+the same way, in full, without exiting non-zero. `plan` is a report; a
+workspace that is not ready for a stage yet is not an error, it is the thing
+the report is for.
 """
 
 from __future__ import annotations
@@ -33,6 +39,10 @@ def _with_shop_id(root: Path) -> Path:
 
 def _plan(root: Path, *args: str):
     return runner.invoke(app, ["plan", *args, "--root", str(root)])
+
+
+def _apply(root: Path, *args: str):
+    return runner.invoke(app, ["apply", *args, "--root", str(root)])
 
 
 # ------------------------------------------------------- the unconfigured stage
@@ -133,9 +143,34 @@ def test_a_gate_refusal_is_an_actionable_message_not_a_traceback(
 
     result = _plan(root, "take-a-hike")
 
-    assert result.exit_code != 0
     assert "Traceback" not in result.output
     assert "<generate>" in result.output
+
+
+def test_a_gate_refusal_reads_as_a_blocked_stage(workspace_root: Path) -> None:
+    """One vocabulary, not two. A refusal and an unconfigured shop are both
+    reasons a stage cannot run, so `plan` renders them identically -- and
+    counts them in the same place."""
+    root = _with_shop_id(workspace_root)
+
+    result = _plan(root, "take-a-hike")
+
+    assert result.exit_code == 0, result.output
+    assert "1 blocked" in result.output
+    warning = next(line for line in result.output.splitlines() if "<generate>" in line)
+    assert warning.lstrip().startswith("!")
+
+
+def test_a_gate_refusal_leaves_the_rest_of_the_plan_standing(workspace_root: Path) -> None:
+    """The bug that made the refusal a returned value. It was raised, so it
+    unwound the stage walk: a listing whose copy was not written yet reported
+    one line of error and nothing at all about the mockups it would render."""
+    root = _with_shop_id(workspace_root)
+
+    result = _plan(root, "take-a-hike")
+
+    assert "+ render" in result.output
+    assert "1 to run" in result.output
 
 
 def test_a_gate_refusal_does_not_halt_a_batch(workspace_root: Path) -> None:
@@ -154,4 +189,41 @@ def test_a_gate_refusal_does_not_halt_a_batch(workspace_root: Path) -> None:
 
     assert "take-a-hike" in result.output
     assert "second-listing" in result.output, "the batch carried on past the refusal"
-    assert result.exit_code != 0, "but the run still reports failure"
+
+
+# ------------------------------------------------------------ what apply says
+
+
+def test_apply_says_what_it_will_not_do(workspace_root: Path) -> None:
+    """`apply` prints no plan, so a blocked stage would otherwise be invisible
+    on the route where it matters most: the user asked for the work to happen
+    and part of it silently did not."""
+    result = _apply(workspace_root, "take-a-hike")
+
+    assert "will not be uploaded to Printify" in result.output
+    assert "setup" in result.output
+
+
+def test_apply_still_does_the_work_it_can(workspace_root: Path) -> None:
+    """A blocked stage is not a failed run. The render stage has nothing to do
+    with Printify, and a workspace that has not opted into Phase 2 is not
+    broken -- so the mockups are rendered and the exit code stays clean."""
+    result = _apply(workspace_root, "take-a-hike")
+
+    assert result.exit_code == 0, result.output
+    renders = workspace_root / ".cache" / "renders" / "take-a-hike" / "flat-lay-01"
+    assert (renders / "black.png").is_file()
+
+
+def test_apply_says_it_in_the_same_words_plan_does(workspace_root: Path) -> None:
+    """One vocabulary, both routes (PRD 20). The stage supplies the sentence;
+    neither the plan renderer nor `apply` writes its own version of it."""
+    blocked_line = "will not be uploaded to Printify"
+    planned = next(
+        ln for ln in _plan(workspace_root, "take-a-hike").output.splitlines() if blocked_line in ln
+    )
+    applied = next(
+        ln for ln in _apply(workspace_root, "take-a-hike").output.splitlines() if blocked_line in ln
+    )
+
+    assert planned == applied

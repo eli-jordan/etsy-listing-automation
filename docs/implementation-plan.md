@@ -26,7 +26,7 @@ and commit messages without colliding with the PRD's own decision log.
 | A11 | Template kind schema | Discriminated pydantic union on `kind` (`ColourMatrixTemplate \| MultipleTemplate \| SingleTemplate`, `Field(discriminator="kind")`), loaded via `load_template_config()` — no wrapping model, since the file *is* one of the three shapes. PRD 28. |
 | A12 | Multi-layer rendering | `render_scene()`/`Layer`/`export_many()` in `render/pipeline.py`/`render/passes.py`, `multiple`-kind only. The existing single-layer `render()`/`export()` are untouched, not generalised — see A7. |
 | A13 | Template ownership + media addressing | No profile-level registry — `Profile` carries no `templates` field. `listing.media` always references `{template, colour?}` explicitly, naming any template that exists in `mockup-templates/`; no default, no bare-colour shorthand. A template is purely local and Etsy-facing (Printify never sees it), unlike `blueprint`/`print_provider`/`sizes`, which genuinely are Printify product-creation inputs — that's why templates don't live on the profile the way those do. PRD 29. |
-| A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in the render stage (`engine/stages/render.py::_resolve_artwork`), reused unchanged by the future `printify_product` stage (Phase 2). PRD 30. |
+| A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in `engine/stages/placement.py::DesignPlacement.artwork_for`, and used by both stages that place a design — the render stage's mockup and the product stage's print file. It lived privately inside the render stage until Phase 2, when the product stage had to import it through the underscore; a mockup and a print file disagreeing about which ink a colour gets is a failure neither stage's own tests would catch, so the rule got its own module rather than a second implementation. The order itself is unchanged. PRD 30. |
 | A15 | Render cache namespacing | `.cache/renders/{listing}/{template}/...`, not `.cache/renders/{listing}/{colour}.png` — namespaced by template, since a listing can reference more than one `colour-matrix`-kind template and a bare colour is no longer unique across them. |
 | A16 | Pricing plan resolution | `Listing.pricing_plan` stays a bare ref string, resolved by the caller via `Workspace.resolve()`, exactly like `design:` — `Listing` itself never touches `Workspace` or does I/O. `resolved_price()` takes an already-loaded `PricingPlan` as an optional keyword argument rather than loading it itself. Keeps `Listing` as pure and workspace-ignorant as it is today; the cost is every future price-resolving call site must remember to load and pass the plan, same cost `design:` resolution already carries. PRD 34. |
 | A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside `catalog/`'s documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
@@ -115,21 +115,31 @@ class Stage(Protocol):
     local: bool                      # True => no remote state, so no drift
 
     def desired(self, ctx: RunContext) -> Desired: ...
-    def last_applied(self, lock: Lockfile) -> Applied | None: ...
     def read_live(self, ctx: RunContext, listing, lock) -> Live | None: ...
-    def plan(self, desired, applied, live) -> StagePlan: ...
-    def apply(self, ctx: RunContext, plan: StagePlan) -> StageResult: ...
+    def plan(self, desired, applied: dict | None, live) -> StagePlan: ...
+    def apply(self, ctx, plan, desired, live, lock) -> StageApplyResult: ...
 
 STAGES = [Render(), Generate(), PrintifyProduct(),
           Publish(), EtsyCopy(), EtsyMedia()]
 ```
 
+`plan`'s `applied` is the stage's **own subtree** of the lockfile, looked up by
+`build_plan` through `Lockfile.applied_for(name)`. There used to be a
+`last_applied(lock)` method for this, and every stage implemented it as
+`lock.applied.get(self.name)` — the same lookup written out once per stage, on
+a protocol wide enough to reach every *other* stage's state. It arrives as the
+raw document, because that is the form it was written in; a stage wanting a
+typed view parses one at the top of its own `plan()`, where the parse sits
+beside the comparison it feeds.
+
 A stage's `apply` returns a `StageApplyResult` carrying three dicts, each
-merged into a different part of the next lockfile by the engine, never by the
-stage: `applied` becomes `lock.applied[stage.name]` (the verbatim document A2
-hashes), `outputs` merges into `lock.outputs` (the separate re-upload axis),
-and `remote` merges into `lock.remote` (A20) — ids handed back by an API,
-excluded from every hash, each stage owning a documented key prefix.
+merged into a different part of the next lockfile — by the **lockfile**, never
+by the stage and no longer by `apply`'s loop: `applied` **replaces**
+`lock.applied[stage.name]` (it is a whole document, so a field the stage has
+stopped emitting must not survive), while `outputs` and `remote` **merge** by
+key into their respective axes (A20) — ids handed back by an API, excluded
+from every hash, each stage owning a documented key prefix. See `Lockfile.fold`
+below.
 
 | Stage | `desired` | `read_live` | `apply` |
 |---|---|---|---|
@@ -266,6 +276,47 @@ shows a spurious diff" failure.
 requires: `input_hash` decides whether to re-render, `outputs` decides whether to
 re-upload. A library upgrade that changes render bytes therefore triggers a
 re-upload, correctly and visibly.
+
+**`Lockfile` owns the merge, not just the file.** `fold(stage, result)` returns
+the next lockfile with that stage's result absorbed under the replace/merge
+rules above; `applied_for(stage)` hands a stage its own subtree back; and
+`stamped(tool_version, applied_at)` records what wrote it and when, once per
+run rather than once per stage. Those four axes used to be public dicts that
+`execute` copied and combined by hand, with the rules for doing so written
+down one module away in `StageApplyResult`'s docstring — rules stated in one
+place and implemented in another are rules that drift. `StageApplyResult`
+moved next to `fold` for the same reason. `execute` now decides only *which*
+stages run and in what order, which is the part that is genuinely its
+business (A3).
+
+### Runs
+
+```python
+def plan_listings(ctx, listings, stages, *, on_planned, on_failure) -> RunReport: ...
+def apply_listings(ctx, listings, stages, *, on_planned, on_failure) -> RunReport: ...
+```
+
+`engine/run.py`, one level above `build_plan`/`execute`: a whole run over a set
+of listings, owning each lockfile's lifecycle — read it, plan, execute, write
+it back — and PRD 16's continue-on-error. A `UserFacingError` abandons that
+listing and no other; anything else is a defect and propagates.
+
+This lived in `cli/app.py` as a private helper taking a callback until it was
+lifted here. None of it is presentation: the lockfile's path and lifecycle are
+engine concerns, so are the tool version and clock stamped into it, and PRD 16
+is a product rule that has to hold whichever entry point drives it — the CLI
+only added the words. It is the same seam `Plan`/`format_plan` already draws,
+one level up: `cli` formats the `RunReport`, Phase 5's UI will serialise it,
+and neither re-derives what a run does. PRD 16 is now assertable against a
+value instead of against terminal output.
+
+The two sinks exist because a batch has two moments worth watching, and output
+must interleave with the work rather than arriving after it. `on_planned` fires
+the instant a listing's plan is ready — before `apply` executes it, which is
+the only point at which the plan is known and none of its progress events have
+been emitted. `on_failure` fires when a listing is abandoned. The returned
+`RunReport` is the same information in one piece, for a caller that wants it
+that way, and `RunReport.failed` is what the CLI turns into an exit code.
 
 ### Workspace
 
