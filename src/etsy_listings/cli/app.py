@@ -21,6 +21,8 @@ from etsy_listings.catalog.cache import CachedCatalogClient
 from etsy_listings.catalog.client import CatalogClient
 from etsy_listings.catalog.http import CatalogAuthError, HttpCatalogClient
 from etsy_listings.cli.render import format_plan
+from etsy_listings.clients.printify.http import HttpPrintifyClient
+from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.secrets import (
     ANTHROPIC_KEY_VAR,
@@ -117,11 +119,24 @@ def _catalog(workspace: Workspace) -> CatalogClient:
     return CachedCatalogClient(HttpCatalogClient(token), workspace.catalog_cache_dir())
 
 
+def _printify(workspace: Workspace) -> PrintifyClient:
+    """The shop-scoped client, token resolved lazily for the same reason the
+    catalog client's is: a workspace that has not opted into Phase 2 never
+    calls it, and demanding a credential to build one would make `plan` fail
+    in every workspace that only renders mockups."""
+
+    def token() -> str:
+        return Secrets.load(workspace.env_file()).require_printify_api_token()
+
+    return HttpPrintifyClient(token)
+
+
 def _run_context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
     catalog = _catalog(workspace)
+    printify = _printify(workspace)
     if on_event is None:
-        return RunContext(workspace=workspace, catalog=catalog)
-    return RunContext(workspace=workspace, catalog=catalog, on_event=on_event)
+        return RunContext(workspace=workspace, catalog=catalog, printify=printify)
+    return RunContext(workspace=workspace, catalog=catalog, printify=printify, on_event=on_event)
 
 
 SWATCH_GLYPH = "██"

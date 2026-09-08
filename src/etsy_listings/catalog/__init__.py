@@ -27,8 +27,12 @@ from etsy_listings.catalog.models import (
 from etsy_listings.catalog.resolve import (
     AmbiguousBlueprintError,
     CatalogResolutionError,
+    ResolvedVariant,
+    UnknownSizeError,
+    VariantResolution,
     resolve_blueprint,
     resolve_print_provider,
+    resolve_variants,
 )
 
 __all__ = [
@@ -51,6 +55,11 @@ __all__ = [
     # Name -> id resolution, with an error that lists the near misses.
     "AmbiguousBlueprintError",
     "CatalogResolutionError",
+    "UnknownSizeError",
     "resolve_blueprint",
     "resolve_print_provider",
+    # Colour slug x size -> the integer ids Printify sells by.
+    "resolve_variants",
+    "ResolvedVariant",
+    "VariantResolution",
 ]

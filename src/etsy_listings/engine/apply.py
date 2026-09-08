@@ -30,7 +30,7 @@ def execute(ctx: RunContext, plan: Plan, lock: Lockfile, stages: list[AnyStage])
         stage = stages_by_name[stage_plan.stage]
         desired = stage.desired(ctx, plan.listing)
         ctx.emit(f"applying {stage.name}")
-        result = stage.apply(ctx, stage_plan, desired)
+        result = stage.apply(ctx, stage_plan, desired, lock)
         applied[stage.name] = result.applied
         outputs.update(result.outputs)
         # Merged, not replaced: a stage reports only the keys it owns, and a

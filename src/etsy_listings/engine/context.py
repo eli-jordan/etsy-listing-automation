@@ -12,6 +12,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
 from etsy_listings.catalog.client import CatalogClient
+from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.workspace.workspace import Workspace
 
 Swatch = tuple[int, int, int]
@@ -39,6 +40,10 @@ def _noop_sink(event: Event) -> None:
 class RunContext:
     workspace: Workspace
     catalog: CatalogClient
+    printify: PrintifyClient | None = None
+    """The shop-scoped client, from Phase 2 on. Optional because the stages
+    that came before it do not need one, and a workspace that only renders
+    mockups should not need a token to run `plan`."""
     on_event: EventSink = field(default=_noop_sink)
 
     def emit(self, message: str, *, swatches: Sequence[Swatch] = ()) -> None:

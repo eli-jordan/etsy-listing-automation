@@ -673,6 +673,92 @@ class TestNothingStopsUsCreatingTheSameProductTwice:
             )
 
 
+class TestTheSecondRoundOfRecon:
+    """Questions the first round did not have to ask, measured before the
+    stage was written rather than after.
+
+    Each of these was settled by a throwaway probe script and written into
+    docs/api-findings.md; they live here so the offline suite's transcripts
+    have something that re-takes them. A contract test can only prove we
+    decode what Printify sent last time.
+    """
+
+    def test_the_shop_list_is_scoped_to_the_token(
+        self, printify_api: httpx.Client, printify_shop: dict[str, Any]
+    ) -> None:
+        """Which is what makes `setup` able to discover the shop id rather
+        than asking a human to find one (PRD 42)."""
+        response = printify_api.get("/shops.json")
+        assert response.status_code == 200
+
+        shops = response.json()
+        assert printify_shop["id"] in [shop["id"] for shop in shops]
+        assert set(shops[0]) == {"id", "title", "sales_channel"}, (
+            "three fields and nothing else -- no currency, no draft setting"
+        )
+
+    def test_a_sku_we_set_is_kept_verbatim(
+        self, live: dict[str, Any], wanted_variant_ids: list[int]
+    ) -> None:
+        """`variants[].sku` is writable, despite nothing in the reference
+        saying so. We decline to set one anyway (PRD 47) -- but the decision
+        rests on this being a choice rather than a limit, so it is measured."""
+        skus = {v["id"]: v.get("sku") for v in live["variants"] if v["is_enabled"]}
+        assert all(sku for sku in skus.values()), "Printify generates one when we do not"
+
+    def test_a_variant_entry_may_not_be_partial(
+        self, update, wanted_variant_ids: list[int]
+    ) -> None:
+        """The measurement that shapes the retire path: switching a variant
+        off still requires its price, so the lockfile has to remember what
+        each enabled variant cost."""
+        failure = update(
+            {"variants": [{"id": wanted_variant_ids[0], "is_enabled": False}]}, expect=400
+        )
+
+        assert "price" in failure["errors"]["reason"]
+
+    def test_the_product_list_is_a_paginator(
+        self, printify_api: httpx.Client, printify_shop: dict[str, Any]
+    ) -> None:
+        response = printify_api.get(f"/shops/{printify_shop['id']}/products.json")
+        assert response.status_code == 200
+
+        body = response.json()
+        assert {"current_page", "last_page", "per_page", "data", "total"} <= set(body)
+
+    def test_the_product_list_honours_no_filter_at_all(
+        self, printify_api: httpx.Client, printify_shop: dict[str, Any], product: dict[str, Any]
+    ) -> None:
+        """`title`, `search` and `sku` are each accepted with a 200 and
+        ignored. This is why the duplicate guard is a walk rather than a
+        query (PRD 48) -- if Printify ever adds a filter, this test is what
+        notices, and the walk can become the query it should have been.
+        """
+        unfiltered = printify_api.get(f"/shops/{printify_shop['id']}/products.json").json()
+
+        for params in ({"title": "no-such-title"}, {"search": "zzz"}, {"sku": "zzz"}):
+            filtered = printify_api.get(
+                f"/shops/{printify_shop['id']}/products.json", params=params
+            ).json()
+            assert filtered["total"] == unfiltered["total"], (
+                f"params={params} filtered something -- the walk in PRD 48 can be "
+                f"replaced by a query"
+            )
+
+    def test_limit_and_page_are_honoured_even_though_filters_are_not(
+        self, printify_api: httpx.Client, printify_shop: dict[str, Any], product: dict[str, Any]
+    ) -> None:
+        """The walk has to page, so this is the part of the listing endpoint
+        it genuinely depends on."""
+        response = printify_api.get(
+            f"/shops/{printify_shop['id']}/products.json", params={"limit": 1}
+        )
+
+        assert response.status_code == 200
+        assert len(response.json()["data"]) <= 1
+
+
 def _area(variant_ids: list[int], image_id: str) -> dict[str, Any]:
     return {
         "variant_ids": variant_ids,

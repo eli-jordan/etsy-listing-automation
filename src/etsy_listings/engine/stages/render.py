@@ -498,7 +498,11 @@ class RenderStage:
         )
 
     def apply(
-        self, ctx: RunContext, stage_plan: StagePlan, desired: RenderDesired
+        self,
+        ctx: RunContext,
+        stage_plan: StagePlan,
+        desired: RenderDesired,
+        lock: Lockfile | None = None,
     ) -> StageApplyResult:
         """A flat loop over already-resolved work.
 

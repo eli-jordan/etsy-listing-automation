@@ -68,7 +68,14 @@ class Stage(Protocol[D, A, L]):
 
     def plan(self, desired: D, applied: A | None, live: L | None) -> StagePlan: ...
 
-    def apply(self, ctx: RunContext, stage_plan: StagePlan, desired: D) -> StageApplyResult: ...
+    def apply(
+        self, ctx: RunContext, stage_plan: StagePlan, desired: D, lock: Lockfile
+    ) -> StageApplyResult: ...
+
+    """``lock`` is the *previous* one. A stage that writes remote state has to
+    read the remote state it wrote last time -- the Printify product id it is
+    about to update, the upload ids it can skip re-shipping. Passing it in
+    keeps that visible in the signature rather than hidden on the context."""
 
 
 AnyStage = Stage[Any, Any, Any]

@@ -9,10 +9,10 @@ reviewable Etsy draft: renders custom mockups locally, configures the product in
 Printify, and patches the resulting Etsy listing. Idempotent by design — re-running
 against unchanged inputs must make no remote changes.
 
-**Phases 0 and 1 are implemented**; Phases 2-6 are not. "Code layout" below
+**Phases 0, 1 and 2 are implemented**; Phases 3-6 are not. "Code layout" below
 shows what exists today, marked per module. "Commands" still describes the
-PRD's full CLI surface — `plan`, `apply`, `new` and `ui` are real; the rest is
-the agreed design for later phases. Check the tree, or
+PRD's full CLI surface — `setup`, `plan`, `apply`, `new` and `ui` are real; the
+rest is the agreed design for later phases. Check the tree, or
 [docs/architecture.md](docs/architecture.md), before assuming a module,
 command or test exists.
 
@@ -163,12 +163,12 @@ src/etsy_listings/
   config/       pydantic models, Money type, slugification     [done]
   catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, stages/
-                                        [done; STAGES = [Render()], more stages later]
+                   [done; STAGES = [Render(), PrintifyProduct()], more stages later]
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
   clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
-                    [printify.shops() + retry done; products Phase 2, etsy Phase 3]
+                       [printify/ + retry done; etsy/ and the limiter Phase 3/6]
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
@@ -398,7 +398,7 @@ assume a command exists because it is listed here.
 setup              initialise a workspace: skeleton, shop.yaml, credentials      [done]
 new [<design>]     interactive design/garment/provider picker; writes profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
-apply <listing|--all>  execute every stage the plan identified          [done; only `render` exists]
+apply <listing|--all>  execute every stage the plan identified   [done; render + printify]
 render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
 ui                     setup wizard, dashboard, calibrator, run runner    [calibrator done; rest Phase 5]
 auth                   Etsy OAuth PKCE + Anthropic credentials                     [Phase 3]

@@ -47,7 +47,9 @@ class RecordingStage:
     def plan(self, desired: Any, applied: Any, live: Any) -> StagePlan:
         return StagePlan(stage=self.name, will_run=True)
 
-    def apply(self, ctx: RunContext, stage_plan: StagePlan, desired: Any) -> StageApplyResult:
+    def apply(
+        self, ctx: RunContext, stage_plan: StagePlan, desired: Any, lock: Lockfile
+    ) -> StageApplyResult:
         return StageApplyResult(
             applied=self.applied if self.applied is not None else {"ok": True},
             outputs=self.outputs or {},

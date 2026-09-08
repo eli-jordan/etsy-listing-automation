@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Any
 
 from pydantic import BeforeValidator, GetCoreSchemaHandler
@@ -62,6 +62,21 @@ class Money:
 
     def __str__(self) -> str:
         return f"{self.amount} {self.currency}"
+
+    @property
+    def minor_units(self) -> int:
+        """The amount as an integer number of minor units -- ``349 NOK`` is
+        ``34900``.
+
+        The form every price reaches Printify in (PRD 39/40). **No conversion
+        happens**: Printify sends the bare number to the sales channel, which
+        renders it in the shop's own currency, so an NOK price travels as NOK
+        minor units and no exchange rate enters `apply` or a hash.
+
+        Rounded half-up rather than truncated: banker's rounding on a price
+        is a surprise, and truncation loses a øre on every odd amount.
+        """
+        return int((self.amount * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
 
     @classmethod
     def __get_pydantic_core_schema__(
