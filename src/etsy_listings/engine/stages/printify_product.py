@@ -312,8 +312,9 @@ class PrintifyProductStage:
                 stage=self.name,
                 will_run=False,
                 blocked=(
-                    "no Printify shop configured -- run `etsy-listings setup` to "
-                    "point this workspace at one"
+                    "this listing will not be uploaded to Printify: no Printify "
+                    "shop is configured for this workspace.\n"
+                    "Run `etsy-listings setup` to point it at one."
                 ),
             )
 

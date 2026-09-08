@@ -48,10 +48,48 @@ def test_a_stage_that_cannot_run_is_named_rather_than_hidden(workspace_root: Pat
     assert "printify_product" in result.output
 
 
+def test_it_warns_in_the_users_terms_not_the_pipelines(workspace_root: Path) -> None:
+    """ "printify_product will not run" describes the machinery. What the user
+    loses is the listing not reaching Printify, and that is the sentence that
+    has to be on screen."""
+    result = _plan(workspace_root, "take-a-hike")
+
+    assert "will not be uploaded to Printify" in result.output
+
+
+def test_the_warning_is_marked_as_one(workspace_root: Path) -> None:
+    """It sat below "No changes." as a dim dash line, which reads as a note.
+    A listing silently not reaching Printify is not a note."""
+    warning_line = next(
+        line for line in result_lines(workspace_root) if "will not be uploaded" in line
+    )
+
+    assert warning_line.lstrip().startswith("!")
+
+
+def test_the_warning_leads(workspace_root: Path) -> None:
+    """What a run will *not* do is the more surprising half. Reporting the
+    work first and qualifying it afterwards is how this was missed in the
+    first place."""
+    lines = result_lines(workspace_root)
+    warning = next(i for i, line in enumerate(lines) if "will not be uploaded" in line)
+    first_work = next(i for i, line in enumerate(lines) if line.lstrip().startswith("+"))
+
+    assert warning < first_work
+
+
 def test_it_says_what_to_do_about_it(workspace_root: Path) -> None:
     result = _plan(workspace_root, "take-a-hike")
 
     assert "setup" in result.output
+
+
+def test_the_summary_counts_the_blocked_stage(workspace_root: Path) -> None:
+    """A summary that says "0 to run, 0 to change" and nothing else is the
+    same omission one line further down."""
+    result = _plan(workspace_root, "take-a-hike")
+
+    assert "1 blocked" in result.output
 
 
 def test_a_blocked_stage_is_not_counted_as_work_to_do(workspace_root: Path) -> None:
@@ -60,6 +98,10 @@ def test_a_blocked_stage_is_not_counted_as_work_to_do(workspace_root: Path) -> N
     result = _plan(workspace_root, "take-a-hike")
 
     assert "1 to run" in result.output, "the render stage, and only it"
+
+
+def result_lines(root: Path) -> list[str]:
+    return _plan(root, "take-a-hike").output.splitlines()
 
 
 def test_a_configured_workspace_does_not_report_a_block(workspace_root: Path) -> None:

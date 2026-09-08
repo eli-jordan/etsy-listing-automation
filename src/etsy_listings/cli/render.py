@@ -27,6 +27,12 @@ def format_plan(plan: Plan) -> str:
     drifts = [(sp, drift) for sp in plan.stage_plans for drift in sp.drift]
     action_count = sum(len(sp.actions) for sp in plan.stage_plans)
 
+    # Blocked stages lead. What a run will *not* do is the more surprising
+    # half, and burying it under "No changes." is exactly how a listing goes
+    # un-uploaded without anyone noticing.
+    for stage_plan in blocked:
+        lines.extend(_format_blocked(stage_plan))
+
     for stage_plan in runs:
         reason = f" ({stage_plan.reason})" if stage_plan.reason else ""
         lines.append(f"  + {stage_plan.stage}{reason}")
@@ -35,26 +41,41 @@ def format_plan(plan: Plan) -> str:
         lines.append(f"  ~ {stage_plan.stage}: {change}")
     for stage_plan, drift in drifts:
         lines.append(f"  ! drift  {stage_plan.stage}.{drift.path} was edited outside this tool")
-    # After the work and before the summary: a blocked stage is context for
-    # what is missing from the run, not part of it.
-    for stage_plan in blocked:
-        lines.append(f"  - {stage_plan.stage}: {stage_plan.blocked}")
 
     if not plan.stage_plans:
         lines.append("  (no stages configured)")
     elif not (runs or changes or drifts):
-        # Still "No changes." even when something is blocked: the blocked
-        # line sits directly below and carries the qualification, so the two
-        # together say what is true. It was the *absence* of that line that
-        # made this a lie.
-        lines.insert(len(lines) - len(blocked), "  No changes.")
+        lines.append("  No changes.")
 
     lines.append("")
     lines.append(
         f"  {len(runs)} to run{_actions_suffix(action_count)}, "
-        f"{len(changes)} to change, {len(drifts)} drift warning(s)"
+        f"{len(changes)} to change{_blocked_suffix(len(blocked))}, "
+        f"{len(drifts)} drift warning(s)"
     )
     return "\n".join(lines)
+
+
+def _format_blocked(stage_plan: StagePlan) -> list[str]:
+    """A stage that cannot run, as a warning rather than a footnote.
+
+    The first line is the consequence in the user's terms -- what will not
+    happen to their listing -- and any further lines are the remedy, indented
+    under it. The stage supplies both, because *why* a stage is blocked is
+    engine knowledge; only the shape of it belongs here.
+    """
+    message = (stage_plan.blocked or "").splitlines()
+    head, *rest = message or [""]
+    lines = [f"  ! {head}"]
+    lines.extend(f"      {line}" for line in rest)
+    lines.append(f"      ({stage_plan.stage} will not run)")
+    return lines
+
+
+def _blocked_suffix(count: int) -> str:
+    if count == 0:
+        return ""
+    return f", {count} blocked"
 
 
 def _actions_suffix(count: int) -> str:
