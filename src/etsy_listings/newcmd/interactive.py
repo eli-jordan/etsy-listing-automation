@@ -192,7 +192,7 @@ def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
     path = workspace.design_file(design_name)
     if path.is_file():
         return
-    near = sorted(p.name for p in path.parent.glob(f"{design_name}*") if p.is_file())
+    near = [p.name for p in workspace.design_files() if p.name.startswith(design_name)]
     hint = f" Did you mean {near[0]!r}?" if near else ""
     typer.echo(f"note: {path} does not exist yet.{hint}")
 

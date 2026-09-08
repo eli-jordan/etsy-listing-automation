@@ -161,6 +161,63 @@ def test_template_names_can_include_uncalibrated_directories(workspace_root: Pat
     ]
 
 
+def test_a_templates_photos_are_everything_but_the_scene(workspace_root: Path) -> None:
+    """What a colour-matrix set offers, read off its filenames -- PRD 7a makes
+    the filename *be* the slugified colour, which is why this is a directory
+    listing rather than a lookup table.
+
+    Here rather than in the calibrator, which used to glob for it: the shape
+    of a template directory is layout, and layout is this module's alone (A8).
+    """
+    ws = Workspace.discover(root_override=workspace_root)
+
+    assert ws.template_colours("flat-lay-01") == ["black", "blue-jean", "ivory", "moss"]
+    assert ws.template_colours("colour-chart-01") == []  # one photo, and it is the scene
+
+
+def test_the_preview_photo_prefers_the_scene_and_falls_back_to_a_colour(
+    workspace_root: Path,
+) -> None:
+    """Answered without reading the config, which is the point: the rail has
+    to show a thumbnail for a directory nobody has assigned a kind to yet."""
+    ws = Workspace.discover(root_override=workspace_root)
+
+    assert ws.template_preview_photo("colour-chart-01") == ws.template_scene_image(
+        "colour-chart-01"
+    )
+    assert ws.template_preview_photo("flat-lay-01") == ws.template_base_image(
+        "flat-lay-01", "black"
+    )
+
+
+def test_a_template_directory_that_is_not_there_answers_empty_not_raises(
+    workspace_root: Path,
+) -> None:
+    """``has_template`` is the question with a yes/no answer; the accessors
+    below it degrade, so a caller that skipped the check gets nothing rather
+    than an exception about a directory."""
+    ws = Workspace.discover(root_override=workspace_root)
+
+    assert ws.has_template("flat-lay-01") is True
+    assert ws.has_template("never-existed") is False
+    assert ws.template_photos("never-existed") == []
+    assert ws.template_colours("never-existed") == []
+    assert ws.template_preview_photo("never-existed") is None
+
+
+def test_test_design_names_lists_uploaded_targets_by_their_id(workspace_root: Path) -> None:
+    """The id the library offers is the filename stem, which is what
+    ``test_design_file`` resolves back -- so the two have to agree, and they
+    agree by being written here together (A19)."""
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.test_design_names() == []
+
+    ws.test_designs_dir().mkdir(parents=True)
+    ws.test_design_file("ink-weight").write_bytes(b"")
+
+    assert ws.test_design_names() == ["ink-weight"]
+
+
 @pytest.mark.parametrize(
     "name",
     ["..", ".", "", "../escape", "nested/name", "back\\slash", "C:evil"],
