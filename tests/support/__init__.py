@@ -18,6 +18,20 @@ Two modules, one job each.
     reply lists, where ``"2"`` meant a template only because of where it fell
     in a directory listing.
 
+``doubles``
+    Stand-ins for what a *prompt* reaches outside the process for: a
+    ``subprocess.run`` that answers as told and records how it was called, and
+    an ``input()`` over a list of replies. Twelve hand-rolled ``fake_run``
+    closures existed, each closing over its own ``seen`` dict, and the
+    variation was never the point of any of them. One level below ``scripted``:
+    that one replaces the prompt, these replace what the prompt calls.
+
+``http``
+    A :class:`Transport` wired to an ``httpx`` mock handler, for the contract
+    layer. Its ``sleep`` is always stubbed -- those tests are about decoding a
+    response, and a retryable status on a GET otherwise spends the policy's
+    full backoff before an assertion that never needed to wait.
+
 Withheld deliberately: no builder for ``tests/unit/test_lock.py``. That file
 tests :class:`Lockfile` itself, and a unit test of a type should construct it
 directly -- routing it through a builder would mean the thing under test and

@@ -175,7 +175,8 @@ src/etsy_listings/
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
                              (dashboard/setup wizard/run runner: Phase 5)
-  prompts.py    which prompt backend can drive this terminal at all          [done]
+  prompts.py    which prompt backend can drive this terminal at all, and the
+                cancel-raising wrappers the wizards ask through              [done]
   terminal.py   stdlib-only leaf: can this stream print that character?     [done]
 ```
 
@@ -212,13 +213,23 @@ later. Each traces to a decision.
   (`A7`).
 - **Every `cv2` call passes explicit `interpolation` and `borderMode`.** Relying
   on defaults makes output depend on the library version.
-- **Only `workspace` knows the directory layout.** Everything else asks for
-  `workspace.lock_file(name)` rather than joining
-  `listings/<name>/state.lock.json`. Two rules enforce it: `resolve()` rejects
-  paths escaping the root (`A8`), and the layout accessors reject any name that
-  is not a single path segment. Together they are what keeps the UI's endpoints
-  safe — template names arrive from URLs — so this is a security boundary, not
-  a tidiness rule. A new path-taking CLI option or endpoint goes through them.
+- **Only `workspace` knows the directory layout — including how to *list* one.**
+  Everything else asks for `workspace.lock_file(name)` rather than joining
+  `listings/<name>/state.lock.json`, and for `workspace.template_photos(name)`
+  rather than globbing `mockup-templates/<name>/*.png`. Two rules enforce it:
+  `resolve()` rejects paths escaping the root (`A8`), and the layout accessors
+  reject any name that is not a single path segment. Together they are what
+  keeps the UI's endpoints safe — template names arrive from URLs — so this is
+  a security boundary, not a tidiness rule. A new path-taking CLI option or
+  endpoint goes through them, and so does a new `glob`: the calibrator grew
+  four private helpers that each globbed a template directory a different way,
+  which is exactly the drift this rule exists to prevent.
+- **A cancelled prompt raises; it is never a `None` a caller might miss.**
+  `prompts.choose`/`text`/`confirm` answer `None` because that is the honest
+  shape for a backend, but no wizard uses them directly — `pick`, `ask_choice`,
+  `ask_text` and `ask_confirm` raise `prompts.Cancelled`, caught once in
+  `cli/app.py`. A rule applied at every call site is one that will eventually
+  be missed at a call site, and a missed one here writes a `None` to a file.
 - **Two hash axes, not one.** `input_hash` decides whether to re-render;
   `outputs` (per-file) decides whether to re-upload. Collapsing them breaks the
   library-upgrade case the PRD calls out.
@@ -267,7 +278,7 @@ plus a separate frontend unit layer:
 
 | Layer | Job |
 |---|---|
-| Unit | slugification, `Money`, hash canonicalisation, path resolution, limiter maths |
+| Unit | slugification, `Money`, hash canonicalisation, path resolution, limiter maths, which prompt backend runs, what a terminal can print |
 | Golden | per-pass renders on a grid target; end-to-end composites per template |
 | Behaviour | in-memory fake clients: idempotency, drift, resume, polling, batch |
 | Browser | `-m browser`, playwright over the built SPA served by FastAPI: one full drag → render → save loop per template kind |
@@ -285,6 +296,23 @@ not through internal state.
 
 Reach for a **fake** to test behaviour and a **cassette** to test payload shape.
 Asking either to do the other's job is the mistake this split exists to prevent.
+
+**A test file has one subject.** `tests/behaviour/test_new_prompts.py` had
+three — prompt-backend selection, terminal encoding, and an end-to-end `new`
+run — so a cygwin-encoding regression and a wizard regression arrived from the
+same place, and two thirds of a 543-line "behaviour" file needed neither a
+workspace nor a fake. It is now `tests/unit/test_prompts.py`,
+`tests/unit/test_terminal.py` and `tests/behaviour/test_new.py`, with the
+row-building tests folded into `test_new_picker.py` beside the rest of
+`newcmd.logic`.
+
+`tests/support/` holds what more than one file needs: `builders` (a lockfile,
+a run context, an edited fixture workspace), `scripted` (the prompt double
+that answers a wizard by the *text* of the question, not its position),
+`doubles` (a `subprocess.run` and an `input()` stand-in — one level below
+`scripted`: that replaces the prompt, these replace what the prompt calls) and
+`http` (a `Transport` over an httpx mock handler, sleep always stubbed). Reach
+there before writing a fourth `fake_run` closure.
 
 Golden failures should name the guilty render pass — that is why per-pass goldens
 exist alongside end-to-end ones. Regenerate with `--update-goldens` only after
@@ -367,7 +395,24 @@ uv run playwright install chromium   # one-off, enables the browser layer
 uv run pytest --update-goldens       # regenerate render goldens
 uv run mypy src                      # strict type check
 uv run ruff check . / ruff format .  # lint / format
+uv run python scripts/sloc.py --summary   # code size, prose excluded
 ```
+
+`scripts/sloc.py` exists because physical line count is the wrong measure
+here. This codebase is deliberately heavy on rationale — the writing rules
+below ask for it — so a "make it smaller" pass measured in physical lines
+scores its biggest wins by deleting the most valuable text. The script strips
+blank lines, comments and docstrings and counts what is left, split four ways
+(`src`, `tests`, `frontend`, `frontend tests`), so a refactoring registers only
+when logic actually disappears.
+
+It is a measuring tool, not a gate, and it is worth knowing what it will not
+tell you: extracting a shared abstraction is usually **LOC-neutral**, because
+the interface it needs — a props type, a protocol, a dataclass, a fixture
+signature — costs about what the duplicated bodies did. Three copies of forty
+lines of JSX cost 120; one shell with a typed props interface costs 125. Judge
+those on whether there is now one place to change the thing, not on the
+number.
 
 Frontend (`src/etsy_listings/ui/frontend/`):
 `npm run dev|build|typecheck|lint|format|test|test:coverage`. See the
