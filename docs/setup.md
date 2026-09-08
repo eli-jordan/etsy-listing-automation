@@ -26,23 +26,22 @@ systems. Without it, Phase 2's exit criteria cannot be met.
 
 ### 1.2 Confirm products publish as DRAFT — this has to be done by hand
 
-**Do this before anything else touches the shop, and don't expect the tool to
-ever do it for you.** Checked directly against Printify's API Reference: the
-product's `visible` field ("Used for publishing. Visibility in sales channel")
-is documented **read-only**, and `publish.json`'s request body only accepts
-`images`, `variants`, `title`, `description`, `tags`, `shipping_template` —
-draft-vs-live is nowhere in it. "Hide in Store" is a checkbox in Printify's own
-web app, not an API parameter; nothing this tool sends can set it. Details and
-citations: `docs/implementation-plan.md`, "Draft-vs-live cannot be set through
-the API."
+**Do this before anything else touches the shop.** This section used to say
+that nothing the tool sends can affect it, citing Printify's API Reference,
+which documents `visible` as read-only and omits it from every request body.
+**The reference is wrong**: measured against the live API, `visible` is
+accepted on create and on update and reads back as sent
+([api-findings.md](api-findings.md)).
 
-So: find the setting in the Etsy store's settings inside Printify, by hand, and
-confirm it publishes as a draft, before running `apply` against this shop for
-the first time. What's still unconfirmed is whether that setting is a
-persistent per-shop default or something that needs re-checking — Phase 2's
-`docs/api-findings.md` writeup should settle that. Until it's confirmed either
-way, re-check it before every publish. Getting it wrong means a listing goes
-public before you've reviewed it, and costs the $0.20 listing fee.
+What that does *not* establish is the thing this section cares about —
+whether a hidden product publishes to Etsy as a draft. That needs a connected
+Etsy shop and is unanswered. So the shop-side setting remains the lever to
+trust: find it in the Etsy store's settings inside Printify, by hand, and
+confirm it publishes as a draft before running `apply` against this shop for
+the first time. Whether that setting is a persistent per-shop default or
+something that reverts is still open, so re-check it before every publish.
+Getting it wrong means a listing goes public before you've reviewed it, and
+costs the $0.20 listing fee.
 
 ### 1.3 Generate an API token
 
@@ -101,38 +100,50 @@ them out until then.
 
 ## 3. The workspace
 
-The workspace is a **separate directory you own**, never this repository. Create
-it wherever you keep working data:
+The workspace is a **separate directory you own**, never this repository.
+`setup` creates one:
+
+```bash
+uv run etsy-listings setup --root ~/etsy-listings
+```
+
+It writes the skeleton, captures and **verifies** the Printify token from
+section 1.3, discovers the shop id from that same call, and writes `shop.yaml`
+and a `.gitignore` covering `.env`, `.auth/` and `.cache/`. Re-running it is
+safe — each question comes pre-filled with the current value.
 
 ```
 etsy-listings/
   shop.yaml
+  .gitignore               # written by setup
   .env                     # secrets, gitignored
   designs/
   mockup-templates/
   listings/
+  profiles/
+  pricing-plans/
   common-media/
+  test-designs/
+  prompts/
 ```
 
 `shop.yaml` — everything Phase 2 needs, and nothing it doesn't:
 
 ```yaml
+printify:
+  shop_id: 28819281        # read back from your token; setup writes it
 etsy:
-  shop_id: 12345678
   who_made: i_did
   when_made: made_to_order
   is_supply: false
   renewal: manual
-  # shop_section_id and return_policy_id are Phase 3; add them then.
+  # shop_id, shop_section_id and return_policy_id are Phase 3; add them then.
 currency: NOK
 preferred_print_provider: Monster Digital
 ```
 
 Point the tool at it with `--root`, or `export ETSY_LISTINGS_ROOT=...` in
-`~/.zshenv`. Cygwin paths work (`/home/Admin/etsy-listings`).
-
-If the workspace is its own git repo, gitignore `.env`, `.auth/` and `.cache/`
-before the first commit.
+`~/.zshenv`. Cygwin paths work (`/home/Admin/etsy-listings`), for `setup` too.
 
 ---
 
@@ -163,9 +174,9 @@ regenerable from the same Connections page.
 Phase 2 pushes a real product, so `apply` runs the render stage first and needs
 real inputs:
 
-- **A design file** — RGBA PNG, and large enough for ~300 DPI over the profile's
-  print area (a 4500×5400 print area wants a 4500×5400 design). Validation
-  rejects anything smaller with the required size named; it never upscales.
+- **A design file** — RGBA PNG, sized within 10% of the profile's print area (a
+  4500×5400 print area wants at least 4050×4860). Validation rejects anything
+  smaller with the required size named; it never upscales.
 - **A calibrated mockup template** — at least one template set, calibrated in
   the browser (`etsy-listings ui`). Until Phase 3 the mockups aren't uploaded
   anywhere, but `apply` still renders them.
@@ -187,10 +198,13 @@ On a shop you intend to keep:
    nothing above costs money unless the draft setting is wrong, which is why it
    is step one.
 
-`create_product` is the only non-idempotent call in the system. It's guarded by
-the lockfile's `printify_product_id` plus a pre-flight lookup so a retry can't
-duplicate a product — that guard is the first thing to get a behaviour test in
-Phase 2, before anything talks to a real shop.
+`create_product` is the only non-idempotent call in the system — there is no
+idempotency key and no conflict, so an identical spec simply makes a second
+product. It is guarded by the lockfile's `printify_product_id`, plus a
+pre-flight **walk** of the shop's products matched on title and description
+(PRD 48). A walk rather than a lookup because `GET products.json` accepts
+`title`, `search` and `sku` and ignores all three. That guard is the first
+thing to get a behaviour test in Phase 2, before anything talks to a real shop.
 
 ---
 
@@ -202,7 +216,6 @@ Phase 2, before anything talks to a real shop.
 - [ ] Etsy shop open and able to accept listings
 - [ ] Etsy developer app **submitted** (for Phase 3)
 - [ ] At least one Etsy shop section and one return policy created (ids not needed until Phase 3)
-- [ ] Workspace directory created, `shop.yaml` written
-- [ ] `.env` holding `PRINTIFY_API_TOKEN`, gitignored
+- [ ] `etsy-listings setup` run: workspace created, token verified, `shop.yaml` and `.env` written
 - [ ] One real design at print-area resolution
 - [ ] One calibrated mockup template

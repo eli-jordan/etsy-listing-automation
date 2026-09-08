@@ -1,7 +1,7 @@
 """Pure logic behind the ``new`` picker (PRD 19): everything that doesn't touch
 a terminal, so it's testable through the fake catalog client with no
 interactive prompting -- ``newcmd/interactive.py`` only sequences the
-questions, and ``newcmd/prompts.py`` picks a backend that can actually drive
+questions, and ``prompts.py`` picks a backend that can actually drive
 the terminal it was given.
 """
 
@@ -61,7 +61,7 @@ def filter_blueprints_by_category(blueprints: list[Blueprint], category: str) ->
 # ones this workspace already has a profile for sort to the top. Building them
 # lives here rather than in the prompt so it can be tested without a terminal,
 # the same reason every other decision in `new` does. Filtering, on a terminal
-# that can do it at all, is fzf's job -- see `newcmd/prompts.py`.
+# that can do it at all, is fzf's job -- see `prompts.py`.
 # ----------------------------------------------------------------------
 
 LOCAL_MARKER = "⭐"

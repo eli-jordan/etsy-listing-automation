@@ -121,20 +121,27 @@ uv run etsy-listings apply take-a-hike --root /tmp/try-workspace
 ## 3. Set up your own workspace
 
 The workspace is a directory **you** own, entirely separate from this repo —
-never point `--root` at the repo itself for real work. Create it anywhere:
+never point `--root` at the repo itself for real work. One command creates it:
 
 ```bash
-mkdir -p ~/etsy-listings/{designs,mockup-templates,listings,common-media}
-cd ~/etsy-listings
+uv run etsy-listings setup --root ~/etsy-listings
 ```
 
-Write `shop.yaml` at the root. Only `currency` and the `etsy.*` fields shown
-below are required today — `shop_section_id`/`return_policy_id` are Phase 3
-fields, leave them out until then:
+`setup` makes the directory skeleton, asks for your Printify token and
+**verifies it against the API before storing it**, reads back which shop it
+can reach and writes that id, then collects the currency and Etsy defaults and
+writes `shop.yaml`. It is safe to re-run: every question arrives pre-filled
+with what the file already says, so pressing enter through it changes nothing.
+
+It stops before Etsy sign-in, which arrives with `auth` in Phase 3. A
+workspace without that is complete for everything up to publishing.
+
+The `shop.yaml` it writes looks like this, and hand-editing it is fine:
 
 ```yaml
+printify:
+  shop_id: 28819281          # discovered from your token, not typed
 etsy:
-  shop_id: 12345678
   who_made: i_did
   when_made: made_to_order
   is_supply: false
@@ -143,8 +150,9 @@ currency: NOK
 preferred_print_provider: Monster Digital   # optional; used by `new`'s default
 ```
 
-`shop_id` is a placeholder for now — nothing in Phase 0/1 calls Printify or
-Etsy, so any number works. Every price you write anywhere in this workspace
+`etsy.shop_id`, `shop_section_id` and `return_policy_id` are Phase 3 fields and
+are simply absent until you have them — the tool asks for each by name at the
+point it actually needs one. Every price you write anywhere in this workspace
 must be in the currency you set here (`349 NOK`, never a bare `349` — see
 `Money` in [config/money.py](../src/etsy_listings/config/money.py)).
 
@@ -163,11 +171,15 @@ Without either, the CLI walks up from your current directory looking for
 ## 4. Add a design
 
 Drop an RGBA PNG into `designs/`, e.g. `designs/take-a-hike.png`. It needs to
-be large enough for ~300 DPI over your garment's print area — a 4500×5400
-print area wants a 4500×5400-or-larger design. Rendering never upscales; too
-small fails loudly, naming the required size. Printify's print area varies by
-garment size, and `new` records the largest of them in the profile, so meeting
-the number in `print_area` covers every size you sell.
+be **within 10% of your garment's print area** — a 4500×5400 print area wants a
+design at least 4050×4860, and one at least 4500×5400 is better. Rendering never
+upscales; anything smaller fails loudly, naming the required size. Printify's
+print area varies by garment size, and `new` records the largest of them in the
+profile, so meeting the number in `print_area` covers every size you sell.
+
+Printify itself checks none of this — it will take a 120×140 file and print it —
+so this gate is the only thing between a low-resolution export and a blurry
+shirt.
 
 A design that needs different ink for light vs. dark garments carries more
 than one file — that's configured per-listing (§7), not here.

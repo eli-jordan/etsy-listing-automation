@@ -127,8 +127,9 @@ artwork:
   moss: on-dark   # optional per-colour override
 ```
 
-**Resolution order** (`engine/stages/render.py::_resolve_artwork`), used by
-the render stage now and by the future `printify_product` stage in Phase 2:
+**Resolution order** (`engine/stages/placement.py::DesignPlacement.artwork_for`),
+used by the render stage for its mockups and by `printify_product` for the
+print file — one implementation, because the two must agree:
 
 1. `listing.artwork[colour]` — wins even over a template's own override,
    deliberately: it's the thing a human is most likely to revisit per design.

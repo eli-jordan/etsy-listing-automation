@@ -9,10 +9,10 @@ reviewable Etsy draft: renders custom mockups locally, configures the product in
 Printify, and patches the resulting Etsy listing. Idempotent by design — re-running
 against unchanged inputs must make no remote changes.
 
-**Phases 0 and 1 are implemented**; Phases 2-6 are not. "Code layout" below
+**Phases 0, 1 and 2 are implemented**; Phases 3-6 are not. "Code layout" below
 shows what exists today, marked per module. "Commands" still describes the
-PRD's full CLI surface — `plan`, `apply`, `new` and `ui` are real; the rest is
-the agreed design for later phases. Check the tree, or
+PRD's full CLI surface — `setup`, `plan`, `apply`, `new` and `ui` are real; the
+rest is the agreed design for later phases. Check the tree, or
 [docs/architecture.md](docs/architecture.md), before assuming a module,
 command or test exists.
 
@@ -20,8 +20,8 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 27 numbered product decisions in its appendix. |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 10 architecture decisions, `A1`–`A10`. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 48 numbered product decisions in its appendix. |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 21 architecture decisions, `A1`–`A21`. |
 
 When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.
 
@@ -154,24 +154,26 @@ user-writable directory with no installer.
 
 ## Code layout
 
-Per `A1`–`A10`. Full detail in the plan; the shape:
+Per `A1`–`A21`. Full detail in the plan; the shape:
 
 ```
 src/etsy_listings/
-  cli/          Typer app, one module per command        [plan/apply/new/ui done]
+  cli/          Typer app, one module per command  [setup/plan/apply/new/ui done]
   workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
   catalog/      Printify catalog fetch + TTL cache + name-to-id resolution  [done]
-  engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, stages/
-                                        [done; STAGES = [Render()], more stages later]
+  engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run, stages/
+                   [done; STAGES = [Render(), PrintifyProduct()], more stages later]
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
+  setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
   clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
-                                                                            [Phase 2/3]
+                       [printify/ + retry done; etsy/ and the limiter Phase 3/6]
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
                              (dashboard/setup wizard/run runner: Phase 5)
+  prompts.py    which prompt backend can drive this terminal at all          [done]
   terminal.py   stdlib-only leaf: can this stream print that character?     [done]
 ```
 
@@ -187,6 +189,15 @@ later. Each traces to a decision.
 - **Only `engine` computes a diff.** The CLI renderer and the UI serialiser both
   consume `Plan` / `StagePlan` / `Change` objects. Neither may compare states
   itself — that is what makes the CLI and UI enforce identical rules (`A2`, PRD 20).
+- **Only `engine` runs a run.** The same rule, one level up: reading a
+  listing's lockfile, planning it, executing it, writing the lockfile back and
+  carrying on past a failure (PRD 16) all live in `engine/run.py`, behind
+  `plan_listings` / `apply_listings`. An entry point supplies the listings and
+  formats the resulting `RunReport`; it never opens a lockfile itself.
+- **Only the lockfile merges a lockfile.** `Lockfile.fold()` owns the
+  replace-versus-merge rules for all four axes and `applied_for()` owns the
+  per-stage lookup. A stage returns a `StageApplyResult` and never touches the
+  file; `execute` decides only which stages run, in what order.
 - **Nothing volatile enters a hash.** No timestamps, no absolute paths, no model
   output, no `tool_version`. Only the lockfile's `applied` subtree is hashed, via
   the single `canonical_hash()` helper. Violating this makes every run show a
@@ -393,9 +404,10 @@ PRD's agreed CLI surface for reference when building later phases — do not
 assume a command exists because it is listed here.
 
 ```
+setup              initialise a workspace: skeleton, shop.yaml, credentials      [done]
 new [<design>]     interactive design/garment/provider picker; writes profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
-apply <listing|--all>  execute every stage the plan identified          [done; only `render` exists]
+apply <listing|--all>  execute every stage the plan identified   [done; render + printify]
 render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
 ui                     setup wizard, dashboard, calibrator, run runner    [calibrator done; rest Phase 5]
 auth                   Etsy OAuth PKCE + Anthropic credentials                     [Phase 3]

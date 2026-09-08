@@ -22,9 +22,16 @@ def format_plan(plan: Plan) -> str:
     lines = [_header(plan), ""]
 
     runs = [sp for sp in plan.stage_plans if sp.will_run]
+    blocked = [sp for sp in plan.stage_plans if sp.blocked]
     changes = [(sp, change) for sp in plan.stage_plans for change in sp.changes]
     drifts = [(sp, drift) for sp in plan.stage_plans for drift in sp.drift]
     action_count = sum(len(sp.actions) for sp in plan.stage_plans)
+
+    # Blocked stages lead. What a run will *not* do is the more surprising
+    # half, and burying it under "No changes." is exactly how a listing goes
+    # un-uploaded without anyone noticing.
+    for stage_plan in blocked:
+        lines.extend(format_blocked(stage_plan))
 
     for stage_plan in runs:
         reason = f" ({stage_plan.reason})" if stage_plan.reason else ""
@@ -43,9 +50,37 @@ def format_plan(plan: Plan) -> str:
     lines.append("")
     lines.append(
         f"  {len(runs)} to run{_actions_suffix(action_count)}, "
-        f"{len(changes)} to change, {len(drifts)} drift warning(s)"
+        f"{len(changes)} to change{_blocked_suffix(len(blocked))}, "
+        f"{len(drifts)} drift warning(s)"
     )
     return "\n".join(lines)
+
+
+def format_blocked(stage_plan: StagePlan) -> list[str]:
+    """A stage that cannot run, as a warning rather than a footnote.
+
+    The first line is the consequence in the user's terms -- what will not
+    happen to their listing -- and any further lines are the remedy, indented
+    under it. The stage supplies both, because *why* a stage is blocked is
+    engine knowledge; only the shape of it belongs here.
+
+    Public because ``apply`` shows these too. A blocked stage is the one thing
+    ``apply`` must not stay quiet about: it is doing less than it was asked
+    to, and the whole point of the ``blocked`` vocabulary is that both routes
+    say so in the same words.
+    """
+    message = (stage_plan.blocked or "").splitlines()
+    head, *rest = message or [""]
+    lines = [f"  ! {head}"]
+    lines.extend(f"      {line}" for line in rest)
+    lines.append(f"      ({stage_plan.stage} will not run)")
+    return lines
+
+
+def _blocked_suffix(count: int) -> str:
+    if count == 0:
+        return ""
+    return f", {count} blocked"
 
 
 def _actions_suffix(count: int) -> str:

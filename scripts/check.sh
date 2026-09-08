@@ -6,6 +6,19 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# A developer who works on a real workspace exports ETSY_LISTINGS_ROOT in their
+# shell, and `Workspace.discover()` consults it before walking up from cwd. The
+# workspace tests then discover *that* workspace instead of the fixture copy
+# they just built, and two of them fail for a reason that has nothing to do
+# with the change being checked.
+#
+# Unset rather than override: this script's job is to say whether the repo is
+# sound, so it should not depend on any workspace at all. Safe for the suite
+# it runs -- the tests that want the variable set it themselves (monkeypatch,
+# or CliRunner's env=), and the one layer that reads it from the environment
+# is `-m e2e`, which the default addopts deselect and this script never runs.
+unset ETSY_LISTINGS_ROOT
+
 echo "== ruff format =="
 uv run ruff format .
 

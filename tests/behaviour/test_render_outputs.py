@@ -40,13 +40,13 @@ def _empty_lock() -> Lockfile:
 
 def _applied(workspace_root: Path) -> Lockfile:
     ctx = _ctx(workspace_root)
-    plan = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    return execute(ctx, plan, _empty_lock(), STAGES)
+    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    return execute(ctx, planned, _empty_lock())
 
 
 def _render_plan(workspace_root: Path, lock: Lockfile):
-    plan = build_plan(_ctx(workspace_root), LISTING, lock, STAGES)
-    return next(sp for sp in plan.stage_plans if sp.stage == "render")
+    planned = build_plan(_ctx(workspace_root), LISTING, lock, STAGES)
+    return next(sp for sp in planned.plan.stage_plans if sp.stage == "render")
 
 
 def test_a_deleted_render_makes_plan_want_to_run_again(workspace_root: Path) -> None:
@@ -74,7 +74,7 @@ def test_apply_actually_restores_the_deleted_render(workspace_root: Path) -> Non
     deleted.unlink()
 
     ctx = _ctx(workspace_root)
-    execute(ctx, build_plan(ctx, LISTING, lock, STAGES), lock, STAGES)
+    execute(ctx, build_plan(ctx, LISTING, lock, STAGES), lock)
 
     assert deleted.is_file()
 
@@ -85,7 +85,7 @@ def test_an_emptied_cache_directory_is_fully_rebuilt(workspace_root: Path) -> No
         png.unlink()
 
     ctx = _ctx(workspace_root)
-    execute(ctx, build_plan(ctx, LISTING, lock, STAGES), lock, STAGES)
+    execute(ctx, build_plan(ctx, LISTING, lock, STAGES), lock)
 
     assert sorted(p.name for p in (workspace_root / RENDER_DIR).glob("*.png")) == [
         "black.png",
@@ -160,7 +160,7 @@ def test_every_render_event_carries_the_garment_colour(workspace_root: Path) -> 
     escape baked into the message."""
     events: list[Event] = []
     ctx = _ctx(workspace_root, events)
-    execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock(), STAGES)
+    execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock())
 
     rendered = [event for event in events if event.message.startswith("rendered ")]
     assert len(rendered) == 4
@@ -185,7 +185,7 @@ def test_a_multiple_kind_scene_emits_one_swatch_per_placement(workspace_root: Pa
 
     events: list[Event] = []
     ctx = _ctx(workspace_root, events)
-    execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock(), STAGES)
+    execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock())
 
     chart = next(e for e in events if e.message == "rendered colour-chart-01")
     assert len(chart.swatches) > 1

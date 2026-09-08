@@ -9,29 +9,30 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Callable
-from datetime import UTC, datetime
+from pathlib import Path
 from typing import Any
 
 import typer
 
-from etsy_listings import __about__, terminal
+from etsy_listings import terminal
 from etsy_listings.catalog.cache import CachedCatalogClient
 from etsy_listings.catalog.client import CatalogClient
 from etsy_listings.catalog.http import CatalogAuthError, HttpCatalogClient
-from etsy_listings.cli.render import format_plan
-from etsy_listings.config.errors import ConfigLoadError
+from etsy_listings.cli.render import format_blocked, format_plan
+from etsy_listings.clients.printify.http import HttpPrintifyClient
+from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
     Secrets,
 )
-from etsy_listings.engine.apply import execute
+from etsy_listings.engine.change import Plan
 from etsy_listings.engine.context import Event, EventSink, RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import build_plan
+from etsy_listings.engine.plan import PlannedRun
+from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
+from etsy_listings.errors import UserFacingError
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import Workspace, WorkspaceNotFoundError
@@ -116,11 +117,24 @@ def _catalog(workspace: Workspace) -> CatalogClient:
     return CachedCatalogClient(HttpCatalogClient(token), workspace.catalog_cache_dir())
 
 
+def _printify(workspace: Workspace) -> PrintifyClient:
+    """The shop-scoped client, token resolved lazily for the same reason the
+    catalog client's is: a workspace that has not opted into Phase 2 never
+    calls it, and demanding a credential to build one would make `plan` fail
+    in every workspace that only renders mockups."""
+
+    def token() -> str:
+        return Secrets.load(workspace.env_file()).require_printify_api_token()
+
+    return HttpPrintifyClient(token)
+
+
 def _run_context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
     catalog = _catalog(workspace)
+    printify = _printify(workspace)
     if on_event is None:
-        return RunContext(workspace=workspace, catalog=catalog)
-    return RunContext(workspace=workspace, catalog=catalog, on_event=on_event)
+        return RunContext(workspace=workspace, catalog=catalog, printify=printify)
+    return RunContext(workspace=workspace, catalog=catalog, printify=printify, on_event=on_event)
 
 
 SWATCH_GLYPH = "██"
@@ -174,17 +188,30 @@ def _echo_event(event: Event) -> None:
     typer.echo(f"  {swatch} {event.message}", color=True)
 
 
-def _empty_lock() -> Lockfile:
-    return Lockfile.empty(tool_version=__about__.VERSION, applied_at=datetime.now(UTC).isoformat())
+def _echo_blocked(plan: Plan) -> None:
+    """Say what this apply will *not* do, before it does the rest.
+
+    A blocked stage is not a failure -- the render stage still runs, and a
+    workspace that has not opted into Printify yet is not broken -- but it is
+    the half of the run the user cannot see happening, so it must be said out
+    loud rather than inferred from a product that never appears.
+    """
+    for stage_plan in plan.stage_plans:
+        if stage_plan.blocked:
+            for line in format_blocked(stage_plan):
+                typer.echo(line, err=True)
 
 
-def _validate_config(workspace: Workspace, listing: str) -> None:
-    """Parse everything the run depends on, so a config error is reported
-    before any stage work starts. The parsed values are discarded -- each stage
-    loads what it needs itself (A1); this is purely the early failure."""
-    config = workspace.load_listing(listing)
-    workspace.load_profile(config.profile)
-    workspace.load_exceptions()
+def _echo_failure(listing: str, error: UserFacingError) -> None:
+    """One listing's refusal, as a message rather than a stack.
+
+    Every refusal the user can act on -- a config error, a design too small, a
+    colour that does not exist, copy still carrying a sentinel -- reaches here
+    instead of ending the run: PRD 16 is why one bad listing cannot halt fifty
+    good ones. The engine decides that; this only says it out loud.
+    """
+    typer.echo(f"{listing}: {error}", err=True)
+    typer.echo("", err=True)
 
 
 def _target_listings(workspace: Workspace, listing: str | None, every: bool) -> list[str]:
@@ -199,25 +226,37 @@ def _target_listings(workspace: Workspace, listing: str | None, every: bool) -> 
     return names
 
 
-def _run_over_listings(
-    workspace: Workspace,
-    names: list[str],
-    ctx: RunContext,
-    action: Callable[[RunContext, str, Lockfile], None],
-) -> None:
-    """Run ``action`` per listing, continue-on-error (PRD 16: one bad listing
-    must not halt fifty good ones), exiting non-zero if any failed."""
-    failed = False
-    for name in names:
-        try:
-            _validate_config(workspace, name)
-        except ConfigLoadError as exc:
-            typer.echo(str(exc), err=True)
-            failed = True
-            continue
-        action(ctx, name, Lockfile.read(workspace.lock_file(name)) or _empty_lock())
+def _exit_for(report: RunReport) -> None:
+    raise typer.Exit(code=1 if report.failed else 0)
 
-    raise typer.Exit(code=1 if failed else 0)
+
+@app.command(epilog=EPILOG)
+def setup(
+    root: str | None = typer.Option(
+        None,
+        "--root",
+        help=(
+            "Where to create the workspace. Defaults to the current directory. "
+            "Unlike every other command, this one does not need a shop.yaml to "
+            "exist there already -- it is the command that writes one."
+        ),
+        envvar=layout.ROOT_ENV_VAR,
+        show_envvar=True,
+        metavar="PATH",
+    ),
+) -> None:
+    """Initialise a workspace: directories, shop.yaml, and the Printify token.
+
+    Safe to re-run: it fills in what is missing and leaves existing answers
+    alone. Verifies the token against Printify before storing it, and reads
+    the shop id back from the same call rather than asking you to find one.
+
+    Stops before Etsy sign-in, which arrives with `auth` in Phase 3.
+    """
+    from etsy_listings.setupcmd import run_setup
+
+    target = to_native_path(root) if root else Path.cwd()
+    run_setup(target)
 
 
 @app.command(epilog=EPILOG)
@@ -233,13 +272,20 @@ def plan(
     published.
     """
     workspace = _open_workspace(root)
-    ctx = _run_context(workspace)
 
-    def show_plan(ctx: RunContext, name: str, lock: Lockfile) -> None:
-        typer.echo(format_plan(build_plan(ctx, name, lock, STAGES)))
+    def show(name: str, planned: PlannedRun) -> None:
+        typer.echo(format_plan(planned.plan))
         typer.echo("")
 
-    _run_over_listings(workspace, _target_listings(workspace, listing, all), ctx, show_plan)
+    _exit_for(
+        plan_listings(
+            _run_context(workspace),
+            _target_listings(workspace, listing, all),
+            STAGES,
+            on_planned=show,
+            on_failure=_echo_failure,
+        )
+    )
 
 
 @app.command(epilog=EPILOG)
@@ -251,14 +297,26 @@ def apply(
     """Execute every stage the plan identified. Only local stages (render) run
     until later phases add Printify/Etsy."""
     workspace = _open_workspace(root)
-    ctx = _run_context(workspace, on_event=_echo_event)
 
-    def run_apply(ctx: RunContext, name: str, lock: Lockfile) -> None:
+    def announce(name: str, planned: PlannedRun) -> None:
+        """The header and the refusals, before the work they frame.
+
+        ``on_planned`` fires between planning and executing, which is the only
+        point at which both are true: the plan is known, and none of its
+        progress events have been printed yet.
+        """
         typer.echo(f"applying {name}")
-        plan = build_plan(ctx, name, lock, STAGES)
-        execute(ctx, plan, lock, STAGES).write(workspace.lock_file(name))
+        _echo_blocked(planned.plan)
 
-    _run_over_listings(workspace, _target_listings(workspace, listing, all), ctx, run_apply)
+    _exit_for(
+        apply_listings(
+            _run_context(workspace, on_event=_echo_event),
+            _target_listings(workspace, listing, all),
+            STAGES,
+            on_planned=announce,
+            on_failure=_echo_failure,
+        )
+    )
 
 
 @app.command(epilog=EPILOG)

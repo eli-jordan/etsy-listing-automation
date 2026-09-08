@@ -1,6 +1,6 @@
 # Implementation Plan: Etsy Listing Automation
 
-Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 27 product
+Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 48 product
 forks; this document settles *how* it is built — module boundaries, core contracts,
 and the order of work. Where the two disagree, the PRD wins and this file is wrong.
 
@@ -8,7 +8,7 @@ and the order of work. Where the two disagree, the PRD wins and this file is wro
 
 ## Architecture decision log
 
-Nineteen forks, resolved. Numbered `A#` so they can be cited from code comments
+Twenty-one forks, resolved. Numbered `A#` so they can be cited from code comments
 and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
@@ -26,12 +26,14 @@ and commit messages without colliding with the PRD's own decision log.
 | A11 | Template kind schema | Discriminated pydantic union on `kind` (`ColourMatrixTemplate \| MultipleTemplate \| SingleTemplate`, `Field(discriminator="kind")`), loaded via `load_template_config()` — no wrapping model, since the file *is* one of the three shapes. PRD 28. |
 | A12 | Multi-layer rendering | `render_scene()`/`Layer`/`export_many()` in `render/pipeline.py`/`render/passes.py`, `multiple`-kind only. The existing single-layer `render()`/`export()` are untouched, not generalised — see A7. |
 | A13 | Template ownership + media addressing | No profile-level registry — `Profile` carries no `templates` field. `listing.media` always references `{template, colour?}` explicitly, naming any template that exists in `mockup-templates/`; no default, no bare-colour shorthand. A template is purely local and Etsy-facing (Printify never sees it), unlike `blueprint`/`print_provider`/`sizes`, which genuinely are Printify product-creation inputs — that's why templates don't live on the profile the way those do. PRD 29. |
-| A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in the render stage (`engine/stages/render.py::_resolve_artwork`), reused unchanged by the future `printify_product` stage (Phase 2). PRD 30. |
+| A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in `engine/stages/placement.py::DesignPlacement.artwork_for`, and used by both stages that place a design — the render stage's mockup and the product stage's print file. It lived privately inside the render stage until Phase 2, when the product stage had to import it through the underscore; a mockup and a print file disagreeing about which ink a colour gets is a failure neither stage's own tests would catch, so the rule got its own module rather than a second implementation. The order itself is unchanged. PRD 30. |
 | A15 | Render cache namespacing | `.cache/renders/{listing}/{template}/...`, not `.cache/renders/{listing}/{colour}.png` — namespaced by template, since a listing can reference more than one `colour-matrix`-kind template and a bare colour is no longer unique across them. |
 | A16 | Pricing plan resolution | `Listing.pricing_plan` stays a bare ref string, resolved by the caller via `Workspace.resolve()`, exactly like `design:` — `Listing` itself never touches `Workspace` or does I/O. `resolved_price()` takes an already-loaded `PricingPlan` as an optional keyword argument rather than loading it itself. Keeps `Listing` as pure and workspace-ignorant as it is today; the cost is every future price-resolving call site must remember to load and pass the plan, same cost `design:` resolution already carries. PRD 34. |
 | A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside `catalog/`'s documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
 | A18 | Wizard-time FX module placement | The one-off FX fetch lives in `newcmd/fx_rate.py`, not the package layout's reserved `fx/` (this doc's own deferred, cached full-margin module, PRD 10b) — avoids name collision with, and confusion against, that future work. PRD 36. |
 | A19 | Calibrator test design | A **library**, not the fixed `BundledDesign` literal it replaces. The three bundled targets stay and keep their ids; the preview endpoint resolves an arbitrary id against those plus PNGs the user has uploaded into the workspace, and an unknown id is a 400 rather than a `KeyError`. The literal was right while the only designs were the ones shipped in `api/static/`, but calibration is judged by eye, and the grid target answers "is the warp right?" while saying nothing about how a real ink weight sits on a real garment. The set has to be open for the second question. Uploads land in the workspace (`test-designs/`, kept apart from `designs/`), never the repo. |
+| A20 | Stage-produced remote state | `StageApplyResult` gains a `remote: dict[str, Any]`, merged into the lockfile's `remote` block the same way `outputs` already is, with each stage owning a documented key prefix (`printify_*`, `etsy_*`). Until Phase 2 no stage produced remote ids, so `apply` copied `lock.remote` through untouched and there was no channel at all — `printify_product` is the first stage that has to write one. A dict merged by the engine, rather than the stage mutating a lockfile it was handed, keeps the rule that a stage returns a value and the engine decides what becomes of it. |
+| A21 | Phase 2 concurrency scope | Retry-with-backoff lands in Phase 2, because it is needed the moment anything writes; the token buckets and the persisted daily budget stay in Phase 6 as planned. A3's `plan` thread-pool fan-out also stays unbuilt: with one remote stage and a single live read per listing there is nothing to overlap, and a pool that fans out over one call is machinery pretending to be an optimisation. Recorded as a decision rather than left as an omission, so the next reader does not take the empty pool for an oversight. |
 
 ### Toolchain
 
@@ -56,12 +58,17 @@ src/etsy_listings/
     slug.py             slugification rules + exceptions file + collision detection
   catalog/              Printify catalog fetch, TTL cache, name to id resolution;
                         shipping() alongside blueprints/providers/variants (PRD 35)
+  prompts.py            which prompt backend can drive this terminal at all --
+                        shared by `new` and `setup`, a package-root leaf like
+                        terminal.py rather than a member of either
   newcmd/               the `new` picker: logic.py (pure) + interactive.py (terminal
-                        sequencing) + prompts.py (backend selection)
+                        sequencing)
     unofficial_variant_costs.py    undocumented per-variant cost fetch, fail-soft,
                         isolated from catalog/'s documented surface (A17, PRD 35)
     fx_rate.py          one-off uncached FX fetch for the pricing-plan wizard only
                         — not the reserved fx/ package below (A18, PRD 36)
+  setupcmd/             `setup` (PRD 43): logic.py (pure — skeleton, shop.yaml
+                        merge, .env editing) + interactive.py (sequencing, I/O)
   engine/
     stage.py            Stage protocol
     change.py           Change vocabulary + comparison helpers
@@ -108,20 +115,37 @@ class Stage(Protocol):
     local: bool                      # True => no remote state, so no drift
 
     def desired(self, ctx: RunContext) -> Desired: ...
-    def last_applied(self, lock: Lockfile) -> Applied | None: ...
     def read_live(self, ctx: RunContext, listing, lock) -> Live | None: ...
-    def plan(self, desired, applied, live) -> StagePlan: ...
-    def apply(self, ctx: RunContext, plan: StagePlan) -> StageResult: ...
+    def plan(self, desired, applied: dict | None, live) -> StagePlan: ...
+    def apply(self, ctx, plan, desired, live, lock) -> StageApplyResult: ...
 
 STAGES = [Render(), Generate(), PrintifyProduct(),
           Publish(), EtsyCopy(), EtsyMedia()]
 ```
 
+`plan`'s `applied` is the stage's **own subtree** of the lockfile, looked up by
+`build_plan` through `Lockfile.applied_for(name)`. There used to be a
+`last_applied(lock)` method for this, and every stage implemented it as
+`lock.applied.get(self.name)` — the same lookup written out once per stage, on
+a protocol wide enough to reach every *other* stage's state. It arrives as the
+raw document, because that is the form it was written in; a stage wanting a
+typed view parses one at the top of its own `plan()`, where the parse sits
+beside the comparison it feeds.
+
+A stage's `apply` returns a `StageApplyResult` carrying three dicts, each
+merged into a different part of the next lockfile — by the **lockfile**, never
+by the stage and no longer by `apply`'s loop: `applied` **replaces**
+`lock.applied[stage.name]` (it is a whole document, so a field the stage has
+stopped emitting must not survive), while `outputs` and `remote` **merge** by
+key into their respective axes (A20) — ids handed back by an API, excluded
+from every hash, each stage owning a documented key prefix. See `Lockfile.fold`
+below.
+
 | Stage | `desired` | `read_live` | `apply` |
 |---|---|---|---|
 | `render` | design/artwork bytes hashes + template assets + resolved `RenderConfig`(s) per referenced scene (A11–A14) | which rendered files still exist under `.cache/renders/` | render each scene actually referenced by `media` into `.cache/renders/{listing}/{template}/` (A15) |
 | `generate` | brief + design hash + profile context + prompt template hashes | whether `generated.yaml` still exists | call the model, validate hard, write `generated.yaml` |
-| `printify_product` | blueprint/provider ids, enabled variant matrix, per-variant prices in cents, print areas | `GET products/{id}`, incl. `visible` (below) | create or update product |
+| `printify_product` | title + description (PRD 44), blueprint/provider ids, enabled variant matrix with prices, print areas | `GET products/{id}`, incl. `visible` (below); `None` without a request when the lockfile has no product id | create (after the PRD 48 duplicate walk) or update product |
 | `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
 | `etsy_copy` | title, description, tags, materials, section, `should_auto_renew` | `getListing` | `updateListing` |
 | `etsy_media` | ordered media manifest, each entry `(ref, content_hash)` | listing images + ids | full delete-and-reupload in rank order |
@@ -142,30 +166,42 @@ This paragraph used to say local stages have no live state at all, which read as
 licence to skip the read entirely. `plan` duly reported "No changes." over a
 half-emptied render cache, and `apply` did nothing to refill it.
 
-### Draft-vs-live cannot be set through the API — PRD risk 5, resolved in one direction
+### Draft-vs-live — PRD risk 5, and a correction
 
-Checked directly against Printify's API Reference (`developers.printify.com/docs/`):
-Product has a documented `visible` field ("Used for publishing. Visibility in
-sales channel", defaults to `true`) but it is marked **read-only**, and the
-`publish.json` request body only accepts `images`, `variants`, `title`,
-`description`, `tags`, `shipping_template` — `visible` is not among them, and it
-is absent from the create/update product bodies and from the Shop resource too.
+This section used to read *"Draft-vs-live cannot be set through the API"*, and
+concluded that nothing this tool sends could affect whether a publish lands as a
+draft. **The premise was wrong, and Phase 2's recon caught it**
+([api-findings.md](api-findings.md)).
 
-**"Hide in Store" is a Printify web-app UI action, not an API parameter.**
-Nothing this tool sends can make a publish come in as a draft; the shop's
-Etsy-connection setting (`docs/setup.md` §1.2) is the only lever, and it must be
-set by a human in Printify's UI before the first `apply` ever publishes.
+The reasoning was sound as far as the documentation went: Printify's API
+Reference (`developers.printify.com/docs/`) documents `visible` ("Used for
+publishing. Visibility in sales channel", defaults to `true`) and marks it
+**read-only**; it is absent from the `publish.json` body, which takes only
+`images`, `variants`, `title`, `description`, `tags`, `shipping_template`, and
+absent from the create/update product bodies and the Shop resource. From that,
+"Hide in Store" looked like a web-app-only action.
 
-What the API *does* give us: `visible` comes back on `GET products/{id}`, so
+Measured against the live API, `visible` **is** writable — accepted on
+`POST products.json`, accepted on `PUT`, and it reads back as sent. The
+reference is wrong about it, which is a good reason to keep measuring rather
+than reading.
+
+What that does *not* establish is the thing risk 5 cares about: whether a
+hidden product publishes to Etsy as a draft. That needs a connected Etsy shop
+and belongs to Phase 3. So the shop's Etsy-connection setting
+(`docs/setup.md` §1.2) remains the documented lever and must still be set by a
+human before the first `apply` publishes — but `visible` is now a candidate
+second lever rather than a closed door.
+
+Meanwhile `visible` comes back on `GET products/{id}`, so
 `printify_product.read_live()` reads it and the stage surfaces a warning if a
-product it manages ever comes back `visible: true` — a tripwire, not a fix,
-since nothing here can correct it.
+product it manages ever comes back `visible: true`. That tripwire stands, and
+may yet become a fix.
 
-**Still open, and only answerable against the real Printify account (Phase 2's
-job, not this doc's):** whether the shop's draft setting is a persistent
-per-shop default that holds for every future publish, or something that reverts
-and needs re-confirming — write this into `docs/api-findings.md` before Phase 2
-exits, citing this section.
+**Still open, and only answerable once an Etsy shop is connected:** whether the
+shop's draft setting is a persistent per-shop default that holds for every
+future publish, or something that reverts and needs re-confirming. Carried in
+[api-findings.md](api-findings.md)'s open questions.
 
 ### `Change` vocabulary
 
@@ -205,7 +241,8 @@ regardless of route".
   "applied": {
     "render":   { "input_hash": "sha256:...", "config": {}, "colors": ["black", "moss"] },
     "generate": { "title": "...", "description": "...", "tags": [], "alt_text": {} },
-    "printify_product": { "blueprint_id": 6, "print_provider_id": 29,
+    "printify_product": { "title": "...", "description": "...",
+                          "blueprint_id": 6, "print_provider_id": 29,
                           "variants": [{"id": 17887, "price": 4990, "is_enabled": true}],
                           "print_areas": [] },
     "publish":  { "sync_flags": {"variants": true, "title": false, "images": false} },
@@ -214,7 +251,9 @@ regardless of route".
     "etsy_media": { "manifest": [{"ref": "mockup:black", "hash": "sha256:..."}] }
   },
 
-  "remote":  { "printify_product_id": "...", "etsy_listing_id": 1234567890,
+  "remote":  { "printify_product_id": "...",
+               "printify_upload_ids": {"default": "..."},
+               "etsy_listing_id": 1234567890,
                "etsy_image_ids": [111, 112], "etsy_listing_state": "draft" },
   "outputs": { ".cache/renders/take-a-hike/black.png": "sha256:..." },
   "stages_completed": ["render", "generate", "printify_product", "publish",
@@ -237,6 +276,47 @@ shows a spurious diff" failure.
 requires: `input_hash` decides whether to re-render, `outputs` decides whether to
 re-upload. A library upgrade that changes render bytes therefore triggers a
 re-upload, correctly and visibly.
+
+**`Lockfile` owns the merge, not just the file.** `fold(stage, result)` returns
+the next lockfile with that stage's result absorbed under the replace/merge
+rules above; `applied_for(stage)` hands a stage its own subtree back; and
+`stamped(tool_version, applied_at)` records what wrote it and when, once per
+run rather than once per stage. Those four axes used to be public dicts that
+`execute` copied and combined by hand, with the rules for doing so written
+down one module away in `StageApplyResult`'s docstring — rules stated in one
+place and implemented in another are rules that drift. `StageApplyResult`
+moved next to `fold` for the same reason. `execute` now decides only *which*
+stages run and in what order, which is the part that is genuinely its
+business (A3).
+
+### Runs
+
+```python
+def plan_listings(ctx, listings, stages, *, on_planned, on_failure) -> RunReport: ...
+def apply_listings(ctx, listings, stages, *, on_planned, on_failure) -> RunReport: ...
+```
+
+`engine/run.py`, one level above `build_plan`/`execute`: a whole run over a set
+of listings, owning each lockfile's lifecycle — read it, plan, execute, write
+it back — and PRD 16's continue-on-error. A `UserFacingError` abandons that
+listing and no other; anything else is a defect and propagates.
+
+This lived in `cli/app.py` as a private helper taking a callback until it was
+lifted here. None of it is presentation: the lockfile's path and lifecycle are
+engine concerns, so are the tool version and clock stamped into it, and PRD 16
+is a product rule that has to hold whichever entry point drives it — the CLI
+only added the words. It is the same seam `Plan`/`format_plan` already draws,
+one level up: `cli` formats the `RunReport`, Phase 5's UI will serialise it,
+and neither re-derives what a run does. PRD 16 is now assertable against a
+value instead of against terminal output.
+
+The two sinks exist because a batch has two moments worth watching, and output
+must interleave with the work rather than arriving after it. `on_planned` fires
+the instant a listing's plan is ready — before `apply` executes it, which is
+the only point at which the plan is known and none of its progress events have
+been emitted. `on_failure` fires when a listing is abandoned. The returned
+`RunReport` is the same information in one piece, for a caller that wants it
+that way, and `RunReport.failed` is what the CLI turns into an exit code.
 
 ### Workspace
 
@@ -345,9 +425,33 @@ history. `plan --all` reports what fraction of the daily budget it consumed, whi
 is the PRD's risk 10 made visible rather than merely noted.
 
 **Retries.** Exponential backoff with jitter on 429 and 5xx, honouring
-`Retry-After`; no retry on other 4xx. `create_product` is the one non-idempotent
-call: it is guarded by the lockfile's `printify_product_id` plus a pre-flight
-lookup, so a retried create can never produce a duplicate product.
+`Retry-After`; no retry on other 4xx.
+
+**The HTTP method decides more than the status does.** A 429 is a refusal to
+process — Printify rejected the request before touching it — so resending is
+free whatever the verb. A 5xx or a dropped connection says the opposite: the
+write may well have landed. So idempotent methods are retried on both, and
+**POST only on 429**. Without that split, retrying a `create_product` that
+timed out is itself the duplicate-product bug the guard below exists to
+prevent.
+
+The last response is returned rather than raised, so the caller's own error
+decoding still sees the real `errors.reason` instead of a wrapper's summary.
+`sleep` and the jitter source are injected, which is what lets the whole
+policy be tested instantly and deterministically.
+
+`create_product` is the one non-idempotent call: it is guarded by the
+lockfile's `printify_product_id` plus a pre-flight walk of the shop's
+products, matching on title and description (PRD 48).
+
+That clause used to say "plus a pre-flight lookup", which assumed a key the
+product API does not have. There is none: `POST products.json` has no
+idempotency key and no conflict — an identical spec makes a second product —
+and `GET products.json` accepts `title`, `search` and `sku` parameters while
+ignoring all three. So the guard is a **walk**, not a query, matched
+client-side, and it is affordable only because it runs on the create path
+alone. PRD 44's requirement that title and description be concrete text is what
+makes that match key exist at all.
 
 **Publish polling.** Backoff 2s to 60s against a ~10 minute ceiling. On timeout the
 lockfile records the product as locked, which is what `unlock` later acts on.
@@ -501,28 +605,64 @@ colour; goldens are committed; `new` writes a profile and listing with no intege
 
 ### Phase 2 — Printify
 
-Client, models and fakes; variant resolution from colour slug × size; product
-create/update; publish with sync flags; polling; `unlock`; the first cassette
-contract tests.
+`setup` (PRD 43), which is what puts `printify.shop_id` and a verified token in
+a workspace before any of the rest can run. Then: client, models and fakes;
+variant resolution from colour slug × size; product create/update; the
+design-resolution, immutable-garment and concrete-copy validation gates
+(PRD 37, 38, 44); the first cassette contract tests.
 
-*Exit:* a product is created against a test shop and gains `external.id`; a second
-`apply` is a no-op; PRD risks 2, 3 and 6 are answered empirically and written up in
-`docs/api-findings.md`. Risk 5's API-surface question is answered already (see
-"Draft-vs-live cannot be set through the API", above) — what Phase 2 must still
-confirm empirically is whether the shop's Printify-side draft setting persists
-across every future publish, and record that in the same file.
+Three smaller pieces land with it because Phase 2 is the first phase that needs
+them: `StageApplyResult.remote` (A20), since `printify_product` is the first
+stage to produce an id worth keeping; retry-with-backoff (A21), since it is the
+first stage that writes; and the duplicate-create walk (PRD 48).
+
+**Recon landed first**, before any of it:
+[api-findings.md](api-findings.md) and `tests/e2e/test_printify_product_e2e.py`
+establish what the product endpoints actually require, and several answers are
+not the obvious ones — `variants` merges rather than replaces, `print_areas`
+coverage differs between create and update, the product returns the whole
+blueprint matrix, `visible` is writable. Build against that file, not against
+the API reference.
+
+*Exit:* `setup` takes an empty directory to a workspace `new` runs in, with a
+token it verified and a shop id it discovered; a product is created against a
+test shop carrying exactly the intended variant matrix, prices and print area;
+a second `apply` is a no-op; retiring a colour actually disables its variants;
+and a garment change, an undersized design and an unresolved `<generate>` in
+the copy are each refused at `plan` time with an actionable error.
+
+**Publishing is not in this phase's exit criteria, because this account cannot
+reach it.** With no Etsy shop connected, `publish.json` returns
+`400 code 8254`, so `external.id`, the publish lock, the selective-sync flags
+and `unlock` — PRD risks 2, 3, 5 and 6 — move to Phase 3, where the shop that
+can answer them exists. Phase 2 builds the product; Phase 3 publishes it.
 
 ### Phase 3 — Etsy
 
-OAuth PKCE and `auth`; copy patch; full-replace media sync; renewal; the LIVE
+OAuth PKCE and `auth`; **publish with sync flags, polling for `external.id`,
+and `unlock`**, inherited from Phase 2 because they need the connected shop
+this phase creates; copy patch; full-replace media sync; renewal; the LIVE
 banner and drift reporting on live listings.
 
 > **File the Etsy app registration now, not at the start of this phase.** It is a
 > form, not engineering work, and approval lead time is unknown — PRD risk 1. The
 > phase order is unchanged; only the paperwork moves earlier.
 
+> **Settle shipping before writing any of this — PRD risk 13.** Printify
+> publishes its USD shipping rates to Etsy as bare numerals, so an NOK shop
+> receives `kr 4,49` where `$4.49` was meant. The requirement is that both free
+> and paid shipping work, starting with paid, which means this tool owns a
+> shipping profile on the Etsy side and sends `shipping_template: false`. That
+> is a decision about where rates live and whether a shipping stage exists — it
+> shapes the stage list, so it cannot be discovered halfway through. Prices need
+> no such care: NOK passes through unconverted (PRD 39, 40), and risk 12 is
+> closed.
+
 *Exit:* a complete draft listing exists in Etsy with our copy, tags and media in
-rank order; the live-edit check from the PRD passes.
+rank order; the live-edit check from the PRD passes; PRD risks 2, 3, 5, 6 and 13
+are answered empirically, along with the one confirmation risk 12 still owes
+(does `29900` arrive as `299,00`?), and written into
+[api-findings.md](api-findings.md).
 
 ### Phase 4 — AI generation
 
