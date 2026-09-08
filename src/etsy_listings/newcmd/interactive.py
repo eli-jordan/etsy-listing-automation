@@ -66,7 +66,7 @@ def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Bluepr
         choices,
         label=lambda choice: choice.label,
         marker_hint=f"{marker.strip()} = already used in this workspace",
-    ).blueprint
+    ).value
 
 
 def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> PrintProvider:
@@ -117,7 +117,7 @@ def _pick_design(workspace: Workspace) -> str:
         raise typer.Exit(code=1)
     return prompts.pick(
         "Design", choices, label=lambda choice: choice.label, marker_hint="newest first"
-    ).name
+    ).value.stem
 
 
 def _pick_template(workspace: Workspace) -> str:
@@ -225,7 +225,7 @@ def _pick_or_create_pricing_plan(
             )
         return path
 
-    return by_label[answer].path
+    return by_label[answer].value
 
 
 def _reject_existing_listing(workspace: Workspace, design_name: str) -> None:

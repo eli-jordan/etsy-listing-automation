@@ -201,6 +201,20 @@ later. Each traces to a decision.
   replace-versus-merge rules for all four axes and `applied_for()` owns the
   per-stage lookup. A stage returns a `StageApplyResult` and never touches the
   file; `execute` decides only which stages run, in what order.
+- **A stage's applied document is a type, not a dict.** The lockfile stores it
+  as JSON, but a stage parses it back into a model (`RenderApplied`,
+  `AppliedProduct`) before comparing anything. A stage that reads its own
+  document with `applied.get("title")` ends up spelling the key names again in
+  every function that touches them, and nothing stops one drifting from the
+  others — that is where a `("?", "?")` fallback for a lookup that cannot miss
+  came from. `parse()` answers `None` for both "never applied" and "will not
+  decode", because a document we cannot read is one we cannot prove the live
+  state matches.
+- **A hashed document must not depend on the order its inputs happened to
+  arrive in.** Sort anything that lands in one. Variant ids reached
+  `print_areas[].variant_ids` in the order a listing wrote `colors:`, so
+  reordering that list changed `input_hash` and re-applied a product nothing
+  about which had changed.
 - **Nothing volatile enters a hash.** No timestamps, no absolute paths, no model
   output, no `tool_version`. Only the lockfile's `applied` subtree is hashed, via
   the single `canonical_hash()` helper. Violating this makes every run show a

@@ -25,9 +25,11 @@ to upload id, from the lockfile where it can and by uploading where it cannot.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from etsy_listings.clients.printify.models import (
     PlacedImage,
@@ -38,7 +40,6 @@ from etsy_listings.clients.printify.models import (
 )
 from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.clients.printify.resolve import (
-    VariantResolution,
     resolve_blueprint,
     resolve_print_provider,
     resolve_variants,
@@ -60,7 +61,6 @@ from etsy_listings.engine.stage import Blocked, StageApplyResult, StageBlockedEr
 from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
-    check_garment_unchanged,
 )
 from etsy_listings.engine.stages.placement import ArtworkGroup, DesignPlacement
 
@@ -96,6 +96,91 @@ class MissingPrintifyClientError(RuntimeError):
         )
 
 
+class AppliedVariant(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    id: int
+    price: int
+
+
+class AppliedPrintArea(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    artwork: str
+    design_hash: str
+    variant_ids: list[int]
+
+
+class AppliedProduct(BaseModel):
+    """The verbatim last-applied document (A2), as a type rather than a dict.
+
+    It is *stored* as JSON, and it used to be *read back* as JSON too:
+    ``applied.get("title")`` beside ``document["print_areas"]`` beside
+    ``entry["id"]``, spelled again in each of the three functions that
+    compared them. Nothing stopped one drifting from the others, and the shape
+    of a missing value was whatever ``.get`` happened to return -- which is why
+    the price diff carried a ``("?", "?")`` fallback for a lookup that cannot
+    miss.
+
+    Typed, the comparison is field access and the fallbacks are gone. The bytes
+    on disk are unchanged: :meth:`PrintifyProductDesired.applied` dumps exactly
+    the document that was written before, so no existing lockfile is
+    invalidated and no product is re-applied for having been re-read.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    title: str
+    description: str
+    blueprint_id: int
+    print_provider_id: int
+    position: str
+    variants: list[AppliedVariant]
+    print_areas: list[AppliedPrintArea]
+
+    @classmethod
+    def parse(cls, data: dict[str, Any] | None) -> AppliedProduct | None:
+        """This stage's lockfile subtree, or ``None`` if there is no usable one.
+
+        ``None`` in, ``None`` out -- a stage that has never run has no applied
+        document. A document that will not *parse* answers ``None`` as well,
+        which is a reading rather than a swallowed error: an applied document
+        we cannot decode is one we cannot prove the live product matches, and
+        "cannot prove" is what "never applied" already means. The cost is a
+        create, which PRD 48's copy walk turns into an adopt; the alternative
+        is `plan` dying on a lockfile some other version wrote.
+        """
+        if data is None:
+            return None
+        try:
+            return cls.model_validate(data)
+        except ValidationError:
+            return None
+
+    @property
+    def prices(self) -> dict[int, int]:
+        return {variant.id: variant.price for variant in self.variants}
+
+
+@dataclass(frozen=True)
+class PricedVariant:
+    """One colour x size cell, and what it sells for.
+
+    A :class:`~etsy_listings.clients.printify.resolve.ResolvedVariant` plus a
+    price, which is the whole of what this stage needs about a variant. It
+    replaces three parallel structures that between them described exactly
+    this: ``prices`` keyed by id, ``price_labels`` keyed by id, and the full
+    ``VariantResolution``. ``price_labels`` existed only because ``prices``
+    had thrown away the colour and size the resolution was still carrying.
+    """
+
+    id: int
+    colour_slug: str
+    size: str
+    price: int
+    """Minor units of the sales channel's currency (PRD 39/40)."""
+
+
 @dataclass(frozen=True)
 class PrintifyProductDesired:
     title: str
@@ -103,49 +188,102 @@ class PrintifyProductDesired:
     blueprint_id: int
     print_provider_id: int
     position: str
-    prices: dict[int, int]
+    variants: tuple[PricedVariant, ...]
     groups: tuple[ArtworkGroup, ...]
-    resolution: VariantResolution
+    missing: tuple[tuple[str, str], ...] = ()
+    """``(colour_slug, size)`` cells the catalog no longer offers. Reported,
+    never fatal -- PRD 46."""
     currency: str = ""
-    price_labels: dict[int, tuple[str, str]] = field(default_factory=dict)
-    """``variant_id -> (colour_slug, size)``, so a ``PriceChange`` can name the
-    cell a human recognises instead of an integer they have never seen."""
+
+    @property
+    def prices(self) -> dict[int, int]:
+        """``{variant_id: price}`` -- the shape the wire wants, and the only
+        place that shape is needed."""
+        return {variant.id: variant.price for variant in self.variants}
 
     def variant_ids(self, group: ArtworkGroup) -> tuple[int, ...]:
-        """The Printify variants a group's colours resolve to.
+        """The Printify variants a group's colours resolve to, in id order.
 
         The group itself knows only colours -- which ink a colour gets is a
         fact about the listing, not about Printify -- so turning them into ids
         is this stage's half of the job, and it is the one place that does it.
-        """
-        return self.resolution.ids(colours=set(group.colours))
 
-    def document(self) -> dict[str, Any]:
-        """The hashable ``applied`` form: no paths, no upload ids, no clock.
-
-        Variants are a sorted list of objects rather than a dict keyed by id,
-        because a JSON round-trip turns integer keys into strings and the
-        comparison would then find a difference on every run.
+        **Sorted**, and that is a fix rather than a tidying. These ids go into
+        ``print_areas[].variant_ids``, which is part of the hashed document,
+        and they used to come out in resolution order -- colour-outer,
+        size-inner, so the order the listing happens to write ``colors:`` in.
+        Reordering that list changed ``input_hash`` and re-applied a product
+        nothing about which had changed. Printify does not care about the
+        order, so nothing is lost by making the document not care either.
         """
-        return {
-            "title": self.title,
-            "description": self.description,
-            "blueprint_id": self.blueprint_id,
-            "print_provider_id": self.print_provider_id,
-            "position": self.position,
-            "variants": [
-                {"id": variant_id, "price": self.prices[variant_id]}
-                for variant_id in sorted(self.prices)
+        colours = set(group.colours)
+        return tuple(sorted(v.id for v in self.variants if v.colour_slug in colours))
+
+    def applied(self) -> AppliedProduct:
+        """The hashable last-applied form: no paths, no upload ids, no clock.
+
+        Variants are a list sorted by id rather than a mapping, because a JSON
+        round-trip turns integer keys into strings and the comparison would
+        then find a difference on every run. The sort is also what keeps the
+        hash independent of the colour-outer, size-inner order the catalog
+        resolves cells in.
+        """
+        return AppliedProduct(
+            title=self.title,
+            description=self.description,
+            blueprint_id=self.blueprint_id,
+            print_provider_id=self.print_provider_id,
+            position=self.position,
+            variants=[
+                AppliedVariant(id=variant.id, price=variant.price)
+                for variant in sorted(self.variants, key=lambda v: v.id)
             ],
-            "print_areas": [
-                {
-                    "artwork": group.artwork,
-                    "design_hash": group.design_hash,
-                    "variant_ids": list(self.variant_ids(group)),
-                }
+            print_areas=[
+                AppliedPrintArea(
+                    artwork=group.artwork,
+                    design_hash=group.design_hash,
+                    variant_ids=list(self.variant_ids(group)),
+                )
                 for group in self.groups
             ],
-        }
+        )
+
+
+def check_garment_unchanged(
+    was: AppliedProduct | None, *, blueprint_id: int, print_provider_id: int
+) -> Blocked | None:
+    """Refuse a garment or printer change on a listing that already has a product.
+
+    A deliberate refusal, not a missing feature (PRD 37). Printify ignores both
+    fields on an update -- ``200``, no change -- so the only automated route is
+    delete-and-recreate, which takes the Etsy listing behind the product with
+    it: reviews, favourites, search history, to save retyping a short YAML
+    file. A listing is cheap; the listing's history is not.
+
+    Here rather than in ``gates``, which is for checks no single stage owns:
+    this one is entirely about this stage's own applied document, and it needed
+    that document's type to stop reading it as a dict.
+    """
+    if was is None:
+        return None
+
+    changes: list[str] = []
+    if was.blueprint_id != blueprint_id:
+        changes.append(f"blueprint {was.blueprint_id} -> {blueprint_id}")
+    if was.print_provider_id != print_provider_id:
+        changes.append(f"print provider {was.print_provider_id} -> {print_provider_id}")
+    if not changes:
+        return None
+
+    return Blocked(
+        f"this listing's Printify product was created with a different garment: "
+        f"{', '.join(changes)}.\n"
+        f"Printify cannot change either on an existing product -- it accepts the "
+        f"request, answers 200, and changes nothing.\n"
+        f"Start a new listing for the new garment, or make the change by hand in "
+        f"Printify and Etsy. Recreating the product here would discard the Etsy "
+        f"listing's reviews and favourites."
+    )
 
 
 def _money(minor_units: int, currency: str) -> Money:
@@ -209,12 +347,17 @@ class PrintifyProductStage:
             if plan_file
             else None
         )
-        prices = {
-            variant.id: config.resolved_price(
-                variant.colour_slug, variant.size, pricing_plan=pricing_plan
-            ).minor_units
+        variants = tuple(
+            PricedVariant(
+                id=variant.id,
+                colour_slug=variant.colour_slug,
+                size=variant.size,
+                price=config.resolved_price(
+                    variant.colour_slug, variant.size, pricing_plan=pricing_plan
+                ).minor_units,
+            )
             for variant in resolution.variants
-        }
+        )
 
         return PrintifyProductDesired(
             title=config.etsy.title,
@@ -222,11 +365,10 @@ class PrintifyProductStage:
             blueprint_id=blueprint.id,
             print_provider_id=provider.id,
             position=profile.placeholder,
-            prices=prices,
-            groups=placement.group_by_artwork([v.colour_slug for v in resolution.variants]),
-            resolution=resolution,
+            variants=variants,
+            groups=placement.group_by_artwork([v.colour_slug for v in variants]),
+            missing=resolution.missing,
             currency=workspace.defaults.currency,
-            price_labels={v.id: (v.colour_slug, v.size) for v in resolution.variants},
         )
 
     def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> Product | None:
@@ -251,25 +393,25 @@ class PrintifyProductStage:
         if isinstance(desired, Blocked):
             return StagePlan(stage=self.name, will_run=False, blocked=desired.message)
 
+        was = AppliedProduct.parse(applied)
         blocked = check_garment_unchanged(
-            applied,
+            was,
             blueprint_id=desired.blueprint_id,
             print_provider_id=desired.print_provider_id,
         )
         if blocked is not None:
             return StagePlan(stage=self.name, will_run=False, blocked=blocked.message)
 
-        document = desired.document()
-        changes = _changes(desired, document, applied)
-        will_run = applied is None or bool(changes) or live is None
+        wanted = desired.applied()
+        changes = _changes(desired, wanted, was)
 
         return StagePlan(
             stage=self.name,
-            will_run=will_run,
+            will_run=was is None or bool(changes) or live is None,
             changes=changes,
-            drift=_drift(document, live),
-            reason=_reason(applied, live, changes),
-            actions=_actions(desired, applied is None or live is None),
+            drift=_drift(wanted, live),
+            reason=_reason(was, live, changes),
+            actions=_actions(desired, was is None or live is None),
         )
 
     def apply(
@@ -317,7 +459,7 @@ class PrintifyProductStage:
             product = client.update_product(shop_id, live.id, spec, live=live)
 
         return StageApplyResult(
-            applied=desired.document(),
+            applied=desired.applied().model_dump(mode="json"),
             remote={PRODUCT_ID_KEY: product.id, UPLOAD_IDS_KEY: uploads},
         )
 
@@ -358,55 +500,52 @@ def _spec(desired: PrintifyProductDesired, uploads: dict[str, str]) -> ProductSp
 
 
 def _changes(
-    desired: PrintifyProductDesired, document: dict[str, Any], applied: dict[str, Any] | None
+    desired: PrintifyProductDesired, wanted: AppliedProduct, was: AppliedProduct | None
 ) -> tuple[Change, ...]:
-    if applied is None:
+    if was is None:
         return ()
 
     changes: list[Change] = []
     for path in ("title", "description", "position"):
-        change = scalar(path, document[path], applied.get(path))
+        change = scalar(path, getattr(wanted, path), getattr(was, path))
         if change is not None:
             changes.append(change)
 
-    was_prices = {entry["id"]: entry["price"] for entry in applied.get("variants", [])}
-    for variant_id, price in sorted(desired.prices.items()):
-        if was_prices.get(variant_id) != price and variant_id in was_prices:
-            colour, size = desired.price_labels.get(variant_id, ("?", "?"))
+    was_prices = was.prices
+    for variant in sorted(desired.variants, key=lambda v: v.id):
+        previous = was_prices.get(variant.id)
+        if previous is not None and previous != variant.price:
             # Rendered back into `Money` rather than shown as the minor units
             # the document stores. "34900 -> 39900" is the wire format; the
             # user wrote "349 NOK", and that is what a diff has to say back.
             changes.append(
                 PriceChange(
-                    size=size,
-                    color=colour,
-                    before=_money(was_prices[variant_id], desired.currency),
-                    after=_money(price, desired.currency),
+                    size=variant.size,
+                    color=variant.colour_slug,
+                    before=_money(previous, desired.currency),
+                    after=_money(variant.price, desired.currency),
                 )
             )
 
-    added = sorted(set(desired.prices) - set(was_prices))
-    removed = sorted(set(was_prices) - set(desired.prices))
-    if added or removed:
+    if set(wanted.prices) != set(was_prices):
         changes.append(
-            FieldChange(path="variants", before=len(was_prices), after=len(desired.prices))
+            FieldChange(path="variants", before=len(was.variants), after=len(wanted.variants))
         )
 
-    for index, area in enumerate(document["print_areas"]):
-        was = applied.get("print_areas", [])
-        previous = was[index] if index < len(was) else None
-        if previous != area:
+    for index, area in enumerate(wanted.print_areas):
+        previous_area = was.print_areas[index] if index < len(was.print_areas) else None
+        if previous_area != area:
             changes.append(
                 FieldChange(
-                    path=f"print_areas[{index}].{area['artwork']}",
-                    before=(previous or {}).get("design_hash"),
-                    after=area["design_hash"],
+                    path=f"print_areas[{index}].{area.artwork}",
+                    before=previous_area.design_hash if previous_area else None,
+                    after=area.design_hash,
                 )
             )
     return tuple(changes)
 
 
-def _drift(document: dict[str, Any], live: Product | None) -> tuple[Drift, ...]:
+def _drift(wanted: AppliedProduct, live: Product | None) -> tuple[Drift, ...]:
     """What changed in Printify since we last applied.
 
     Compared against *desired* rather than *applied* only where the two agree
@@ -418,14 +557,14 @@ def _drift(document: dict[str, Any], live: Product | None) -> tuple[Drift, ...]:
 
     found: list[Drift] = []
     for path, ours, theirs in (
-        ("title", document["title"], live.title),
-        ("description", document["description"], live.description),
+        ("title", wanted.title, live.title),
+        ("description", wanted.description, live.description),
     ):
         change = drift(path, ours, theirs)
         if change is not None:
             found.append(change)
 
-    ours_prices = {entry["id"]: entry["price"] for entry in document["variants"]}
+    ours_prices = wanted.prices
     if live.enabled_variants() != ours_prices:
         found.append(
             Drift(
@@ -444,9 +583,9 @@ def _drift(document: dict[str, Any], live: Product | None) -> tuple[Drift, ...]:
 
 
 def _reason(
-    applied: dict[str, Any] | None, live: Product | None, changes: tuple[Change, ...]
+    was: AppliedProduct | None, live: Product | None, changes: tuple[Change, ...]
 ) -> str | None:
-    if applied is None:
+    if was is None:
         return "no Printify product yet -- it will be created"
     if live is None:
         return "the Printify product this listing named is gone -- it will be created again"
@@ -458,7 +597,7 @@ def _reason(
 def _actions(desired: PrintifyProductDesired, creating: bool) -> tuple[Action, ...]:
     verb = "create" if creating else "update"
     described = (
-        f"{verb} a Printify product: {len(desired.prices)} variants across "
+        f"{verb} a Printify product: {len(desired.variants)} variants across "
         f"{len(desired.groups)} print area(s)"
     )
     actions = [
@@ -467,15 +606,15 @@ def _actions(desired: PrintifyProductDesired, creating: bool) -> tuple[Action, .
             inputs=tuple(sorted(group.design.name for group in desired.groups)),
         )
     ]
-    if desired.resolution.missing:
+    if desired.missing:
         # PRD 46: reported, never fatal. A cell Printify has discontinued is
         # its fact, not the user's mistake -- but a listing quietly selling
         # five sizes where it asked for six is worth saying out loud.
-        listed = ", ".join(f"{colour}/{size}" for colour, size in desired.resolution.missing)
+        listed = ", ".join(f"{colour}/{size}" for colour, size in desired.missing)
         actions.append(
             Action(
                 description=(
-                    f"skip {len(desired.resolution.missing)} colour/size "
+                    f"skip {len(desired.missing)} colour/size "
                     f"combination(s) this garment no longer offers: {listed}"
                 )
             )

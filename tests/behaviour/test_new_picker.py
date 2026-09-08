@@ -374,8 +374,8 @@ def test_build_pricing_plan_choices_marks_the_exact_profile_match(tmp_path: Path
 
     choices = build_pricing_plan_choices(plans, "comfort-colors-1717")
 
-    assert [c.is_compatible for c in choices] == [True, False]
-    assert choices[0].path.stem == "a-matching"
+    assert [c.marked for c in choices] == [True, False]
+    assert choices[0].value.stem == "a-matching"
     assert choices[0].label.strip().endswith("a-matching")
     assert choices[1].label.startswith("  ")  # no marker for the non-matching row
 
@@ -549,7 +549,7 @@ def test_design_choices_put_the_newest_design_first(workspace_root: Path) -> Non
 
     # take-a-hike is the fixture's own design, checked out just now, so it
     # sorts above every backdated one.
-    assert [c.name for c in choices][-3:] == ["newest", "middle", "oldest"]
+    assert [c.value.stem for c in choices][-3:] == ["newest", "middle", "oldest"]
 
 
 def test_design_choices_break_ties_on_name(workspace_root: Path) -> None:
@@ -560,7 +560,11 @@ def test_design_choices_break_ties_on_name(workspace_root: Path) -> None:
 
     choices = build_design_choices(workspace.design_files(), set())
 
-    assert [c.name for c in choices if c.name != "take-a-hike"] == ["alpha", "beta", "gamma"]
+    assert [c.value.stem for c in choices if c.value.stem != "take-a-hike"] == [
+        "alpha",
+        "beta",
+        "gamma",
+    ]
 
 
 def test_design_rows_carry_the_date_and_mark_designs_that_already_have_a_listing(
@@ -569,11 +573,13 @@ def test_design_rows_carry_the_date_and_mark_designs_that_already_have_a_listing
     _design(workspace_root, "fresh", mtime=datetime(2026, 3, 1, 9, 30).timestamp())
     workspace = Workspace.discover(root_override=workspace_root)
 
-    rows = {c.name: c for c in build_design_choices(workspace.design_files(), {"take-a-hike"})}
+    rows = {
+        c.value.stem: c for c in build_design_choices(workspace.design_files(), {"take-a-hike"})
+    }
 
     assert rows["fresh"].label == "2026-03-01 09:30  fresh"
-    assert not rows["fresh"].has_listing
-    assert rows["take-a-hike"].has_listing
+    assert not rows["fresh"].marked
+    assert rows["take-a-hike"].marked
     assert rows["take-a-hike"].label.endswith("  take-a-hike  (listing exists)")
 
 
@@ -619,10 +625,10 @@ def _key(blueprint: Blueprint) -> tuple[str, str]:
 def test_locally_used_garments_come_first_and_carry_the_marker() -> None:
     choices = build_blueprint_choices(ALL, {_key(GILDAN_HOODIE)}, marker="* ")
 
-    assert choices[0].blueprint == GILDAN_HOODIE
-    assert choices[0].is_local is True
+    assert choices[0].value == GILDAN_HOODIE
+    assert choices[0].marked is True
     assert choices[0].label.startswith("* ")
-    assert all(not choice.is_local for choice in choices[1:])
+    assert all(not choice.marked for choice in choices[1:])
 
 
 def test_rows_carry_brand_model_and_title_as_aligned_columns() -> None:
@@ -632,15 +638,13 @@ def test_rows_carry_brand_model_and_title_as_aligned_columns() -> None:
     labels = [choice.label for choice in choices]
 
     for choice in choices:
-        assert choice.blueprint.brand in choice.label
-        assert choice.blueprint.model in choice.label
-        assert choice.blueprint.title in choice.label
+        assert choice.value.brand in choice.label
+        assert choice.value.model in choice.label
+        assert choice.value.title in choice.label
 
     # Every row puts the title at the same column, which is what makes the
     # list scannable rather than ragged.
-    title_columns = {
-        label.index(c.blueprint.title) for label, c in zip(labels, choices, strict=True)
-    }
+    title_columns = {label.index(c.value.title) for label, c in zip(labels, choices, strict=True)}
     assert len(title_columns) == 1
 
 
@@ -652,14 +656,12 @@ def test_the_model_column_sits_between_the_brand_and_the_title() -> None:
 def test_rows_without_a_local_profile_still_reserve_the_marker_column() -> None:
     choices = build_blueprint_choices(ALL, {_key(GILDAN_HOODIE)}, marker="* ")
     marked, unmarked = choices[0], choices[1]
-    assert marked.label.index(marked.blueprint.brand) == unmarked.label.index(
-        unmarked.blueprint.brand
-    )
+    assert marked.label.index(marked.value.brand) == unmarked.label.index(unmarked.value.brand)
 
 
 def test_within_a_group_rows_sort_by_brand_then_title() -> None:
     choices = build_blueprint_choices(ALL, set(), marker="* ")
-    assert [(c.blueprint.brand, c.blueprint.title) for c in choices] == [
+    assert [(c.value.brand, c.value.title) for c in choices] == [
         ("Comfort Colors", "Unisex Garment-Dyed Heavy Weight Tee"),
         ("Gildan", "Unisex Heavy Cotton Tee"),
         ("Gildan", "Unisex Long Sleeve Tee"),
@@ -698,7 +700,7 @@ def test_a_local_key_ignores_case_and_the_trademark_sign(workspace_root: Path) -
         id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
     )
     choices = build_blueprint_choices([catalog_entry], local_blueprint_keys(workspace))
-    assert choices[0].is_local is True
+    assert choices[0].marked is True
 
 
 def test_a_broken_profile_costs_a_marker_not_the_whole_picker(workspace_root: Path) -> None:
