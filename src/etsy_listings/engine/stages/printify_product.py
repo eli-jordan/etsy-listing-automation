@@ -311,7 +311,7 @@ class PrintifyProductStage:
             return StagePlan(
                 stage=self.name,
                 will_run=False,
-                reason=(
+                blocked=(
                     "no Printify shop configured -- run `etsy-listings setup` to "
                     "point this workspace at one"
                 ),

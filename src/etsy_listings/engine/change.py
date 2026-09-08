@@ -112,6 +112,14 @@ class StagePlan:
     drift: tuple[Drift, ...] = field(default_factory=tuple)
     reason: str | None = None
     actions: tuple[Action, ...] = field(default_factory=tuple)
+    blocked: str | None = None
+    """Why this stage cannot run at all, if it cannot.
+
+    Distinct from ``reason``, which says why a stage *will* run. A blocked
+    stage does nothing and is not counted as work -- but it must still be
+    shown, because the alternative is what shipped first: a workspace with an
+    entire unrun stage reporting "No changes." and the user reasonably
+    concluding the tool had nothing to do."""
 
 
 @dataclass(frozen=True)

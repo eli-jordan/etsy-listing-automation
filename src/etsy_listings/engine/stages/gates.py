@@ -20,6 +20,7 @@ from PIL import Image, UnidentifiedImageError
 
 from etsy_listings.config.listing import GENERATE
 from etsy_listings.config.profile import Profile
+from etsy_listings.errors import UserFacingError
 
 RESOLUTION_TOLERANCE = 0.9
 """A design must reach 90% of the print area on each axis (PRD 38).
@@ -31,15 +32,15 @@ fires on work nobody would call wrong is a rule that gets switched off.
 """
 
 
-class DesignResolutionError(ValueError):
+class DesignResolutionError(UserFacingError, ValueError):
     """The design cannot make a good print, and nothing later will say so."""
 
 
-class GarmentChangedError(ValueError):
+class GarmentChangedError(UserFacingError, ValueError):
     """The profile now names a different blank than the product was made with."""
 
 
-class UnresolvedCopyError(ValueError):
+class UnresolvedCopyError(UserFacingError, ValueError):
     """Copy that is still a sentinel, or empty."""
 
 

@@ -15,6 +15,7 @@ from dataclasses import dataclass
 
 from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
 from etsy_listings.config.slug import ColourExceptions, slug_map
+from etsy_listings.errors import UserFacingError
 
 _TRADEMARK = re.compile(r"[®™©]")
 _WHITESPACE = re.compile(r"\s+")
@@ -32,7 +33,7 @@ def normalise(value: str) -> str:
     return _WHITESPACE.sub(" ", _TRADEMARK.sub("", value)).strip().casefold()
 
 
-class CatalogResolutionError(ValueError):
+class CatalogResolutionError(UserFacingError, ValueError):
     def __init__(self, kind: str, name: str, valid_names: list[str]) -> None:
         self.kind = kind
         self.name = name
@@ -41,7 +42,7 @@ class CatalogResolutionError(ValueError):
         super().__init__(f"no {kind} named {name!r}. Valid names: {options}")
 
 
-class AmbiguousBlueprintError(ValueError):
+class AmbiguousBlueprintError(UserFacingError, ValueError):
     """Brand and model matched more than one blueprint.
 
     Picking one arbitrarily would silently bind a profile to a garment nobody
@@ -89,7 +90,7 @@ def resolve_print_provider(name: str, providers: list[PrintProvider]) -> PrintPr
     raise CatalogResolutionError("print provider", name, [p.title for p in providers])
 
 
-class UnknownSizeError(ValueError):
+class UnknownSizeError(UserFacingError, ValueError):
     """A size no colour of this garment is made in.
 
     Distinct from a discontinued *cell* (PRD 46), which is Printify's business

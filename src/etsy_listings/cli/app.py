@@ -23,7 +23,6 @@ from etsy_listings.catalog.http import CatalogAuthError, HttpCatalogClient
 from etsy_listings.cli.render import format_plan
 from etsy_listings.clients.printify.http import HttpPrintifyClient
 from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -35,6 +34,7 @@ from etsy_listings.engine.context import Event, EventSink, RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import build_plan
 from etsy_listings.engine.stages import STAGES
+from etsy_listings.errors import UserFacingError
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import Workspace, WorkspaceNotFoundError
@@ -227,11 +227,15 @@ def _run_over_listings(
     for name in names:
         try:
             _validate_config(workspace, name)
-        except ConfigLoadError as exc:
-            typer.echo(str(exc), err=True)
+            action(ctx, name, Lockfile.read(workspace.lock_file(name)) or _empty_lock())
+        except UserFacingError as exc:
+            # Every refusal the user can act on -- a config error, a design
+            # too small, a colour that does not exist, copy still carrying a
+            # sentinel -- is a message, not a stack. And it must not stop the
+            # batch: PRD 16 is why one bad listing cannot halt fifty good ones.
+            typer.echo(f"{name}: {exc}", err=True)
+            typer.echo("", err=True)
             failed = True
-            continue
-        action(ctx, name, Lockfile.read(workspace.lock_file(name)) or _empty_lock())
 
     raise typer.Exit(code=1 if failed else 0)
 

@@ -22,6 +22,7 @@ def format_plan(plan: Plan) -> str:
     lines = [_header(plan), ""]
 
     runs = [sp for sp in plan.stage_plans if sp.will_run]
+    blocked = [sp for sp in plan.stage_plans if sp.blocked]
     changes = [(sp, change) for sp in plan.stage_plans for change in sp.changes]
     drifts = [(sp, drift) for sp in plan.stage_plans for drift in sp.drift]
     action_count = sum(len(sp.actions) for sp in plan.stage_plans)
@@ -34,11 +35,19 @@ def format_plan(plan: Plan) -> str:
         lines.append(f"  ~ {stage_plan.stage}: {change}")
     for stage_plan, drift in drifts:
         lines.append(f"  ! drift  {stage_plan.stage}.{drift.path} was edited outside this tool")
+    # After the work and before the summary: a blocked stage is context for
+    # what is missing from the run, not part of it.
+    for stage_plan in blocked:
+        lines.append(f"  - {stage_plan.stage}: {stage_plan.blocked}")
 
     if not plan.stage_plans:
         lines.append("  (no stages configured)")
     elif not (runs or changes or drifts):
-        lines.append("  No changes.")
+        # Still "No changes." even when something is blocked: the blocked
+        # line sits directly below and carries the qualification, so the two
+        # together say what is true. It was the *absence* of that line that
+        # made this a lie.
+        lines.insert(len(lines) - len(blocked), "  No changes.")
 
     lines.append("")
     lines.append(

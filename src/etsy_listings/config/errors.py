@@ -10,8 +10,10 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
+from etsy_listings.errors import UserFacingError
 
-class ConfigLoadError(ValueError):
+
+class ConfigLoadError(UserFacingError, ValueError):
     def __init__(self, path: Path, detail: str) -> None:
         self.path = path
         super().__init__(f"{path}: {detail}")
