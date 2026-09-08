@@ -374,9 +374,24 @@ history. `plan --all` reports what fraction of the daily budget it consumed, whi
 is the PRD's risk 10 made visible rather than merely noted.
 
 **Retries.** Exponential backoff with jitter on 429 and 5xx, honouring
-`Retry-After`; no retry on other 4xx. `create_product` is the one non-idempotent
-call: it is guarded by the lockfile's `printify_product_id` plus a pre-flight
-walk of the shop's products, matching on title and description (PRD 48).
+`Retry-After`; no retry on other 4xx.
+
+**The HTTP method decides more than the status does.** A 429 is a refusal to
+process — Printify rejected the request before touching it — so resending is
+free whatever the verb. A 5xx or a dropped connection says the opposite: the
+write may well have landed. So idempotent methods are retried on both, and
+**POST only on 429**. Without that split, retrying a `create_product` that
+timed out is itself the duplicate-product bug the guard below exists to
+prevent.
+
+The last response is returned rather than raised, so the caller's own error
+decoding still sees the real `errors.reason` instead of a wrapper's summary.
+`sleep` and the jitter source are injected, which is what lets the whole
+policy be tested instantly and deterministically.
+
+`create_product` is the one non-idempotent call: it is guarded by the
+lockfile's `printify_product_id` plus a pre-flight walk of the shop's
+products, matching on title and description (PRD 48).
 
 That clause used to say "plus a pre-flight lookup", which assumed a key the
 product API does not have. There is none: `POST products.json` has no

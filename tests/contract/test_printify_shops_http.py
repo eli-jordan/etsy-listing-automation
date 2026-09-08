@@ -22,6 +22,7 @@ from etsy_listings.clients.printify.http import (
     PrintifyApiError,
     PrintifyAuthError,
 )
+from etsy_listings.clients.retry import RetryPolicy
 
 SHOPS_PAYLOAD = [
     {"id": 28819281, "title": "My new store", "sales_channel": "disconnected"},
@@ -47,8 +48,16 @@ sentence naming the field, and is the only part worth showing a user."""
 
 
 def _client(handler, token: str = "test-token") -> HttpPrintifyClient:
+    """Real policy, no waiting. The 5xx cases below are about *decoding* an
+    error, but a 5xx on a GET is retryable (A21), so without a stubbed sleep
+    each of them quietly spends the policy's full backoff before asserting
+    anything -- seven seconds of nothing, in a layer that should be instant."""
     transport = httpx.MockTransport(handler)
-    return HttpPrintifyClient(token, client=httpx.Client(transport=transport, base_url=BASE_URL))
+    return HttpPrintifyClient(
+        token,
+        client=httpx.Client(transport=transport, base_url=BASE_URL),
+        sleep=lambda _: None,
+    )
 
 
 def test_shops_carries_the_bearer_token_and_hits_the_documented_path() -> None:
@@ -177,3 +186,59 @@ def test_an_empty_error_body_still_names_the_status() -> None:
 
     assert "500" in str(exc_info.value)
     assert "no response body" in str(exc_info.value)
+
+
+# ------------------------------------------------------------------- retries
+
+# A21. The policy itself is unit-tested in tests/unit/test_retry.py; what
+# these pin is that the client actually goes through it, and that the caller
+# still sees a real decoded error when the retries run out.
+
+
+def _retrying_client(handler, policy: RetryPolicy) -> HttpPrintifyClient:
+    return HttpPrintifyClient(
+        "test-token",
+        client=httpx.Client(transport=httpx.MockTransport(handler), base_url=BASE_URL),
+        policy=policy,
+        sleep=lambda _: None,
+    )
+
+
+INSTANT = RetryPolicy(attempts=3, base_delay=0.0, max_delay=0.0, jitter=0.0)
+
+
+def test_a_rate_limited_read_is_retried_and_succeeds() -> None:
+    responses = iter(
+        [
+            httpx.Response(429, headers={"Retry-After": "0"}),
+            httpx.Response(200, json=SHOPS_PAYLOAD),
+        ]
+    )
+
+    shops = _retrying_client(lambda _: next(responses), INSTANT).shops()
+
+    assert shops[0].id == 28819281
+
+
+def test_retries_that_run_out_surface_the_real_error_not_a_wrapper() -> None:
+    with pytest.raises(PrintifyApiError) as exc_info:
+        _retrying_client(
+            lambda _: httpx.Response(503, json={"message": "Service Unavailable"}), INSTANT
+        ).shops()
+
+    assert "Service Unavailable" in str(exc_info.value)
+
+
+def test_a_rejected_token_is_not_retried() -> None:
+    """401 is a verdict. Retrying it three times just delays the message that
+    says what to fix."""
+    calls: list[int] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(1)
+        return httpx.Response(401, json={"message": "Unauthenticated."})
+
+    with pytest.raises(PrintifyAuthError):
+        _retrying_client(handler, INSTANT).shops()
+
+    assert len(calls) == 1

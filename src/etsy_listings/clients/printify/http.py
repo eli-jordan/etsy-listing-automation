@@ -19,6 +19,7 @@ only part of that envelope worth putting in front of a user
 
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -26,6 +27,7 @@ import httpx
 
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.clients.printify.protocol import PrintifyClient
+from etsy_listings.clients.retry import DEFAULT_POLICY, RetryPolicy, with_retries
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR
 
 BASE_URL = "https://api.printify.com"
@@ -105,15 +107,33 @@ def _decode_error(response: httpx.Response) -> PrintifyApiError:
 
 
 class HttpPrintifyClient(PrintifyClient):
-    def __init__(self, token: TokenSource, *, client: httpx.Client | None = None) -> None:
+    def __init__(
+        self,
+        token: TokenSource,
+        *,
+        client: httpx.Client | None = None,
+        policy: RetryPolicy = DEFAULT_POLICY,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
         self._token = token
         self._client = client or httpx.Client(base_url=BASE_URL, timeout=DEFAULT_TIMEOUT_SECONDS)
+        self._policy = policy
+        self._sleep = sleep
 
     def _request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         token = self._token if isinstance(self._token, str) else self._token()
-        response = self._client.request(
-            method, path, headers={"Authorization": f"Bearer {token}"}, **kwargs
-        )
+
+        def send() -> httpx.Response:
+            return self._client.request(
+                method, path, headers={"Authorization": f"Bearer {token}"}, **kwargs
+            )
+
+        # Retries happen *before* the error decoding below, so a 429 that
+        # clears on the second attempt never becomes an exception at all --
+        # and one that does not clear surfaces as the real decoded error
+        # rather than a retry wrapper's summary of it (A21).
+        response = with_retries(send, method, self._policy, sleep=self._sleep)
+
         if response.status_code in (401, 403):
             raise PrintifyAuthError(response.status_code)
         if response.is_error:

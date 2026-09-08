@@ -168,7 +168,7 @@ src/etsy_listings/
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
   clients/      printify/ and etsy/: protocol, http, models, fakes; limiter, retry
-                             [printify.shops() done; products Phase 2, etsy Phase 3]
+                    [printify.shops() + retry done; products Phase 2, etsy Phase 3]
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]

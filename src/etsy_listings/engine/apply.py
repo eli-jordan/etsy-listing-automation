@@ -21,6 +21,7 @@ def execute(ctx: RunContext, plan: Plan, lock: Lockfile, stages: list[AnyStage])
     stages_by_name = {stage.name: stage for stage in stages}
     applied = dict(lock.applied)
     outputs = dict(lock.outputs)
+    remote = dict(lock.remote)
     completed = list(lock.stages_completed)
 
     for stage_plan in plan.stage_plans:
@@ -32,6 +33,9 @@ def execute(ctx: RunContext, plan: Plan, lock: Lockfile, stages: list[AnyStage])
         result = stage.apply(ctx, stage_plan, desired)
         applied[stage.name] = result.applied
         outputs.update(result.outputs)
+        # Merged, not replaced: a stage reports only the keys it owns, and a
+        # Printify id arriving must not take the Etsy listing id with it (A20).
+        remote.update(result.remote)
         if stage.name not in completed:
             completed.append(stage.name)
 
@@ -39,7 +43,7 @@ def execute(ctx: RunContext, plan: Plan, lock: Lockfile, stages: list[AnyStage])
         tool_version=__about__.VERSION,
         applied_at=datetime.now(UTC).isoformat(),
         applied=applied,
-        remote=lock.remote,
+        remote=remote,
         outputs=outputs,
         stages_completed=completed,
     )

@@ -30,15 +30,30 @@ L = TypeVar("L")
 class StageApplyResult:
     """What a stage's ``apply`` hands back to fold into the next lockfile.
 
+    Three dicts, each merged into a different part of it by the engine -- never
+    by the stage, which returns a value and lets the engine decide what becomes
+    of it. That is what keeps a stage testable without a lockfile.
+
     ``applied`` becomes ``lock.applied[stage.name]`` -- the verbatim
     last-applied document A2 hashes. ``outputs`` merges into the lockfile's
     separate ``outputs`` axis (workspace-relative path -> content hash), which
     is what later decides whether a file needs *re-uploading*, independently
     of whether the stage needed to *re-run* at all.
+
+    ``remote`` merges into ``lock.remote``: ids an API handed back, which the
+    stage did not choose and cannot derive (A20). Each stage owns a key prefix
+    -- ``printify_*``, ``etsy_*`` -- so one arriving never displaces another's.
+
+    **``remote`` is never hashed**, and that is the point of keeping it out of
+    ``applied`` rather than letting a stage tuck ids in there. A product id is
+    volatile by definition; hash one and every listing shows a diff for the
+    rest of its life. ``canonical_hash`` only sees the ``applied`` subtree, so
+    the separation is enforced by the lockfile rather than by convention.
     """
 
     applied: dict[str, Any]
     outputs: dict[str, str] = field(default_factory=dict)
+    remote: dict[str, Any] = field(default_factory=dict)
 
 
 class Stage(Protocol[D, A, L]):
