@@ -49,10 +49,6 @@ from etsy_listings.workspace.workspace import Workspace
 DEFAULT_PLACEHOLDER = "front"
 
 
-def _cancelled() -> typer.Exit:
-    return typer.Exit(code=1)
-
-
 def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Blueprint:
     """Pick from ``marker  brand  model  title`` rows.
 
@@ -65,16 +61,12 @@ def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Bluepr
     """
     marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
     choices = build_blueprint_choices(blueprints, local_blueprint_keys(workspace), marker=marker)
-    by_label = {choice.label: choice for choice in choices}
-
-    answer = prompts.choose(
+    return prompts.pick(
         "Garment",
-        list(by_label),
+        choices,
+        label=lambda choice: choice.label,
         marker_hint=f"{marker.strip()} = already used in this workspace",
-    )
-    if answer is None:
-        raise _cancelled()
-    return by_label[answer].blueprint
+    ).blueprint
 
 
 def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> PrintProvider:
@@ -83,12 +75,7 @@ def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> Prin
     backends have no way to express."""
     preferred = workspace.defaults.preferred_print_provider
     ordered = sorted(providers, key=lambda p: (p.title != preferred, p.title.lower()))
-    by_title = {p.title: p for p in ordered}
-
-    answer = prompts.choose("Print provider", list(by_title))
-    if answer is None:
-        raise _cancelled()
-    return by_title[answer]
+    return prompts.pick("Print provider", ordered, label=lambda provider: provider.title)
 
 
 def _report_print_area_choice(variant_set: VariantSet) -> None:
@@ -128,11 +115,9 @@ def _pick_design(workspace: Workspace) -> str:
             err=True,
         )
         raise typer.Exit(code=1)
-    by_label = {choice.label: choice for choice in choices}
-    answer = prompts.choose("Design", list(by_label), marker_hint="newest first")
-    if answer is None:
-        raise _cancelled()
-    return by_label[answer].name
+    return prompts.pick(
+        "Design", choices, label=lambda choice: choice.label, marker_hint="newest first"
+    ).name
 
 
 def _pick_template(workspace: Workspace) -> str:
@@ -151,10 +136,7 @@ def _pick_template(workspace: Workspace) -> str:
             err=True,
         )
         raise typer.Exit(code=1)
-    answer = prompts.choose("Mockup template set", names)
-    if answer is None:
-        raise _cancelled()
-    return answer
+    return prompts.ask_choice("Mockup template set", names)
 
 
 def _report_media_choice(
@@ -215,16 +197,14 @@ def _pick_or_create_pricing_plan(
     by_label = {c.label: c for c in choices}
 
     marker = terminal.choose(LOCAL_MARKER, LOCAL_MARKER_FALLBACK)
-    answer = prompts.choose(
+    # `ask_choice` rather than `pick`: one of the rows is a sentinel that is
+    # not a plan at all, so there is no option to map it back to.
+    answer = prompts.ask_choice(
         "Pricing plan", rows, marker_hint=f"{marker.strip()} = sizes match this garment exactly"
     )
-    if answer is None:
-        raise _cancelled()
 
     if answer == CREATE_NEW_PLAN_LABEL:
-        name = prompts.text("Pricing plan name:")
-        if not name:
-            raise _cancelled()
+        name = prompts.ask_text("Pricing plan name:")
         costs = unofficial_variant_costs.fetch_variant_costs(blueprint.id, provider.id)
         shipping = catalog.shipping(blueprint.id, provider.id)
         rate = fx_rate.fetch_usd_to(workspace.defaults.currency)
@@ -293,17 +273,12 @@ def run_new(
     template_kind = load_template_kind(workspace, mockup_template)
 
     colour_tone: dict[str, Literal["light", "dark"]] = {}
-    needs_tone = prompts.confirm(
+    if prompts.ask_confirm(
         "Will any listing on this profile need different artwork for light vs dark shirts?",
         default=False,
-    )
-    if needs_tone is None:
-        raise _cancelled()
-    if needs_tone:
+    ):
         for colour in sorted(colour_slugs.values()):
-            tone = prompts.choose(f"{colour}: light or dark garment?", ["light", "dark"])
-            if tone is None:
-                raise _cancelled()
+            tone = prompts.ask_choice(f"{colour}: light or dark garment?", ["light", "dark"])
             colour_tone[colour] = cast('Literal["light", "dark"]', tone)
 
     profile = build_profile(

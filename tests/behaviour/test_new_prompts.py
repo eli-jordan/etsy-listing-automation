@@ -840,14 +840,12 @@ def test_new_offers_an_existing_compatible_pricing_plan(
 def test_cancelling_the_pricing_plan_picker_stops_new(
     workspace_root: Path, monkeypatch, scripted
 ) -> None:
-    import typer
-
     from etsy_listings.newcmd.interactive import run_new
 
     scripted({**NEW_WIZARD, "Pricing plan": None})
 
     workspace = Workspace.discover(root_override=workspace_root)
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_new(workspace, _one_garment_catalog(), "cancelled-at-pricing", "tshirt")
 
     assert not (workspace_root / "listings" / "cancelled-at-pricing").exists()
@@ -871,15 +869,13 @@ def _write_single_kind_template(directory: Path) -> None:
 
 
 def test_cancelling_the_garment_picker_stops_new(workspace_root: Path, scripted) -> None:
-    import typer
-
     from etsy_listings.clients.printify.fakes import FakeCatalogClient
     from etsy_listings.newcmd.interactive import run_new
 
     scripted({**NEW_WIZARD, "Garment": None})
 
     workspace = Workspace.discover(root_override=workspace_root)
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_new(workspace, FakeCatalogClient([GILDAN_TEE], {}, {}), "another-design", "tshirt")
 
     assert not (workspace_root / "listings" / "another-design").exists()

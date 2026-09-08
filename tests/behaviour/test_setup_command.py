@@ -17,6 +17,7 @@ import pytest
 import typer
 import yaml
 
+from etsy_listings import prompts
 from etsy_listings.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR
@@ -169,7 +170,7 @@ def test_an_account_with_no_shops_says_what_to_do(tmp_path: Path, scripted, caps
 def test_cancelling_a_question_writes_no_shop_file(tmp_path: Path, scripted) -> None:
     scripted({**HAPPY_PATH, "currency": None})
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(ONE_SHOP)))
 
     assert not (tmp_path / layout.SHOP_FILE).exists()
@@ -282,7 +283,7 @@ def test_cancelling_any_question_leaves_no_workspace(
 ) -> None:
     scripted({**HAPPY_PATH, cancelled: None})
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(ONE_SHOP)))
 
     assert not (tmp_path / layout.SHOP_FILE).exists()
@@ -291,7 +292,7 @@ def test_cancelling_any_question_leaves_no_workspace(
 def test_cancelling_the_shop_choice_leaves_no_workspace(tmp_path: Path, scripted) -> None:
     scripted({**HAPPY_PATH, "Printify shop": None})
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(TWO_SHOPS)))
 
     assert not (tmp_path / layout.SHOP_FILE).exists()
@@ -313,7 +314,7 @@ def test_cancelling_an_individual_etsy_question_leaves_no_workspace(
         }
     )
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(ONE_SHOP)))
 
     assert not (tmp_path / layout.SHOP_FILE).exists()
@@ -338,7 +339,7 @@ def test_a_cancelled_run_leaves_no_token_behind(tmp_path: Path, scripted) -> Non
     directory the user may well delete rather than re-run."""
     scripted({**HAPPY_PATH, "print-on-demand defaults": None})
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(ONE_SHOP)))
 
     assert not (tmp_path / layout.ENV_FILE).exists()

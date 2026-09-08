@@ -252,3 +252,22 @@ def test_new_without_any_designs_says_where_to_put_one(tmp_path: Path, monkeypat
 
     assert result.exit_code == 1
     assert "no designs under" in result.output
+
+
+def test_cancelling_the_wizard_says_so_and_exits_non_zero(
+    workspace_root: Path, monkeypatch
+) -> None:
+    """Ctrl-C out of a picker is an ordinary way to leave a wizard, so it earns
+    a line rather than a traceback -- and rather than nothing, which is what
+    `new` used to do: its `_cancelled()` exited 1 in silence while `setup`'s,
+    a module away, printed "cancelled". One vocabulary now, caught once.
+    """
+    monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
+    monkeypatch.setattr(prompts, "choose", lambda *args, **kwargs: None)
+    (workspace_root / "designs" / "brand-new.png").write_bytes(b"")
+
+    result = runner.invoke(app, ["new", "--root", str(workspace_root)])
+
+    assert result.exit_code == 1
+    assert "cancelled" in result.output
+    assert "Traceback" not in result.output
