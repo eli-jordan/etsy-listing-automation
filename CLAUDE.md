@@ -20,8 +20,8 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 27 numbered product decisions in its appendix. |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 10 architecture decisions, `A1`–`A10`. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 48 numbered product decisions in its appendix. |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 21 architecture decisions, `A1`–`A21`. |
 
 When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.
 
@@ -393,6 +393,7 @@ PRD's agreed CLI surface for reference when building later phases — do not
 assume a command exists because it is listed here.
 
 ```
+setup              initialise a workspace: skeleton, shop.yaml, credentials    [Phase 2]
 new [<design>]     interactive design/garment/provider picker; writes profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified          [done; only `render` exists]

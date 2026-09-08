@@ -1,6 +1,6 @@
 # Implementation Plan: Etsy Listing Automation
 
-Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 27 product
+Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 48 product
 forks; this document settles *how* it is built — module boundaries, core contracts,
 and the order of work. Where the two disagree, the PRD wins and this file is wrong.
 
@@ -8,7 +8,7 @@ and the order of work. Where the two disagree, the PRD wins and this file is wro
 
 ## Architecture decision log
 
-Nineteen forks, resolved. Numbered `A#` so they can be cited from code comments
+Twenty-one forks, resolved. Numbered `A#` so they can be cited from code comments
 and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
@@ -32,6 +32,8 @@ and commit messages without colliding with the PRD's own decision log.
 | A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside `catalog/`'s documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
 | A18 | Wizard-time FX module placement | The one-off FX fetch lives in `newcmd/fx_rate.py`, not the package layout's reserved `fx/` (this doc's own deferred, cached full-margin module, PRD 10b) — avoids name collision with, and confusion against, that future work. PRD 36. |
 | A19 | Calibrator test design | A **library**, not the fixed `BundledDesign` literal it replaces. The three bundled targets stay and keep their ids; the preview endpoint resolves an arbitrary id against those plus PNGs the user has uploaded into the workspace, and an unknown id is a 400 rather than a `KeyError`. The literal was right while the only designs were the ones shipped in `api/static/`, but calibration is judged by eye, and the grid target answers "is the warp right?" while saying nothing about how a real ink weight sits on a real garment. The set has to be open for the second question. Uploads land in the workspace (`test-designs/`, kept apart from `designs/`), never the repo. |
+| A20 | Stage-produced remote state | `StageApplyResult` gains a `remote: dict[str, Any]`, merged into the lockfile's `remote` block the same way `outputs` already is, with each stage owning a documented key prefix (`printify_*`, `etsy_*`). Until Phase 2 no stage produced remote ids, so `apply` copied `lock.remote` through untouched and there was no channel at all — `printify_product` is the first stage that has to write one. A dict merged by the engine, rather than the stage mutating a lockfile it was handed, keeps the rule that a stage returns a value and the engine decides what becomes of it. |
+| A21 | Phase 2 concurrency scope | Retry-with-backoff lands in Phase 2, because it is needed the moment anything writes; the token buckets and the persisted daily budget stay in Phase 6 as planned. A3's `plan` thread-pool fan-out also stays unbuilt: with one remote stage and a single live read per listing there is nothing to overlap, and a pool that fans out over one call is machinery pretending to be an optimisation. Recorded as a decision rather than left as an omission, so the next reader does not take the empty pool for an oversight. |
 
 ### Toolchain
 
@@ -49,6 +51,7 @@ needs no node.
 ```
 src/etsy_listings/
   cli/                  Typer app; one module per command
+                        setup.py -- workspace init + credential capture (PRD 43)
   workspace/            root discovery, path resolution, layout constants
   config/               pydantic models: defaults, profile, listing, exceptions
     money.py            Money type — parsing, currency validation; PriceField (A16)
@@ -117,11 +120,18 @@ STAGES = [Render(), Generate(), PrintifyProduct(),
           Publish(), EtsyCopy(), EtsyMedia()]
 ```
 
+A stage's `apply` returns a `StageApplyResult` carrying three dicts, each
+merged into a different part of the next lockfile by the engine, never by the
+stage: `applied` becomes `lock.applied[stage.name]` (the verbatim document A2
+hashes), `outputs` merges into `lock.outputs` (the separate re-upload axis),
+and `remote` merges into `lock.remote` (A20) — ids handed back by an API,
+excluded from every hash, each stage owning a documented key prefix.
+
 | Stage | `desired` | `read_live` | `apply` |
 |---|---|---|---|
 | `render` | design/artwork bytes hashes + template assets + resolved `RenderConfig`(s) per referenced scene (A11–A14) | which rendered files still exist under `.cache/renders/` | render each scene actually referenced by `media` into `.cache/renders/{listing}/{template}/` (A15) |
 | `generate` | brief + design hash + profile context + prompt template hashes | whether `generated.yaml` still exists | call the model, validate hard, write `generated.yaml` |
-| `printify_product` | blueprint/provider ids, enabled variant matrix, per-variant prices in cents, print areas | `GET products/{id}`, incl. `visible` (below) | create or update product |
+| `printify_product` | title + description (PRD 44), blueprint/provider ids, enabled variant matrix with prices, print areas | `GET products/{id}`, incl. `visible` (below); `None` without a request when the lockfile has no product id | create (after the PRD 48 duplicate walk) or update product |
 | `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
 | `etsy_copy` | title, description, tags, materials, section, `should_auto_renew` | `getListing` | `updateListing` |
 | `etsy_media` | ordered media manifest, each entry `(ref, content_hash)` | listing images + ids | full delete-and-reupload in rank order |
@@ -217,7 +227,8 @@ regardless of route".
   "applied": {
     "render":   { "input_hash": "sha256:...", "config": {}, "colors": ["black", "moss"] },
     "generate": { "title": "...", "description": "...", "tags": [], "alt_text": {} },
-    "printify_product": { "blueprint_id": 6, "print_provider_id": 29,
+    "printify_product": { "title": "...", "description": "...",
+                          "blueprint_id": 6, "print_provider_id": 29,
                           "variants": [{"id": 17887, "price": 4990, "is_enabled": true}],
                           "print_areas": [] },
     "publish":  { "sync_flags": {"variants": true, "title": false, "images": false} },
@@ -226,7 +237,9 @@ regardless of route".
     "etsy_media": { "manifest": [{"ref": "mockup:black", "hash": "sha256:..."}] }
   },
 
-  "remote":  { "printify_product_id": "...", "etsy_listing_id": 1234567890,
+  "remote":  { "printify_product_id": "...",
+               "printify_upload_ids": {"default": "..."},
+               "etsy_listing_id": 1234567890,
                "etsy_image_ids": [111, 112], "etsy_listing_state": "draft" },
   "outputs": { ".cache/renders/take-a-hike/black.png": "sha256:..." },
   "stages_completed": ["render", "generate", "printify_product", "publish",
@@ -359,7 +372,16 @@ is the PRD's risk 10 made visible rather than merely noted.
 **Retries.** Exponential backoff with jitter on 429 and 5xx, honouring
 `Retry-After`; no retry on other 4xx. `create_product` is the one non-idempotent
 call: it is guarded by the lockfile's `printify_product_id` plus a pre-flight
-lookup, so a retried create can never produce a duplicate product.
+walk of the shop's products, matching on title and description (PRD 48).
+
+That clause used to say "plus a pre-flight lookup", which assumed a key the
+product API does not have. There is none: `POST products.json` has no
+idempotency key and no conflict — an identical spec makes a second product —
+and `GET products.json` accepts `title`, `search` and `sku` parameters while
+ignoring all three. So the guard is a **walk**, not a query, matched
+client-side, and it is affordable only because it runs on the create path
+alone. PRD 44's requirement that title and description be concrete text is what
+makes that match key exist at all.
 
 **Publish polling.** Backoff 2s to 60s against a ~10 minute ceiling. On timeout the
 lockfile records the product as locked, which is what `unlock` later acts on.
@@ -513,9 +535,16 @@ colour; goldens are committed; `new` writes a profile and listing with no intege
 
 ### Phase 2 — Printify
 
-Client, models and fakes; variant resolution from colour slug × size; product
-create/update; the design-resolution and immutable-garment validation gates
-(PRD 37, 38); the first cassette contract tests.
+`setup` (PRD 43), which is what puts `printify.shop_id` and a verified token in
+a workspace before any of the rest can run. Then: client, models and fakes;
+variant resolution from colour slug × size; product create/update; the
+design-resolution, immutable-garment and concrete-copy validation gates
+(PRD 37, 38, 44); the first cassette contract tests.
+
+Three smaller pieces land with it because Phase 2 is the first phase that needs
+them: `StageApplyResult.remote` (A20), since `printify_product` is the first
+stage to produce an id worth keeping; retry-with-backoff (A21), since it is the
+first stage that writes; and the duplicate-create walk (PRD 48).
 
 **Recon landed first**, before any of it:
 [api-findings.md](api-findings.md) and `tests/e2e/test_printify_product_e2e.py`
@@ -525,10 +554,12 @@ coverage differs between create and update, the product returns the whole
 blueprint matrix, `visible` is writable. Build against that file, not against
 the API reference.
 
-*Exit:* a product is created against a test shop carrying exactly the intended
-variant matrix, prices and print area; a second `apply` is a no-op; a garment
-change and an undersized design are each refused at `plan` time with an
-actionable error.
+*Exit:* `setup` takes an empty directory to a workspace `new` runs in, with a
+token it verified and a shop id it discovered; a product is created against a
+test shop carrying exactly the intended variant matrix, prices and print area;
+a second `apply` is a no-op; retiring a colour actually disables its variants;
+and a garment change, an undersized design and an unresolved `<generate>` in
+the copy are each refused at `plan` time with an actionable error.
 
 **Publishing is not in this phase's exit criteria, because this account cannot
 reach it.** With no Etsy shop connected, `publish.json` returns

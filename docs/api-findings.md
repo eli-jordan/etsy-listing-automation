@@ -24,6 +24,12 @@ not automated), **38** (a design must be within 10% of the print area), **39**
 Printify verbatim); and a correction to the implementation plan's
 *Draft-vs-live* section, which was wrong about `visible`.
 
+A **second round** of measurement, taken before Phase 2's implementation began
+rather than after its recon, settled what the first round had not had to ask:
+shop discovery, whether SKUs are ours, what the product list can be searched
+by, and whether a variant entry may be partial. It produced PRD **42**–**48**
+and amended **40**. Those sections are marked below.
+
 **One conclusion in this document has since been corrected.** The first version
 read Printify's `USD` badge as a currency assertion and recorded prices as USD
 cents, which opened risk 12. The measurement was right; the inference was not.
@@ -35,7 +41,7 @@ See *Prices, costs, and the currency question* below.
 
 | Step | Call | Notes |
 |---|---|---|
-| 1 | `GET /v1/shops.json` | The shop id. Returns `{id, title, sales_channel}` and nothing else — no currency, no settings. |
+| 1 | `GET /v1/shops.json` | The shop id. Returns `{id, title, sales_channel}` per shop and nothing else — no currency, no settings. Scoped to the token: it lists exactly the shops those credentials can reach, which is what makes shop discovery a question `setup` can answer rather than one the user has to look up (PRD 42). |
 | 2 | `GET /v1/catalog/blueprints/{bp}/print_providers/{pp}/variants.json` | Colour × size → integer variant id, plus per-variant print-area dimensions. Already implemented (`catalog/`). |
 | 3 | `POST /v1/uploads/images.json` | The print file. `{file_name, contents}` where `contents` is base64. |
 | 4 | `POST /v1/shops/{shop}/products.json` | The product. **200**, not 201. |
@@ -165,6 +171,73 @@ PUT and report success, which is what a naive implementation gets for free.
 
 A `PUT` carrying only `variants` left `title`, `description` and `print_areas`
 untouched. The stage may send only what changed.
+
+### But a variant entry is not partial: `price` is always required
+
+Sending the one field that expresses the intent is rejected:
+
+```
+PUT {"variants": [{"id": 73196, "is_enabled": false}]}
+400 {"code": 8150, "errors": {"reason": "variants.0.price: The variants.0.price
+     field is required."}}
+```
+
+Identically on the way in — `{"id": …, "is_enabled": true}` with no price is the
+same 400. So **retiring a colour means sending a price for the variant being
+switched off**, which is the second reason the lockfile has to remember the
+enabled set: not just which ids, but what each was priced at. The desired
+document cannot supply a price for a colour it no longer offers.
+
+A disabled variant is not price-less on Printify's side either — the spare
+variant this was measured against read back `price: 1304`, exactly its `cost`.
+Printify seeds the field from the manufacturing cost rather than leaving it
+null, so a naive "is the live price what we set?" comparison over the *whole*
+matrix would see 232 spurious differences. Another reason `read_live` projects
+down to the enabled subset.
+
+## SKUs are ours to set, and we decline to
+
+`variants[].sku` is writable, on create and on update, and reads back verbatim
+— `ELA-PROBE-73196` on create, changed to `ELA-CHANGED-XYZ` by a later `PUT`.
+Printify auto-generates one only when the field is absent. This was worth
+measuring because the API reference does not make it obvious and because a
+SKU we controlled would have been the natural key the product API otherwise
+lacks.
+
+**We leave it to Printify anyway** (PRD 47). The only thing our own SKU bought
+was the duplicate guard below, and that guard has a workable key without it;
+against that, a SKU is one more piece of state to keep in sync on a matrix
+where every entry already has to carry a price.
+
+## Listing products: a paginator with no filters
+
+`GET /v1/shops/{shop}/products.json` returns a Laravel paginator —
+`current_page`, `data`, `first_page_url`, `from`, `last_page`, `last_page_url`,
+`links`, `next_page_url`, `path`, `per_page` (50), `prev_page_url`, `to`,
+`total`. `limit` and `page` are honoured.
+
+**Nothing filters.** `?title=`, `?search=` and `?sku=` were each accepted with
+a `200` and silently ignored, every one returning the full set. So finding a
+product by anything other than its id is a walk of every product in the shop,
+matched client-side.
+
+That is what shapes the duplicate guard (PRD 48). `POST products.json` has no
+idempotency key and no conflict — an identical spec makes a second product —
+so the window is: create succeeds, the process dies before the lockfile is
+written, and the next run creates a duplicate. The lockfile's
+`printify_product_id` closes it in every case but that one. The walk closes
+that one too, matching on **title and description**, which are exactly the
+fields PRD 44 requires to be concrete hand-entered text rather than a
+`<generate>` sentinel. It runs only when a create is already pending, so a
+normal no-op `plan` never pays for it.
+
+Each product record in the list carries `id`, `title`, `description`,
+`blueprint_id`, `print_provider_id`, `variants`, `print_areas`, `images`,
+`tags`, `options`, `visible`, **`is_locked`**, `is_deleted`, `created_at`,
+`updated_at`, `shop_id`, `user_id`, `views`, `original_product_id`,
+`sales_channel_properties`, `print_details`, and the Printify Express flags.
+`is_locked` is the field `unlock` will read (risk 6) — visible here even
+though nothing on this account can currently set it.
 
 ## Uploads are content-addressed
 
@@ -388,7 +461,7 @@ directly.
 | 2 — do the selective-sync booleans stop Printify overwriting our copy? | **Open.** `publish.json` is unreachable without a sales channel. Phase 3. |
 | 3 — does republishing `{variants: true}` disturb an active listing? | **Open**, same reason. |
 | 5 — can a publish be made to land as a draft? | **Reframed.** `visible` *is* settable (above); whether that produces an Etsy draft is untested. The shop-side setting remains the documented lever. |
-| 6 — is `unlock` real? | **Partly.** `publishing_failed.json` exists and returns 200. Whether it clears a genuine publish lock is untestable here. |
+| 6 — is `unlock` real? | **Partly.** `publishing_failed.json` exists and returns 200, and the product record carries `is_locked`, so the state `unlock` acts on is at least observable. Whether the endpoint clears a genuine publish lock is untestable here. |
 | 7 — better blueprint category filter than keyword matching? | Unchanged; nothing in the product API offers one. |
 | 11 — the undocumented cost endpoint | **Corroborated.** Its numbers match `variants[].cost` on a real product. |
 | 12 — Printify prices in USD, this shop's in NOK | **Closed.** The conflict came from reading a UI badge as a currency. Printify converts nothing: `price` is minor units of the *channel's* currency, so NOK passes through unchanged. One confirmation still owed against a live NOK shop. |
@@ -457,17 +530,29 @@ can do instead.
 
 Concretely, from the above:
 
-- `desired` is `{blueprint_id, print_provider_id, enabled: {variant_id: price},
-  print_areas: {variant_id_group: placement}}` — the *enabled subset*, nothing
-  more.
+- `desired` is `{title, description, blueprint_id, print_provider_id,
+  enabled: {variant_id: price}, print_areas: {variant_id_group: placement}}` —
+  the *enabled subset*, nothing more. `title`/`description` are in there because
+  the API demands them at create and because they are the duplicate guard's
+  match key (PRD 44, 48), not because Printify owns them: the publish flags stay
+  `{title: false, description: false}` so they never reach Etsy through Printify
+  (PRD 41).
 - `read_live` reads the product and projects it the same way: enabled variants
   only, placement fields down to the five we set, `visible` kept as a tripwire.
+  Live variants also carry `cost` and `is_available`, which the projection drops
+  — they are Printify's facts, not our desired state.
+- `read_live` returns `None` without a request when the lockfile has no
+  `printify_product_id`. There is nothing to read before the first `apply`, and
+  demanding a token to discover that would break every workspace that has not
+  reached Phase 2 yet.
 - `apply` branches on whether `remote.printify_product_id` exists, because the
   create and update bodies genuinely differ (the coverage rule), and update
   needs the live variant list first.
+- The create branch walks `products.json` first and refuses if a product already
+  matches on title and description (PRD 48). Only that branch pays for it.
 - The lockfile needs `remote.printify_product_id` (a **string**),
-  `remote.printify_upload_id` per artwork, and the enabled variant id set — the
-  last because omission cannot disable.
+  `remote.printify_upload_id` per artwork, and the enabled variant set **with
+  prices** — because omission cannot disable and a disable cannot omit a price.
 - A changed `blueprint`/`print_provider` is a hard error at `plan` time, not an
   update and not a recreate (PRD 37).
 - Design validation gets the concrete rule it was missing: pixel dimensions
@@ -475,5 +560,17 @@ Concretely, from the above:
   before the upload, since nothing after it will object.
 - Prices stay `Money` all the way to the stage boundary and are serialised to
   minor units of the shop currency, unconverted (PRD 39, 40). No FX anywhere in
-  `apply`. `plan` asserts the numeric price is at or above the numeric USD
-  `cost`, since Printify rejects a publish below it.
+  `apply`.
+- **The price-above-cost assertion belongs to the publish stage, not this one**
+  (PRD 40, amended). Printify enforces it at publish, and `variants[].cost` only
+  exists on a product that already exists — before the first create there is no
+  documented source for it at all, and the undocumented one is walled off from
+  the engine by design (A17). Phase 3 gets the check for free from its own
+  `read_live`; asserting it here would mean either skipping it on the run that
+  matters or breaching A17 to reach cost data.
+- Placement is fixed: centred, `scale: 1.0`, `angle: 0`, into
+  `profile.placeholder` (PRD 45). PRD 38's ≥90% gate is what makes that the
+  right constant rather than a default nobody chose.
+- A colour × size cell the catalog does not offer is reported and skipped, not
+  fatal (PRD 46) — a discontinued combination is Printify's fact, not the
+  user's mistake.

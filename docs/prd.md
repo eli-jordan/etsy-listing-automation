@@ -159,6 +159,8 @@ changes and the images re-upload, which is correct behaviour.
 
 ### `shop.yaml`
 ```yaml
+printify:
+  shop_id: 28819281            # which Printify shop products are created in
 etsy:
   shop_id: 12345678
   who_made: i_did
@@ -172,6 +174,16 @@ preferred_print_provider: Monster Digital
                                # by name, not id — preselected in `new` when
                                # it offers the chosen garment
 ```
+
+`printify.shop_id` is **written by `setup`, not looked up by hand** (#42).
+Every product call is scoped to a shop — `/v1/shops/{shop}/products.json` — so
+the tool cannot create anything without it, and unlike a print provider there
+is no human-readable name to resolve: Printify's own titles for shops are
+whatever you typed when you made one ("My new store"). `GET /v1/shops.json`
+returns exactly the shops the token can reach, so `setup` lists them, selects
+the only one when there is only one, and asks otherwise. It is stored rather
+than resolved on every run because a second shop appearing later must not
+silently redirect where products are created.
 
 Print providers are referred to **by name everywhere a human writes config**.
 Names resolve to Printify's integer IDs via `.cache/providers.json`, populated
@@ -359,6 +371,48 @@ cleanly (ampersands, slashes, parenthesised names) or that collide on one slug.
 `new` reports any collisions it finds while building a profile.
 
 ---
+
+## `setup` — from nothing to a usable workspace
+
+The step before everything else, and until now the one step the tool did not
+own (#43). A workspace is a directory the user creates, containing a
+`shop.yaml` they wrote by hand from an example in the docs, next to a `.env`
+they populated from a page on printify.com. Two files, both easy to get subtly
+wrong, both of which fail much later as an unhelpful `401` or a pydantic
+validation dump.
+
+`setup` runs in an empty (or absent) directory and produces a workspace that
+`new` can immediately be run in:
+
+1. **Creates the directory skeleton** — `designs/`, `listings/`, `profiles/`,
+   `pricing-plans/`, `mockup-templates/`, `common-media/`, `test-designs/`,
+   `.cache/` — and the `.gitignore` that keeps `.cache/`, `.env` and `.auth/`
+   out of any repository the user later puts around it.
+2. **Walks through the Printify token**: what scopes it needs
+   (`catalog.read`, and the shop scopes Phase 2 writes with), where to generate
+   one, and writes it to `.env`. The token is **verified before it is stored** —
+   a `GET /v1/shops.json` that comes back `401` is a question to re-ask, not a
+   file to write.
+3. **Asks which Printify shop**, from that same call. One shop is selected
+   without asking; several are a picker; none is an error naming what to do on
+   printify.com. Writes `printify.shop_id`.
+4. **Collects the Etsy and commercial defaults** — shop id, `who_made`,
+   `when_made`, `is_supply`, currency, renewal policy, preferred print provider
+   — and writes `shop.yaml`.
+5. **Stops before Etsy OAuth**, which is `auth`'s job and Phase 3's code.
+   `setup` says so rather than pretending the workspace is finished: a Phase 2
+   workspace is complete for everything up to publishing, and telling the user
+   that is more useful than a wizard that dead-ends on an unbuilt step.
+
+Re-running it against an existing workspace is safe: it reports what is already
+there, offers to fill only what is missing, and never overwrites a value
+without asking. **`setup` is the only command that writes credentials**, and it
+writes them to the workspace, never to this repository.
+
+The `ui` first-run wizard (#26) covers the same ground in a browser and remains
+Phase 5's work. `setup` is not a stopgap for it — a terminal-only path to a
+working workspace is worth having on its own, and it is the one that exists
+before there is a UI to serve.
 
 ## `new` — interactive garment picker
 
@@ -694,8 +748,13 @@ written to Etsy's `should_auto_renew`.
 
 *Known wrinkle:* Etsy requires a title at creation, so Printify's first publish
 sets some title and description regardless of the sync flags — the flags govern
-subsequent syncs. There is a brief window where the draft carries Printify's
-generic copy before we overwrite it. Harmless for drafts.
+subsequent syncs. There is a brief window where the draft carries whatever copy
+the Printify product holds before we overwrite it. Harmless for drafts, and
+narrower than it looks: the product carries **our** title and description, not
+Printify's generic ones, because the create call requires both and #44 makes
+them real text (they are also the duplicate guard's match key, #48). The
+publish flags still say `{title: false, description: false}` — the product
+holding our copy does not make Printify a writer of it.
 
 ### Media sync
 
@@ -711,6 +770,7 @@ photo, acceptable at this volume.
 
 | Command | Purpose |
 |---|---|
+| `setup` | Initialise an empty workspace: directory skeleton, `shop.yaml`, and a guided walk through the credentials `.env` needs |
 | `new [<design>] [--category tshirt]` | Interactive garment/provider picker; writes profile (if absent) + listing |
 | `ui` | Serve setup, dashboard, template authoring and plan/apply runner |
 | `plan <listing\|--all>` | Three-way diff against live remote state; decides which stages need to run |
@@ -774,7 +834,12 @@ Etsy, and `external.id` appears on success.
 - The listing's profile still names the blueprint and print provider its
   Printify product was created with. A garment or printer change is a **hard
   error** — see below.
-- Every requested colour slug resolves to a real variant in the catalog.
+- Every requested colour slug resolves to a real variant in the catalog. A
+  colour that resolves for *some* sizes but not all is not an error — the
+  missing cells are reported and skipped (#46).
+- **`etsy.title` and `etsy.description` are concrete text**, not `<generate>`
+  and not empty, before a Printify product may be created (#44). Until Phase 4
+  builds `generate`, that means typed by hand.
 - Every requested colour has a matching mockup file.
 - Every media entry resolves: `mockup:` references name a colour the listing
   offers, paths exist. ≤10 images total.
@@ -812,7 +877,7 @@ Tokens land in gitignored `.auth/`, keys in `.env`.
 |---|---|
 | 0 | Config schemas (pydantic), profile/listing resolution, catalog fetch + cache, slugification, validation, lockfile model, `plan` skeleton |
 | 1 | Render pipeline + calibration UI + `new` picker — fully local, valuable standalone |
-| 2 | Printify: variant resolution, product create/update, the validation gates (37, 38) |
+| 2 | `setup` (43); Printify: variant resolution, product create/update, the validation gates (37, 38, 44) |
 | 3 | Etsy: OAuth, publish + polling + `unlock`, copy patch, media replace, renewal |
 | 4 | AI generation + validation gate |
 | 5 | `ui` first-run setup, dashboard and plan/apply runner |
@@ -895,7 +960,8 @@ useful before any API credentials exist.
     retail price falls below the numeric USD production cost. NOK clears that by
     roughly 10×, so it will not fire in normal use, which is precisely why
     `plan` asserts it rather than waiting to be surprised by a mis-scaled price
-    (#40).
+    (#40) — in the **publish** stage, where the cost figure exists, per #40's
+    amendment.
 
 13. **Shipping rates pass through as bare numbers too, and that one does bite.**
     The same mechanism as the price, with the opposite consequence: Printify
@@ -997,5 +1063,12 @@ whether Norway is among them needs checking, not assuming).
 | 37 | Changing the garment | Refused, not automated. Once a listing has a Printify product its blueprint and print provider are fixed; `plan` fails and says to start a new listing or make the change by hand. Printify silently ignores both fields on an update (`200`, no change — [api-findings.md](api-findings.md)), so the only automated route is delete-and-recreate, which throws away the Etsy listing's history to save retyping a short file. |
 | 38 | Design resolution gate | A design must be **within 10% of the profile's print area** — at least 90% of it on each axis. Replaces the earlier "~300 DPI for the print area", which said the same thing less checkably: Printify's placeholder dimensions already *are* its print resolution. Verified necessary — Printify accepts a 120×140 file onto a 4200×4800 area silently, so nothing else in the chain will catch it. The tolerance is not slack for its own sake: a few percent short upscales invisibly, and a gate that rejects a 4000×4800 file for a 4200×4800 area is a gate that gets switched off. |
 | 39 | Printify price units | Integer **minor units of the connected sales channel's currency** — not USD cents. Printify converts nothing on publish: it sends the number and the channel renders it in the shop currency, which is what its own instruction to non-USD sellers ("enter 24.99 … and ignore the 'USD' label") describes. The `USD` badge in the web app is a fixed label. This corrects an earlier reading of the same measurement: the integers were measured correctly, the currency attached to them was inferred from a UI string, and that inference is what produced risk 12. |
-| 40 | Retail price currency | NOK reaches Printify verbatim, as NOK minor units; `Money` stays NOK from `shop.yaml` to the wire, and no conversion happens at `apply`. Rejected — converting NOK→USD at apply time, which puts a live rate inside a hash-based idempotency system and churns every listing on a day nobody edited anything; pricing in USD and letting Printify's conversion set the Etsy figure, which surrenders the number the customer reads; and changing Printify's billing currency, which does not offer NOK and converts costs only. Accepted costs: Printify's own profit and listing-health figures compare an NOK number against a USD cost and are meaningless, leaving this tool's margin display (#10b) the only honest one; and `plan` must assert the numeric price is at or above the numeric USD production cost, because Printify refuses to publish below it. |
+| 40 | Retail price currency | NOK reaches Printify verbatim, as NOK minor units; `Money` stays NOK from `shop.yaml` to the wire, and no conversion happens at `apply`. Rejected — converting NOK→USD at apply time, which puts a live rate inside a hash-based idempotency system and churns every listing on a day nobody edited anything; pricing in USD and letting Printify's conversion set the Etsy figure, which surrenders the number the customer reads; and changing Printify's billing currency, which does not offer NOK and converts costs only. Accepted costs: Printify's own profit and listing-health figures compare an NOK number against a USD cost and are meaningless, leaving this tool's margin display (#10b) the only honest one; and `plan` must assert the numeric price is at or above the numeric USD production cost, because Printify refuses to publish below it. **Amended:** that assertion belongs to the **publish** stage, not the product stage. `variants[].cost` exists only on a product that already exists, so before the first create there is no documented source for it — the only other one is walled off from the engine by A17 — and Printify enforces the rule at publish anyway. Phase 3 gets it free from its own `read_live`; asserting it earlier would mean either skipping the run that matters or breaching A17. |
 | 41 | Update routing | Printify creates the product and publishes once with only the fields it needs to exist and route orders. Thereafter each field has exactly one writer: the **variant matrix** (colour, size, price, SKU) is Printify's, changed there and republished with selective sync `{variants: true}` and every other flag false; **everything the buyer reads** (title, description, tags, materials, images, shop section, alt text, renewal) is ours, written straight to Etsy. Refines #1 by making the boundary exhaustive rather than exemplary. Rests entirely on the sync booleans behaving as documented — risk 2 — since they are what stops a variant republish from overwriting our copy and mockups. |
+| 42 | Printify shop id | Stored in `shop.yaml` as `printify.shop_id`, written by `setup` (#43) from `GET /v1/shops.json`, which returns exactly the shops the token can reach. Discovered rather than typed, because the id appears in no obvious place in Printify's UI; stored rather than resolved per run, because an account that gains a second shop must not silently start creating products somewhere else. Unlike a print provider (#23) there is no name to match on — a shop's title is whatever the owner typed. |
+| 43 | `setup` command | A terminal command that takes an empty directory to a workspace `new` can run in: directory skeleton and `.gitignore`, a guided Printify token capture **verified against the live API before it is stored**, the shop selection above, and the Etsy/commercial defaults written to `shop.yaml`. Stops short of Etsy OAuth, which is `auth`'s job (#14) and Phase 3's code, and says so. Idempotent — re-running fills only what is missing. Does not replace the `ui` first-run wizard (#26): a terminal path to a working workspace has to exist before there is a UI to serve it. |
+| 44 | Printify product copy | The product carries the listing's **own** title and description, and both must be concrete text — a `<generate>` sentinel or an empty string is refused at `plan` time. Printify's create call requires both, so something must be sent; sending the real copy makes the product legible in Printify's web app and gives #48 its match key. It does **not** make Printify a writer of them: the publish flags stay `{title: false, description: false}` (#41), and the fields reach Etsy only through `updateListing`. Until Phase 4 builds `generate`, this means typed by hand. Accepted cost: a copy edit shows a diff on the Printify stage. |
+| 45 | Print placement | Fixed — centred, `scale: 1.0`, `angle: 0`, into `profile.placeholder`. No per-listing or per-template configuration in v1. `scale: 1.0` means fit-inside-the-print-area, and #38 already requires the design to be within 10% of that area on each axis, so the constant is the consequence of a gate rather than a default nobody chose. Revisit if a garment ever needs off-centre or rotated placement; a config surface added speculatively would need a calibrator to be usable. |
+| 46 | Missing variant cells | A colour × size combination the catalog does not offer is **reported and skipped**, not fatal. The requested matrix is `listing.colors` × `profile.sizes`, and Printify discontinues individual cells (`Berry / 4XL`); refusing the listing would force the user to drop a size for every colour or drop the colour entirely, to record a fact that is Printify's rather than theirs. A colour with *no* variants at all remains a hard error — that one is a typo. |
+| 47 | SKUs | Printify's. `variants[].sku` is writable and reads back verbatim, measured, so this is a choice rather than a limit — but the only thing our own SKU bought was #48's match key, and #48 has one without it. Declining leaves one less field to keep synchronised on a matrix where every entry must already carry a price. Refines #41, which listed SKU as part of Printify's variant matrix without saying whether we set it. |
+| 48 | Duplicate-create guard | The lockfile's `printify_product_id` is the primary guard; before a create — and **only** before a create — the stage also walks `GET /shops/{id}/products.json` and refuses if a product already matches on title and description. `POST products.json` has no idempotency key and no conflict, so the window the lockfile cannot close is create-succeeds-then-crash. The product list is a paginator that honours `limit`/`page` and **no filter whatsoever** (`title`, `search`, `sku` are accepted and ignored), so the match is client-side over a full walk — affordable because it runs on the rare create path, never on a no-op `plan`. Corrects the implementation plan, which asserted a pre-flight lookup without a key to look up by. |
