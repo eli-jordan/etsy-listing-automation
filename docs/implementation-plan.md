@@ -142,30 +142,42 @@ This paragraph used to say local stages have no live state at all, which read as
 licence to skip the read entirely. `plan` duly reported "No changes." over a
 half-emptied render cache, and `apply` did nothing to refill it.
 
-### Draft-vs-live cannot be set through the API — PRD risk 5, resolved in one direction
+### Draft-vs-live — PRD risk 5, and a correction
 
-Checked directly against Printify's API Reference (`developers.printify.com/docs/`):
-Product has a documented `visible` field ("Used for publishing. Visibility in
-sales channel", defaults to `true`) but it is marked **read-only**, and the
-`publish.json` request body only accepts `images`, `variants`, `title`,
-`description`, `tags`, `shipping_template` — `visible` is not among them, and it
-is absent from the create/update product bodies and from the Shop resource too.
+This section used to read *"Draft-vs-live cannot be set through the API"*, and
+concluded that nothing this tool sends could affect whether a publish lands as a
+draft. **The premise was wrong, and Phase 2's recon caught it**
+([api-findings.md](api-findings.md)).
 
-**"Hide in Store" is a Printify web-app UI action, not an API parameter.**
-Nothing this tool sends can make a publish come in as a draft; the shop's
-Etsy-connection setting (`docs/setup.md` §1.2) is the only lever, and it must be
-set by a human in Printify's UI before the first `apply` ever publishes.
+The reasoning was sound as far as the documentation went: Printify's API
+Reference (`developers.printify.com/docs/`) documents `visible` ("Used for
+publishing. Visibility in sales channel", defaults to `true`) and marks it
+**read-only**; it is absent from the `publish.json` body, which takes only
+`images`, `variants`, `title`, `description`, `tags`, `shipping_template`, and
+absent from the create/update product bodies and the Shop resource. From that,
+"Hide in Store" looked like a web-app-only action.
 
-What the API *does* give us: `visible` comes back on `GET products/{id}`, so
+Measured against the live API, `visible` **is** writable — accepted on
+`POST products.json`, accepted on `PUT`, and it reads back as sent. The
+reference is wrong about it, which is a good reason to keep measuring rather
+than reading.
+
+What that does *not* establish is the thing risk 5 cares about: whether a
+hidden product publishes to Etsy as a draft. That needs a connected Etsy shop
+and belongs to Phase 3. So the shop's Etsy-connection setting
+(`docs/setup.md` §1.2) remains the documented lever and must still be set by a
+human before the first `apply` publishes — but `visible` is now a candidate
+second lever rather than a closed door.
+
+Meanwhile `visible` comes back on `GET products/{id}`, so
 `printify_product.read_live()` reads it and the stage surfaces a warning if a
-product it manages ever comes back `visible: true` — a tripwire, not a fix,
-since nothing here can correct it.
+product it manages ever comes back `visible: true`. That tripwire stands, and
+may yet become a fix.
 
-**Still open, and only answerable against the real Printify account (Phase 2's
-job, not this doc's):** whether the shop's draft setting is a persistent
-per-shop default that holds for every future publish, or something that reverts
-and needs re-confirming — write this into `docs/api-findings.md` before Phase 2
-exits, citing this section.
+**Still open, and only answerable once an Etsy shop is connected:** whether the
+shop's draft setting is a persistent per-shop default that holds for every
+future publish, or something that reverts and needs re-confirming. Carried in
+[api-findings.md](api-findings.md)'s open questions.
 
 ### `Change` vocabulary
 
@@ -502,27 +514,54 @@ colour; goldens are committed; `new` writes a profile and listing with no intege
 ### Phase 2 — Printify
 
 Client, models and fakes; variant resolution from colour slug × size; product
-create/update; publish with sync flags; polling; `unlock`; the first cassette
-contract tests.
+create/update; the design-resolution and immutable-garment validation gates
+(PRD 37, 38); the first cassette contract tests.
 
-*Exit:* a product is created against a test shop and gains `external.id`; a second
-`apply` is a no-op; PRD risks 2, 3 and 6 are answered empirically and written up in
-`docs/api-findings.md`. Risk 5's API-surface question is answered already (see
-"Draft-vs-live cannot be set through the API", above) — what Phase 2 must still
-confirm empirically is whether the shop's Printify-side draft setting persists
-across every future publish, and record that in the same file.
+**Recon landed first**, before any of it:
+[api-findings.md](api-findings.md) and `tests/e2e/test_printify_product_e2e.py`
+establish what the product endpoints actually require, and several answers are
+not the obvious ones — `variants` merges rather than replaces, `print_areas`
+coverage differs between create and update, the product returns the whole
+blueprint matrix, `visible` is writable. Build against that file, not against
+the API reference.
+
+*Exit:* a product is created against a test shop carrying exactly the intended
+variant matrix, prices and print area; a second `apply` is a no-op; a garment
+change and an undersized design are each refused at `plan` time with an
+actionable error.
+
+**Publishing is not in this phase's exit criteria, because this account cannot
+reach it.** With no Etsy shop connected, `publish.json` returns
+`400 code 8254`, so `external.id`, the publish lock, the selective-sync flags
+and `unlock` — PRD risks 2, 3, 5 and 6 — move to Phase 3, where the shop that
+can answer them exists. Phase 2 builds the product; Phase 3 publishes it.
 
 ### Phase 3 — Etsy
 
-OAuth PKCE and `auth`; copy patch; full-replace media sync; renewal; the LIVE
+OAuth PKCE and `auth`; **publish with sync flags, polling for `external.id`,
+and `unlock`**, inherited from Phase 2 because they need the connected shop
+this phase creates; copy patch; full-replace media sync; renewal; the LIVE
 banner and drift reporting on live listings.
 
 > **File the Etsy app registration now, not at the start of this phase.** It is a
 > form, not engineering work, and approval lead time is unknown — PRD risk 1. The
 > phase order is unchanged; only the paperwork moves earlier.
 
+> **Settle shipping before writing any of this — PRD risk 13.** Printify
+> publishes its USD shipping rates to Etsy as bare numerals, so an NOK shop
+> receives `kr 4,49` where `$4.49` was meant. The requirement is that both free
+> and paid shipping work, starting with paid, which means this tool owns a
+> shipping profile on the Etsy side and sends `shipping_template: false`. That
+> is a decision about where rates live and whether a shipping stage exists — it
+> shapes the stage list, so it cannot be discovered halfway through. Prices need
+> no such care: NOK passes through unconverted (PRD 39, 40), and risk 12 is
+> closed.
+
 *Exit:* a complete draft listing exists in Etsy with our copy, tags and media in
-rank order; the live-edit check from the PRD passes.
+rank order; the live-edit check from the PRD passes; PRD risks 2, 3, 5, 6 and 13
+are answered empirically, along with the one confirmation risk 12 still owes
+(does `29900` arrive as `299,00`?), and written into
+[api-findings.md](api-findings.md).
 
 ### Phase 4 — AI generation
 

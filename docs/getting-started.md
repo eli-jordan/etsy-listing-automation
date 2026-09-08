@@ -163,11 +163,15 @@ Without either, the CLI walks up from your current directory looking for
 ## 4. Add a design
 
 Drop an RGBA PNG into `designs/`, e.g. `designs/take-a-hike.png`. It needs to
-be large enough for ~300 DPI over your garment's print area — a 4500×5400
-print area wants a 4500×5400-or-larger design. Rendering never upscales; too
-small fails loudly, naming the required size. Printify's print area varies by
-garment size, and `new` records the largest of them in the profile, so meeting
-the number in `print_area` covers every size you sell.
+be **within 10% of your garment's print area** — a 4500×5400 print area wants a
+design at least 4050×4860, and one at least 4500×5400 is better. Rendering never
+upscales; anything smaller fails loudly, naming the required size. Printify's
+print area varies by garment size, and `new` records the largest of them in the
+profile, so meeting the number in `print_area` covers every size you sell.
+
+Printify itself checks none of this — it will take a 120×140 file and print it —
+so this gate is the only thing between a low-resolution export and a blurry
+shirt.
 
 A design that needs different ink for light vs. dark garments carries more
 than one file — that's configured per-listing (§7), not here.

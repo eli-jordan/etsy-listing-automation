@@ -178,12 +178,27 @@ Names resolve to Printify's integer IDs via `.cache/providers.json`, populated
 from the catalog. `plan` fails with the list of valid names if one can't be
 resolved.
 
-> **Currency asymmetry.** The Etsy shop lists and deposits in **NOK**, matching
-> the bank account, which avoids Etsy's ~2.5% conversion fee on deposits.
-> **Printify bills in USD**, so cost is USD while revenue is NOK and the two
-> cannot be subtracted directly.
+> **Currency asymmetry — real on the cost side, absent on the retail side.**
+> The Etsy shop lists and deposits in **NOK**, matching the bank account, which
+> avoids Etsy's ~2.5% conversion fee on deposits. **Printify bills in USD**, so
+> cost is USD while revenue is NOK and the two cannot be subtracted directly.
 >
-> The USD→NOK rate is **fetched live and cached** in `.cache/fx.json` with a
+> The retail side looks like the same problem and is not. Printify performs no
+> conversion when it publishes a retail price: it sends the bare number, and the
+> sales channel renders it in the shop's own currency. Printify documents this
+> as the intended procedure rather than a defect — for a GBP shop, *"enter 24.99
+> as the retail price in Printify and ignore the 'USD' label"*. So
+> `variants[].price` is an integer in **minor units of the connected sales
+> channel's currency**, and `29900` against an NOK Etsy shop is `kr 299,00`. The
+> `USD` badge in Printify's web app is a fixed label, not a currency assertion
+> (#39).
+>
+> Prices therefore travel as `Money` in NOK from `shop.yaml` to the wire and are
+> serialised straight to minor units. **No exchange rate enters `apply`, and
+> none enters a hash** (#40). The price is the one thing this asymmetry does not
+> touch. Shipping is not so lucky — risk 13.
+>
+> The cost side still needs a rate. The USD→NOK rate is **fetched live and cached** in `.cache/fx.json` with a
 > TTL. Wherever a converted figure is displayed, the output states that a
 > conversion occurred, the rate used, and when that rate was fetched. If the
 > fetch fails, the cached rate is used and its age is shown prominently.
@@ -451,14 +466,51 @@ Listings stay maintainable after they go live; this is a routine workflow, not a
 edge case. `plan` marks any active listing with a **`LIVE`** banner and shows the
 full diff, and `apply` then proceeds without needing a special flag.
 
-- **Price changes** flow through Printify: update variant prices, then republish
-  with `{variants: true}` so Etsy picks them up.
-- **Copy, tags, materials, renewal and image changes** go straight to Etsy via
-  `updateListing`, bypassing Printify entirely.
+**Two writers, and each field belongs to exactly one of them** (#41). Printify
+creates the product and publishes it once, carrying only what it needs in order
+to exist and to route an order to the printer. From that moment the split is:
+
+- **The variant matrix — colour, size, price, SKU — belongs to Printify.** It
+  is what fulfils an order, so Printify has to hold it. Changes go to Printify
+  and republish with selective sync `{variants: true}` and **every other flag
+  false**.
+- **Everything the buyer reads belongs to us** — title, description, tags,
+  materials, images, shop section, alt text, renewal — and is written straight
+  to Etsy via `updateListing` and the image endpoints, never through Printify.
+
+Neither writer touches the other's fields. That is what makes the two systems
+composable rather than a sync war, and it is why the selective-sync booleans
+matter so much: they are the enforcement mechanism, not a convenience.
 
 > **Verify early:** republishing with `variants: true` against an *active* Etsy
 > listing must be confirmed not to disturb the listing's state or inventory. This
-> is the single riskiest assumption in the post-publish workflow.
+> is the single riskiest assumption in the post-publish workflow. Risk 2 is its
+> mirror image — if `{images: false}` is not honoured, every variant republish
+> silently overwrites our rendered mockups with Printify's generated ones and the
+> ownership split above collapses.
+
+#### There is no draft of a live listing — settled, not open
+
+Etsy has no staging concept. `updateListing`'s `state` parameter is
+`enum(active, inactive)`: `draft` appears in the *read* enum
+(`active, inactive, sold_out, draft, expired`) but cannot be set on an update.
+`draft` is a birth-only state — `createDraftListing` produces one, setting it
+`active` publishes it, and there is no route back. A published listing cannot be
+copied to a reviewable draft that later replaces it, and edits to a live listing
+take effect immediately and visibly.
+
+So the review gate that exists before publish (#4 — the Etsy draft) genuinely
+does not exist after it, and **#21 stands as the only in-place option**: `plan`
+shows the diff, and the diff *is* the review.
+
+One alternative does exist and is deliberately not chosen: set the listing
+`inactive`, edit, set it `active` again. Etsy charges nothing for this as long
+as the listing has not expired (deactivation does not pause the four-month
+clock; an expired listing costs $0.20 to renew before it can be reactivated),
+and the listing keeps its ID, favourites and reviews. What it costs is
+visibility — the item is unbuyable and out of search for the duration, on a
+marketplace whose ranking rewards consistency. Not worth it to hide a tag edit.
+Worth reconsidering only if some future change is both large and slow to apply.
 
 ---
 
@@ -703,10 +755,25 @@ Etsy, and `external.id` appears on success.
 
 ## Validation (at `plan` time, before any remote write)
 
-- Design file: pixel dimensions must meet ~300 DPI for the profile's print area;
-  must be RGB with an alpha channel. **Rejected with an actionable error naming
-  the required size — never auto-upscaled or converted.** Silent upscaling
-  produces a blurry print discovered via customer complaint.
+- Design file: **pixel dimensions within 10% of the profile's print area** in
+  both axes — that is, at least 90% of its width and 90% of its height — and RGB
+  with an alpha channel. **Rejected with an actionable error naming the required
+  size — never auto-upscaled or converted.** Silent upscaling produces a blurry
+  print discovered via customer complaint, and nothing downstream will catch it:
+  Printify accepted a 120×140 PNG onto a 4200×4800 print area without so much as
+  a warning ([api-findings.md](api-findings.md)).
+
+  The measure is the print area rather than a DPI figure because the print area
+  *is* the DPI figure — Printify's placeholder dimensions are already the pixels
+  it wants at its own print resolution. The 10% tolerance is there because a
+  design a few percent short upscales invisibly, while the failure this gate
+  exists to catch is a design that is half the size or a tenth of it. A gate at
+  exactly 100% would reject a 4000×4800 file for a 4200×4800 area — 4.8% short
+  on one axis, indistinguishable in print — and a rule that fires on files
+  nobody would call wrong gets turned off.
+- The listing's profile still names the blueprint and print provider its
+  Printify product was created with. A garment or printer change is a **hard
+  error** — see below.
 - Every requested colour slug resolves to a real variant in the catalog.
 - Every requested colour has a matching mockup file.
 - Every media entry resolves: `mockup:` references name a colour the listing
@@ -716,6 +783,19 @@ Etsy, and `external.id` appears on success.
 - Blueprint and print provider names resolve to catalog IDs; failure lists the
   valid names.
 - Copy within Etsy limits; no unresolved `<generate>` sentinels.
+
+### Changing the garment is not an operation
+
+Once a listing has a Printify product, its blueprint and print provider are
+fixed. `plan` fails, naming both values, and says what to do instead: **start a
+new listing**, or make the change by hand in Printify and Etsy.
+
+This is a deliberate refusal, not a missing feature. Printify will not do it —
+`PUT` with a different `blueprint_id` answers `200` and changes nothing, the
+quietest failure in that API — so the only automated route would be delete the
+product and create another. That discards the Etsy listing behind it along with
+its reviews, favourites and search history, to save retyping a short YAML file.
+A listing is cheap; the listing's history is not.
 
 ## Auth and secrets
 
@@ -732,8 +812,8 @@ Tokens land in gitignored `.auth/`, keys in `.env`.
 |---|---|
 | 0 | Config schemas (pydantic), profile/listing resolution, catalog fetch + cache, slugification, validation, lockfile model, `plan` skeleton |
 | 1 | Render pipeline + calibration UI + `new` picker — fully local, valuable standalone |
-| 2 | Printify: variant resolution, product create/update, publish, polling |
-| 3 | Etsy: OAuth, copy patch, media replace, renewal |
+| 2 | Printify: variant resolution, product create/update, the validation gates (37, 38) |
+| 3 | Etsy: OAuth, publish + polling + `unlock`, copy patch, media replace, renewal |
 | 4 | AI generation + validation gate |
 | 5 | `ui` first-run setup, dashboard and plan/apply runner |
 | 6 | Batch, rate limiting, `status`, drift reporting, polish |
@@ -797,6 +877,50 @@ useful before any API credentials exist.
     different provider will simply fail soft to a blank price rather than
     use the right method. Verify there's no better, documented source for
     either the cost data or the decoration method.
+12. **Printify's retail price against this shop's NOK prices — resolved: there
+    is nothing to convert.** The conflict was real; the premise shared by both
+    proposed resolutions was not. Printify publishes a retail price as a bare
+    number and the sales channel renders it in its own currency — its
+    documentation instructs sellers on non-USD channels to type the local figure
+    and ignore the `USD` label, and its supported billing currencies (AUD, CAD,
+    EUR, GBP, USD — **not** NOK) move the *cost* side only. NOK minor units go
+    to `variants[].price` unchanged, no FX rate reaches `apply`, and nothing
+    volatile reaches a hash (#39, #40).
+
+    Two things remain, neither of them a decision. **To observe:** publish one
+    product at `29900` into the NOK shop and confirm Etsy stores `299,00`. All
+    of the above is Printify's documentation, and this project's standard is
+    measurement — the same standard that caught the API reference being wrong
+    about `visible`. **To guard:** Printify refuses to publish when the numeric
+    retail price falls below the numeric USD production cost. NOK clears that by
+    roughly 10×, so it will not fire in normal use, which is precisely why
+    `plan` asserts it rather than waiting to be surprised by a mis-scaled price
+    (#40).
+
+13. **Shipping rates pass through as bare numbers too, and that one does bite.**
+    The same mechanism as the price, with the opposite consequence: Printify
+    sends its USD shipping rates to Etsy as numerals, so a `$4.49` rate is
+    published as `kr 4,49` — roughly a 90% shortfall on every shipment.
+    Printify names the problem itself and offers exactly two ways out: set the
+    Etsy shop currency to USD (2.5% on every deposit, refused here), or maintain
+    Etsy shipping profiles that Printify never overwrites.
+
+    The lever exists and is unused. `publish.json` takes `shipping_template`,
+    documented as *"Used by Etsy and Amazon sales channels only. If set to
+    false, product shipping template will not be updated"* — but nothing in this
+    tool sets it, and no decision anywhere says what shipping should be.
+
+    **The requirement is that both modes work: free shipping (cost absorbed into
+    the NOK price) and paid shipping (a real NOK rate the buyer sees), starting
+    with paid.** That rules out the easy answer of always publishing free
+    shipping, and means the tool owns a shipping profile on the Etsy side rather
+    than borrowing Printify's.
+
+    **This must be settled before Phase 3 implementation begins**, not during
+    it. It decides whether `shipping_template: false` is unconditional, whether
+    a shipping stage exists at all, and whether the rates live in `shop.yaml`,
+    the profile or the listing. A wrong answer here is not a spurious diff; it
+    is money lost per order, silently, with nothing in the tool to notice.
 
 ## Deferred: full margin model
 
@@ -870,3 +994,8 @@ whether Norway is among them needs checking, not assuming).
 | 34 | Pricing plan reference | A listing references a pricing plan by workspace-relative path (`pricing_plan: ../../pricing-plans/x.yaml`), the same mechanism as `design:` — not a bare name against a fixed root, unlike `profile:`/`media[].template` (#29). `pricing-plans/` is a conventional discovery root for `new`'s picker, not an enforced resolution root — nested layouts, and plans stored elsewhere, both work. Migrating `media[].template` to the same path-based scheme is explicitly out of scope: it would also touch the calibrator UI/API and render-cache key naming, a separate, larger piece of work. |
 | 35 | Undocumented cost data | `new`'s "create a pricing plan" flow reads Printify's undocumented per-variant manufacturing-cost endpoint (`product-catalog-service`, no auth, no docs — verified working in this project against a live response) to seed a starting price, joined against the public `variants.json` catalog on variant id for colour/size names. Isolated in its own module outside the documented `catalog/` surface, fail-soft by construction: any failure degrades to a blank price for the affected size(s), never aborts `new`. `decoration_method` is hardcoded to `dtg` (risk item 11). Shipping cost, by contrast, comes from Printify's documented `shipping.json` endpoint and lives in the normal `catalog/` client. |
 | 36 | Wizard-time FX | The starting-price computation ((manufacturing + shipping) × 1.10 margin) converts USD cost to the shop currency via a minimal, uncached, one-off live rate fetch — deliberately not the deferred full-margin-model FX cache (#10b); that remains unbuilt. Where colours offering the same size disagree on cost, the max is used and the disagreement is noted in the generated file's comment. |
+| 37 | Changing the garment | Refused, not automated. Once a listing has a Printify product its blueprint and print provider are fixed; `plan` fails and says to start a new listing or make the change by hand. Printify silently ignores both fields on an update (`200`, no change — [api-findings.md](api-findings.md)), so the only automated route is delete-and-recreate, which throws away the Etsy listing's history to save retyping a short file. |
+| 38 | Design resolution gate | A design must be **within 10% of the profile's print area** — at least 90% of it on each axis. Replaces the earlier "~300 DPI for the print area", which said the same thing less checkably: Printify's placeholder dimensions already *are* its print resolution. Verified necessary — Printify accepts a 120×140 file onto a 4200×4800 area silently, so nothing else in the chain will catch it. The tolerance is not slack for its own sake: a few percent short upscales invisibly, and a gate that rejects a 4000×4800 file for a 4200×4800 area is a gate that gets switched off. |
+| 39 | Printify price units | Integer **minor units of the connected sales channel's currency** — not USD cents. Printify converts nothing on publish: it sends the number and the channel renders it in the shop currency, which is what its own instruction to non-USD sellers ("enter 24.99 … and ignore the 'USD' label") describes. The `USD` badge in the web app is a fixed label. This corrects an earlier reading of the same measurement: the integers were measured correctly, the currency attached to them was inferred from a UI string, and that inference is what produced risk 12. |
+| 40 | Retail price currency | NOK reaches Printify verbatim, as NOK minor units; `Money` stays NOK from `shop.yaml` to the wire, and no conversion happens at `apply`. Rejected — converting NOK→USD at apply time, which puts a live rate inside a hash-based idempotency system and churns every listing on a day nobody edited anything; pricing in USD and letting Printify's conversion set the Etsy figure, which surrenders the number the customer reads; and changing Printify's billing currency, which does not offer NOK and converts costs only. Accepted costs: Printify's own profit and listing-health figures compare an NOK number against a USD cost and are meaningless, leaving this tool's margin display (#10b) the only honest one; and `plan` must assert the numeric price is at or above the numeric USD production cost, because Printify refuses to publish below it. |
+| 41 | Update routing | Printify creates the product and publishes once with only the fields it needs to exist and route orders. Thereafter each field has exactly one writer: the **variant matrix** (colour, size, price, SKU) is Printify's, changed there and republished with selective sync `{variants: true}` and every other flag false; **everything the buyer reads** (title, description, tags, materials, images, shop section, alt text, renewal) is ours, written straight to Etsy. Refines #1 by making the boundary exhaustive rather than exemplary. Rests entirely on the sync booleans behaving as documented — risk 2 — since they are what stops a variant republish from overwriting our copy and mockups. |

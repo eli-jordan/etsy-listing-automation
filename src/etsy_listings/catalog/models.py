@@ -104,9 +104,9 @@ class VariantSet(BaseModel):
 
         A profile carries one print area (PRD 8a) and the catalog offers
         several, so one has to win. The largest does, because the print area
-        is a resolution target -- the design has to hold ~300 DPI across it --
-        and art sized for the 3XL panel still covers the S panel, while the
-        reverse prints soft on the sizes that need it most.
+        is a resolution target -- a design must come within 10% of it in each
+        axis (PRD 38) -- and art sized for the 3XL panel still covers the S
+        panel, while the reverse prints soft on the sizes that need it most.
         """
         sizes = self.placeholder_sizes(position)
         return sizes[0] if sizes else None

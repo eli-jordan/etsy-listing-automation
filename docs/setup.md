@@ -163,9 +163,9 @@ regenerable from the same Connections page.
 Phase 2 pushes a real product, so `apply` runs the render stage first and needs
 real inputs:
 
-- **A design file** — RGBA PNG, and large enough for ~300 DPI over the profile's
-  print area (a 4500×5400 print area wants a 4500×5400 design). Validation
-  rejects anything smaller with the required size named; it never upscales.
+- **A design file** — RGBA PNG, sized within 10% of the profile's print area (a
+  4500×5400 print area wants at least 4050×4860). Validation rejects anything
+  smaller with the required size named; it never upscales.
 - **A calibrated mockup template** — at least one template set, calibrated in
   the browser (`etsy-listings ui`). Until Phase 3 the mockups aren't uploaded
   anywhere, but `apply` still renders them.
