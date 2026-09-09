@@ -4,21 +4,23 @@ No terminal and no network: prompts are answered by matching on the question's
 text, so a reordered wizard does not break every test, and the client is the
 in-memory fake. What is asserted is the workspace left on disk -- the files
 `new` and `plan` will actually read -- rather than the internal sequencing.
+
+The `scripted` fixture and the double behind it are shared with `new`'s tests;
+see ``tests/support/scripted.py``.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from pathlib import Path
 
 import pytest
 import typer
 import yaml
 
+from etsy_listings import prompts
 from etsy_listings.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR
-from etsy_listings.setupcmd import interactive
 from etsy_listings.setupcmd.interactive import run_setup
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import Workspace
@@ -28,65 +30,6 @@ TWO_SHOPS = [
     Shop(id=1, title="First store", sales_channel="disconnected"),
     Shop(id=2, title="Second store", sales_channel="etsy"),
 ]
-
-
-class Scripted:
-    """Answers keyed by a fragment of the question.
-
-    Keyed rather than ordered on purpose: a wizard's question order is
-    presentation, and a test that encodes it fails on every reword.
-    """
-
-    def __init__(self, answers: dict[str, object]) -> None:
-        self.answers = answers
-        self.asked: list[str] = []
-        self.defaults_offered: dict[str, str] = {}
-        """What each text prompt arrived pre-filled with. A re-run keeps every
-        value only if these carry what the file already says."""
-
-    def _answer(self, message: str) -> object:
-        self.asked.append(message)
-        for fragment, answer in self.answers.items():
-            if fragment.lower() in message.lower():
-                # A list is successive answers to the same question -- what a
-                # user does when a prompt rejects what they typed and asks
-                # again. Anything else is the same answer every time.
-                if isinstance(answer, list):
-                    return answer.pop(0) if len(answer) > 1 else answer[0]
-                return answer
-        raise AssertionError(f"no scripted answer for {message!r}; asked {self.asked}")
-
-    def text(self, message: str, *, default: str = "") -> str | None:
-        """``None`` is what a real prompt returns when the user cancels, so
-        that is what it means here too -- not "fall back to the default"."""
-        self.defaults_offered[message] = default
-        answer = self._answer(message)
-        return None if answer is None else str(answer)
-
-    def confirm(self, message: str, *, default: bool = False) -> bool | None:
-        answer = self._answer(message)
-        return None if answer is None else bool(answer)
-
-    def choose(self, message: str, rows: Sequence[str], *, marker_hint: str = "") -> str | None:
-        wanted = self._answer(message)
-        if wanted is None:
-            return None
-        for row in rows:
-            if str(wanted) in row:
-                return row
-        raise AssertionError(f"scripted answer {wanted!r} matches no row in {list(rows)}")
-
-
-@pytest.fixture
-def scripted(monkeypatch) -> callable:
-    def install(answers: dict[str, object]) -> Scripted:
-        script = Scripted(answers)
-        monkeypatch.setattr(interactive.prompts, "text", script.text)
-        monkeypatch.setattr(interactive.prompts, "confirm", script.confirm)
-        monkeypatch.setattr(interactive.prompts, "choose", script.choose)
-        return script
-
-    return install
 
 
 @pytest.fixture(autouse=True)
@@ -227,7 +170,7 @@ def test_an_account_with_no_shops_says_what_to_do(tmp_path: Path, scripted, caps
 def test_cancelling_a_question_writes_no_shop_file(tmp_path: Path, scripted) -> None:
     scripted({**HAPPY_PATH, "currency": None})
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(ONE_SHOP)))
 
     assert not (tmp_path / layout.SHOP_FILE).exists()
@@ -340,7 +283,7 @@ def test_cancelling_any_question_leaves_no_workspace(
 ) -> None:
     scripted({**HAPPY_PATH, cancelled: None})
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(ONE_SHOP)))
 
     assert not (tmp_path / layout.SHOP_FILE).exists()
@@ -349,7 +292,7 @@ def test_cancelling_any_question_leaves_no_workspace(
 def test_cancelling_the_shop_choice_leaves_no_workspace(tmp_path: Path, scripted) -> None:
     scripted({**HAPPY_PATH, "Printify shop": None})
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(TWO_SHOPS)))
 
     assert not (tmp_path / layout.SHOP_FILE).exists()
@@ -371,7 +314,7 @@ def test_cancelling_an_individual_etsy_question_leaves_no_workspace(
         }
     )
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(ONE_SHOP)))
 
     assert not (tmp_path / layout.SHOP_FILE).exists()
@@ -396,7 +339,7 @@ def test_a_cancelled_run_leaves_no_token_behind(tmp_path: Path, scripted) -> Non
     directory the user may well delete rather than re-run."""
     scripted({**HAPPY_PATH, "print-on-demand defaults": None})
 
-    with pytest.raises(typer.Exit):
+    with pytest.raises(prompts.Cancelled):
         run_setup(tmp_path, client_factory=_factory(FakePrintifyClient(ONE_SHOP)))
 
     assert not (tmp_path / layout.ENV_FILE).exists()

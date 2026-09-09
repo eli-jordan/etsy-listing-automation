@@ -14,13 +14,12 @@ from __future__ import annotations
 
 import os
 from collections.abc import Iterator
-from pathlib import Path
 from typing import Any
 
 import httpx
 import pytest
 
-from etsy_listings.catalog.http import HttpCatalogClient
+from etsy_listings.clients.printify import HttpCatalogClient, Transport
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError, Secrets
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import layout
@@ -68,7 +67,7 @@ def catalog(printify_token: str) -> HttpCatalogClient:
     ``printify_api`` below is the one that writes -- the Phase 2 product tests
     create a throwaway product in ``printify_shop`` and delete it in teardown.
     """
-    return HttpCatalogClient(printify_token)
+    return HttpCatalogClient(Transport(printify_token))
 
 
 @pytest.fixture(scope="session")
@@ -78,7 +77,8 @@ def contract_fixtures() -> dict[str, object]:
     Imported from the contract test rather than duplicated, because the whole
     point of comparing them here is that there is exactly one copy: if
     Printify's real response stops matching, the file the *offline* tests
-    trust is the file this layer names.
+    trust is the file this layer names. (``pythonpath = ["."]`` in
+    pyproject.toml is what makes ``tests.contract`` importable from here.)
     """
     from tests.contract import test_catalog_http as contract
 
@@ -87,15 +87,6 @@ def contract_fixtures() -> dict[str, object]:
         "providers": contract.PROVIDERS_PAYLOAD,
         "variants": contract.VARIANTS_PAYLOAD,
     }
-
-
-def pytest_configure(config: pytest.Config) -> None:
-    """Make ``tests`` importable so ``contract_fixtures`` can reach the
-    transcripts. ``rootdir`` is on ``sys.path`` under pytest's default import
-    mode, but only once a package marker exists -- this keeps that explicit."""
-    root = Path(__file__).resolve().parents[2]
-    if str(root) not in os.sys.path:
-        os.sys.path.insert(0, str(root))
 
 
 @pytest.fixture(scope="session")

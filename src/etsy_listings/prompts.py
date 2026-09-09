@@ -42,7 +42,10 @@ Finding fzf is its own problem here, and ``shutil.which`` is not the answer:
 see :func:`fzf_command`.
 
 Every backend returns ``None`` for "the user cancelled", so callers handle
-cancellation one way regardless of which one ran.
+cancellation one way regardless of which one ran -- and above them sit
+:func:`pick`, :func:`ask_choice`, :func:`ask_text` and :func:`ask_confirm`,
+which raise :class:`Cancelled` instead. That is what the wizards use; see the
+note above them for why a `None` nobody checks is worse than an exception.
 """
 
 from __future__ import annotations
@@ -50,7 +53,7 @@ from __future__ import annotations
 import os
 import shutil
 import subprocess
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from functools import cache
 from pathlib import Path
 
@@ -196,6 +199,83 @@ def confirm(message: str, *, default: bool = False) -> bool | None:
     if not typed:
         return default
     return typed.startswith("y")
+
+
+# --------------------------------------------------------------- asking, for real
+#
+# The three functions above answer ``None`` for "the user cancelled", which is
+# the honest shape for a backend: a prompt that was declined has no answer, and
+# a caller might legitimately carry on without one.
+#
+# No caller does. Both wizards treat a cancelled question as the end of the
+# run, and each was writing that out per question -- fourteen `if answer is
+# None: raise _cancelled()` between them, plus a `_cancelled()` defined twice
+# with two different behaviours (one printed "cancelled", the other exited
+# silently). A rule applied at every call site is a rule that will eventually
+# be missed at one, and a missed one here means a wizard that reads a `None`
+# as an answer and writes it to a file.
+#
+# So cancellation is an exception, raised once, caught once in `cli/app.py`.
+
+
+class Cancelled(Exception):  # noqa: N818 - a decision, not an error condition
+    """The user declined to answer.
+
+    Not a failure: ctrl-C out of a picker is an ordinary way to leave a
+    wizard, and the CLI turns this into a message and a non-zero exit rather
+    than a traceback.
+    """
+
+
+def ask_choice(message: str, rows: Sequence[str], *, marker_hint: str = "") -> str:
+    """:func:`choose`, where declining ends the wizard."""
+    answer = choose(message, rows, marker_hint=marker_hint)
+    if answer is None:
+        raise Cancelled
+    return answer
+
+
+def pick[T](
+    message: str,
+    options: Sequence[T],
+    *,
+    label: Callable[[T], str] = str,
+    marker_hint: str = "",
+) -> T:
+    """Choose one of ``options``, offered by the label ``label`` gives it.
+
+    The dance every picker was writing out: build a ``{label: option}`` dict,
+    offer its keys, map the answer back. Doing it here means the caller says
+    what it wants chosen rather than how choosing works -- and ``options``
+    arrives in the order it should be offered, which every backend preserves.
+    """
+    by_label = {label(option): option for option in options}
+    return by_label[ask_choice(message, list(by_label), marker_hint=marker_hint)]
+
+
+def ask_text(message: str, *, default: str = "", allow_blank: bool = False) -> str:
+    """:func:`text`, where declining ends the wizard.
+
+    A blank answer counts as declining by default -- most questions ask for a
+    name, and "" is not one. ``allow_blank`` is for the few where empty is a
+    real answer ("Preferred print provider (blank for none)"), and there it
+    still ends the wizard on a true cancel.
+    """
+    answer = text(message, default=default)
+    if answer is None or (not answer and not allow_blank):
+        raise Cancelled
+    return answer
+
+
+def ask_confirm(message: str, *, default: bool = False) -> bool:
+    """:func:`confirm`, where declining ends the wizard.
+
+    Distinct from answering *no*, which is an answer and comes back ``False``.
+    """
+    answer = confirm(message, default=default)
+    if answer is None:
+        raise Cancelled
+    return answer
 
 
 def _choose_with_fzf(command: list[str], message: str, rows: list[str]) -> str | None:

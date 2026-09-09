@@ -4,9 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.catalog.cache import CachedCatalogClient
-from etsy_listings.catalog.fakes import FakeCatalogClient
-from etsy_listings.catalog.models import (
+from etsy_listings.clients.printify.cache import CachedCatalogClient
+from etsy_listings.clients.printify.fakes import FakeCatalogClient
+from etsy_listings.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -17,7 +17,7 @@ from etsy_listings.catalog.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.catalog.resolve import (
+from etsy_listings.clients.printify.resolve import (
     AmbiguousBlueprintError,
     CatalogResolutionError,
     resolve_blueprint,

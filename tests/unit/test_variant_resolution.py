@@ -16,8 +16,8 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.catalog.models import Variant, VariantOptions, VariantSet
-from etsy_listings.catalog.resolve import (
+from etsy_listings.clients.printify.models import Variant, VariantOptions, VariantSet
+from etsy_listings.clients.printify.resolve import (
     CatalogResolutionError,
     UnknownSizeError,
     resolve_variants,

@@ -174,21 +174,27 @@ class _FakeStdout:
 
 
 def test_each_swatch_is_styled_with_the_colour_the_stage_sampled(plain_env, capsys) -> None:
-    """One block per garment, in the colour that scene actually rendered."""
-    plain_env.setattr(cli, "_swatch_glyph", lambda: cli.SWATCH_GLYPH)
-    styled: list[tuple[str, object]] = []
+    """One block per garment, in the colour that scene actually rendered, in
+    the order the stage sampled them.
 
-    def fake_style(text: str, fg: object = None, **kwargs: object) -> str:
-        styled.append((text, fg))
-        return text
+    Asserted on what reached stdout, not on a record of calls to
+    `typer.style`. Patching the styler and checking its arguments verifies
+    that the code asked for a colour -- it cannot see whether the answer was
+    ever written, and the failure this guards against (click stripping the
+    escapes from a stream it believes is not a terminal) happens entirely
+    after that call returns.
+    """
+    plain_env.setenv("FORCE_COLOR", "1")
 
-    plain_env.setattr(cli.typer, "style", fake_style)
     cli._echo_event(
         Event(message="rendered colour-chart-01", swatches=((10, 20, 30), (200, 100, 50)))
     )
 
-    assert styled == [(cli.SWATCH_GLYPH, (10, 20, 30)), (cli.SWATCH_GLYPH, (200, 100, 50))]
-    assert capsys.readouterr().out.endswith(" rendered colour-chart-01\n")
+    out = capsys.readouterr().out
+    assert "38;2;10;20;30" in out
+    assert "38;2;200;100;50" in out
+    assert out.index("38;2;10;20;30") < out.index("38;2;200;100;50"), "sampled order is kept"
+    assert out.endswith(" rendered colour-chart-01\n")
 
 
 def test_the_ansi_escapes_survive_to_the_terminal(plain_env, capsys) -> None:
@@ -246,3 +252,22 @@ def test_new_without_any_designs_says_where_to_put_one(tmp_path: Path, monkeypat
 
     assert result.exit_code == 1
     assert "no designs under" in result.output
+
+
+def test_cancelling_the_wizard_says_so_and_exits_non_zero(
+    workspace_root: Path, monkeypatch
+) -> None:
+    """Ctrl-C out of a picker is an ordinary way to leave a wizard, so it earns
+    a line rather than a traceback -- and rather than nothing, which is what
+    `new` used to do: its `_cancelled()` exited 1 in silence while `setup`'s,
+    a module away, printed "cancelled". One vocabulary now, caught once.
+    """
+    monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
+    monkeypatch.setattr(prompts, "choose", lambda *args, **kwargs: None)
+    (workspace_root / "designs" / "brand-new.png").write_bytes(b"")
+
+    result = runner.invoke(app, ["new", "--root", str(workspace_root)])
+
+    assert result.exit_code == 1
+    assert "cancelled" in result.output
+    assert "Traceback" not in result.output

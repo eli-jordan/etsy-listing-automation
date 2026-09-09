@@ -8,6 +8,8 @@ from typing import NoReturn
 
 import pytest
 
+from tests.support import scripted as scripted_prompts
+
 FIXTURE_WORKSPACE = Path(__file__).parent / "fixtures" / "workspace"
 
 REQUIRE_EVERY_LAYER_ENV_VAR = "ETSY_LISTINGS_REQUIRE_EVERY_LAYER"
@@ -40,6 +42,23 @@ def workspace_root(tmp_path: Path) -> Path:
     dest = tmp_path / "workspace"
     shutil.copytree(FIXTURE_WORKSPACE, dest)
     return dest
+
+
+@pytest.fixture
+def scripted(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Callable[[scripted_prompts.Answers], scripted_prompts.Scripted]:
+    """Answer an interactive command's questions by their text.
+
+    Shared by `setup`'s and `new`'s tests: both are wizards, and neither
+    should have its tests pinned to the order it happens to ask in. See
+    ``tests/support/scripted.py``.
+    """
+
+    def install(answers: scripted_prompts.Answers) -> scripted_prompts.Scripted:
+        return scripted_prompts.install(monkeypatch, answers)
+
+    return install
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

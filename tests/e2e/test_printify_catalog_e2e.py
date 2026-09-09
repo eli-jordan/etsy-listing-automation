@@ -24,9 +24,9 @@ from typing import Any
 import httpx
 import pytest
 
-from etsy_listings.catalog.http import BASE_URL, HttpCatalogClient
-from etsy_listings.catalog.models import Blueprint, PrintProvider
-from etsy_listings.catalog.resolve import CatalogResolutionError, resolve_blueprint
+from etsy_listings.clients.printify import BASE_URL, HttpCatalogClient
+from etsy_listings.clients.printify.models import Blueprint, PrintProvider
+from etsy_listings.clients.printify.resolve import CatalogResolutionError, resolve_blueprint
 
 pytestmark = pytest.mark.e2e
 
@@ -98,7 +98,7 @@ class TestTheCatalogAnswers:
 class TestWhatTheCatalogActuallyRequires:
     """What the catalog checks, measured rather than assumed.
 
-    ``catalog/http.py`` and docs/setup.md say every ``/v1/catalog/*.json`` call
+    ``clients/printify/catalog.py`` and docs/setup.md say every ``/v1/catalog/*.json`` call
     needs a personal access token with the ``catalog.read`` scope. Two of them
     plainly do not: ``blueprints`` and ``print_providers`` are served with no
     ``Authorization`` header at all. That matters for how hard ``new`` should
@@ -110,7 +110,7 @@ class TestWhatTheCatalogActuallyRequires:
     all, junk included, and tests pinned that down; Printify now 401s some of
     them and not others, differing between machines in a way that looks like a
     rollout mid-flight. Nothing here depends on the answer -- a valid token
-    works, and ``CatalogAuthError`` already turns a 401 into a named failure
+    works, and ``PrintifyAuthError`` already turns a 401 into a named failure
     (see the contract layer) -- so those assertions were dropped rather than
     re-pinned to a moving target.
 
@@ -120,8 +120,8 @@ class TestWhatTheCatalogActuallyRequires:
     """
 
     PUBLIC = [
-        "/blueprints.json",
-        "/blueprints/706/print_providers.json",
+        "/v1/catalog/blueprints.json",
+        "/v1/catalog/blueprints/706/print_providers.json",
     ]
 
     @pytest.mark.parametrize("path", PUBLIC)

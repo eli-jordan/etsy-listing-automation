@@ -27,7 +27,7 @@ import typer
 import yaml
 
 from etsy_listings import prompts
-from etsy_listings.clients.printify.http import HttpPrintifyClient, PrintifyAuthError
+from etsy_listings.clients.printify import HttpPrintifyClient, PrintifyAuthError, Transport
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, Secrets
@@ -54,13 +54,8 @@ confirmation rather than four questions, because getting four identical
 answers out of the user teaches them the wizard is not worth reading."""
 
 
-def _cancelled() -> typer.Exit:
-    typer.echo("cancelled", err=True)
-    return typer.Exit(code=1)
-
-
 def _default_client_factory(token: str) -> PrintifyClient:
-    return HttpPrintifyClient(token)
+    return HttpPrintifyClient(Transport(token))
 
 
 def _existing_token(root: Path) -> str | None:
@@ -91,10 +86,7 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
         typer.echo("and create products. Generate one at:")
         typer.echo("  https://printify.com/app/account/connections")
         typer.echo("It needs the catalog, shops and products scopes.")
-        answer = prompts.text("Printify API token:")
-        if not answer:
-            raise _cancelled()
-        token = answer
+        token = prompts.ask_text("Printify API token:")
 
     try:
         shops = factory(token).shops()
@@ -116,34 +108,21 @@ def _pick_shop(shops: list[Shop]) -> Shop:
         typer.echo(f"Printify shop: {selection.shop.title} ({selection.shop.id})")
         return selection.shop
 
-    by_label = {f"{shop.title}  ({shop.id})": shop for shop in shops}
-    answer = prompts.choose("Which Printify shop?", list(by_label))
-    if answer is None:
-        raise _cancelled()
-    return by_label[answer]
+    return prompts.pick(
+        "Which Printify shop?", shops, label=lambda shop: f"{shop.title}  ({shop.id})"
+    )
 
 
 def _ask_etsy_defaults() -> dict[str, Any]:
     summary = ", ".join(f"{key}: {value}" for key, value in POD_DEFAULTS.items())
-    use_defaults = prompts.confirm(
-        f"Use the print-on-demand defaults for Etsy? ({summary})", default=True
-    )
-    if use_defaults is None:
-        raise _cancelled()
-    if use_defaults:
+    if prompts.ask_confirm(f"Use the print-on-demand defaults for Etsy? ({summary})", default=True):
         return dict(POD_DEFAULTS)
 
-    who_made = prompts.choose("Who made the item?", WHO_MADE)
-    when_made = prompts.choose("When was it made?", WHEN_MADE)
-    is_supply = prompts.confirm("Is it a craft supply rather than a finished item?")
-    renewal = prompts.choose("Listing renewal policy?", RENEWAL)
-    if who_made is None or when_made is None or is_supply is None or renewal is None:
-        raise _cancelled()
     return {
-        "who_made": who_made,
-        "when_made": when_made,
-        "is_supply": is_supply,
-        "renewal": renewal,
+        "who_made": prompts.ask_choice("Who made the item?", WHO_MADE),
+        "when_made": prompts.ask_choice("When was it made?", WHEN_MADE),
+        "is_supply": prompts.ask_confirm("Is it a craft supply rather than a finished item?"),
+        "renewal": prompts.ask_choice("Listing renewal policy?", RENEWAL),
     }
 
 
@@ -156,9 +135,11 @@ def _ask_etsy_shop_id(current: object) -> int | None:
     """
     default = str(current) if isinstance(current, int) else ""
     while True:
-        answer = prompts.text("Etsy shop id (blank if you do not have one yet):", default=default)
-        if answer is None:
-            raise _cancelled()
+        answer = prompts.ask_text(
+            "Etsy shop id (blank if you do not have one yet):",
+            default=default,
+            allow_blank=True,
+        )
         if not answer.strip():
             return None
         if answer.strip().isdigit():
@@ -202,18 +183,14 @@ def run_setup(root: Path, *, client_factory: ClientFactory | None = None) -> Non
     existing = _existing_document(root) or {}
     existing_etsy = existing.get("etsy") or {}
 
-    currency = prompts.text(
+    currency = prompts.ask_text(
         "Shop currency (ISO code, e.g. NOK):", default=str(existing.get("currency") or "NOK")
     )
-    if not currency:
-        raise _cancelled()
-
-    provider = prompts.text(
+    provider = prompts.ask_text(
         "Preferred print provider (blank for none):",
         default=str(existing.get("preferred_print_provider") or ""),
+        allow_blank=True,
     )
-    if provider is None:
-        raise _cancelled()
 
     etsy_shop_id = _ask_etsy_shop_id(existing_etsy.get("shop_id"))
     etsy = _ask_etsy_defaults()

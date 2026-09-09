@@ -13,7 +13,7 @@ import re
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
-from etsy_listings.catalog.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.clients.printify.models import Blueprint, PrintProvider, VariantSet
 from etsy_listings.config.slug import ColourExceptions, slug_map
 from etsy_listings.errors import UserFacingError
 

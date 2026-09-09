@@ -9,18 +9,24 @@ from __future__ import annotations
 
 import os
 import sys
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import typer
 
-from etsy_listings import terminal
-from etsy_listings.catalog.cache import CachedCatalogClient
-from etsy_listings.catalog.client import CatalogClient
-from etsy_listings.catalog.http import CatalogAuthError, HttpCatalogClient
+from etsy_listings import prompts, terminal
 from etsy_listings.cli.render import format_blocked, format_plan
-from etsy_listings.clients.printify.http import HttpPrintifyClient
-from etsy_listings.clients.printify.protocol import PrintifyClient
+from etsy_listings.clients.printify import (
+    CachedCatalogClient,
+    CatalogClient,
+    HttpCatalogClient,
+    HttpPrintifyClient,
+    PrintifyAuthError,
+    PrintifyClient,
+    Transport,
+)
 from etsy_listings.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -101,37 +107,36 @@ def _open_workspace(root: str | None) -> Workspace:
         raise typer.Exit(code=1) from exc
 
 
-def _catalog(workspace: Workspace) -> CatalogClient:
-    """The catalog client, with its token resolved lazily.
+def _transport(workspace: Workspace) -> Transport:
+    """One connection to Printify, with its token resolved lazily.
 
     ``plan`` and ``apply`` build a ``RunContext`` eagerly, but no Phase 0/1
-    stage calls the catalog, and a cached read never needs a token either.
-    Resolving one at construction time would make every ``plan`` fail in a
-    workspace that has no ``.env`` -- including the fixture workspace the
+    stage calls Printify at all, and a cached catalog read never needs a token
+    either. Resolving one at construction time would make every ``plan`` fail
+    in a workspace that has no ``.env`` -- including the fixture workspace the
     getting-started guide points at.
+
+    Shared by both clients because it is one host and one token: they differ in
+    what they are allowed to *ask*, which is a matter of which protocol the
+    caller holds, not of which socket the bytes leave through.
     """
 
     def token() -> str:
         return Secrets.load(workspace.env_file()).require_printify_api_token()
 
-    return CachedCatalogClient(HttpCatalogClient(token), workspace.catalog_cache_dir())
+    return Transport(token)
 
 
-def _printify(workspace: Workspace) -> PrintifyClient:
-    """The shop-scoped client, token resolved lazily for the same reason the
-    catalog client's is: a workspace that has not opted into Phase 2 never
-    calls it, and demanding a credential to build one would make `plan` fail
-    in every workspace that only renders mockups."""
-
-    def token() -> str:
-        return Secrets.load(workspace.env_file()).require_printify_api_token()
-
-    return HttpPrintifyClient(token)
+def _clients(workspace: Workspace) -> tuple[CatalogClient, PrintifyClient]:
+    transport = _transport(workspace)
+    return (
+        CachedCatalogClient(HttpCatalogClient(transport), workspace.catalog_cache_dir()),
+        HttpPrintifyClient(transport),
+    )
 
 
 def _run_context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
-    catalog = _catalog(workspace)
-    printify = _printify(workspace)
+    catalog, printify = _clients(workspace)
     if on_event is None:
         return RunContext(workspace=workspace, catalog=catalog, printify=printify)
     return RunContext(workspace=workspace, catalog=catalog, printify=printify, on_event=on_event)
@@ -230,6 +235,24 @@ def _exit_for(report: RunReport) -> None:
     raise typer.Exit(code=1 if report.failed else 0)
 
 
+@contextmanager
+def _wizard() -> Iterator[None]:
+    """Run an interactive command, and leave quietly if the user does.
+
+    Ctrl-C out of a picker is an ordinary way to abandon a wizard, not a
+    crash, so it earns a line and a non-zero exit rather than a traceback.
+    Caught here because it is the same answer for both wizards, and because
+    every question inside them used to check for it individually -- fourteen
+    checks, and two `_cancelled()` helpers that disagreed about whether to
+    print anything.
+    """
+    try:
+        yield
+    except prompts.Cancelled as exc:
+        typer.echo("cancelled", err=True)
+        raise typer.Exit(code=1) from exc
+
+
 @app.command(epilog=EPILOG)
 def setup(
     root: str | None = typer.Option(
@@ -256,7 +279,8 @@ def setup(
     from etsy_listings.setupcmd import run_setup
 
     target = to_native_path(root) if root else Path.cwd()
-    run_setup(target)
+    with _wizard():
+        run_setup(target)
 
 
 @app.command(epilog=EPILOG)
@@ -338,8 +362,9 @@ def new(
 
     workspace = _open_workspace(root)
     try:
-        run_new(workspace, _catalog(workspace), design, category)
-    except (MissingCredentialError, CatalogAuthError) as exc:
+        with _wizard():
+            run_new(workspace, _clients(workspace)[0], design, category)
+    except (MissingCredentialError, PrintifyAuthError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
 

@@ -1,10 +1,10 @@
 """Contract layer for the shop-scoped Printify client: payload shape, auth,
 and error decoding, through real ``httpx`` with a mock transport.
 
-Distinct from ``test_catalog_http.py`` because the clients are distinct
-(``catalog/`` is read-only and shop-agnostic; ``clients/printify/`` is
-shop-scoped and writes), and the transcripts below are the ones the ``-m e2e``
-layer re-takes against the live API.
+Distinct from ``test_catalog_http.py`` because the *protocols* are distinct:
+``CatalogClient`` is read-only and shop-agnostic, ``PrintifyClient`` is
+shop-scoped and writes. They share a transport, not a surface. The transcripts
+below are the ones the ``-m e2e`` layer re-takes against the live API.
 
 Every payload here is transcribed from a real response recorded on
 2026-09-08 -- see docs/api-findings.md. A contract fixture that is not a
@@ -16,13 +16,14 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.clients.printify.http import (
-    BASE_URL,
+from etsy_listings.clients.printify import (
     HttpPrintifyClient,
     PrintifyApiError,
     PrintifyAuthError,
 )
 from etsy_listings.clients.retry import RetryPolicy
+
+from tests.support.http import always, transport
 
 SHOPS_PAYLOAD = [
     {"id": 28819281, "title": "My new store", "sales_channel": "disconnected"},
@@ -48,16 +49,7 @@ sentence naming the field, and is the only part worth showing a user."""
 
 
 def _client(handler, token: str = "test-token") -> HttpPrintifyClient:
-    """Real policy, no waiting. The 5xx cases below are about *decoding* an
-    error, but a 5xx on a GET is retryable (A21), so without a stubbed sleep
-    each of them quietly spends the policy's full backoff before asserting
-    anything -- seven seconds of nothing, in a layer that should be instant."""
-    transport = httpx.MockTransport(handler)
-    return HttpPrintifyClient(
-        token,
-        client=httpx.Client(transport=transport, base_url=BASE_URL),
-        sleep=lambda _: None,
-    )
+    return HttpPrintifyClient(transport(handler, token=token))
 
 
 def test_shops_carries_the_bearer_token_and_hits_the_documented_path() -> None:
@@ -137,11 +129,7 @@ def test_the_token_is_resolved_lazily() -> None:
         return "late-token"
 
     client = HttpPrintifyClient(
-        token,
-        client=httpx.Client(
-            transport=httpx.MockTransport(lambda _: httpx.Response(200, json=SHOPS_PAYLOAD)),
-            base_url=BASE_URL,
-        ),
+        transport(always(httpx.Response(200, json=SHOPS_PAYLOAD)), token=token)
     )
     assert calls == []
 
@@ -196,12 +184,7 @@ def test_an_empty_error_body_still_names_the_status() -> None:
 
 
 def _retrying_client(handler, policy: RetryPolicy) -> HttpPrintifyClient:
-    return HttpPrintifyClient(
-        "test-token",
-        client=httpx.Client(transport=httpx.MockTransport(handler), base_url=BASE_URL),
-        policy=policy,
-        sleep=lambda _: None,
-    )
+    return HttpPrintifyClient(transport(handler, policy=policy))
 
 
 INSTANT = RetryPolicy(attempts=3, base_delay=0.0, max_delay=0.0, jitter=0.0)

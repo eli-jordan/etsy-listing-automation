@@ -1,11 +1,9 @@
 import { useCallback, useMemo, useState } from "react";
-import { PreviewPanel, type PreviewJob } from "../components/PreviewPanel";
-import { PrintRealismPanel } from "../components/PrintRealismPanel";
+import type { PreviewJob } from "../components/PreviewPanel";
 import { QuadEditor } from "../components/QuadEditor";
-import { TestDesignPicker } from "../components/TestDesignPicker";
-import { ViewTabs, type View } from "../components/ViewTabs";
 import { usePreview } from "../hooks/usePreview";
 import type { BoundingBox, MultipleTemplate, Placement } from "../types";
+import { EditorShell } from "./EditorShell";
 
 interface Props {
   templateName: string;
@@ -50,6 +48,11 @@ function uncolouredWarning(placements: Placement[]): string | null {
  * drag -- except assigning a colour, and a colour is now a caption on the box
  * itself. A panel that duplicates the canvas is a second place to look and a
  * second place to be wrong about which box is which.
+ *
+ * `colour_coverage` has no home in wireframe 2a and is, for now, editable only
+ * by hand in template.yaml. Recorded as a debt in
+ * docs/implementation-plan.md -- it belongs in the Advanced disclosure when it
+ * comes back.
  */
 export function MultipleEditor({
   templateName,
@@ -60,9 +63,7 @@ export function MultipleEditor({
   onDesignChange,
   knownColours,
 }: Props) {
-  const [tab, setTab] = useState<View>("calibrate");
   const [selectedIndex, setSelectedIndex] = useState(0);
-  const [showOutlines, setShowOutlines] = useState(true);
 
   const previewUrl = usePreview(
     templateName,
@@ -195,77 +196,46 @@ export function MultipleEditor({
   );
 
   return (
-    <main className="app__main">
-      <div className="app__preview">
-        <div className="app__preview-bar">
-          <ViewTabs value={tab} onChange={setTab} />
-          {tab === "calibrate" && (
-            <label className="app__outline-toggle">
-              <input
-                type="checkbox"
-                checked={showOutlines}
-                onChange={(e) => setShowOutlines(e.target.checked)}
-              />
-              show all outlines
-            </label>
-          )}
-        </div>
-        {tab === "calibrate" &&
-          (previewUrl && space ? (
-            config.placements.length === 0 ? (
-              <div className="quad-editor__empty">
-                <p>No bounding boxes on this photo</p>
-                <button type="button" className="btn btn-primary" onClick={addBox}>
-                  + Add box
-                </button>
-                <p className="quad-editor__empty-hint">first box lands ready to drag</p>
-              </div>
-            ) : (
-              <QuadEditor
-                imageUrl={previewUrl}
-                space={space}
-                boxes={config.placements.map((p) => p.bounding_box)}
-                selectedIndex={clampedIndex}
-                onSelect={setSelectedIndex}
-                onChangeBox={handleBoxChange}
-                onAddBox={addBox}
-                onDeleteSelected={deleteSelected}
-                onDuplicateSelected={duplicateSelected}
-                onBringSelectedToFront={bringToFront}
-                outlines={showOutlines ? "all" : "selected"}
-                labels={config.placements.map((p) => p.colour)}
-                onLabelChange={handleColourChange}
-                labelPlaceholder="assign colour…"
-                labelSuggestions={knownColours}
-              />
-            )
-          ) : (
-            <p className="app__loading">Loading preview…</p>
-          ))}
-        {/* Mounted either way, so flicking back to Calibrate and returning
-            does not throw away renders that cost real seconds. */}
-        <PreviewPanel
-          templateName={templateName}
-          jobs={jobs}
-          design={design}
-          active={tab === "preview"}
-        />
-        {tab === "calibrate" && warning && <p className="app__warn">{warning}</p>}
-      </div>
-
-      <aside className="app__controls">
-        {/* `colour_coverage` has no home in wireframe 2a and is, for now,
-            editable only by hand in template.yaml. Recorded as a debt in
-            docs/implementation-plan.md -- it belongs in the Advanced
-            disclosure when it comes back. */}
-        <TestDesignPicker value={design} onChange={onDesignChange} />
-        <PrintRealismPanel
-          displace={config.displace}
-          shade={config.shade}
-          onDisplaceChange={(displace) => onChange({ ...config, displace })}
-          onShadeChange={(shade) => onChange({ ...config, shade })}
-        />
-      </aside>
-    </main>
+    <EditorShell
+      templateName={templateName}
+      config={config}
+      onChange={onChange}
+      design={design}
+      onDesignChange={onDesignChange}
+      space={space}
+      previewUrl={previewUrl}
+      jobs={jobs}
+      outlineLabel="show all outlines"
+      canvas={({ imageUrl, space: box_space, showOutlines }) =>
+        config.placements.length === 0 ? (
+          <div className="quad-editor__empty">
+            <p>No bounding boxes on this photo</p>
+            <button type="button" className="btn btn-primary" onClick={addBox}>
+              + Add box
+            </button>
+            <p className="quad-editor__empty-hint">first box lands ready to drag</p>
+          </div>
+        ) : (
+          <QuadEditor
+            imageUrl={imageUrl}
+            space={box_space}
+            boxes={config.placements.map((p) => p.bounding_box)}
+            selectedIndex={clampedIndex}
+            onSelect={setSelectedIndex}
+            onChangeBox={handleBoxChange}
+            onAddBox={addBox}
+            onDeleteSelected={deleteSelected}
+            onDuplicateSelected={duplicateSelected}
+            onBringSelectedToFront={bringToFront}
+            outlines={showOutlines ? "all" : "selected"}
+            labels={config.placements.map((p) => p.colour)}
+            onLabelChange={handleColourChange}
+            labelPlaceholder="assign colour…"
+            labelSuggestions={knownColours}
+          />
+        )
+      }
+      footer={warning ? <p className="app__warn">{warning}</p> : null}
+    />
   );
 }

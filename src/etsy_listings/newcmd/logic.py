@@ -7,6 +7,7 @@ the terminal it was given.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
@@ -16,8 +17,8 @@ from typing import Any, Literal
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.catalog.models import Blueprint, ShippingRates, VariantSet
-from etsy_listings.catalog.resolve import normalise
+from etsy_listings.clients.printify.models import Blueprint, ShippingRates, VariantSet
+from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.listing import GENERATE, MAX_MEDIA_ENTRIES, Listing
 from etsy_listings.config.money import Money
@@ -74,12 +75,51 @@ MARKER_WIDTH = 2
 
 
 @dataclass(frozen=True)
-class BlueprintChoice:
-    """One row of the garment picker."""
+class Choice[T]:
+    """One row of a picker: the thing itself, and the text offered for it.
 
-    blueprint: Blueprint
-    is_local: bool
+    Three of these existed -- ``BlueprintChoice``, ``DesignChoice``,
+    ``PricingPlanChoice`` -- each holding a domain object, a flag, and a
+    rendered label, and each with its own builder doing the same three steps.
+    The picker only ever reads ``label`` (to offer it) and ``value`` (to act on
+    the answer), so the per-type fields were paid for and never spent.
+    """
+
+    value: T
     label: str
+    marked: bool = False
+    """Whether this row is called out, and why is the picker's business: a
+    garment already used in this workspace, a plan whose sizes match, a design
+    that already has a listing. The *rendering* of the callout differs (a
+    marker column, a trailing note) and so does whether it sorts first, which
+    is why those stay with each picker rather than moving in here."""
+
+
+def marked_choices[T](
+    items: Iterable[T],
+    *,
+    marked: Callable[[T], bool],
+    sort_key: Callable[[T], Any],
+    label: Callable[[T], str],
+    marker: str = LOCAL_MARKER,
+) -> list[Choice[T]]:
+    """Rows with the marked ones first, each label behind an aligned marker column.
+
+    The shape both "which of these have I used before?" pickers want: mark,
+    sort marked-first then by the picker's own key, and reserve the marker
+    column on every row so the columns after it line up whether or not the row
+    carries one.
+    """
+    entries = [(item, marked(item)) for item in items]
+    entries.sort(key=lambda entry: (not entry[1], sort_key(entry[0])))
+    return [
+        Choice(
+            value=item,
+            marked=is_marked,
+            label=f"{marker if is_marked else ' ' * MARKER_WIDTH}  {label(item)}",
+        )
+        for item, is_marked in entries
+    ]
 
 
 def local_blueprint_keys(workspace: Workspace) -> set[tuple[str, str]]:
@@ -109,7 +149,7 @@ def build_blueprint_choices(
     local_keys: set[tuple[str, str]],
     *,
     marker: str = LOCAL_MARKER,
-) -> list[BlueprintChoice]:
+) -> list[Choice[Blueprint]]:
     """Blueprints as aligned ``marker  brand  model  title`` rows.
 
     Brand and model are what identify a garment to anyone who buys blanks --
@@ -121,28 +161,15 @@ def build_blueprint_choices(
     common job. Within each group, rows sort by brand then title, so the brand
     column reads as blocks rather than as noise.
     """
-    entries = [
-        (blueprint, (normalise(blueprint.brand), normalise(blueprint.model)) in local_keys)
-        for blueprint in blueprints
-    ]
-    entries.sort(key=lambda entry: (not entry[1], entry[0].brand.lower(), entry[0].title.lower()))
-
-    brand_width = max((len(b.brand) for b, _ in entries), default=0)
-    model_width = max((len(b.model) for b, _ in entries), default=0)
-
-    return [
-        BlueprintChoice(
-            blueprint=blueprint,
-            is_local=is_local,
-            label=(
-                f"{(marker if is_local else ' ' * MARKER_WIDTH)}  "
-                f"{blueprint.brand.ljust(brand_width)}  "
-                f"{blueprint.model.ljust(model_width)}  "
-                f"{blueprint.title}"
-            ),
-        )
-        for blueprint, is_local in entries
-    ]
+    brand_width = max((len(b.brand) for b in blueprints), default=0)
+    model_width = max((len(b.model) for b in blueprints), default=0)
+    return marked_choices(
+        blueprints,
+        marked=lambda b: (normalise(b.brand), normalise(b.model)) in local_keys,
+        sort_key=lambda b: (b.brand.lower(), b.title.lower()),
+        label=lambda b: f"{b.brand.ljust(brand_width)}  {b.model.ljust(model_width)}  {b.title}",
+        marker=marker,
+    )
 
 
 def sort_sizes(sizes: set[str]) -> list[str]:
@@ -217,18 +244,7 @@ def build_profile(
 # ----------------------------------------------------------------------
 
 
-@dataclass(frozen=True)
-class DesignChoice:
-    """One row of the design picker."""
-
-    name: str
-    path: Path
-    modified: float
-    has_listing: bool
-    label: str
-
-
-def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[DesignChoice]:
+def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Choice[Path]]:
     """Designs as ``date  name`` rows, newest first.
 
     The date is in the row rather than implied by the order because "newest
@@ -240,16 +256,18 @@ def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Des
 
     A design that already has a listing is marked: ``new`` refuses to
     overwrite one (:func:`write_listing`), so the row would otherwise look
-    like a choice and behave like a dead end.
+    like a choice and behave like a dead end. Marked as a trailing note rather
+    than through :func:`marked_choices` -- this callout is a warning, and
+    sorting warnings to the top would be exactly wrong.
     """
-    entries = [(path, path.stat().st_mtime) for path in paths]
-    entries.sort(key=lambda entry: (-entry[1], entry[0].stem.lower()))
+    entries = sorted(
+        ((path, path.stat().st_mtime) for path in paths),
+        key=lambda entry: (-entry[1], entry[0].stem.lower()),
+    )
     return [
-        DesignChoice(
-            name=path.stem,
-            path=path,
-            modified=modified,
-            has_listing=path.stem in listing_names,
+        Choice(
+            value=path,
+            marked=path.stem in listing_names,
             label=(
                 f"{datetime.fromtimestamp(modified):%Y-%m-%d %H:%M}  {path.stem}"
                 f"{'  (listing exists)' if path.stem in listing_names else ''}"
@@ -319,19 +337,10 @@ PORTAL_VERIFICATION_NOTE = (
 )
 
 
-@dataclass(frozen=True)
-class PricingPlanChoice:
-    """One row of the pricing-plan picker."""
-
-    path: Path
-    is_compatible: bool
-    label: str
-
-
 def load_candidate_pricing_plans(workspace: Workspace) -> list[tuple[Path, PricingPlan]]:
     """Every discovered plan that actually loads. A plan that won't parse or
     fails currency validation is skipped, not fatal -- same precedent as
-    :func:`local_blueprint_titles` skipping a broken profile."""
+    :func:`local_blueprint_keys` skipping a broken profile."""
     result: list[tuple[Path, PricingPlan]] = []
     for path in workspace.pricing_plan_files():
         try:
@@ -346,21 +355,19 @@ def build_pricing_plan_choices(
     profile_slug: str,
     *,
     marker: str = LOCAL_MARKER,
-) -> list[PricingPlanChoice]:
+) -> list[Choice[Path]]:
     """Rows for the picker: plans declaring this exact garment profile sort
     first and carry the marker -- an *exact* ``plan.profile == profile_slug``
     match, since a plan declares its garment directly (PRD 33), unlike the
     blueprint picker's marker, which infers "already used here"."""
-    entries = [(path, plan.profile == profile_slug) for path, plan in plans]
-    entries.sort(key=lambda entry: (not entry[1], entry[0].stem.lower()))
-    return [
-        PricingPlanChoice(
-            path=path,
-            is_compatible=is_compatible,
-            label=f"{(marker if is_compatible else ' ' * MARKER_WIDTH)}  {path.stem}",
-        )
-        for path, is_compatible in entries
-    ]
+    compatible = {path for path, plan in plans if plan.profile == profile_slug}
+    return marked_choices(
+        [path for path, _ in plans],
+        marked=lambda path: path in compatible,
+        sort_key=lambda path: path.stem.lower(),
+        label=lambda path: path.stem,
+        marker=marker,
+    )
 
 
 def pricing_plan_ref(plan_path: Path, *, listing_dir: Path) -> str:

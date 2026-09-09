@@ -10,38 +10,28 @@ would take, the files each reads, and the files each writes.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
-from etsy_listings import __about__
-from etsy_listings.catalog.fakes import FakeCatalogClient
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.context import Event, RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import build_plan
 from etsy_listings.engine.stages import STAGES
-from etsy_listings.workspace.workspace import Workspace
 
-LISTING = "take-a-hike"
+from tests.support.builders import FIXTURE_LISTING as LISTING
+from tests.support.builders import a_context, a_lock
+
 RENDER_DIR = Path(".cache") / "renders" / LISTING / "flat-lay-01"
 
 
 def _ctx(workspace_root: Path, events: list[Event] | None = None) -> RunContext:
-    workspace = Workspace.discover(root_override=workspace_root)
-    catalog = FakeCatalogClient([], {}, {})
-    if events is None:
-        return RunContext(workspace=workspace, catalog=catalog)
-    return RunContext(workspace=workspace, catalog=catalog, on_event=events.append)
-
-
-def _empty_lock() -> Lockfile:
-    return Lockfile.empty(tool_version=__about__.VERSION, applied_at=datetime.now(UTC).isoformat())
+    return a_context(workspace_root, on_event=None if events is None else events.append)
 
 
 def _applied(workspace_root: Path) -> Lockfile:
     ctx = _ctx(workspace_root)
-    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    return execute(ctx, planned, _empty_lock())
+    planned = build_plan(ctx, LISTING, a_lock(), STAGES)
+    return execute(ctx, planned, a_lock())
 
 
 def _render_plan(workspace_root: Path, lock: Lockfile):
@@ -105,7 +95,7 @@ def test_an_intact_cache_still_plans_as_a_no_op(workspace_root: Path) -> None:
 
 
 def test_plan_names_the_inputs_and_outputs_of_every_action(workspace_root: Path) -> None:
-    stage_plan = _render_plan(workspace_root, _empty_lock())
+    stage_plan = _render_plan(workspace_root, a_lock())
 
     assert [action.description for action in stage_plan.actions] == [
         "render flat-lay-01/black",
@@ -147,7 +137,7 @@ def test_a_multiple_kind_scene_lists_every_artwork_it_reads(workspace_root: Path
         encoding="utf-8",
     )
 
-    stage_plan = _render_plan(workspace_root, _empty_lock())
+    stage_plan = _render_plan(workspace_root, a_lock())
     chart = next(a for a in stage_plan.actions if a.description == "render colour-chart-01")
     assert chart.outputs == (".cache/renders/take-a-hike/colour-chart-01/scene.png",)
     assert "mockup-templates/colour-chart-01/scene.png" in chart.inputs
@@ -160,7 +150,7 @@ def test_every_render_event_carries_the_garment_colour(workspace_root: Path) -> 
     escape baked into the message."""
     events: list[Event] = []
     ctx = _ctx(workspace_root, events)
-    execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock())
+    execute(ctx, build_plan(ctx, LISTING, a_lock(), STAGES), a_lock())
 
     rendered = [event for event in events if event.message.startswith("rendered ")]
     assert len(rendered) == 4
@@ -185,7 +175,7 @@ def test_a_multiple_kind_scene_emits_one_swatch_per_placement(workspace_root: Pa
 
     events: list[Event] = []
     ctx = _ctx(workspace_root, events)
-    execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock())
+    execute(ctx, build_plan(ctx, LISTING, a_lock(), STAGES), a_lock())
 
     chart = next(e for e in events if e.message == "rendered colour-chart-01")
     assert len(chart.swatches) > 1

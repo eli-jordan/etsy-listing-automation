@@ -1,27 +1,72 @@
-"""In-memory :class:`PrintifyClient` for behaviour tests. No network, ever.
+"""In-memory clients for the behaviour suite. No network, ever (A4).
 
-It models the API's *awkward* behaviour, not a tidy version of it, because the
-awkward parts are what the stage exists to handle: a created product comes
-back carrying the whole blueprint matrix with everything but the requested
-variants disabled, and an update merges variants by id rather than replacing
-them. A fake that behaved sensibly would let a stage pass its tests and fail
-against Printify (A4 -- reach for a fake to test behaviour, a cassette to test
-payload shape).
+Both fakes in one module, beside the two protocols they satisfy, because a
+behaviour test that exercises the product stage needs both at once -- the
+catalog to resolve a garment, the shop to create the product it resolves to.
+
+:class:`FakePrintifyClient` models the API's *awkward* behaviour, not a tidy
+version of it, because the awkward parts are what the stage exists to handle:
+a created product comes back carrying the whole blueprint matrix with
+everything but the requested variants disabled, and an update merges variants
+by id rather than replacing them. A fake that behaved sensibly would let a
+stage pass its tests and fail against Printify (A4 -- reach for a fake to test
+behaviour, a cassette to test payload shape).
 """
 
 from __future__ import annotations
 
 import hashlib
 
-from etsy_listings.clients.printify.http import PrintifyAuthError
 from etsy_listings.clients.printify.models import (
+    Blueprint,
+    PrintProvider,
     Product,
     ProductSpec,
     ProductVariant,
+    ShippingRates,
     Shop,
     Upload,
+    VariantSet,
 )
-from etsy_listings.clients.printify.protocol import PrintifyClient
+from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
+from etsy_listings.clients.printify.transport import PrintifyAuthError
+
+
+class FakeCatalogClient(CatalogClient):
+    def __init__(
+        self,
+        blueprints: list[Blueprint],
+        providers_by_blueprint: dict[int, list[PrintProvider]],
+        variants_by_key: dict[tuple[int, int], VariantSet],
+        shipping_by_key: dict[tuple[int, int], ShippingRates] | None = None,
+    ) -> None:
+        self._blueprints = blueprints
+        self._providers_by_blueprint = providers_by_blueprint
+        self._variants_by_key = variants_by_key
+        self._shipping_by_key = shipping_by_key or {}
+
+    def blueprints(self) -> list[Blueprint]:
+        return list(self._blueprints)
+
+    def print_providers(self, blueprint_id: int) -> list[PrintProvider]:
+        return list(self._providers_by_blueprint.get(blueprint_id, []))
+
+    def variants(self, blueprint_id: int, provider_id: int) -> VariantSet:
+        key = (blueprint_id, provider_id)
+        if key not in self._variants_by_key:
+            raise KeyError(
+                f"no fixture variants for blueprint={blueprint_id} provider={provider_id}"
+            )
+        return self._variants_by_key[key]
+
+    def shipping(self, blueprint_id: int, provider_id: int) -> ShippingRates:
+        key = (blueprint_id, provider_id)
+        if key not in self._shipping_by_key:
+            raise KeyError(
+                f"no fixture shipping for blueprint={blueprint_id} provider={provider_id}"
+            )
+        return self._shipping_by_key[key]
+
 
 BLUEPRINT_MATRIX_PADDING = (900001, 900002, 900003)
 """Variant ids no test asks for, present on every product this fake creates.

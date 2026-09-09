@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.catalog.models import (
+from etsy_listings.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -23,6 +23,7 @@ from etsy_listings.catalog.models import (
     VariantOptions,
     VariantSet,
 )
+from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import MAX_MEDIA_ENTRIES
 from etsy_listings.config.money import Money
@@ -30,6 +31,7 @@ from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.slug import ColourExceptions, SlugCollisionError
 from etsy_listings.newcmd.fx_rate import FxRate
 from etsy_listings.newcmd.logic import (
+    build_blueprint_choices,
     build_design_choices,
     build_listing_stub,
     build_media_entries,
@@ -39,6 +41,7 @@ from etsy_listings.newcmd.logic import (
     filter_blueprints_by_category,
     load_candidate_pricing_plans,
     load_template_kind,
+    local_blueprint_keys,
     pricing_plan_ref,
     profile_slug_for,
     resolve_colour_slugs,
@@ -371,8 +374,8 @@ def test_build_pricing_plan_choices_marks_the_exact_profile_match(tmp_path: Path
 
     choices = build_pricing_plan_choices(plans, "comfort-colors-1717")
 
-    assert [c.is_compatible for c in choices] == [True, False]
-    assert choices[0].path.stem == "a-matching"
+    assert [c.marked for c in choices] == [True, False]
+    assert choices[0].value.stem == "a-matching"
     assert choices[0].label.strip().endswith("a-matching")
     assert choices[1].label.startswith("  ")  # no marker for the non-matching row
 
@@ -546,7 +549,7 @@ def test_design_choices_put_the_newest_design_first(workspace_root: Path) -> Non
 
     # take-a-hike is the fixture's own design, checked out just now, so it
     # sorts above every backdated one.
-    assert [c.name for c in choices][-3:] == ["newest", "middle", "oldest"]
+    assert [c.value.stem for c in choices][-3:] == ["newest", "middle", "oldest"]
 
 
 def test_design_choices_break_ties_on_name(workspace_root: Path) -> None:
@@ -557,7 +560,11 @@ def test_design_choices_break_ties_on_name(workspace_root: Path) -> None:
 
     choices = build_design_choices(workspace.design_files(), set())
 
-    assert [c.name for c in choices if c.name != "take-a-hike"] == ["alpha", "beta", "gamma"]
+    assert [c.value.stem for c in choices if c.value.stem != "take-a-hike"] == [
+        "alpha",
+        "beta",
+        "gamma",
+    ]
 
 
 def test_design_rows_carry_the_date_and_mark_designs_that_already_have_a_listing(
@@ -566,11 +573,13 @@ def test_design_rows_carry_the_date_and_mark_designs_that_already_have_a_listing
     _design(workspace_root, "fresh", mtime=datetime(2026, 3, 1, 9, 30).timestamp())
     workspace = Workspace.discover(root_override=workspace_root)
 
-    rows = {c.name: c for c in build_design_choices(workspace.design_files(), {"take-a-hike"})}
+    rows = {
+        c.value.stem: c for c in build_design_choices(workspace.design_files(), {"take-a-hike"})
+    }
 
     assert rows["fresh"].label == "2026-03-01 09:30  fresh"
-    assert not rows["fresh"].has_listing
-    assert rows["take-a-hike"].has_listing
+    assert not rows["fresh"].marked
+    assert rows["take-a-hike"].marked
     assert rows["take-a-hike"].label.endswith("  take-a-hike  (listing exists)")
 
 
@@ -591,3 +600,121 @@ def test_design_files_is_empty_without_a_designs_directory(tmp_path: Path) -> No
         encoding="utf-8",
     )
     assert Workspace.discover(root_override=tmp_path).design_files() == []
+
+
+# --- the garment rows, and which count as "already used here" ----------------
+#
+# Moved here from the prompts file, where they sat because the marker glyph is
+# printed by a picker. They are about `newcmd.logic`, which is what this file
+# tests; the glyph is `terminal`'s, tested in tests/unit/test_terminal.py.
+
+COMFORT_TEE = Blueprint(
+    id=6, title="Unisex Garment-Dyed Heavy Weight Tee", brand="Comfort Colors", model="1717"
+)
+GILDAN_TEE = Blueprint(id=12, title="Unisex Heavy Cotton Tee", brand="Gildan", model="5000")
+GILDAN_HOODIE = Blueprint(id=99, title="Unisex Pullover Hoodie", brand="Gildan", model="18500")
+GILDAN_LONG = Blueprint(id=13, title="Unisex Long Sleeve Tee", brand="Gildan", model="2400")
+ALL = [COMFORT_TEE, GILDAN_HOODIE, GILDAN_TEE, GILDAN_LONG]
+
+
+def _key(blueprint: Blueprint) -> tuple[str, str]:
+    """A blueprint as `local_blueprint_keys` reports it: normalised brand+model."""
+    return (normalise(blueprint.brand), normalise(blueprint.model))
+
+
+def test_locally_used_garments_come_first_and_carry_the_marker() -> None:
+    choices = build_blueprint_choices(ALL, {_key(GILDAN_HOODIE)}, marker="* ")
+
+    assert choices[0].value == GILDAN_HOODIE
+    assert choices[0].marked is True
+    assert choices[0].label.startswith("* ")
+    assert all(not choice.marked for choice in choices[1:])
+
+
+def test_rows_carry_brand_model_and_title_as_aligned_columns() -> None:
+    """Brand and model, not an inferred garment type: "Gildan 18500" is what
+    identifies a blank, and Printify supplies it rather than us guessing."""
+    choices = build_blueprint_choices(ALL, set(), marker="* ")
+    labels = [choice.label for choice in choices]
+
+    for choice in choices:
+        assert choice.value.brand in choice.label
+        assert choice.value.model in choice.label
+        assert choice.value.title in choice.label
+
+    # Every row puts the title at the same column, which is what makes the
+    # list scannable rather than ragged.
+    title_columns = {label.index(c.value.title) for label, c in zip(labels, choices, strict=True)}
+    assert len(title_columns) == 1
+
+
+def test_the_model_column_sits_between_the_brand_and_the_title() -> None:
+    label = build_blueprint_choices([GILDAN_HOODIE], set(), marker="* ")[0].label
+    assert label.index("Gildan") < label.index("18500") < label.index("Unisex Pullover Hoodie")
+
+
+def test_rows_without_a_local_profile_still_reserve_the_marker_column() -> None:
+    choices = build_blueprint_choices(ALL, {_key(GILDAN_HOODIE)}, marker="* ")
+    marked, unmarked = choices[0], choices[1]
+    assert marked.label.index(marked.value.brand) == unmarked.label.index(unmarked.value.brand)
+
+
+def test_within_a_group_rows_sort_by_brand_then_title() -> None:
+    choices = build_blueprint_choices(ALL, set(), marker="* ")
+    assert [(c.value.brand, c.value.title) for c in choices] == [
+        ("Comfort Colors", "Unisex Garment-Dyed Heavy Weight Tee"),
+        ("Gildan", "Unisex Heavy Cotton Tee"),
+        ("Gildan", "Unisex Long Sleeve Tee"),
+        ("Gildan", "Unisex Pullover Hoodie"),
+    ]
+
+
+def test_no_blueprints_produces_no_rows() -> None:
+    assert build_blueprint_choices([], set()) == []
+
+
+# --- which garments count as "already used here" -----------------------------
+
+
+def test_local_blueprint_keys_reads_the_workspace_profiles(workspace_root: Path) -> None:
+    """The fixture workspace holds one profile, `comfort-colors-1717`, whose
+    `blueprint:` says `brand: Comfort Colors` / `model: "1717"`.
+
+    Written out as a literal. Deriving the expected set the way the code does
+    -- `normalise(profile.blueprint.brand)` over `profile_names()` -- passes
+    for *any* behaviour `normalise` might have, including none: both sides move
+    together, so the assertion can never disagree with the implementation. The
+    casefolding it is really claiming is only visible when one side is fixed.
+    """
+    workspace = Workspace.discover(root_override=workspace_root)
+
+    assert local_blueprint_keys(workspace) == {("comfort colors", "1717")}
+
+
+def test_a_local_key_ignores_case_and_the_trademark_sign(workspace_root: Path) -> None:
+    """The catalog says "Comfort Colors®"; a hand-written profile says
+    "Comfort Colors". The marker has to survive that, or the garment you used
+    yesterday stops sorting to the top for a reason nobody can see."""
+    workspace = Workspace.discover(root_override=workspace_root)
+    catalog_entry = Blueprint(
+        id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
+    )
+    choices = build_blueprint_choices([catalog_entry], local_blueprint_keys(workspace))
+    assert choices[0].marked is True
+
+
+def test_a_broken_profile_costs_a_marker_not_the_whole_picker(workspace_root: Path) -> None:
+    (workspace_root / "profiles" / "broken.yaml").write_text("not: a profile\n", encoding="utf-8")
+    workspace = Workspace.discover(root_override=workspace_root)
+    assert local_blueprint_keys(workspace)  # the valid ones still resolve
+
+
+def test_a_workspace_with_no_profiles_directory_has_no_local_keys(tmp_path: Path) -> None:
+    (tmp_path / "shop.yaml").write_text(
+        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
+        "  is_supply: false\ncurrency: NOK\n",
+        encoding="utf-8",
+    )
+    workspace = Workspace.discover(root_override=tmp_path)
+    assert workspace.profile_names() == []
+    assert local_blueprint_keys(workspace) == set()

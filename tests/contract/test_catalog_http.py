@@ -4,7 +4,7 @@ in for the network (A4's "cassette" job -- a fake would tell us nothing about
 the wire format or the headers that actually go out).
 
 The reason this file exists: Printify's catalog endpoints are *not*
-unauthenticated, contrary to what ``catalog/http.py`` used to claim. Every
+unauthenticated, contrary to what the catalog client used to claim. Every
 ``/v1/catalog/*.json`` call needs a personal access token with the
 ``catalog.read`` scope, so a token-less client gets a bare 401 and ``new``
 falls over before it can prompt for anything.
@@ -17,8 +17,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from etsy_listings.catalog.http import BASE_URL, CatalogAuthError, HttpCatalogClient
+from etsy_listings.clients.printify import (
+    HttpCatalogClient,
+    PrintifyApiError,
+    PrintifyAuthError,
+)
 from etsy_listings.config.secrets import MissingCredentialError, Secrets
+
+from tests.support.http import transport
 
 BLUEPRINTS_PAYLOAD = [
     {"id": 6, "title": "Comfort Colors 1717", "brand": "Comfort Colors", "model": "1717"},
@@ -59,8 +65,7 @@ VARIANTS_PAYLOAD = {
 
 
 def _client(handler, token: str = "test-token") -> HttpCatalogClient:
-    transport = httpx.MockTransport(handler)
-    return HttpCatalogClient(token, client=httpx.Client(transport=transport, base_url=BASE_URL))
+    return HttpCatalogClient(transport(handler, token=token))
 
 
 def test_every_catalog_request_carries_the_bearer_token() -> None:
@@ -148,7 +153,7 @@ def test_rejected_credentials_become_an_actionable_error(status: int) -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(status, json={"error": "Unauthenticated."})
 
-    with pytest.raises(CatalogAuthError) as exc_info:
+    with pytest.raises(PrintifyAuthError) as exc_info:
         _client(handler).blueprints()
 
     message = str(exc_info.value)
@@ -157,11 +162,40 @@ def test_rejected_credentials_become_an_actionable_error(status: int) -> None:
 
 
 def test_other_http_errors_are_not_swallowed_as_auth_failures() -> None:
+    """A 500 is decoded, not auth-flavoured -- and not a bare
+    ``HTTPStatusError`` either, which is what a catalog read used to raise.
+
+    The reader called ``raise_for_status()`` while the write side ran the same
+    failure through ``decode_error``, so identical refusals from one host
+    reached the user in two shapes depending on which half asked. Sharing the
+    transport is what makes there be one.
+    """
+
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="boom")
 
-    with pytest.raises(httpx.HTTPStatusError):
+    with pytest.raises(PrintifyApiError) as exc_info:
         _client(handler).blueprints()
+
+    assert "500" in str(exc_info.value)
+    assert "boom" in str(exc_info.value)
+
+
+def test_a_rate_limited_catalog_read_is_retried() -> None:
+    """The behaviour this reader did not have. A 429 on ``blueprints.json``
+    failed a ``new`` run outright, while the identical 429 on a product write
+    rode out its backoff window -- two implementations of one concern, drifted
+    (A21)."""
+    responses = iter(
+        [
+            httpx.Response(429, headers={"Retry-After": "0"}),
+            httpx.Response(200, json=BLUEPRINTS_PAYLOAD),
+        ]
+    )
+
+    blueprints = _client(lambda _: next(responses)).blueprints()
+
+    assert [b.id for b in blueprints] == [6]
 
 
 def test_token_is_resolved_lazily_so_a_cache_hit_never_needs_one() -> None:
@@ -177,8 +211,7 @@ def test_token_is_resolved_lazily_so_a_cache_hit_never_needs_one() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, json=BLUEPRINTS_PAYLOAD)
 
-    transport = httpx.MockTransport(handler)
-    client = HttpCatalogClient(token, client=httpx.Client(transport=transport, base_url=BASE_URL))
+    client = HttpCatalogClient(transport(handler, token=token))
     assert calls == []
     client.blueprints()
     assert calls == [1]

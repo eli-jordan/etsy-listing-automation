@@ -1,14 +1,20 @@
 """The checks `plan` runs before any remote write, and refuses on.
 
-All three exist for the same reason: **nothing downstream catches the
-mistake.** Printify accepted a 120x140 PNG onto a 4200x4800 print area without
-a warning; it answers ``200`` to a blueprint change and silently ignores it;
+Both exist for the same reason: **nothing downstream catches the mistake.**
+Printify accepted a 120x140 PNG onto a 4200x4800 print area without a warning,
 and it requires a title, so an unresolved ``<generate>`` would be sent as the
 literal string and published as one.
 
-They live here rather than inside ``printify_product`` because `plan` has to
-be able to run them before it builds a desired document -- a refusal is more
-useful than a well-formed payload nobody wants sent.
+They live here rather than inside a stage because they are checks about a
+*listing* -- its copy, its artwork -- that any stage shipping either will want,
+and because `plan` has to be able to run them before it builds a desired
+document: a refusal is more useful than a well-formed payload nobody wants
+sent.
+
+``check_garment_unchanged`` used to be here and is not, for the same rule read
+the other way: it is entirely about the product stage's own applied document,
+which is now a type rather than a dict, and a shared module has no business
+knowing that type. It lives beside the document it reads.
 
 **Each returns a** :class:`~etsy_listings.engine.stage.Blocked` **rather than
 raising one.** A refusal is something `plan` has to report, and raising made
@@ -23,7 +29,6 @@ stage, which is the half that has to stay hard.
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Any
 
 from PIL import Image, UnidentifiedImageError
 
@@ -83,41 +88,6 @@ def check_design_resolution(design: Path, profile: Profile) -> Blocked | None:
             f"for you, because a blurry print is only ever discovered by a customer."
         )
     return None
-
-
-def check_garment_unchanged(
-    applied: dict[str, Any] | None, *, blueprint_id: int, print_provider_id: int
-) -> Blocked | None:
-    """Refuse a garment or printer change on a listing that already has a product.
-
-    A deliberate refusal, not a missing feature (PRD 37). Printify ignores both
-    fields on an update -- ``200``, no change -- so the only automated route is
-    delete-and-recreate, which takes the Etsy listing behind the product with
-    it: reviews, favourites, search history, to save retyping a short YAML
-    file. A listing is cheap; the listing's history is not.
-    """
-    if not applied:
-        return None
-
-    changes: list[str] = []
-    was_blueprint = applied.get("blueprint_id")
-    was_provider = applied.get("print_provider_id")
-    if was_blueprint is not None and was_blueprint != blueprint_id:
-        changes.append(f"blueprint {was_blueprint} -> {blueprint_id}")
-    if was_provider is not None and was_provider != print_provider_id:
-        changes.append(f"print provider {was_provider} -> {print_provider_id}")
-    if not changes:
-        return None
-
-    return Blocked(
-        f"this listing's Printify product was created with a different garment: "
-        f"{', '.join(changes)}.\n"
-        f"Printify cannot change either on an existing product -- it accepts the "
-        f"request, answers 200, and changes nothing.\n"
-        f"Start a new listing for the new garment, or make the change by hand in "
-        f"Printify and Etsy. Recreating the product here would discard the Etsy "
-        f"listing's reviews and favourites."
-    )
 
 
 def check_copy_is_concrete(*, title: str, description: str) -> Blocked | None:

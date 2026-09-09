@@ -4,46 +4,32 @@ here -- the render stage is local-only, so there's no remote to fake."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
-from etsy_listings import __about__
-from etsy_listings.catalog.fakes import FakeCatalogClient
 from etsy_listings.engine.apply import execute
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import build_plan
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.placement import ArtworkResolutionError
 from etsy_listings.engine.stages.render import TemplateNotFoundError
-from etsy_listings.workspace.workspace import Workspace
 
-LISTING = "take-a-hike"
-
-
-def _ctx(workspace_root: Path) -> RunContext:
-    workspace = Workspace.discover(root_override=workspace_root)
-    return RunContext(workspace=workspace, catalog=FakeCatalogClient([], {}, {}))
-
-
-def _empty_lock() -> Lockfile:
-    return Lockfile.empty(tool_version=__about__.VERSION, applied_at=datetime.now(UTC).isoformat())
+from tests.support.builders import FIXTURE_LISTING as LISTING
+from tests.support.builders import a_context, a_lock
 
 
 def test_first_plan_says_render_needs_to_run(workspace_root: Path) -> None:
-    ctx = _ctx(workspace_root)
-    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
+    ctx = a_context(workspace_root)
+    planned = build_plan(ctx, LISTING, a_lock(), STAGES)
     render_plan = next(sp for sp in planned.plan.stage_plans if sp.stage == "render")
     assert render_plan.will_run is True
     assert render_plan.reason == "no previous render"
 
 
 def test_apply_renders_a_file_per_colour(workspace_root: Path) -> None:
-    ctx = _ctx(workspace_root)
-    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock = execute(ctx, planned, _empty_lock())
+    ctx = a_context(workspace_root)
+    planned = build_plan(ctx, LISTING, a_lock(), STAGES)
+    lock = execute(ctx, planned, a_lock())
 
     renders_dir = workspace_root / ".cache" / "renders" / LISTING / "flat-lay-01"
     for colour in ("black", "blue-jean", "ivory", "moss"):
@@ -63,9 +49,9 @@ def test_apply_only_renders_scenes_referenced_by_media(workspace_root: Path) -> 
         text.replace("  - { template: flat-lay-01, colour: moss }\n", ""), encoding="utf-8"
     )
 
-    ctx = _ctx(workspace_root)
-    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock = execute(ctx, planned, _empty_lock())
+    ctx = a_context(workspace_root)
+    planned = build_plan(ctx, LISTING, a_lock(), STAGES)
+    lock = execute(ctx, planned, a_lock())
 
     renders_dir = workspace_root / ".cache" / "renders" / LISTING / "flat-lay-01"
     for colour in ("black", "blue-jean", "ivory"):
@@ -75,9 +61,9 @@ def test_apply_only_renders_scenes_referenced_by_media(workspace_root: Path) -> 
 
 
 def test_second_plan_after_apply_is_a_no_op(workspace_root: Path) -> None:
-    ctx = _ctx(workspace_root)
-    first_planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock = execute(ctx, first_planned, _empty_lock())
+    ctx = a_context(workspace_root)
+    first_planned = build_plan(ctx, LISTING, a_lock(), STAGES)
+    lock = execute(ctx, first_planned, a_lock())
 
     second_planned = build_plan(ctx, LISTING, lock, STAGES)
     render_plan = next(sp for sp in second_planned.plan.stage_plans if sp.stage == "render")
@@ -87,9 +73,9 @@ def test_second_plan_after_apply_is_a_no_op(workspace_root: Path) -> None:
 def test_apply_twice_produces_byte_identical_applied_subtree(workspace_root: Path) -> None:
     """The PRD's idempotency check: apply twice in a row, the second is a no-op
     -- here specifically, the lockfile's hashed `applied` subtree is unchanged."""
-    ctx = _ctx(workspace_root)
-    planned_a = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock_a = execute(ctx, planned_a, _empty_lock())
+    ctx = a_context(workspace_root)
+    planned_a = build_plan(ctx, LISTING, a_lock(), STAGES)
+    lock_a = execute(ctx, planned_a, a_lock())
 
     planned_b = build_plan(ctx, LISTING, lock_a, STAGES)
     lock_b = execute(ctx, planned_b, lock_a)
@@ -112,9 +98,9 @@ def test_media_referencing_a_template_with_no_directory_names_it(workspace_root:
         encoding="utf-8",
     )
 
-    ctx = _ctx(workspace_root)
+    ctx = a_context(workspace_root)
     with pytest.raises(TemplateNotFoundError, match="does-not-exist"):
-        build_plan(ctx, LISTING, _empty_lock(), STAGES)
+        build_plan(ctx, LISTING, a_lock(), STAGES)
 
 
 def test_apply_renders_a_multiple_kind_scene_as_one_composite(workspace_root: Path) -> None:
@@ -133,9 +119,9 @@ def test_apply_renders_a_multiple_kind_scene_as_one_composite(workspace_root: Pa
         encoding="utf-8",
     )
 
-    ctx = _ctx(workspace_root)
-    planned = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock = execute(ctx, planned, _empty_lock())
+    ctx = a_context(workspace_root)
+    planned = build_plan(ctx, LISTING, a_lock(), STAGES)
+    lock = execute(ctx, planned, a_lock())
 
     chart_file = workspace_root / ".cache" / "renders" / LISTING / "colour-chart-01" / "scene.png"
     assert chart_file.is_file()
@@ -143,9 +129,9 @@ def test_apply_renders_a_multiple_kind_scene_as_one_composite(workspace_root: Pa
 
 
 def test_changing_the_design_triggers_a_rerender(workspace_root: Path) -> None:
-    ctx = _ctx(workspace_root)
-    planned_a = build_plan(ctx, LISTING, _empty_lock(), STAGES)
-    lock_a = execute(ctx, planned_a, _empty_lock())
+    ctx = a_context(workspace_root)
+    planned_a = build_plan(ctx, LISTING, a_lock(), STAGES)
+    lock_a = execute(ctx, planned_a, a_lock())
 
     design_path = workspace_root / "designs" / "take-a-hike.png"
     design_path.write_bytes(
@@ -173,8 +159,8 @@ def test_replacing_any_colours_photo_triggers_a_rerender(workspace_root: Path, c
     reported "No changes." and left the stale render sitting in the cache.
     Photos are now hashed per scene (`base_hash`), so both cases re-run.
     """
-    ctx = _ctx(workspace_root)
-    lock = execute(ctx, build_plan(ctx, LISTING, _empty_lock(), STAGES), _empty_lock())
+    ctx = a_context(workspace_root)
+    lock = execute(ctx, build_plan(ctx, LISTING, a_lock(), STAGES), a_lock())
 
     photo = workspace_root / "mockup-templates" / "flat-lay-01" / f"{colour}.png"
     photo.write_bytes(photo.read_bytes() + b"\x00")

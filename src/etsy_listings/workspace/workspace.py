@@ -80,6 +80,12 @@ def _looks_like_windows_absolute(ref: str) -> bool:
     return p.drive != "" or ref.startswith("\\\\") or ref.startswith("//")
 
 
+_SCENE_STEM = "scene"
+"""The fixed filename a ``multiple``/``single``-kind template's one photo
+takes. Named once because two accessors turn on it: the scene image itself,
+and :meth:`Workspace.template_photos`, which is everything *but* it."""
+
+
 @dataclass(frozen=True)
 class ScenePhoto:
     """A scene's blank mockup photo, and the name its derived maps cache under
@@ -255,6 +261,54 @@ class Workspace:
     def template_dir(self, template: str) -> Path:
         return self.templates_dir() / _segment(template)
 
+    def has_template(self, template: str) -> bool:
+        """Is there a directory for this template at all?
+
+        Distinct from :meth:`template_names`'s filter, which asks whether one
+        has been *calibrated*. The calibrator needs the weaker question: a
+        folder of photos with no ``template.yaml`` is exactly what it exists
+        to turn into a template.
+        """
+        return self.template_dir(template).is_dir()
+
+    def template_photos(self, template: str) -> list[Path]:
+        """Every mockup photo in the template's directory except the scene,
+        sorted.
+
+        For a ``colour-matrix`` set these are the colours; for the other two
+        kinds it is what is there *before* calibration renames the single
+        photo to ``scene.png``. Either way the filenames are the template's
+        content, so reading them is a layout question and belongs here -- the
+        calibrator used to glob for them itself, which is the one place
+        anything but this module knew what a template directory looks like.
+        """
+        directory = self.template_dir(template)
+        if not directory.is_dir():
+            return []
+        return sorted(p for p in directory.glob("*.png") if p.stem != _SCENE_STEM)
+
+    def template_colours(self, template: str) -> list[str]:
+        """The colours a ``colour-matrix`` set offers, read from its filenames.
+
+        PRD 7a: the mockup filename *is* the slugified colour name, which is
+        why this is a directory listing and not a lookup table.
+        """
+        return [photo.stem for photo in self.template_photos(template)]
+
+    def template_preview_photo(self, template: str) -> Path | None:
+        """The one photo that stands for the whole template, or ``None``.
+
+        Which one hardly matters: a colour-matrix set's colours are the same
+        garment at the same size, and the other two kinds have exactly one
+        photo. So this takes ``scene.png`` when there is one and the first
+        colour otherwise -- **without reading the config**, which is what lets
+        it answer for a directory that has not been given a kind yet.
+        """
+        scene = self.template_scene_image(template)
+        if scene.is_file():
+            return scene
+        return next(iter(self.template_photos(template)), None)
+
     def template_config_file(self, template: str) -> Path:
         return self.template_dir(template) / layout.TEMPLATE_FILE
 
@@ -269,7 +323,7 @@ class Workspace:
     def template_scene_image(self, template: str) -> Path:
         """``multiple``/``single``-kind templates: exactly one photo, fixed
         filename -- there's no per-colour name to derive it from."""
-        return self.template_dir(template) / "scene.png"
+        return self.template_dir(template) / f"{_SCENE_STEM}.png"
 
     def scene_photo(self, template: str, colour: str | None) -> ScenePhoto:
         """Which photo a scene composites over, and what its derived maps are
@@ -294,6 +348,15 @@ class Workspace:
 
     def test_design_file(self, name: str) -> Path:
         return self.test_designs_dir() / f"{_segment(name)}.png"
+
+    def test_design_names(self) -> list[str]:
+        """Every uploaded calibration target, by the id the library offers it
+        under -- which is its filename stem, the same way
+        :meth:`test_design_file` resolves one back."""
+        directory = self.test_designs_dir()
+        if not directory.is_dir():
+            return []
+        return sorted(p.stem for p in directory.glob("*.png") if p.is_file())
 
     def render_file(self, listing: str, template: str, colour: str | None = None) -> Path:
         """Namespaced by template: a listing can reference several templates

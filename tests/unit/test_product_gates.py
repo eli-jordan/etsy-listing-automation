@@ -1,9 +1,13 @@
-"""The three things `plan` refuses before any remote write.
+"""The listing-level things `plan` refuses before any remote write.
 
 Each exists because nothing downstream would catch the mistake. Printify
-accepted a 120x140 PNG onto a 4200x4800 print area without a warning; it
-answers 200 to a blueprint change and silently ignores it; and it requires a
-title, so a `<generate>` sentinel would be published as the literal string.
+accepted a 120x140 PNG onto a 4200x4800 print area without a warning, and it
+requires a title, so a `<generate>` sentinel would be published as the literal
+string.
+
+The garment-change refusal used to live here too. It reads the product stage's
+own applied document, so it moved beside it -- see
+tests/unit/test_product_document.py.
 
 A gate *returns* its refusal rather than raising it. That is what lets `plan`
 report the blocked stage alongside everything else the run would do, instead
@@ -23,7 +27,6 @@ from etsy_listings.engine.stage import Blocked
 from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
-    check_garment_unchanged,
 )
 
 PROFILE = Profile(
@@ -100,44 +103,6 @@ def test_a_file_that_is_not_an_image_is_refused(tmp_path: Path) -> None:
     path.write_text("not a png", encoding="utf-8")
 
     assert "not readable as an image" in _refusal(check_design_resolution(path, PROFILE))
-
-
-# ---------------------------------------------------- garment change (PRD 37)
-
-
-APPLIED = {"blueprint_id": 706, "print_provider_id": 29}
-
-
-def test_an_unchanged_garment_passes() -> None:
-    assert check_garment_unchanged(APPLIED, blueprint_id=706, print_provider_id=29) is None
-
-
-def test_no_previous_apply_passes() -> None:
-    """Nothing to have changed from. The first `apply` creates the product."""
-    assert check_garment_unchanged(None, blueprint_id=706, print_provider_id=29) is None
-
-
-def test_a_changed_blueprint_is_refused() -> None:
-    """Printify answers 200 to a blueprint change and does nothing -- the
-    quietest failure in that API. The only automated alternative is
-    delete-and-recreate, which discards the Etsy listing's reviews and
-    favourites to save retyping a short file."""
-    message = _refusal(check_garment_unchanged(APPLIED, blueprint_id=6, print_provider_id=29))
-
-    assert "706" in message and "6" in message
-    assert "new listing" in message
-
-
-def test_a_changed_print_provider_is_refused() -> None:
-    message = _refusal(check_garment_unchanged(APPLIED, blueprint_id=706, print_provider_id=99))
-
-    assert "29" in message and "99" in message
-
-
-def test_both_changing_at_once_names_both() -> None:
-    message = _refusal(check_garment_unchanged(APPLIED, blueprint_id=6, print_provider_id=99))
-
-    assert "blueprint" in message and "print provider" in message
 
 
 # ------------------------------------------------------ concrete copy (PRD 44)

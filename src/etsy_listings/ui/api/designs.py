@@ -45,13 +45,6 @@ def _workspace(request: Request) -> Workspace:
     return workspace
 
 
-def uploaded_design_ids(workspace: Workspace) -> list[str]:
-    directory = workspace.test_designs_dir()
-    if not directory.is_dir():
-        return []
-    return sorted(p.stem for p in directory.glob("*.png"))
-
-
 def resolve_design(workspace: Workspace, design: str) -> Path:
     """Turn an id from the library into a file on disk.
 
@@ -77,7 +70,7 @@ def list_designs(request: Request) -> list[DesignSummary]:
     ]
     uploads = [
         DesignSummary(id=name, label=name, source="upload")
-        for name in uploaded_design_ids(workspace)
+        for name in workspace.test_design_names()
     ]
     return bundled + uploads
 

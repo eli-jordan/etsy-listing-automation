@@ -18,11 +18,12 @@ tool uses, instead of a second, bespoke check living in the web layer.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from io import BytesIO
 from pathlib import Path
-from typing import Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from PIL import Image
 
@@ -71,10 +72,28 @@ def _workspace(request: Request) -> Workspace:
     return workspace
 
 
-def _colours_from_scene_files(template_dir: Path) -> list[str]:
-    if not template_dir.is_dir():
-        return []
-    return sorted(p.stem for p in template_dir.glob("*.png") if p.stem != "scene")
+@dataclass(frozen=True)
+class Target:
+    """A template that exists, and the workspace it lives in.
+
+    A dependency rather than a helper, because "does this template exist?" was
+    the first line of four endpoints and the answer is a precondition, not a
+    step: an endpoint that has one of these cannot be looking at a directory
+    that is not there.
+    """
+
+    workspace: Workspace
+    name: str
+
+
+def target(request: Request, name: str) -> Target:
+    workspace = _workspace(request)
+    if not workspace.has_template(name):
+        raise HTTPException(status_code=404, detail=f"no template {name!r}")
+    return Target(workspace=workspace, name=name)
+
+
+Existing = Annotated[Target, Depends(target)]
 
 
 def _default_box(size: tuple[int, int]) -> BoundingBox:
@@ -87,25 +106,7 @@ def _default_box(size: tuple[int, int]) -> BoundingBox:
     )
 
 
-def _representative_photo(template_dir: Path) -> Path | None:
-    """The one photo that stands for the whole template.
-
-    Which one hardly matters: a colour-matrix set's colours are the same
-    garment at the same size, and the other two kinds have exactly one photo.
-    So this takes ``scene.png`` when there is one and the first colour
-    otherwise, without reading the config -- which is what lets both callers
-    (the rail's thumbnail and the summary's pixel size) answer for a directory
-    that has not been given a kind yet.
-    """
-    if not template_dir.is_dir():
-        return None
-    scene = template_dir / "scene.png"
-    if scene.is_file():
-        return scene
-    return next(iter(sorted(template_dir.glob("*.png"))), None)
-
-
-def _photo_size(template_dir: Path) -> tuple[int | None, int | None]:
+def _photo_size(workspace: Workspace, name: str) -> tuple[int | None, int | None]:
     """The template's true pixel size, from the image header alone.
 
     ``Image.open`` is lazy, so this reads a few dozen bytes per template
@@ -114,7 +115,7 @@ def _photo_size(template_dir: Path) -> tuple[int | None, int | None]:
     truncated PNG in it should still be listable, since listing it is how the
     user reaches the UI that fixes it.
     """
-    photo = _representative_photo(template_dir)
+    photo = workspace.template_preview_photo(name)
     if photo is None:
         return None, None
     try:
@@ -162,7 +163,7 @@ def _status_reason(config: AnyTemplate) -> str | None:
 
 
 def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
-    width, height = _photo_size(workspace.template_dir(name))
+    width, height = _photo_size(workspace, name)
     try:
         config = workspace.load_template_config(name)
     except ConfigLoadError:
@@ -178,7 +179,7 @@ def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
         )
 
     if isinstance(config, ColourMatrixTemplate):
-        colours = _colours_from_scene_files(workspace.template_dir(name))
+        colours = workspace.template_colours(name)
     elif isinstance(config, MultipleTemplate):
         colours = [p.colour for p in config.placements]
     else:
@@ -205,11 +206,6 @@ def list_templates(request: Request) -> list[TemplateSummary]:
     return [_summarize(workspace, name) for name in names]
 
 
-def _template_photos(template_dir: Path) -> list[Path]:
-    """Every photo in the directory except the scene, sorted."""
-    return sorted(p for p in template_dir.glob("*.png") if p.stem != "scene")
-
-
 def _colour_slugs(workspace: Workspace, photos: list[Path]) -> dict[Path, str]:
     """Each photo mapped to the colour slug its filename means.
 
@@ -227,7 +223,7 @@ def _colour_slugs(workspace: Workspace, photos: list[Path]) -> dict[Path, str]:
 
 
 @router.get("/{name}/colour-report", response_model=list[ColourReportRow])
-def colour_report(request: Request, name: str) -> list[ColourReportRow]:
+def colour_report(template: Existing) -> list[ColourReportRow]:
     """What each photo will be taken as if this becomes a colour-matrix set.
 
     Shown in the kind picker before committing, so a badly named file is seen
@@ -236,12 +232,8 @@ def colour_report(request: Request, name: str) -> list[ColourReportRow]:
     slugified colour, and a directory whose filenames disagree with the
     colours they mean is the state that rule exists to prevent).
     """
-    workspace = _workspace(request)
-    template_dir = workspace.template_dir(name)
-    if not template_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"no template {name!r}")
-
-    photos = _template_photos(template_dir)
+    workspace = template.workspace
+    photos = workspace.template_photos(template.name)
     slugs = _colour_slugs(workspace, photos)
     return [
         ColourReportRow(filename=photo.name, colour=slugs[photo], clean=slugs[photo] == photo.stem)
@@ -276,7 +268,7 @@ def _rename_photos_to_slugs(workspace: Workspace, photos: list[Path]) -> list[Pa
 
 
 @router.post("/{name}/kind", response_model=TemplateConfig)
-def assign_kind(request: Request, name: str, body: AssignKindRequest) -> AnyTemplate:
+def assign_kind(template: Existing, body: AssignKindRequest) -> AnyTemplate:
     """The first calibration step: say what this template is, and get the
     starting ``template.yaml`` for that shape.
 
@@ -285,18 +277,14 @@ def assign_kind(request: Request, name: str, body: AssignKindRequest) -> AnyTemp
     the old shape's fields -- and doing that silently, from a picker, is the
     kind of data loss nobody would think to look for.
     """
-    workspace = _workspace(request)
-    config_path = workspace.template_config_file(name)
-    template_dir = workspace.template_dir(name)
-    if not template_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"no template {name!r}")
-    if config_path.is_file():
+    workspace, name = template.workspace, template.name
+    if workspace.template_config_file(name).is_file():
         raise HTTPException(
             status_code=409,
             detail=f"{name!r} already has a template.yaml; delete it to change kind",
         )
 
-    photos = _template_photos(template_dir)
+    photos = workspace.template_photos(name)
     if not photos:
         raise HTTPException(status_code=400, detail=f"no photos in {name!r}")
 
@@ -337,28 +325,23 @@ def assign_kind(request: Request, name: str, body: AssignKindRequest) -> AnyTemp
 
 
 @router.get("/{name}/thumbnail")
-def thumbnail(request: Request, name: str) -> Response:
+def thumbnail(template: Existing) -> Response:
     """The template's own photo, downscaled, for the rail.
 
     Not a render: the rail shows every template in the workspace at once, and
     running the real pipeline once per row would make opening the calibrator
-    cost as much as calibrating. Which photo hardly matters -- a colour-matrix
-    set's colours are all the same garment -- so this takes ``scene.png`` when
-    there is one and the first colour otherwise, without reading the config.
+    cost as much as calibrating. Which photo is shown is
+    :meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s
+    question, not this endpoint's.
 
     Regenerated per request rather than cached on disk; the resize is cheap
     next to the response, and a cache in the workspace would be one more
     derived directory to invalidate. Repeat loads are handled by the
     ``Cache-Control`` header instead.
     """
-    workspace = _workspace(request)
-    template_dir = workspace.template_dir(name)
-    if not template_dir.is_dir():
-        raise HTTPException(status_code=404, detail=f"no template {name!r}")
-
-    source = _representative_photo(template_dir)
+    source = template.workspace.template_preview_photo(template.name)
     if source is None:
-        raise HTTPException(status_code=404, detail=f"no photo for {name!r}")
+        raise HTTPException(status_code=404, detail=f"no photo for {template.name!r}")
 
     buffer = BytesIO()
     with Image.open(source) as img:
@@ -373,16 +356,13 @@ def thumbnail(request: Request, name: str) -> Response:
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)
-def get_config(request: Request, name: str) -> AnyTemplate:
-    return _load_config(_workspace(request), name)
+def get_config(template: Existing) -> AnyTemplate:
+    return _load_config(template.workspace, template.name)
 
 
 @router.put("/{name}/config", response_model=TemplateConfig)
-def put_config(request: Request, name: str, body: AnyTemplate) -> AnyTemplate:
-    workspace = _workspace(request)
-    if not workspace.template_config_file(name).parent.is_dir():
-        raise HTTPException(status_code=404, detail=f"no template {name!r}")
-    workspace.save_template_config(name, body)
+def put_config(template: Existing, body: AnyTemplate) -> AnyTemplate:
+    template.workspace.save_template_config(template.name, body)
     return body
 
 
@@ -492,10 +472,8 @@ def _encode_preview(image: Image.Image, scale: PreviewScale) -> Response:
 
 
 @router.post("/{name}/preview")
-def preview(
-    request: Request, name: str, body: PreviewRequest, scale: PreviewScale = "full"
-) -> Response:
-    workspace = _workspace(request)
+def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "full") -> Response:
+    workspace, name = template.workspace, template.name
     kind = _load_config(workspace, name).kind
     if not isinstance(body, PREVIEW_BODIES[kind]):
         raise HTTPException(status_code=400, detail=f"expected a {kind} preview body")
