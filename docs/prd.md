@@ -160,30 +160,54 @@ changes and the images re-upload, which is correct behaviour.
 ### `shop.yaml`
 ```yaml
 printify:
-  shop_id: 28819281            # which Printify shop products are created in
+  shop_name: My new store      # what the shop is called in Printify
+  shop_id: 28819281            # resolved from the name by `setup`
+  preferred_print_provider: Monster Digital
+                               # by name, not id — preselected in `new` when
+                               # it offers the chosen garment
 etsy:
-  shop_id: 12345678
+  shop_name: TakeAHikeTees     # the shop's name on Etsy
+  shop_id: 12345678            # resolved from the name by `setup`
+  currency: NOK                # read from the Etsy shop; the only currency
+                               # prices may be expressed in
   who_made: i_did
   when_made: made_to_order
   is_supply: false
   shop_section_id: 4455667
   return_policy_id: 1122334
   renewal: manual              # manual | auto — default manual
-currency: NOK                  # the only currency prices may be expressed in
-preferred_print_provider: Monster Digital
-                               # by name, not id — preselected in `new` when
-                               # it offers the chosen garment
 ```
+
+Every key sits under the service that owns it, and every shop is identified by
+**name with its id beside it** (#51). The name is what a human recognises and
+can check against a browser tab; the id is what the API needs; `setup` derives
+the second from the first, so nobody transcribes an eight-digit number. The
+file it writes carries a comment per field and points at `.env` for the
+credentials, because it is the one file in a workspace people open by hand.
 
 `printify.shop_id` is **written by `setup`, not looked up by hand** (#42).
 Every product call is scoped to a shop — `/v1/shops/{shop}/products.json` — so
-the tool cannot create anything without it, and unlike a print provider there
-is no human-readable name to resolve: Printify's own titles for shops are
-whatever you typed when you made one ("My new store"). `GET /v1/shops.json`
+the tool cannot create anything without it, and Printify's own titles for shops
+are whatever you typed when you made one ("My new store"). `GET /v1/shops.json`
 returns exactly the shops the token can reach, so `setup` lists them, selects
 the only one when there is only one, and asks otherwise. It is stored rather
 than resolved on every run because a second shop appearing later must not
 silently redirect where products are created.
+
+**The Etsy shop is discovered from what is already connected**, not typed. A
+Printify shop whose sales channel is Etsy carries the Etsy shop's own name, so
+`findShops` turns the selection just made into an Etsy shop id with no further
+question. Where the Printify shop is not connected — an "API" store, which is
+what a workspace starts with — the id comes instead from the shop the stored
+consent belongs to, since an Etsy account has exactly one. `setup` shows what
+it found and takes an answer either way; what it will not do is ask someone to
+find a number in a URL (#51).
+
+**The currency comes from the Etsy shop too.** It is the shop's own
+`currency_code`, read at `setup` time and written into the file as the default
+for everything after — a value the shop already has, and one whose disagreement
+with the file would be invisible until a price landed wrong (#24 is unchanged:
+it remains the only currency a price may be written in).
 
 Print providers are referred to **by name everywhere a human writes config**.
 Names resolve to Printify's integer IDs via `.cache/providers.json`, populated
@@ -1067,7 +1091,7 @@ whether Norway is among them needs checking, not assuming).
 | 11 | Etsy fields | Core + merchandising, plus renewal policy (default manual). |
 | 12 | Media | Explicit per-listing list; full replace on change. |
 | 13 | AI inputs | Vision + short brief; editable prompts; hard limit validation. |
-| 14 | Auth | Single guided `auth` covering **every** credential: the Printify token, the Etsy app key pair, the Etsy OAuth flow, and the Anthropic key, each verified against its own API before it is stored. **Amended:** it writes credentials and nothing else — no `shop.yaml`, no ids (#49). One command to answer "what do I need to give this tool, and where does it go" beats a credential list split across two wizards by which service happens to need a browser. |
+| 14 | Auth | Single guided `auth` covering **every** credential: the Printify token, the Etsy app key pair, the Etsy OAuth flow, and the Anthropic key, each verified against its own API before it is stored. **Amended:** it writes credentials and nothing else — no `shop.yaml`, no ids (#49). One command to answer "what do I need to give this tool, and where does it go" beats a credential list split across two wizards by which service happens to need a browser. **Amended:** it also takes the part as an argument -- `auth printify`, `auth etsy`, `auth anthropic` -- with bare `auth` running all three. One credential expiring is the ordinary case, and having to walk past two working ones to renew it is what teaches people to avoid the command. |
 | 15 | Failures | Resumable staged apply; `unlock` for stuck products. |
 | 16 | Batch | Sequential, rate-limited, continue-on-error. |
 | 17 | Design validation | Strict, never auto-fix. |
@@ -1095,7 +1119,7 @@ whether Norway is among them needs checking, not assuming).
 | 39 | Printify price units | Integer **minor units of the connected sales channel's currency** — not USD cents. Printify converts nothing on publish: it sends the number and the channel renders it in the shop currency, which is what its own instruction to non-USD sellers ("enter 24.99 … and ignore the 'USD' label") describes. The `USD` badge in the web app is a fixed label. This corrects an earlier reading of the same measurement: the integers were measured correctly, the currency attached to them was inferred from a UI string, and that inference is what produced risk 12. |
 | 40 | Retail price currency | NOK reaches Printify verbatim, as NOK minor units; `Money` stays NOK from `shop.yaml` to the wire, and no conversion happens at `apply`. Rejected — converting NOK→USD at apply time, which puts a live rate inside a hash-based idempotency system and churns every listing on a day nobody edited anything; pricing in USD and letting Printify's conversion set the Etsy figure, which surrenders the number the customer reads; and changing Printify's billing currency, which does not offer NOK and converts costs only. Accepted costs: Printify's own profit and listing-health figures compare an NOK number against a USD cost and are meaningless, leaving this tool's margin display (#10b) the only honest one; and `plan` must assert the numeric price is at or above the numeric USD production cost, because Printify refuses to publish below it. **Amended:** that assertion belongs to the **publish** stage, not the product stage. `variants[].cost` exists only on a product that already exists, so before the first create there is no documented source for it — the only other one is walled off from the engine by A17 — and Printify enforces the rule at publish anyway. Phase 3 gets it free from its own `read_live`; asserting it earlier would mean either skipping the run that matters or breaching A17. |
 | 41 | Update routing | Printify creates the product and publishes once with only the fields it needs to exist and route orders. Thereafter each field has exactly one writer: the **variant matrix** (colour, size, price, SKU) is Printify's, changed there and republished with selective sync `{variants: true}` and every other flag false; **everything the buyer reads** (title, description, tags, materials, images, shop section, alt text, renewal) is ours, written straight to Etsy. Refines #1 by making the boundary exhaustive rather than exemplary. Rests entirely on the sync booleans behaving as documented — risk 2 — since they are what stops a variant republish from overwriting our copy and mockups. |
-| 42 | Printify shop id | Stored in `shop.yaml` as `printify.shop_id`, written by `setup` (#43) from `GET /v1/shops.json`, which returns exactly the shops the token can reach. Discovered rather than typed, because the id appears in no obvious place in Printify's UI; stored rather than resolved per run, because an account that gains a second shop must not silently start creating products somewhere else. Unlike a print provider (#23) there is no name to match on — a shop's title is whatever the owner typed. |
+| 42 | Printify shop id | Stored in `shop.yaml` as `printify.shop_id`, written by `setup` (#43) from `GET /v1/shops.json`, which returns exactly the shops the token can reach. Discovered rather than typed, because the id appears in no obvious place in Printify's UI; stored rather than resolved per run, because an account that gains a second shop must not silently start creating products somewhere else. Unlike a print provider (#23) there is no name to match on — a shop's title is whatever the owner typed. **Amended (#51):** the title is stored beside the id all the same, as `printify.shop_name`. It is not a resolution key -- the id remains what `setup` selects and stores -- but it is what makes the stored id checkable by a human, which the number alone never was. |
 | 43 | `setup` command | A terminal command that takes an empty directory to a workspace `new` can run in: directory skeleton and `.gitignore`, a guided Printify token capture **verified against the live API before it is stored**, the shop selection above, and the Etsy/commercial defaults written to `shop.yaml`. Stops short of Etsy OAuth, which is `auth`'s job (#14) and Phase 3's code, and says so. Idempotent — re-running fills only what is missing. Does not replace the `ui` first-run wizard (#26): a terminal path to a working workspace has to exist before there is a UI to serve it. **Amended (#49):** `setup` no longer captures any credential — the Printify token capture named above moved to `auth`, which runs first. What `setup` gained in exchange is the whole id-resolution job: `printify.shop_id` as before, plus `etsy.shop_id`, `etsy.shop_section_id` and `etsy.return_policy_id`. It no longer stops short of Etsy; it stops short of *credentials*. |
 | 44 | Printify product copy | The product carries the listing's **own** title and description, and both must be concrete text — a `<generate>` sentinel or an empty string is refused at `plan` time. Printify's create call requires both, so something must be sent; sending the real copy makes the product legible in Printify's web app and gives #48 its match key. It does **not** make Printify a writer of them: the publish flags stay `{title: false, description: false}` (#41), and the fields reach Etsy only through `updateListing`. Until Phase 4 builds `generate`, this means typed by hand. Accepted cost: a copy edit shows a diff on the Printify stage. |
 | 45 | Print placement | Fixed — centred, `scale: 1.0`, `angle: 0`, into `profile.placeholder`. No per-listing or per-template configuration in v1. `scale: 1.0` means fit-inside-the-print-area, and #38 already requires the design to be within 10% of that area on each axis, so the constant is the consequence of a gate rather than a default nobody chose. Revisit if a garment ever needs off-centre or rotated placement; a config surface added speculatively would need a calibrator to be usable. |
@@ -1104,3 +1128,4 @@ whether Norway is among them needs checking, not assuming).
 | 48 | Duplicate-create guard | The lockfile's `printify_product_id` is the primary guard; before a create — and **only** before a create — the stage also walks `GET /shops/{id}/products.json` and refuses if a product already matches on title and description. `POST products.json` has no idempotency key and no conflict, so the window the lockfile cannot close is create-succeeds-then-crash. The product list is a paginator that honours `limit`/`page` and **no filter whatsoever** (`title`, `search`, `sku` are accepted and ignored), so the match is client-side over a full walk — affordable because it runs on the rare create path, never on a no-op `plan`. Corrects the implementation plan, which asserted a pre-flight lookup without a key to look up by. |
 | 49 | Credentials versus configuration | `auth` captures every credential and writes only `.env` and `.auth/`; `setup` creates the workspace and writes every id into `shop.yaml`. The line is what the value *is*, not which vendor it belongs to: a credential is something a human obtains from a website and pastes, an id is something this tool discovers by asking an API. Ordering follows from that — `auth` first, because every discovery call `setup` makes needs a credential to make it with. Two consequences worth stating. `auth` runs before `shop.yaml` exists, so like `setup` it takes its root from `--root`, `ETSY_LISTINGS_ROOT` or cwd rather than discovering it (A8 governs commands that *use* a workspace, not the two that create one); and it writes the `.gitignore` before the first secret, sharing `setup`'s writer. This also records a second Etsy secret the document had been silent about: the app key pair is keystring **and** shared secret, colon-joined into `x-api-key` on every v3 request. Rejected: splitting the credentials by whether they need a browser, which put the Etsy key pair in `setup` and left a user hunting two commands for the answer to one question; and letting `auth` write ids, which would make the workspace's identity wait on a browser round trip it never needed — `findShops`, `getShopSections` and `getShopReturnPolicies` carry no scope, so the ids need the key pair only. |
 | 50 | Etsy OAuth parameters | Scopes `listings_r listings_w shops_r`; callback `http://localhost:8517/oauth/callback`, registered verbatim with the app; refresh on demand, with a warning as the 90-day refresh token nears expiry. The scopes are the smallest set covering Phases 3-6 — image upload *and* delete are both `listings_w`, and `listings_d` deletes listings, which this tool never does — and are worth choosing once, because changing them later forces a second trip through the browser. The port is fixed rather than OS-assigned because Etsy matches `redirect_uri` against a registered string exactly, case and trailing slash included; an ephemeral port cannot be registered in advance, so a busy 8517 is a clear error rather than a silent fallback Etsy would refuse. One caveat carried knowingly: Etsy's authentication guide says the redirect must be `https://`, while Etsy's own quick-start tutorial uses `http://localhost:3003/oauth/redirect` throughout. Loopback over http is the documented-by-example exception, and the first real `auth` run is what confirms it. |
+| 51 | `shop.yaml` grouped by service, keyed by name | Every setting sits under the service that owns it: `printify.shop_name`, `printify.shop_id`, `printify.preferred_print_provider`; `etsy.shop_name`, `etsy.shop_id`, `etsy.currency` and the listing defaults. Two top-level keys moved to get there. `currency` is the Etsy shop's own currency, now **read from the shop** rather than typed, so it belongs with the shop it describes; #24 is untouched, and it remains the only currency a price may be written in. `preferred_print_provider` names a Printify entity and was top-level only because it arrived first. Each shop is then identified by **name with the id beside it**: the name is what a human recognises, the id is what the API needs, and `setup` derives the second from the first. Discovery follows what is already connected — a Printify shop whose sales channel is Etsy carries the Etsy shop's name, and where there is no connection the id comes from the shop the stored consent owns. Rejected: the id alone, which is what the file held. An eight-digit number tells a reader nothing, so a wrong one looks exactly like a right one — the PRD's own example `12345678` sat in a real workspace for a phase and a half without being noticed. |
