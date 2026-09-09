@@ -1,4 +1,4 @@
-"""A Printify transport wired to a mock handler, for the contract layer.
+"""Transports wired to a mock handler, for the contract layer.
 
 Every contract file was building the same three-line stack -- a
 ``MockTransport`` inside an ``httpx.Client`` inside the client under test --
@@ -17,8 +17,12 @@ from collections.abc import Callable
 
 import httpx
 
+from etsy_listings.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
+from etsy_listings.clients.etsy.transport import OAuthClient
+from etsy_listings.clients.etsy.transport import Transport as EtsyTransport
 from etsy_listings.clients.printify import BASE_URL, Transport
 from etsy_listings.clients.retry import DEFAULT_POLICY, RetryPolicy
+from etsy_listings.config.secrets import EtsyAppKey
 
 Handler = Callable[[httpx.Request], httpx.Response]
 
@@ -45,3 +49,37 @@ def transport(
 def always(response: httpx.Response) -> Handler:
     """A handler that answers every request the same way."""
     return lambda _: response
+
+
+def etsy_transport(
+    handler: Handler,
+    *,
+    app_key: EtsyAppKey = EtsyAppKey("test-keystring", "test-secret"),
+    bearer: Callable[[], str] | None = lambda: "12345678.test-access",
+    policy: RetryPolicy = DEFAULT_POLICY,
+) -> EtsyTransport:
+    """The same stack for Etsy. ``bearer=None`` is the unauthenticated case --
+    a ping, which is the one call `auth` makes before a token exists."""
+    return EtsyTransport(
+        app_key,
+        bearer=bearer,
+        client=httpx.Client(transport=httpx.MockTransport(handler), base_url=ETSY_BASE_URL),
+        policy=policy,
+        sleep=lambda _: None,
+    )
+
+
+def etsy_oauth_client(
+    handler: Handler,
+    *,
+    keystring: str = "test-keystring",
+    policy: RetryPolicy = DEFAULT_POLICY,
+) -> OAuthClient:
+    """The token endpoint, which carries no credentials of its own -- no base
+    URL either, since it is the one absolute URL in the client."""
+    return OAuthClient(
+        keystring,
+        client=httpx.Client(transport=httpx.MockTransport(handler)),
+        policy=policy,
+        sleep=lambda _: None,
+    )

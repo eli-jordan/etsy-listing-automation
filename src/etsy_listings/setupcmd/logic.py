@@ -36,19 +36,6 @@ here would suggest it is structural, which is exactly the misunderstanding
 ``plan``'s "is the output still there?" check exists to survive.
 """
 
-GITIGNORE_ENTRIES: tuple[tuple[str, str], ...] = (
-    (layout.ENV_FILE, "API tokens -- never commit"),
-    (f"{layout.AUTH_DIR}/", "OAuth tokens -- never commit"),
-    (f"{layout.CACHE_DIR}/", "derived: catalog, renders, run history"),
-)
-"""What must not reach a repository, and why.
-
-A workspace is not a git repository by default, but people put one around it
--- the listings and pricing are worth versioning. The two that would leak a
-credential are the reason this file is written at all; ``.cache/`` is there
-because it is large and fully derivable.
-"""
-
 
 def missing_directories(root: Path) -> tuple[str, ...]:
     return tuple(name for name in WORKSPACE_DIRS if not (root / name).is_dir())
@@ -64,30 +51,6 @@ def create_directories(root: Path) -> tuple[str, ...]:
     for name in created:
         (root / name).mkdir(parents=True, exist_ok=True)
     return created
-
-
-def update_gitignore(root: Path) -> tuple[str, ...]:
-    """Append any missing entry to ``.gitignore``; return the lines added.
-
-    Appends rather than rewrites: the file may already carry rules that have
-    nothing to do with us, and a workspace's ``.gitignore`` is the user's.
-    """
-    path = root / ".gitignore"
-    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
-    # The pattern, not the line: the entries this function writes carry a
-    # trailing `# why` comment, so comparing whole lines made every run think
-    # its own previous output was missing and append it again.
-    present = {line.split("#", 1)[0].strip() for line in existing.splitlines()}
-
-    added = tuple(
-        f"{pattern:<12} # {why}" for pattern, why in GITIGNORE_ENTRIES if pattern not in present
-    )
-    if not added:
-        return ()
-
-    prefix = existing if not existing or existing.endswith("\n") else existing + "\n"
-    path.write_text(prefix + "\n".join(added) + "\n", encoding="utf-8")
-    return added
 
 
 @dataclass(frozen=True)
@@ -203,24 +166,3 @@ def render_shop_yaml(document: dict[str, Any]) -> str:
     """``sort_keys=False`` so the file reads in the order it was built, with
     the shop identifiers before the long tail of Etsy defaults."""
     return SHOP_YAML_HEADER + yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
-
-
-def env_with(existing: str, key: str, value: str) -> str:
-    """``existing`` with ``key`` set to ``value``, everything else untouched.
-
-    Rewriting the line in place rather than appending keeps a second
-    assignment from shadowing the first, and leaves comments and unrelated
-    keys exactly where the user put them. A commented-out assignment is not a
-    match -- it is a note, and silently un-commenting one would be a surprise.
-    """
-    lines = existing.splitlines()
-    prefix = f"{key}="
-    replaced = False
-    for index, line in enumerate(lines):
-        if line.startswith(prefix):
-            lines[index] = f"{key}={value}"
-            replaced = True
-            break
-    if not replaced:
-        lines.append(f"{key}={value}")
-    return "\n".join(lines) + "\n"

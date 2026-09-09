@@ -284,6 +284,42 @@ def setup(
 
 
 @app.command(epilog=EPILOG)
+def auth(
+    root: str | None = typer.Option(
+        None,
+        "--root",
+        help=(
+            "Which workspace to store credentials in. Defaults to the current "
+            "directory. Like `setup`, and unlike every other command, this one "
+            "does not need a shop.yaml to exist there yet -- it runs before one."
+        ),
+        envvar=layout.ROOT_ENV_VAR,
+        show_envvar=True,
+        metavar="PATH",
+    ),
+    check: bool = typer.Option(
+        False,
+        "--check",
+        help="Report what is stored and how long the Etsy consent has left. Writes nothing.",
+    ),
+) -> None:
+    """Capture every credential: Printify, Etsy, and the Anthropic key.
+
+    Verifies each one against its own API before storing it, and signs in to
+    Etsy through the browser. Keys go to the workspace's .env, OAuth tokens to
+    .auth/, and both are gitignored before the first one is written.
+
+    Safe to re-run: it fills in what is missing, leaves what is present alone,
+    and is also how you renew the Etsy consent before its 90 days are up.
+    """
+    from etsy_listings.authcmd import run_auth
+
+    target = to_native_path(root) if root else Path.cwd()
+    with _wizard():
+        run_auth(target, check=check)
+
+
+@app.command(epilog=EPILOG)
 def plan(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
     all: bool = typer.Option(False, "--all", help="Plan every listing in the workspace"),

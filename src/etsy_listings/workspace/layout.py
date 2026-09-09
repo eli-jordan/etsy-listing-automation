@@ -12,6 +12,10 @@ SHOP_FILE = "shop.yaml"
 EXCEPTIONS_FILE = "exceptions.yaml"
 ENV_FILE = ".env"
 AUTH_DIR = ".auth"
+ETSY_TOKENS_FILE = "etsy-tokens.json"
+"""Inside :data:`AUTH_DIR`. Separate from ``.env`` because its contents are
+written by this tool rather than pasted by the user, and rewritten on every
+refresh (PRD 49)."""
 CACHE_DIR = ".cache"
 PROMPTS_DIR = "prompts"
 PROFILES_DIR = "profiles"

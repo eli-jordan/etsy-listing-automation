@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
 import yaml
 
 from etsy_listings.clients.printify.models import Shop
@@ -58,37 +57,6 @@ def test_the_cache_directory_is_not_part_of_the_skeleton() -> None:
     """`.cache/` is created on demand by whatever writes into it, and is the
     one directory a user is invited to delete."""
     assert layout.CACHE_DIR not in logic.WORKSPACE_DIRS
-
-
-# -------------------------------------------------------------- .gitignore
-
-
-def test_a_fresh_gitignore_gets_every_secret_path(tmp_path: Path) -> None:
-    added = logic.update_gitignore(tmp_path)
-
-    content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
-    for entry in (layout.ENV_FILE, layout.AUTH_DIR, layout.CACHE_DIR):
-        assert entry in content
-        assert any(entry in line for line in added)
-
-
-def test_gitignore_only_appends_what_is_missing(tmp_path: Path) -> None:
-    (tmp_path / ".gitignore").write_text(f"{layout.ENV_FILE}\nnotes.txt\n", encoding="utf-8")
-
-    added = logic.update_gitignore(tmp_path)
-
-    content = (tmp_path / ".gitignore").read_text(encoding="utf-8")
-    assert content.count(layout.ENV_FILE) == 1
-    assert "notes.txt" in content
-    assert not any(line.strip() == layout.ENV_FILE for line in added)
-
-
-def test_gitignore_is_left_alone_when_it_already_covers_everything(tmp_path: Path) -> None:
-    logic.update_gitignore(tmp_path)
-    before = (tmp_path / ".gitignore").read_text(encoding="utf-8")
-
-    assert logic.update_gitignore(tmp_path) == ()
-    assert (tmp_path / ".gitignore").read_text(encoding="utf-8") == before
 
 
 # ------------------------------------------------------------ shop selection
@@ -239,38 +207,3 @@ def test_the_rendered_file_is_valid_yaml_with_printify_first() -> None:
     parsed = yaml.safe_load(rendered)
 
     assert list(parsed) == ["printify", "etsy", "currency", "preferred_print_provider"]
-
-
-# --------------------------------------------------------------------- .env
-
-
-@pytest.mark.parametrize(
-    ("existing", "expected"),
-    [
-        ("", "PRINTIFY_API_TOKEN=abc\n"),
-        ("OTHER=1\n", "OTHER=1\nPRINTIFY_API_TOKEN=abc\n"),
-        ("PRINTIFY_API_TOKEN=old\n", "PRINTIFY_API_TOKEN=abc\n"),
-        ("A=1\nPRINTIFY_API_TOKEN=old\nB=2\n", "A=1\nPRINTIFY_API_TOKEN=abc\nB=2\n"),
-        ("OTHER=1", "OTHER=1\nPRINTIFY_API_TOKEN=abc\n"),
-    ],
-)
-def test_setting_an_env_value_replaces_in_place_and_keeps_the_rest(
-    existing: str, expected: str
-) -> None:
-    assert logic.env_with(existing, "PRINTIFY_API_TOKEN", "abc") == expected
-
-
-def test_setting_an_env_value_leaves_comments_alone() -> None:
-    existing = "# a note\nPRINTIFY_API_TOKEN=old\n"
-
-    assert (
-        logic.env_with(existing, "PRINTIFY_API_TOKEN", "abc")
-        == "# a note\nPRINTIFY_API_TOKEN=abc\n"
-    )
-
-
-def test_a_commented_out_key_is_not_mistaken_for_the_real_one() -> None:
-    existing = "#PRINTIFY_API_TOKEN=old\n"
-    result = logic.env_with(existing, "PRINTIFY_API_TOKEN", "abc")
-
-    assert result == "#PRINTIFY_API_TOKEN=old\nPRINTIFY_API_TOKEN=abc\n"

@@ -32,7 +32,7 @@ from etsy_listings.clients.printify.models import Shop
 from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, Secrets
 from etsy_listings.setupcmd import logic
-from etsy_listings.workspace import layout
+from etsy_listings.workspace import layout, scaffold
 
 ClientFactory = Callable[[str], PrintifyClient]
 """Builds a client from a *candidate* token. Injected rather than imported so
@@ -171,7 +171,7 @@ def run_setup(root: Path, *, client_factory: ClientFactory | None = None) -> Non
     typer.echo(
         f"  created {len(created)} directories" if created else "  directories already in place"
     )
-    if logic.update_gitignore(root):
+    if scaffold.update_gitignore(root):
         typer.echo("  wrote .gitignore (.env, .auth/ and .cache/ stay out of git)")
 
     token, shops = _verified_token(root, factory)
@@ -205,9 +205,7 @@ def run_setup(root: Path, *, client_factory: ClientFactory | None = None) -> Non
 
     # Every question is answered, so the credential is worth keeping: writing
     # it earlier would leave a token behind after a cancelled run.
-    env_path = root / layout.ENV_FILE
-    existing_env = env_path.read_text(encoding="utf-8") if env_path.is_file() else ""
-    env_path.write_text(logic.env_with(existing_env, PRINTIFY_TOKEN_VAR, token), encoding="utf-8")
+    scaffold.write_env_value(root, PRINTIFY_TOKEN_VAR, token)
 
     document = logic.shop_yaml_document(answers, existing)
     (root / layout.SHOP_FILE).write_text(logic.render_shop_yaml(document), encoding="utf-8")

@@ -234,6 +234,17 @@ class Workspace:
         never in this repository -- see ``config/secrets.py``."""
         return self.root / layout.ENV_FILE
 
+    def etsy_tokens_file(self) -> Path:
+        """Where ``auth`` leaves the OAuth tokens, and where every later run
+        reads them from.
+
+        ``auth`` itself cannot use this accessor -- it runs before there is a
+        ``shop.yaml`` to discover a workspace by, so it joins the same two
+        layout constants against the root it was given (PRD 49). This exists
+        for everything downstream of it, which does have a workspace.
+        """
+        return self.root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE
+
     def templates_dir(self) -> Path:
         return self.root / layout.MOCKUP_TEMPLATES_DIR
 
