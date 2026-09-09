@@ -35,6 +35,7 @@ and commit messages without colliding with the PRD's own decision log.
 | A20 | Stage-produced remote state | `StageApplyResult` gains a `remote: dict[str, Any]`, merged into the lockfile's `remote` block the same way `outputs` already is, with each stage owning a documented key prefix (`printify_*`, `etsy_*`). Until Phase 2 no stage produced remote ids, so `apply` copied `lock.remote` through untouched and there was no channel at all — `printify_product` is the first stage that has to write one. A dict merged by the engine, rather than the stage mutating a lockfile it was handed, keeps the rule that a stage returns a value and the engine decides what becomes of it. |
 | A21 | Phase 2 concurrency scope | Retry-with-backoff lands in Phase 2, because it is needed the moment anything writes; the token buckets and the persisted daily budget stay in Phase 6 as planned. A3's `plan` thread-pool fan-out also stays unbuilt: with one remote stage and a single live read per listing there is nothing to overlap, and a pool that fans out over one call is machinery pretending to be an optimisation. Recorded as a decision rather than left as an omission, so the next reader does not take the empty pool for an oversight. |
 | A22 | One Printify package, two protocols | `catalog/` and `clients/printify/` are **one package**, `clients/printify/`, over one shared `Transport`. The authority split that justified two packages is real and is kept — but it is a property of the *protocols*, not of the directory: a caller holding `CatalogClient` cannot reach `create_product` because the method is not on its type. What the two packages actually duplicated was plumbing — a `TokenSource` alias, a lazy token resolve, a `401/403` branch, an auth error, a base URL, an `httpx.Client` — and the copies had already drifted: the catalog reader had **no retries at all**, so a 429 on `blueprints.json` failed a `new` run outright while the identical 429 on a write rode out its backoff (A21). One transport, two protocols, one auth error naming every scope the single token needs. |
+| A23 | Etsy auth, split four ways | `oauth.py` is pure (verifier, challenge, authorise URL, state check, response parsing), `callback.py` serves exactly one loopback request, `tokens.py` owns `.auth/etsy-tokens.json` and every rotation, `transport.py` carries both headers. The split is not tidiness. Refresh tokens **rotate on every use**, which makes the file write part of the protocol rather than a cache: it must land — atomically, `os.replace` over a temp file — before the new access token is used, or a crash mid-rotation burns the only credential that can recover without a browser. A `TokenStore` behind a lazily-resolved token source (A22's rule) keeps `plan` buildable with no credentials; an in-process lock with a double-check stops A3's read fan-out rotating twice; and an `invalid_grant` re-reads the file once before it is believed, because the rotation that invalidated it may have come from a second process. |
 
 ### Toolchain
 
@@ -68,6 +69,12 @@ src/etsy_listings/
                         — not the reserved fx/ package below (A18, PRD 36)
   setupcmd/             `setup` (PRD 43): logic.py (pure — skeleton, shop.yaml
                         merge, .env editing) + interactive.py (sequencing, I/O)
+  authcmd/              `auth` (PRD 14, 49): every credential, verified before
+                        it is stored. logic.py (pure — PKCE, authorise URL,
+                        token bookkeeping) + interactive.py (the four
+                        credential questions, browser, callback). Shares
+                        setupcmd.logic's .env and .gitignore writers rather
+                        than keeping a second copy of either
   engine/
     stage.py            Stage protocol
     change.py           Change vocabulary + comparison helpers
@@ -91,7 +98,14 @@ src/etsy_listings/
       cache.py          TTL disk cache -- catalog only, deliberately
       resolve.py        name to id, the only place a config name becomes an int
       fakes.py          in-memory implementations of both protocols
-    etsy/               protocol.py http.py models.py fakes.py oauth.py
+    etsy/               everything said to Etsy, over one transport (A23)
+      oauth.py          PKCE, authorise URL, state check — pure, no I/O
+      callback.py       the one-shot loopback server that catches the code
+      tokens.py         TokenStore: .auth/etsy-tokens.json, expiry, rotation
+      transport.py      both auth headers, retries, error decoding
+      protocol.py       EtsyClient
+      models.py         listing, image, shop, section, return policy
+      fakes.py          in-memory implementation
     limiter.py          token buckets, incl. persisted daily budget
     retry.py            backoff policy
   ai/                   prompt loading, generation, hard validation
@@ -463,9 +477,25 @@ makes that match key exist at all.
 **Publish polling.** Backoff 2s to 60s against a ~10 minute ceiling. On timeout the
 lockfile records the product as locked, which is what `unlock` later acts on.
 
-**Etsy OAuth.** PKCE via a localhost callback on a fixed port with a `state`
-check; access tokens refreshed automatically, rotation handled; tokens written to
-`.auth/etsy-tokens.json` with `0600`.
+**Etsy OAuth.** PKCE (`S256`, which Etsy requires on every flow) via a
+localhost callback on the fixed registered port, with a `state` check.
+Authorise at `https://www.etsy.com/oauth/connect`, exchange and refresh at
+`https://api.etsy.com/v3/public/oauth/token`; scopes and callback URL are PRD
+50. Tokens are written to `.auth/etsy-tokens.json`, and the mode is set to
+`0600` where the platform means it — on the Windows filesystem this is
+developed against, that call sets a read-only bit and is not an access control.
+The docs say which of the two the user is getting rather than repeating a POSIX
+promise the file does not keep.
+
+Refresh happens on demand: when a run is about to speak to Etsy and the access
+token has under five minutes left, or once in response to a `401`. Nothing
+refreshes in the background, and a purely local `plan` still needs no
+credentials at all. The refresh token's 90-day life is the one clock a user can
+lose without noticing, so `auth --check` reports the days remaining and any
+command that refreshes warns under fourteen. Whether a refresh restarts those
+90 days is undocumented, so the stored `refresh_expires_at` is optimistic and
+an `invalid_grant` is the authoritative answer — surfaced as "run `auth`
+again", never as a bare OAuth error code.
 
 ---
 
@@ -649,7 +679,12 @@ can answer them exists. Phase 2 builds the product; Phase 3 publishes it.
 OAuth PKCE and `auth`; **publish with sync flags, polling for `external.id`,
 and `unlock`**, inherited from Phase 2 because they need the connected shop
 this phase creates; copy patch; full-replace media sync; renewal; the LIVE
-banner and drift reporting on live listings.
+banner and drift reporting on live listings. Two commands move in this phase
+before any stage does: `auth` grows from a stub to the credential command PRD
+14 describes, and `setup` — whose Printify token capture moves out to it —
+grows the Etsy id resolution that `findShops` and friends make possible without
+a bearer token (PRD 49). Everything downstream then opens on a workspace that
+already knows which shop it patches.
 
 > **File the Etsy app registration now, not at the start of this phase.** It is a
 > form, not engineering work, and approval lead time is unknown — PRD risk 1. The

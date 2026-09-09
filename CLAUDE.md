@@ -20,8 +20,8 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 48 numbered product decisions in its appendix. |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 22 architecture decisions, `A1`–`A22`. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 50 numbered product decisions in its appendix. |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 23 architecture decisions, `A1`–`A23`. |
 
 When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.
 
@@ -154,7 +154,7 @@ user-writable directory with no installer.
 
 ## Code layout
 
-Per `A1`–`A22`. Full detail in the plan; the shape:
+Per `A1`–`A23`. Full detail in the plan; the shape:
 
 ```
 src/etsy_listings/
@@ -465,13 +465,14 @@ PRD's agreed CLI surface for reference when building later phases — do not
 assume a command exists because it is listed here.
 
 ```
-setup              initialise a workspace: skeleton, shop.yaml, credentials      [done]
+setup              initialise a workspace: skeleton, shop.yaml, ids   [done; its token
+                   capture moves to `auth` in Phase 3 — PRD 49]
 new [<design>]     interactive design/garment/provider picker; writes profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified   [done; render + printify]
 render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
 ui                     setup wizard, dashboard, calibrator, run runner    [calibrator done; rest Phase 5]
-auth                   Etsy OAuth PKCE + Anthropic credentials                     [Phase 3]
+auth                   every credential: Printify, Etsy key pair + OAuth, Anthropic [Phase 3]
 catalog refresh        force-refresh the cached Printify catalog                  [Phase 6]
 unlock <listing>       clear a Printify product stuck publishing                  [Phase 2]
 status [<listing>]                                                                [Phase 6]
