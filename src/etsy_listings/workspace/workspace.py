@@ -392,7 +392,7 @@ class Workspace:
     # ------------------------------------------------------------------
 
     def load_listing(self, listing: str) -> Listing:
-        return Listing.load(self.listing_file(listing), currency=self.defaults.currency)
+        return Listing.load(self.listing_file(listing), currency=self.defaults.etsy.currency)
 
     def load_profile(self, profile: str) -> Profile:
         return Profile.load(self.profile_file(profile))
@@ -403,7 +403,7 @@ class Workspace:
         (see ``Listing.pricing_plan``'s docstring), so resolving a name to a
         path is the caller's job, the same point ``design:`` refs are
         resolved. This method only owns "attach currency, wrap load errors"."""
-        return PricingPlan.load(path, currency=self.defaults.currency)
+        return PricingPlan.load(path, currency=self.defaults.etsy.currency)
 
     def load_exceptions(self) -> ColourExceptions:
         return load_exceptions(self.exceptions_file())

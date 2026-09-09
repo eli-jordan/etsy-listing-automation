@@ -81,7 +81,7 @@ class PrintifyAuthError(RuntimeError):
             f"present, it is expired, revoked, or missing a scope.\n"
             f"  Reading the catalog needs `catalog.read`; writing products needs the "
             f"shop and product scopes as well.\n"
-            f"  Regenerate it at printify.com/app/account/connections (docs/setup.md "
+            f"  Regenerate it at printify.com/app/account/api (docs/setup.md "
             f"section 1.3), or re-run `etsy-listings setup`, which verifies a token "
             f"before storing it."
         )

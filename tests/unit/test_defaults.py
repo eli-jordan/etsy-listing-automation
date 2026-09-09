@@ -16,11 +16,11 @@ from etsy_listings.config.errors import ConfigLoadError
 MINIMAL: dict[str, object] = {
     "etsy": {
         "shop_id": 12345678,
+        "currency": "NOK",
         "who_made": "i_did",
         "when_made": "made_to_order",
         "is_supply": False,
     },
-    "currency": "NOK",
 }
 
 
@@ -130,3 +130,53 @@ def test_printify_defaults_default_to_empty() -> None:
 def test_missing_file_is_an_actionable_error(tmp_path: Path) -> None:
     with pytest.raises(ConfigLoadError, match="not found"):
         Defaults.load(tmp_path / "nope.yaml")
+
+
+# ------------------------------------------------------- keys that have moved
+
+
+def test_a_top_level_currency_says_where_it_went(tmp_path: Path) -> None:
+    """`extra="forbid"` would call it "not permitted", which is true and
+    useless: the value is not extra, it is one line further down the file
+    (PRD 51)."""
+    stale = {**MINIMAL, "currency": "NOK"}
+
+    with pytest.raises(ConfigLoadError) as caught:
+        Defaults.load(_write(tmp_path, stale))
+
+    assert "etsy.currency" in str(caught.value)
+    assert "setup" in str(caught.value)
+
+
+def test_a_top_level_print_provider_says_where_it_went(tmp_path: Path) -> None:
+    stale = {**MINIMAL, "preferred_print_provider": "Monster Digital"}
+
+    with pytest.raises(ConfigLoadError) as caught:
+        Defaults.load(_write(tmp_path, stale))
+
+    assert "printify.preferred_print_provider" in str(caught.value)
+
+
+def test_both_moved_keys_are_reported_together(tmp_path: Path) -> None:
+    """One run of the wizard should fix a file, not two."""
+    stale = {**MINIMAL, "currency": "NOK", "preferred_print_provider": "Monster Digital"}
+
+    with pytest.raises(ConfigLoadError) as caught:
+        Defaults.load(_write(tmp_path, stale))
+
+    assert "etsy.currency" in str(caught.value)
+    assert "printify.preferred_print_provider" in str(caught.value)
+
+
+def test_the_shop_names_load_beside_the_ids(tmp_path: Path) -> None:
+    """The name is what makes a stored id checkable by a human (PRD 51)."""
+    document = {
+        "printify": {"shop_name": "My new store", "shop_id": 28819281},
+        "etsy": {**MINIMAL["etsy"], "shop_name": "TakeAHikeTees"},  # type: ignore[dict-item]
+    }
+
+    defaults = Defaults.load(_write(tmp_path, document))
+
+    assert defaults.printify.shop_name == "My new store"
+    assert defaults.etsy.shop_name == "TakeAHikeTees"
+    assert defaults.etsy.currency == "NOK"

@@ -73,7 +73,7 @@ def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> Prin
     """The shop's ``preferred_print_provider`` sorts first when it is offered,
     so the common case is the first row rather than a default the fuzzy
     backends have no way to express."""
-    preferred = workspace.defaults.preferred_print_provider
+    preferred = workspace.defaults.printify.preferred_print_provider
     ordered = sorted(providers, key=lambda p: (p.title != preferred, p.title.lower()))
     return prompts.pick("Print provider", ordered, label=lambda provider: provider.title)
 
@@ -207,14 +207,14 @@ def _pick_or_create_pricing_plan(
         name = prompts.ask_text("Pricing plan name:")
         costs = unofficial_variant_costs.fetch_variant_costs(blueprint.id, provider.id)
         shipping = catalog.shipping(blueprint.id, provider.id)
-        rate = fx_rate.fetch_usd_to(workspace.defaults.currency)
+        rate = fx_rate.fetch_usd_to(workspace.defaults.etsy.currency)
         prices, notes = compute_starting_prices(
             sizes=sizes,
             variant_set=variant_set,
             variant_costs=costs,
             shipping=shipping,
             fx_rate=rate,
-            target_currency=workspace.defaults.currency,
+            target_currency=workspace.defaults.etsy.currency,
         )
         path = write_pricing_plan(workspace, name, profile_slug, prices, notes)
         typer.echo(f"wrote {path}")
@@ -308,6 +308,6 @@ def run_new(
         brief="",
         media=media,
     )
-    validate_listing_stub(listing_data, currency=workspace.defaults.currency)
+    validate_listing_stub(listing_data, currency=workspace.defaults.etsy.currency)
     path = write_listing(workspace, design_name, listing_data)
     typer.echo(f"wrote {path}")

@@ -40,7 +40,18 @@ class PrintifyDefaults(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
+    shop_name: str | None = None
+    """What the shop is called in Printify, stored beside the id (PRD 51).
+
+    Not a resolution key -- `setup` selects the shop and stores its id, and
+    Printify's titles are whatever the owner typed. It is here so that the
+    stored id is *checkable*: "28819281" tells a reader nothing about whether
+    this workspace points at the right place."""
+
     shop_id: int | None = None
+    preferred_print_provider: str | None = None
+    """By name, not id. Preselected in `new` when it offers the chosen
+    garment. Under `printify:` because it names a Printify entity (PRD 51)."""
 
     def require_shop_id(self) -> int:
         if self.shop_id is None:
@@ -56,6 +67,19 @@ class PrintifyDefaults(BaseModel):
 
 class EtsyDefaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
+
+    currency: str
+    """The shop's own currency, read from Etsy by `setup` (PRD 51).
+
+    Under `etsy:` because it describes the Etsy shop, and read rather than
+    typed because a workspace configured in one currency while the shop sells
+    in another is a disagreement nothing surfaces until a price lands wrong.
+    PRD 24 is unchanged: it remains the only currency a price may be written
+    in."""
+
+    shop_name: str | None = None
+    """The shop's name on Etsy -- the human-readable half of its identity, and
+    what `findShops` resolves the id from (PRD 51)."""
 
     who_made: str
     when_made: str
@@ -111,20 +135,46 @@ class EtsyDefaults(BaseModel):
         return self.return_policy_id
 
 
+MOVED_KEYS = {
+    "currency": "etsy.currency",
+    "preferred_print_provider": "printify.preferred_print_provider",
+}
+"""Where two top-level keys went (PRD 51).
+
+`extra="forbid"` would report them as "extra inputs are not permitted", which
+is true and useless: the value is not extra, it is one line further down the
+file. A workspace written before the move is exactly the one whose owner needs
+to be told where to put it."""
+
+
 class Defaults(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     etsy: EtsyDefaults
     printify: PrintifyDefaults = PrintifyDefaults()
-    currency: str
-    preferred_print_provider: str | None = None
 
     @classmethod
     def load(cls, path: Path) -> Defaults:
         if not path.is_file():
             raise ConfigLoadError(path, "file not found")
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        if isinstance(raw, dict):
+            _refuse_moved_keys(path, raw)
         try:
             return cls.model_validate(raw)
         except ValidationError as exc:
             raise format_validation_error(path, exc) from exc
+
+
+def _refuse_moved_keys(path: Path, raw: dict[str, object]) -> None:
+    found = [(key, moved_to) for key, moved_to in MOVED_KEYS.items() if key in raw]
+    if not found:
+        return
+    moves = "\n".join(f"  {key}: -> {moved_to}:" for key, moved_to in found)
+    raise ConfigLoadError(
+        path,
+        "these keys moved under the service that owns them (PRD 51):\n"
+        f"{moves}\n"
+        "  Move them by hand, or re-run `etsy-listings setup`, which rewrites "
+        "the file in the current shape.",
+    )

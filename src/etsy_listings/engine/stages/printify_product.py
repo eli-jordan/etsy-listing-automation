@@ -368,7 +368,7 @@ class PrintifyProductStage:
             variants=variants,
             groups=placement.group_by_artwork([v.colour_slug for v in variants]),
             missing=resolution.missing,
-            currency=workspace.defaults.currency,
+            currency=workspace.defaults.etsy.currency,
         )
 
     def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> Product | None:

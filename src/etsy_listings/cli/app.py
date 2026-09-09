@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
@@ -17,6 +17,8 @@ from typing import Any
 import typer
 
 from etsy_listings import prompts, terminal
+from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
+from etsy_listings.authcmd import Part as AuthPart
 from etsy_listings.cli.render import format_blocked, format_plan
 from etsy_listings.clients.printify import (
     CachedCatalogClient,
@@ -283,25 +285,56 @@ def setup(
         run_setup(target)
 
 
-@app.command(epilog=EPILOG)
-def auth(
-    root: str | None = typer.Option(
+auth_app = typer.Typer(
+    epilog=EPILOG,
+    invoke_without_command=True,
+    help="Capture every credential: Printify, Etsy, and the Anthropic key.",
+)
+app.add_typer(auth_app, name="auth")
+
+
+def _check_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
+    return typer.Option(
+        False,
+        "--check",
+        help="Report what is stored and how long the Etsy consent has left. Writes nothing.",
+    )
+
+
+def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
+    """``--root`` as `auth` needs it: no shop.yaml required.
+
+    `auth` and `setup` are the two commands that run *before* a workspace
+    exists, so neither can discover one by walking up for its marker file --
+    they take the directory they are given (PRD 49).
+    """
+    return typer.Option(
         None,
         "--root",
         help=(
             "Which workspace to store credentials in. Defaults to the current "
-            "directory. Like `setup`, and unlike every other command, this one "
-            "does not need a shop.yaml to exist there yet -- it runs before one."
+            "directory; unlike most commands this one does not need a shop.yaml "
+            "to exist there yet."
         ),
         envvar=layout.ROOT_ENV_VAR,
         show_envvar=True,
         metavar="PATH",
-    ),
-    check: bool = typer.Option(
-        False,
-        "--check",
-        help="Report what is stored and how long the Etsy consent has left. Writes nothing.",
-    ),
+    )
+
+
+def _run_auth(root: str | None, check: bool, parts: Sequence[AuthPart]) -> None:
+    from etsy_listings.authcmd import run_auth
+
+    target = to_native_path(root) if root else Path.cwd()
+    with _wizard():
+        run_auth(target, check=check, parts=parts)
+
+
+@auth_app.callback(invoke_without_command=True)
+def auth(
+    ctx: typer.Context,
+    root: str | None = _auth_root_option(),
+    check: bool = _check_option(),
 ) -> None:
     """Capture every credential: Printify, Etsy, and the Anthropic key.
 
@@ -309,14 +342,40 @@ def auth(
     Etsy through the browser. Keys go to the workspace's .env, OAuth tokens to
     .auth/, and both are gitignored before the first one is written.
 
+    Run one at a time with `auth printify`, `auth etsy` or `auth anthropic`.
     Safe to re-run: it fills in what is missing, leaves what is present alone,
-    and is also how you renew the Etsy consent before its 90 days are up.
+    and is how you renew the Etsy consent before its 90 days are up.
     """
-    from etsy_listings.authcmd import run_auth
+    if ctx.invoked_subcommand is not None:
+        return
+    _run_auth(root, check, ALL_AUTH_PARTS)
 
-    target = to_native_path(root) if root else Path.cwd()
-    with _wizard():
-        run_auth(target, check=check)
+
+@auth_app.command("printify", epilog=EPILOG)
+def auth_printify(
+    root: str | None = _auth_root_option(),
+    check: bool = _check_option(),
+) -> None:
+    """Capture just the Printify API token, verified against the live API."""
+    _run_auth(root, check, ["printify"])
+
+
+@auth_app.command("etsy", epilog=EPILOG)
+def auth_etsy(
+    root: str | None = _auth_root_option(),
+    check: bool = _check_option(),
+) -> None:
+    """Capture just the Etsy app key pair and sign in through the browser."""
+    _run_auth(root, check, ["etsy"])
+
+
+@auth_app.command("anthropic", epilog=EPILOG)
+def auth_anthropic(
+    root: str | None = _auth_root_option(),
+    check: bool = _check_option(),
+) -> None:
+    """Capture just the Anthropic API key (used by `generate`, from Phase 4)."""
+    _run_auth(root, check, ["anthropic"])
 
 
 @app.command(epilog=EPILOG)

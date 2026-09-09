@@ -239,7 +239,7 @@ def test_workspace_loads_listing_with_the_workspace_currency(workspace_root: Pat
     themselves -- the one argument it was possible to get quietly wrong."""
     ws = Workspace.discover(root_override=workspace_root)
     listing = ws.load_listing("take-a-hike")
-    assert listing.prices["S"].currency == ws.defaults.currency
+    assert listing.prices["S"].currency == ws.defaults.etsy.currency
 
 
 def test_workspace_loads_profile_and_exceptions(workspace_root: Path) -> None:
@@ -294,4 +294,4 @@ def test_load_pricing_plan_attaches_the_workspace_currency(workspace_root: Path)
     plan = ws.load_pricing_plan(path)
 
     assert plan.profile == "comfort-colors-1717"
-    assert plan.prices["S"].currency == ws.defaults.currency
+    assert plan.prices["S"].currency == ws.defaults.etsy.currency

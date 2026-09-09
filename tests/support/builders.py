@@ -143,7 +143,10 @@ def set_shop_id(root: Path, shop_id: int) -> Path:
     a configured workspace can say so in one line."""
     path = root / "shop.yaml"
     document = _read_yaml(path)
-    document["printify"] = {"shop_id": shop_id}
+    # Merged, not replaced: the fixture's `preferred_print_provider` lives in
+    # this block too (PRD 51), and a helper that quietly dropped it would
+    # change what the product stage offers.
+    document["printify"] = {**(document.get("printify") or {}), "shop_id": shop_id}
     _write_yaml(path, document)
     return root
 

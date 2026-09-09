@@ -45,7 +45,7 @@ costs the $0.20 listing fee.
 
 ### 1.3 Generate an API token
 
-Printify → **account settings → Connections** (`printify.com/app/account/connections`)
+Printify → **account settings → API** (`printify.com/app/account/api`)
 → generate a personal access token.
 
 Scopes to select:
@@ -131,16 +131,24 @@ etsy-listings/
 
 ```yaml
 printify:
+  shop_name: My new store  # so the id below is checkable at a glance
   shop_id: 28819281        # read back from your token; setup writes it
+  preferred_print_provider: Monster Digital
 etsy:
+  shop_name: TakeAHikeTees # setup resolves the id from this
+  shop_id: 12345678
+  currency: NOK            # read from the Etsy shop
   who_made: i_did
   when_made: made_to_order
   is_supply: false
   renewal: manual
-  # shop_id, shop_section_id and return_policy_id are Phase 3; add them then.
-currency: NOK
-preferred_print_provider: Monster Digital
+  # shop_section_id and return_policy_id are filled in by `setup` once it can
+  # reach Etsy -- that is, once `auth` has run.
 ```
+
+Every key sits under the service that owns it, and each shop carries its name
+beside its id (PRD 51). `setup` writes the whole file with a comment per field,
+so the copy above is a sketch rather than the exact output.
 
 Point the tool at it with `--root`, or `export ETSY_LISTINGS_ROOT=...` in
 `~/.zshenv`. Cygwin paths work (`/home/Admin/etsy-listings`), for `setup` too.

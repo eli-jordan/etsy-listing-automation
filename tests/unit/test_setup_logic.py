@@ -12,6 +12,7 @@ from pathlib import Path
 
 import yaml
 
+from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.config.defaults import Defaults
 from etsy_listings.setupcmd import logic
@@ -97,13 +98,13 @@ def test_no_shops_at_all_is_an_error_naming_what_to_do() -> None:
 
 ANSWERS = logic.SetupAnswers(
     printify_shop_id=28819281,
+    printify_shop_name="My new store",
+    preferred_print_provider="Monster Digital",
     currency="NOK",
     who_made="i_did",
     when_made="made_to_order",
     is_supply=False,
     renewal="manual",
-    preferred_print_provider="Monster Digital",
-    etsy_shop_id=None,
 )
 
 
@@ -114,8 +115,9 @@ def test_the_document_it_writes_loads_back_as_defaults(tmp_path: Path) -> None:
 
     defaults = Defaults.load(path)
     assert defaults.printify.require_shop_id() == 28819281
-    assert defaults.currency == "NOK"
-    assert defaults.preferred_print_provider == "Monster Digital"
+    assert defaults.printify.shop_name == "My new store"
+    assert defaults.printify.preferred_print_provider == "Monster Digital"
+    assert defaults.etsy.currency == "NOK"
     assert defaults.etsy.who_made == "i_did"
 
 
@@ -125,48 +127,34 @@ def test_an_unknown_etsy_shop_id_is_omitted_rather_than_faked() -> None:
     document = logic.shop_yaml_document(ANSWERS, None)
 
     assert "shop_id" not in document["etsy"]
+    assert "shop_name" not in document["etsy"]
 
 
-def test_a_known_etsy_shop_id_is_written() -> None:
-    answers = logic.SetupAnswers(**{**vars(ANSWERS), "etsy_shop_id": 12345678})
+def test_a_discovered_etsy_shop_is_written_as_name_and_id() -> None:
+    answers = logic.SetupAnswers(
+        **{**vars(ANSWERS), "etsy_shop_id": 12345678, "etsy_shop_name": "TakeAHikeTees"}
+    )
 
-    assert logic.shop_yaml_document(answers, None)["etsy"]["shop_id"] == 12345678
+    etsy = logic.shop_yaml_document(answers, None)["etsy"]
+
+    assert etsy["shop_id"] == 12345678
+    assert etsy["shop_name"] == "TakeAHikeTees"
 
 
 def test_an_absent_print_provider_preference_is_omitted() -> None:
     answers = logic.SetupAnswers(**{**vars(ANSWERS), "preferred_print_provider": None})
 
-    assert "preferred_print_provider" not in logic.shop_yaml_document(answers, None)
+    assert "preferred_print_provider" not in logic.shop_yaml_document(answers, None)["printify"]
 
 
-def test_merging_keeps_keys_setup_does_not_ask_about(tmp_path: Path) -> None:
-    """Re-running `setup` on a workspace that reached Phase 3 must not drop
-    the ids that phase filled in."""
-    existing = {
-        "etsy": {
-            "shop_id": 999,
-            "who_made": "i_did",
-            "when_made": "made_to_order",
-            "is_supply": False,
-            "shop_section_id": 44,
-            "return_policy_id": 55,
-        },
-        "currency": "NOK",
-    }
+def test_merging_keeps_keys_setup_does_not_ask_about() -> None:
+    """Anything a later phase or a human added is theirs, and a wizard that
+    drops it is a wizard nobody re-runs."""
+    existing = {"etsy": {"a_later_key": 1}, "something_later": {"a": 1}}
 
     document = logic.shop_yaml_document(ANSWERS, existing)
 
-    assert document["etsy"]["shop_section_id"] == 44
-    assert document["etsy"]["return_policy_id"] == 55
-
-
-def test_merging_keeps_top_level_keys_setup_does_not_ask_about() -> None:
-    """Not just the Etsy ids: anything a later phase or a human added at the
-    top level is theirs, and a wizard that drops it is a wizard nobody re-runs."""
-    existing = {"currency": "NOK", "something_later": {"a": 1}}
-
-    document = logic.shop_yaml_document(ANSWERS, existing)
-
+    assert document["etsy"]["a_later_key"] == 1
     assert document["something_later"] == {"a": 1}
 
 
@@ -176,23 +164,27 @@ def test_an_answer_the_user_just_gave_wins_over_the_file() -> None:
     about, the answer wins. Asking a question and then discarding the answer
     is worse than either -- the caller seeds the prompt with the current value,
     so pressing enter already means "leave it"."""
-    existing = {"etsy": {"shop_id": 999}, "currency": "USD"}
+    existing = {"etsy": {"shop_id": 999, "currency": "USD"}}
     answers = logic.SetupAnswers(**{**vars(ANSWERS), "etsy_shop_id": 12345678})
 
     document = logic.shop_yaml_document(answers, existing)
 
     assert document["etsy"]["shop_id"] == 12345678
-    assert document["currency"] == "NOK"
+    assert document["etsy"]["currency"] == "NOK"
 
 
-def test_an_etsy_shop_id_on_disk_survives_an_answer_of_none() -> None:
-    """`None` here means "not asked / not known", not "delete it" -- the
-    prompt cannot return blank for a field it seeded with a value."""
-    existing = {"etsy": {"shop_id": 999}}
+def test_ids_on_disk_survive_a_discovery_that_found_nothing() -> None:
+    """``None`` means "not found", not "delete it". An Etsy lookup that failed
+    -- no credentials, a network problem -- must not clear ids a previous run
+    resolved."""
+    existing = {
+        "etsy": {"shop_id": 999, "shop_name": "Old", "shop_section_id": 44, "return_policy_id": 55}
+    }
 
-    document = logic.shop_yaml_document(ANSWERS, existing)
+    etsy = logic.shop_yaml_document(ANSWERS, existing)["etsy"]
 
-    assert document["etsy"]["shop_id"] == 999
+    assert (etsy["shop_id"], etsy["shop_name"]) == (999, "Old")
+    assert (etsy["shop_section_id"], etsy["return_policy_id"]) == (44, 55)
 
 
 def test_the_rendered_file_carries_a_header_saying_where_it_came_from() -> None:
@@ -202,8 +194,67 @@ def test_the_rendered_file_carries_a_header_saying_where_it_came_from() -> None:
     assert "setup" in rendered.splitlines()[0]
 
 
+def test_the_rendered_file_points_at_env_for_the_credentials() -> None:
+    """`shop.yaml` is the file people open looking for their tokens, and it is
+    the one file in the workspace that must never hold them."""
+    rendered = logic.render_shop_yaml(logic.shop_yaml_document(ANSWERS, None))
+
+    assert ".env" in rendered
+    assert "auth" in rendered
+
+
+def test_every_field_written_carries_a_comment() -> None:
+    """The point of the comments is that a reader never meets a bare number.
+    A field added later without one would go unnoticed, so the check is over
+    whatever the document happens to contain."""
+    answers = logic.SetupAnswers(
+        **{
+            **vars(ANSWERS),
+            "etsy_shop_name": "TakeAHikeTees",
+            "etsy_shop_id": 12345678,
+            "etsy_shop_section_id": 44,
+            "etsy_return_policy_id": 55,
+        }
+    )
+    document = logic.shop_yaml_document(answers, None)
+
+    rendered = logic.render_shop_yaml(document)
+    lines = rendered.splitlines()
+    for section, fields in document.items():
+        for field in fields:
+            index = next(i for i, line in enumerate(lines) if line.strip().startswith(f"{field}:"))
+            assert lines[index - 1].strip().startswith("#"), f"{section}.{field} has no comment"
+
+
 def test_the_rendered_file_is_valid_yaml_with_printify_first() -> None:
     rendered = logic.render_shop_yaml(logic.shop_yaml_document(ANSWERS, None))
     parsed = yaml.safe_load(rendered)
 
-    assert list(parsed) == ["printify", "etsy", "currency", "preferred_print_provider"]
+    assert list(parsed) == ["printify", "etsy"]
+
+
+# ------------------------------------------------------- matching an Etsy shop
+
+
+def _etsy_shop(name: str, shop_id: int) -> EtsyShop:
+    return EtsyShop(shop_id=shop_id, shop_name=name)
+
+
+def test_one_exact_match_is_the_answer() -> None:
+    found = logic.exact_shop_match(
+        [_etsy_shop("TakeAHike", 1), _etsy_shop("TakeAHikeVintage", 2)], "takeahike"
+    )
+
+    assert found is not None
+    assert found.shop_id == 1
+
+
+def test_a_near_match_is_not_taken_as_the_answer() -> None:
+    """Etsy's shop search is built for buyers browsing, not for resolving an
+    identifier. Taking the first row would point a workspace at a stranger's
+    shop."""
+    assert logic.exact_shop_match([_etsy_shop("TakeAHikeVintage", 2)], "TakeAHike") is None
+
+
+def test_no_candidates_is_no_answer() -> None:
+    assert logic.exact_shop_match([], "TakeAHike") is None

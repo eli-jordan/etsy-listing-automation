@@ -18,6 +18,6 @@ needs a credential to discover it with.
 :func:`run_auth` is the whole interface.
 """
 
-from etsy_listings.authcmd.interactive import Backends, run_auth
+from etsy_listings.authcmd.interactive import ALL_PARTS, Backends, Part, run_auth
 
-__all__ = ["Backends", "run_auth"]
+__all__ = ["ALL_PARTS", "Backends", "Part", "run_auth"]

@@ -140,19 +140,22 @@ The `shop.yaml` it writes looks like this, and hand-editing it is fine:
 
 ```yaml
 printify:
+  shop_name: My new store    # so the id below is checkable at a glance
   shop_id: 28819281          # discovered from your token, not typed
+  preferred_print_provider: Monster Digital   # optional; used by `new`'s default
 etsy:
+  shop_name: TakeAHikeTees   # discovered too; the id is resolved from it
+  shop_id: 12345678
+  currency: NOK              # read from the Etsy shop
   who_made: i_did
   when_made: made_to_order
   is_supply: false
   renewal: manual
-currency: NOK
-preferred_print_provider: Monster Digital   # optional; used by `new`'s default
 ```
 
-`etsy.shop_id`, `shop_section_id` and `return_policy_id` are Phase 3 fields and
-are simply absent until you have them — the tool asks for each by name at the
-point it actually needs one. Every price you write anywhere in this workspace
+The Etsy fields are absent until `auth` has stored credentials `setup` can look
+them up with — the tool asks for each by name at the point it actually needs
+one, and none of them is ever typed as a number. Every price you write anywhere in this workspace
 must be in the currency you set here (`349 NOK`, never a bare `349` — see
 `Money` in [config/money.py](../src/etsy_listings/config/money.py)).
 
@@ -271,7 +274,7 @@ how you start a listing for artwork you have not drawn yet.
 This reads Printify's catalog live, so it needs a token first — the catalog
 endpoints are read-only but **not** public, and without one Printify answers
 `401 Unauthorized`. Generate a personal access token with the `catalog.read`
-scope at [printify.com/app/account/connections](https://printify.com/app/account/connections)
+scope at [printify.com/app/account/api](https://printify.com/app/account/api)
 (docs/setup.md §1.3) and put it in the **workspace's** `.env`:
 
 ```

@@ -224,7 +224,7 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     assert plan_path.is_file()
     plan = workspace.load_pricing_plan(plan_path)
     assert plan.profile == "gildan-5000"
-    zero = Money.parse(f"0 {workspace.defaults.currency}")
+    zero = Money.parse(f"0 {workspace.defaults.etsy.currency}")
     assert all(price != zero for price in plan.prices.values())  # real cost data was used
 
     listing = Listing.load(

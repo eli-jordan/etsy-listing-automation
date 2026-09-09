@@ -42,6 +42,8 @@ connection, and a 5s default turns a slow uplink into an unreadable failure."""
 
 PING_PATH = "/v3/application/openapi-ping"
 
+HTTP_NOT_FOUND = 404
+
 BearerSource = Callable[[], str]
 """Resolved per request, never at construction. `plan` builds clients it may
 never call, and a workspace that has not signed in must still be able to build

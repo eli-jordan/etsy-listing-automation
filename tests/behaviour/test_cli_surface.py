@@ -245,7 +245,7 @@ def test_new_without_any_designs_says_where_to_put_one(tmp_path: Path, monkeypat
     monkeypatch.delenv("PRINTIFY_API_TOKEN", raising=False)
     (tmp_path / "shop.yaml").write_text(
         "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
-        "  is_supply: false\ncurrency: NOK\n",
+        "  is_supply: false\n  currency: NOK\n",
         encoding="utf-8",
     )
     result = runner.invoke(app, ["new", "--root", str(tmp_path)])

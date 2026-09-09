@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -27,10 +28,15 @@ import typer
 import yaml
 
 from etsy_listings import prompts
+from etsy_listings.clients.etsy.models import Shop as EtsyShop
+from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
+from etsy_listings.clients.etsy.tokens import EtsyAuthError, TokenStore
+from etsy_listings.clients.etsy.transport import EtsyApiError, OAuthClient
+from etsy_listings.clients.etsy.transport import Transport as EtsyTransport
 from etsy_listings.clients.printify import HttpPrintifyClient, PrintifyAuthError, Transport
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, Secrets
+from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, EtsyAppKey, Secrets
 from etsy_listings.setupcmd import logic
 from etsy_listings.workspace import layout, scaffold
 
@@ -84,7 +90,7 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
         typer.echo("")
         typer.echo("A Printify personal access token is needed to read the catalog")
         typer.echo("and create products. Generate one at:")
-        typer.echo("  https://printify.com/app/account/connections")
+        typer.echo("  https://printify.com/app/account/api")
         typer.echo("It needs the catalog, shops and products scopes.")
         token = prompts.ask_text("Printify API token:")
 
@@ -126,25 +132,187 @@ def _ask_etsy_defaults() -> dict[str, Any]:
     }
 
 
-def _ask_etsy_shop_id(current: object) -> int | None:
-    """Blank is a real answer: this project had no Etsy shop when `setup` was
-    written, and a wizard that demands the id anyway gets a made-up one.
+@dataclass(frozen=True)
+class EtsyAccess:
+    """A client that can read Etsy, and who it is reading as.
 
-    Seeded with whatever the file already says, so a re-run keeps it without
-    the user having to retype an eight-digit number they do not have to hand.
+    ``user_id`` is ``None`` when the app key pair is stored but nobody has
+    signed in: the searches still work -- they are unscoped -- but "which shop
+    does the signed-in seller own?" has no answer, so discovery falls back to
+    asking for a name.
     """
-    default = str(current) if isinstance(current, int) else ""
-    while True:
-        answer = prompts.ask_text(
-            "Etsy shop id (blank if you do not have one yet):",
-            default=default,
-            allow_blank=True,
+
+    client: EtsyShopClient
+    user_id: int | None
+
+
+@dataclass(frozen=True)
+class EtsyFindings:
+    """What `setup` managed to learn about the Etsy side. Every field may be
+    ``None``: a workspace is usable before Etsy is reachable at all."""
+
+    shop: EtsyShop | None = None
+    section_id: int | None = None
+    return_policy_id: int | None = None
+
+
+EtsyAccessFactory = Callable[[Path], EtsyAccess | None]
+"""Builds Etsy access from what the workspace has stored, or answers ``None``
+when it has nothing. Injected for the same reason the Printify factory is: the
+discovery is the part worth testing, and it should not need a network."""
+
+
+def _default_etsy_access(root: Path) -> EtsyAccess | None:
+    secrets = Secrets.load(root / layout.ENV_FILE)
+    if not (secrets.etsy_keystring and secrets.etsy_shared_secret):
+        return None
+    app_key = EtsyAppKey(secrets.etsy_keystring, secrets.etsy_shared_secret)
+
+    store = TokenStore(
+        root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE,
+        refresh=lambda token: OAuthClient(app_key.keystring).refresh(token),
+    )
+    tokens = store.load()
+    # Every call `setup` makes is unscoped, so a bearer is a bonus rather than
+    # a requirement -- it is what makes `shop_by_owner` possible, nothing more.
+    bearer = store.access_token if tokens is not None else None
+    transport = EtsyTransport(app_key, bearer=bearer)
+    return EtsyAccess(HttpEtsyShopClient(transport), tokens.user_id if tokens else None)
+
+
+def _discover_etsy(
+    access: EtsyAccess | None,
+    printify_shop: Shop,
+    existing_etsy: dict[str, Any],
+) -> EtsyFindings:
+    """Find the Etsy shop, its section and its return policy (PRD 51).
+
+    Never fatal. `setup`'s job is to leave a usable workspace, and everything
+    it learns here is optional to that: a failure reports what it could not
+    reach and keeps whatever the file already said.
+    """
+    if access is None:
+        typer.echo("")
+        typer.echo("No Etsy credentials stored yet, so the Etsy ids cannot be looked up.")
+        typer.echo("  Run `etsy-listings auth` first, then re-run `setup` to fill them in.")
+        return EtsyFindings()
+
+    try:
+        shop = _find_etsy_shop(access, printify_shop, existing_etsy)
+        if shop is None:
+            return EtsyFindings()
+        return EtsyFindings(
+            shop=shop,
+            section_id=_pick_section(access.client, shop, existing_etsy.get("shop_section_id")),
+            return_policy_id=_pick_return_policy(
+                access.client, shop, existing_etsy.get("return_policy_id")
+            ),
         )
-        if not answer.strip():
-            return None
-        if answer.strip().isdigit():
-            return int(answer.strip())
-        typer.echo("  that is not a number -- it is the numeric id, not the shop's name")
+    except (EtsyAuthError, EtsyApiError) as exc:
+        typer.echo("")
+        typer.echo(f"Could not read the Etsy shop: {exc}")
+        typer.echo("  Keeping whatever shop.yaml already says. `auth` then `setup` fixes this.")
+        return EtsyFindings()
+
+
+def _find_etsy_shop(
+    access: EtsyAccess, printify_shop: Shop, existing_etsy: dict[str, Any]
+) -> EtsyShop | None:
+    """Three routes to the shop, cheapest and most certain first.
+
+    A connected Printify shop is the best evidence available: Printify names
+    the shop after the Etsy shop it publishes to, so the selection the user
+    just made *is* the answer. Failing that, an Etsy account owns exactly one
+    shop, and the stored consent says which account. Only if both are silent
+    does anyone get asked to type a name.
+    """
+    if printify_shop.is_connected:
+        matches = access.client.find_shops(printify_shop.title)
+        found = logic.exact_shop_match(matches, printify_shop.title)
+        if found is not None:
+            typer.echo("")
+            typer.echo(f"Etsy shop: {found.shop_name} ({found.shop_id})")
+            typer.echo(f"  matched from the connected Printify shop {printify_shop.title!r}.")
+            return found
+
+    if access.user_id is not None:
+        owned = access.client.shop_by_owner(access.user_id)
+        if owned is not None:
+            typer.echo("")
+            typer.echo(f"Etsy shop: {owned.shop_name} ({owned.shop_id})")
+            typer.echo("  the shop the signed-in Etsy account owns.")
+            return owned
+
+    return _ask_for_etsy_shop(access, existing_etsy)
+
+
+def _ask_for_etsy_shop(access: EtsyAccess, existing_etsy: dict[str, Any]) -> EtsyShop | None:
+    """The fallback: a name, resolved to an id by searching for it.
+
+    Blank is a real answer -- a workspace with no Etsy shop yet is a workspace
+    that can still render and create products -- and the id is never asked
+    for, because a number typed by hand is the thing this whole path exists to
+    avoid.
+    """
+    default = str(existing_etsy.get("shop_name") or "")
+    answer = prompts.ask_text("Etsy shop name (blank to skip):", default=default, allow_blank=True)
+    name = answer.strip()
+    if not name:
+        return None
+
+    matches = access.client.find_shops(name)
+    exact = logic.exact_shop_match(matches, name)
+    if exact is not None:
+        typer.echo(f"  found {exact.shop_name} ({exact.shop_id})")
+        return exact
+    if not matches:
+        typer.echo(f"  Etsy has no shop called {name!r}. Leaving the Etsy ids unset.")
+        return None
+    return prompts.pick(
+        "Which Etsy shop?",
+        matches,
+        label=lambda shop: f"{shop.shop_name}  ({shop.shop_id})",
+    )
+
+
+def _pick_section(client: EtsyShopClient, shop: EtsyShop, current: object) -> int | None:
+    sections = client.shop_sections(shop.shop_id)
+    if not sections:
+        typer.echo("  no shop sections on Etsy yet -- create one there if you want listings filed.")
+        return None
+    # What is already configured is offered first and says so, which is what
+    # makes pressing enter through a re-run keep the file as it is.
+    ordered = sorted(sections, key=lambda section: section.shop_section_id != current)
+    chosen = prompts.pick(
+        "Which shop section should listings go in?",
+        [*ordered, None],
+        label=lambda section: (
+            "(none)"
+            if section is None
+            else f"{section.title}  ({section.shop_section_id})"
+            + ("  -- current" if section.shop_section_id == current else "")
+        ),
+    )
+    return None if chosen is None else chosen.shop_section_id
+
+
+def _pick_return_policy(client: EtsyShopClient, shop: EtsyShop, current: object) -> int | None:
+    policies = client.return_policies(shop.shop_id)
+    if not policies:
+        typer.echo("  no return policies on Etsy yet -- listings can be drafted without one.")
+        return None
+    ordered = sorted(policies, key=lambda policy: policy.return_policy_id != current)
+    chosen = prompts.pick(
+        "Which return policy should listings carry?",
+        [*ordered, None],
+        label=lambda policy: (
+            "(none)"
+            if policy is None
+            else f"{policy.describe()}  ({policy.return_policy_id})"
+            + ("  -- current" if policy.return_policy_id == current else "")
+        ),
+    )
+    return None if chosen is None else chosen.return_policy_id
 
 
 def _existing_document(root: Path) -> dict[str, Any] | None:
@@ -161,8 +329,14 @@ def _existing_document(root: Path) -> dict[str, Any] | None:
     return loaded if isinstance(loaded, dict) else None
 
 
-def run_setup(root: Path, *, client_factory: ClientFactory | None = None) -> None:
+def run_setup(
+    root: Path,
+    *,
+    client_factory: ClientFactory | None = None,
+    etsy_access: EtsyAccessFactory | None = None,
+) -> None:
     factory = client_factory or _default_client_factory
+    access_factory = etsy_access or _default_etsy_access
     root.mkdir(parents=True, exist_ok=True)
 
     typer.echo(f"Setting up a workspace in {root}")
@@ -182,25 +356,31 @@ def run_setup(root: Path, *, client_factory: ClientFactory | None = None) -> Non
     # nothing, and typing something different is taken at face value.
     existing = _existing_document(root) or {}
     existing_etsy = existing.get("etsy") or {}
+    existing_printify = existing.get("printify") or {}
+
+    findings = _discover_etsy(access_factory(root), shop, existing_etsy)
 
     currency = prompts.ask_text(
-        "Shop currency (ISO code, e.g. NOK):", default=str(existing.get("currency") or "NOK")
+        "Shop currency (ISO code):",
+        default=_currency_default(findings, existing_etsy),
     )
     provider = prompts.ask_text(
         "Preferred print provider (blank for none):",
-        default=str(existing.get("preferred_print_provider") or ""),
+        default=str(existing_printify.get("preferred_print_provider") or ""),
         allow_blank=True,
     )
-
-    etsy_shop_id = _ask_etsy_shop_id(existing_etsy.get("shop_id"))
-    etsy = _ask_etsy_defaults()
+    etsy_defaults = _ask_etsy_defaults()
 
     answers = logic.SetupAnswers(
         printify_shop_id=shop.id,
-        currency=currency.strip().upper(),
+        printify_shop_name=shop.title,
         preferred_print_provider=provider.strip() or None,
-        etsy_shop_id=etsy_shop_id,
-        **etsy,
+        currency=currency.strip().upper(),
+        etsy_shop_name=findings.shop.shop_name if findings.shop else None,
+        etsy_shop_id=findings.shop.shop_id if findings.shop else None,
+        etsy_shop_section_id=findings.section_id,
+        etsy_return_policy_id=findings.return_policy_id,
+        **etsy_defaults,
     )
 
     # Every question is answered, so the credential is worth keeping: writing
@@ -210,13 +390,29 @@ def run_setup(root: Path, *, client_factory: ClientFactory | None = None) -> Non
     document = logic.shop_yaml_document(answers, existing)
     (root / layout.SHOP_FILE).write_text(logic.render_shop_yaml(document), encoding="utf-8")
 
-    _report_next_steps(root, shop)
+    _report_next_steps(root, shop, findings)
 
 
-def _report_next_steps(root: Path, shop: Shop) -> None:
+def _currency_default(findings: EtsyFindings, existing_etsy: dict[str, Any]) -> str:
+    """The Etsy shop's own currency wins, then the file, then NOK.
+
+    The shop's answer goes first because it is the only one that cannot be
+    wrong: a workspace configured in a currency the shop does not sell in is a
+    disagreement nothing surfaces until a price lands wrong (PRD 51). It is
+    still offered as a default rather than imposed -- it is a prompt, and the
+    user can say otherwise.
+    """
+    if findings.shop is not None and findings.shop.currency_code:
+        return findings.shop.currency_code
+    return str(existing_etsy.get("currency") or "NOK")
+
+
+def _report_next_steps(root: Path, shop: Shop, findings: EtsyFindings) -> None:
     typer.echo("")
     typer.echo(f"Workspace ready at {root}")
     typer.echo(f"  Printify shop  {shop.title} ({shop.id})")
+    if findings.shop is not None:
+        typer.echo(f"  Etsy shop      {findings.shop.shop_name} ({findings.shop.shop_id})")
     typer.echo(f"  shop.yaml      {layout.SHOP_FILE}")
     typer.echo(f"  credentials    {layout.ENV_FILE} (gitignored)")
     typer.echo("")
@@ -227,7 +423,3 @@ def _report_next_steps(root: Path, shop: Shop) -> None:
             f"Note: this Printify shop is not connected to a sales channel "
             f"({shop.sales_channel or 'none'}), so nothing can be published to Etsy from it yet."
         )
-    typer.echo(
-        "Etsy sign-in is not part of setup: it arrives with `auth` in Phase 3, "
-        "along with publishing. Everything up to that point works now."
-    )

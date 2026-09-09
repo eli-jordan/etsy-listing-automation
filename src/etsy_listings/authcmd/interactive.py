@@ -22,11 +22,11 @@ from __future__ import annotations
 
 import os
 import webbrowser
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import NoReturn
+from typing import Literal, NoReturn
 
 import typer
 
@@ -69,8 +69,26 @@ class Backends:
     now: Callable[[], datetime] = utcnow
 
 
-def run_auth(root: Path, *, backends: Backends | None = None, check: bool = False) -> None:
-    """Capture (or report on) every credential this tool needs.
+Part = Literal["printify", "etsy", "anthropic"]
+
+ALL_PARTS: tuple[Part, ...] = ("printify", "etsy", "anthropic")
+"""The credentials `auth` knows how to capture, in the order it asks for them.
+
+Printify first because it is the one every phase so far needs; Anthropic last
+because nothing needs it yet. A part can be run on its own (`auth etsy`) --
+one credential expiring is the ordinary case, and walking past two working
+ones to renew the third is what teaches people to avoid the command (PRD 14).
+"""
+
+
+def run_auth(
+    root: Path,
+    *,
+    backends: Backends | None = None,
+    check: bool = False,
+    parts: Sequence[Part] = ALL_PARTS,
+) -> None:
+    """Capture (or report on) the credentials named by ``parts``.
 
     ``check`` reports and writes nothing -- it is the answer to "am I still
     signed in?", which should never be a question you have to risk changing
@@ -88,15 +106,23 @@ def run_auth(root: Path, *, backends: Backends | None = None, check: bool = Fals
     if scaffold.update_gitignore(root):
         typer.echo("  wrote .gitignore (.env, .auth/ and .cache/ stay out of git)")
 
-    _printify_token(root, back)
-    app_key = _etsy_app_key(root, back)
-    _etsy_sign_in(root, app_key, store, back)
-    _anthropic_key(root)
+    if "printify" in parts:
+        _printify_token(root, back)
+    if "etsy" in parts:
+        # The key pair and the sign-in are one part, not two: the browser flow
+        # needs the keystring, and a `auth etsy` that captured a key pair
+        # without signing in would leave the half-configured state the whole
+        # command exists to avoid.
+        app_key = _etsy_app_key(root, back)
+        _etsy_sign_in(root, app_key, store, back)
+    if "anthropic" in parts:
+        _anthropic_key(root)
 
     typer.echo("")
     _report(root, store, back)
-    typer.echo("")
-    typer.echo("Next: `etsy-listings setup` writes the workspace and reads back the shop ids.")
+    if tuple(parts) == ALL_PARTS:
+        typer.echo("")
+        typer.echo("Next: `etsy-listings setup` writes the workspace and reads back the shop ids.")
 
 
 # --------------------------------------------------------------- credentials
@@ -111,7 +137,7 @@ def _printify_token(root: Path, back: Backends) -> None:
     typer.echo("")
     typer.echo("A Printify personal access token is needed to read the catalog")
     typer.echo("and create products. Generate one at:")
-    typer.echo("  https://printify.com/app/account/connections")
+    typer.echo("  https://printify.com/app/account/api")
     typer.echo("It needs the catalog, shops and products scopes.")
     token = prompts.ask_text("Printify API token:")
 
