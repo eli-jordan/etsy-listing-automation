@@ -22,7 +22,17 @@ holding one listing's lockfile itself.
 
 A stage that cannot run says so with a :class:`Blocked`, never an exception:
 a refusal is something ``plan`` must report, and an exception unwinds the walk
-and takes the other stages' plans with it.
+and takes the other stages' plans with it. It says so from ``desired()`` and
+nowhere else -- one place a stage can refuse, so a refusal never arrives
+carrying a document built for a run that was never going to happen.
+
+**The bookkeeping around a stage is this module's, not the stage's.** Looking
+up a stage's lockfile subtree, decoding it, deciding what an undecodable one
+means, naming the stage in the resulting plan, and turning a refusal into a
+blocked plan all happen in :func:`build_plan`. Each was written out once per
+stage until Phase 3, and each had already been written two different ways with
+only two stages in the pipeline -- which is what a wide protocol costs when
+the pipeline is about to double.
 """
 
 from etsy_listings.engine.apply import execute
@@ -36,6 +46,7 @@ from etsy_listings.engine.change import (
     Plan,
     PriceChange,
     StagePlan,
+    Verdict,
     drift,
     scalar,
     sequence,
@@ -89,6 +100,9 @@ __all__ = [
     "StageApplyResult",
     "Blocked",
     "StageBlockedError",
+    # What a stage's plan() answers with: a decision, not a plan. The engine
+    # supplies the stage's name and the refusal; a stage supplies neither.
+    "Verdict",
     # What plan produces and cli/ui consume -- never comparing state themselves.
     "Plan",
     "StagePlan",

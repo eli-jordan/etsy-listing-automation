@@ -16,6 +16,8 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+from etsy_listings.errors import UserFacingError
+
 PRINTIFY_TOKEN_VAR = "PRINTIFY_API_TOKEN"
 ANTHROPIC_KEY_VAR = "ANTHROPIC_API_KEY"
 ETSY_KEYSTRING_VAR = "ETSY_KEYSTRING"
@@ -26,7 +28,17 @@ one pre-joined string, because they are two values on two lines of Etsy's app
 page and a user pasting them should not have to assemble anything (PRD 49)."""
 
 
-class MissingCredentialError(RuntimeError):
+class MissingCredentialError(UserFacingError, RuntimeError):
+    """A credential this run needs is not set anywhere.
+
+    A :class:`~etsy_listings.errors.UserFacingError`, because the message
+    below *is* the whole useful output -- it names the variable, the file and
+    the way to get one. Typed as anything else it reaches ``--all`` as a
+    traceback that ends the batch on its first unconfigured listing, which is
+    the outcome PRD 16 exists to prevent. ``RuntimeError`` is kept alongside
+    it so the type it has always been stays catchable.
+    """
+
     def __init__(self, variable: str, env_file: Path, needed_for: str, how_to_get: str) -> None:
         self.variable = variable
         super().__init__(

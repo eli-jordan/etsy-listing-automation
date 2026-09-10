@@ -35,10 +35,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.config.listing import TemplateMediaEntry
-from etsy_listings.engine.change import Action, StagePlan
+from etsy_listings.engine.change import Action, StagePlan, Verdict
 from etsy_listings.engine.context import RunContext, Swatch
 from etsy_listings.engine.lock import (
     Lockfile,
@@ -196,24 +197,26 @@ class RenderDesired:
         return to_workspace_relative_posix(self.root, path)
 
 
-@dataclass(frozen=True)
-class RenderApplied:
+class RenderApplied(BaseModel):
+    """The stage's lockfile subtree, as the two fields ``plan()`` compares.
+
+    A model rather than a dataclass with a hand-written ``parse``, so that
+    :meth:`~etsy_listings.engine.lock.Lockfile.parse_applied_for` can decode
+    it under the same rule as every other stage's document. The hand-written
+    one indexed ``data["input_hash"]`` and raised ``KeyError`` on a truncated
+    lockfile, where the product stage's returned ``None`` -- one rule, two
+    answers, and the raising one took a whole ``--all`` batch with it.
+
+    ``extra="ignore"``, because the written document also carries
+    ``scene_config``, which nothing reads back: it is there because A2 says
+    the lockfile records the verbatim last-applied document, not because this
+    comparison needs it.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
     input_hash: str
     scenes: tuple[str, ...]
-
-    @classmethod
-    def parse(cls, data: dict[str, Any] | None) -> RenderApplied | None:
-        """The stage's lockfile subtree, as the two fields ``plan()`` compares.
-
-        ``None`` in, ``None`` out -- a stage that has never run has no applied
-        document, and that is not an error to distinguish from a malformed
-        one. The written document also carries ``scene_config``, which nothing
-        reads back: it is there because A2 says the lockfile records the
-        verbatim last-applied document, not because this comparison needs it.
-        """
-        if data is None:
-            return None
-        return cls(input_hash=data["input_hash"], scenes=tuple(data["scenes"]))
 
 
 @dataclass(frozen=True)
@@ -303,8 +306,15 @@ def _resolve_scene(
 class RenderStage:
     name = "render"
     local = True
+    applied_model = RenderApplied
 
-    def desired(self, ctx: RunContext, listing: str) -> RenderDesired:
+    def desired(
+        self, ctx: RunContext, listing: str, applied: RenderApplied | None
+    ) -> RenderDesired:
+        """``applied`` is unused: nothing about a previous render can make the
+        next one refusable. The parameter is the protocol's, not this stage's
+        -- the product stage needs it to refuse a garment change (PRD 37)."""
+        del applied
         workspace = ctx.workspace
         listing_cfg = workspace.load_listing(listing)
         profile = workspace.load_profile(listing_cfg.profile)
@@ -360,33 +370,38 @@ class RenderStage:
             base_hash=base_hash,
         )
 
-    def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> RenderLive | None:
+    def read_live(
+        self, ctx: RunContext, listing: str, lock: Lockfile, applied: RenderApplied | None
+    ) -> RenderLive | None:
         """Does what the lockfile claims was rendered still exist?
 
         A stat per scene, deliberately not a re-hash of every PNG: a
         ``plan --all`` over a real catalogue would otherwise read every
         rendered megabyte on every invocation, to answer a question the
         separate ``outputs`` axis already exists to answer at upload time.
+
+        ``applied`` arrives decoded. This used to re-look-up and re-parse the
+        stage's own subtree here, having just been handed it a line earlier in
+        ``build_plan``.
         """
-        last = RenderApplied.parse(lock.applied_for(self.name))
-        if last is None:
+        del lock
+        if applied is None:
             return None
         return RenderLive(
             outputs_present={
                 scene: _render_path(ctx.workspace, listing, scene).is_file()
-                for scene in last.scenes
+                for scene in applied.scenes
             }
         )
 
     def plan(
-        self, desired: RenderDesired, applied: dict[str, Any] | None, live: RenderLive | None
-    ) -> StagePlan:
-        last = RenderApplied.parse(applied)
-        if last is None:
+        self, desired: RenderDesired, applied: RenderApplied | None, live: RenderLive | None
+    ) -> Verdict:
+        if applied is None:
             return self._will_run(desired, "no previous render", missing=())
-        if last.input_hash != self._input_hash(desired):
+        if applied.input_hash != self._input_hash(desired):
             return self._will_run(desired, "design or template changed", missing=())
-        if last.scenes != desired.scenes:
+        if applied.scenes != desired.scenes:
             return self._will_run(desired, "referenced scenes changed", missing=())
 
         missing = tuple(
@@ -399,17 +414,12 @@ class RenderStage:
             return self._will_run(
                 desired, f"{len(missing)} rendered {noun} missing from the cache", missing=missing
             )
-        return StagePlan(stage=self.name, will_run=False)
+        return Verdict.no_work()
 
     def _will_run(
         self, desired: RenderDesired, reason: str, *, missing: tuple[str, ...]
-    ) -> StagePlan:
-        return StagePlan(
-            stage=self.name,
-            will_run=True,
-            reason=reason,
-            actions=self._actions(desired, missing),
-        )
+    ) -> Verdict:
+        return Verdict.work(reason, actions=self._actions(desired, missing))
 
     def _actions(self, desired: RenderDesired, missing: tuple[str, ...]) -> tuple[Action, ...]:
         missing_set = set(missing)

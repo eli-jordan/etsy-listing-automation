@@ -105,6 +105,46 @@ class Action:
 
 
 @dataclass(frozen=True)
+class Verdict:
+    """What a stage's ``plan()`` decided, before the engine says whose it is.
+
+    A :class:`StagePlan` minus two things a stage has no business supplying.
+
+    ``stage`` is gone because every stage wrote ``stage=self.name`` into every
+    plan it returned -- the engine already knows which stage it asked, and a
+    name a stage stamps for itself is a name it can stamp wrongly.
+
+    ``blocked`` is gone because a refusal now has exactly one home:
+    ``desired()`` returning :class:`~etsy_listings.engine.stage.Blocked`. A
+    stage that could also refuse from ``plan()`` had two ways to say one
+    thing, and the second one arrived with a desired document already built
+    for a run that was never going to happen.
+    """
+
+    will_run: bool
+    changes: tuple[Change, ...] = field(default_factory=tuple)
+    drift: tuple[Drift, ...] = field(default_factory=tuple)
+    reason: str | None = None
+    actions: tuple[Action, ...] = field(default_factory=tuple)
+
+    @classmethod
+    def no_work(cls) -> Verdict:
+        """Nothing to do. The common answer, and the one worth not spelling."""
+        return cls(will_run=False)
+
+    @classmethod
+    def work(cls, reason: str, *, actions: tuple[Action, ...] = (), **rest: Any) -> Verdict:  # noqa: ANN401
+        """Work to do, and why -- the two being inseparable is the point.
+
+        ``will_run`` used to be an expression standing beside a ``reason``
+        string that restated it, so a stage could run while reporting no
+        reason, or report one while not running. Here a reason is required and
+        ``will_run`` follows from it.
+        """
+        return cls(will_run=True, reason=reason, actions=actions, **rest)
+
+
+@dataclass(frozen=True)
 class StagePlan:
     stage: str
     will_run: bool

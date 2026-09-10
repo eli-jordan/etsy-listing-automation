@@ -495,41 +495,77 @@ def test_it_names_both_shops_and_the_next_command(tmp_path: Path, scripted, caps
 # half-answered configuration.
 
 
-@pytest.mark.parametrize(
-    "cancelled",
-    [
-        "token",
-        "currency",
-        "print provider",
-        "print-on-demand defaults",
-    ],
-)
-def test_cancelling_any_question_leaves_no_workspace(
-    tmp_path: Path, scripted, cancelled: str
-) -> None:
-    scripted({**HAPPY_PATH, cancelled: None})
+EVERY_QUESTION = {
+    **HAPPY_PATH,
+    # The widest run `setup` has: two Printify shops so the shop choice is
+    # asked, the print-on-demand defaults declined so the four individual Etsy
+    # questions are, and an Etsy client with a section and a policy so the
+    # discovery questions are too.
+    "Printify shop": "Second store",
+    "shop section": "Tees",
+    "return policy": "returns",
+    "print-on-demand defaults": False,
+    "Who made": "i_did",
+    "When was": "made_to_order",
+    "supply": False,
+    "renew": "manual",
+}
 
-    with pytest.raises(prompts.Cancelled):
-        run_setup(
-            tmp_path,
-            client_factory=_factory(FakePrintifyClient(ONE_SHOP)),
-            etsy_access=_etsy(),
+
+def _widest_etsy() -> FakeEtsyShopClient:
+    return FakeEtsyShopClient(
+        owned=ETSY_SHOP,
+        sections=[ShopSection(shop_section_id=44, title="Tees")],
+        policies=[
+            ReturnPolicy(
+                return_policy_id=55,
+                accepts_returns=True,
+                accepts_exchanges=False,
+                return_deadline=30,
+            )
+        ],
+    )
+
+
+def test_cancelling_any_question_setup_asks_leaves_no_workspace(tmp_path: Path, scripted) -> None:
+    """Every question, derived from the wizard rather than listed by hand.
+
+    This was two parametrized lists of question fragments covering eight
+    prompts, and it had already fallen behind what `setup` asks: the Etsy
+    discovery questions were added and never added here, so they could be
+    cancelled into a half-written workspace with the suite still green. A list
+    maintained by hand beside a wizard that grows is a list that is wrong;
+    this one completes a run, takes the questions it was actually asked, and
+    cancels each of them in turn. It covers eleven, and it will cover the
+    twelfth without being edited.
+    """
+    probe_root = tmp_path / "probe"
+    probe = scripted(dict(EVERY_QUESTION))
+    run_setup(
+        probe_root,
+        client_factory=_factory(FakePrintifyClient(TWO_SHOPS)),
+        etsy_access=_etsy(_widest_etsy()),
+    )
+    questions = list(probe.asked)
+    assert (probe_root / layout.SHOP_FILE).exists(), "the probe run must be a complete one"
+    assert len(questions) > 1
+
+    for index, question in enumerate(questions):
+        root = tmp_path / f"cancelled-at-{index}"
+        # The full question text: `Scripted` lets an exact match win outright,
+        # so this cancels precisely this one and answers the rest normally.
+        scripted({**EVERY_QUESTION, question: None})
+
+        with pytest.raises(prompts.Cancelled):
+            run_setup(
+                root,
+                client_factory=_factory(FakePrintifyClient(TWO_SHOPS)),
+                etsy_access=_etsy(_widest_etsy()),
+            )
+
+        assert not (root / layout.SHOP_FILE).exists(), (
+            f"cancelling {question!r} left a shop.yaml behind"
         )
-
-    assert not (tmp_path / layout.SHOP_FILE).exists()
-
-
-def test_cancelling_the_shop_choice_leaves_no_workspace(tmp_path: Path, scripted) -> None:
-    scripted({**HAPPY_PATH, "Printify shop": None})
-
-    with pytest.raises(prompts.Cancelled):
-        run_setup(
-            tmp_path,
-            client_factory=_factory(FakePrintifyClient(TWO_SHOPS)),
-            etsy_access=_etsy(),
-        )
-
-    assert not (tmp_path / layout.SHOP_FILE).exists()
 
 
 @pytest.mark.parametrize("cancelled", ["Who made", "When was", "supply", "renew"])

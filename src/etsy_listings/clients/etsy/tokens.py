@@ -33,6 +33,7 @@ from pathlib import Path
 from typing import Any
 
 from etsy_listings.clients.etsy.oauth import OAuthError, TokenResponse
+from etsy_listings.errors import UserFacingError
 
 REFRESH_MARGIN = timedelta(minutes=5)
 """How much of an access token's hour is treated as already spent. Long enough
@@ -47,13 +48,18 @@ the authority: an `invalid_grant` is what actually settles it (PRD 50)."""
 RENEW_WARNING = timedelta(days=14)
 
 
-class EtsyAuthError(RuntimeError):
+class EtsyAuthError(UserFacingError, RuntimeError):
     """There is no usable Etsy credential, and no retry will produce one.
 
     Raised where a token is *needed*, never where one is merely absent, so the
     message can always name the command that fixes it. Also what
     :mod:`transport` raises on a 401: from the caller's side, a rejected token
     and a missing one call for the same next step.
+
+    Naming the command that fixes it is the definition of a
+    :class:`~etsy_listings.errors.UserFacingError`; being one is what keeps a
+    signed-out workspace reporting that fact per listing rather than aborting
+    the run on the first (PRD 16).
     """
 
     def __init__(self, detail: str) -> None:

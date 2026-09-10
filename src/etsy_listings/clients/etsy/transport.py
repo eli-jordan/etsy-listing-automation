@@ -28,6 +28,7 @@ from etsy_listings.clients.etsy import oauth
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.retry import DEFAULT_POLICY, RetryPolicy, with_retries
 from etsy_listings.config.secrets import ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR, EtsyAppKey
+from etsy_listings.errors import UserFacingError
 
 BASE_URL = "https://openapi.etsy.com"
 """The API reference's documented base URL. Its guides and tutorials use
@@ -50,8 +51,13 @@ never call, and a workspace that has not signed in must still be able to build
 one (A22)."""
 
 
-class EtsyApiError(RuntimeError):
+class EtsyApiError(UserFacingError, RuntimeError):
     """A request Etsy understood and refused.
+
+    A :class:`~etsy_listings.errors.UserFacingError`, so that one listing
+    Etsy refuses is one listing reported rather than a batch ended (PRD 16).
+    The Phase 3 stages that will raise this inherit the behaviour by being
+    written against this type.
 
     Etsy's error envelope is a single ``{"error": "..."}`` string -- no code,
     no field name -- so there is nothing to branch on and the whole value is

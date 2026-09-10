@@ -18,7 +18,6 @@ Two orderings matter and are not arbitrary:
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -27,7 +26,7 @@ from typing import Any
 import typer
 import yaml
 
-from etsy_listings import prompts
+from etsy_listings import credentials, prompts
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
 from etsy_listings.clients.etsy.tokens import EtsyAuthError, TokenStore
@@ -64,45 +63,32 @@ def _default_client_factory(token: str) -> PrintifyClient:
     return HttpPrintifyClient(Transport(token))
 
 
-def _existing_token(root: Path) -> str | None:
-    """A token this machine already has, from the environment or the
-    workspace's ``.env`` -- the same precedence :class:`Secrets` uses, so
-    ``setup`` cannot disagree with the rest of the tool about which token is
-    in play."""
-    from_env = os.environ.get(PRINTIFY_TOKEN_VAR)
-    if from_env:
-        return from_env
-    return Secrets.load(root / layout.ENV_FILE).printify_api_token
-
-
 def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]]:
     """A token that has actually answered ``GET /v1/shops.json``, and what it
     answered.
 
     The shop list comes back from the same call rather than being fetched
     again: verifying the token *is* asking which shops it can reach (PRD 42),
-    and a second call would only invite the two answers to disagree.
+    and a second call would only invite the two answers to disagree. That is
+    also why this one verifies a *reused* token where ``auth`` does not --
+    ``setup`` needs the answer either way, so there is no call to save.
     """
-    token = _existing_token(root)
-    if token:
-        typer.echo(f"Using the {PRINTIFY_TOKEN_VAR} this machine already has.")
-    else:
-        typer.echo("")
-        typer.echo("A Printify personal access token is needed to read the catalog")
-        typer.echo("and create products. Generate one at:")
-        typer.echo("  https://printify.com/app/account/api")
-        typer.echo("It needs the catalog, shops and products scopes.")
-        token = prompts.ask_text("Printify API token:")
 
-    try:
-        shops = factory(token).shops()
-    except PrintifyAuthError as exc:
-        typer.echo("", err=True)
-        typer.echo(str(exc), err=True)
-        typer.echo("Nothing was written -- re-run `setup` with a working token.", err=True)
-        raise typer.Exit(code=1) from exc
+    def verify(values: tuple[str, ...]) -> tuple[list[Shop], str]:
+        try:
+            shops = factory(values[0]).shops()
+        except PrintifyAuthError as exc:
+            credentials.refuse(str(exc), command="setup")
+        return shops, f"verified -- the token can reach {len(shops)} shop(s)."
 
-    return token, shops
+    captured = credentials.capture(
+        root,
+        credentials.PRINTIFY,
+        verify=verify,
+        command="setup",
+        reuse_message=f"Using the {PRINTIFY_TOKEN_VAR} this machine already has.",
+    )
+    return captured.values[0], captured.require_proof()
 
 
 def _pick_shop(shops: list[Shop]) -> Shop:
@@ -345,8 +331,7 @@ def run_setup(
     typer.echo(
         f"  created {len(created)} directories" if created else "  directories already in place"
     )
-    if scaffold.update_gitignore(root):
-        typer.echo("  wrote .gitignore (.env, .auth/ and .cache/ stay out of git)")
+    credentials.announce_gitignore(root)
 
     token, shops = _verified_token(root, factory)
     shop = _pick_shop(shops)

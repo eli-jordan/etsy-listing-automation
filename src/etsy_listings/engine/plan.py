@@ -23,7 +23,7 @@ from typing import Any
 from etsy_listings.engine.change import Plan, StagePlan
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stage import AnyStage
+from etsy_listings.engine.stage import AnyStage, Blocked
 
 
 @dataclass(frozen=True)
@@ -31,15 +31,17 @@ class StageState:
     """One stage, and the three states its ``plan()`` compared.
 
     Types erased, like :data:`AnyStage` -- the pipeline mixes stages with
-    unrelated desired/live types by design (A1), and only the stage that
-    produced them ever looks inside. ``applied`` is the exception: it is
-    always the stage's raw lockfile subtree, since that is the form it was
-    written in.
+    unrelated desired/applied/live types by design (A1), and only the stage
+    that produced them ever looks inside.
+
+    ``desired`` is the exception worth naming: it is a ``Blocked`` rather than
+    a desired document when the stage refused, which is exactly the case
+    ``stage_plan.blocked`` reports and ``execute`` never runs.
     """
 
     stage: AnyStage
     desired: Any
-    applied: dict[str, Any] | None
+    applied: Any
     live: Any
     stage_plan: StagePlan
 
@@ -75,24 +77,55 @@ def build_plan(
     than as drift. Each stage's own ``plan()`` computes the diff; this
     function only orchestrates the walk and assembles the result.
     """
-    states: list[StageState] = []
-    for stage in stages:
-        desired = stage.desired(ctx, listing)
-        # The stage's own subtree, looked up here rather than by each stage
-        # for itself -- a stage never needs to know which key in the lockfile
-        # is its own, only how to read the document it finds there.
-        applied = lock.applied_for(stage.name)
-        live = stage.read_live(ctx, listing, lock)
-        states.append(
-            StageState(
-                stage=stage,
-                desired=desired,
-                applied=applied,
-                live=live,
-                stage_plan=stage.plan(desired, applied, live),
-            )
+    states = [_walk(ctx, listing, lock, stage) for stage in stages]
+
+    return _assemble(listing, lock, tuple(states))
+
+
+def _walk(ctx: RunContext, listing: str, lock: Lockfile, stage: AnyStage) -> StageState:
+    """One stage's three states, and the plan comparing them.
+
+    Every line of bookkeeping a stage used to do for itself lives here: the
+    subtree lookup, the decode, the refusal, and the stage's own name. What
+    the stage is left with is three questions about three states.
+    """
+    # The stage's own subtree, looked up and decoded here rather than by each
+    # stage for itself -- a stage never needs to know which key in the
+    # lockfile is its own, nor what a document it cannot read should mean.
+    applied = lock.parse_applied_for(stage.name, stage.applied_model)
+    desired = stage.desired(ctx, listing, applied)
+
+    if isinstance(desired, Blocked):
+        # Refused: no live read, because there is nothing this run could do
+        # with the answer, and a blocked remote stage should not spend a
+        # request finding that out.
+        return StageState(
+            stage=stage,
+            desired=desired,
+            applied=applied,
+            live=None,
+            stage_plan=StagePlan(stage=stage.name, will_run=False, blocked=desired.message),
         )
 
+    live = stage.read_live(ctx, listing, lock, applied)
+    verdict = stage.plan(desired, applied, live)
+    return StageState(
+        stage=stage,
+        desired=desired,
+        applied=applied,
+        live=live,
+        stage_plan=StagePlan(
+            stage=stage.name,
+            will_run=verdict.will_run,
+            changes=verdict.changes,
+            drift=verdict.drift,
+            reason=verdict.reason,
+            actions=verdict.actions,
+        ),
+    )
+
+
+def _assemble(listing: str, lock: Lockfile, states: tuple[StageState, ...]) -> PlannedRun:
     etsy_listing_id = lock.remote.get("etsy_listing_id")
     is_live = lock.remote.get("etsy_listing_state") not in (None, "draft")
 

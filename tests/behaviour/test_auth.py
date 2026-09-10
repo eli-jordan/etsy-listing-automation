@@ -21,6 +21,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
+from etsy_listings import prompts
 from etsy_listings.authcmd.interactive import Backends, run_auth
 from etsy_listings.clients.etsy.callback import Callback
 from etsy_listings.clients.etsy.oauth import OAuthError, TokenResponse
@@ -362,3 +363,57 @@ def test_check_reports_the_stored_consent(
     assert "user 12345678" in captured
     assert "90 more days" in captured
     assert "All required credentials present" in captured
+
+
+# ----------------------------------------------------------------- cancelling
+
+
+def test_cancelling_any_question_auth_asks_keeps_only_what_came_before_it(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, etsy: FakeEtsy, printify: FakePrintifyClient
+) -> None:
+    """`auth` had no cancellation tests at all, and it needs different ones.
+
+    `setup` writes at the end, so cancelling it must leave *nothing*. `auth`
+    writes as it goes, on purpose: its parts are independent, and a working
+    Printify token should survive abandoning the Etsy sign-in rather than
+    being thrown away with it. Nothing said so and nothing checked it, so a
+    reorder could have flipped it silently in either direction.
+
+    The questions are derived from a completed run rather than listed, for the
+    same reason as `setup`'s: a list written by hand beside a wizard that
+    grows is a list that goes stale.
+    """
+    full = dict(ANSWERS, **{"Anthropic API key": "sk-ant-123"})
+    probe = scripted.install(monkeypatch, dict(full))
+    run_auth(tmp_path / "probe", backends=backends(etsy, printify))
+    questions = list(probe.asked)
+    assert len(questions) > 1
+
+    for index, question in enumerate(questions):
+        root = tmp_path / f"cancelled-at-{index}"
+        run = scripted.install(monkeypatch, {**full, question: None})
+
+        with pytest.raises(prompts.Cancelled):
+            run_auth(root, backends=backends(etsy, printify))
+
+        answered = set(run.asked) - {question}
+        stored = env_values(root) if (root / layout.ENV_FILE).exists() else {}
+
+        # A *credential* is the unit that gets stored, not a question. The
+        # Etsy app key is two prompts and one step, because both halves ride
+        # on one header and the ping that proves them cannot say which was
+        # wrong -- so answering only the keystring stores neither.
+        for asks, variables in (
+            (("Printify API token",), (PRINTIFY_TOKEN_VAR,)),
+            (
+                ("Etsy keystring", "Etsy shared secret"),
+                (ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR),
+            ),
+            (("Anthropic API key",), (ANTHROPIC_KEY_VAR,)),
+        ):
+            complete = all(any(ask in q for q in answered) for ask in asks)
+            for variable in variables:
+                assert (variable in stored) == complete, (
+                    f"cancelling {question!r}: {variable} should "
+                    f"{'be' if complete else 'not be'} on disk"
+                )

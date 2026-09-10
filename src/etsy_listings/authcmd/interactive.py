@@ -20,17 +20,16 @@ browser included -- runs in a test without a socket or a network.
 
 from __future__ import annotations
 
-import os
 import webbrowser
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Literal, NoReturn
+from typing import Literal
 
 import typer
 
-from etsy_listings import prompts
+from etsy_listings import credentials, prompts
 from etsy_listings.authcmd import logic
 from etsy_listings.clients.etsy import callback as callback_module
 from etsy_listings.clients.etsy import oauth
@@ -38,16 +37,15 @@ from etsy_listings.clients.etsy.tokens import TokenStore, utcnow
 from etsy_listings.clients.etsy.transport import OAuthClient, Transport
 from etsy_listings.clients.printify import HttpPrintifyClient, PrintifyAuthError
 from etsy_listings.clients.printify import Transport as PrintifyTransport
+from etsy_listings.clients.printify.models import Shop
 from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.config.secrets import (
-    ANTHROPIC_KEY_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
-    PRINTIFY_TOKEN_VAR,
     EtsyAppKey,
     Secrets,
 )
-from etsy_listings.workspace import layout, scaffold
+from etsy_listings.workspace import layout
 
 
 @dataclass(frozen=True)
@@ -103,8 +101,7 @@ def run_auth(
         return
 
     typer.echo(f"Credentials for the workspace in {root}")
-    if scaffold.update_gitignore(root):
-        typer.echo("  wrote .gitignore (.env, .auth/ and .cache/ stay out of git)")
+    credentials.announce_gitignore(root)
 
     if "printify" in parts:
         _printify_token(root, back)
@@ -129,54 +126,39 @@ def run_auth(
 
 
 def _printify_token(root: Path, back: Backends) -> None:
-    existing = _stored(root, PRINTIFY_TOKEN_VAR)
-    if existing:
-        typer.echo(f"{PRINTIFY_TOKEN_VAR} already set -- leaving it alone.")
-        return
+    def verify(values: tuple[str, ...]) -> tuple[list[Shop], str]:
+        try:
+            shops = back.printify_client(values[0]).shops()
+        except PrintifyAuthError as exc:
+            credentials.refuse(str(exc), command="auth")
+        return shops, f"verified -- the token can reach {len(shops)} shop(s)."
 
-    typer.echo("")
-    typer.echo("A Printify personal access token is needed to read the catalog")
-    typer.echo("and create products. Generate one at:")
-    typer.echo("  https://printify.com/app/account/api")
-    typer.echo("It needs the catalog, shops and products scopes.")
-    token = prompts.ask_text("Printify API token:")
-
-    try:
-        shops = back.printify_client(token).shops()
-    except PrintifyAuthError as exc:
-        _refuse(str(exc))
-    typer.echo(f"  verified -- the token can reach {len(shops)} shop(s).")
-    scaffold.write_env_value(root, PRINTIFY_TOKEN_VAR, token)
+    captured = credentials.capture(
+        root, credentials.PRINTIFY, verify=verify, command="auth", verify_reused=False
+    )
+    credentials.store(root, credentials.PRINTIFY, captured)
 
 
 def _etsy_app_key(root: Path, back: Backends) -> EtsyAppKey:
-    """The keystring and shared secret, verified together by one ping.
+    """The keystring and shared secret, verified together by one ping."""
 
-    Together because they fail together: `x-api-key` carries both, so a ping
-    cannot say which half was wrong, and asking for them one at a time with a
-    verification between would promise a precision Etsy does not offer.
-    """
-    keystring = _stored(root, ETSY_KEYSTRING_VAR)
-    shared_secret = _stored(root, ETSY_SHARED_SECRET_VAR)
+    def verify(values: tuple[str, ...]) -> tuple[EtsyAppKey, str]:
+        app_key = EtsyAppKey(values[0], values[1])
+        application_id = back.etsy_transport(app_key).ping()
+        return app_key, f"verified -- Etsy application {application_id}."
 
-    if keystring and shared_secret:
-        typer.echo(f"{ETSY_KEYSTRING_VAR} and {ETSY_SHARED_SECRET_VAR} already set.")
-        return EtsyAppKey(keystring, shared_secret)
-
-    typer.echo("")
-    typer.echo("Etsy identifies this application by a key *pair*, both on:")
-    typer.echo("  https://www.etsy.com/developers/your-apps")
-    typer.echo("The shared secret is hidden behind the visibility icon beside it.")
-    keystring = keystring or prompts.ask_text("Etsy keystring:")
-    shared_secret = shared_secret or prompts.ask_text("Etsy shared secret:")
-
-    app_key = EtsyAppKey(keystring.strip(), shared_secret.strip())
-    application_id = back.etsy_transport(app_key).ping()
-    typer.echo(f"  verified -- Etsy application {application_id}.")
-
-    scaffold.write_env_value(root, ETSY_KEYSTRING_VAR, app_key.keystring)
-    scaffold.write_env_value(root, ETSY_SHARED_SECRET_VAR, app_key.shared_secret)
-    return app_key
+    captured = credentials.capture(
+        root,
+        credentials.ETSY_APP_KEY,
+        verify=verify,
+        command="auth",
+        verify_reused=False,
+        reuse_message=f"{ETSY_KEYSTRING_VAR} and {ETSY_SHARED_SECRET_VAR} already set.",
+    )
+    credentials.store(root, credentials.ETSY_APP_KEY, captured)
+    # Rebuilt from the values rather than taken from `proof`: a reused pair is
+    # not re-pinged, so there is no proof to take.
+    return EtsyAppKey(captured.values[0], captured.values[1])
 
 
 def _etsy_sign_in(root: Path, app_key: EtsyAppKey, store: TokenStore, back: Backends) -> None:
@@ -227,18 +209,14 @@ def _anthropic_key(root: Path) -> None:
     than a skipped step -- and unverified, because Anthropic has no free
     endpoint that proves a key without spending on one.
     """
-    if _stored(root, ANTHROPIC_KEY_VAR):
-        typer.echo(f"{ANTHROPIC_KEY_VAR} already set -- leaving it alone.")
-        return
-
-    typer.echo("")
-    typer.echo("An Anthropic API key generates listing copy (Phase 4; not needed yet).")
-    typer.echo("  https://console.anthropic.com/settings/keys")
-    key = prompts.ask_text("Anthropic API key (blank to skip):", allow_blank=True)
-    if not key.strip():
-        typer.echo("  skipped.")
-        return
-    scaffold.write_env_value(root, ANTHROPIC_KEY_VAR, key.strip())
+    captured = credentials.capture(
+        root,
+        credentials.ANTHROPIC,
+        verify=credentials.nothing_to_prove,
+        command="auth",
+        verify_reused=False,
+    )
+    credentials.store(root, credentials.ANTHROPIC, captured)
 
 
 # -------------------------------------------------------------------- report
@@ -280,30 +258,3 @@ def _token_store(root: Path, back: Backends) -> TokenStore:
         refresh=refresh,
         now=back.now,
     )
-
-
-def _stored(root: Path, variable: str) -> str | None:
-    """A credential this machine already has, environment first.
-
-    The same precedence :class:`Secrets` uses, so `auth` cannot disagree with
-    the rest of the tool about which credential is in play -- a wizard that
-    stores a token the next command then ignores is worse than one that never
-    ran.
-    """
-    from_env = os.environ.get(variable)
-    if from_env:
-        return from_env
-    secrets = Secrets.load(root / layout.ENV_FILE)
-    return {
-        PRINTIFY_TOKEN_VAR: secrets.printify_api_token,
-        ETSY_KEYSTRING_VAR: secrets.etsy_keystring,
-        ETSY_SHARED_SECRET_VAR: secrets.etsy_shared_secret,
-        ANTHROPIC_KEY_VAR: secrets.anthropic_api_key,
-    }[variable]
-
-
-def _refuse(message: str) -> NoReturn:
-    typer.echo("", err=True)
-    typer.echo(message, err=True)
-    typer.echo("Nothing was written -- re-run `auth` with a working credential.", err=True)
-    raise typer.Exit(code=1)

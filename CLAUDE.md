@@ -163,9 +163,14 @@ src/etsy_listings/
   config/       pydantic models, Money type, slugification     [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run, stages/
                    [done; STAGES = [Render(), PrintifyProduct()], more stages later]
+                stages/ splits the product stage three ways: the stage itself
+                  (needs a context), product_document (the two documents and
+                  the garment gate) and product_diff (the comparison — pure,
+                  and unit-tested without a workspace or a fake)
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
+  authcmd/      `auth`: the credential command, per part (PRD 14, 49, 50)    [done]
   clients/      printify/ — one package for everything said to Printify (A22):
                   transport (token/retry/errors), two protocols (CatalogClient
                   reads, PrintifyClient writes), models, catalog, products,
@@ -177,6 +182,9 @@ src/etsy_listings/
                              (dashboard/setup wizard/run runner: Phase 5)
   prompts.py    which prompt backend can drive this terminal at all, and the
                 cancel-raising wrappers the wizards ask through              [done]
+  credentials.py  one credential step — where it already lives, the blurb, the
+                ask, the caller's verification, the refusal. Shared by `setup`
+                and `auth`; capturing stays separate from storing             [done]
   terminal.py   stdlib-only leaf: can this stream print that character?     [done]
 ```
 
@@ -198,18 +206,40 @@ later. Each traces to a decision.
   `plan_listings` / `apply_listings`. An entry point supplies the listings and
   formats the resulting `RunReport`; it never opens a lockfile itself.
 - **Only the lockfile merges a lockfile.** `Lockfile.fold()` owns the
-  replace-versus-merge rules for all four axes and `applied_for()` owns the
-  per-stage lookup. A stage returns a `StageApplyResult` and never touches the
-  file; `execute` decides only which stages run, in what order.
-- **A stage's applied document is a type, not a dict.** The lockfile stores it
-  as JSON, but a stage parses it back into a model (`RenderApplied`,
-  `AppliedProduct`) before comparing anything. A stage that reads its own
-  document with `applied.get("title")` ends up spelling the key names again in
-  every function that touches them, and nothing stops one drifting from the
-  others — that is where a `("?", "?")` fallback for a lookup that cannot miss
-  came from. `parse()` answers `None` for both "never applied" and "will not
-  decode", because a document we cannot read is one we cannot prove the live
-  state matches.
+  replace-versus-merge rules for all four axes, `applied_for()` owns the
+  per-stage lookup and `parse_applied_for()` owns the decode. A stage returns
+  a `StageApplyResult` and never touches the file; `execute` decides only
+  which stages run, in what order.
+- **A stage's applied document is a type, not a dict — and the stage does not
+  decode it.** The lockfile stores it as JSON; `build_plan` hands `plan()` the
+  model the stage declared in `applied_model` (`RenderApplied`,
+  `AppliedProduct`). A stage that reads its own document with
+  `applied.get("title")` ends up spelling the key names again in every
+  function that touches them — that is where a `("?", "?")` fallback for a
+  lookup that cannot miss came from. Decoding answers `None` for both "never
+  applied" and "will not decode", because a document we cannot read is one we
+  cannot prove the live state matches. That rule is the lockfile's precisely
+  because it was two stages' and they disagreed: one caught `ValidationError`
+  and answered `None`, the other indexed the dict and raised `KeyError`, which
+  is not a `UserFacingError` and so ended a whole `--all` batch.
+- **A stage refuses from `desired()`, and nowhere else.** `Blocked` is the one
+  vocabulary for "this cannot run", and `desired()` is the one place it is
+  spoken: `plan()` returns a `Verdict`, which has no way to express a refusal
+  and no way to name its own stage. Two places to refuse meant a refusal could
+  arrive carrying a fully resolved document for a run that was never going to
+  happen.
+- **`will_run` is derived from a reason, never computed beside one.** They were
+  two expressions of one rule — `was is None or bool(changes) or live is None`
+  standing next to a three-branch string — and two expressions of one rule are
+  how a stage comes to run while reporting nothing to do.
+- **A credential is captured, verified and stored through `credentials.py`.**
+  Where it already lives (environment, then the workspace `.env`), what to say
+  before asking, how to ask, how to prove it, and what to say when it fails.
+  `setup` and `auth` each wrote that out longhand and the copies had already
+  drifted: the same blurb byte-for-byte, and a refusal differing by one word.
+  Capturing stays separate from storing because the two commands genuinely
+  disagree about *when* — `auth` writes per credential as it goes, `setup`
+  writes once every question is answered.
 - **A hashed document must not depend on the order its inputs happened to
   arrive in.** Sort anything that lands in one. Variant ids reached
   `print_areas[].variant_ids` in the order a listing wrote `colors:`, so
