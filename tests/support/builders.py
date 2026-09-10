@@ -154,6 +154,20 @@ def set_shop_id(root: Path, shop_id: int) -> Path:
     return root
 
 
+def set_etsy_listing_defaults(root: Path, **overrides: Any) -> Path:
+    """Merge ``etsy.listing_defaults`` overrides into ``shop.yaml`` --
+    ``shipping_profile``, ``return_policy``, ``production_partner``,
+    ``who_made`` and friends (Phase 3, decision 7). Merged, not replaced, for
+    the same reason :func:`set_shop_id` merges `printify:`."""
+    path = root / "shop.yaml"
+    document = _read_yaml(path)
+    etsy = dict(document.get("etsy") or {})
+    etsy["listing_defaults"] = {**(etsy.get("listing_defaults") or {}), **overrides}
+    document["etsy"] = etsy
+    _write_yaml(path, document)
+    return root
+
+
 def write_design(root: Path, size: tuple[int, int], *, name: str = FIXTURE_LISTING) -> Path:
     """Replace a design with a solid image of a given pixel size.
 
