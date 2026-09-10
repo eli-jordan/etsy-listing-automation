@@ -149,6 +149,18 @@ class HttpPrintifyClient(PrintifyClient):
     def delete_product(self, shop_id: int, product_id: str) -> None:
         self._transport.request("DELETE", f"/v1/shops/{shop_id}/products/{product_id}.json")
 
+    def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
+        self._transport.request(
+            "POST", f"/v1/shops/{shop_id}/products/{product_id}/publish.json", json=sync_flags
+        )
+
+    def publishing_failed(self, shop_id: int, product_id: str, *, reason: str) -> None:
+        self._transport.request(
+            "POST",
+            f"/v1/shops/{shop_id}/products/{product_id}/publishing_failed.json",
+            json={"reason": reason},
+        )
+
     def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
         """The id of a product already carrying this copy, or ``None``. PRD 48.
 

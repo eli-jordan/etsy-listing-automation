@@ -443,3 +443,69 @@ def test_delete_removes_the_product() -> None:
         "method": "DELETE",
         "path": f"/v1/shops/{SHOP_ID}/products/{PRODUCT_ID}.json",
     }
+
+
+# --------------------------------------------------------------------- publish
+
+
+def test_publish_posts_the_sync_flags() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["body"] = httpx.Response(200, content=request.read()).json()
+        return httpx.Response(200, json={})
+
+    flags = {
+        "title": False,
+        "description": False,
+        "images": False,
+        "variants": True,
+        "tags": False,
+        "keyFeatures": False,
+        "shipping_template": False,
+    }
+    _client(handler).publish(SHOP_ID, PRODUCT_ID, flags)
+
+    assert (seen["method"], seen["path"]) == (
+        "POST",
+        f"/v1/shops/{SHOP_ID}/products/{PRODUCT_ID}/publish.json",
+    )
+    assert seen["body"] == flags
+
+
+def test_the_external_block_decodes_once_a_publish_lands() -> None:
+    payload = {
+        **PRODUCT_PAYLOAD,
+        "external": {
+            "id": "4572537111",
+            "handle": "https://www.etsy.com/listing/4572537111/probe",
+            "shipping_template_id": "314944410819",
+            "type": 4,
+        },
+    }
+    product = _client(lambda _: httpx.Response(200, json=payload)).get_product(SHOP_ID, PRODUCT_ID)
+
+    assert product is not None
+    assert product.external is not None
+    assert (product.external.id, product.external.handle) == (
+        "4572537111",
+        "https://www.etsy.com/listing/4572537111/probe",
+    )
+
+
+def test_publishing_failed_clears_a_stuck_lock() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(200, json={})
+
+    _client(handler).publishing_failed(SHOP_ID, PRODUCT_ID, reason="polling timed out")
+
+    assert (seen["method"], seen["path"]) == (
+        "POST",
+        f"/v1/shops/{SHOP_ID}/products/{PRODUCT_ID}/publishing_failed.json",
+    )

@@ -33,6 +33,8 @@ what the comparison decided; it decides nothing itself.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from etsy_listings.clients.printify.models import (
     PlacedImage,
     Placeholder,
@@ -125,55 +127,25 @@ class PrintifyProductStage:
             if blocked is not None:
                 return blocked
 
-        blueprint = resolve_blueprint(
-            profile.blueprint.brand, profile.blueprint.model, ctx.catalog.blueprints()
-        )
-        provider = resolve_print_provider(
-            profile.print_provider, ctx.catalog.print_providers(blueprint.id)
-        )
+        resolved = resolve_variant_pricing(ctx, listing)
 
         blocked = check_garment_unchanged(
-            applied, blueprint_id=blueprint.id, print_provider_id=provider.id
+            applied,
+            blueprint_id=resolved.blueprint_id,
+            print_provider_id=resolved.print_provider_id,
         )
         if blocked is not None:
             return blocked
 
-        resolution = resolve_variants(
-            ctx.catalog.variants(blueprint.id, provider.id),
-            config.colors,
-            profile.sizes,
-            workspace.load_exceptions(),
-        )
-
-        plan_file = config.pricing_plan
-        pricing_plan = (
-            workspace.load_pricing_plan(
-                workspace.resolve(plan_file, relative_to=workspace.listing_dir(listing))
-            )
-            if plan_file
-            else None
-        )
-        variants = tuple(
-            PricedVariant(
-                id=variant.id,
-                colour_slug=variant.colour_slug,
-                size=variant.size,
-                price=config.resolved_price(
-                    variant.colour_slug, variant.size, pricing_plan=pricing_plan
-                ).minor_units,
-            )
-            for variant in resolution.variants
-        )
-
         return PrintifyProductDesired(
             title=config.etsy.title,
             description=config.etsy.description,
-            blueprint_id=blueprint.id,
-            print_provider_id=provider.id,
+            blueprint_id=resolved.blueprint_id,
+            print_provider_id=resolved.print_provider_id,
             position=profile.placeholder,
-            variants=variants,
-            groups=placement.group_by_artwork([v.colour_slug for v in variants]),
-            missing=resolution.missing,
+            variants=resolved.variants,
+            groups=placement.group_by_artwork([v.colour_slug for v in resolved.variants]),
+            missing=resolved.missing,
             currency=workspace.defaults.etsy.currency,
         )
 
@@ -268,6 +240,74 @@ class PrintifyProductStage:
 
 def _shop_id(ctx: RunContext) -> int:
     return ctx.workspace.defaults.printify.require_shop_id()
+
+
+@dataclass(frozen=True)
+class ResolvedVariantPricing:
+    """The blueprint, print provider and priced variant matrix a listing
+    resolves to -- everything about a Printify product that depends on the
+    catalog and nothing about its artwork or copy."""
+
+    blueprint_id: int
+    print_provider_id: int
+    variants: tuple[PricedVariant, ...]
+    missing: tuple[tuple[str, str], ...]
+
+
+def resolve_variant_pricing(ctx: RunContext, listing: str) -> ResolvedVariantPricing:
+    """Resolve a listing's garment and priced variant matrix from the catalog.
+
+    Shared with the `publish` stage (phase-3-etsy.md decision 1), which
+    rebuilds its own desired variant matrix through this same function rather
+    than reading this stage's lockfile subtree -- the cost is one extra
+    resolution pass per listing per run (the catalog is disk-cached; the rest
+    is arithmetic), and it buys the two stages independence from each other's
+    lockfile shape.
+    """
+    workspace = ctx.workspace
+    config = workspace.load_listing(listing)
+    profile = workspace.load_profile(config.profile)
+
+    blueprint = resolve_blueprint(
+        profile.blueprint.brand, profile.blueprint.model, ctx.catalog.blueprints()
+    )
+    provider = resolve_print_provider(
+        profile.print_provider, ctx.catalog.print_providers(blueprint.id)
+    )
+
+    resolution = resolve_variants(
+        ctx.catalog.variants(blueprint.id, provider.id),
+        config.colors,
+        profile.sizes,
+        workspace.load_exceptions(),
+    )
+
+    plan_file = config.pricing_plan
+    pricing_plan = (
+        workspace.load_pricing_plan(
+            workspace.resolve(plan_file, relative_to=workspace.listing_dir(listing))
+        )
+        if plan_file
+        else None
+    )
+    variants = tuple(
+        PricedVariant(
+            id=variant.id,
+            colour_slug=variant.colour_slug,
+            size=variant.size,
+            price=config.resolved_price(
+                variant.colour_slug, variant.size, pricing_plan=pricing_plan
+            ).minor_units,
+        )
+        for variant in resolution.variants
+    )
+
+    return ResolvedVariantPricing(
+        blueprint_id=blueprint.id,
+        print_provider_id=provider.id,
+        variants=variants,
+        missing=resolution.missing,
+    )
 
 
 def _spec(desired: PrintifyProductDesired, uploads: dict[str, str]) -> ProductSpec:

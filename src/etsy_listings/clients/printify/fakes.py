@@ -21,6 +21,7 @@ from etsy_listings.clients.printify.models import (
     Blueprint,
     PrintProvider,
     Product,
+    ProductExternal,
     ProductSpec,
     ProductVariant,
     ShippingRates,
@@ -92,7 +93,14 @@ class FakePrintifyClient(PrintifyClient):
         self.created: list[ProductSpec] = []
         self.updated: list[ProductSpec] = []
         self.deleted: list[str] = []
+        self.published: list[tuple[str, dict[str, bool]]] = []
+        self.publishing_failed_calls: list[str] = []
         self._next_product = 0
+        self.publish_external: dict[str, ProductExternal] = {}
+        """What `publish` should attach to a product's `external`, keyed by
+        product id -- the fake's stand-in for Printify's asynchronous publish
+        completing. Unset means `publish` does not (yet) unlock the product,
+        which is what a stuck-lock/timeout test seeds."""
 
     # ------------------------------------------------------------- shops
 
@@ -167,6 +175,27 @@ class FakePrintifyClient(PrintifyClient):
     def delete_product(self, shop_id: int, product_id: str) -> None:
         self.products.pop(product_id, None)
         self.deleted.append(product_id)
+
+    def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
+        """Fire-and-forget, like the real one: `is_locked` and `external` are
+        set immediately here rather than after a poll, since the fake has no
+        asynchronous side to simulate unless a test asks for one via
+        `publish_external` (left unset, `is_locked` stays true forever --
+        the timeout path)."""
+        self.published.append((product_id, dict(sync_flags)))
+        product = self.products.get(product_id)
+        if product is None:
+            return
+        external = self.publish_external.get(product_id)
+        self.products[product_id] = product.model_copy(
+            update={"is_locked": external is None, "external": external}
+        )
+
+    def publishing_failed(self, shop_id: int, product_id: str, *, reason: str) -> None:
+        self.publishing_failed_calls.append(product_id)
+        product = self.products.get(product_id)
+        if product is not None:
+            self.products[product_id] = product.model_copy(update={"is_locked": False})
 
     def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
         for product in self.products.values():
