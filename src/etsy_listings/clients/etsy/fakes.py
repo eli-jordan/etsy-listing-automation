@@ -44,6 +44,8 @@ class FakeEtsyShopClient:
         self._policies = list(policies or [])
         self.searched: list[str] = []
         self.owner_lookups: list[int] = []
+        self.section_calls = 0
+        self.return_policy_calls = 0
 
     def find_shops(self, name: str) -> list[Shop]:
         self.searched.append(name)
@@ -54,9 +56,11 @@ class FakeEtsyShopClient:
         return self._owned
 
     def shop_sections(self, shop_id: int) -> list[ShopSection]:
+        self.section_calls += 1
         return list(self._sections)
 
     def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
+        self.return_policy_calls += 1
         return list(self._policies)
 
 
@@ -82,6 +86,8 @@ class FakeEtsyListingClient:
         self._production_partners = list(production_partners or [])
         self._next_image_id = 0
         self.updated: list[dict[str, Any]] = []
+        self.shipping_profile_calls = 0
+        self.production_partner_calls = 0
 
     def seed_listing(self, listing_id: int, *, shop_id: int | None = None, **fields: Any) -> None:
         self._listings[listing_id] = Listing(listing_id=listing_id, shop_id=shop_id, **fields)
@@ -106,9 +112,11 @@ class FakeEtsyListingClient:
         return list(self._variation_images.get(listing_id, []))
 
     def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:
+        self.shipping_profile_calls += 1
         return list(self._shipping_profiles)
 
     def production_partners(self, shop_id: int) -> list[ProductionPartner]:
+        self.production_partner_calls += 1
         return list(self._production_partners)
 
     # ------------------------------------------------------------- writes
