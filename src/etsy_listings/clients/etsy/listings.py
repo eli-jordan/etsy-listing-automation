@@ -19,7 +19,14 @@ findings make the obvious implementation wrong:
 Separate from :class:`~etsy_listings.clients.etsy.shops.EtsyShopClient` for
 the reason A22 gives: authority is a property of the type, so a caller
 resolving `setup`'s four unscoped reads cannot reach `updateListing` however
-much transport plumbing the two share.
+much transport plumbing the two share. `shop_sections` and `return_policies`
+exist on **both** protocols despite being unscoped calls, because the two
+serve different lifecycles rather than different authority: `setup` needs
+them before a token exists at all (`EtsyShopClient`), while
+`EtsyShopCatalog` needs them from the one client `RunContext` actually
+carries once a run is signed in -- adding a second client field to
+`RunContext` just to reach two calls its `EtsyListingClient` could make
+over the same transport would be the wrong seam to add.
 """
 
 from __future__ import annotations
@@ -31,7 +38,9 @@ from etsy_listings.clients.etsy.models import (
     Listing,
     ListingImage,
     ProductionPartner,
+    ReturnPolicy,
     ShippingProfile,
+    ShopSection,
     VariationImageLink,
 )
 from etsy_listings.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
@@ -71,6 +80,10 @@ class EtsyListingClient(Protocol):
 
     def production_partners(self, shop_id: int) -> list[ProductionPartner]: ...
 
+    def shop_sections(self, shop_id: int) -> list[ShopSection]: ...
+
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]: ...
+
 
 class HttpEtsyListingClient:
     def __init__(self, transport: Transport) -> None:
@@ -103,6 +116,14 @@ class HttpEtsyListingClient:
     def production_partners(self, shop_id: int) -> list[ProductionPartner]:
         response = self._transport.get(f"/v3/application/shops/{shop_id}/production-partners")
         return [ProductionPartner.model_validate(row) for row in _results(response.json())]
+
+    def shop_sections(self, shop_id: int) -> list[ShopSection]:
+        response = self._transport.get(f"/v3/application/shops/{shop_id}/sections")
+        return [ShopSection.model_validate(row) for row in _results(response.json())]
+
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
+        response = self._transport.get(f"/v3/application/shops/{shop_id}/policies/return")
+        return [ReturnPolicy.model_validate(row) for row in _results(response.json())]
 
     # ------------------------------------------------------------- writes
 

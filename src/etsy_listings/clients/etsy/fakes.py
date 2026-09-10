@@ -77,6 +77,8 @@ class FakeEtsyListingClient:
         *,
         shipping_profiles: list[ShippingProfile] | None = None,
         production_partners: list[ProductionPartner] | None = None,
+        sections: list[ShopSection] | None = None,
+        policies: list[ReturnPolicy] | None = None,
     ) -> None:
         self._listings: dict[int, Listing] = {}
         self._images: dict[int, list[ListingImage]] = {}
@@ -84,10 +86,14 @@ class FakeEtsyListingClient:
         self._variation_images: dict[int, list[VariationImageLink]] = {}
         self._shipping_profiles = list(shipping_profiles or [])
         self._production_partners = list(production_partners or [])
+        self._sections = list(sections or [])
+        self._policies = list(policies or [])
         self._next_image_id = 0
         self.updated: list[dict[str, Any]] = []
         self.shipping_profile_calls = 0
         self.production_partner_calls = 0
+        self.section_calls = 0
+        self.return_policy_calls = 0
 
     def seed_listing(self, listing_id: int, *, shop_id: int | None = None, **fields: Any) -> None:
         self._listings[listing_id] = Listing(listing_id=listing_id, shop_id=shop_id, **fields)
@@ -118,6 +124,14 @@ class FakeEtsyListingClient:
     def production_partners(self, shop_id: int) -> list[ProductionPartner]:
         self.production_partner_calls += 1
         return list(self._production_partners)
+
+    def shop_sections(self, shop_id: int) -> list[ShopSection]:
+        self.section_calls += 1
+        return list(self._sections)
+
+    def return_policies(self, shop_id: int) -> list[ReturnPolicy]:
+        self.return_policy_calls += 1
+        return list(self._policies)
 
     # ------------------------------------------------------------- writes
 

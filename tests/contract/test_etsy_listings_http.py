@@ -380,3 +380,41 @@ def test_production_partners_are_read_from_the_shop_scoped_path() -> None:
     partners = _client(handler).production_partners(SHOP_ID)
 
     assert partners[0].partner_name == "The Print Provider"
+
+
+def test_shop_sections_are_also_reachable_over_the_signed_in_connection() -> None:
+    """Unscoped, and duplicated from `EtsyShopClient` on purpose: the run
+    context that resolves a listing carries only `EtsyListingClient`
+    (decision 2), not a second client just to reach two unscoped reads over
+    the same transport."""
+    payload = {"count": 1, "results": [{"shop_section_id": 44, "title": "Retro Tees"}]}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == f"/v3/application/shops/{SHOP_ID}/sections"
+        return httpx.Response(200, json=payload)
+
+    sections = _client(handler).shop_sections(SHOP_ID)
+
+    assert sections[0].title == "Retro Tees"
+
+
+def test_return_policies_are_also_reachable_over_the_signed_in_connection() -> None:
+    payload = {
+        "count": 1,
+        "results": [
+            {
+                "return_policy_id": 1513785862328,
+                "accepts_returns": True,
+                "accepts_exchanges": True,
+                "return_deadline": 30,
+            }
+        ],
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == f"/v3/application/shops/{SHOP_ID}/policies/return"
+        return httpx.Response(200, json=payload)
+
+    policies = _client(handler).return_policies(SHOP_ID)
+
+    assert policies[0].describe() == "returns and exchanges within 30 days"

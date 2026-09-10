@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
+from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.clients.etsy.models import (
     ProductionPartner,
     ReturnPolicy,
@@ -33,19 +33,21 @@ def _catalog(
     policies: list[ReturnPolicy] | None = None,
     shipping_profiles: list[ShippingProfile] | None = None,
     production_partners: list[ProductionPartner] | None = None,
-) -> tuple[EtsyShopCatalog, FakeEtsyShopClient, FakeEtsyListingClient]:
-    shop_client = FakeEtsyShopClient(sections=sections, policies=policies)
-    listing_client = FakeEtsyListingClient(
-        shipping_profiles=shipping_profiles, production_partners=production_partners
+) -> tuple[EtsyShopCatalog, FakeEtsyListingClient]:
+    client = FakeEtsyListingClient(
+        sections=sections,
+        policies=policies,
+        shipping_profiles=shipping_profiles,
+        production_partners=production_partners,
     )
-    return EtsyShopCatalog(shop_client, listing_client, SHOP_ID), shop_client, listing_client
+    return EtsyShopCatalog(client, SHOP_ID), client
 
 
 # ------------------------------------------------------------------ sections
 
 
 def test_a_section_resolves_by_its_title() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         sections=[
             ShopSection(shop_section_id=44, title="Tees"),
             ShopSection(shop_section_id=45, title="Hoodies"),
@@ -56,14 +58,14 @@ def test_a_section_resolves_by_its_title() -> None:
 
 
 def test_an_unknown_section_lists_the_shops_actual_sections() -> None:
-    catalog, _, _ = _catalog(sections=[ShopSection(shop_section_id=44, title="Tees")])
+    catalog, _ = _catalog(sections=[ShopSection(shop_section_id=44, title="Tees")])
 
     with pytest.raises(ShopCatalogError, match="Tees"):
         catalog.shop_section("Retro Tees")
 
 
 def test_no_sections_at_all_names_the_shop_manager_step() -> None:
-    catalog, _, _ = _catalog(sections=[])
+    catalog, _ = _catalog(sections=[])
 
     with pytest.raises(ShopCatalogError, match="Shop Manager"):
         catalog.shop_section("Retro Tees")
@@ -73,7 +75,7 @@ def test_no_sections_at_all_names_the_shop_manager_step() -> None:
 
 
 def test_a_shipping_profile_resolves_by_its_title() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         shipping_profiles=[ShippingProfile(shipping_profile_id=1, title="NOK standard tee")]
     )
 
@@ -81,7 +83,7 @@ def test_a_shipping_profile_resolves_by_its_title() -> None:
 
 
 def test_a_deleted_shipping_profile_is_not_offered() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         shipping_profiles=[
             ShippingProfile(shipping_profile_id=1, title="Old profile", is_deleted=True)
         ]
@@ -92,7 +94,7 @@ def test_a_deleted_shipping_profile_is_not_offered() -> None:
 
 
 def test_an_unknown_shipping_profile_lists_the_shops_actual_ones() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         shipping_profiles=[ShippingProfile(shipping_profile_id=1, title="NOK standard tee")]
     )
 
@@ -104,7 +106,7 @@ def test_an_unknown_shipping_profile_lists_the_shops_actual_ones() -> None:
 
 
 def test_a_shop_with_exactly_one_policy_needs_no_reference() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         policies=[
             ReturnPolicy(
                 return_policy_id=1, accepts_returns=True, accepts_exchanges=True, return_deadline=30
@@ -116,7 +118,7 @@ def test_a_shop_with_exactly_one_policy_needs_no_reference() -> None:
 
 
 def test_omitting_it_with_more_than_one_policy_lists_them_by_terms() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         policies=[
             ReturnPolicy(
                 return_policy_id=1, accepts_returns=True, accepts_exchanges=True, return_deadline=30
@@ -130,7 +132,7 @@ def test_omitting_it_with_more_than_one_policy_lists_them_by_terms() -> None:
 
 
 def test_terms_resolve_to_the_matching_policy() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         policies=[
             ReturnPolicy(
                 return_policy_id=1, accepts_returns=True, accepts_exchanges=True, return_deadline=30
@@ -147,7 +149,7 @@ def test_terms_resolve_to_the_matching_policy() -> None:
 
 
 def test_terms_matching_nothing_list_what_the_shop_actually_has() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         policies=[
             ReturnPolicy(
                 return_policy_id=1, accepts_returns=True, accepts_exchanges=True, return_deadline=30
@@ -168,7 +170,7 @@ def test_a_named_partner_resolves_through_the_same_normalisation_as_the_catalog(
     """PRD 23's blueprint: trademark signs and case fold away. Etsy renders
     partner names plainly, but the config author should not have to match its
     capitalisation exactly either."""
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         production_partners=[
             ProductionPartner(production_partner_id=1, partner_name="The Print Provider")
         ]
@@ -178,7 +180,7 @@ def test_a_named_partner_resolves_through_the_same_normalisation_as_the_catalog(
 
 
 def test_omitted_with_exactly_one_partner_uses_it() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         production_partners=[
             ProductionPartner(production_partner_id=1, partner_name="The Print Provider")
         ]
@@ -189,7 +191,7 @@ def test_omitted_with_exactly_one_partner_uses_it() -> None:
 
 def test_omitted_with_several_partners_names_them_by_name_and_location() -> None:
     """Generic partner names make the location the distinguishing half."""
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         production_partners=[
             ProductionPartner(
                 production_partner_id=1, partner_name="The Print Provider", location="Miami, FL"
@@ -209,14 +211,14 @@ def test_a_shop_with_no_partner_at_all_names_the_shop_manager_step() -> None:
     """The API is read-only for this resource -- there is no
     createShopProductionPartner -- so the message has to send a human to
     Shop Manager rather than suggest a name to type."""
-    catalog, _, _ = _catalog(production_partners=[])
+    catalog, _ = _catalog(production_partners=[])
 
     with pytest.raises(ShopCatalogError, match="Shop Manager"):
         catalog.production_partner(None)
 
 
 def test_an_unresolvable_named_partner_lists_the_shops_actual_ones() -> None:
-    catalog, _, _ = _catalog(
+    catalog, _ = _catalog(
         production_partners=[
             ProductionPartner(production_partner_id=1, partner_name="The Print Provider")
         ]
@@ -230,7 +232,7 @@ def test_an_unresolvable_named_partner_lists_the_shops_actual_ones() -> None:
 
 
 def test_each_list_is_fetched_at_most_once_per_catalog() -> None:
-    catalog, shop_client, listing_client = _catalog(
+    catalog, client = _catalog(
         sections=[ShopSection(shop_section_id=44, title="Tees")],
         shipping_profiles=[ShippingProfile(shipping_profile_id=1, title="NOK standard tee")],
     )
@@ -240,5 +242,5 @@ def test_each_list_is_fetched_at_most_once_per_catalog() -> None:
     catalog.shipping_profile("NOK standard tee")
     catalog.shipping_profile("NOK standard tee")
 
-    assert shop_client.section_calls == 1
-    assert listing_client.shipping_profile_calls == 1
+    assert client.section_calls == 1
+    assert client.shipping_profile_calls == 1

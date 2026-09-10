@@ -27,7 +27,6 @@ from etsy_listings.clients.etsy.models import (
     ShippingProfile,
     ShopSection,
 )
-from etsy_listings.clients.etsy.shops import EtsyShopClient
 from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.errors import UserFacingError
 
@@ -56,11 +55,8 @@ class EtsyShopCatalog:
     """Sections, shipping profiles, return policies and production partners,
     fetched at most once each per instance."""
 
-    def __init__(
-        self, shop_client: EtsyShopClient, listing_client: EtsyListingClient, shop_id: int
-    ) -> None:
-        self._shop_client = shop_client
-        self._listing_client = listing_client
+    def __init__(self, client: EtsyListingClient, shop_id: int) -> None:
+        self._client = client
         self._shop_id = shop_id
         self._sections: list[ShopSection] | None = None
         self._shipping_profiles: list[ShippingProfile] | None = None
@@ -71,7 +67,7 @@ class EtsyShopCatalog:
 
     def _all_sections(self) -> list[ShopSection]:
         if self._sections is None:
-            self._sections = self._shop_client.shop_sections(self._shop_id)
+            self._sections = self._client.shop_sections(self._shop_id)
         return self._sections
 
     def _all_shipping_profiles(self) -> list[ShippingProfile]:
@@ -81,19 +77,19 @@ class EtsyShopCatalog:
             # match against something no longer offered.
             self._shipping_profiles = [
                 profile
-                for profile in self._listing_client.shipping_profiles(self._shop_id)
+                for profile in self._client.shipping_profiles(self._shop_id)
                 if not profile.is_deleted
             ]
         return self._shipping_profiles
 
     def _all_return_policies(self) -> list[ReturnPolicy]:
         if self._return_policies is None:
-            self._return_policies = self._shop_client.return_policies(self._shop_id)
+            self._return_policies = self._client.return_policies(self._shop_id)
         return self._return_policies
 
     def _all_production_partners(self) -> list[ProductionPartner]:
         if self._production_partners is None:
-            self._production_partners = self._listing_client.production_partners(self._shop_id)
+            self._production_partners = self._client.production_partners(self._shop_id)
         return self._production_partners
 
     # -------------------------------------------------------------- section
