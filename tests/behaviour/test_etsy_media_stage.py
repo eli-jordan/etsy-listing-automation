@@ -280,7 +280,7 @@ def test_variation_images_links_each_colour_to_its_uploaded_image(
 
     lock = _apply(ctx, _lock_with_listing_id())
 
-    links = etsy.get_listing_variation_images(ETSY_LISTING_ID)
+    links = etsy.get_listing_variation_images(SHOP_ID, ETSY_LISTING_ID)
     assert len(links) == 4
     by_value_id = {link.value_id: link.image_id for link in links}
     black_image_id = lock.remote["etsy_image_ids"][f"{TEMPLATE}:black"]
@@ -306,4 +306,4 @@ def test_no_matching_colour_property_skips_the_feature_without_failing(
 
     _apply(ctx, _lock_with_listing_id())
 
-    assert etsy.get_listing_variation_images(ETSY_LISTING_ID) == []
+    assert etsy.get_listing_variation_images(SHOP_ID, ETSY_LISTING_ID) == []

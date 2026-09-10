@@ -312,7 +312,8 @@ class TestTheFullCycle:
         written = Lockfile.read(workspace.lock_file(LISTING))
         assert written is not None
         listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
-        links = ctx.require_etsy().get_listing_variation_images(listing_id)
+        shop_id = workspace.defaults.etsy.require_shop_id()
+        links = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
         if len(links) != 4:
             inventory = ctx.require_etsy().get_listing_inventory(listing_id)
             properties = [

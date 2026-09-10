@@ -117,7 +117,7 @@ def test_a_replaced_images_variation_link_is_left_dangling() -> None:
         listing_image_id=first.listing_image_id,
     )
 
-    links = client.get_listing_variation_images(LISTING_ID)
+    links = client.get_listing_variation_images(SHOP_ID, LISTING_ID)
     assert links[0].image_id == first.listing_image_id
 
 
@@ -130,7 +130,7 @@ def test_variation_images_round_trip_with_the_value_string() -> None:
         [VariationImageLink(property_id=513, value_id=50135267836, image_id=1, value="Black")],
     )
 
-    links = client.get_listing_variation_images(LISTING_ID)
+    links = client.get_listing_variation_images(SHOP_ID, LISTING_ID)
     assert (links[0].value_id, links[0].value) == (50135267836, "Black")
 
 
@@ -142,7 +142,7 @@ def test_an_empty_list_clears_the_links() -> None:
 
     client.update_variation_images(SHOP_ID, LISTING_ID, [])
 
-    assert client.get_listing_variation_images(LISTING_ID) == []
+    assert client.get_listing_variation_images(SHOP_ID, LISTING_ID) == []
 
 
 def test_shipping_profiles_and_production_partners_are_seeded() -> None:

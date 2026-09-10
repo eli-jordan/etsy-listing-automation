@@ -117,7 +117,9 @@ class FakeEtsyListingClient:
     def get_listing_inventory(self, listing_id: int) -> Inventory:
         return self._inventory.get(listing_id, Inventory())
 
-    def get_listing_variation_images(self, listing_id: int) -> list[VariationImageLink]:
+    def get_listing_variation_images(
+        self, shop_id: int, listing_id: int
+    ) -> list[VariationImageLink]:
         return list(self._variation_images.get(listing_id, []))
 
     def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:

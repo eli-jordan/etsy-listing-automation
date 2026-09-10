@@ -12,8 +12,10 @@ the parts that make the naive implementation wrong: the comma-separated
 from __future__ import annotations
 
 import httpx
+import pytest
 
 from etsy_listings.clients.etsy.listings import HttpEtsyListingClient
+from etsy_listings.clients.etsy.transport import EtsyApiError
 
 from tests.support.http import etsy_transport
 
@@ -331,7 +333,13 @@ def test_an_empty_list_clears_the_links() -> None:
 def test_get_listing_variation_images_reads_the_value_string_back() -> None:
     """The read carries the value string alongside each id, so
     `value_id -> value -> slug` comes free with it -- the inventory read is
-    needed only to build a link, never to compare one."""
+    needed only to build a link, never to compare one.
+
+    The path is asserted here and not only in the write's test: this read is
+    shop-scoped, unlike every other read in this client, and the version that
+    left `shop_id` out 404'd for every listing while looking exactly like
+    "no links yet".
+    """
     payload = {
         "count": 1,
         "results": [
@@ -343,23 +351,41 @@ def test_get_listing_variation_images_reads_the_value_string_back() -> None:
             }
         ],
     }
+    seen: dict = {}
 
-    links = _client(lambda _: httpx.Response(200, json=payload)).get_listing_variation_images(
-        LISTING_ID
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(200, json=payload)
+
+    links = _client(handler).get_listing_variation_images(SHOP_ID, LISTING_ID)
+
+    assert (seen["method"], seen["path"]) == (
+        "GET",
+        f"/v3/application/shops/{SHOP_ID}/listings/{LISTING_ID}/variation-images",
     )
-
     assert links[0].value == "Black"
     assert links[0].image_id == 8503331196
 
 
-def test_a_listing_with_no_links_ever_set_404s_rather_than_an_empty_count() -> None:
-    """Measured: unlike every other list read in this client, a listing that
-    has never had `updateVariationImages` called on it 404s here instead of
-    answering `200` with `count: 0` -- decision 6 treats "no links" as one
-    state regardless of which shape Etsy used to say it."""
-    handler = lambda _: httpx.Response(404, json={"error": "No variation images found."})  # noqa: E731
+def test_a_listing_with_no_links_reads_as_an_empty_count() -> None:
+    """Measured on the shop-scoped path: a listing that has never had
+    `updateVariationImages` called on it answers `200` with `count: 0`, the
+    same envelope as every other list read here. The unscoped path's blanket
+    `404` was once mistaken for this state, which is why it is pinned."""
+    handler = lambda _: httpx.Response(200, json={"count": 0, "results": []})  # noqa: E731
 
-    assert _client(handler).get_listing_variation_images(LISTING_ID) == []
+    assert _client(handler).get_listing_variation_images(SHOP_ID, LISTING_ID) == []
+
+
+def test_a_missing_listing_raises_rather_than_reading_as_no_links() -> None:
+    """The other half of the same fix: with the path correct, a `404` is the
+    listing being gone, and flattening it to `[]` would report a deleted
+    listing as one whose swatches simply are not set."""
+    handler = lambda _: httpx.Response(404, json={"error": "Listing not found."})  # noqa: E731
+
+    with pytest.raises(EtsyApiError):
+        _client(handler).get_listing_variation_images(SHOP_ID, LISTING_ID)
 
 
 # --------------------------------------------------- shipping profiles & partners

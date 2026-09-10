@@ -74,7 +74,9 @@ class EtsyListingClient(Protocol):
         self, shop_id: int, listing_id: int, links: list[VariationImageLink]
     ) -> None: ...
 
-    def get_listing_variation_images(self, listing_id: int) -> list[VariationImageLink]: ...
+    def get_listing_variation_images(
+        self, shop_id: int, listing_id: int
+    ) -> list[VariationImageLink]: ...
 
     def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]: ...
 
@@ -105,21 +107,23 @@ class HttpEtsyListingClient:
         response = self._transport.get(f"/v3/application/listings/{listing_id}/inventory")
         return Inventory.model_validate(response.json())
 
-    def get_listing_variation_images(self, listing_id: int) -> list[VariationImageLink]:
-        """``[]`` on a `404`, the same as no links -- measured: a listing that
-        has never had ``updateVariationImages`` called on it 404s here rather
-        than answering `200` with an empty ``results``, unlike every other
-        list read in this client. Decision 6 treats a swatch as a decoration
-        (PRD 46), so "no links yet" must read the same regardless of which
-        shape Etsy used to say it."""
-        try:
-            response = self._transport.get(
-                f"/v3/application/listings/{listing_id}/variation-images"
-            )
-        except EtsyApiError as exc:
-            if exc.status_code == HTTP_NOT_FOUND:
-                return []
-            raise
+    def get_listing_variation_images(
+        self, shop_id: int, listing_id: int
+    ) -> list[VariationImageLink]:
+        """Shop-scoped, like the write beside it -- and unlike every other
+        *read* in this client, which is why it was got wrong once and worth
+        stating: `getListingVariationImages` takes `shop_id` in the path.
+
+        The unscoped `/v3/application/listings/{id}/variation-images` 404s for
+        every listing, linked or not, which is indistinguishable from "no
+        links yet" and was once read as exactly that. On the correct path a
+        listing with no links answers `200` with `count: 0` like every other
+        list read here (measured, both shapes), so a `404` means the listing
+        is gone and is raised rather than flattened into an empty list.
+        """
+        response = self._transport.get(
+            f"/v3/application/shops/{shop_id}/listings/{listing_id}/variation-images"
+        )
         return [VariationImageLink.model_validate(row) for row in _results(response.json())]
 
     def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:

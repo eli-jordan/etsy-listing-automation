@@ -722,6 +722,15 @@ that names `black.png` maps Etsy's `"Black"` onto `black` with nothing added.
 | Does an empty array clear them? | **Yes**, `200` and `count: 0`. Turning the feature off is a write, not a message |
 | May two values share one image? | **Yes**, `200`. The reference's "should not contain any duplicates" means duplicate *(property, value)* pairs — two colours sharing one photograph is legal |
 | Scope to read | **none** — `getListingVariationImages` needs only the app key |
+| Path to read | **shop-scoped**, `GET /v3/application/shops/{shop}/listings/{id}/variation-images` — unlike every other read this client makes, and the trap below |
+
+The read being shop-scoped is worth its own line because getting it wrong is
+invisible. The unscoped `/v3/application/listings/{id}/variation-images`
+answers `404` for **every** listing, linked or not — which reads exactly like
+"this listing has no swatches yet", and was once written into the client as
+that rule. On the correct path an unlinked listing answers `200` with
+`count: 0`, the same envelope as every other list read, so there is no special
+case to make: a `404` there means the listing is gone.
 
 ### `overwrite: true` replaces in place — open question 6, answered
 
