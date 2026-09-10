@@ -165,8 +165,38 @@ jobs:
           ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
         run: uv run pytest -m browser
 
+      # Phase 3's Etsy e2e tests need a workspace that has already run `setup`
+      # and `auth etsy` -- Etsy's OAuth handshake needs a real browser consent
+      # step, so unlike the Printify token it cannot be a bare secret. This
+      # materialises one from the stored token pair plus the (non-secret) shop
+      # ids, in $RUNNER_TEMP so it never touches the checkout.
+      #
+      # Etsy rotates the refresh token on every use, and this workspace is
+      # thrown away at the end of the job -- so the first run that needs a
+      # refresh (the access token is typically good for ~1h) invalidates
+      # ETSY_TOKENS_JSON for every run after it. There is no write-back here;
+      # re-run `etsy-listings auth etsy` locally and update the secret when
+      # that happens.
+      - name: set up the Etsy e2e workspace
+        env:
+          ETSY_TOKENS_JSON: ${{ secrets.ETSY_TOKENS_JSON }}
+        run: |
+          workspace="$RUNNER_TEMP/etsy-e2e-workspace"
+          mkdir -p "$workspace/.auth"
+          {
+            echo "printify:"
+            echo "  shop_id: 28877318"
+            echo "etsy:"
+            echo "  shop_id: 67961328"
+            echo "  currency: NOK"
+          } > "$workspace/shop.yaml"
+          printf '%s' "$ETSY_TOKENS_JSON" > "$workspace/.auth/etsy-tokens.json"
+          echo "ETSY_LISTINGS_ROOT=$workspace" >> "$GITHUB_ENV"
+
       - name: pytest -m e2e
         env:
           ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
           PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
+          ETSY_KEYSTRING: ${{ secrets.ETSY_KEYSTRING }}
+          ETSY_SHARED_SECRET: ${{ secrets.ETSY_SHARED_SECRET }}
         run: uv run pytest -m e2e

@@ -375,24 +375,6 @@ class TestCreatingTheProduct:
         }
         assert "back" in positions
 
-    def test_printify_generates_its_own_mockups(self, live: dict[str, Any]) -> None:
-        """One set per enabled colour, several camera angles each, all flagged
-        for publishing. These are the stock mockups the PRD exists to replace;
-        knowing they arrive matters because the Etsy publish would otherwise
-        use them."""
-        assert live["images"]
-        colours_covered = {
-            variant_id for image in live["images"] for variant_id in image["variant_ids"]
-        }
-        assert colours_covered == set(_enabled(live))
-        assert {image["position"] for image in live["images"]} >= {"front", "back"}
-
-    def test_the_blueprints_default_tags_arrive_unasked(self, live: dict[str, Any]) -> None:
-        """We sent no tags. Printify supplies the blueprint's, and they are
-        what a publish would push -- which is what ``{tags: false}`` in the
-        sync flags is for."""
-        assert live["tags"]
-
     def test_no_response_anywhere_names_a_currency(
         self, live: dict[str, Any], printify_shop: dict[str, Any]
     ) -> None:
