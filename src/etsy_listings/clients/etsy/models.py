@@ -9,7 +9,7 @@ for the rest.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class Shop(BaseModel):
@@ -199,3 +199,13 @@ class Listing(BaseModel):
     processing_min: int | None = None
     processing_max: int | None = None
     images: tuple[ListingImage, ...] = ()
+
+    @field_validator("images", mode="before")
+    @classmethod
+    def _null_images_is_none_requested(cls, value: object) -> object:
+        """``getListing`` sends ``images: null``, not an omitted key or ``[]``,
+        when called without ``includes=Images`` (measured) -- the default
+        every ``read_live()`` but ``etsy_media``'s asks for. The field default
+        only covers a *missing* key, so without this a plain re-plan of an
+        existing listing fails validation on every run."""
+        return () if value is None else value

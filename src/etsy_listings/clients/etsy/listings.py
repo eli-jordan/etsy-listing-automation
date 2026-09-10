@@ -106,7 +106,20 @@ class HttpEtsyListingClient:
         return Inventory.model_validate(response.json())
 
     def get_listing_variation_images(self, listing_id: int) -> list[VariationImageLink]:
-        response = self._transport.get(f"/v3/application/listings/{listing_id}/variation-images")
+        """``[]`` on a `404`, the same as no links -- measured: a listing that
+        has never had ``updateVariationImages`` called on it 404s here rather
+        than answering `200` with an empty ``results``, unlike every other
+        list read in this client. Decision 6 treats a swatch as a decoration
+        (PRD 46), so "no links yet" must read the same regardless of which
+        shape Etsy used to say it."""
+        try:
+            response = self._transport.get(
+                f"/v3/application/listings/{listing_id}/variation-images"
+            )
+        except EtsyApiError as exc:
+            if exc.status_code == HTTP_NOT_FOUND:
+                return []
+            raise
         return [VariationImageLink.model_validate(row) for row in _results(response.json())]
 
     def shipping_profiles(self, shop_id: int) -> list[ShippingProfile]:

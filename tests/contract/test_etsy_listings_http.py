@@ -122,6 +122,21 @@ def test_a_listing_with_no_images_requested_has_an_empty_tuple() -> None:
     assert listing.images == ()
 
 
+def test_images_is_null_not_omitted_when_not_requested() -> None:
+    """Measured: the real API sends ``"images": null``, not an absent key, on
+    a call without ``includes=Images``. A missing key falls back to the
+    field's own default tuple; an explicit ``null`` does not, and every
+    `etsy_listing` re-plan of an already-published listing calls `get_listing`
+    this way (no `include_images`) -- so this shape broke every second run
+    against a real listing until the model was taught to fold it."""
+    listing = _client(
+        lambda _: httpx.Response(200, json={**LISTING_PAYLOAD, "images": None})
+    ).get_listing(LISTING_ID)
+
+    assert listing is not None
+    assert listing.images == ()
+
+
 # -------------------------------------------------------------- update_listing
 
 
@@ -335,6 +350,16 @@ def test_get_listing_variation_images_reads_the_value_string_back() -> None:
 
     assert links[0].value == "Black"
     assert links[0].image_id == 8503331196
+
+
+def test_a_listing_with_no_links_ever_set_404s_rather_than_an_empty_count() -> None:
+    """Measured: unlike every other list read in this client, a listing that
+    has never had `updateVariationImages` called on it 404s here instead of
+    answering `200` with `count: 0` -- decision 6 treats "no links" as one
+    state regardless of which shape Etsy used to say it."""
+    handler = lambda _: httpx.Response(404, json={"error": "No variation images found."})  # noqa: E731
+
+    assert _client(handler).get_listing_variation_images(LISTING_ID) == []
 
 
 # --------------------------------------------------- shipping profiles & partners
