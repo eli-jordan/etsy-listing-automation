@@ -170,13 +170,30 @@ etsy:
   shop_id: 12345678            # resolved from the name by `setup`
   currency: NOK                # read from the Etsy shop; the only currency
                                # prices may be expressed in
-  who_made: i_did
-  when_made: made_to_order
-  is_supply: false
-  shop_section_id: 4455667
-  return_policy_id: 1122334
-  renewal: manual              # manual | auto — default manual
+  listing_defaults:            # everything a listing inherits (#52-#59)
+    who_made: someone_else     # another company printed it — and Etsy then
+                               # requires a production partner (#52)
+    when_made: made_to_order
+    is_supply: false
+    renewal: manual            # manual | auto — default manual
+    shipping_profile: NOK standard tee     # by title (#54)
+    production_partner: The Print Provider # optional — omit when the shop
+                                           # has exactly one (#52)
+    return_policy:             # by its terms, not its id (#59); optional
+      accepts_returns: true    # when the shop has exactly one policy
+      accepts_exchanges: true
+      within_days: 30
 ```
+
+`listing_defaults` is what a listing inherits and may override; everything
+outside it identifies the shop. The line is worth drawing because the two fail
+differently — a wrong `shop_id` means nothing works, while a wrong default
+means every listing is quietly slightly wrong.
+
+Two settings are deliberately **absent**: there is no shop-wide shop section
+and no shop-wide swatch template. Which part of the shop a listing sits in, and
+which of its mockups become colour swatches, are facts about that listing
+(#53, #56).
 
 Every key sits under the service that owns it, and every shop is identified by
 **name with its id beside it** (#51). The name is what a human recognises and
@@ -355,6 +372,10 @@ etsy:
   tags: <generate>
   materials: [cotton]
   renewal: manual          # overrides shop.yaml
+  section: Retro Tees      # by name; listing-only, no shop default (#53)
+  shipping_profile: NOK heavy tee     # optional — overrides shop.yaml (#54)
+  variation_images: flat-lay-01       # optional — the colour-matrix template
+                                      # whose renders become swatches (#56)
 media:
   - { template: flat-lay-01, colour: black }
   - { template: flat-lay-01, colour: blue-jean }
@@ -417,13 +438,21 @@ validation dump.
    none is an error naming what to do on printify.com. Writes
    `printify.shop_id`. A *missing* token is not a question to ask here: it is a
    pointer back to `auth`, by name.
-3. **Resolves the Etsy ids** with the app key pair, no OAuth involved:
-   `findShops` by shop name, then `getShopSections` and
-   `getShopReturnPolicies`, none of which carry a scope. Writes
-   `etsy.shop_id`, `etsy.shop_section_id` and `etsy.return_policy_id`,
+3. **Resolves the Etsy shop** with the app key pair, no OAuth involved:
+   `findShops` by shop name, which carries no scope. Writes `etsy.shop_id`,
    discovered rather than typed for the same reason as #42 — an id copied out
    of a browser URL is a transcription error waiting to happen.
-4. **Collects the commercial defaults** — `who_made`, `when_made`, `is_supply`,
+
+   It writes **two ids now, not four** (#53, #59, amending #49). The shop
+   section moved to the listing, where it belongs, and the return policy is
+   named by its terms — so neither is an id `setup` has to resolve, and a
+   workspace no longer carries two numbers whose staleness is invisible until
+   a `400`. What `setup` does instead is *report*: a shop with no production
+   partner, no section, or only Printify's shipping profile is one where the
+   next `plan` will block, and saying so at setup time beats saying it per
+   listing later.
+4. **Collects the commercial defaults** — the `listing_defaults` block:
+   `who_made`, `when_made`, `is_supply`,
    currency, renewal policy, preferred print provider — and writes `shop.yaml`
    **last**, because it is the file that makes a directory a workspace: a run
    cancelled halfway leaves directories nothing downstream mistakes for one.
@@ -766,10 +795,23 @@ title.
 ## Etsy field ownership
 
 We own: **title, description, tags, images, shop section, materials, per-image
-alt text, and renewal policy.** Everything else stays as Printify left it.
+alt text, renewal policy, the `who_made`/`when_made`/`is_supply` declaration
+with its production partner, the shipping profile, the return policy, and the
+per-colour variation images.** Everything else stays as Printify left it.
+
+The last four joined this list in Phase 3, and three of them are corrections
+rather than additions: the shipping profile because Printify attaches its own
+regardless of the sync flag and charges USD numerals as NOK (#58); the
+production partner because Etsy refuses the listing without one (#52); and the
+return policy because Printify creates one on first publish, so the shop's
+policy set is something it writes to.
 
 Renewal defaults to **manual** in `shop.yaml` and is overridable per listing,
 written to Etsy's `should_auto_renew`.
+
+**Processing time is the one buyer-facing field we do not own** (#55). It lives
+per offering inside the inventory, which belongs to Printify, and every route
+to it that avoids writing that document was measured and does not work.
 
 *Known wrinkle:* Etsy requires a title at creation, so Printify's first publish
 sets some title and description regardless of the sync flags — the flags govern
@@ -784,10 +826,23 @@ holding our copy does not make Printify a writer of it.
 ### Media sync
 
 Explicit ordered media list per listing (mockups plus shared assets such as the
-sizing chart). Because Etsy has no update-image endpoint, sync is **full
-replace**: if the media manifest hash differs, delete all images and re-upload in
-rank order. Always correct; churns image IDs and spends ~10 uploads to change one
-photo, acceptable at this volume.
+sizing chart), synced as a **full replacement** driven by a per-file hash.
+
+The *mechanism* changed once measurement replaced assumption (#57). This
+section used to say that because Etsy has no update-image endpoint, sync must
+delete every image and re-upload in rank order — ten uploads to change one
+photo. Two endpoints make that unnecessary: `image_ids` on `updateListing` is
+an ordered full-replacement set that reorders and detaches without re-sending
+bytes, and `uploadListingImage`'s `overwrite: true` replaces in place at an
+occupied rank. So sync uploads only what changed, then asserts the order in one
+call — which also clears Printify's first-publish mockups, an unknown number of
+which arrive at an unknown time.
+
+Two hazards came with it, both measured, both now the media stage's job: sent
+as repeated form keys rather than one comma-separated value, `image_ids`
+answers `200` and reduces the listing to a single image; and replacing an image
+leaves any colour swatch bound to it (#56) pointing at an id no longer on the
+listing, which Etsy also reports as a healthy `200`.
 
 ---
 
@@ -873,6 +928,18 @@ Etsy, and `external.id` appears on success.
 - Blueprint and print provider names resolve to catalog IDs; failure lists the
   valid names.
 - Copy within Etsy limits; no unresolved `<generate>` sentinels.
+- **Every Etsy name resolves**: the shop section, the shipping profile and the
+  production partner each name something the shop actually has, with failure
+  listing the real candidates. A stale name is not a soft failure — a section
+  id Etsy does not recognise fails the entire `updateListing` (#53).
+- **`who_made: someone_else` has a production partner resolved** (#52). Etsy
+  refuses the write without one, so this gate turns a `400` that blames the
+  marketplace into a sentence naming the missing thing.
+- **The return policy reference matches exactly one policy**, or the shop has
+  exactly one and none is named (#59).
+- **A `variation_images` reference names a `colour-matrix` template that the
+  listing's own `media` uses** (#56). `multiple` and `single` templates have
+  one output and no colour, so they have nothing to bind.
 
 ### Changing the garment is not an operation
 
@@ -932,7 +999,7 @@ not silently replaced.
 | 0 | Config schemas (pydantic), profile/listing resolution, catalog fetch + cache, slugification, validation, lockfile model, `plan` skeleton |
 | 1 | Render pipeline + calibration UI + `new` picker — fully local, valuable standalone |
 | 2 | `setup` (43); Printify: variant resolution, product create/update, the validation gates (37, 38, 44) |
-| 3 | Etsy: OAuth, publish + polling + `unlock`, copy patch, media replace, renewal |
+| 3 | Etsy: OAuth, publish + polling + `unlock`, the listing patch, media replace, renewal, variation images — [phase-3-etsy.md](phase-3-etsy.md) |
 | 4 | AI generation + validation gate |
 | 5 | `ui` first-run setup, dashboard and plan/apply runner |
 | 6 | Batch, rate limiting, `status`, drift reporting, polish |
@@ -1036,11 +1103,27 @@ useful before any API credentials exist.
     shipping, and means the tool owns a shipping profile on the Etsy side rather
     than borrowing Printify's.
 
-    **This must be settled before Phase 3 implementation begins**, not during
-    it. It decides whether `shipping_template: false` is unconditional, whether
-    a shipping stage exists at all, and whether the rates live in `shop.yaml`,
-    the profile or the listing. A wrong answer here is not a spurious diff; it
-    is money lost per order, silently, with nothing in the tool to notice.
+    **Settled, and worse than described, before it was closed** (#58). Measured
+    against the connected shop: `shipping_template: false` does not prevent
+    Printify creating and attaching its own profile on first publish, so the
+    documented lever is a hint. The profile it made ships from `US` against a
+    shop that ships from `NO`, and its rates read `kr 10,39` where `$10.39` was
+    meant — the ~90% shortfall, now measured rather than predicted.
+
+    The resolution is not a shipping stage and not a rate table in config. The
+    tool **names an Etsy shipping profile and asserts it on every listing it
+    manages**; because `read_live` reads the listing's actual
+    `shipping_profile_id`, a profile Printify re-attaches is ordinary drift,
+    which `plan` reports and `apply` repairs. Free and paid shipping both work
+    by naming a different profile — a choice, not a code path. Rates are
+    maintained in Shop Manager, where they can be created at all: the tool has
+    `shops_r` and not `shops_w` (#50), which is deliberate.
+
+    Two questions the probe could not close — whether the flag at least
+    prevents *re-attachment*, and whether an assigned profile survives a
+    republish — stop being blockers under that design, since drift is repaired
+    either way. Both need a second shipping profile to exist before they can be
+    distinguished at all.
 
 ## Deferred: full margin model
 
@@ -1129,3 +1212,11 @@ whether Norway is among them needs checking, not assuming).
 | 49 | Credentials versus configuration | `auth` captures every credential and writes only `.env` and `.auth/`; `setup` creates the workspace and writes every id into `shop.yaml`. The line is what the value *is*, not which vendor it belongs to: a credential is something a human obtains from a website and pastes, an id is something this tool discovers by asking an API. Ordering follows from that — `auth` first, because every discovery call `setup` makes needs a credential to make it with. Two consequences worth stating. `auth` runs before `shop.yaml` exists, so like `setup` it takes its root from `--root`, `ETSY_LISTINGS_ROOT` or cwd rather than discovering it (A8 governs commands that *use* a workspace, not the two that create one); and it writes the `.gitignore` before the first secret, sharing `setup`'s writer. This also records a second Etsy secret the document had been silent about: the app key pair is keystring **and** shared secret, colon-joined into `x-api-key` on every v3 request. Rejected: splitting the credentials by whether they need a browser, which put the Etsy key pair in `setup` and left a user hunting two commands for the answer to one question; and letting `auth` write ids, which would make the workspace's identity wait on a browser round trip it never needed — `findShops`, `getShopSections` and `getShopReturnPolicies` carry no scope, so the ids need the key pair only. |
 | 50 | Etsy OAuth parameters | Scopes `listings_r listings_w shops_r`; callback `http://localhost:8517/oauth/callback`, registered verbatim with the app; refresh on demand, with a warning as the 90-day refresh token nears expiry. The scopes are the smallest set covering Phases 3-6 — image upload *and* delete are both `listings_w`, and `listings_d` deletes listings, which this tool never does — and are worth choosing once, because changing them later forces a second trip through the browser. The port is fixed rather than OS-assigned because Etsy matches `redirect_uri` against a registered string exactly, case and trailing slash included; an ephemeral port cannot be registered in advance, so a busy 8517 is a clear error rather than a silent fallback Etsy would refuse. One caveat carried knowingly: Etsy's authentication guide says the redirect must be `https://`, while Etsy's own quick-start tutorial uses `http://localhost:3003/oauth/redirect` throughout. Loopback over http is the documented-by-example exception, and the first real `auth` run is what confirms it. |
 | 51 | `shop.yaml` grouped by service, keyed by name | Every setting sits under the service that owns it: `printify.shop_name`, `printify.shop_id`, `printify.preferred_print_provider`; `etsy.shop_name`, `etsy.shop_id`, `etsy.currency` and the listing defaults. Two top-level keys moved to get there. `currency` is the Etsy shop's own currency, now **read from the shop** rather than typed, so it belongs with the shop it describes; #24 is untouched, and it remains the only currency a price may be written in. `preferred_print_provider` names a Printify entity and was top-level only because it arrived first. Each shop is then identified by **name with the id beside it**: the name is what a human recognises, the id is what the API needs, and `setup` derives the second from the first. Discovery follows what is already connected — a Printify shop whose sales channel is Etsy carries the Etsy shop's name, and where there is no connection the id comes from the shop the stored consent owns. Rejected: the id alone, which is what the file held. An eight-digit number tells a reader nothing, so a wrong one looks exactly like a right one — the PRD's own example `12345678` sat in a real workspace for a phase and a half without being noticed. |
+| 52 | Who made it, and who printed it | `who_made: someone_else` — the shirt genuinely was made by another company — with a **production partner attached to the listing**, which Etsy requires and refuses the write without. Measured: the same PATCH answers `400 "you cannot sell this item on Etsy"` with no partner on the listing and `200` with one, *even when a partner exists in the shop*. An earlier reading of that 400 — that a made-to-order finished item may not be declared `someone_else` at all — came from three controls that each dodged the partner requirement rather than satisfying it, and is disproved. The partner is **not** derived from `profile.print_provider`: Etsy carries `The Print Provider` where the profile says `Monster Digital`, the location matching while the name is deliberately generic, because Printify's guidance produces one anonymous partner standing in for whichever printer fulfils an order. Resolution is therefore: named explicitly (listing > profile > `listing_defaults`), else the shop's sole partner, else an error listing candidates by name **and location** — generic names make the location the distinguishing half. A listing whose partner does not resolve is blocked at `plan` time, because under `someone_else` an unresolved partner is not a policy nicety but a guaranteed `400`. |
+| 53 | Shop section, per listing only | A listing names its section by **name** (`etsy.section`), resolved per run through `getShopSections`, which carries no scope. **No shop-wide default**: which part of a shop a listing belongs in is a fact about that listing, and a default would be right for the first one and wrong from the second onwards. `etsy.shop_section_id` therefore leaves `shop.yaml` entirely, and `setup` stops resolving it — amending #43/#49, which had `setup` writing four ids. Measured: a stale section id fails the *whole* `updateListing`, so resolution is load-bearing rather than cosmetic. |
+| 54 | Shipping profile by name | `listing_defaults.shipping_profile` names an Etsy shipping profile by its `title`, overridable per listing. Resolved per run through `getShopShippingProfiles` (`shops_r`), filtering `is_deleted`; an unresolvable name fails loudly rather than falling back to whatever Printify attached. The tool never *creates* a profile — that needs `shops_w`, outside the granted scopes (#50) — so both shipping modes the PRD requires become a choice of which named profile, not a code path. |
+| 55 | Processing time is read, never written | The tool **never calls `updateListingInventory`**, recorded as an invariant: it is a full-replace PUT over the variant matrix #41 gives to Printify, and its failure mode is an unsellable listing rather than a wrong word. That closes the only route to Etsy's processing profiles, which are attached per *offering* inside the inventory. The two levers that would have avoided it were measured and do not work: this shop is on processing profiles, so the shipping profile does not carry processing time; and `processing_min`/`processing_max` on `updateListing` answer `200` and change nothing — the second silent-`200` in this project after Printify's `blueprint_id`, and the more dangerous because both fields *are* documented as writable on `createDraftListing`. `readiness_state_id` on `updateListing` is untested rather than working: the shop has one definition and it was already the value in place. The practical cost is near zero — Printify applies the shop's single profile to every offering at publish — so `plan` surfaces processing time and reports drift, the same treatment as the shop's draft setting (risk 5). |
+| 56 | Per-colour variation images | Opt-in per listing, `etsy.variation_images: <template>`, naming the `colour-matrix` template whose renders become Etsy's colour swatches; absent means off. The join is: find the colour property **by its values** — measured, it is `property_id 513` named `Comfort Colors® Colors`, the *blueprint's* option name, so matching on `"Color"` finds nothing and hardcoding 513 picks the wrong property on the next garment — then slugify Etsy's value strings onto `listing.colors` (`"Black"` → `black`, the same convention as #7a, since Printify's colour names reach Etsy verbatim), then resolve each colour to the image id its media entry was uploaded under. Rejected: `true` with first-match-wins, which makes media *order* silently decide swatch content. A replaced image leaves its link **dangling and reported as a healthy `200`**, so re-asserting whenever an image id changed is a measured requirement, not a precaution. Deferred: swatches from `single`-kind or shared assets, which need a `depicts:` annotation rather than overloading `media[].colour` — that key addresses a render, and a swatch needs a claim about content. |
+| 57 | Media sync mechanism | **Supersedes #12's mechanism, not its meaning.** Upload only what the per-file hash says changed, then `PATCH updateListing` with `image_ids` as **one comma-separated value**, which orders our images and detaches everything else — including Printify's first-publish mockups, of which an unknown number arrive at an unknown time. `overwrite: true` replaces in place at an occupied rank, so a re-rendered mockup that has not moved costs one call and no reorder. Sync is still full-replacement in meaning, still hash-driven, still an explicit ordered manifest. The premise #12 rested on — that reordering requires re-uploading — was measured false. The encoding is the sharp edge and gets its own test: sent as repeated form keys, `image_ids` answers `200` and reduces the listing to one image. |
+| 58 | Shipping ownership | The tool owns the Etsy-side shipping profile by **asserting it on every listing it manages**, and `shipping_template: false` is treated as a hint rather than a guarantee — measured, Printify creates and attaches its own US-origin profile on first publish regardless, publishing USD rates as NOK numerals (`$10.39` → `kr 10,39`, a ~90% shortfall). This closes risk 13 by design rather than by a flag: `read_live` reads the listing's actual `shipping_profile_id`, so a profile Printify re-attaches is **drift**, `plan` reports it, and `apply` re-asserts. No always-rewrite special case, and no dependence on a boolean Printify honours only sometimes. |
+| 59 | Referring to a return policy | By its **terms**, not its id: `return_policy: {accepts_returns, accepts_exchanges, within_days}`, resolved by exact match against `getShopReturnPolicies`. Etsy gives a return policy no title, but the three terms are its identity — `return_deadline` is constrained to `[7, 14, 21, 30, 45, 60, 90]`, and Etsy ships `consolidateShopReturnPolicies` precisely because duplicate term-sets are merged rather than kept. **Omitting it is the zero-config path**: a shop with exactly one policy needs no reference. Two or more with none named is an error listing them by their terms, because guessing which refund policy was meant is not a thing a tool should do. Same ladder as #52's partner, for the same reason: when Etsy offers exactly one, do not make anyone name it. |

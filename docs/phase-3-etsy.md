@@ -6,9 +6,9 @@ Etsy listing it creates, and owning the media on it.
 Subsidiary to [prd.md](prd.md) and [implementation-plan.md](implementation-plan.md)
 in the way [multi-placement-rendering.md](multi-placement-rendering.md) is —
 detail those two point at rather than a third authority. Where it disagrees
-with the PRD, the PRD wins. The decisions it proposes carry the numbers they
-will take (**PRD 52–58**, **A24–A28**); folding them into the two documents is
-a commit of its own, before any of the code below is written.
+with the PRD, the PRD wins. Its decisions are recorded there as **PRD 52–59**
+and **A24–A28**; what this document adds is the reasoning and the measurements
+behind them, which a one-row summary in a decision log cannot carry.
 
 Built on [printify-etsy-integration.md](printify-etsy-integration.md), which
 measured the publish path against the real shops, and on Etsy's own API
@@ -734,7 +734,7 @@ Each step is a commit, and each leaves the suite green.
 | # | Step | Notes |
 |---|---|---|
 | 1 | ~~Probe + findings update~~ | **Done** — 1–4 answered; 5–7 ride along with step 10 |
-| 2 | Docs: PRD 52–58, A24–A28, risk 13 closed | Its own commit, before any code (CLAUDE.md) |
+| 2 | ~~Docs: PRD 52–59, A24–A28, risk 13 closed~~ | **Done** — folded into the two authority documents in their own commit |
 | 3 | `clients/etsy/listings.py` + models + fakes | Protocol, HTTP impl, in-memory fake |
 | 4 | Contract cassettes | Payload shape, both `image_ids` encodings, error decoding, the 401-scope text |
 | 5 | `shopcatalog.py` — names to ids | Sections, shipping profiles, partners; unresolved names name the candidates |

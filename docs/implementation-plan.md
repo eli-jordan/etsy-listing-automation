@@ -1,15 +1,18 @@
 # Implementation Plan: Etsy Listing Automation
 
-Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 48 product
+Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 59 product
 forks; this document settles *how* it is built — module boundaries, core contracts,
 and the order of work. Where the two disagree, the PRD wins and this file is wrong.
+
+Phase 3's detail lives in [phase-3-etsy.md](phase-3-etsy.md), subsidiary to
+both.
 
 ---
 
 ## Architecture decision log
 
-Twenty-two forks, resolved. Numbered `A#` so they can be cited from code comments
-and commit messages without colliding with the PRD's own decision log.
+Twenty-eight forks, resolved. Numbered `A#` so they can be cited from code
+comments and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
 |---|---|---|
@@ -36,6 +39,11 @@ and commit messages without colliding with the PRD's own decision log.
 | A21 | Phase 2 concurrency scope | Retry-with-backoff lands in Phase 2, because it is needed the moment anything writes; the token buckets and the persisted daily budget stay in Phase 6 as planned. A3's `plan` thread-pool fan-out also stays unbuilt: with one remote stage and a single live read per listing there is nothing to overlap, and a pool that fans out over one call is machinery pretending to be an optimisation. Recorded as a decision rather than left as an omission, so the next reader does not take the empty pool for an oversight. |
 | A22 | One Printify package, two protocols | `catalog/` and `clients/printify/` are **one package**, `clients/printify/`, over one shared `Transport`. The authority split that justified two packages is real and is kept — but it is a property of the *protocols*, not of the directory: a caller holding `CatalogClient` cannot reach `create_product` because the method is not on its type. What the two packages actually duplicated was plumbing — a `TokenSource` alias, a lazy token resolve, a `401/403` branch, an auth error, a base URL, an `httpx.Client` — and the copies had already drifted: the catalog reader had **no retries at all**, so a 429 on `blueprints.json` failed a `new` run outright while the identical 429 on a write rode out its backoff (A21). One transport, two protocols, one auth error naming every scope the single token needs. |
 | A23 | Etsy auth, split four ways | `oauth.py` is pure (verifier, challenge, authorise URL, state check, response parsing), `callback.py` serves exactly one loopback request, `tokens.py` owns `.auth/etsy-tokens.json` and every rotation, `transport.py` carries both headers. The split is not tidiness. Refresh tokens **rotate on every use**, which makes the file write part of the protocol rather than a cache: it must land — atomically, `os.replace` over a temp file — before the new access token is used, or a crash mid-rotation burns the only credential that can recover without a browser. A `TokenStore` behind a lazily-resolved token source (A22's rule) keeps `plan` buildable with no credentials; an in-process lock with a double-check stops A3's read fan-out rotating twice; and an `invalid_grant` re-reads the file once before it is believed, because the rotation that invalidated it may have come from a second process. |
+| A24 | Phase 3's stage list | Three stages: `Publish`, `EtsyListing`, `EtsyMedia`. Everything except images travels in one `updateListing` PATCH, so one stage owns it — copy, tags, materials, section, the `who_made` trio, production partners, shipping profile, return policy and renewal. Named `etsy_listing`, not `etsy_copy`, which was accurate while copy was all it wrote. Rejected: splitting copy from settings, on the argument that a Phase 4 regeneration and a `shop.yaml` edit should be separately resumable. The `Change` vocabulary already distinguishes them by path (`etsy.title` against `etsy.shop_section`), and two PATCHes where one would do invents a half-written state one call cannot produce. PRD 52-59. |
+| A25 | Etsy shop reference data | Sections, shipping profiles, production partners and return policies resolve **once per run, in memory** (`clients/etsy/shopcatalog.py`) — never through the disk TTL cache Printify's catalog uses. A stale Printify variant id is a wrong product; a stale Etsy section id is a `400` that fails the entire PATCH, measured. The lists are small, shop-scoped and change when a human edits Shop Manager, which is exactly the moment a cache would be wrong. Deleted shipping profiles are filtered; an unresolved name reports every candidate it did find, and for partners reports the location too, since Printify's guidance produces generically-named partners. |
+| A26 | Ids minted mid-run | `execute` threads the accumulating `remote` block through a run while continuing to hand each stage the **previous** run's `applied`. The existing rule — every stage sees the world as it was before the run — is right for a last-applied document and wrong for an id an API just returned: a first `apply` that creates a product, publishes it and then cannot find the Etsy listing id it just minted is not safer, it is an `apply` that must be run twice. Rendered bytes take the other answer, the one the PRD already uses for copy: a file that does not exist yet is **pending**, so `plan` reports "4 images (pending render)" and `apply` hashes what it actually uploaded. |
+| A27 | Variation images belong to the media stage | Not a stage of their own. The links are a function of the image ids that stage mints, `updateVariationImages` overwrites all of them per call, and a separate stage would be one that must run whenever its neighbour does. Its applied document stores `{colour: manifest ref}` — stable and hashable, no remote ids — and `read_live` projects `getListingVariationImages` back into that space by reversing `value_id → value → slug` and `image_id → ref`. That projection is load-bearing: a replaced image leaves its link dangling and Etsy reports the dangling state as `200` with a full count, so comparing linked ids against the ids actually on the listing is the only thing that can notice. PRD 56. |
+| A28 | The Etsy client, split like Printify's | `EtsyShopClient` (reads, unscoped, `setup`'s four calls) and a new `EtsyListingClient` (the listing surface) over the one `Transport` — A22's rule, one host and one credential pair, authority a property of the type rather than of the directory. `RunContext` gains `etsy` and `require_etsy()` mirroring the Printify pair, optional for the same reason: `plan` in a Phase 1 workspace must not demand a credential. One defect is fixed while here — a missing Etsy scope is a `401`, not a `403`, and the transport currently reports it as "check your keystring", pointing at a credential that is fine. Phase 3 is the first phase where a scope error is plausible (`shops_r` for shipping profiles), so the auth error carries the server's own text from here on. |
 
 ### Toolchain
 
@@ -82,7 +90,8 @@ src/etsy_listings/
     context.py          RunContext (workspace, clients, limiter, event sink)
     plan.py             builds a Plan across stages
     apply.py            executes a Plan, resumable
-    stages/             render, generate, printify_product, publish, etsy_copy, etsy_media
+    stages/             render, generate, printify_product, publish, etsy_listing,
+                        etsy_media
   render/
     config.py           frozen RenderConfig, TemplateConfig
     passes.py           warp, displace, shade, export — pure functions
@@ -103,9 +112,12 @@ src/etsy_listings/
       callback.py       the one-shot loopback server that catches the code
       tokens.py         TokenStore: .auth/etsy-tokens.json, expiry, rotation
       transport.py      both auth headers, retries, error decoding
-      protocol.py       EtsyClient
-      models.py         listing, image, shop, section, return policy
-      fakes.py          in-memory implementation
+      shops.py          EtsyShopClient — `setup`'s four unscoped reads
+      listings.py       EtsyListingClient — the listing surface (A28)
+      shopcatalog.py    names to ids, resolved once per run, never cached (A25)
+      models.py         listing, image, inventory, shop, section, shipping
+                        profile, production partner, return policy
+      fakes.py          in-memory implementations of both protocols
     limiter.py          token buckets, incl. persisted daily budget
     retry.py            backoff policy
   ai/                   prompt loading, generation, hard validation
@@ -141,7 +153,7 @@ class Stage(Protocol):
     def apply(self, ctx, plan, desired, live, lock) -> StageApplyResult: ...
 
 STAGES = [Render(), Generate(), PrintifyProduct(),
-          Publish(), EtsyCopy(), EtsyMedia()]
+          Publish(), EtsyListing(), EtsyMedia()]
 ```
 
 `plan`'s `applied` is the stage's **own subtree** of the lockfile, looked up by
@@ -168,8 +180,8 @@ below.
 | `generate` | brief + design hash + profile context + prompt template hashes | whether `generated.yaml` still exists | call the model, validate hard, write `generated.yaml` |
 | `printify_product` | title + description (PRD 44), blueprint/provider ids, enabled variant matrix with prices, print areas | `GET products/{id}`, incl. `visible` (below); `None` without a request when the lockfile has no product id | create (after the PRD 48 duplicate walk) or update product |
 | `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
-| `etsy_copy` | title, description, tags, materials, section, `should_auto_renew` | `getListing` | `updateListing` |
-| `etsy_media` | ordered media manifest, each entry `(ref, content_hash)` | listing images + ids | full delete-and-reupload in rank order |
+| `etsy_listing` | title, description, tags, materials, section, shipping profile, return policy, `who_made`/`when_made`/`is_supply`, production partners, `should_auto_renew` — names resolved to ids through A25 | `getListing` | one `updateListing` PATCH carrying only what changed (A24) |
+| `etsy_media` | ordered media manifest, each entry `(ref, content_hash \| pending, alt_text)`, plus the variation-image links when enabled | listing images + ids; `getListingVariationImages` when enabled | upload what changed (`overwrite: true` in place where the rank holds), assert order with `image_ids`, then `updateVariationImages` (PRD 56, 57) |
 
 Local stages have no *remote* state — that is what `local: bool` encodes, and it
 buys two things: drift is undefined for them, so the engine skips drift reporting
@@ -266,19 +278,35 @@ regardless of route".
                           "blueprint_id": 6, "print_provider_id": 29,
                           "variants": [{"id": 17887, "price": 4990, "is_enabled": true}],
                           "print_areas": [] },
-    "publish":  { "sync_flags": {"variants": true, "title": false, "images": false} },
-    "etsy_copy":{ "title": "...", "description": "...", "tags": [], "materials": ["cotton"],
-                  "shop_section_id": 4455667, "should_auto_renew": false },
-    "etsy_media": { "manifest": [{"ref": "mockup:black", "hash": "sha256:..."}] }
+    "publish":  { "sync_flags": {"variants": true, "title": false, "images": false},
+                  "variants": {"17887": 4990} },
+    "etsy_listing": { "title": "...", "description": "...", "tags": [],
+                      "materials": ["cotton"],
+                      "shop_section": "Retro Tees", "shop_section_id": 4455667,
+                      "shipping_profile": "NOK standard tee",
+                      "shipping_profile_id": 314944410819,
+                      "return_policy": {"accepts_returns": true,
+                                        "accepts_exchanges": true, "within_days": 30},
+                      "return_policy_id": 1513785862328,
+                      "who_made": "someone_else", "when_made": "made_to_order",
+                      "is_supply": false,
+                      "production_partners": ["The Print Provider"],
+                      "production_partner_ids": [5785693],
+                      "should_auto_renew": false },
+    "etsy_media": { "manifest": [{"ref": "flat-lay-01:black", "hash": "sha256:..."}],
+                    "variation_images": {"black": "flat-lay-01:black"} }
   },
 
   "remote":  { "printify_product_id": "...",
                "printify_upload_ids": {"default": "..."},
+               "printify_publish_locked": false,
                "etsy_listing_id": 1234567890,
-               "etsy_image_ids": [111, 112], "etsy_listing_state": "draft" },
+               "etsy_listing_handle": "https://www.etsy.com/listing/...",
+               "etsy_image_ids": {"flat-lay-01:black": 111},
+               "etsy_listing_state": "draft" },
   "outputs": { ".cache/renders/take-a-hike/black.png": "sha256:..." },
   "stages_completed": ["render", "generate", "printify_product", "publish",
-                       "etsy_copy", "etsy_media"]
+                       "etsy_listing", "etsy_media"]
 }
 ```
 
@@ -425,8 +453,16 @@ class PrintifyClient(Protocol):
     def clear_publish_lock(self, product_id: str) -> None: ...
 ```
 
-`EtsyClient` mirrors this for `get_listing`, `update_listing`, `upload_image`,
-`delete_image`, `shop_sections`, `return_policies`.
+`EtsyListingClient` mirrors this for `get_listing`, `update_listing`,
+`upload_image`, `delete_image`, `listing_inventory`, `variation_images` and
+`set_variation_images`; `EtsyShopClient` keeps the unscoped shop reads
+`setup` uses, plus `shipping_profiles` and `production_partners` for A25's
+resolver. Two protocols, one transport (A28).
+
+Three of those calls need the encoding pinned rather than merely typed, and
+each has a contract test for it: `image_ids` must be one comma-separated value
+(repeated keys answer `200` and reduce the listing to a single image),
+`updateListing` is form-encoded, and `updateVariationImages` is JSON.
 
 **Rate limiting.** One `TokenBucket` per named budget, all behind a single
 `threading.Lock` so the `plan` thread pool and the sequential `apply` path share
@@ -690,21 +726,37 @@ already knows which shop it patches.
 > form, not engineering work, and approval lead time is unknown — PRD risk 1. The
 > phase order is unchanged; only the paperwork moves earlier.
 
-> **Settle shipping before writing any of this — PRD risk 13.** Printify
-> publishes its USD shipping rates to Etsy as bare numerals, so an NOK shop
-> receives `kr 4,49` where `$4.49` was meant. The requirement is that both free
-> and paid shipping work, starting with paid, which means this tool owns a
-> shipping profile on the Etsy side and sends `shipping_template: false`. That
-> is a decision about where rates live and whether a shipping stage exists — it
-> shapes the stage list, so it cannot be discovered halfway through. Prices need
-> no such care: NOK passes through unconverted (PRD 39, 40), and risk 12 is
-> closed.
+**The full plan is [phase-3-etsy.md](phase-3-etsy.md)** — the stage designs,
+the config shape, the build order and the recon behind each decision. What
+follows is the summary this document owes its own readers.
 
-*Exit:* a complete draft listing exists in Etsy with our copy, tags and media in
-rank order; the live-edit check from the PRD passes; PRD risks 2, 3, 5, 6 and 13
-are answered empirically, along with the one confirmation risk 12 still owes
-(does `29900` arrive as `299,00`?), and written into
-[api-findings.md](api-findings.md).
+> **Shipping was settled before any of this was written — PRD risk 13, now
+> closed (PRD 58).** Printify publishes its USD rates as bare numerals, so the
+> NOK shop received `kr 10,39` where `
+10.39` was meant, and
+> `shipping_template: false` does **not** stop it creating and attaching that
+> profile on first publish. The resolution is neither a shipping stage nor
+> rates in config: the tool names an Etsy shipping profile and asserts it, and
+> because `read_live` reads the listing's real `shipping_profile_id`, a profile
+> Printify re-attaches is ordinary drift that `plan` reports and `apply`
+> repairs. Free and paid shipping are two named profiles, not two code paths.
+> Prices need no such care: NOK passes through unconverted (PRD 39, 40).
+
+Three measurements shaped the stage list more than any design argument did,
+and each had already produced a plausible wrong implementation on paper: the
+first publish sends Printify's mockups regardless of `{images: false}`, an
+unknown number of them arriving over minutes; `image_ids` reorders and detaches
+without re-uploading, but destroys the listing's images when sent as repeated
+form keys; and `processing_min`/`processing_max` on `updateListing` answer
+`200` and change nothing. Build against
+[printify-etsy-integration.md](printify-etsy-integration.md), not the API
+reference.
+
+*Exit:* a complete draft listing exists in Etsy with our copy, tags, media in
+rank order and colour swatches bound to the right variants; the live-edit check
+from the PRD passes; PRD risks 2, 3, 5, 6 and 13 are answered empirically,
+along with risk 12's confirmation (`29900` arrives as `299,00` — measured), and
+written into [printify-etsy-integration.md](printify-etsy-integration.md).
 
 ### Phase 4 — AI generation
 
