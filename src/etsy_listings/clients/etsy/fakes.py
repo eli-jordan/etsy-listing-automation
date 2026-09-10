@@ -90,6 +90,9 @@ class FakeEtsyListingClient:
         self._policies = list(policies or [])
         self._next_image_id = 0
         self.updated: list[dict[str, Any]] = []
+        self.uploads: list[bytes] = []
+        """Every upload's bytes, in call order -- what a test checks to prove
+        a re-run did *not* resend an image whose content did not change."""
         self.shipping_profile_calls = 0
         self.production_partner_calls = 0
         self.section_calls = 0
@@ -161,6 +164,7 @@ class FakeEtsyListingClient:
         overwrite: bool = False,
         listing_image_id: int | None = None,
     ) -> ListingImage:
+        self.uploads.append(contents)
         self._next_image_id += 1
         image = ListingImage(listing_image_id=self._next_image_id, rank=rank, alt_text=alt_text)
         images = self._images.setdefault(listing_id, [])
