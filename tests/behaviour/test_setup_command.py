@@ -19,7 +19,7 @@ import yaml
 
 from etsy_listings import prompts
 from etsy_listings.clients.etsy.fakes import FakeEtsyShopClient
-from etsy_listings.clients.etsy.models import ReturnPolicy, ShopSection
+from etsy_listings.clients.etsy.models import ReturnPolicy
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.clients.printify.models import Shop
@@ -76,6 +76,8 @@ HAPPY_PATH = {
     "print provider": "Monster Digital",
     "Etsy shop": "",
     "print-on-demand defaults": True,
+    "shipping profile": "",
+    "production partner": "",
 }
 
 
@@ -346,19 +348,15 @@ def test_the_currency_comes_from_the_etsy_shop(tmp_path: Path, scripted) -> None
     assert script.defaults_offered[prompt] == "USD"
 
 
-def test_the_shop_section_and_return_policy_are_picked_from_the_live_lists(
-    tmp_path: Path, scripted
+def test_a_shop_with_exactly_one_return_policy_needs_no_question(
+    tmp_path: Path, scripted, capsys
 ) -> None:
-    scripted(
-        {
-            **HAPPY_PATH,
-            "shop section": "Tees",
-            "return policy": "returns",
-        }
-    )
+    """PRD 59's zero-config path: the shop's only policy is used without
+    asking, and `shop.yaml` need not name it at all -- the stages resolve it
+    live the same way."""
+    scripted(HAPPY_PATH)
     etsy = FakeEtsyShopClient(
         owned=ETSY_SHOP,
-        sections=[ShopSection(shop_section_id=44, title="Tees")],
         policies=[
             ReturnPolicy(
                 return_policy_id=55,
@@ -375,9 +373,67 @@ def test_the_shop_section_and_return_policy_are_picked_from_the_live_lists(
         etsy_access=_etsy(etsy),
     )
 
-    etsy_defaults = Workspace.discover(root_override=tmp_path).defaults.etsy
-    assert etsy_defaults.require_shop_section_id() == 44
-    assert etsy_defaults.require_return_policy_id() == 55
+    assert "returns within 30 days" in capsys.readouterr().out
+    listing_defaults = Workspace.discover(root_override=tmp_path).defaults.etsy.listing_defaults
+    assert listing_defaults.return_policy is None
+
+
+def test_several_return_policies_are_a_question_answered_by_terms(tmp_path: Path, scripted) -> None:
+    scripted({**HAPPY_PATH, "return policy": "returns and exchanges"})
+    etsy = FakeEtsyShopClient(
+        owned=ETSY_SHOP,
+        policies=[
+            ReturnPolicy(
+                return_policy_id=55,
+                accepts_returns=True,
+                accepts_exchanges=False,
+                return_deadline=30,
+            ),
+            ReturnPolicy(
+                return_policy_id=56,
+                accepts_returns=True,
+                accepts_exchanges=True,
+                return_deadline=14,
+            ),
+        ],
+    )
+
+    run_setup(
+        tmp_path,
+        client_factory=_factory(FakePrintifyClient(ONE_SHOP)),
+        etsy_access=_etsy(etsy),
+    )
+
+    return_policy = Workspace.discover(
+        root_override=tmp_path
+    ).defaults.etsy.listing_defaults.return_policy
+    assert return_policy is not None
+    assert (return_policy.accepts_exchanges, return_policy.within_days) == (True, 14)
+
+
+def test_a_named_shipping_profile_and_production_partner_are_written_as_typed(
+    tmp_path: Path, scripted
+) -> None:
+    """Both are free text, not picked from a live list: resolving either
+    against the shop needs `shops_r` and a bearer, which `setup` may not have
+    -- that happens once per run in `EtsyShopCatalog`, at plan time."""
+    scripted(
+        {
+            **HAPPY_PATH,
+            "shipping profile": "NOK standard tee",
+            "production partner": "The Print Provider",
+        }
+    )
+
+    run_setup(
+        tmp_path,
+        client_factory=_factory(FakePrintifyClient(ONE_SHOP)),
+        etsy_access=_etsy(),
+    )
+
+    listing_defaults = Workspace.discover(root_override=tmp_path).defaults.etsy.listing_defaults
+    assert listing_defaults.shipping_profile == "NOK standard tee"
+    assert listing_defaults.production_partner == "The Print Provider"
 
 
 def test_without_credentials_it_says_to_run_auth_first(tmp_path: Path, scripted, capsys) -> None:
@@ -410,13 +466,13 @@ def test_declining_the_defaults_asks_for_each_etsy_field(tmp_path: Path, scripte
         etsy_access=_etsy(),
     )
 
-    etsy = Workspace.discover(root_override=tmp_path).defaults.etsy
-    assert etsy.who_made == "someone_else"
-    assert etsy.renewal == "auto"
+    listing_defaults = Workspace.discover(root_override=tmp_path).defaults.etsy.listing_defaults
+    assert listing_defaults.who_made == "someone_else"
+    assert listing_defaults.renewal == "auto"
 
 
 def test_re_running_keeps_what_a_later_phase_filled_in(tmp_path: Path, scripted) -> None:
-    """`setup` fills gaps; it does not correct answers. The Phase 3 ids it
+    """`setup` fills gaps; it does not correct answers. A name a later run
     never asks about must survive a second run."""
     scripted(HAPPY_PATH)
     run_setup(
@@ -427,8 +483,8 @@ def test_re_running_keeps_what_a_later_phase_filled_in(tmp_path: Path, scripted)
 
     shop_file = tmp_path / layout.SHOP_FILE
     document = yaml.safe_load(shop_file.read_text(encoding="utf-8"))
-    document["etsy"]["shop_section_id"] = 44
-    document["etsy"]["return_policy_id"] = 55
+    document["etsy"]["listing_defaults"]["shipping_profile"] = "NOK standard tee"
+    document["etsy"]["listing_defaults"]["production_partner"] = "The Print Provider"
     shop_file.write_text(yaml.safe_dump(document, sort_keys=False), encoding="utf-8")
 
     scripted({**HAPPY_PATH, "currency": "USD"})
@@ -439,8 +495,8 @@ def test_re_running_keeps_what_a_later_phase_filled_in(tmp_path: Path, scripted)
     )
 
     defaults = Workspace.discover(root_override=tmp_path).defaults
-    assert defaults.etsy.require_shop_section_id() == 44
-    assert defaults.etsy.require_return_policy_id() == 55
+    assert defaults.etsy.listing_defaults.shipping_profile == "NOK standard tee"
+    assert defaults.etsy.listing_defaults.production_partner == "The Print Provider"
     assert defaults.etsy.currency == "USD", "the answer just given wins over the file"
 
 
@@ -499,11 +555,11 @@ EVERY_QUESTION = {
     **HAPPY_PATH,
     # The widest run `setup` has: two Printify shops so the shop choice is
     # asked, the print-on-demand defaults declined so the four individual Etsy
-    # questions are, and an Etsy client with a section and a policy so the
-    # discovery questions are too.
+    # questions are, and an Etsy client with two return policies so that
+    # question is asked too (one policy is the zero-config path, and asks
+    # nothing).
     "Printify shop": "Second store",
-    "shop section": "Tees",
-    "return policy": "returns",
+    "return policy": "returns within 30 days",
     "print-on-demand defaults": False,
     "Who made": "i_did",
     "When was": "made_to_order",
@@ -515,14 +571,19 @@ EVERY_QUESTION = {
 def _widest_etsy() -> FakeEtsyShopClient:
     return FakeEtsyShopClient(
         owned=ETSY_SHOP,
-        sections=[ShopSection(shop_section_id=44, title="Tees")],
         policies=[
             ReturnPolicy(
                 return_policy_id=55,
                 accepts_returns=True,
                 accepts_exchanges=False,
                 return_deadline=30,
-            )
+            ),
+            ReturnPolicy(
+                return_policy_id=56,
+                accepts_returns=True,
+                accepts_exchanges=True,
+                return_deadline=14,
+            ),
         ],
     )
 

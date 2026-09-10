@@ -101,7 +101,7 @@ ANSWERS = logic.SetupAnswers(
     printify_shop_name="My new store",
     preferred_print_provider="Monster Digital",
     currency="NOK",
-    who_made="i_did",
+    who_made="someone_else",
     when_made="made_to_order",
     is_supply=False,
     renewal="manual",
@@ -118,7 +118,42 @@ def test_the_document_it_writes_loads_back_as_defaults(tmp_path: Path) -> None:
     assert defaults.printify.shop_name == "My new store"
     assert defaults.printify.preferred_print_provider == "Monster Digital"
     assert defaults.etsy.currency == "NOK"
-    assert defaults.etsy.who_made == "i_did"
+    assert defaults.etsy.listing_defaults.who_made == "someone_else"
+
+
+def test_shipping_profile_return_policy_and_production_partner_round_trip(tmp_path: Path) -> None:
+    answers = logic.SetupAnswers(
+        **{
+            **vars(ANSWERS),
+            "etsy_shipping_profile": "NOK standard tee",
+            "etsy_return_policy": {
+                "accepts_returns": True,
+                "accepts_exchanges": True,
+                "within_days": 30,
+            },
+            "etsy_production_partner": "The Print Provider",
+        }
+    )
+    path = tmp_path / layout.SHOP_FILE
+    path.write_text(logic.render_shop_yaml(logic.shop_yaml_document(answers, None)), "utf-8")
+
+    listing_defaults = Defaults.load(path).etsy.listing_defaults
+    assert listing_defaults.shipping_profile == "NOK standard tee"
+    assert listing_defaults.production_partner == "The Print Provider"
+    assert listing_defaults.return_policy is not None
+    assert listing_defaults.return_policy.within_days == 30
+
+
+def test_omitted_shipping_profile_and_partner_are_left_unset(tmp_path: Path) -> None:
+    """Blank means "not known", never "delete it" -- same rule as the Etsy
+    shop id (PRD 51's reasoning, applied to the new name-based fields)."""
+    path = tmp_path / layout.SHOP_FILE
+    path.write_text(logic.render_shop_yaml(logic.shop_yaml_document(ANSWERS, None)), "utf-8")
+
+    listing_defaults = Defaults.load(path).etsy.listing_defaults
+    assert listing_defaults.shipping_profile is None
+    assert listing_defaults.production_partner is None
+    assert listing_defaults.return_policy is None
 
 
 def test_an_unknown_etsy_shop_id_is_omitted_rather_than_faked() -> None:
@@ -175,16 +210,35 @@ def test_an_answer_the_user_just_gave_wins_over_the_file() -> None:
 
 def test_ids_on_disk_survive_a_discovery_that_found_nothing() -> None:
     """``None`` means "not found", not "delete it". An Etsy lookup that failed
-    -- no credentials, a network problem -- must not clear ids a previous run
+    -- no credentials, a network problem -- must not clear what a previous run
     resolved."""
-    existing = {
-        "etsy": {"shop_id": 999, "shop_name": "Old", "shop_section_id": 44, "return_policy_id": 55}
-    }
+    existing = {"etsy": {"shop_id": 999, "shop_name": "Old"}}
 
     etsy = logic.shop_yaml_document(ANSWERS, existing)["etsy"]
 
     assert (etsy["shop_id"], etsy["shop_name"]) == (999, "Old")
-    assert (etsy["shop_section_id"], etsy["return_policy_id"]) == (44, 55)
+
+
+def test_listing_defaults_names_on_disk_survive_an_unanswered_run() -> None:
+    """The shipping profile, return policy and production partner `setup`
+    never asked about this run must not be cleared -- the same rule as the
+    shop id, one level deeper."""
+    existing = {
+        "etsy": {
+            "shop_id": 999,
+            "listing_defaults": {
+                "shipping_profile": "NOK standard tee",
+                "production_partner": "The Print Provider",
+                "return_policy": {"accepts_returns": True, "accepts_exchanges": True},
+            },
+        }
+    }
+
+    listing_defaults = logic.shop_yaml_document(ANSWERS, existing)["etsy"]["listing_defaults"]
+
+    assert listing_defaults["shipping_profile"] == "NOK standard tee"
+    assert listing_defaults["production_partner"] == "The Print Provider"
+    assert listing_defaults["return_policy"] == {"accepts_returns": True, "accepts_exchanges": True}
 
 
 def test_the_rendered_file_carries_a_header_saying_where_it_came_from() -> None:
@@ -205,25 +259,32 @@ def test_the_rendered_file_points_at_env_for_the_credentials() -> None:
 
 def test_every_field_written_carries_a_comment() -> None:
     """The point of the comments is that a reader never meets a bare number.
-    A field added later without one would go unnoticed, so the check is over
-    whatever the document happens to contain."""
+    A field added later without one would go unnoticed, so the check walks
+    every level the document actually has -- including `listing_defaults`,
+    two deep."""
     answers = logic.SetupAnswers(
         **{
             **vars(ANSWERS),
             "etsy_shop_name": "TakeAHikeTees",
             "etsy_shop_id": 12345678,
-            "etsy_shop_section_id": 44,
-            "etsy_return_policy_id": 55,
+            "etsy_shipping_profile": "NOK standard tee",
+            "etsy_production_partner": "The Print Provider",
         }
     )
     document = logic.shop_yaml_document(answers, None)
 
     rendered = logic.render_shop_yaml(document)
     lines = rendered.splitlines()
-    for section, fields in document.items():
-        for field in fields:
+
+    def check(mapping: dict, path: str) -> None:
+        for field, value in mapping.items():
             index = next(i for i, line in enumerate(lines) if line.strip().startswith(f"{field}:"))
-            assert lines[index - 1].strip().startswith("#"), f"{section}.{field} has no comment"
+            assert lines[index - 1].strip().startswith("#"), f"{path}.{field} has no comment"
+            if isinstance(value, dict):
+                check(value, f"{path}.{field}")
+
+    for section, fields in document.items():
+        check(fields, section)
 
 
 def test_the_rendered_file_is_valid_yaml_with_printify_first() -> None:

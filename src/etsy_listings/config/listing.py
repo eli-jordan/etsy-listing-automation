@@ -70,6 +70,20 @@ class EtsyListingConfig(BaseModel):
     tags: list[str] | Literal["<generate>"] = GENERATE
     materials: list[str] = []
     renewal: Literal["manual", "auto"] | None = None
+    section: str | None = None
+    """Which shop section this listing files under, by name (PRD 53). Listing
+    only -- there is no shop-wide default, unlike `shipping_profile` below:
+    a section is a fact about this listing, and a shop-wide default would be
+    right for the first listing and wrong from the second onwards."""
+    shipping_profile: str | None = None
+    """Overrides `shop.yaml`'s `etsy.listing_defaults.shipping_profile`, by
+    name (PRD 54)."""
+    variation_images: str | None = None
+    """The `colour-matrix` template whose renders become this listing's
+    per-colour swatches (PRD 56). Names the template rather than a bare
+    `true`, because media order would otherwise silently decide which
+    template supplies them when a listing carries more than one. Absent
+    means the feature is off for this listing."""
 
     @model_validator(mode="after")
     def _validate_concrete_values(self) -> EtsyListingConfig:

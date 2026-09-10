@@ -27,6 +27,7 @@ import typer
 import yaml
 
 from etsy_listings import credentials, prompts
+from etsy_listings.clients.etsy.models import ReturnPolicy
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
 from etsy_listings.clients.etsy.tokens import EtsyAuthError, TokenStore
@@ -44,19 +45,25 @@ ClientFactory = Callable[[str], PrintifyClient]
 the verification step -- the one thing `setup` exists to do that reading the
 docs does not -- can be driven without a network."""
 
-WHO_MADE = ["i_did", "someone_else", "collective"]
+WHO_MADE = ["someone_else", "i_did", "collective"]
 WHEN_MADE = ["made_to_order", "2020_2025", "2010_2019", "before_2004"]
 RENEWAL = ["manual", "auto"]
 
 POD_DEFAULTS = {
-    "who_made": "i_did",
+    "who_made": "someone_else",
     "when_made": "made_to_order",
     "is_supply": False,
     "renewal": "manual",
 }
-"""What every print-on-demand t-shirt listing answers. Offered as one
-confirmation rather than four questions, because getting four identical
-answers out of the user teaches them the wizard is not worth reading."""
+"""What every print-on-demand t-shirt listing answers (PRD 52: the shirt
+genuinely was made by another company). Offered as one confirmation rather
+than four questions, because getting four identical answers out of the user
+teaches them the wizard is not worth reading.
+
+``who_made: someone_else`` requires a production partner attached to the
+listing (decision 3) -- not enforced here, since resolving a *name* to a
+partner needs the shop's live list, which `setup` may not be able to reach.
+`plan` is where an unresolvable or missing partner blocks."""
 
 
 def _default_client_factory(token: str) -> PrintifyClient:
@@ -135,11 +142,17 @@ class EtsyAccess:
 @dataclass(frozen=True)
 class EtsyFindings:
     """What `setup` managed to learn about the Etsy side. Every field may be
-    ``None``: a workspace is usable before Etsy is reachable at all."""
+    ``None``: a workspace is usable before Etsy is reachable at all.
+
+    No shop section here -- Phase 3 drops it from `shop.yaml` entirely
+    (decision 7): which section a listing files under is a fact about that
+    listing, not the shop, so it is asked (optionally) in `new`/`listing.yaml`
+    instead, never resolved by `setup`.
+    """
 
     shop: EtsyShop | None = None
-    section_id: int | None = None
-    return_policy_id: int | None = None
+    return_policy: dict[str, Any] | None = None
+    """The three terms a return policy is addressed by (PRD 59), not an id."""
 
 
 EtsyAccessFactory = Callable[[Path], EtsyAccess | None]
@@ -170,8 +183,9 @@ def _discover_etsy(
     access: EtsyAccess | None,
     printify_shop: Shop,
     existing_etsy: dict[str, Any],
+    existing_listing_defaults: dict[str, Any],
 ) -> EtsyFindings:
-    """Find the Etsy shop, its section and its return policy (PRD 51).
+    """Find the Etsy shop and its return policy (PRD 51, PRD 59).
 
     Never fatal. `setup`'s job is to leave a usable workspace, and everything
     it learns here is optional to that: a failure reports what it could not
@@ -179,8 +193,8 @@ def _discover_etsy(
     """
     if access is None:
         typer.echo("")
-        typer.echo("No Etsy credentials stored yet, so the Etsy ids cannot be looked up.")
-        typer.echo("  Run `etsy-listings auth` first, then re-run `setup` to fill them in.")
+        typer.echo("No Etsy credentials stored yet, so the Etsy shop cannot be looked up.")
+        typer.echo("  Run `etsy-listings auth` first, then re-run `setup` to fill it in.")
         return EtsyFindings()
 
     try:
@@ -189,9 +203,8 @@ def _discover_etsy(
             return EtsyFindings()
         return EtsyFindings(
             shop=shop,
-            section_id=_pick_section(access.client, shop, existing_etsy.get("shop_section_id")),
-            return_policy_id=_pick_return_policy(
-                access.client, shop, existing_etsy.get("return_policy_id")
+            return_policy=_pick_return_policy(
+                access.client, shop, existing_listing_defaults.get("return_policy")
             ),
         )
     except (EtsyAuthError, EtsyApiError) as exc:
@@ -261,44 +274,43 @@ def _ask_for_etsy_shop(access: EtsyAccess, existing_etsy: dict[str, Any]) -> Ets
     )
 
 
-def _pick_section(client: EtsyShopClient, shop: EtsyShop, current: object) -> int | None:
-    sections = client.shop_sections(shop.shop_id)
-    if not sections:
-        typer.echo("  no shop sections on Etsy yet -- create one there if you want listings filed.")
-        return None
-    # What is already configured is offered first and says so, which is what
-    # makes pressing enter through a re-run keep the file as it is.
-    ordered = sorted(sections, key=lambda section: section.shop_section_id != current)
-    chosen = prompts.pick(
-        "Which shop section should listings go in?",
-        [*ordered, None],
-        label=lambda section: (
-            "(none)"
-            if section is None
-            else f"{section.title}  ({section.shop_section_id})"
-            + ("  -- current" if section.shop_section_id == current else "")
-        ),
-    )
-    return None if chosen is None else chosen.shop_section_id
+def _policy_terms(policy: ReturnPolicy) -> dict[str, Any]:
+    return {
+        "accepts_returns": bool(policy.accepts_returns),
+        "accepts_exchanges": bool(policy.accepts_exchanges),
+        "within_days": policy.return_deadline,
+    }
 
 
-def _pick_return_policy(client: EtsyShopClient, shop: EtsyShop, current: object) -> int | None:
+def _pick_return_policy(
+    client: EtsyShopClient, shop: EtsyShop, current: dict[str, Any] | None
+) -> dict[str, Any] | None:
+    """Zero-config when the shop has exactly one (PRD 59): most shops do, and
+    a shop with one return policy needs no reference to it at all -- the
+    stages resolve it live the same way. Only two or more make it a question,
+    and the answer is the policy's *terms*, not an id Etsy gives no title."""
     policies = client.return_policies(shop.shop_id)
     if not policies:
         typer.echo("  no return policies on Etsy yet -- listings can be drafted without one.")
         return None
-    ordered = sorted(policies, key=lambda policy: policy.return_policy_id != current)
+    if len(policies) == 1:
+        typer.echo(f"  return policy: {policies[0].describe()} (the shop's only one)")
+        return None
+
+    def _is_current(policy: ReturnPolicy) -> bool:
+        return current is not None and _policy_terms(policy) == current
+
+    ordered = sorted(policies, key=lambda policy: not _is_current(policy))
     chosen = prompts.pick(
         "Which return policy should listings carry?",
         [*ordered, None],
         label=lambda policy: (
             "(none)"
             if policy is None
-            else f"{policy.describe()}  ({policy.return_policy_id})"
-            + ("  -- current" if policy.return_policy_id == current else "")
+            else policy.describe() + ("  -- current" if _is_current(policy) else "")
         ),
     )
-    return None if chosen is None else chosen.return_policy_id
+    return None if chosen is None else _policy_terms(chosen)
 
 
 def _existing_document(root: Path) -> dict[str, Any] | None:
@@ -342,8 +354,9 @@ def run_setup(
     existing = _existing_document(root) or {}
     existing_etsy = existing.get("etsy") or {}
     existing_printify = existing.get("printify") or {}
+    existing_listing_defaults = existing_etsy.get("listing_defaults") or {}
 
-    findings = _discover_etsy(access_factory(root), shop, existing_etsy)
+    findings = _discover_etsy(access_factory(root), shop, existing_etsy, existing_listing_defaults)
 
     currency = prompts.ask_text(
         "Shop currency (ISO code):",
@@ -355,6 +368,17 @@ def run_setup(
         allow_blank=True,
     )
     etsy_defaults = _ask_etsy_defaults()
+    shipping_profile = prompts.ask_text(
+        "Shipping profile name for listings (blank to skip; matched against "
+        "Etsy's shipping profiles when a listing is planned):",
+        default=str(existing_listing_defaults.get("shipping_profile") or ""),
+        allow_blank=True,
+    )
+    production_partner = prompts.ask_text(
+        "Production partner name (blank if the shop has exactly one -- it is used automatically):",
+        default=str(existing_listing_defaults.get("production_partner") or ""),
+        allow_blank=True,
+    )
 
     answers = logic.SetupAnswers(
         printify_shop_id=shop.id,
@@ -363,8 +387,9 @@ def run_setup(
         currency=currency.strip().upper(),
         etsy_shop_name=findings.shop.shop_name if findings.shop else None,
         etsy_shop_id=findings.shop.shop_id if findings.shop else None,
-        etsy_shop_section_id=findings.section_id,
-        etsy_return_policy_id=findings.return_policy_id,
+        etsy_shipping_profile=shipping_profile.strip() or None,
+        etsy_return_policy=findings.return_policy,
+        etsy_production_partner=production_partner.strip() or None,
         **etsy_defaults,
     )
 

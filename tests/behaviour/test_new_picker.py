@@ -343,8 +343,7 @@ def test_template_names_lists_only_calibrated_templates(workspace_root: Path) ->
 
 def test_template_names_is_empty_without_a_templates_directory(tmp_path: Path) -> None:
     (tmp_path / "shop.yaml").write_text(
-        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
-        "  is_supply: false\n  currency: NOK\n",
+        "etsy:\n  shop_id: 1\n  currency: NOK\n",
         encoding="utf-8",
     )
     assert Workspace.discover(root_override=tmp_path).template_names() == []
@@ -595,8 +594,7 @@ def test_design_files_lists_only_flat_pngs(workspace_root: Path) -> None:
 
 def test_design_files_is_empty_without_a_designs_directory(tmp_path: Path) -> None:
     (tmp_path / "shop.yaml").write_text(
-        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
-        "  is_supply: false\n  currency: NOK\n",
+        "etsy:\n  shop_id: 1\n  currency: NOK\n",
         encoding="utf-8",
     )
     assert Workspace.discover(root_override=tmp_path).design_files() == []
@@ -711,8 +709,7 @@ def test_a_broken_profile_costs_a_marker_not_the_whole_picker(workspace_root: Pa
 
 def test_a_workspace_with_no_profiles_directory_has_no_local_keys(tmp_path: Path) -> None:
     (tmp_path / "shop.yaml").write_text(
-        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
-        "  is_supply: false\n  currency: NOK\n",
+        "etsy:\n  shop_id: 1\n  currency: NOK\n",
         encoding="utf-8",
     )
     workspace = Workspace.discover(root_override=tmp_path)
