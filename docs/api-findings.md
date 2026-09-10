@@ -18,6 +18,12 @@ the publish lock, `external.id`, draft-vs-live — is either unanswerable here o
 answered only in the negative, and is marked as such. Publishing moved to
 Phase 3 for that reason.
 
+**That bound has since been lifted.** A shop was connected on 2026-09-10 and
+the publishing questions were measured against it; the answers live in
+[printify-etsy-integration.md](printify-etsy-integration.md). Where the two
+documents touch the same subject, that one is later and wins — including on
+this one's claim that *errors have one shape*, which a wider sample falsified.
+
 What this produced elsewhere: PRD decisions **37** (a garment change is refused,
 not automated), **38** (a design must be within 10% of the print area), **39**
 (what Printify's price integers are denominated in) and **40** (NOK goes to
@@ -468,6 +474,12 @@ directly.
 | 13 — Printify's shipping rates publish as bare numerals | **New.** `$4.49` becomes `kr 4,49`. `shipping_template: false` is the lever; what shipping the tool should own is undecided and blocks Phase 3. |
 
 ## Open questions, for when an Etsy shop exists
+
+**The shop now exists.** Questions 1, 2, 3 and 7 are answered in
+[printify-etsy-integration.md](printify-etsy-integration.md), and 5 is half
+answered there — the publish lock is real, its remedy still unobserved.
+Questions 4, 6, 8 and 9 remain open. The list is kept as written because what
+was asked, and why, is the useful part; go there for what came back.
 
 1. **Does `29900` land on the NOK listing as `299,00`?** Printify's
    documentation says yes and risk 12 is closed on that basis; this is the

@@ -58,6 +58,17 @@ not yet reached the phase which needs one."""
 
 HTTP_NOT_FOUND = 404
 
+WRONG_SHOP_CODE = 8104
+"""Printify's answer for "that product id is real, but it is not in this shop".
+
+A `400`, not the `404` the same question gets when the id is unknown to every
+shop -- so "is this product gone?" has two right answers and only one obvious
+one. It is reachable in ordinary use: reconnecting a store replaces the shop
+id, and a lockfile written against the old one then names a product this shop
+has never held. Measured, against a workspace whose Printify store had been
+swapped for a natively-connected Etsy one.
+"""
+
 DEFAULT_TIMEOUT_SECONDS = 120.0
 """Generous, because uploads travel this transport: a print file is megabytes,
 and the default 5s timeout turns a slow link into an inscrutable failure."""

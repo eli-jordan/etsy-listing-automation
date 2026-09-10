@@ -13,6 +13,7 @@ from __future__ import annotations
 import base64
 
 import httpx
+import pytest
 
 from etsy_listings.clients.printify import HttpPrintifyClient
 from etsy_listings.clients.printify.models import (
@@ -21,6 +22,7 @@ from etsy_listings.clients.printify.models import (
     PrintAreaSpec,
     ProductSpec,
 )
+from etsy_listings.clients.printify.transport import PrintifyApiError
 
 from tests.support.http import INSTANT, transport
 
@@ -204,6 +206,43 @@ def test_get_product_returns_none_for_a_product_that_is_gone() -> None:
         )
         is None
     )
+
+
+def test_get_product_returns_none_when_the_product_belongs_to_another_shop() -> None:
+    """Reconnecting a store gives the account a new shop id, and the lockfile
+    still names the product the old one held. Printify answers that with a
+    `400`/8104 rather than a `404`, so catching only `404` turns an ordinary
+    re-point into a failed `plan` instead of a re-create. Payload copied from
+    a live response."""
+    response = httpx.Response(
+        400,
+        json={
+            "status": "error",
+            "code": 8104,
+            "message": "Validation failed.",
+            "errors": {
+                "reason": f'Product "{PRODUCT_ID}" does not belongs to shop #{SHOP_ID}.',
+                "code": 8104,
+            },
+        },
+    )
+    assert _client(lambda _: response).get_product(SHOP_ID, PRODUCT_ID) is None
+
+
+def test_get_product_still_raises_for_a_validation_error_that_is_not_the_wrong_shop() -> None:
+    """The 8104 branch is a named code, not "any 400" -- otherwise a genuine
+    bad request reads as "no product" and silently becomes a create."""
+    response = httpx.Response(
+        400,
+        json={
+            "status": "error",
+            "code": 8251,
+            "message": "Validation failed.",
+            "errors": {"reason": "something else entirely", "code": 8251},
+        },
+    )
+    with pytest.raises(PrintifyApiError):
+        _client(lambda _: response).get_product(SHOP_ID, PRODUCT_ID)
 
 
 # ------------------------------------------------------------ the projection
