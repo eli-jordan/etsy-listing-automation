@@ -104,6 +104,18 @@ def edit_listing(root: Path, listing: str = FIXTURE_LISTING, **updates: Any) -> 
     _write_yaml(path, document)
 
 
+def profile_file(root: Path, profile: str) -> Path:
+    return root / "profiles" / f"{profile}.yaml"
+
+
+def edit_profile(root: Path, profile: str, **updates: Any) -> None:
+    """Replace top-level keys of a profile -- ``sizes``, ``print_provider``."""
+    path = profile_file(root, profile)
+    document = _read_yaml(path)
+    document.update(updates)
+    _write_yaml(path, document)
+
+
 def set_copy(
     root: Path,
     *,

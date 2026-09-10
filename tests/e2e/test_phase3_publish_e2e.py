@@ -57,6 +57,7 @@ from tests.conftest import FIXTURE_WORKSPACE
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (
     edit_listing,
+    edit_profile,
     set_copy,
     set_etsy_listing_defaults,
     set_etsy_shop_id,
@@ -150,6 +151,26 @@ def workspace(
     # guaranteed to have a production partner declared, and the point of this
     # test is the publish/patch/media cycle, not decision 3's partner ladder
     # (covered at the unit and behaviour layers already).
+
+    # The fixture profile's `XXL`/`XXXL` are the offline fakes' own naming,
+    # shared with every unit and behaviour test that uses this fixture -- not
+    # what the real Comfort Colors 1717 / Monster Digital catalog calls them
+    # (`2XL`/`3XL`/`4XL`). Overridden here, in this test's own copy only, so
+    # size resolution against the live catalog doesn't raise `UnknownSizeError`;
+    # size-naming itself is already covered offline and isn't this test's job.
+    edit_profile(root, "comfort-colors-1717", sizes=["S", "M", "L", "XL", "2XL", "3XL", "4XL"])
+    edit_listing(
+        root,
+        prices={
+            "S": "349 NOK",
+            "M": "349 NOK",
+            "L": "349 NOK",
+            "XL": "359 NOK",
+            "2XL": "369 NOK",
+            "3XL": "379 NOK",
+            "4XL": "379 NOK",
+        },
+    )
 
     return Workspace.discover(root_override=root)
 
