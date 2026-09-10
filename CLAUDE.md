@@ -381,7 +381,7 @@ That clean skip is right on a contributor's machine and wrong in CI, where a
 layer that runs nothing still reports green.
 `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1` turns every such skip — this layer's
 missing token, the browser layer's missing chromium or unbuilt SPA — into a
-failure naming the prerequisite. CI sets it on the `main` tier.
+failure naming the prerequisite. Both `main`-tier workflows set it.
 
 ```
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
@@ -470,21 +470,41 @@ the typed API client after an endpoint change.
 
 ### CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same gates,
-split in two by what a layer needs from the outside world.
+**Two workflows.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs
+the same gates as `check.sh`, split by what a layer needs from the outside
+world; [`.github/workflows/e2e.yml`](.github/workflows/e2e.yml) is the e2e
+layer alone.
 
-| Trigger | What runs |
-|---|---|
-| Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's prettier/eslint/tsc/vitest gate |
-| Push to `main` | all of the above, then `pytest -m browser` and `pytest -m e2e` |
-| Manual (`workflow_dispatch`) | the same as a push to `main`, against whichever ref you pick |
+| Workflow | Trigger | What runs |
+|---|---|---|
+| CI | Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's prettier/eslint/tsc/vitest gate |
+| CI | Push to `main` | all of the above, then `pytest -m browser` |
+| CI | Manual (`workflow_dispatch`) | the same as a push to `main`, against whichever ref you pick |
+| e2e | Push to `main`, or manual | `pytest -m e2e` against the real Printify and Etsy shops |
 
 The PR tier is deliberately hermetic — unit, golden, behaviour and contract
 touch no network and no browser, so a PR cannot go red on somebody else's
-infrastructure. The `browser` and `e2e` layers need chromium and a real
-Printify token respectively, so they sit on `main`, where the token lives as
-the repository secret `PRINTIFY_API_TOKEN`. Phase 1's e2e tests are read-only
-catalog GETs, so running them on every push costs no state.
+infrastructure. The `browser` and `e2e` layers need chromium and real
+credentials respectively, so they run on `main`, where the secrets live
+(`PRINTIFY_API_TOKEN`, `ETSY_KEYSTRING`, `ETSY_SHARED_SECRET`,
+`ETSY_TOKENS_JSON`).
+
+`e2e` is a separate workflow because it is the one layer worth running on its
+own: `gh workflow run e2e --ref <branch>` re-runs it without re-running lint,
+both test matrices and the browser layer. That matters because its Etsy
+sign-in expires — Etsy rotates the refresh token on every use and the CI
+workspace is thrown away, so `ETSY_TOKENS_JSON` eventually goes stale and is
+fixed by running `etsy-listings auth etsy` locally, updating the secret, and
+re-running just this. The cost of the split is that it no longer sits behind
+the lint and offline-suite gate; that is accepted, since a gate blocking the
+manual re-run would be worse.
+
+Run it locally before merging rather than iterating through CI — it is far
+faster, and it costs the same real shop state either way:
+
+```
+ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
+```
 
 Windows is in the matrix because it is where development happens and where the
 render goldens were generated; ubuntu is there to prove the exact OpenCV and
