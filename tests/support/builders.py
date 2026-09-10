@@ -25,6 +25,7 @@ import yaml
 from PIL import Image
 
 from etsy_listings import __about__
+from etsy_listings.clients.etsy.listings import EtsyListingClient
 from etsy_listings.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
 from etsy_listings.engine.context import Event, RunContext
@@ -59,6 +60,7 @@ def a_context(
     *,
     catalog: CatalogClient | None = None,
     printify: PrintifyClient | None = None,
+    etsy: EtsyListingClient | None = None,
     on_event: Callable[[Event], None] | None = None,
 ) -> RunContext:
     """A run context over the workspace at ``root``.
@@ -73,6 +75,7 @@ def a_context(
         workspace=Workspace.discover(root_override=root),
         catalog=catalog if catalog is not None else FakeCatalogClient([], {}, {}),
         printify=printify,
+        etsy=etsy,
         **sink,
     )
 

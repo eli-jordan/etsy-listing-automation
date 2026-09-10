@@ -11,6 +11,7 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from etsy_listings.clients.etsy.listings import EtsyListingClient
 from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
 from etsy_listings.workspace.workspace import Workspace
 
@@ -59,6 +60,12 @@ class RunContext:
     """The shop-scoped client, from Phase 2 on. Optional because the stages
     that came before it do not need one, and a workspace that only renders
     mockups should not need a token to run `plan`."""
+    etsy: EtsyListingClient | None = None
+    """The Etsy listing surface, from Phase 3 on -- `publish`'s poll target,
+    `etsy_listing`'s PATCH, `etsy_media`'s uploads. Optional for the same
+    reason ``printify`` is: `plan` builds a context for a workspace that has
+    never signed in to Etsy, and demanding a client there would mean every
+    Phase 1/2 workspace needs one to run `plan` at all."""
     on_event: EventSink = field(default=_noop_sink)
 
     def emit(self, message: str, *, swatches: Sequence[Swatch] = ()) -> None:
@@ -82,3 +89,10 @@ class RunContext:
         if self.printify is None:
             raise MissingClientError("Printify")
         return self.printify
+
+    def require_etsy(self) -> EtsyListingClient:
+        """The Etsy listing client, or a loud failure. Mirrors
+        :meth:`require_printify` for the reason given there."""
+        if self.etsy is None:
+            raise MissingClientError("Etsy")
+        return self.etsy
