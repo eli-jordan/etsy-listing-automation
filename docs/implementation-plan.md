@@ -28,8 +28,8 @@ comments and commit messages without colliding with the PRD's own decision log.
 | A10 | Build order | Strict PRD phase order, 0 to 6. |
 | A11 | Template kind schema | Discriminated pydantic union on `kind` (`ColourMatrixTemplate \| MultipleTemplate \| SingleTemplate`, `Field(discriminator="kind")`), loaded via `load_template_config()` — no wrapping model, since the file *is* one of the three shapes. PRD 28. |
 | A12 | Multi-layer rendering | `render_scene()`/`Layer`/`export_many()` in `render/pipeline.py`/`render/passes.py`, `multiple`-kind only. The existing single-layer `render()`/`export()` are untouched, not generalised — see A7. |
-| A13 | Template ownership + media addressing | No profile-level registry — `Profile` carries no `templates` field. `listing.media` always references `{template, colour?}` explicitly, naming any template that exists in `mockup-templates/`; no default, no bare-colour shorthand. A template is purely local and Etsy-facing (Printify never sees it), unlike `blueprint`/`print_provider`/`sizes`, which genuinely are Printify product-creation inputs — that's why templates don't live on the profile the way those do. PRD 29. |
-| A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `profile.colour_tone`-derived key > design map's sole key. Implemented once, in `engine/stages/placement.py::DesignPlacement.artwork_for`, and used by both stages that place a design — the render stage's mockup and the product stage's print file. It lived privately inside the render stage until Phase 2, when the product stage had to import it through the underscore; a mockup and a print file disagreeing about which ink a colour gets is a failure neither stage's own tests would catch, so the rule got its own module rather than a second implementation. The order itself is unchanged. PRD 30. |
+| A13 | Template ownership + media addressing | No garment-profile-level registry — `GarmentProfile` carries no `templates` field. `listing.media` always references `{template, colour?}` explicitly, naming any template that exists in `mockup-templates/`; no default, no bare-colour shorthand. A template is purely local and Etsy-facing (Printify never sees it), unlike `blueprint`/`print_provider`/`sizes`, which genuinely are Printify product-creation inputs — that's why templates don't live on the garment profile the way those do. PRD 29. |
+| A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `garment_profile.colors`-derived key > design map's sole key. Implemented once, in `engine/stages/placement.py::DesignPlacement.artwork_for`, and used by both stages that place a design — the render stage's mockup and the product stage's print file. It lived privately inside the render stage until Phase 2, when the product stage had to import it through the underscore; a mockup and a print file disagreeing about which ink a colour gets is a failure neither stage's own tests would catch, so the rule got its own module rather than a second implementation. The order itself is unchanged. PRD 30. |
 | A15 | Render cache namespacing | `.cache/renders/{listing}/{template}/...`, not `.cache/renders/{listing}/{colour}.png` — namespaced by template, since a listing can reference more than one `colour-matrix`-kind template and a bare colour is no longer unique across them. |
 | A16 | Pricing plan resolution | `Listing.pricing_plan` stays a bare ref string, resolved by the caller via `Workspace.resolve()`, exactly like `design:` — `Listing` itself never touches `Workspace` or does I/O. `resolved_price()` takes an already-loaded `PricingPlan` as an optional keyword argument rather than loading it itself. Keeps `Listing` as pure and workspace-ignorant as it is today; the cost is every future price-resolving call site must remember to load and pass the plan, same cost `design:` resolution already carries. PRD 34. |
 | A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside the documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
@@ -62,7 +62,7 @@ needs no node.
 src/etsy_listings/
   cli/                  Typer app; one module per command
   workspace/            root discovery, path resolution, layout constants
-  config/               pydantic models: defaults, profile, listing, exceptions
+  config/               pydantic models: defaults, garment profile, listing, exceptions
     money.py            Money type — parsing, currency validation; PriceField (A16)
     pricing_plan.py     PricingPlan — reusable per-size price table (PRD 33)
     slug.py             slugification rules + exceptions file + collision detection
@@ -177,7 +177,7 @@ below.
 | Stage | `desired` | `read_live` | `apply` |
 |---|---|---|---|
 | `render` | design/artwork bytes hashes + template assets + resolved `RenderConfig`(s) per referenced scene (A11–A14) | which rendered files still exist under `.cache/renders/` | render each scene actually referenced by `media` into `.cache/renders/{listing}/{template}/` (A15) |
-| `generate` | brief + design hash + profile context + prompt template hashes | whether `generated.yaml` still exists | call the model, validate hard, write `generated.yaml` |
+| `generate` | brief + design hash + garment profile context + prompt template hashes | whether `generated.yaml` still exists | call the model, validate hard, write `generated.yaml` |
 | `printify_product` | title + description (PRD 44), blueprint/provider ids, enabled variant matrix with prices, print areas | `GET products/{id}`, incl. `visible` (below); `None` without a request when the lockfile has no product id | create (after the PRD 48 duplicate walk) or update product |
 | `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
 | `etsy_listing` | title, description, tags, materials, section, shipping profile, return policy, `who_made`/`when_made`/`is_supply`, production partners, `should_auto_renew` — names resolved to ids through A25 | `getListing` | one `updateListing` PATCH carrying only what changed (A24) |
@@ -656,7 +656,7 @@ until they pass.
 ### Phase 0 — foundations
 
 Workspace discovery and path resolution; pydantic models for `shop.yaml`,
-profiles, listings, exceptions; the `Money` type with explicit-currency
+garment profiles, listings, exceptions; the `Money` type with explicit-currency
 validation; slugification rules plus collision detection; catalog fetch, TTL cache
 and name-to-id resolution; `Change` vocabulary; lockfile model and
 `canonical_hash()`; `Stage` protocol; a `plan` skeleton that walks the stages and
@@ -674,7 +674,7 @@ React skeleton carrying **only** the calibrator; the `new` interactive picker.
 
 *Exit:* a folder of photos can be given a kind, calibrated in the browser
 against the bundled test design, and produce full-resolution mockups for every
-colour; goldens are committed; `new` writes a profile and listing with no integer IDs typed by hand.
+colour; goldens are committed; `new` writes a garment profile and listing with no integer IDs typed by hand.
 
 ### Phase 2 — Printify
 

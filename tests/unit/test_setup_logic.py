@@ -45,7 +45,7 @@ def test_the_skeleton_covers_the_directories_the_layout_names(tmp_path: Path) ->
     for name in (
         layout.DESIGNS_DIR,
         layout.LISTINGS_DIR,
-        layout.PROFILES_DIR,
+        layout.GARMENT_PROFILES_DIR,
         layout.PRICING_PLANS_DIR,
         layout.MOCKUP_TEMPLATES_DIR,
         layout.COMMON_MEDIA_DIR,

@@ -520,7 +520,7 @@ def new(
     ),
     root: str | None = _root_option(),
 ) -> None:
-    """Interactive design/garment/provider picker; writes profile (if absent) + listing.
+    """Interactive design/garment/provider picker; writes garment profile (if absent) + listing.
 
     Reads Printify's catalog, so it needs PRINTIFY_API_TOKEN with the
     `catalog.read` scope (see the environment variables below).

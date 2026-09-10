@@ -1,5 +1,5 @@
-"""Backs the ``new`` CLI command (PRD 19): a catalog choice in, a profile and
-a listing stub out.
+"""Backs the ``new`` CLI command (PRD 19): a catalog choice in, a garment
+profile and a listing stub out.
 
 Named ``newcmd`` rather than ``new`` -- purely to avoid a package that shadows
 the common local variable name ``new`` everywhere else in the codebase; the

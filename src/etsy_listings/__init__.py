@@ -7,11 +7,11 @@ Eight modules, dependencies pointing strictly downward (docs/architecture.md):
 ``ui``           The calibrator's FastAPI API and its React front end.
 ``engine``       Stage pipeline, the three-way diff, the lockfile. The *only*
                  module that computes a diff (A2).
-``newcmd``       The ``new`` picker: a catalog choice to a profile + listing.
+``newcmd``       The ``new`` picker: a catalog choice to a garment profile + listing.
 ``workspace``    Where every file lives, path safety, loading config (A8).
 ``render``       Pure passes and frozen config; ``template.yaml``'s models (A7).
 ``catalog``      Printify reference data: protocol, TTL cache, fake.
-``config``       ``shop.yaml`` / profile / listing / pricing models, ``Money``.
+``config``       ``shop.yaml`` / garment profile / listing / pricing models, ``Money``.
 ===============  ============================================================
 
 Plus :mod:`etsy_listings.terminal`, a standard-library-only leaf that answers

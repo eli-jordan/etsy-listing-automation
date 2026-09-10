@@ -2,7 +2,7 @@
 pipeline into plan/apply.
 
 Its ``desired()`` does the I/O the render *passes* deliberately don't (A7):
-loading the listing/profile/template config and hashing the design + template
+loading the listing/garment-profile/template config and hashing the design + template
 assets. ``read_live()`` looks at what is actually on disk under
 ``.cache/renders/``. ``apply()`` is the one place renders actually happen and
 get written to ``.cache/renders/{listing}/{template}/...`` (PRD: rendered
@@ -317,7 +317,7 @@ class RenderStage:
         del applied
         workspace = ctx.workspace
         listing_cfg = workspace.load_listing(listing)
-        profile = workspace.load_profile(listing_cfg.profile)
+        profile = workspace.load_garment_profile(listing_cfg.garment_profile)
         placement = DesignPlacement.resolve(workspace, listing, listing_cfg, profile)
 
         referenced: dict[tuple[str, str | None], None] = {}

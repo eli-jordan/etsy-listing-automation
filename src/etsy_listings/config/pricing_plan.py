@@ -2,11 +2,12 @@
 
 Referenced by a listing's ``pricing_plan:`` field as a workspace-relative
 path, resolved the same way ``design:`` is (PRD 34) -- not a bare name
-against a fixed directory the way ``profile:``/``media[].template`` are. No
-name/label field: the filename is the identity. ``profile`` is a bare-name
-back-reference to the garment profile this plan was built for, in the same
-style as ``Listing.profile`` -- unvalidated against an actual profile file at
-load time, for the same reason ``Listing.profile`` is (PRD 33).
+against a fixed directory the way ``garment_profile:``/``media[].template``
+are. No name/label field: the filename is the identity.
+``garment_profile`` is a bare-name back-reference to the garment profile
+this plan was built for, in the same style as ``Listing.garment_profile`` --
+unvalidated against an actual garment profile file at load time, for the
+same reason ``Listing.garment_profile`` is (PRD 33).
 """
 
 from __future__ import annotations
@@ -23,7 +24,7 @@ from etsy_listings.config.money import Money, PriceField, require_currency
 class PricingPlan(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    profile: str
+    garment_profile: str
     prices: dict[str, PriceField]
     price_overrides: dict[str, dict[str, PriceField]] = {}
     """Same shape as ``Listing.price_overrides`` -- a whole tier can carry a

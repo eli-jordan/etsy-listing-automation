@@ -113,7 +113,7 @@ class PrintifyProductStage:
             return NO_SHOP_BLOCKED
 
         config = workspace.load_listing(listing)
-        profile = workspace.load_profile(config.profile)
+        profile = workspace.load_garment_profile(config.garment_profile)
 
         blocked = check_copy_is_concrete(
             title=config.etsy.title, description=config.etsy.description
@@ -266,7 +266,7 @@ def resolve_variant_pricing(ctx: RunContext, listing: str) -> ResolvedVariantPri
     """
     workspace = ctx.workspace
     config = workspace.load_listing(listing)
-    profile = workspace.load_profile(config.profile)
+    profile = workspace.load_garment_profile(config.garment_profile)
 
     blueprint = resolve_blueprint(
         profile.blueprint.brand, profile.blueprint.model, ctx.catalog.blueprints()

@@ -101,20 +101,19 @@ file *is* one of the three shapes).
 
 ## Light-vs-dark artwork
 
-**Profile** carries `colour_tone`, human-classified once via `new` (not
-auto-seeded from Printify hex — this codebase's `catalog/models.py` carries
-no hex field, and whether Printify's real API exposes one at all is
-unverified):
+**GarmentProfile** carries `colors`, human-classified by hand-editing the
+generated garment profile file (not auto-seeded from Printify hex — this
+codebase's `catalog/models.py` carries no hex field, and whether Printify's
+real API exposes one at all is unverified). `new` never asks about it:
 
 ```yaml
-colour_tone:
+colors:
   black: dark
   ivory: light
 ```
 
-`new`'s prompt (`newcmd/interactive.py`) is skippable — one upfront yes/no,
-and only on "yes" does it walk every resolved colour. Skipping leaves
-`colour_tone: {}`, so the common single-artwork case costs nothing.
+A freshly-generated garment profile always has `colors: {}`, so the common
+single-artwork case costs nothing until a design actually needs the split.
 
 **Listing**'s `design:` is polymorphic (`config/listing.py`): a bare path
 normalises to `{"default": <path>}`; a map keys artwork files by tag:
@@ -134,7 +133,7 @@ print file — one implementation, because the two must agree:
 1. `listing.artwork[colour]` — wins even over a template's own override,
    deliberately: it's the thing a human is most likely to revisit per design.
 2. The template/placement's own `artwork:` override.
-3. `on-{profile.colour_tone[colour]}`, if that key exists in the design map.
+3. `on-{profile.colors[colour]}`, if that key exists in the design map.
 4. The design map's sole key, if it has exactly one entry — the common case
    needs none of the above.
 
@@ -144,14 +143,14 @@ Anything else raises `ArtworkResolutionError`, naming the colour, its tone
 ## Multiple templates per listing, and how media references them
 
 **There is no per-garment registry of templates.** An earlier version of this
-design put `templates: list[str]` on the profile, on the reasoning that
+design put `templates: list[str]` on the garment profile, on the reasoning that
 mockup templates were a garment-level fact the same way `blueprint`/
 `print_provider`/`sizes` are. That reasoning didn't hold up: those fields are
 literal inputs to Printify's product-creation call — a template is not,
 Printify never sees it, it's purely local and Etsy-facing. The registry also
 got in the way of a real case: two listings sharing a garment wanting
 different mockups, or a listing wanting a template no other listing on that
-garment will ever reuse. `Profile` carries no `templates` field; a template
+garment will ever reuse. `GarmentProfile` carries no `templates` field; a template
 lives purely in `mockup-templates/{name}/`, and any listing may reference any
 of them.
 
@@ -201,7 +200,7 @@ convention, just one level down.
 `TemplateNotFoundError` checks that `mockup-templates/{template}/template.yaml`
 actually exists on disk (at `plan` time, in the render stage's `desired()`)
 before ever trying to read it. This replaced an earlier `TemplateNotDeclaredError`
-that checked membership in the now-removed profile registry instead; the
+that checked membership in the now-removed garment-profile registry instead; the
 validation moved from "is this declared" to "does this exist," which is the
 right question once there's no declaration step to skip.
 
@@ -281,7 +280,7 @@ on `PATH`.
 
 None. This was a young, unreleased codebase at the time of the change — the
 schema changed directly, and every fixture was updated in the same change
-rather than carrying a transitional shape. The profile's mockup-template
+rather than carrying a transitional shape. The garment profile's mockup-template
 field went through two shapes in quick succession: `mockup_template: str` →
 `templates: list[str]` (a per-garment registry) → removed entirely once it
 became clear the registry didn't earn its keep (see "Multiple templates per
@@ -294,9 +293,9 @@ shorthand was removed, in the same spirit.
 |---|---|
 | Template kinds | Exactly one of `colour-matrix` / `multiple` / `single` per template, discriminated by `kind:`. No mixing, no generic placements-with-overrides model. |
 | Per-colour override | Removed entirely for `colour-matrix` kind. A colour needing different geometry is a separate `single`-kind template instead. |
-| Artwork tone source | Human-classified once per profile via `new`, not auto-seeded — Printify hex isn't modelled in this codebase and isn't confirmed to exist in the real API. |
+| Artwork tone source | Human-classified once per garment profile by hand-editing the generated file (`new` does not ask), not auto-seeded — Printify hex isn't modelled in this codebase and isn't confirmed to exist in the real API. |
 | Media addressing | Always explicit `{template, colour?}` — no bare-colour shorthand, no "default template" concept. |
-| Template ownership | No per-garment registry — `Profile` carries no `templates` field; any listing may reference any template that exists in `mockup-templates/`. A template is purely local and Etsy-facing, unlike the fields (`blueprint`, `print_provider`, `sizes`) that are genuine Printify product-creation inputs and do belong on the profile. `TemplateNotFoundError` checks the template actually exists on disk instead of checking registry membership. |
+| Template ownership | No per-garment registry — `GarmentProfile` carries no `templates` field; any listing may reference any template that exists in `mockup-templates/`. A template is purely local and Etsy-facing, unlike the fields (`blueprint`, `print_provider`, `sizes`) that are genuine Printify product-creation inputs and do belong on the garment profile. `TemplateNotFoundError` checks the template actually exists on disk instead of checking registry membership. |
 | What renders | Driven purely by `media` references, not by `listing.colors` membership (a real behaviour change from before this work). |
 | Render output paths | Namespaced by template (`.cache/renders/{listing}/{template}/...`), not by colour alone — closes a collision a single-colour-matrix-template assumption used to hide. |
 | `multiple`-kind rendering | New `render_scene()`/`export_many()`, not a generalisation of the existing single-layer `render()`/`export()` — zero regression risk to existing goldens, verified by an explicit byte-identity test. |
@@ -308,6 +307,6 @@ shorthand was removed, in the same spirit.
 - **Printify `print_areas` multi-entry behaviour** — unverified; Phase 2's job.
 
 Resolved since the first version of this section: whether a `single`-kind
-template needed profile-level ownership or could be listing-specific — moot
-once the profile-level registry was dropped for every kind, not just
+template needed garment-profile-level ownership or could be listing-specific — moot
+once the garment-profile-level registry was dropped for every kind, not just
 `single`.

@@ -809,11 +809,11 @@ human can read rather than against an id.
 ### The partner is not named after the print provider
 
 The name matters, because the plan was to derive the partner from
-`profile.print_provider` and match on it. Measured:
+`garment_profile.print_provider` and match on it. Measured:
 
 | | |
 |---|---|
-| `profile.print_provider` | `Monster Digital` |
+| `garment_profile.print_provider` | `Monster Digital` |
 | Etsy `partner_name` | **`The Print Provider`** |
 | `normalise()` match | **False** |
 

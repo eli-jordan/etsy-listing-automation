@@ -139,12 +139,12 @@ same PATCH still answers `400`. Sent with `production_partner_ids`, it answers
 #### Resolving the partner: the shop's, not the printer's
 
 The first version of this decision derived the partner from
-`profile.print_provider` and matched on the name. **Measured against the real
+`garment_profile.print_provider` and matched on the name. **Measured against the real
 shop, that is wrong:**
 
 | | |
 |---|---|
-| `profile.print_provider` | `Monster Digital` |
+| `garment_profile.print_provider` | `Monster Digital` |
 | Etsy's `partner_name` | **`The Print Provider`** |
 
 The `location` — `Miami Gardens, FL` — *is* Monster Digital's, so the identity
@@ -159,7 +159,7 @@ The resolution ladder is therefore the one the return policy uses (PRD 59),
 for the same reason: when Etsy offers exactly one, do not make anyone name it.
 
 1. **Named explicitly** — `production_partner:` on the listing, else the
-   profile, else `listing_defaults` — matched against `partner_name` under the
+   garment profile, else `listing_defaults` — matched against `partner_name` under the
    same normalisation blueprint matching uses (PRD 23).
 2. **Omitted, and the shop has exactly one partner** — use it. The common case,
    and this shop's.

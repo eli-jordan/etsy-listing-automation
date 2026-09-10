@@ -8,7 +8,7 @@ non-ASCII decoration asks here first, so there is one place that knows the
 rule rather than a `try: encode` at every call site.
 
 A top-level leaf rather than a member of any module: both ``cli`` (the
-``apply`` swatches) and ``newcmd`` (the picker's local-profile marker) print
+``apply`` swatches) and ``newcmd`` (the picker's local-garment-profile marker) print
 decorations, and living in ``cli`` made ``newcmd`` import an entry point --
 the one edge that pointed *up* through the layering, and the reason
 architecture.md's "no cycles" was not quite true. It depends on nothing but

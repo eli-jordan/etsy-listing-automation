@@ -27,7 +27,7 @@ import yaml
 from PIL import Image, ImageDraw
 
 REPO_ROOT = Path(__file__).parent.parent
-DESIGN_SIZE = (360, 432)  # matches the fixture profile's 5:6 print-area aspect
+DESIGN_SIZE = (360, 432)  # matches the fixture garment profile's 5:6 print-area aspect
 TEMPLATE_SIZE = (480, 576)
 CHART_SIZE = (960, 576)  # two garments side by side
 
@@ -161,7 +161,7 @@ def main() -> None:
         {"black": (35, 35, 38), "white": (245, 245, 240)},
     )
 
-    # Matches tests/fixtures/workspace's profile (templates: [flat-lay-01]) and
+    # Matches tests/fixtures/workspace's garment profile (templates: [flat-lay-01]) and
     # listing (colors: [black, blue-jean, ivory, moss]) -- lets the render
     # stage's behaviour tests exercise a full listing end to end.
     _write_colour_matrix_set(

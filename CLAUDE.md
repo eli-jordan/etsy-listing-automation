@@ -287,12 +287,18 @@ later. Each traces to a decision.
   waiting to be a refund (PRD 24).
 - **`colour-matrix`-kind mockup filename = slugified Printify colour name.**
   Convention, not a mapping table. A sparse `exceptions.yaml` handles what
-  will not slugify (PRD 7a). `multiple`- and `single`-kind templates use a
+  will not slugify (PRD 7a). When nothing matches exactly, `template_base_image`
+  falls back to a filename ending in the slug's hyphen segments — but only if
+  exactly one photo in the directory qualifies; two candidates is refused, not
+  guessed at. That fallback is lookup-only: `template_colours` still reports
+  a non-matching filename as its own name, since deriving a colour from an
+  unknown shared prefix (the enumeration direction) isn't the same question as
+  matching a known slug against one (the lookup direction). `multiple`- and `single`-kind templates use a
   fixed `scene.png` instead — no per-colour photo to name (PRD 28).
 - **A template is exactly one of three kinds — never a mix.** `kind:
   colour-matrix | multiple | single`, a discriminated union (`A11`). **No
-  profile-level registry of templates** — `Profile` carries no `templates`
-  field; a template lives purely in `mockup-templates/{name}/`, and any
+  garment-profile-level registry of templates** — `GarmentProfile` carries no
+  `templates` field; a template lives purely in `mockup-templates/{name}/`, and any
   listing may reference any of them. A listing's `media:` always names
   `{template, colour?}` explicitly — there is no default template and no
   bare-colour shorthand (`A13`, PRD 29).
@@ -522,7 +528,7 @@ assume a command exists because it is listed here.
 ```
 setup              initialise a workspace: skeleton, shop.yaml, ids   [done; its token
                    capture moves to `auth` in Phase 3 — PRD 49]
-new [<design>]     interactive design/garment/provider picker; writes profile + listing  [done]
+new [<design>]     interactive design/garment/provider picker; writes garment profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified   [done; render + printify]
 render / generate      force a single local stage                    [render: via apply; generate: Phase 4]

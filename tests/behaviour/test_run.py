@@ -47,7 +47,7 @@ def _ctx(root: Path, **overrides: object) -> RunContext:
 
 def test_one_bad_listing_does_not_stop_the_rest(workspace_root: Path) -> None:
     """The whole reason `--all` is safe to run over a real catalogue."""
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
     copy_listing(workspace_root, "fine")
 
     report = plan_listings(_ctx(workspace_root), ["broken", "fine", LISTING], STAGES)
@@ -59,7 +59,7 @@ def test_one_bad_listing_does_not_stop_the_rest(workspace_root: Path) -> None:
 def test_a_report_with_any_failure_is_failed(workspace_root: Path) -> None:
     """What the CLI turns into an exit code, and the one thing watching a
     batch go past does not tell you."""
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
 
     report = plan_listings(_ctx(workspace_root), ["broken", LISTING], STAGES)
 
@@ -77,7 +77,7 @@ def test_a_clean_batch_reports_no_failure(workspace_root: Path) -> None:
 def test_a_failure_carries_the_message_not_a_stack(workspace_root: Path) -> None:
     """The error is the whole useful output -- that is what `UserFacingError`
     means, and the run module catches nothing else."""
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
 
     report = plan_listings(_ctx(workspace_root), ["broken"], STAGES)
 
@@ -223,7 +223,7 @@ def test_planned_fires_per_listing_as_the_run_goes(workspace_root: Path) -> None
 
 
 def test_failure_sink_fires_only_for_the_listing_that_failed(workspace_root: Path) -> None:
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
     planned: list[str] = []
     failed: list[str] = []
 
@@ -270,7 +270,7 @@ def test_apply_writes_a_lockfile_per_listing(workspace_root: Path) -> None:
 
 
 def test_a_failed_listing_writes_no_lockfile(workspace_root: Path) -> None:
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
 
     apply_listings(_ctx(workspace_root), ["broken"], STAGES)
 

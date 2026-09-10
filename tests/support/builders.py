@@ -104,13 +104,13 @@ def edit_listing(root: Path, listing: str = FIXTURE_LISTING, **updates: Any) -> 
     _write_yaml(path, document)
 
 
-def profile_file(root: Path, profile: str) -> Path:
-    return root / "profiles" / f"{profile}.yaml"
+def garment_profile_file(root: Path, garment_profile: str) -> Path:
+    return root / "garment-profiles" / f"{garment_profile}.yaml"
 
 
-def edit_profile(root: Path, profile: str, **updates: Any) -> None:
-    """Replace top-level keys of a profile -- ``sizes``, ``print_provider``."""
-    path = profile_file(root, profile)
+def edit_garment_profile(root: Path, garment_profile: str, **updates: Any) -> None:
+    """Replace top-level keys of a garment profile -- ``sizes``, ``print_provider``."""
+    path = garment_profile_file(root, garment_profile)
     document = _read_yaml(path)
     document.update(updates)
     _write_yaml(path, document)
@@ -194,8 +194,8 @@ def write_design(root: Path, size: tuple[int, int], *, name: str = FIXTURE_LISTI
     """Replace a design with a solid image of a given pixel size.
 
     The size is the point: the product stage refuses a design smaller than the
-    profile's print area, so "at print resolution" and "too small" are both
-    just a number here.
+    garment profile's print area, so "at print resolution" and "too small" are
+    both just a number here.
     """
     path = root / "designs" / f"{name}.png"
     Image.new("RGBA", size, (10, 20, 30, 255)).save(path)

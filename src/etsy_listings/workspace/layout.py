@@ -18,7 +18,7 @@ written by this tool rather than pasted by the user, and rewritten on every
 refresh (PRD 49)."""
 CACHE_DIR = ".cache"
 PROMPTS_DIR = "prompts"
-PROFILES_DIR = "profiles"
+GARMENT_PROFILES_DIR = "garment-profiles"
 PRICING_PLANS_DIR = "pricing-plans"
 DESIGNS_DIR = "designs"
 TEST_DESIGNS_DIR = "test-designs"

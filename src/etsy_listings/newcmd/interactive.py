@@ -9,7 +9,6 @@ drive the terminal it was given (questionary cannot, under cygwin).
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal, cast
 
 import typer
 
@@ -25,21 +24,21 @@ from etsy_listings.newcmd.logic import (
     LOCAL_MARKER_FALLBACK,
     build_blueprint_choices,
     build_design_choices,
+    build_garment_profile,
     build_listing_stub,
     build_media_entries,
     build_pricing_plan_choices,
-    build_profile,
     compute_starting_prices,
     filter_blueprints_by_category,
+    garment_profile_slug_for,
     load_candidate_pricing_plans,
     load_template_kind,
     local_blueprint_keys,
-    profile_slug_for,
     resolve_colour_slugs,
     validate_listing_stub,
+    write_garment_profile_if_absent,
     write_listing,
     write_pricing_plan,
-    write_profile_if_absent,
 )
 from etsy_listings.newcmd.logic import (
     pricing_plan_ref as make_pricing_plan_ref,
@@ -55,7 +54,7 @@ def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Bluepr
     Even ``--category tshirt`` leaves dozens of blueprints, and Printify's
     titles bury the useful word in the middle ("Unisex Garment-Dyed Heavy
     Weight Tee"), so a scrolling list is the wrong instrument. Garments this
-    workspace already has a profile for sort to the top and carry a marker: a
+    workspace already has a garment profile for sort to the top and carry a marker: a
     shop reuses a handful of blueprints, and re-finding the one used yesterday
     is this picker's most common job.
     """
@@ -79,10 +78,10 @@ def _pick_provider(workspace: Workspace, providers: list[PrintProvider]) -> Prin
 
 
 def _report_print_area_choice(variant_set: VariantSet) -> None:
-    """Say so when the profile's print area is one of several on offer.
+    """Say so when the garment profile's print area is one of several on offer.
 
     Printify's print areas are per-variant and genuinely differ by garment
-    size. The profile carries exactly one (PRD 8a), so `new` records the
+    size. The garment profile carries exactly one (PRD 8a), so `new` records the
     largest -- a defensible default, but not one worth making silently, since
     it decides how big the design file has to be.
     """
@@ -146,7 +145,7 @@ def _report_media_choice(
 
     Both branches are surprising in silence: a `single`/`multiple` template
     renders one image no matter how many colours sell, and a `colour-matrix`
-    one has to stop at Etsy's 10-image limit while the listing still sells
+    one has to stop at Etsy's 20-image limit while the listing still sells
     every colour.
     """
     if kind != "colour-matrix":
@@ -182,7 +181,7 @@ def _warn_if_design_missing(workspace: Workspace, design_name: str) -> None:
 def _pick_or_create_pricing_plan(
     workspace: Workspace,
     catalog: CatalogClient,
-    profile_slug: str,
+    garment_profile_slug: str,
     blueprint: Blueprint,
     provider: PrintProvider,
     variant_set: VariantSet,
@@ -192,7 +191,7 @@ def _pick_or_create_pricing_plan(
     a listing-relative ref is the caller's job (`run_new` has `design_name`,
     this function doesn't need it)."""
     candidates = load_candidate_pricing_plans(workspace)
-    choices = build_pricing_plan_choices(candidates, profile_slug)
+    choices = build_pricing_plan_choices(candidates, garment_profile_slug)
     rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]
     by_label = {c.label: c for c in choices}
 
@@ -216,7 +215,7 @@ def _pick_or_create_pricing_plan(
             fx_rate=rate,
             target_currency=workspace.defaults.etsy.currency,
         )
-        path = write_pricing_plan(workspace, name, profile_slug, prices, notes)
+        path = write_pricing_plan(workspace, name, garment_profile_slug, prices, notes)
         typer.echo(f"wrote {path}")
         if not costs or rate is None:
             typer.echo(
@@ -272,36 +271,34 @@ def run_new(
     mockup_template = _pick_template(workspace)
     template_kind = load_template_kind(workspace, mockup_template)
 
-    colour_tone: dict[str, Literal["light", "dark"]] = {}
-    if prompts.ask_confirm(
-        "Will any listing on this profile need different artwork for light vs dark shirts?",
-        default=False,
-    ):
-        for colour in sorted(colour_slugs.values()):
-            tone = prompts.ask_choice(f"{colour}: light or dark garment?", ["light", "dark"])
-            colour_tone[colour] = cast('Literal["light", "dark"]', tone)
-
-    profile = build_profile(
+    garment_profile = build_garment_profile(
         blueprint=blueprint,
         provider_title=provider.title,
         placeholder=DEFAULT_PLACEHOLDER,
         variant_set=variant_set,
-        colour_tone=colour_tone,
     )
-    slug = profile_slug_for(blueprint)
-    written = write_profile_if_absent(workspace, slug, profile)
-    typer.echo(f"{'wrote' if written else 'reusing existing'} profiles/{slug}.yaml")
+    slug = garment_profile_slug_for(blueprint)
+    written = write_garment_profile_if_absent(workspace, slug, garment_profile)
+    typer.echo(f"{'wrote' if written else 'reusing existing'} garment-profiles/{slug}.yaml")
+    if not written:
+        garment_profile = workspace.load_garment_profile(slug)
 
     plan_path = _pick_or_create_pricing_plan(
-        workspace, catalog, slug, blueprint, provider, variant_set, profile.sizes
+        workspace, catalog, slug, blueprint, provider, variant_set, garment_profile.sizes
     )
     plan_ref = make_pricing_plan_ref(plan_path, listing_dir=workspace.listing_dir(design_name))
 
-    colours = sorted(colour_slugs.values())
+    # A new listing enables whatever colours the garment profile already
+    # lists -- reflecting any hand-editing since it was written -- falling
+    # back to every catalog colour the first time this garment is used.
+    if garment_profile.colors:
+        colours = sorted(garment_profile.colors)
+    else:
+        colours = sorted(colour_slugs.values())
     media = build_media_entries(template=mockup_template, kind=template_kind, colours=colours)
     _report_media_choice(mockup_template, template_kind, colours, media)
     listing_data = build_listing_stub(
-        profile_slug=slug,
+        garment_profile_slug=slug,
         design_ref=f"../../designs/{design_name}.png",
         colours=colours,
         pricing_plan_ref=plan_ref,

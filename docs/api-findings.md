@@ -259,11 +259,11 @@ downstream catches a blurry print, which is what makes the PRD's design
 validation (17) a real gate rather than a courtesy.
 
 The gate is now concrete (PRD 38): **a design must be within 10% of the
-profile's print area** — at least 90% of its width and 90% of its height. That
+garment profile's print area** — at least 90% of its width and 90% of its height. That
 replaces "~300 DPI for the print area", which said the same thing less
 checkably: Printify's placeholder dimensions already are the pixels it wants at
 its own print resolution, and the editor states the figure outright ("Print area
-size: 4200 × 4800 px", matching the profile `new` wrote).
+size: 4200 × 4800 px", matching the garment profile `new` wrote).
 
 The tolerance was set by the first file it was pointed at. The workspace's own
 `designs/duke-java-developer.png` is **4000×4800** — 4.8% short on the width
@@ -499,7 +499,7 @@ was asked, and why, is the useful part; go there for what came back.
    description is already recorded in the PRD as harmless; images are not
    harmless. If `publish.json` ignores `{images: false}` on a first publish,
    every listing is born carrying Printify's generated mockups — 8 of them on
-   the probe product, against Etsy's 10-image cap — and the media stage has to
+   the probe product, against Etsy's 20-image cap — and the media stage has to
    **delete** them before uploading ours, not merely add. That changes what the
    stage does, so it needs answering before the stage is written (PRD 41).
 8. **How do per-colour variation images get set?** Etsy shows a thumbnail per
@@ -581,7 +581,7 @@ Concretely, from the above:
   `read_live`; asserting it here would mean either skipping it on the run that
   matters or breaching A17 to reach cost data.
 - Placement is fixed: centred, `scale: 1.0`, `angle: 0`, into
-  `profile.placeholder` (PRD 45). PRD 38's ≥90% gate is what makes that the
+  `garment_profile.placeholder` (PRD 45). PRD 38's ≥90% gate is what makes that the
   right constant rather than a default nobody chose.
 - A colour × size cell the catalog does not offer is reported and skipped, not
   fatal (PRD 46) — a discontinued combination is Printify's fact, not the

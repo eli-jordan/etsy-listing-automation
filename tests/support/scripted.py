@@ -55,9 +55,9 @@ class Scripted:
         matches = [f for f in self.answers if f.lower() in message.lower()]
         if not matches:
             raise AssertionError(f"no scripted answer for {message!r}; asked {self.asked}")
-        # A fragment that *is* the whole question wins outright: `new` asks
-        # "Garment", and also asks "black: light or dark garment?" -- the first
-        # must not be able to swallow the second.
+        # A fragment that *is* the whole question wins outright, so a short
+        # exact answer is never swallowed by a longer question that happens
+        # to contain it as a substring.
         exact = [f for f in matches if f.lower() == message.lower()]
         if exact:
             return self._value(exact[0])

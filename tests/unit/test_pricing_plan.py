@@ -11,7 +11,7 @@ from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
 
 BASE: dict[str, object] = {
-    "profile": "comfort-colors-1717",
+    "garment_profile": "comfort-colors-1717",
     "prices": {"S": "349 NOK", "M": "349 NOK"},
 }
 
@@ -20,7 +20,7 @@ def test_loads_valid_pricing_plan(tmp_path: Path) -> None:
     path = tmp_path / "launch-low.yaml"
     path.write_text(yaml.safe_dump(BASE), encoding="utf-8")
     plan = PricingPlan.load(path, currency="NOK")
-    assert plan.profile == "comfort-colors-1717"
+    assert plan.garment_profile == "comfort-colors-1717"
     assert plan.prices["S"] == Money.parse("349 NOK")
 
 
