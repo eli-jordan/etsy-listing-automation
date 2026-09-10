@@ -313,6 +313,18 @@ class TestTheFullCycle:
         assert written is not None
         listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
         links = ctx.require_etsy().get_listing_variation_images(listing_id)
-        assert len(links) == 4
+        if len(links) != 4:
+            inventory = ctx.require_etsy().get_listing_inventory(listing_id)
+            properties = [
+                (pv.property_id, pv.values) for p in inventory.products for pv in p.property_values
+            ]
+            pytest.fail(
+                f"expected 4 variation image links, got {len(links)}. This binds against "
+                f"Etsy's own inventory (Printify's variant push), not anything this tool "
+                f"writes -- if that hasn't materialised yet by the time this test asks, "
+                f"resolve_colour_property finds no overlap and the media stage skips "
+                f"loudly rather than failing (decision 6, PRD 46). "
+                f"Inventory properties as read: {properties}"
+            )
         image_ids = set(written.remote["etsy_image_ids"].values())
         assert {link.image_id for link in links} <= image_ids
