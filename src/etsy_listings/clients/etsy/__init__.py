@@ -6,11 +6,15 @@ callback.py   the loopback server that catches the redirect, once
 tokens.py     the token file: expiry, rotation, the only writer of it
 transport.py  Transport (both credentials, every API call) and OAuthClient
               (the token endpoint, which carries neither)
+shops.py      EtsyShopClient -- setup's four unscoped reads
+listings.py   EtsyListingClient -- Phase 3's stages: publish's poll target,
+              the copy PATCH, media upload/reorder/variation-images
+models.py     what every endpoint above returns
+fakes.py      in-memory doubles for the behaviour layer (A4)
 ```
 
-Phase 3's listing stages add `protocol.py`, `models.py` and `fakes.py` beside
-these; what is here is the authentication half, which everything else waits
-on (A23).
+What is here (`oauth.py`, `callback.py`, `tokens.py`, `transport.py`) is the
+authentication half, which everything else waits on (A23).
 
 Exported below is what the rest of the codebase should need: a transport, the
 two errors worth catching by type, and the store that keeps a bearer coming.
@@ -19,6 +23,7 @@ business calling -- a command that finds itself opening a browser mid-run is a
 command that should have failed with :class:`EtsyAuthError` instead.
 """
 
+from etsy_listings.clients.etsy.listings import EtsyListingClient, HttpEtsyListingClient
 from etsy_listings.clients.etsy.oauth import OAuthError, Pkce, TokenResponse
 from etsy_listings.clients.etsy.tokens import EtsyAuthError, StoredTokens, TokenStore
 from etsy_listings.clients.etsy.transport import EtsyApiError, OAuthClient, Transport
@@ -26,6 +31,8 @@ from etsy_listings.clients.etsy.transport import EtsyApiError, OAuthClient, Tran
 __all__ = [
     "EtsyApiError",
     "EtsyAuthError",
+    "EtsyListingClient",
+    "HttpEtsyListingClient",
     "OAuthClient",
     "OAuthError",
     "Pkce",

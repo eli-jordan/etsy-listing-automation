@@ -69,3 +69,133 @@ class ReturnPolicy(BaseModel):
             return "no returns or exchanges"
         within = f" within {self.return_deadline} days" if self.return_deadline else ""
         return f"{' and '.join(accepted)}{within}"
+
+
+class ShippingProfile(BaseModel):
+    """A shipping profile (`etsy.shipping_profile_id`), addressed by title
+    (PRD 54) -- Etsy gives these a title, unlike a return policy."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    shipping_profile_id: int
+    title: str
+    origin_country_iso: str | None = None
+    is_deleted: bool = False
+
+
+class ProductionPartner(BaseModel):
+    """A fulfilment relationship the shop has declared (PRD 52).
+
+    Etsy gives it a name and a location but not, notably, a link to
+    `profile.print_provider` -- the two describe different things (decision
+    3's resolution ladder). Read the same way whether it came from
+    `getShopProductionPartners` or nested in a listing's own
+    `production_partners`.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    production_partner_id: int
+    partner_name: str | None = None
+    location: str | None = None
+
+
+class ListingImage(BaseModel):
+    """One image on a listing, as `getListing?includes=Images` and
+    `uploadListingImage` both return it."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    listing_image_id: int
+    rank: int | None = None
+    alt_text: str | None = None
+
+
+class VariationImageLink(BaseModel):
+    """One `(property, value) -> image` swatch binding (PRD 56).
+
+    `value` is present on a read (`getListingVariationImages` returns the
+    value string alongside each id, which is what makes the reverse
+    projection free) and absent on a write -- Etsy only wants the ids sent.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    property_id: int
+    value_id: int
+    image_id: int
+    value: str | None = None
+
+
+class InventoryPropertyValue(BaseModel):
+    """One property on one inventory product-combination -- e.g. this
+    combination's colour, or its size. `property_name` is the *blueprint's*
+    option name (PRD 3, "Comfort Colors® Colors" rather than "Color"), which
+    is why the colour property is identified by matching `values` against the
+    listing's own colours rather than by name or id (decision 6)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    property_id: int
+    property_name: str | None = None
+    value_ids: tuple[int, ...] = ()
+    values: tuple[str, ...] = ()
+
+
+class InventoryOffering(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    offering_id: int | None = None
+    quantity: int | None = None
+    is_enabled: bool | None = None
+
+
+class InventoryProduct(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+
+    product_id: int | None = None
+    sku: str | None = None
+    property_values: tuple[InventoryPropertyValue, ...] = ()
+    offerings: tuple[InventoryOffering, ...] = ()
+
+
+class Inventory(BaseModel):
+    """`getListingInventory`'s response: Printify's variant matrix as Etsy
+    materialised it, including the disabled cross-product cells Etsy adds to
+    keep the grid rectangular (PRD 55 -- read here, never written)."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    products: tuple[InventoryProduct, ...] = ()
+
+
+class Listing(BaseModel):
+    """`getListing`'s response, narrowed to what the stages compare against
+    `applied` (the Etsy write surface table in phase-3-etsy.md).
+
+    Read only through `GET /v3/application/listings/{id}` -- the *unscoped*
+    path. The shop-scoped one exists for `PATCH`/`DELETE` and 404s on `GET`,
+    which cost the probe a false "our copy was overwritten" verdict.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    listing_id: int
+    shop_id: int | None = None
+    state: str | None = None
+    title: str | None = None
+    description: str | None = None
+    tags: tuple[str, ...] = ()
+    materials: tuple[str, ...] = ()
+    shop_section_id: int | None = None
+    shipping_profile_id: int | None = None
+    return_policy_id: int | None = None
+    who_made: str | None = None
+    when_made: str | None = None
+    is_supply: bool | None = None
+    should_auto_renew: bool | None = None
+    production_partners: tuple[ProductionPartner, ...] = ()
+    readiness_state_id: int | None = None
+    processing_min: int | None = None
+    processing_max: int | None = None
+    images: tuple[ListingImage, ...] = ()
