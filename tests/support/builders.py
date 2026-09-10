@@ -154,6 +154,16 @@ def set_shop_id(root: Path, shop_id: int) -> Path:
     return root
 
 
+def set_etsy_shop_id(root: Path, shop_id: int) -> Path:
+    """Opt the workspace into the Etsy stages (Phase 3), the same way
+    :func:`set_shop_id` opts it into Printify's. Merged, not replaced."""
+    path = root / "shop.yaml"
+    document = _read_yaml(path)
+    document["etsy"] = {**(document.get("etsy") or {}), "shop_id": shop_id}
+    _write_yaml(path, document)
+    return root
+
+
 def set_etsy_listing_defaults(root: Path, **overrides: Any) -> Path:
     """Merge ``etsy.listing_defaults`` overrides into ``shop.yaml`` --
     ``shipping_profile``, ``return_policy``, ``production_partner``,

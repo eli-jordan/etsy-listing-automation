@@ -11,7 +11,6 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-import yaml
 
 from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.clients.etsy.models import ProductionPartner, ReturnPolicy, ShippingProfile
@@ -28,7 +27,10 @@ from tests.support.builders import (
     edit_listing,
     set_copy,
     set_etsy_listing_defaults,
+    set_etsy_shop_id,
 )
+
+SHOP_ID = 12345678
 
 ETSY_LISTING_ID = 4572550919
 STAGE = EtsyListingStage()
@@ -48,8 +50,7 @@ def etsy() -> FakeEtsyListingClient:
 
 @pytest.fixture
 def root(workspace_root: Path) -> Path:
-    """The fixture workspace already has `etsy.shop_id` (12345678); only
-    real copy and a shipping profile are missing before this stage can run."""
+    set_etsy_shop_id(workspace_root, SHOP_ID)
     set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
     set_etsy_listing_defaults(workspace_root, shipping_profile="NOK standard tee")
     return workspace_root
@@ -79,11 +80,9 @@ def _apply(ctx: RunContext, lock: Lockfile) -> Lockfile:
 
 
 def test_no_etsy_shop_id_blocks(workspace_root: Path, etsy) -> None:
+    """The fixture workspace has no `etsy.shop_id` by default -- the same
+    opt-in-only convention `printify.shop_id` already follows."""
     set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
-    path = workspace_root / "shop.yaml"
-    document = yaml.safe_load(path.read_text(encoding="utf-8"))
-    del document["etsy"]["shop_id"]
-    path.write_text(yaml.safe_dump(document), encoding="utf-8")
 
     stage_plan = _stage_plan(_ctx(workspace_root, etsy), a_lock())
 
@@ -101,6 +100,7 @@ def test_generate_sentinel_copy_blocks(root: Path, etsy) -> None:
 
 
 def test_no_shipping_profile_configured_blocks(workspace_root: Path, etsy) -> None:
+    set_etsy_shop_id(workspace_root, SHOP_ID)
     set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
 
     stage_plan = _stage_plan(_ctx(workspace_root, etsy), a_lock())

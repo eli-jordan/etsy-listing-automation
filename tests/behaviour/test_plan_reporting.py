@@ -89,10 +89,12 @@ def test_it_says_what_to_do_about_it(workspace_root: Path) -> None:
 
 def test_the_summary_counts_the_blocked_stage(workspace_root: Path) -> None:
     """A summary that says "0 to run, 0 to change" and nothing else is the
-    same omission one line further down."""
+    same omission one line further down. Four stages block on an
+    unconfigured workspace: printify_product, publish, etsy_listing and
+    etsy_media all need a shop id this fixture does not have."""
     result = _plan(workspace_root, "take-a-hike")
 
-    assert "1 blocked" in result.output
+    assert "4 blocked" in result.output
 
 
 def test_a_blocked_stage_is_not_counted_as_work_to_do(workspace_root: Path) -> None:
@@ -135,13 +137,15 @@ def test_a_gate_refusal_is_an_actionable_message_not_a_traceback(
 def test_a_gate_refusal_reads_as_a_blocked_stage(workspace_root: Path) -> None:
     """One vocabulary, not two. A refusal and an unconfigured shop are both
     reasons a stage cannot run, so `plan` renders them identically -- and
-    counts them in the same place."""
+    counts them in the same place. Four block here: printify_product and
+    publish on the `<generate>` copy gate, etsy_listing and etsy_media on
+    the Etsy shop id this test never configures."""
     root = set_shop_id(workspace_root, SHOP_ID)
 
     result = _plan(root, "take-a-hike")
 
     assert result.exit_code == 0, result.output
-    assert "1 blocked" in result.output
+    assert "4 blocked" in result.output
     warning = next(line for line in result.output.splitlines() if "<generate>" in line)
     assert warning.lstrip().startswith("!")
 

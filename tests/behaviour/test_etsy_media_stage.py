@@ -29,13 +29,18 @@ from etsy_listings.engine.stages.etsy_media import (
 )
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import a_context, a_lock, edit_listing
+from tests.support.builders import a_context, a_lock, edit_listing, set_etsy_shop_id
 
 ETSY_LISTING_ID = 4572550919
 SHOP_ID = 12345678
 STAGE = EtsyMediaStage()
 COLOURS = ["black", "blue-jean", "ivory", "moss"]
 TEMPLATE = "flat-lay-01"
+
+
+@pytest.fixture(autouse=True)
+def _etsy_shop(workspace_root: Path) -> None:
+    set_etsy_shop_id(workspace_root, SHOP_ID)
 
 
 @pytest.fixture

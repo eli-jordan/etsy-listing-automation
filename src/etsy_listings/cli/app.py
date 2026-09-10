@@ -1,8 +1,8 @@
 """Typer CLI. One module per command; this module wires them into one app.
 
-``plan``, ``apply``, ``new`` and ``ui`` exist as of Phase 1 -- ``auth``,
-``catalog refresh``, ``unlock`` and ``status`` are built in later phases, per
-A10's strict phase order.
+``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth`` and ``unlock`` are
+built, per A10's strict phase order. ``catalog refresh`` and ``status``
+remain for Phase 6.
 """
 
 from __future__ import annotations
@@ -20,6 +20,13 @@ from etsy_listings import prompts, terminal
 from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
 from etsy_listings.authcmd import Part as AuthPart
 from etsy_listings.cli.render import format_blocked, format_plan
+from etsy_listings.clients.etsy import (
+    EtsyListingClient,
+    HttpEtsyListingClient,
+    OAuthClient,
+    TokenStore,
+)
+from etsy_listings.clients.etsy import Transport as EtsyTransport
 from etsy_listings.clients.printify import (
     CachedCatalogClient,
     CatalogClient,
@@ -29,6 +36,7 @@ from etsy_listings.clients.printify import (
     PrintifyClient,
     Transport,
 )
+from etsy_listings.config.defaults import MissingDefaultError
 from etsy_listings.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -37,9 +45,11 @@ from etsy_listings.config.secrets import (
 )
 from etsy_listings.engine.change import Plan
 from etsy_listings.engine.context import Event, EventSink, RunContext
+from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
 from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
+from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.errors import UserFacingError
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.userpath import to_native_path
@@ -90,10 +100,9 @@ def _root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this b
 def _root_callback() -> None:
     """Etsy print-on-demand listing automation.
 
-    Renders mockups locally, configures the product in Printify and patches the
-    resulting Etsy listing. Idempotent: re-running against unchanged inputs
-    makes no remote changes. Only the local `render` stage is implemented so
-    far -- `plan` and `apply` are real, and neither touches Printify or Etsy yet.
+    Renders mockups locally, configures the product in Printify, publishes it
+    and patches the resulting Etsy listing's copy and media. Idempotent:
+    re-running against unchanged inputs makes no remote changes.
     """
     # A no-op callback keeps `plan` addressed as a subcommand (`etsy-listings
     # plan ...`) -- Typer otherwise collapses a single-command app so its
@@ -137,11 +146,38 @@ def _clients(workspace: Workspace) -> tuple[CatalogClient, PrintifyClient]:
     )
 
 
+def _etsy_client(workspace: Workspace) -> EtsyListingClient | None:
+    """The signed-in Etsy connection Phase 3's stages write through, or
+    ``None`` before `auth etsy` has run.
+
+    Checked without raising, unlike :meth:`Secrets.require_etsy_app_key`:
+    `plan` in a workspace that has never touched Etsy must not be made to
+    configure it just to render mockups -- the same reason
+    :func:`_transport` resolves Printify's token lazily, one level further
+    in here because :class:`~etsy_listings.clients.etsy.transport.Transport`
+    takes its app key pair eagerly rather than through a callable, unlike
+    Printify's bearer.
+    """
+    secrets = Secrets.load(workspace.env_file())
+    if not (secrets.etsy_keystring and secrets.etsy_shared_secret):
+        return None
+    app_key = secrets.require_etsy_app_key()
+    store = TokenStore(
+        workspace.root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE,
+        refresh=lambda token: OAuthClient(app_key.keystring).refresh(token),
+    )
+    transport = EtsyTransport(app_key, bearer=store.access_token)
+    return HttpEtsyListingClient(transport)
+
+
 def _run_context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
     catalog, printify = _clients(workspace)
+    etsy = _etsy_client(workspace)
     if on_event is None:
-        return RunContext(workspace=workspace, catalog=catalog, printify=printify)
-    return RunContext(workspace=workspace, catalog=catalog, printify=printify, on_event=on_event)
+        return RunContext(workspace=workspace, catalog=catalog, printify=printify, etsy=etsy)
+    return RunContext(
+        workspace=workspace, catalog=catalog, printify=printify, etsy=etsy, on_event=on_event
+    )
 
 
 SWATCH_GLYPH = "██"
@@ -413,8 +449,10 @@ def apply(
     all: bool = typer.Option(False, "--all", help="Apply every listing in the workspace"),
     root: str | None = _root_option(),
 ) -> None:
-    """Execute every stage the plan identified. Only local stages (render) run
-    until later phases add Printify/Etsy."""
+    """Execute every stage the plan identified: render, create or update the
+    Printify product, publish it, and patch the resulting Etsy listing's
+    copy and media. A stage a workspace has not configured (no Printify or
+    Etsy shop id) reports itself blocked rather than running."""
     workspace = _open_workspace(root)
 
     def announce(name: str, planned: PlannedRun) -> None:
@@ -436,6 +474,40 @@ def apply(
             on_failure=_echo_failure,
         )
     )
+
+
+@app.command(epilog=EPILOG)
+def unlock(
+    listing: str = typer.Argument(help="Listing name, e.g. take-a-hike"),
+    root: str | None = _root_option(),
+) -> None:
+    """Clear a Printify product stuck publishing (`is_locked: true`).
+
+    `publish` polls for up to ~10 minutes before giving up; this calls
+    Printify's own remedy (`publishing_failed.json`) for the product that
+    poll named. Its one job has never been exercised against a genuinely
+    stuck publish -- none has stuck in probing -- so it ships built and
+    unverified rather than withheld. Re-run `apply` afterwards; this command
+    only asks Printify to clear the lock, it does not touch the lockfile.
+    """
+    workspace = _open_workspace(root)
+    lock = Lockfile.read(workspace.lock_file(listing))
+    product_id = lock.remote.get(PRODUCT_ID_KEY) if lock is not None else None
+    if not product_id:
+        typer.echo(f"{listing}: no Printify product on record -- nothing to unlock", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        shop_id = workspace.defaults.printify.require_shop_id()
+    except MissingDefaultError as exc:
+        typer.echo(f"{listing}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    printify = _clients(workspace)[1]
+    printify.publishing_failed(
+        shop_id, str(product_id), reason="cleared via `etsy-listings unlock`"
+    )
+    typer.echo(f"{listing}: asked Printify to clear the publish lock on product {product_id}")
+    typer.echo("Run `etsy-listings apply` again to continue.")
 
 
 @app.command(epilog=EPILOG)
