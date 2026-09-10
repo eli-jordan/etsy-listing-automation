@@ -92,6 +92,22 @@ def test_a_rejected_app_key_names_the_two_variables_to_fix() -> None:
     assert "ETSY_SHARED_SECRET" in str(caught.value)
 
 
+def test_a_rejected_bearer_carries_the_servers_own_text() -> None:
+    """A missing scope is a 401, not a 403 -- Phase 3 is the first phase where
+    that is plausible (`shops_r` for shipping profiles). The old message
+    pointed at the credential ("no longer valid"), which is wrong for a scope
+    error and sends the user re-pasting a keystring that was never the
+    problem."""
+    handler = lambda _: httpx.Response(  # noqa: E731
+        401, json={"error": "invalid scope: shops_r required"}
+    )
+
+    with pytest.raises(EtsyAuthError) as caught:
+        etsy_transport(handler).get("/v3/application/shops/1/shipping-profiles")
+
+    assert "invalid scope: shops_r required" in str(caught.value)
+
+
 def test_an_etsy_error_envelope_is_decoded_to_its_one_string() -> None:
     """Etsy's error shape is a single `error` string -- no code, no field --
     so the whole value is what a human gets."""

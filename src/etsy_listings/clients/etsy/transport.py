@@ -70,7 +70,7 @@ class EtsyApiError(UserFacingError, RuntimeError):
         super().__init__(f"Etsy refused the request with {status_code}: {error}")
 
 
-def decode_error(response: httpx.Response) -> EtsyApiError:
+def _error_detail(response: httpx.Response) -> str:
     """Pull ``error`` out of the envelope, tolerating its absence.
 
     A 502 from a proxy is HTML. Failing while decoding the thing that explains
@@ -81,10 +81,13 @@ def decode_error(response: httpx.Response) -> EtsyApiError:
     try:
         body: Any = response.json()
     except ValueError:
-        return EtsyApiError(response.status_code, error=detail)
-    if isinstance(body, dict) and isinstance(body.get("error"), str):
-        detail = body["error"]
-    return EtsyApiError(response.status_code, error=detail)
+        return detail
+    error = body.get("error") if isinstance(body, dict) else None
+    return error if isinstance(error, str) else detail
+
+
+def decode_error(response: httpx.Response) -> EtsyApiError:
+    return EtsyApiError(response.status_code, error=_error_detail(response))
 
 
 class Transport:
@@ -119,7 +122,11 @@ class Transport:
         response = with_retries(send, method, self._policy, sleep=self._sleep)
 
         if response.status_code in (401, 403):
-            raise EtsyAuthError(_rejected_message(response.status_code, bearer=self._bearer))
+            raise EtsyAuthError(
+                _rejected_message(
+                    response.status_code, bearer=self._bearer, detail=_error_detail(response)
+                )
+            )
         if response.is_error:
             raise decode_error(response)
         return response
@@ -150,23 +157,24 @@ class Transport:
         return int(body["application_id"])
 
 
-def _rejected_message(status_code: int, *, bearer: BearerSource | None) -> str:
-    """Name the credential that was actually rejected.
+def _rejected_message(status_code: int, *, bearer: BearerSource | None, detail: str) -> str:
+    """Name the credential that was actually rejected, and say what Etsy said.
 
-    Etsy answers 401 for a bad app key pair and for a bad bearer alike, and
-    the fixes are different enough -- re-paste two strings, or sign in again
-    -- that a message covering both helps nobody. Which credentials the
-    request carried is the only distinction available here, so it is the one
-    the message draws.
+    Etsy answers 401 for a bad app key pair, a bad bearer, *and* a missing
+    scope alike -- Phase 3 is the first phase where the third is plausible
+    (`shops_r` for shipping profiles) -- and the old message named only the
+    credential, which points a scope error at a keystring that was never the
+    problem. Carrying the server's own text is what tells the two apart.
     """
     if bearer is None:
         return (
-            f"Etsy rejected the app key pair ({status_code}). Check "
+            f"Etsy rejected the app key pair ({status_code}): {detail}. Check "
             f"{ETSY_KEYSTRING_VAR} and {ETSY_SHARED_SECRET_VAR} in your workspace's .env."
         )
     return (
-        f"Etsy rejected the request ({status_code}). The app key pair or the stored "
-        f"access token is no longer valid."
+        f"Etsy rejected the request ({status_code}): {detail}. If this names a missing "
+        f"scope, `etsy-listings auth` grants it on the next sign-in; otherwise the app "
+        f"key pair or the stored access token is no longer valid."
     )
 
 
