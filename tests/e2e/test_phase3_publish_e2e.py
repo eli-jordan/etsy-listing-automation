@@ -62,6 +62,7 @@ from tests.support.builders import (
     set_etsy_listing_defaults,
     set_etsy_shop_id,
     set_shop_id,
+    write_design,
 )
 
 pytestmark = pytest.mark.e2e
@@ -134,10 +135,19 @@ def workspace(
     tmp_path_factory: pytest.TempPathFactory, credentials_workspace: Workspace
 ) -> Workspace:
     """A fresh copy of the fixture workspace (the same one every offline test
-    uses -- real profile, real mockup templates, real design), pointed at the
-    throwaway shops named by ``credentials_workspace``."""
+    uses -- real profile, real mockup templates), pointed at the throwaway
+    shops named by ``credentials_workspace``."""
     root = tmp_path_factory.mktemp("phase3-e2e") / "workspace"
     shutil.copytree(FIXTURE_WORKSPACE, root)
+
+    # The fixture's own design is the synthetic grid/ruler test image -- far
+    # below this garment's real 4500x5400 print area, so `check_design_resolution`
+    # would block the product stage before it ever creates anything (silently:
+    # a blocked stage is reported, not raised, so the failure only surfaces
+    # three stages later as `publish`'s "no product exists"). The offline
+    # behaviour tests already swap it for a print-resolution placeholder via
+    # `write_design`; this test needs the same thing against the real gate.
+    write_design(root, (4500, 5400))
 
     set_shop_id(root, credentials_workspace.defaults.printify.require_shop_id())
     set_etsy_shop_id(root, credentials_workspace.defaults.etsy.require_shop_id())
