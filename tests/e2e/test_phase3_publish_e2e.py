@@ -19,14 +19,25 @@ without both skips cleanly.
 
 **This layer costs state.** It creates one Printify product, publishes it
 -- a real Etsy draft listing -- patches it, uploads real images, and deletes
-the product in teardown. The Etsy listing itself survives teardown: Etsy's
-cleanup asymmetry (deleting the product orphans the listing rather than
-removing it, and there is no delete endpoint this tool is scoped for) means
-every run of this test leaves one draft behind in the throwaway shop, to be
-cleared by hand occasionally. Nothing here ever sets ``state`` -- the
-"live-edit check" at the end confirms the listing is still a draft after
-every write this test makes, which is the measurable form of PRD's non-goal
-1 (the tool never activates a listing).
+the product in teardown. Deleting the product **also removes the Etsy draft**:
+measured, by asking for a listing a previous run had created and getting a
+`404` for it and for its product. An earlier version of this note claimed the
+opposite -- that the listing was orphaned and had to be cleared by hand -- and
+that claim was never checked. Nothing here ever sets ``state``: the
+"live-edit check" confirms the listing is still a draft after every write this
+test makes, which is the measurable form of PRD's non-goal 1 (the tool never
+activates a listing).
+
+**Every stage must actually run.** A blocked stage is reported, not raised,
+and ``RunReport.failed`` does not count one -- so ``assert not report.failed``
+passes over a stage that refused, and the layer reports green for work it
+never did. It did: `etsy_listing` was blocked for want of a shipping profile
+through every run of this test, so the `updateListing` PATCH at the centre of
+PRD 52-59 was never once sent against the real API, while the first test's
+title assertion passed anyway because Printify creates the listing from the
+*product's* title (PRD 44). :func:`apply_everything` is the guard -- no stage
+may refuse -- and the workspace fixture now resolves a shipping profile from
+the shop it is pointed at rather than leaving one unset.
 """
 
 from __future__ import annotations
@@ -45,7 +56,7 @@ from etsy_listings.clients.printify import Transport as PrintifyTransport
 from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.run import apply_listings, plan_listings
+from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
@@ -130,9 +141,39 @@ def printify_client(printify_token: str) -> PrintifyClient:
 # ------------------------------------------------------------- test workspace
 
 
+def apply_everything(ctx: RunContext) -> RunReport:
+    """Apply, and insist the whole pipeline actually ran.
+
+    ``report.failed`` is not enough on its own. A stage that refuses is
+    *reported*, not failed -- PRD 16's rule, and the right one -- so an
+    assertion on ``failed`` alone passes over a pipeline that quietly did half
+    its work. That is not a hypothetical: `etsy_listing` refused in every run
+    of this test for want of a shipping profile, and nothing said so.
+
+    In this layer a refusal is always a defect in the fixture. Every stage is
+    configured, every credential is present, and if one of them still cannot
+    run then the run under test is not the run the assertions below describe.
+    """
+    report = apply_listings(ctx, [LISTING], STAGES)
+    assert not report.failed, [o.error for o in report.failures]
+
+    refused = [
+        (stage_plan.stage, stage_plan.blocked)
+        for outcome in report.outcomes
+        if outcome.planned is not None
+        for stage_plan in outcome.planned.plan.stage_plans
+        if stage_plan.blocked
+    ]
+    assert not refused, f"a stage refused, so this run tested less than it appears to: {refused}"
+    return report
+
+
 @pytest.fixture(scope="class")
 def workspace(
-    tmp_path_factory: pytest.TempPathFactory, credentials_workspace: Workspace
+    tmp_path_factory: pytest.TempPathFactory,
+    credentials_workspace: Workspace,
+    etsy_client: HttpEtsyListingClient,
+    prerequisite_missing: PrerequisiteMissing,
 ) -> Workspace:
     """A fresh copy of the fixture workspace (the same one every offline test
     uses -- real profile, real mockup templates), pointed at the throwaway
@@ -150,13 +191,26 @@ def workspace(
     write_design(root, (4500, 5400))
 
     set_shop_id(root, credentials_workspace.defaults.printify.require_shop_id())
-    set_etsy_shop_id(root, credentials_workspace.defaults.etsy.require_shop_id())
+    etsy_shop_id = credentials_workspace.defaults.etsy.require_shop_id()
+    set_etsy_shop_id(root, etsy_shop_id)
     set_copy(
         root,
         title="etsy-listings e2e -- safe to delete",
         description="Created by an automated test. The Printify product is deleted in teardown.",
     )
-    set_etsy_listing_defaults(root, who_made="i_did")
+    # A shipping profile is **required** for `etsy_listing` to run at all
+    # (decision 2: no listing- or shop-level name means a `Blocked`), and
+    # leaving it unset is what kept that stage out of every run of this test.
+    # Resolved from the shop rather than hard-coded, so this configures itself
+    # against whichever throwaway shop it is pointed at -- and by name, which
+    # is also what exercises A25's name -> id resolution against the real API.
+    profiles = [p for p in etsy_client.shipping_profiles(etsy_shop_id) if not p.is_deleted]
+    if not profiles:
+        prerequisite_missing(
+            f"Etsy shop {etsy_shop_id} has no shipping profile -- create one in Shop Manager; "
+            f"`etsy_listing` cannot patch a listing without one (PRD 58)"
+        )
+    set_etsy_listing_defaults(root, who_made="i_did", shipping_profile=profiles[0].title)
     # `i_did`, not the real `someone_else` default: this throwaway shop is not
     # guaranteed to have a production partner declared, and the point of this
     # test is the publish/patch/media cycle, not decision 3's partner ladder
@@ -227,9 +281,7 @@ class TestTheFullCycle:
     def test_a_first_apply_creates_publishes_and_patches_the_listing(
         self, ctx: RunContext, workspace: Workspace
     ) -> None:
-        report = apply_listings(ctx, [LISTING], STAGES)
-
-        assert not report.failed, [o.error for o in report.failures]
+        apply_everything(ctx)
         lock = workspace.lock_file(LISTING)
 
         written = Lockfile.read(lock)
@@ -237,11 +289,36 @@ class TestTheFullCycle:
         assert written.remote.get(PRODUCT_ID_KEY)
         assert written.remote.get(ETSY_LISTING_ID_KEY)
 
+        # Every stage wrote a document, which is the only proof that every
+        # stage ran: a refusal writes nothing and fails nothing.
+        assert set(written.applied) == {
+            "render",
+            "printify_product",
+            "publish",
+            "etsy_listing",
+            "etsy_media",
+        }
+
         listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
         live = ctx.require_etsy().get_listing(listing_id, include_images=True)
         assert live is not None
         assert live.title == "etsy-listings e2e -- safe to delete"
         assert len(live.images) == 4, "one per colour in the fixture listing"
+
+        # The fields only `etsy_listing`'s PATCH can have set. The title is not
+        # one of them -- Printify creates the listing carrying the *product's*
+        # title (PRD 44), so asserting on it proves nothing about the PATCH,
+        # which is how a stage that never ran passed this test for weeks.
+        assert live.materials == ("cotton",)
+        assert live.who_made == "i_did"
+        assert live.when_made == "made_to_order"
+        assert live.is_supply is False
+        assert live.should_auto_renew is False, "renewal: manual"
+        # Resolved from a *name* against the live shop (A25). A stale id here
+        # is a 400 that fails the whole PATCH, which is why it is resolved per
+        # run rather than cached.
+        assert live.shipping_profile_id is not None
+        assert live.return_policy_id is not None
 
     def test_a_second_plan_reports_no_changes(self, ctx: RunContext, workspace: Workspace) -> None:
         """Idempotency, against the real APIs: nothing in `listing.yaml`
@@ -281,8 +358,7 @@ class TestTheFullCycle:
             ],
         )
 
-        report = apply_listings(ctx, [LISTING], STAGES)
-        assert not report.failed, [o.error for o in report.failures]
+        apply_everything(ctx)
 
         written = Lockfile.read(workspace.lock_file(LISTING))
         assert written is not None
@@ -309,8 +385,7 @@ class TestTheFullCycle:
             },
         )
 
-        report = apply_listings(ctx, [LISTING], STAGES)
-        assert not report.failed, [o.error for o in report.failures]
+        apply_everything(ctx)
 
         written = Lockfile.read(workspace.lock_file(LISTING))
         assert written is not None
