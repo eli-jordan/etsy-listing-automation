@@ -274,4 +274,8 @@ def test_a_price_below_cost_blocks_with_no_run(root, catalog, printify) -> None:
     stage_plan = _publish_plan(ctx, lock)
 
     assert stage_plan.will_run is False
-    assert "below" in (stage_plan.reason or "").lower()
+    # `blocked`, not `reason`: a stage that will not run reports a refusal, and
+    # `reason` is only rendered for stages that *do* run -- which is how this
+    # check shipped invisible, under a plan reading "No changes."
+    assert "below" in (stage_plan.blocked or "").lower()
+    assert stage_plan.reason is None

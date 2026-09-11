@@ -17,10 +17,11 @@ def execute(ctx: RunContext, planned: PlannedRun, lock: Lockfile) -> Lockfile:
     ``stages_completed`` with no pending change is a no-op re-check, not a
     duplicate action -- this is what lets a failed ``apply`` be re-run safely.
 
-    Nothing here re-resolves anything. Each stage is handed back the desired
-    document and the live state ``build_plan`` already got from it, so the
-    document that was hashed is the document that gets sent, by construction
-    rather than by two call paths agreeing.
+    Nothing here re-resolves anything, and nothing here re-*reads* anything.
+    Each stage is handed back the three states ``build_plan`` already
+    resolved -- its desired document, its decoded ``applied`` subtree and its
+    live state -- so the document that was hashed is the document that gets
+    sent, by construction rather than by two call paths agreeing.
 
     Nor does anything here know the lockfile's shape. Each result is folded in
     by :meth:`Lockfile.fold`, which owns the replace-versus-merge rules for
@@ -50,7 +51,7 @@ def execute(ctx: RunContext, planned: PlannedRun, lock: Lockfile) -> Lockfile:
         # started. `remote` is the accumulator instead, so an id minted a
         # moment ago in this same loop is there to be read.
         live_lock = lock.model_copy(update={"remote": remote})
-        result = stage.apply(ctx, stage_plan, state.desired, state.live, live_lock)
+        result = stage.apply(ctx, state.desired, state.applied, state.live, live_lock)
         result_lock = result_lock.fold(stage.name, result)
         remote = {**remote, **result.remote}
 

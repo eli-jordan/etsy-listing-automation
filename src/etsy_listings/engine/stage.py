@@ -19,7 +19,7 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from etsy_listings.engine.change import StagePlan, Verdict
+from etsy_listings.engine.change import Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile, StageApplyResult
 from etsy_listings.errors import UserFacingError
@@ -94,12 +94,17 @@ class Stage(Protocol[D, A, L]):
 
     """What this listing wants from this stage, or why it cannot have it.
 
-    **The only place a stage may refuse.** ``plan()`` used to be able to
-    refuse as well, which meant a refusal could arrive after a desired
-    document had been built for a run that was never going to happen, and
-    two vocabularies for one idea. ``applied`` is passed because some
-    refusals are about what was applied last time -- changing the garment
-    under an existing product is the one that exists today (PRD 37)."""
+    **Where a pre-flight refusal is spoken** -- everything decidable from
+    config and the last-applied document, which is nearly all of them. It is
+    the earliest point one can be raised, and raising it here is what stops a
+    fully resolved document being built for a run that was never going to
+    happen. The exception is a refusal only the live state can prove, which
+    belongs to ``plan()`` as :meth:`~etsy_listings.engine.change.Verdict.refused`
+    because the fact it turns on does not exist yet.
+
+    ``applied`` is passed because some refusals are about what was applied
+    last time -- changing the garment under an existing product is the one
+    that exists today (PRD 37)."""
 
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: A | None
@@ -119,25 +124,45 @@ class Stage(Protocol[D, A, L]):
     """Compare the three states. A2: every stage writes its own.
 
     It returns a :class:`~etsy_listings.engine.change.Verdict` rather than a
-    ``StagePlan`` because the two things a ``StagePlan`` has and a verdict
-    does not -- the stage's name, and a refusal -- are both the engine's to
-    supply. This signature is pure by construction: no context, no clock, no
-    client, so a stage's comparison is unit-testable without any of them."""
+    ``StagePlan`` because the one thing a ``StagePlan`` has and a verdict does
+    not -- the stage's own name -- is the engine's to supply, and a name a
+    stage stamps for itself is a name it can stamp wrongly.
+
+    A verdict may also *refuse*
+    (:meth:`~etsy_listings.engine.change.Verdict.refused`), for the refusals
+    that only ``live`` could have proved. It is the same refusal ``desired()``
+    speaks and lands in the same place; what a verdict must never do is
+    decline to run while reporting a mere ``reason``, which renders as
+    nothing at all.
+
+    This signature is pure by construction: no context, no clock, no client,
+    so a stage's comparison is unit-testable without any of them."""
 
     def apply(
         self,
         ctx: RunContext,
-        stage_plan: StagePlan,
         desired: D,
+        applied: A | None,
         live: L | None,
         lock: Lockfile,
     ) -> StageApplyResult: ...
 
-    """``desired`` and ``live`` are the ones ``build_plan`` already resolved,
-    handed back rather than re-derived. That is what makes "the document that
-    was hashed is the document that was sent" true by construction, and it is
-    why the product stage no longer issues a second ``GET`` for a product it
-    read moments ago.
+    """``desired``, ``applied`` and ``live`` are the ones ``build_plan``
+    already resolved, handed back rather than re-derived. That is what makes
+    "the document that was hashed is the document that was sent" true by
+    construction, and it is why the product stage no longer issues a second
+    ``GET`` for a product it read moments ago.
+
+    ``applied`` is here for the same reason it is passed to the other three
+    questions: decoding a stage's own subtree is the engine's job, and a
+    stage that cannot get the document handed to it goes and decodes one --
+    ``etsy_media`` did, which put a second implementation of that rule in a
+    file that had just been given the first. This parameter replaces the
+    ``stage_plan`` that used to sit here, which no stage read: three deleted
+    it outright and the protocol had already drifted, one stage typing it
+    ``object`` while the rest said ``StagePlan``. A plan is the engine's
+    account of what a stage said; handing it back to that stage tells it
+    nothing it did not say.
 
     ``desired`` is a ``D``, never a ``Blocked``: a blocked stage is never
     flagged to run, so the branch every stage used to open here is gone.

@@ -114,11 +114,11 @@ class Verdict:
     plan it returned -- the engine already knows which stage it asked, and a
     name a stage stamps for itself is a name it can stamp wrongly.
 
-    ``blocked`` is gone because a refusal now has exactly one home:
-    ``desired()`` returning :class:`~etsy_listings.engine.stage.Blocked`. A
-    stage that could also refuse from ``plan()`` had two ways to say one
-    thing, and the second one arrived with a desired document already built
-    for a run that was never going to happen.
+    ``blocked`` is gone because a stage does not decide how a refusal is
+    *presented* -- it says one is warranted, and the engine turns it into
+    :attr:`StagePlan.blocked` beside the ones ``desired()`` raised. Which
+    leaves three answers a stage can give, and no fourth: nothing to do, work
+    to do and why, or a refusal.
     """
 
     will_run: bool
@@ -126,11 +126,42 @@ class Verdict:
     drift: tuple[Drift, ...] = field(default_factory=tuple)
     reason: str | None = None
     actions: tuple[Action, ...] = field(default_factory=tuple)
+    refusal: str | None = None
+    """Why this stage cannot run, when only the live state could prove it.
+
+    A ``str`` and not a :class:`~etsy_listings.engine.stage.Blocked` because
+    ``stage`` imports *this* module, not the other way about -- but it carries
+    the same contract, and reaches the user through the same
+    :attr:`StagePlan.blocked` field: first line the consequence, any further
+    lines the remedy.
+    """
 
     @classmethod
     def no_work(cls) -> Verdict:
         """Nothing to do. The common answer, and the one worth not spelling."""
         return cls(will_run=False)
+
+    @classmethod
+    def refused(cls, message: str, *, drift: tuple[Drift, ...] = ()) -> Verdict:
+        """This stage cannot run, and the live state is what says so.
+
+        The pre-flight half of the same idea is ``desired()`` returning
+        ``Blocked``, and it covers every refusal that can be decided from
+        config alone. This covers the rest: a retail price below Printify's
+        cost needs ``variants[].cost``, which exists only on a product that
+        already exists (PRD 40's amendment), so the check *cannot* happen
+        before ``read_live``.
+
+        The alternative it replaces was a verdict that would not run carrying
+        a ``reason`` -- and ``cli.render`` prints a reason only for stages
+        that do run, so the refusal reached nobody: the listing was skipped
+        under a plan reading "No changes." A refusal that renders as silence
+        is worse than no check at all, because it looks like agreement.
+
+        ``drift`` still travels: what Etsy has drifted to is worth reporting
+        whether or not this run is allowed to fix it.
+        """
+        return cls(will_run=False, refusal=message, drift=drift)
 
     @classmethod
     def work(cls, reason: str, *, actions: tuple[Action, ...] = (), **rest: Any) -> Verdict:  # noqa: ANN401

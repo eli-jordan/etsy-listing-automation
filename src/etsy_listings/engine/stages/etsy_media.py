@@ -42,14 +42,18 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.clients.etsy.listings import EtsyListingClient
-from etsy_listings.clients.etsy.models import Inventory, VariationImageLink
+from etsy_listings.clients.etsy.models import VariationImageLink
 from etsy_listings.config.listing import MAX_MEDIA_ENTRIES, TemplateMediaEntry
-from etsy_listings.config.slug import ColourExceptions, slugify
 from etsy_listings.engine.change import Action, Drift, Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile, hash_file
 from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.publish import ETSY_LISTING_ID_KEY
+from etsy_listings.engine.stages.colour_property import resolve_colour_property
+from etsy_listings.engine.stages.etsy_target import (
+    check_etsy_shop,
+    etsy_listing_id,
+    require_etsy_listing_id,
+)
 
 IMAGE_IDS_KEY = "etsy_image_ids"
 """This stage's key in ``lock.remote`` (A20) -- keyed by manifest ref, so a
@@ -60,10 +64,7 @@ PENDING = "pending"
 yet. Never a real hash's value -- ``hash_file`` always returns a
 ``sha256:``-prefixed string -- so the two can never collide."""
 
-NO_LISTING_BLOCKED = Blocked(
-    "no Etsy shop is configured for this workspace.\n"
-    "Run `etsy-listings setup`, then `etsy-listings auth`, to connect one."
-)
+NO_SHOP_CONSEQUENCE = "this listing's images will not be uploaded to Etsy"
 
 
 class AppliedMediaEntry(BaseModel):
@@ -165,8 +166,9 @@ class EtsyMediaStage:
         self, ctx: RunContext, listing: str, applied: AppliedEtsyMedia | None
     ) -> EtsyMediaDesired | Blocked:
         del applied
-        if ctx.workspace.defaults.etsy.shop_id is None:
-            return NO_LISTING_BLOCKED
+        blocked = check_etsy_shop(ctx, consequence=NO_SHOP_CONSEQUENCE)
+        if blocked is not None:
+            return blocked
 
         config = ctx.workspace.load_listing(listing)
         if len(config.media) > MAX_MEDIA_ENTRIES:
@@ -203,10 +205,10 @@ class EtsyMediaStage:
         (measured). ``None`` without a request when there is no listing id
         yet."""
         del applied
-        listing_id = lock.remote.get(ETSY_LISTING_ID_KEY)
-        if not listing_id:
+        listing_id = etsy_listing_id(lock)
+        if listing_id is None:
             return None
-        live = ctx.require_etsy().get_listing(int(listing_id), include_images=True)
+        live = ctx.require_etsy().get_listing(listing_id, include_images=True)
         if live is None:
             return None
         live_ids = frozenset(image.listing_image_id for image in live.images)
@@ -251,22 +253,20 @@ class EtsyMediaStage:
     def apply(
         self,
         ctx: RunContext,
-        stage_plan: object,
         desired: EtsyMediaDesired,
+        applied: AppliedEtsyMedia | None,
         live: EtsyMediaLive | None,
         lock: Lockfile,
     ) -> StageApplyResult:
-        del stage_plan
         client = ctx.require_etsy()
-        listing_id_raw = lock.remote.get(ETSY_LISTING_ID_KEY)
-        if not listing_id_raw:
-            raise EtsyMediaWithoutListingError()
-        listing_id = int(listing_id_raw)
+        listing_id = require_etsy_listing_id(lock, to="sync media")
         shop_id = ctx.workspace.defaults.etsy.require_shop_id()
 
         known_ids: dict[str, int] = dict(lock.remote.get(IMAGE_IDS_KEY) or {})
         live_ids = live.live_image_ids if live is not None else frozenset()
-        applied = lock.parse_applied_for(self.name, AppliedEtsyMedia)
+        # The document the engine decoded during planning, not a second read
+        # of the same subtree: an upload is skipped only when the bytes match
+        # what was *last uploaded*, and that is the only thing that knows.
         applied_hashes = {e.ref: e.hash for e in applied.manifest} if applied is not None else {}
 
         image_ids: dict[str, int] = {}
@@ -345,18 +345,6 @@ class EtsyMediaStage:
         client.update_variation_images(shop_id, listing_id, links)
 
 
-class EtsyMediaWithoutListingError(RuntimeError):
-    """``apply`` was asked to sync media with no Etsy listing id on record --
-    a wiring defect, not a configuration problem (mirrors
-    :class:`~etsy_listings.engine.stages.etsy_listing.EtsyListingWithoutIdError`)."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            "cannot sync media: no Etsy listing id on record. `publish` should "
-            "have minted one before this stage runs."
-        )
-
-
 class MediaNotRenderedError(RuntimeError):
     """A manifest entry's file does not exist when ``apply`` tried to upload
     it. `render` runs earlier in the pipeline and should have produced it in
@@ -364,44 +352,6 @@ class MediaNotRenderedError(RuntimeError):
 
     def __init__(self, ref: str) -> None:
         super().__init__(f"cannot upload {ref!r}: its render output does not exist on disk yet.")
-
-
-@dataclass(frozen=True)
-class ColourProperty:
-    property_id: int
-    value_id_by_slug: dict[str, int]
-
-
-def resolve_colour_property(
-    inventory: Inventory, colours: tuple[str, ...], exceptions: ColourExceptions
-) -> ColourProperty | None:
-    """The inventory property whose values slugify onto ``colours`` (decision
-    6): matched by value overlap, never by name or id, because the property's
-    *name* is the blueprint's own option name and changes with the garment.
-
-    ``None`` when nothing overlaps, or when two properties overlap equally --
-    both reported by the caller and never guessed at.
-    """
-    candidates: dict[int, dict[str, int]] = {}
-    for product in inventory.products:
-        for property_value in product.property_values:
-            mapping = candidates.setdefault(property_value.property_id, {})
-            for value, value_id in zip(
-                property_value.values, property_value.value_ids, strict=False
-            ):
-                slug = exceptions.get(value) or slugify(value)
-                mapping[slug] = value_id
-
-    wanted = set(colours)
-    overlaps = {pid: set(mapping) & wanted for pid, mapping in candidates.items()}
-    scored = [(pid, len(overlap)) for pid, overlap in overlaps.items() if overlap]
-    if not scored:
-        return None
-    best_score = max(score for _, score in scored)
-    winners = [pid for pid, score in scored if score == best_score]
-    if len(winners) != 1:
-        return None
-    return ColourProperty(property_id=winners[0], value_id_by_slug=candidates[winners[0]])
 
 
 def _first_run_reason(desired: EtsyMediaDesired) -> str:

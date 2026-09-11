@@ -20,11 +20,14 @@ continue-on-error. Entry points call those and format the
 :class:`RunReport`; ``build_plan``/``execute`` remain available for a caller
 holding one listing's lockfile itself.
 
-A stage that cannot run says so with a :class:`Blocked`, never an exception:
-a refusal is something ``plan`` must report, and an exception unwinds the walk
-and takes the other stages' plans with it. It says so from ``desired()`` and
-nowhere else -- one place a stage can refuse, so a refusal never arrives
-carrying a document built for a run that was never going to happen.
+A stage that cannot run says so as a value, never an exception: a refusal is
+something ``plan`` must report, and an exception unwinds the walk and takes
+the other stages' plans with it. It says so from ``desired()`` -- a
+:class:`Blocked`, before a document is built for a run that was never going to
+happen -- or, when only the live state could prove it, from ``plan()`` as
+:meth:`Verdict.refused`. Both land in ``StagePlan.blocked``, so there is one
+refusal for every consumer to render and no way for a stage to decline
+silently.
 
 **The bookkeeping around a stage is this module's, not the stage's.** Looking
 up a stage's lockfile subtree, decoding it, deciding what an undecodable one

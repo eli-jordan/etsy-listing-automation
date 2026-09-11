@@ -38,21 +38,22 @@ from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.clients.printify.models import Product
 from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.engine.change import Drift, StagePlan, Verdict
+from etsy_listings.engine.change import Drift, Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.stage import Blocked, StageApplyResult
+from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.gates import check_copy_is_concrete
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY, resolve_variant_pricing
 from etsy_listings.engine.stages.product_document import AppliedVariant
 from etsy_listings.errors import UserFacingError
 
-ETSY_LISTING_ID_KEY = "etsy_listing_id"
 ETSY_LISTING_HANDLE_KEY = "etsy_listing_handle"
 PUBLISH_LOCKED_KEY = "printify_publish_locked"
-"""This stage's keys in ``lock.remote`` (A20). ``etsy_listing_id`` is the one
-every later stage in the pipeline reads -- `etsy_listing` and `etsy_media`
-both need it to know which listing to PATCH."""
+"""This stage's own keys in ``lock.remote`` (A20). The listing id it also
+writes is named by ``etsy_target``, not here: two later stages read it, and a
+key two stages read should not be spelled in the one that happens to mint
+it."""
 
 SYNC_FLAGS: dict[str, bool] = {
     "title": False,
@@ -215,7 +216,10 @@ class PublishStage:
         if live is not None and live.variant_costs:
             shortfall = _below_cost(desired.variants, live.variant_costs)
             if shortfall:
-                return Verdict(will_run=False, reason=_below_cost_message(shortfall), drift=drift)
+                # A refusal, not a quiet no-op: `plan` renders this beside the
+                # ones `desired()` raises. It cannot *be* one of those -- the
+                # costs it needs arrive with `read_live` (PRD 40's amendment).
+                return Verdict.refused(_below_cost_message(shortfall), drift=drift)
 
         if applied is None:
             return Verdict.work("publishing for the first time", drift=drift)
@@ -230,12 +234,12 @@ class PublishStage:
     def apply(
         self,
         ctx: RunContext,
-        stage_plan: StagePlan,
         desired: PublishDesired,
+        applied: PublishApplied | None,
         live: PublishLive | None,
         lock: Lockfile,
     ) -> StageApplyResult:
-        del stage_plan
+        del applied
         client = ctx.require_printify()
         shop_id = _shop_id(ctx)
         product_id = lock.remote.get(PRODUCT_ID_KEY)
@@ -296,9 +300,11 @@ def _below_cost(desired_prices: dict[int, int], costs: dict[int, int]) -> tuple[
 
 
 def _below_cost_message(variant_ids: tuple[int, ...]) -> str:
+    """The consequence first, the remedy under it -- ``Blocked``'s shape, which
+    ``cli.render`` relies on to indent one under the other."""
     listed = ", ".join(str(v) for v in variant_ids)
     return (
-        f"the price for variant(s) {listed} is below Printify's cost for them. Printify "
-        f"refuses to publish below cost -- raise the price in listing.yaml (or the "
-        f"pricing plan) before this can run."
+        f"this listing will not be published: the price for variant(s) {listed} is "
+        f"below Printify's cost for them, and Printify refuses to publish below cost.\n"
+        f"Raise the price in listing.yaml, or in the pricing plan it draws from."
     )

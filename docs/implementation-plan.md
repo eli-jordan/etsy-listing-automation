@@ -143,27 +143,52 @@ ships — a calibration target is not a product (A19).
 ### `Stage`
 
 ```python
-class Stage(Protocol):
+class Stage(Protocol[D, A, L]):
     name: str
     local: bool                      # True => no remote state, so no drift
+    applied_model: type[A]           # what this stage's lockfile subtree decodes into
 
-    def desired(self, ctx: RunContext) -> Desired: ...
-    def read_live(self, ctx: RunContext, listing, lock) -> Live | None: ...
-    def plan(self, desired, applied: dict | None, live) -> StagePlan: ...
-    def apply(self, ctx, plan, desired, live, lock) -> StageApplyResult: ...
+    def desired(self, ctx: RunContext, listing, applied: A | None) -> D | Blocked: ...
+    def read_live(self, ctx: RunContext, listing, lock, applied: A | None) -> L | None: ...
+    def plan(self, desired: D, applied: A | None, live: L | None) -> Verdict: ...
+    def apply(self, ctx, desired: D, applied: A | None, live, lock) -> StageApplyResult: ...
 
 STAGES = [Render(), Generate(), PrintifyProduct(),
           Publish(), EtsyListing(), EtsyMedia()]
 ```
 
-`plan`'s `applied` is the stage's **own subtree** of the lockfile, looked up by
-`build_plan` through `Lockfile.applied_for(name)`. There used to be a
-`last_applied(lock)` method for this, and every stage implemented it as
-`lock.applied.get(self.name)` — the same lookup written out once per stage, on
-a protocol wide enough to reach every *other* stage's state. It arrives as the
-raw document, because that is the form it was written in; a stage wanting a
-typed view parses one at the top of its own `plan()`, where the parse sits
-beside the comparison it feeds.
+`applied` is the stage's **own subtree** of the lockfile, and every question
+gets it. `build_plan` looks it up and decodes it once — through
+`Lockfile.parse_applied_for(name, stage.applied_model)` — so no stage spells
+its own key, and none writes a parse of its own. There used to be a
+`last_applied(lock)` method, implemented by every stage as
+`lock.applied.get(self.name)`: the same lookup written out once per stage, on
+a protocol wide enough to reach every *other* stage's state.
+
+It arrives **decoded**, as the model the stage declared, not as the raw
+document. Two stages parsing for themselves had already written the rule two
+ways — one caught `ValidationError` and answered `None`, the other indexed the
+dict and raised `KeyError`, which is not a `UserFacingError` and so ended a
+whole `--all` batch. One decode answers `None` for both "never applied" and
+"will not decode", because a document we cannot read is one we cannot prove
+the live state matches.
+
+`apply` takes it for the same reason the other three do. It used to take the
+`StagePlan` instead, which no stage read — three `del`'d it on the first line
+and the protocol had already drifted, one stage typing it `object` while the
+rest said `StagePlan` — while the stage that genuinely needed its last-applied
+document went and decoded one itself, putting a second implementation of the
+above in the file that had just been handed the first. A plan is the engine's
+account of what a stage said; handing it back to that stage tells it nothing.
+
+`plan()` returns a `Verdict` rather than a `StagePlan`: the stage's name is
+the engine's to supply, and a name a stage stamps for itself is one it can
+stamp wrongly. A stage that cannot run says so as a value — `Blocked` from
+`desired()` for anything decidable before a live read, `Verdict.refused(...)`
+from `plan()` for the refusals only `live` can prove (PRD 40's below-cost
+check is the one that exists) — and the engine folds both into
+`StagePlan.blocked`, so every consumer renders one refusal and no stage can
+decline in silence.
 
 A stage's `apply` returns a `StageApplyResult` carrying three dicts, each
 merged into a different part of the next lockfile — by the **lockfile**, never

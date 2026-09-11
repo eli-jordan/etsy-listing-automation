@@ -121,6 +121,11 @@ def _walk(ctx: RunContext, listing: str, lock: Lockfile, stage: AnyStage) -> Sta
             drift=verdict.drift,
             reason=verdict.reason,
             actions=verdict.actions,
+            # A refusal is a refusal whichever question produced it: one the
+            # live state proved lands in the same field as one `desired()`
+            # raised, so `cli.render` and the UI's serialiser show it without
+            # knowing there were ever two routes to it.
+            blocked=verdict.refusal,
         ),
     )
 

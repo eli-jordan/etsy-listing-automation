@@ -24,9 +24,9 @@ from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, build_plan
 from etsy_listings.engine.stages.etsy_media import (
     EtsyMediaStage,
-    EtsyMediaWithoutListingError,
     MediaNotRenderedError,
 )
+from etsy_listings.engine.stages.etsy_target import EtsyListingNotMintedError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, edit_listing, set_etsy_shop_id
@@ -126,7 +126,7 @@ def test_apply_without_a_listing_id_fails_loudly(workspace_root: Path, etsy) -> 
     _write_renders(workspace_root)
     ctx = _ctx(workspace_root, etsy)
 
-    with pytest.raises(EtsyMediaWithoutListingError):
+    with pytest.raises(EtsyListingNotMintedError):
         _apply(ctx, a_lock())
 
 

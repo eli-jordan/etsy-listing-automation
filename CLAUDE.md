@@ -167,11 +167,18 @@ src/etsy_listings/
   workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run, stages/
-                   [done; STAGES = [Render(), PrintifyProduct()], more stages later]
+                   [done; STAGES = [Render(), PrintifyProduct(), Publish(),
+                   EtsyListing(), EtsyMedia()], Generate() in Phase 4]
                 stages/ splits the product stage three ways: the stage itself
                   (needs a context), product_document (the two documents and
                   the garment gate) and product_diff (the comparison — pure,
                   and unit-tested without a workspace or a fake)
+                stages/ also holds what belongs to no single stage: gates (the
+                  pre-flight checks about a *listing*), etsy_target (which
+                  listing on which shop — the id key, the shop gate, one
+                  not-minted error, shared by all three Etsy stages) and
+                  colour_property (Etsy's inventory property matched onto this
+                  listing's colours — pure, same reasoning as product_diff)
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
@@ -223,7 +230,12 @@ later. Each traces to a decision.
   function that touches them — that is where a `("?", "?")` fallback for a
   lookup that cannot miss came from. Decoding answers `None` for both "never
   applied" and "will not decode", because a document we cannot read is one we
-  cannot prove the live state matches. That rule is the lockfile's precisely
+  cannot prove the live state matches. **Every question a stage is asked gets
+  it**, `apply()` included — the one that did not have it went and decoded its
+  own subtree, which is a second implementation of a rule that exists to have
+  one. (It took the place of a `stage_plan` parameter no stage read: three
+  `del`'d it and the protocol had already drifted, one stage typing it
+  `object` while the rest said `StagePlan`.) That rule is the lockfile's precisely
   because it was two stages' and they disagreed: one caught `ValidationError`
   and answered `None`, the other indexed the dict and raised `KeyError`, which
   is not a `UserFacingError` and so ended a whole `--all` batch.

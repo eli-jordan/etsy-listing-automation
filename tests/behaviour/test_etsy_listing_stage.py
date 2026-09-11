@@ -18,7 +18,8 @@ from etsy_listings.engine.apply import execute
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, build_plan
-from etsy_listings.engine.stages.etsy_listing import EtsyListingStage, EtsyListingWithoutIdError
+from etsy_listings.engine.stages.etsy_listing import EtsyListingStage
+from etsy_listings.engine.stages.etsy_target import EtsyListingNotMintedError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (
@@ -186,7 +187,7 @@ def test_apply_patches_the_listing(root: Path, etsy) -> None:
 def test_apply_without_a_listing_id_fails_loudly(root: Path, etsy) -> None:
     ctx = _ctx(root, etsy)
 
-    with pytest.raises(EtsyListingWithoutIdError):
+    with pytest.raises(EtsyListingNotMintedError):
         _apply(ctx, a_lock())
 
 

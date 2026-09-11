@@ -35,7 +35,6 @@ from etsy_listings.engine.change import (
     Change,
     Drift,
     FieldChange,
-    StagePlan,
     Verdict,
     drift,
     scalar,
@@ -44,14 +43,14 @@ from etsy_listings.engine.change import (
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.gates import check_copy_is_concrete
-from etsy_listings.engine.stages.publish import ETSY_LISTING_ID_KEY
-
-NO_ETSY_SHOP_BLOCKED = Blocked(
-    "this listing's copy and settings cannot be patched on Etsy: no Etsy shop "
-    "is configured for this workspace.\n"
-    "Run `etsy-listings setup`, then `etsy-listings auth`, to connect one."
+from etsy_listings.engine.stages.etsy_target import (
+    check_etsy_shop,
+    etsy_listing_id,
+    require_etsy_listing_id,
 )
+from etsy_listings.engine.stages.gates import check_copy_is_concrete
+
+NO_SHOP_CONSEQUENCE = "this listing's copy and settings cannot be patched on Etsy"
 
 
 class ReturnPolicyApplied(BaseModel):
@@ -144,8 +143,9 @@ class EtsyListingStage:
     ) -> EtsyListingDesired | Blocked:
         del applied
         workspace = ctx.workspace
-        if workspace.defaults.etsy.shop_id is None:
-            return NO_ETSY_SHOP_BLOCKED
+        blocked = check_etsy_shop(ctx, consequence=NO_SHOP_CONSEQUENCE)
+        if blocked is not None:
+            return blocked
 
         config = workspace.load_listing(listing)
         blocked = check_copy_is_concrete(
@@ -154,7 +154,7 @@ class EtsyListingStage:
         if blocked is not None:
             return blocked
 
-        shop_id = workspace.defaults.etsy.shop_id
+        shop_id = workspace.defaults.etsy.require_shop_id()
         catalog = EtsyShopCatalog(ctx.require_etsy(), shop_id)
         listing_defaults = workspace.defaults.etsy.listing_defaults
 
@@ -221,10 +221,10 @@ class EtsyListingStage:
         shop-scoped one exists for `PATCH`/`DELETE` and 404s on `GET`
         (measured)."""
         del applied
-        listing_id = lock.remote.get(ETSY_LISTING_ID_KEY)
-        if not listing_id:
+        listing_id = etsy_listing_id(lock)
+        if listing_id is None:
             return None
-        return ctx.require_etsy().get_listing(int(listing_id))
+        return ctx.require_etsy().get_listing(listing_id)
 
     def plan(
         self,
@@ -254,34 +254,19 @@ class EtsyListingStage:
     def apply(
         self,
         ctx: RunContext,
-        stage_plan: StagePlan,
         desired: EtsyListingDesired,
+        applied: AppliedEtsyListing | None,
         live: EtsyListing | None,
         lock: Lockfile,
     ) -> StageApplyResult:
-        del stage_plan, live
-        listing_id = lock.remote.get(ETSY_LISTING_ID_KEY)
-        if not listing_id:
-            raise EtsyListingWithoutIdError()
+        del applied, live
+        listing_id = require_etsy_listing_id(lock, to="patch the listing")
 
         shop_id = ctx.workspace.defaults.etsy.require_shop_id()
         ctx.emit(f"patching Etsy listing {listing_id}")
-        ctx.require_etsy().update_listing(shop_id, int(listing_id), desired.patch_body())
+        ctx.require_etsy().update_listing(shop_id, listing_id, desired.patch_body())
 
         return StageApplyResult(applied=desired.applied().model_dump(mode="json"))
-
-
-class EtsyListingWithoutIdError(RuntimeError):
-    """``apply`` was asked to patch a listing with no Etsy listing id on
-    record. `publish` runs first and either mints one (available here via
-    A26) or raises -- reaching here is a wiring defect, not a configuration
-    problem, so it is not user-facing."""
-
-    def __init__(self) -> None:
-        super().__init__(
-            "cannot patch: no Etsy listing id on record. `publish` should have "
-            "minted one before this stage runs."
-        )
 
 
 def _terms(config: EtsyReturnPolicyDefaults | None) -> ReturnPolicyTerms | None:

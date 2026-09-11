@@ -39,7 +39,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.config.listing import TemplateMediaEntry
-from etsy_listings.engine.change import Action, StagePlan, Verdict
+from etsy_listings.engine.change import Action, Verdict
 from etsy_listings.engine.context import RunContext, Swatch
 from etsy_listings.engine.lock import (
     Lockfile,
@@ -437,8 +437,8 @@ class RenderStage:
     def apply(
         self,
         ctx: RunContext,
-        stage_plan: StagePlan,
         desired: RenderDesired,
+        applied: RenderApplied | None = None,
         live: RenderLive | None = None,
         lock: Lockfile | None = None,
     ) -> StageApplyResult:
@@ -478,12 +478,12 @@ class RenderStage:
             )
             ctx.emit(f"rendered {work.key}", swatches=swatches)
 
-        applied = {
+        document = {
             "input_hash": self._input_hash(desired),
             "scene_config": {work.key: work.recipe() for work in desired.works},
             "scenes": list(desired.scenes),
         }
-        return StageApplyResult(applied=applied, outputs=outputs)
+        return StageApplyResult(applied=document, outputs=outputs)
 
     @staticmethod
     def _input_hash(desired: RenderDesired) -> str:

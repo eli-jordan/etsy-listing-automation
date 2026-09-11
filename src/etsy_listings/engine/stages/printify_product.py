@@ -27,7 +27,7 @@ a desired product, reading the live one, and sending it. The two documents and
 the gate that reads one live in
 :mod:`~etsy_listings.engine.stages.product_document`, and the comparison over
 them in :mod:`~etsy_listings.engine.stages.product_diff` -- both pure, both
-reachable without a workspace. ``plan()`` below assembles a ``StagePlan`` from
+reachable without a workspace. ``plan()`` below assembles a ``Verdict`` from
 what the comparison decided; it decides nothing itself.
 """
 
@@ -47,7 +47,7 @@ from etsy_listings.clients.printify.resolve import (
     resolve_print_provider,
     resolve_variants,
 )
-from etsy_listings.engine.change import StagePlan, Verdict
+from etsy_listings.engine.change import Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.stage import Blocked, StageApplyResult
@@ -184,8 +184,8 @@ class PrintifyProductStage:
     def apply(
         self,
         ctx: RunContext,
-        stage_plan: StagePlan,
         desired: PrintifyProductDesired,
+        applied: AppliedProduct | None,
         live: Product | None,
         lock: Lockfile,
     ) -> StageApplyResult:
