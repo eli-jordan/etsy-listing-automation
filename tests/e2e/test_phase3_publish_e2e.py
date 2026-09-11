@@ -38,17 +38,17 @@ from typing import NoReturn
 
 import pytest
 
-from etsy_listings.clients.etsy import EtsyAuthError, HttpEtsyListingClient, OAuthClient, TokenStore
-from etsy_listings.clients.etsy import Transport as EtsyTransport
-from etsy_listings.clients.printify import HttpCatalogClient, HttpPrintifyClient
+from etsy_listings import connections
+from etsy_listings.clients.etsy import EtsyAuthError, HttpEtsyListingClient
+from etsy_listings.clients.printify import HttpCatalogClient
 from etsy_listings.clients.printify import Transport as PrintifyTransport
-from etsy_listings.config.secrets import Secrets
+from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.run import apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
+from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.engine.stages.publish import ETSY_LISTING_ID_KEY
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import Workspace
@@ -99,22 +99,22 @@ def credentials_workspace(prerequisite_missing: PrerequisiteMissing) -> Workspac
 def etsy_client(
     credentials_workspace: Workspace, prerequisite_missing: PrerequisiteMissing
 ) -> HttpEtsyListingClient:
-    secrets = Secrets.load(credentials_workspace.env_file())
-    if not (secrets.etsy_keystring and secrets.etsy_shared_secret):
+    """The same connection `apply` uses, assembled the same way.
+
+    Built through ``connections`` rather than by hand: this fixture was the
+    fourth copy of that five-step sequence, and the one nobody would remember
+    to update -- it only runs where there are real credentials. What is left
+    here is the part that is genuinely the e2e layer's, which is deciding
+    what counts as a missing prerequisite.
+    """
+    root = credentials_workspace.root
+    transport = connections.etsy_transport(root)
+    if transport is None:
+        prerequisite_missing(f"{root}: no Etsy app key -- run `etsy-listings auth etsy` there")
+    if connections.etsy_token_store(root).load() is None:
         prerequisite_missing(
-            f"{credentials_workspace.root}: no Etsy app key -- run `etsy-listings auth etsy` there"
+            f"{root}: no stored Etsy sign-in -- run `etsy-listings auth etsy` there"
         )
-    app_key = secrets.require_etsy_app_key()
-    store = TokenStore(
-        credentials_workspace.root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE,
-        refresh=lambda token: OAuthClient(app_key.keystring).refresh(token),
-    )
-    if store.load() is None:
-        prerequisite_missing(
-            f"{credentials_workspace.root}: no stored Etsy sign-in -- run "
-            f"`etsy-listings auth etsy` there"
-        )
-    transport = EtsyTransport(app_key, bearer=store.access_token)
     try:
         transport.ping()
     except EtsyAuthError as exc:
@@ -123,8 +123,8 @@ def etsy_client(
 
 
 @pytest.fixture(scope="session")
-def printify_client(printify_token: str) -> HttpPrintifyClient:
-    return HttpPrintifyClient(PrintifyTransport(printify_token))
+def printify_client(printify_token: str) -> PrintifyClient:
+    return connections.printify_client_for(printify_token)
 
 
 # ------------------------------------------------------------- test workspace
@@ -192,7 +192,7 @@ def workspace(
 def ctx(
     workspace: Workspace,
     printify_token: str,
-    printify_client: HttpPrintifyClient,
+    printify_client: PrintifyClient,
     etsy_client: HttpEtsyListingClient,
 ) -> RunContext:
     catalog = HttpCatalogClient(PrintifyTransport(printify_token))
@@ -202,7 +202,7 @@ def ctx(
 
 
 @pytest.fixture(scope="class", autouse=True)
-def cleanup_product(workspace: Workspace, printify_client: HttpPrintifyClient) -> Iterator[None]:
+def cleanup_product(workspace: Workspace, printify_client: PrintifyClient) -> Iterator[None]:
     """Deletes the Printify product the class's tests create, once, after the
     whole ordered sequence has run. The Etsy listing it published cannot be
     cleaned up the same way -- see the module docstring's note on the

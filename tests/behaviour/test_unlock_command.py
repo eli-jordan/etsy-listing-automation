@@ -13,11 +13,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from etsy_listings.cli import app as cli
+from etsy_listings import connections
 from etsy_listings.cli.app import app
-from etsy_listings.clients.etsy import HttpEtsyListingClient
-from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.clients.printify.fakes import FakePrintifyClient
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_lock, set_shop_id
@@ -66,7 +64,7 @@ def test_it_calls_publishing_failed_on_the_right_product(workspace_root: Path, m
     set_shop_id(workspace_root, SHOP_ID)
     _write_lock(workspace_root, printify_product_id=PRODUCT_ID)
     fake = FakePrintifyClient()
-    monkeypatch.setattr(cli, "_clients", lambda workspace: (FakeCatalogClient([], {}, {}), fake))
+    monkeypatch.setattr(connections, "printify_client", lambda workspace: fake)
 
     result = _unlock(workspace_root)
 
@@ -74,26 +72,3 @@ def test_it_calls_publishing_failed_on_the_right_product(workspace_root: Path, m
     assert fake.publishing_failed_calls == [PRODUCT_ID]
     assert PRODUCT_ID in result.output
     assert "apply" in result.output.lower()
-
-
-# ------------------------------------------------------- RunContext.etsy wiring
-
-
-def test_no_etsy_credentials_means_no_etsy_client(workspace_root: Path) -> None:
-    """`plan`/`apply` in a workspace that has never run `auth etsy` must not
-    be made to configure it just to render mockups or write to Printify --
-    the same reasoning `_transport` already applies to Printify's token."""
-    workspace = Workspace.discover(root_override=workspace_root)
-
-    assert cli._etsy_client(workspace) is None
-
-
-def test_etsy_credentials_present_build_a_real_client(workspace_root: Path) -> None:
-    (workspace_root / ".env").write_text(
-        "ETSY_KEYSTRING=test-keystring\nETSY_SHARED_SECRET=test-secret\n", encoding="utf-8"
-    )
-    workspace = Workspace.discover(root_override=workspace_root)
-
-    client = cli._etsy_client(workspace)
-
-    assert isinstance(client, HttpEtsyListingClient)

@@ -69,6 +69,14 @@ still has no idea a workspace exists.
 | `catalog` | Printify blueprint/provider/variant reads, TTL cache, name→id | Anything shop-scoped or authenticated |
 | `config` | `shop.yaml` / garment profile / listing models, `Money`, slugs | Know where those files are on disk |
 
+`etsy_listings/connections.py` sits across from the table rather than in it:
+it is the one place that knows how to *build* the clients the table's modules
+hold — the transports, the Etsy token store, and the `RunContext` a run is
+given. Four callers each assembled a signed-in Etsy client themselves (`cli`,
+`setup`, `auth`, and the e2e fixtures), which made "which credential is
+resolved when" four answers instead of one. It resolves none of them eagerly:
+a workspace that has only ever rendered mockups still plans.
+
 Plus one leaf that is not a module: `etsy_listings/terminal.py` answers "can
 this stream print that character?" for anything that decorates output. Both
 `cli` (the `apply` swatches) and `newcmd` (the picker's local-garment-profile marker)

@@ -29,14 +29,13 @@ from typing import Literal
 
 import typer
 
-from etsy_listings import credentials, prompts
+from etsy_listings import connections, credentials, prompts
 from etsy_listings.authcmd import logic
 from etsy_listings.clients.etsy import callback as callback_module
 from etsy_listings.clients.etsy import oauth
 from etsy_listings.clients.etsy.tokens import TokenStore, utcnow
 from etsy_listings.clients.etsy.transport import OAuthClient, Transport
-from etsy_listings.clients.printify import HttpPrintifyClient, PrintifyAuthError
-from etsy_listings.clients.printify import Transport as PrintifyTransport
+from etsy_listings.clients.printify import PrintifyAuthError
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.config.secrets import (
@@ -57,9 +56,7 @@ class Backends:
     change the signature of every caller.
     """
 
-    printify_client: Callable[[str], PrintifyClient] = lambda token: HttpPrintifyClient(
-        PrintifyTransport(token)
-    )
+    printify_client: Callable[[str], PrintifyClient] = connections.printify_client_for
     etsy_transport: Callable[[EtsyAppKey], Transport] = Transport
     oauth_client: Callable[[str], OAuthClient] = OAuthClient
     wait_for_redirect: Callable[[], callback_module.Callback] = callback_module.wait_for_redirect
@@ -241,20 +238,11 @@ def _report(root: Path, store: TokenStore, back: Backends) -> None:
 
 
 def _token_store(root: Path, back: Backends) -> TokenStore:
-    """The store, wired to refresh through whatever keystring is on disk.
+    """This workspace's token store, with `auth`'s own OAuth client and clock.
 
-    The keystring is resolved *inside* the refresh rather than captured now,
-    because `auth --check` builds a store for a workspace that may have no
-    credentials at all, and demanding one to answer "what have I got?" would
-    fail the question it was asked.
+    Both are ``Backends`` fields so the whole flow runs without a socket; the
+    store's shape -- where the file lives, and that its refresh resolves the
+    keystring lazily so `auth --check` works on a workspace holding no
+    credentials at all -- is ``connections``'.
     """
-
-    def refresh(refresh_token: str) -> oauth.TokenResponse:
-        app_key = Secrets.load(root / layout.ENV_FILE).require_etsy_app_key()
-        return back.oauth_client(app_key.keystring).refresh(refresh_token)
-
-    return TokenStore(
-        root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE,
-        refresh=refresh,
-        now=back.now,
-    )
+    return connections.etsy_token_store(root, oauth=back.oauth_client, now=back.now)

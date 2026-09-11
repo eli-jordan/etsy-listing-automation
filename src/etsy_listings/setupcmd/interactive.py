@@ -26,17 +26,17 @@ from typing import Any
 import typer
 import yaml
 
-from etsy_listings import credentials, prompts
+from etsy_listings import connections, credentials, prompts
 from etsy_listings.clients.etsy.models import ReturnPolicy
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
-from etsy_listings.clients.etsy.tokens import EtsyAuthError, TokenStore
-from etsy_listings.clients.etsy.transport import EtsyApiError, OAuthClient
+from etsy_listings.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.clients.etsy.transport import Transport as EtsyTransport
-from etsy_listings.clients.printify import HttpPrintifyClient, PrintifyAuthError, Transport
+from etsy_listings.clients.printify import PrintifyAuthError
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, EtsyAppKey, Secrets
+from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR
 from etsy_listings.setupcmd import logic
 from etsy_listings.workspace import layout, scaffold
 
@@ -67,7 +67,7 @@ partner needs the shop's live list, which `setup` may not be able to reach.
 
 
 def _default_client_factory(token: str) -> PrintifyClient:
-    return HttpPrintifyClient(Transport(token))
+    return connections.printify_client_for(token)
 
 
 def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]]:
@@ -162,15 +162,11 @@ discovery is the part worth testing, and it should not need a network."""
 
 
 def _default_etsy_access(root: Path) -> EtsyAccess | None:
-    secrets = Secrets.load(root / layout.ENV_FILE)
-    if not (secrets.etsy_keystring and secrets.etsy_shared_secret):
+    app_key = connections.etsy_app_key(root)
+    if app_key is None:
         return None
-    app_key = EtsyAppKey(secrets.etsy_keystring, secrets.etsy_shared_secret)
 
-    store = TokenStore(
-        root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE,
-        refresh=lambda token: OAuthClient(app_key.keystring).refresh(token),
-    )
+    store = connections.etsy_token_store(root)
     tokens = store.load()
     # Every call `setup` makes is unscoped, so a bearer is a bonus rather than
     # a requirement -- it is what makes `shop_by_owner` possible, nothing more.

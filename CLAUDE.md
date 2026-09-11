@@ -197,6 +197,9 @@ src/etsy_listings/
   credentials.py  one credential step — where it already lives, the blurb, the
                 ask, the caller's verification, the refusal. Shared by `setup`
                 and `auth`; capturing stays separate from storing             [done]
+  connections.py  what a workspace can talk to: the transports, the token
+                store, the clients and the RunContext, with every credential
+                resolved lazily. Verifying one is `credentials.py`'s          [done]
   terminal.py   stdlib-only leaf: can this stream print that character?     [done]
 ```
 
@@ -257,6 +260,16 @@ later. Each traces to a decision.
   two expressions of one rule — `was is None or bool(changes) or live is None`
   standing next to a three-branch string — and two expressions of one rule are
   how a stage comes to run while reporting nothing to do.
+- **A client is built through `connections.py`.** Which credential is resolved
+  when, what a missing one means, and where the Etsy token file lives are one
+  set of answers, not four. `cli`, `setup`, `auth` and the e2e layer each wrote
+  out the same five-step Etsy assembly — read the `.env`, decide whether there
+  is a key pair, open the token store with a refresh that can find the
+  keystring again, hang a transport off it, wrap it in a client — and the e2e
+  copy was the one nobody would remember to update, since it only runs where
+  there are real credentials. The rule the module exists to hold: **a
+  credential is resolved when it is used, never when a client is built**, so a
+  workspace that has only ever rendered mockups can still `plan`.
 - **A credential is captured, verified and stored through `credentials.py`.**
   Where it already lives (environment, then the workspace `.env`), what to say
   before asking, how to ask, how to prove it, and what to say when it fails.

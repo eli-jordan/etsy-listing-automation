@@ -16,35 +16,21 @@ from typing import Any
 
 import typer
 
-from etsy_listings import prompts, terminal
+from etsy_listings import connections, prompts, terminal
 from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
 from etsy_listings.authcmd import Part as AuthPart
 from etsy_listings.cli.render import format_blocked, format_plan
-from etsy_listings.clients.etsy import (
-    EtsyListingClient,
-    HttpEtsyListingClient,
-    OAuthClient,
-    TokenStore,
-)
-from etsy_listings.clients.etsy import Transport as EtsyTransport
 from etsy_listings.clients.printify import (
-    CachedCatalogClient,
-    CatalogClient,
-    HttpCatalogClient,
-    HttpPrintifyClient,
     PrintifyAuthError,
-    PrintifyClient,
-    Transport,
 )
 from etsy_listings.config.defaults import MissingDefaultError
 from etsy_listings.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
-    Secrets,
 )
 from etsy_listings.engine.change import Plan
-from etsy_listings.engine.context import Event, EventSink, RunContext
+from etsy_listings.engine.context import Event
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
 from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
@@ -118,66 +104,11 @@ def _open_workspace(root: str | None) -> Workspace:
         raise typer.Exit(code=1) from exc
 
 
-def _transport(workspace: Workspace) -> Transport:
-    """One connection to Printify, with its token resolved lazily.
-
-    ``plan`` and ``apply`` build a ``RunContext`` eagerly, but no Phase 0/1
-    stage calls Printify at all, and a cached catalog read never needs a token
-    either. Resolving one at construction time would make every ``plan`` fail
-    in a workspace that has no ``.env`` -- including the fixture workspace the
-    getting-started guide points at.
-
-    Shared by both clients because it is one host and one token: they differ in
-    what they are allowed to *ask*, which is a matter of which protocol the
-    caller holds, not of which socket the bytes leave through.
-    """
-
-    def token() -> str:
-        return Secrets.load(workspace.env_file()).require_printify_api_token()
-
-    return Transport(token)
-
-
-def _clients(workspace: Workspace) -> tuple[CatalogClient, PrintifyClient]:
-    transport = _transport(workspace)
-    return (
-        CachedCatalogClient(HttpCatalogClient(transport), workspace.catalog_cache_dir()),
-        HttpPrintifyClient(transport),
-    )
-
-
-def _etsy_client(workspace: Workspace) -> EtsyListingClient | None:
-    """The signed-in Etsy connection Phase 3's stages write through, or
-    ``None`` before `auth etsy` has run.
-
-    Checked without raising, unlike :meth:`Secrets.require_etsy_app_key`:
-    `plan` in a workspace that has never touched Etsy must not be made to
-    configure it just to render mockups -- the same reason
-    :func:`_transport` resolves Printify's token lazily, one level further
-    in here because :class:`~etsy_listings.clients.etsy.transport.Transport`
-    takes its app key pair eagerly rather than through a callable, unlike
-    Printify's bearer.
-    """
-    secrets = Secrets.load(workspace.env_file())
-    if not (secrets.etsy_keystring and secrets.etsy_shared_secret):
-        return None
-    app_key = secrets.require_etsy_app_key()
-    store = TokenStore(
-        workspace.root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE,
-        refresh=lambda token: OAuthClient(app_key.keystring).refresh(token),
-    )
-    transport = EtsyTransport(app_key, bearer=store.access_token)
-    return HttpEtsyListingClient(transport)
-
-
-def _run_context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
-    catalog, printify = _clients(workspace)
-    etsy = _etsy_client(workspace)
-    if on_event is None:
-        return RunContext(workspace=workspace, catalog=catalog, printify=printify, etsy=etsy)
-    return RunContext(
-        workspace=workspace, catalog=catalog, printify=printify, etsy=etsy, on_event=on_event
-    )
+# How a client is built is `connections`', not this module's. Which credential
+# is resolved when, what a missing one means, and where the Etsy token file
+# lives were written out here *and* in `setup`, `auth` and the e2e layer --
+# four copies of one five-step sequence. What is left here is deciding *when*
+# to ask for a connection, which is genuinely the entry point's business.
 
 
 SWATCH_GLYPH = "██"
@@ -434,7 +365,7 @@ def plan(
 
     _exit_for(
         plan_listings(
-            _run_context(workspace),
+            connections.run_context(workspace),
             _target_listings(workspace, listing, all),
             STAGES,
             on_planned=show,
@@ -467,7 +398,7 @@ def apply(
 
     _exit_for(
         apply_listings(
-            _run_context(workspace, on_event=_echo_event),
+            connections.run_context(workspace, on_event=_echo_event),
             _target_listings(workspace, listing, all),
             STAGES,
             on_planned=announce,
@@ -502,7 +433,7 @@ def unlock(
     except MissingDefaultError as exc:
         typer.echo(f"{listing}: {exc}", err=True)
         raise typer.Exit(code=1) from exc
-    printify = _clients(workspace)[1]
+    printify = connections.printify_client(workspace)
     printify.publishing_failed(
         shop_id, str(product_id), reason="cleared via `etsy-listings unlock`"
     )
@@ -530,7 +461,7 @@ def new(
     workspace = _open_workspace(root)
     try:
         with _wizard():
-            run_new(workspace, _clients(workspace)[0], design, category)
+            run_new(workspace, connections.catalog_client(workspace), design, category)
     except (MissingCredentialError, PrintifyAuthError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc
