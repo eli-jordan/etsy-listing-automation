@@ -20,8 +20,13 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 48 numbered product decisions in its appendix. |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 22 architecture decisions, `A1`–`A22`. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 59 numbered product decisions in its appendix. |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
+
+Two subsidiary documents carry detail those two point at rather than repeat:
+[docs/multi-placement-rendering.md](docs/multi-placement-rendering.md) (PRD 28)
+and [docs/phase-3-etsy.md](docs/phase-3-etsy.md) (PRD 52–59, A24–A28). They are
+not a third authority — where either disagrees with the PRD, the PRD wins.
 
 When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.
 
@@ -154,7 +159,7 @@ user-writable directory with no installer.
 
 ## Code layout
 
-Per `A1`–`A22`. Full detail in the plan; the shape:
+Per `A1`–`A23`. Full detail in the plan; the shape:
 
 ```
 src/etsy_listings/
@@ -162,10 +167,22 @@ src/etsy_listings/
   workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
   config/       pydantic models, Money type, slugification     [done]
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run, stages/
-                   [done; STAGES = [Render(), PrintifyProduct()], more stages later]
+                   [done; STAGES = [Render(), PrintifyProduct(), Publish(),
+                   EtsyListing(), EtsyMedia()], Generate() in Phase 4]
+                stages/ splits the product stage three ways: the stage itself
+                  (needs a context), product_document (the two documents and
+                  the garment gate) and product_diff (the comparison — pure,
+                  and unit-tested without a workspace or a fake)
+                stages/ also holds what belongs to no single stage: gates (the
+                  pre-flight checks about a *listing*), etsy_target (which
+                  listing on which shop — the id key, the shop gate, one
+                  not-minted error, shared by all three Etsy stages) and
+                  colour_property (Etsy's inventory property matched onto this
+                  listing's colours — pure, same reasoning as product_diff)
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
+  authcmd/      `auth`: the credential command, per part (PRD 14, 49, 50)    [done]
   clients/      printify/ — one package for everything said to Printify (A22):
                   transport (token/retry/errors), two protocols (CatalogClient
                   reads, PrintifyClient writes), models, catalog, products,
@@ -177,6 +194,12 @@ src/etsy_listings/
                              (dashboard/setup wizard/run runner: Phase 5)
   prompts.py    which prompt backend can drive this terminal at all, and the
                 cancel-raising wrappers the wizards ask through              [done]
+  credentials.py  one credential step — where it already lives, the blurb, the
+                ask, the caller's verification, the refusal. Shared by `setup`
+                and `auth`; capturing stays separate from storing             [done]
+  connections.py  what a workspace can talk to: the transports, the token
+                store, the clients and the RunContext, with every credential
+                resolved lazily. Verifying one is `credentials.py`'s          [done]
   terminal.py   stdlib-only leaf: can this stream print that character?     [done]
 ```
 
@@ -198,18 +221,63 @@ later. Each traces to a decision.
   `plan_listings` / `apply_listings`. An entry point supplies the listings and
   formats the resulting `RunReport`; it never opens a lockfile itself.
 - **Only the lockfile merges a lockfile.** `Lockfile.fold()` owns the
-  replace-versus-merge rules for all four axes and `applied_for()` owns the
-  per-stage lookup. A stage returns a `StageApplyResult` and never touches the
-  file; `execute` decides only which stages run, in what order.
-- **A stage's applied document is a type, not a dict.** The lockfile stores it
-  as JSON, but a stage parses it back into a model (`RenderApplied`,
-  `AppliedProduct`) before comparing anything. A stage that reads its own
-  document with `applied.get("title")` ends up spelling the key names again in
-  every function that touches them, and nothing stops one drifting from the
-  others — that is where a `("?", "?")` fallback for a lookup that cannot miss
-  came from. `parse()` answers `None` for both "never applied" and "will not
-  decode", because a document we cannot read is one we cannot prove the live
-  state matches.
+  replace-versus-merge rules for all four axes, `applied_for()` owns the
+  per-stage lookup and `parse_applied_for()` owns the decode. A stage returns
+  a `StageApplyResult` and never touches the file; `execute` decides only
+  which stages run, in what order.
+- **A stage's applied document is a type, not a dict — and the stage does not
+  decode it.** The lockfile stores it as JSON; `build_plan` hands `plan()` the
+  model the stage declared in `applied_model` (`RenderApplied`,
+  `AppliedProduct`). A stage that reads its own document with
+  `applied.get("title")` ends up spelling the key names again in every
+  function that touches them — that is where a `("?", "?")` fallback for a
+  lookup that cannot miss came from. Decoding answers `None` for both "never
+  applied" and "will not decode", because a document we cannot read is one we
+  cannot prove the live state matches. **Every question a stage is asked gets
+  it**, `apply()` included — the one that did not have it went and decoded its
+  own subtree, which is a second implementation of a rule that exists to have
+  one. (It took the place of a `stage_plan` parameter no stage read: three
+  `del`'d it and the protocol had already drifted, one stage typing it
+  `object` while the rest said `StagePlan`.) That rule is the lockfile's precisely
+  because it was two stages' and they disagreed: one caught `ValidationError`
+  and answered `None`, the other indexed the dict and raised `KeyError`, which
+  is not a `UserFacingError` and so ended a whole `--all` batch.
+- **A refusal is `Blocked`, whichever question produced it.** One vocabulary for
+  "this cannot run", reaching the plan two ways because a refusal has two
+  moments. A **pre-flight** refusal — no shop configured, copy still a
+  sentinel, a design too small — is `desired()` returning `Blocked`, before a
+  document exists for a run that was never going to happen. A refusal only the
+  live state can prove — a retail price below Printify's cost, which needs
+  `variants[].cost` and therefore cannot be known before `read_live` (PRD 40's
+  amendment) — is `plan()` returning `Verdict.refused(...)`, which the engine
+  turns into the same `StagePlan.blocked`. Neither may raise, and a stage still
+  never names itself. What is forbidden is the third shape: a stage that will
+  not run reporting a `reason` instead. That is what shipped first, and
+  `format_plan` prints a reason only for stages that *do* run — so a listing
+  priced under cost skipped `publish` in silence, under a plan reading "No
+  changes." The vocabulary exists to make exactly that impossible.
+- **`will_run` is derived from a reason, never computed beside one.** They were
+  two expressions of one rule — `was is None or bool(changes) or live is None`
+  standing next to a three-branch string — and two expressions of one rule are
+  how a stage comes to run while reporting nothing to do.
+- **A client is built through `connections.py`.** Which credential is resolved
+  when, what a missing one means, and where the Etsy token file lives are one
+  set of answers, not four. `cli`, `setup`, `auth` and the e2e layer each wrote
+  out the same five-step Etsy assembly — read the `.env`, decide whether there
+  is a key pair, open the token store with a refresh that can find the
+  keystring again, hang a transport off it, wrap it in a client — and the e2e
+  copy was the one nobody would remember to update, since it only runs where
+  there are real credentials. The rule the module exists to hold: **a
+  credential is resolved when it is used, never when a client is built**, so a
+  workspace that has only ever rendered mockups can still `plan`.
+- **A credential is captured, verified and stored through `credentials.py`.**
+  Where it already lives (environment, then the workspace `.env`), what to say
+  before asking, how to ask, how to prove it, and what to say when it fails.
+  `setup` and `auth` each wrote that out longhand and the copies had already
+  drifted: the same blurb byte-for-byte, and a refusal differing by one word.
+  Capturing stays separate from storing because the two commands genuinely
+  disagree about *when* — `auth` writes per credential as it goes, `setup`
+  writes once every question is answered.
 - **A hashed document must not depend on the order its inputs happened to
   arrive in.** Sort anything that lands in one. Variant ids reached
   `print_areas[].variant_ids` in the order a listing wrote `colors:`, so
@@ -252,12 +320,18 @@ later. Each traces to a decision.
   waiting to be a refund (PRD 24).
 - **`colour-matrix`-kind mockup filename = slugified Printify colour name.**
   Convention, not a mapping table. A sparse `exceptions.yaml` handles what
-  will not slugify (PRD 7a). `multiple`- and `single`-kind templates use a
+  will not slugify (PRD 7a). When nothing matches exactly, `template_base_image`
+  falls back to a filename ending in the slug's hyphen segments — but only if
+  exactly one photo in the directory qualifies; two candidates is refused, not
+  guessed at. That fallback is lookup-only: `template_colours` still reports
+  a non-matching filename as its own name, since deriving a colour from an
+  unknown shared prefix (the enumeration direction) isn't the same question as
+  matching a known slug against one (the lookup direction). `multiple`- and `single`-kind templates use a
   fixed `scene.png` instead — no per-colour photo to name (PRD 28).
 - **A template is exactly one of three kinds — never a mix.** `kind:
   colour-matrix | multiple | single`, a discriminated union (`A11`). **No
-  profile-level registry of templates** — `Profile` carries no `templates`
-  field; a template lives purely in `mockup-templates/{name}/`, and any
+  garment-profile-level registry of templates** — `GarmentProfile` carries no
+  `templates` field; a template lives purely in `mockup-templates/{name}/`, and any
   listing may reference any of them. A listing's `media:` always names
   `{template, colour?}` explicitly — there is no default template and no
   bare-colour shorthand (`A13`, PRD 29).
@@ -346,7 +420,7 @@ That clean skip is right on a contributor's machine and wrong in CI, where a
 layer that runs nothing still reports green.
 `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1` turns every such skip — this layer's
 missing token, the browser layer's missing chromium or unbuilt SPA — into a
-failure naming the prerequisite. CI sets it on the `main` tier.
+failure naming the prerequisite. Both `main`-tier workflows set it.
 
 ```
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
@@ -435,21 +509,41 @@ the typed API client after an endpoint change.
 
 ### CI
 
-[`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs the same gates,
-split in two by what a layer needs from the outside world.
+**Two workflows.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs
+the same gates as `check.sh`, split by what a layer needs from the outside
+world; [`.github/workflows/e2e.yml`](.github/workflows/e2e.yml) is the e2e
+layer alone.
 
-| Trigger | What runs |
-|---|---|
-| Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's prettier/eslint/tsc/vitest gate |
-| Push to `main` | all of the above, then `pytest -m browser` and `pytest -m e2e` |
-| Manual (`workflow_dispatch`) | the same as a push to `main`, against whichever ref you pick |
+| Workflow | Trigger | What runs |
+|---|---|---|
+| CI | Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's prettier/eslint/tsc/vitest gate |
+| CI | Push to `main` | all of the above, then `pytest -m browser` |
+| CI | Manual (`workflow_dispatch`) | the same as a push to `main`, against whichever ref you pick |
+| e2e | Push to `main`, or manual | `pytest -m e2e` against the real Printify and Etsy shops |
 
 The PR tier is deliberately hermetic — unit, golden, behaviour and contract
 touch no network and no browser, so a PR cannot go red on somebody else's
-infrastructure. The `browser` and `e2e` layers need chromium and a real
-Printify token respectively, so they sit on `main`, where the token lives as
-the repository secret `PRINTIFY_API_TOKEN`. Phase 1's e2e tests are read-only
-catalog GETs, so running them on every push costs no state.
+infrastructure. The `browser` and `e2e` layers need chromium and real
+credentials respectively, so they run on `main`, where the secrets live
+(`PRINTIFY_API_TOKEN`, `ETSY_KEYSTRING`, `ETSY_SHARED_SECRET`,
+`ETSY_TOKENS_JSON`).
+
+`e2e` is a separate workflow because it is the one layer worth running on its
+own: `gh workflow run e2e --ref <branch>` re-runs it without re-running lint,
+both test matrices and the browser layer. That matters because its Etsy
+sign-in expires — Etsy rotates the refresh token on every use and the CI
+workspace is thrown away, so `ETSY_TOKENS_JSON` eventually goes stale and is
+fixed by running `etsy-listings auth etsy` locally, updating the secret, and
+re-running just this. The cost of the split is that it no longer sits behind
+the lint and offline-suite gate; that is accepted, since a gate blocking the
+manual re-run would be worse.
+
+Run it locally before merging rather than iterating through CI — it is far
+faster, and it costs the same real shop state either way:
+
+```
+ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
+```
 
 Windows is in the matrix because it is where development happens and where the
 render goldens were generated; ubuntu is there to prove the exact OpenCV and
@@ -465,13 +559,14 @@ PRD's agreed CLI surface for reference when building later phases — do not
 assume a command exists because it is listed here.
 
 ```
-setup              initialise a workspace: skeleton, shop.yaml, credentials      [done]
-new [<design>]     interactive design/garment/provider picker; writes profile + listing  [done]
+setup              initialise a workspace: skeleton, shop.yaml, ids   [done; its token
+                   capture moves to `auth` in Phase 3 — PRD 49]
+new [<design>]     interactive design/garment/provider picker; writes garment profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified   [done; render + printify]
 render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
 ui                     setup wizard, dashboard, calibrator, run runner    [calibrator done; rest Phase 5]
-auth                   Etsy OAuth PKCE + Anthropic credentials                     [Phase 3]
+auth                   every credential: Printify, Etsy key pair + OAuth, Anthropic [Phase 3]
 catalog refresh        force-refresh the cached Printify catalog                  [Phase 6]
 unlock <listing>       clear a Printify product stuck publishing                  [Phase 2]
 status [<listing>]                                                                [Phase 6]

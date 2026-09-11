@@ -2,7 +2,7 @@
 
 A hands-on walkthrough of what's actually runnable today: install the tool,
 try it against a ready-made workspace with zero setup, then build your own —
-a workspace, a design, a mockup template, a profile and a listing — and run
+a workspace, a design, a mockup template, a garment profile and a listing — and run
 `plan`/`apply` against it.
 
 **Status check first.** Only Phases 0 and 1 are implemented: workspace
@@ -40,7 +40,7 @@ Node is only needed if you want to run the calibrator's frontend in dev mode
 
 This repository's test suite ships a small, real, synthetic workspace at
 [`tests/fixtures/workspace/`](../tests/fixtures/workspace/) — a `shop.yaml`, a
-profile, a listing, a design, and two mockup templates. You can point the CLI
+garment profile, a listing, a design, and two mockup templates. You can point the CLI
 straight at it and run a real `plan`/`apply` without creating anything of your
 own:
 
@@ -140,19 +140,22 @@ The `shop.yaml` it writes looks like this, and hand-editing it is fine:
 
 ```yaml
 printify:
+  shop_name: My new store    # so the id below is checkable at a glance
   shop_id: 28819281          # discovered from your token, not typed
+  preferred_print_provider: Monster Digital   # optional; used by `new`'s default
 etsy:
+  shop_name: TakeAHikeTees   # discovered too; the id is resolved from it
+  shop_id: 12345678
+  currency: NOK              # read from the Etsy shop
   who_made: i_did
   when_made: made_to_order
   is_supply: false
   renewal: manual
-currency: NOK
-preferred_print_provider: Monster Digital   # optional; used by `new`'s default
 ```
 
-`etsy.shop_id`, `shop_section_id` and `return_policy_id` are Phase 3 fields and
-are simply absent until you have them — the tool asks for each by name at the
-point it actually needs one. Every price you write anywhere in this workspace
+The Etsy fields are absent until `auth` has stored credentials `setup` can look
+them up with — the tool asks for each by name at the point it actually needs
+one, and none of them is ever typed as a number. Every price you write anywhere in this workspace
 must be in the currency you set here (`349 NOK`, never a bare `349` — see
 `Money` in [config/money.py](../src/etsy_listings/config/money.py)).
 
@@ -175,7 +178,7 @@ be **within 10% of your garment's print area** — a 4500×5400 print area wants
 design at least 4050×4860, and one at least 4500×5400 is better. Rendering never
 upscales; anything smaller fails loudly, naming the required size. Printify's
 print area varies by garment size, and `new` records the largest of them in the
-profile, so meeting the number in `print_area` covers every size you sell.
+garment profile, so meeting the number in `print_area` covers every size you sell.
 
 Printify itself checks none of this — it will take a 120×140 file and print it —
 so this gate is the only thing between a low-resolution export and a blurry
@@ -249,9 +252,9 @@ Full schema and worked examples for all three kinds, plus how light/dark
 artwork resolves per colour, are in
 [docs/multi-placement-rendering.md](multi-placement-rendering.md).
 
-## 6. Add a profile and a listing
+## 6. Add a garment profile and a listing
 
-A **profile** (`profiles/<name>.yaml`) is the garment definition — blueprint,
+A **garment profile** (`garment-profiles/<name>.yaml`) is the garment definition — blueprint,
 print provider, print area, sizes — reused by every listing built on it. A
 **listing** (`listings/<name>/listing.yaml`) is everything commercial and
 creative for one product: prices, colours, which template(s) render as its
@@ -271,7 +274,7 @@ how you start a listing for artwork you have not drawn yet.
 This reads Printify's catalog live, so it needs a token first — the catalog
 endpoints are read-only but **not** public, and without one Printify answers
 `401 Unauthorized`. Generate a personal access token with the `catalog.read`
-scope at [printify.com/app/account/connections](https://printify.com/app/account/connections)
+scope at [printify.com/app/account/api](https://printify.com/app/account/api)
 (docs/setup.md §1.3) and put it in the **workspace's** `.env`:
 
 ```
@@ -298,7 +301,7 @@ With that in place, `new` interactively:
    Brand and model are how a blank is actually identified — “Gildan 18500” is
    what you look up — while Printify's titles bury it, since half a dozen
    brands sell a “Unisex Pullover Hoodie”. ⭐ means this workspace already has
-   a profile for that garment, and those rows sort to the top — a shop reuses
+   a garment profile for that garment, and those rows sort to the top — a shop reuses
    a handful of blueprints, so the one you used yesterday should not need
    finding.
 2. Lists print providers for that garment — pick one
@@ -308,12 +311,14 @@ With that in place, `new` interactively:
 4. Lists the calibrated mockup templates under `mockup-templates/` — pick one.
    A directory without a `template.yaml` isn't offered: it has no kind and no
    geometry yet, so choosing it would only fail later.
-5. Optionally walks each colour asking light/dark, to seed the profile's
-   `colour_tone` — skip this if every design you'll use on this garment needs
-   only one ink file.
-6. Asks a starting per-size price.
+5. Asks a starting per-size price.
 
-It writes `profiles/<blueprint-slug>.yaml` (reusing it if a profile for that
+A garment needing different ink for light vs dark shirts isn't asked about —
+edit the generated garment profile's `colors:` by hand (`{black: dark, ivory:
+light}`) once you know you need it; see
+[docs/multi-placement-rendering.md](multi-placement-rendering.md).
+
+It writes `garment-profiles/<blueprint-slug>.yaml` (reusing it if a garment profile for that
 blueprint+provider already exists) and
 `listings/take-a-hike/listing.yaml` referencing `designs/take-a-hike.png`.
 Open the listing file afterwards and fill in `brief` (used by AI copy
@@ -324,13 +329,13 @@ which case it took:
 
 | Template kind | `media:` |
 |---|---|
-| `colour-matrix` | One entry per colour — capped at Etsy's **10-image limit** |
+| `colour-matrix` | One entry per colour — capped at Etsy's **20-image limit** |
 | `multiple`, `single` | Exactly one entry, no `colour` (one output each) |
 
 The cap matters in practice: Comfort Colors 1717 at Monster Digital offers 33
-colours, and Etsy accepts 10 images. `colors:` still lists all 33 — it decides
+colours, and Etsy accepts 20 images. `colors:` still lists all 33 — it decides
 which Printify *variants sell*, which is a different axis from which photos
-get rendered. The first 10 is an arbitrary starting point; edit `media:` to
+get rendered. The first 20 is an arbitrary starting point; edit `media:` to
 choose which colours are worth a photo.
 
 **Install `fzf` if you want to filter.** `new` uses it for the garment and
@@ -365,7 +370,7 @@ that spread is in the next note.
 Equivalent, written directly:
 
 ```yaml
-# profiles/comfort-colors-1717.yaml
+# garment-profiles/comfort-colors-1717.yaml
 blueprint:
   brand: Comfort Colors
   model: "1717"
@@ -386,7 +391,7 @@ in brand names are all normalised away, so `Comfort Colors` matches its
 
 ```yaml
 # listings/take-a-hike/listing.yaml
-profile: comfort-colors-1717
+garment_profile: comfort-colors-1717
 design: ../../designs/take-a-hike.png
 colors: [black, blue-jean, ivory, moss]
 brief: >
@@ -500,7 +505,7 @@ your-workspace/
   mockup-templates/<name>/
     template.yaml         kind + bounding box(es) + shade/displace
     {colour}.png | scene.png
-  profiles/<name>.yaml    garment definition, reused across listings
+  garment-profiles/<name>.yaml    garment definition, reused across listings
   listings/<name>/
     listing.yaml          prices, colours, media, Etsy copy
     state.lock.json        written by `apply` — what ran, input hashes

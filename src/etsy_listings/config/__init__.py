@@ -1,8 +1,9 @@
 """The models for the workspace's commercial and creative files, and the value
 types they are built from.
 
-``shop.yaml`` (:class:`Defaults`), ``profiles/*.yaml`` (:class:`Profile`),
-``listings/*/listing.yaml`` (:class:`Listing`), ``pricing-plans/**.yaml``
+``shop.yaml`` (:class:`Defaults`), ``garment-profiles/*.yaml``
+(:class:`GarmentProfile`), ``listings/*/listing.yaml`` (:class:`Listing`),
+``pricing-plans/**.yaml``
 (:class:`PricingPlan`) and ``exceptions.yaml``. Every one of them is loaded
 *by path* -- this module has no idea where any of those files live, which is
 ``workspace``'s job, and it knows nothing about ``render`` or ``catalog``.
@@ -14,6 +15,7 @@ models live in :mod:`etsy_listings.render`.
 from etsy_listings.config.defaults import Defaults
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
+from etsy_listings.config.garment_profile import GarmentProfile, PrintArea
 from etsy_listings.config.listing import (
     GENERATE,
     EtsyListingConfig,
@@ -23,7 +25,6 @@ from etsy_listings.config.listing import (
 )
 from etsy_listings.config.money import Money, PriceField, require_currency
 from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.profile import PrintArea, Profile
 from etsy_listings.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
@@ -37,7 +38,7 @@ __all__ = [
     "Defaults",
     "Listing",
     "PricingPlan",
-    "Profile",
+    "GarmentProfile",
     "EtsyListingConfig",
     "MediaEntry",
     "TemplateMediaEntry",

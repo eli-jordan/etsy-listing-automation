@@ -41,6 +41,7 @@ import httpx
 
 from etsy_listings.clients.retry import DEFAULT_POLICY, RetryPolicy, with_retries
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR
+from etsy_listings.errors import UserFacingError
 
 BASE_URL = "https://api.printify.com"
 """No ``/v1`` suffix: this transport carries several path families
@@ -57,14 +58,31 @@ not yet reached the phase which needs one."""
 
 HTTP_NOT_FOUND = 404
 
+WRONG_SHOP_CODE = 8104
+"""Printify's answer for "that product id is real, but it is not in this shop".
+
+A `400`, not the `404` the same question gets when the id is unknown to every
+shop -- so "is this product gone?" has two right answers and only one obvious
+one. It is reachable in ordinary use: reconnecting a store replaces the shop
+id, and a lockfile written against the old one then names a product this shop
+has never held. Measured, against a workspace whose Printify store had been
+swapped for a natively-connected Etsy one.
+"""
+
 DEFAULT_TIMEOUT_SECONDS = 120.0
 """Generous, because uploads travel this transport: a print file is megabytes,
 and the default 5s timeout turns a slow link into an inscrutable failure."""
 
 
-class PrintifyAuthError(RuntimeError):
+class PrintifyAuthError(UserFacingError, RuntimeError):
     """Printify rejected the credentials. Distinct from every other failure,
     because the fix is a specific human action rather than a retry.
+
+    A specific human action is exactly what a
+    :class:`~etsy_listings.errors.UserFacingError` is for, and the message
+    below has always been written as one. Until it *was* one, a revoked token
+    on the third listing of ``--all`` ended the batch with a stack trace
+    instead of a line, against PRD 16.
 
     One error for both halves. They were two, with two messages naming two
     scopes -- and a user whose token was missing ``catalog.read`` got the
@@ -81,14 +99,19 @@ class PrintifyAuthError(RuntimeError):
             f"present, it is expired, revoked, or missing a scope.\n"
             f"  Reading the catalog needs `catalog.read`; writing products needs the "
             f"shop and product scopes as well.\n"
-            f"  Regenerate it at printify.com/app/account/connections (docs/setup.md "
+            f"  Regenerate it at printify.com/app/account/api (docs/setup.md "
             f"section 1.3), or re-run `etsy-listings setup`, which verifies a token "
             f"before storing it."
         )
 
 
-class PrintifyApiError(RuntimeError):
+class PrintifyApiError(UserFacingError, RuntimeError):
     """A request Printify understood and refused.
+
+    User-facing for the same reason as :class:`PrintifyAuthError`: a refusal
+    the API explained is a refusal the user can read. A 500 is not actionable
+    in the same way, but it is still one listing's failure and not the run's
+    -- ending the batch on it loses the forty-nine that would have succeeded.
 
     Carries ``code`` because Printify's numeric codes are stable enough to
     branch on (8254 is "shop not connected to a sales channel", which

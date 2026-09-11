@@ -91,16 +91,16 @@ NEW_WIZARD: dict[str, object] = {
     "Garment": "Gildan",
     "Print provider": "Monster Digital",
     "Mockup template set": "flat-lay-01",
-    "different artwork for light vs dark": False,
     "Pricing plan": "create a new",
     "Pricing plan name": "launch-low",
 }
 """Answers to every question `new` asks on its main path, keyed by what it
 asked rather than by when.
 
-Not listed, because neither is on that path: `Design`, asked only when no
-design name was given, and the per-colour `light or dark garment?`, asked only
-after answering yes above. A test that wants either adds its own key.
+Not listed, because it is not on that path: `Design`, asked only when no
+design name was given. A test that wants it adds its own key. Light-vs-dark
+artwork tone is never asked by `new` at all -- it is a hand-edit to the
+generated garment profile (docs/multi-placement-rendering.md).
 
 The two pricing keys look ambiguous and are not: a fragment that is the whole
 question wins outright, and otherwise the longest match does, so "Pricing plan
@@ -147,7 +147,6 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
                 "1",  # Garment -- the fake catalog offers exactly one
                 "1",  # Print provider -- likewise
                 _ordinal(workspace.template_names(), "flat-lay-01"),
-                "",  # no light/dark artwork split; blank takes the default
                 "1",  # Pricing plan -- none on disk, so row 1 is "create a new"
                 "launch-low",  # ...and its name
             ]
@@ -159,7 +158,7 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
     listing = workspace_root / "listings" / "brand-new-design" / "listing.yaml"
     assert listing.is_file()
     assert "flat-lay-01" in listing.read_text(encoding="utf-8")
-    assert (workspace_root / "profiles" / "gildan-5000.yaml").is_file()
+    assert (workspace_root / "garment-profiles" / "gildan-5000.yaml").is_file()
     assert (workspace_root / "pricing-plans" / "launch-low.yaml").is_file()
 
 
@@ -223,8 +222,8 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     plan_path = workspace_root / "pricing-plans" / "computed-plan.yaml"
     assert plan_path.is_file()
     plan = workspace.load_pricing_plan(plan_path)
-    assert plan.profile == "gildan-5000"
-    zero = Money.parse(f"0 {workspace.defaults.currency}")
+    assert plan.garment_profile == "gildan-5000"
+    zero = Money.parse(f"0 {workspace.defaults.etsy.currency}")
     assert all(price != zero for price in plan.prices.values())  # real cost data was used
 
     listing = Listing.load(
@@ -246,7 +245,7 @@ def test_new_offers_an_existing_compatible_pricing_plan(
     plans_dir = workspace_root / "pricing-plans"
     plans_dir.mkdir()
     (plans_dir / "existing.yaml").write_text(
-        "profile: gildan-5000\nprices:\n  S: 100 NOK\n  M: 100 NOK\n",
+        "garment_profile: gildan-5000\nprices:\n  S: 100 NOK\n  M: 100 NOK\n",
         encoding="utf-8",
     )
     script = scripted({**NEW_WIZARD, "Pricing plan": "existing"})

@@ -45,7 +45,7 @@ costs the $0.20 listing fee.
 
 ### 1.3 Generate an API token
 
-Printify → **account settings → Connections** (`printify.com/app/account/connections`)
+Printify → **account settings → API** (`printify.com/app/account/api`)
 → generate a personal access token.
 
 Scopes to select:
@@ -120,7 +120,7 @@ etsy-listings/
   designs/
   mockup-templates/
   listings/
-  profiles/
+  garment-profiles/
   pricing-plans/
   common-media/
   test-designs/
@@ -131,16 +131,24 @@ etsy-listings/
 
 ```yaml
 printify:
+  shop_name: My new store  # so the id below is checkable at a glance
   shop_id: 28819281        # read back from your token; setup writes it
+  preferred_print_provider: Monster Digital
 etsy:
+  shop_name: TakeAHikeTees # setup resolves the id from this
+  shop_id: 12345678
+  currency: NOK            # read from the Etsy shop
   who_made: i_did
   when_made: made_to_order
   is_supply: false
   renewal: manual
-  # shop_id, shop_section_id and return_policy_id are Phase 3; add them then.
-currency: NOK
-preferred_print_provider: Monster Digital
+  # shop_section_id and return_policy_id are filled in by `setup` once it can
+  # reach Etsy -- that is, once `auth` has run.
 ```
+
+Every key sits under the service that owns it, and each shop carries its name
+beside its id (PRD 51). `setup` writes the whole file with a comment per field,
+so the copy above is a sketch rather than the exact output.
 
 Point the tool at it with `--root`, or `export ETSY_LISTINGS_ROOT=...` in
 `~/.zshenv`. Cygwin paths work (`/home/Admin/etsy-listings`), for `setup` too.
@@ -174,7 +182,7 @@ regenerable from the same Connections page.
 Phase 2 pushes a real product, so `apply` runs the render stage first and needs
 real inputs:
 
-- **A design file** — RGBA PNG, sized within 10% of the profile's print area (a
+- **A design file** — RGBA PNG, sized within 10% of the garment profile's print area (a
   4500×5400 print area wants at least 4050×4860). Validation rejects anything
   smaller with the required size named; it never upscales.
 - **A calibrated mockup template** — at least one template set, calibrated in

@@ -20,14 +20,24 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import BaseModel
 from typer.testing import CliRunner
 
 from etsy_listings.cli.app import app
+from etsy_listings.cli.render import format_plan
+from etsy_listings.engine.apply import execute
+from etsy_listings.engine.change import Verdict
+from etsy_listings.engine.plan import build_plan
 
-from tests.support.builders import copy_listing, set_copy, set_shop_id
+from tests.support.builders import FIXTURE_LISTING as LISTING
+from tests.support.builders import a_context, a_lock, copy_listing, set_copy, set_shop_id
 
 runner = CliRunner()
 SHOP_ID = 28819281
+
+
+class _Empty(BaseModel):
+    """A stage's applied document, for a stage that has nothing to remember."""
 
 
 def _plan(root: Path, *args: str):
@@ -89,10 +99,12 @@ def test_it_says_what_to_do_about_it(workspace_root: Path) -> None:
 
 def test_the_summary_counts_the_blocked_stage(workspace_root: Path) -> None:
     """A summary that says "0 to run, 0 to change" and nothing else is the
-    same omission one line further down."""
+    same omission one line further down. Four stages block on an
+    unconfigured workspace: printify_product, publish, etsy_listing and
+    etsy_media all need a shop id this fixture does not have."""
     result = _plan(workspace_root, "take-a-hike")
 
-    assert "1 blocked" in result.output
+    assert "4 blocked" in result.output
 
 
 def test_a_blocked_stage_is_not_counted_as_work_to_do(workspace_root: Path) -> None:
@@ -135,13 +147,15 @@ def test_a_gate_refusal_is_an_actionable_message_not_a_traceback(
 def test_a_gate_refusal_reads_as_a_blocked_stage(workspace_root: Path) -> None:
     """One vocabulary, not two. A refusal and an unconfigured shop are both
     reasons a stage cannot run, so `plan` renders them identically -- and
-    counts them in the same place."""
+    counts them in the same place. Four block here: printify_product and
+    publish on the `<generate>` copy gate, etsy_listing and etsy_media on
+    the Etsy shop id this test never configures."""
     root = set_shop_id(workspace_root, SHOP_ID)
 
     result = _plan(root, "take-a-hike")
 
     assert result.exit_code == 0, result.output
-    assert "1 blocked" in result.output
+    assert "4 blocked" in result.output
     warning = next(line for line in result.output.splitlines() if "<generate>" in line)
     assert warning.lstrip().startswith("!")
 
@@ -207,3 +221,64 @@ def test_apply_says_it_in_the_same_words_plan_does(workspace_root: Path) -> None
     )
 
     assert planned == applied
+
+
+# ------------------------------------------- the refusal only `live` can prove
+
+
+class _RefusingStage:
+    """A stage that gets as far as comparing and *then* finds it cannot run.
+
+    Stands in for `publish`'s below-cost check, which needs ``variants[].cost``
+    and so cannot refuse from ``desired()`` (PRD 40's amendment). Written as a
+    stub rather than driven through `publish` because the subject here is what
+    the user is shown, not what Printify charges: reaching the real check needs
+    a published product and a live cost, and neither would make the assertion
+    below any truer.
+    """
+
+    name = "refuser"
+    local = True
+    applied_model = _Empty
+
+    def desired(self, ctx, listing, applied):  # noqa: ANN001, ANN201, ARG002
+        return "wanted"
+
+    def read_live(self, ctx, listing, lock, applied):  # noqa: ANN001, ANN201, ARG002
+        return "live"
+
+    def plan(self, desired, applied, live):  # noqa: ANN001, ANN201, ARG002
+        return Verdict.refused(
+            "this listing will not be published: the price is below cost.\nRaise it."
+        )
+
+    def apply(self, ctx, desired, applied, live, lock):  # noqa: ANN001, ANN201, ARG002
+        raise AssertionError("a refused stage must never be executed")
+
+
+def test_a_refusal_from_plan_reads_like_one_from_desired(workspace_root: Path) -> None:
+    """The half of the vocabulary that shipped invisible. `format_plan` prints
+    a `reason` only for stages that *will* run, so a refusal returned as a
+    won't-run verdict carrying a reason reached nobody -- the listing was
+    skipped under a plan reading "No changes."."""
+    ctx = a_context(workspace_root)
+    planned = build_plan(ctx, LISTING, a_lock(), [_RefusingStage()])
+
+    output = format_plan(planned.plan)
+
+    assert "below cost" in output
+    assert "Raise it." in output
+    assert "(refuser will not run)" in output
+    # Counted as a refusal in the summary, not left to be inferred from a
+    # stage that quietly did nothing.
+    assert "1 blocked" in output
+
+
+def test_a_refused_stage_is_not_executed(workspace_root: Path) -> None:
+    """`_RefusingStage.apply` raises if it is ever reached. A refusal has to
+    stop the work as well as report it -- the same guarantee a `desired()`
+    refusal already gave."""
+    ctx = a_context(workspace_root)
+    planned = build_plan(ctx, LISTING, a_lock(), [_RefusingStage()])
+
+    execute(ctx, planned, a_lock())

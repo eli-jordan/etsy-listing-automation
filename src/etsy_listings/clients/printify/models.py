@@ -19,8 +19,6 @@ one as a validation error breaks on a day nobody deployed anything.
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, ConfigDict, model_validator
 
 # --------------------------------------------------------------- reference data
@@ -260,6 +258,19 @@ class ProductVariant(BaseModel):
     is_available: bool = True
 
 
+class ProductExternal(BaseModel):
+    """A published product's link to the sales channel, narrowed to what
+    Phase 3 reads. ``type`` (observed ``4``, undocumented) is dropped
+    deliberately -- recording it only so the next reader does not think it
+    means something."""
+
+    model_config = ConfigDict(frozen=True, extra="ignore")
+
+    id: str
+    handle: str | None = None
+    shipping_template_id: str | None = None
+
+
 class Product(BaseModel):
     """A product as Printify holds it, projected to what we can actually set.
 
@@ -285,7 +296,7 @@ class Product(BaseModel):
     publish is reviewable."""
     is_locked: bool = False
     is_deleted: bool = False
-    external: dict[str, Any] | None = None
+    external: ProductExternal | None = None
     """Absent from the response until a publish succeeds -- decoded as
     optional-*missing*, not optional-null, because that is how Printify sends
     it."""

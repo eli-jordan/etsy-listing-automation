@@ -21,7 +21,7 @@ from etsy_listings.config.pricing_plan import PricingPlan
 
 GENERATE: Final = "<generate>"
 
-MAX_MEDIA_ENTRIES = 10
+MAX_MEDIA_ENTRIES = 20
 MAX_TAGS = 13
 MAX_TAG_LENGTH = 20
 MAX_TITLE_LENGTH = 140
@@ -41,7 +41,8 @@ DesignField = Annotated[dict[str, str], BeforeValidator(_coerce_design)]
 """Artwork key -> workspace-relative design path. A design needing different
 ink for light vs dark shirts carries more than one entry, conventionally keyed
 ``on-light``/``on-dark``; resolution order lives in the render stage
-(engine/stages/render.py), since it needs the profile and template too."""
+(engine/stages/render.py), since it needs the garment profile and template
+too."""
 
 
 class TemplateMediaEntry(BaseModel):
@@ -70,6 +71,20 @@ class EtsyListingConfig(BaseModel):
     tags: list[str] | Literal["<generate>"] = GENERATE
     materials: list[str] = []
     renewal: Literal["manual", "auto"] | None = None
+    section: str | None = None
+    """Which shop section this listing files under, by name (PRD 53). Listing
+    only -- there is no shop-wide default, unlike `shipping_profile` below:
+    a section is a fact about this listing, and a shop-wide default would be
+    right for the first listing and wrong from the second onwards."""
+    shipping_profile: str | None = None
+    """Overrides `shop.yaml`'s `etsy.listing_defaults.shipping_profile`, by
+    name (PRD 54)."""
+    variation_images: str | None = None
+    """The `colour-matrix` template whose renders become this listing's
+    per-colour swatches (PRD 56). Names the template rather than a bare
+    `true`, because media order would otherwise silently decide which
+    template supplies them when a listing carries more than one. Absent
+    means the feature is off for this listing."""
 
     @model_validator(mode="after")
     def _validate_concrete_values(self) -> EtsyListingConfig:
@@ -95,7 +110,7 @@ class EtsyListingConfig(BaseModel):
 class Listing(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    profile: str
+    garment_profile: str
     design: DesignField
     colors: list[str]
     brief: str
@@ -106,7 +121,7 @@ class Listing(BaseModel):
     pricing_plan: str | None = None
     """Workspace-relative path to a ``pricing-plans/*.yaml`` file, resolved
     the same way ``design`` is (not a bare name against a fixed directory,
-    unlike ``profile``/``media[].template``) -- see PRD 34. Resolution and
+    unlike ``garment_profile``/``media[].template``) -- see PRD 34. Resolution and
     loading are the caller's job; ``Listing`` never touches ``Workspace``."""
     price_overrides: dict[str, dict[str, PriceField]] = {}
     artwork: dict[str, str] = {}

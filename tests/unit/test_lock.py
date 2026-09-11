@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from pydantic import BaseModel, ConfigDict
+
 from etsy_listings.engine.lock import (
     Lockfile,
     StageApplyResult,
@@ -190,3 +192,63 @@ def test_stamped_records_the_version_and_time_without_touching_content() -> None
 
     assert (stamped.tool_version, stamped.applied_at) == ("9.9.9", "2026-09-08T00:00:00Z")
     assert stamped.input_hash() == lock.input_hash()
+
+
+# ------------------------------------------------- decoding a stage's subtree
+
+
+class _Document(BaseModel):
+    """A stand-in for a stage's applied document. A model of this file's own,
+    rather than a real stage's: the rule under test is the lockfile's, and
+    borrowing `AppliedProduct` would tie these assertions to a shape the
+    product stage is free to change."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    title: str
+    count: int = 0
+
+
+def test_a_stage_that_has_never_run_decodes_as_none() -> None:
+    assert _lock().parse_applied_for("render", _Document) is None
+
+
+def test_a_document_decodes_into_the_stages_own_type() -> None:
+    lock = _lock(applied={"render": {"title": "Take A Hike", "count": 2}})
+
+    parsed = lock.parse_applied_for("render", _Document)
+
+    assert parsed == _Document(title="Take A Hike", count=2)
+
+
+def test_a_document_carrying_fields_this_version_does_not_know_still_decodes() -> None:
+    """A lockfile written by a later build. Refusing it would make an upgrade
+    that adds one field re-apply every listing in the workspace."""
+    lock = _lock(applied={"render": {"title": "Take A Hike", "some_future_field": "surprise"}})
+
+    parsed = lock.parse_applied_for("render", _Document)
+
+    assert parsed is not None
+    assert parsed.title == "Take A Hike"
+
+
+def test_a_document_that_will_not_decode_reads_as_never_applied() -> None:
+    """Not an exception, and this is the half that used to differ per stage.
+
+    The product stage answered `None`; the render stage indexed the dict and
+    raised `KeyError`, which is not a `UserFacingError` -- so one truncated
+    lockfile ended a whole `--all` batch with a traceback instead of redoing
+    one listing's work.
+    """
+    lock = _lock(applied={"render": {"count": 3}})
+
+    assert lock.parse_applied_for("render", _Document) is None
+
+
+def test_each_stage_only_ever_sees_its_own_subtree() -> None:
+    lock = _lock(applied={"render": {"title": "mine"}, "printify_product": {"title": "theirs"}})
+
+    parsed = lock.parse_applied_for("render", _Document)
+
+    assert parsed is not None
+    assert parsed.title == "mine"

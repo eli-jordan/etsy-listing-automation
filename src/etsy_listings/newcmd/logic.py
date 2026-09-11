@@ -20,10 +20,10 @@ from pydantic import ValidationError
 from etsy_listings.clients.printify.models import Blueprint, ShippingRates, VariantSet
 from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
 from etsy_listings.config.listing import GENERATE, MAX_MEDIA_ENTRIES, Listing
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.profile import BlueprintRef, PrintArea, Profile
 from etsy_listings.config.slug import ColourExceptions, slug_map, slugify
 from etsy_listings.newcmd.fx_rate import FxRate
 from etsy_listings.workspace.workspace import Workspace
@@ -40,7 +40,7 @@ SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "2XL", "XXXL", "3XL", "4XL", "5X
 numeric one. Comfort Colors 1717 / Monster Digital sells ``2XL``/``3XL``, and
 with only ``XXL``/``XXXL`` listed here they fell through to the alphabetical
 "unknown" tail while ``4XL`` sorted normally -- producing
-``S M L XL 4XL 2XL 3XL`` in the profile `new` wrote."""
+``S M L XL 4XL 2XL 3XL`` in the garment profile `new` wrote."""
 
 
 def filter_blueprints_by_category(blueprints: list[Blueprint], category: str) -> list[Blueprint]:
@@ -59,7 +59,7 @@ def filter_blueprints_by_category(blueprints: list[Blueprint], category: str) ->
 #
 # Printify offers hundreds of blueprints and `--category tshirt` still leaves
 # dozens, so the rows are columned -- marker, brand, model, title -- and the
-# ones this workspace already has a profile for sort to the top. Building them
+# ones this workspace already has a garment profile for sort to the top. Building them
 # lives here rather than in the prompt so it can be tested without a terminal,
 # the same reason every other decision in `new` does. Filtering, on a terminal
 # that can do it at all, is fzf's job -- see `prompts.py`.
@@ -123,21 +123,21 @@ def marked_choices[T](
 
 
 def local_blueprint_keys(workspace: Workspace) -> set[tuple[str, str]]:
-    """The ``(brand, model)`` pairs this workspace already has a profile for,
-    normalised for comparison.
+    """The ``(brand, model)`` pairs this workspace already has a garment
+    profile for, normalised for comparison.
 
-    Keyed on brand+model rather than title, because that is what a profile now
-    identifies a blueprint by (PRD 23) -- and it is what makes the marker
-    survive Printify retitling a garment.
+    Keyed on brand+model rather than title, because that is what a garment
+    profile now identifies a blueprint by (PRD 23) -- and it is what makes
+    the marker survive Printify retitling a garment.
 
-    A profile that will not parse is skipped rather than fatal: it costs a row
-    its marker, and refusing to open the picker over one unrelated broken file
-    would be a poor trade.
+    A garment profile that will not parse is skipped rather than fatal: it
+    costs a row its marker, and refusing to open the picker over one
+    unrelated broken file would be a poor trade.
     """
     keys: set[tuple[str, str]] = set()
-    for name in workspace.profile_names():
+    for name in workspace.garment_profile_names():
         try:
-            ref = workspace.load_profile(name).blueprint
+            ref = workspace.load_garment_profile(name).blueprint
         except (ConfigLoadError, ValidationError):
             continue
         keys.add((normalise(ref.brand), normalise(ref.model)))
@@ -155,7 +155,7 @@ def build_blueprint_choices(
     Brand and model are what identify a garment to anyone who buys blanks --
     "Gildan 18500" is the thing you look up, while Printify's titles bury it
     ("Unisex Pullover Hoodie" is sold under half a dozen brands). Garments
-    this workspace already has a profile for come first and carry the marker:
+    this workspace already has a garment profile for come first and carry the marker:
     in practice a shop reuses a handful of blueprints over and over, and
     having to re-find the one used yesterday is the picker failing at its most
     common job. Within each group, rows sort by brand then title, so the brand
@@ -180,12 +180,12 @@ def sort_sizes(sizes: set[str]) -> list[str]:
 
 def resolve_colour_slugs(variant_set: VariantSet, exceptions: ColourExceptions) -> dict[str, str]:
     """Colour name -> slug, applying exceptions.yaml and raising on collision
-    (PRD: "new reports any collisions it finds while building a profile")."""
+    (PRD: "new reports any collisions it finds while building a garment profile")."""
     return slug_map(variant_set.colors, exceptions)
 
 
-def profile_slug_for(blueprint: Blueprint) -> str:
-    """``profiles/{slug}.yaml``, from brand and model.
+def garment_profile_slug_for(blueprint: Blueprint) -> str:
+    """``garment-profiles/{slug}.yaml``, from brand and model.
 
     Not from the title: Printify's is generic, so a title slug would file the
     Comfort Colors 1717 under ``unisex-garment-dyed-t-shirt.yaml`` alongside
@@ -197,7 +197,7 @@ def profile_slug_for(blueprint: Blueprint) -> str:
 
 
 def blueprint_ref(blueprint: Blueprint) -> BlueprintRef:
-    """The catalog entry as a profile records it (PRD 23).
+    """The catalog entry as a garment profile records it (PRD 23).
 
     Brand and model are written verbatim, ® and all, because that is what the
     catalog says; resolution normalises both sides, so a human editing the
@@ -206,14 +206,14 @@ def blueprint_ref(blueprint: Blueprint) -> BlueprintRef:
     return BlueprintRef(brand=blueprint.brand, model=blueprint.model, title=blueprint.title)
 
 
-def build_profile(
+def build_garment_profile(
     *,
     blueprint: Blueprint,
     provider_title: str,
     placeholder: str,
     variant_set: VariantSet,
-    colour_tone: dict[str, Literal["light", "dark"]] | None = None,
-) -> Profile:
+    colors: dict[str, Literal["light", "dark"]] | None = None,
+) -> GarmentProfile:
     ref = blueprint_ref(blueprint)
     area = variant_set.placeholder(placeholder)
     if area is None:
@@ -223,13 +223,13 @@ def build_profile(
             f"{placeholder!r} placeholder. Available: {available}"
         )
     sizes = sort_sizes({v.options.size for v in variant_set.variants})
-    return Profile(
+    return GarmentProfile(
         blueprint=ref,
         print_provider=provider_title,
         placeholder=placeholder,
         print_area=PrintArea(width=area.width, height=area.height),
         sizes=sizes,
-        colour_tone=colour_tone or {},
+        colors=colors or {},
     )
 
 
@@ -277,16 +277,19 @@ def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Cho
     ]
 
 
-def write_profile_if_absent(workspace: Workspace, slug: str, profile: Profile) -> bool:
-    """Returns True if a new profile.yaml was written, False if one already
-    existed and was left untouched (PRD: "writes profiles/{slug}.yaml if
-    absent; reuses it silently if present")."""
-    path = workspace.profile_file(slug)
+def write_garment_profile_if_absent(
+    workspace: Workspace, slug: str, garment_profile: GarmentProfile
+) -> bool:
+    """Returns True if a new garment profile was written, False if one already
+    existed and was left untouched (PRD: "writes garment-profiles/{slug}.yaml
+    if absent; reuses it silently if present")."""
+    path = workspace.garment_profile_file(slug)
     if path.is_file():
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(
-        yaml.safe_dump(profile.model_dump(mode="json"), sort_keys=False), encoding="utf-8"
+        yaml.safe_dump(garment_profile.model_dump(mode="json"), sort_keys=False),
+        encoding="utf-8",
     )
     return True
 
@@ -305,10 +308,10 @@ def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list
     """The stub's ``media:``, which depends on the referenced template's kind.
 
     ``colour-matrix`` gets one entry per colour, each naming its colour --
-    but capped at Etsy's 10-image limit, because a print provider can offer
+    but capped at Etsy's 20-image limit, because a print provider can offer
     far more colours than Etsy accepts photos: Comfort Colors 1717 / Monster
     Digital offers 33, and one entry each is a listing Etsy will reject.
-    Which 10 is genuinely arbitrary, so it is the first 10 in offer order and
+    Which 20 is genuinely arbitrary, so it is the first 20 in offer order and
     ``new`` says that it truncated. Every colour still appears in ``colors:``
     -- that decides which Printify variants sell, not which photos get
     rendered (PRD 31).
@@ -340,7 +343,7 @@ PORTAL_VERIFICATION_NOTE = (
 def load_candidate_pricing_plans(workspace: Workspace) -> list[tuple[Path, PricingPlan]]:
     """Every discovered plan that actually loads. A plan that won't parse or
     fails currency validation is skipped, not fatal -- same precedent as
-    :func:`local_blueprint_keys` skipping a broken profile."""
+    :func:`local_blueprint_keys` skipping a broken garment profile."""
     result: list[tuple[Path, PricingPlan]] = []
     for path in workspace.pricing_plan_files():
         try:
@@ -352,15 +355,16 @@ def load_candidate_pricing_plans(workspace: Workspace) -> list[tuple[Path, Prici
 
 def build_pricing_plan_choices(
     plans: list[tuple[Path, PricingPlan]],
-    profile_slug: str,
+    garment_profile_slug: str,
     *,
     marker: str = LOCAL_MARKER,
 ) -> list[Choice[Path]]:
     """Rows for the picker: plans declaring this exact garment profile sort
-    first and carry the marker -- an *exact* ``plan.profile == profile_slug``
-    match, since a plan declares its garment directly (PRD 33), unlike the
-    blueprint picker's marker, which infers "already used here"."""
-    compatible = {path for path, plan in plans if plan.profile == profile_slug}
+    first and carry the marker -- an *exact*
+    ``plan.garment_profile == garment_profile_slug`` match, since a plan
+    declares its garment directly (PRD 33), unlike the blueprint picker's
+    marker, which infers "already used here"."""
+    compatible = {path for path, plan in plans if plan.garment_profile == garment_profile_slug}
     return marked_choices(
         [path for path, _ in plans],
         marked=lambda path: path in compatible,
@@ -374,7 +378,7 @@ def pricing_plan_ref(plan_path: Path, *, listing_dir: Path) -> str:
     """The write-side counterpart to :meth:`Workspace.resolve` -- a
     ``listing_dir``-relative POSIX ref, e.g.
     ``'../../pricing-plans/tee-basic.yaml'``. Needed because (unlike
-    ``design``/``profile``, which have one fixed depth) discovery under
+    ``design``/``garment_profile``, which have one fixed depth) discovery under
     ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the way
     ``../../designs/{name}.png`` is."""
     return plan_path.resolve().relative_to(listing_dir.resolve(), walk_up=True).as_posix()
@@ -457,7 +461,7 @@ def compute_starting_prices(
 def write_pricing_plan(
     workspace: Workspace,
     name: str,
-    profile_slug: str,
+    garment_profile_slug: str,
     prices: dict[str, Money],
     notes: list[str],
 ) -> Path:
@@ -479,7 +483,7 @@ def write_pricing_plan(
     )
     body = yaml.safe_dump(
         {
-            "profile": profile_slug,
+            "garment_profile": garment_profile_slug,
             "prices": {size: str(price) for size, price in prices.items()},
             "price_overrides": {},
         },
@@ -491,7 +495,7 @@ def write_pricing_plan(
 
 def build_listing_stub(
     *,
-    profile_slug: str,
+    garment_profile_slug: str,
     design_ref: str,
     colours: list[str],
     pricing_plan_ref: str,
@@ -503,7 +507,7 @@ def build_listing_stub(
     2), the media entries :func:`build_media_entries` decided, and
     ``<generate>`` sentinels for the fields AI copy generation owns."""
     return {
-        "profile": profile_slug,
+        "garment_profile": garment_profile_slug,
         "design": design_ref,
         "colors": colours,
         "brief": brief,

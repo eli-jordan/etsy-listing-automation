@@ -17,17 +17,28 @@ def execute(ctx: RunContext, planned: PlannedRun, lock: Lockfile) -> Lockfile:
     ``stages_completed`` with no pending change is a no-op re-check, not a
     duplicate action -- this is what lets a failed ``apply`` be re-run safely.
 
-    Nothing here re-resolves anything. Each stage is handed back the desired
-    document and the live state ``build_plan`` already got from it, so the
-    document that was hashed is the document that gets sent, by construction
-    rather than by two call paths agreeing.
+    Nothing here re-resolves anything, and nothing here re-*reads* anything.
+    Each stage is handed back the three states ``build_plan`` already
+    resolved -- its desired document, its decoded ``applied`` subtree and its
+    live state -- so the document that was hashed is the document that gets
+    sent, by construction rather than by two call paths agreeing.
 
     Nor does anything here know the lockfile's shape. Each result is folded in
     by :meth:`Lockfile.fold`, which owns the replace-versus-merge rules for
     all four axes -- this loop only decides *which* stages run and in what
     order, which is the part that is genuinely ``apply``'s business (A3).
+
+    **``remote`` is threaded live through the run; ``applied`` is not (A26).**
+    A stage's own ``lock.applied`` stays exactly what it was before this run
+    started, so stage order still cannot change what a stage sees there. But
+    an id an earlier stage minted *this run* -- ``publish`` creating the Etsy
+    listing ``etsy_listing`` is about to patch -- has to be visible to a later
+    stage's ``apply`` in the same run, or a first `apply` that creates a
+    Printify product, publishes it, and then cannot find the listing id it
+    just minted would need running twice.
     """
     result_lock = lock
+    remote = dict(lock.remote)
 
     for state in planned.states:
         stage_plan = state.stage_plan
@@ -35,12 +46,14 @@ def execute(ctx: RunContext, planned: PlannedRun, lock: Lockfile) -> Lockfile:
             continue
         stage = state.stage
         ctx.emit(f"applying {stage.name}")
-        # `lock`, not `result_lock`: a stage reads the *previous* lockfile,
-        # the one describing the world before this run started. Handing it a
-        # lockfile already carrying an earlier stage's results would let stage
-        # order change what a stage sees.
-        result = stage.apply(ctx, stage_plan, state.desired, state.live, lock)
+        # `lock.applied`, not `result_lock.applied`: a stage's own applied
+        # document is still the one describing the world before this run
+        # started. `remote` is the accumulator instead, so an id minted a
+        # moment ago in this same loop is there to be read.
+        live_lock = lock.model_copy(update={"remote": remote})
+        result = stage.apply(ctx, state.desired, state.applied, state.live, live_lock)
         result_lock = result_lock.fold(stage.name, result)
+        remote = {**remote, **result.remote}
 
     return result_lock.stamped(
         tool_version=__about__.VERSION,

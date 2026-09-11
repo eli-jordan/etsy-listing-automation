@@ -25,6 +25,7 @@ import yaml
 from PIL import Image
 
 from etsy_listings import __about__
+from etsy_listings.clients.etsy.listings import EtsyListingClient
 from etsy_listings.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
 from etsy_listings.engine.context import Event, RunContext
@@ -59,6 +60,7 @@ def a_context(
     *,
     catalog: CatalogClient | None = None,
     printify: PrintifyClient | None = None,
+    etsy: EtsyListingClient | None = None,
     on_event: Callable[[Event], None] | None = None,
 ) -> RunContext:
     """A run context over the workspace at ``root``.
@@ -73,6 +75,7 @@ def a_context(
         workspace=Workspace.discover(root_override=root),
         catalog=catalog if catalog is not None else FakeCatalogClient([], {}, {}),
         printify=printify,
+        etsy=etsy,
         **sink,
     )
 
@@ -96,6 +99,18 @@ def listing_file(root: Path, listing: str = FIXTURE_LISTING) -> Path:
 def edit_listing(root: Path, listing: str = FIXTURE_LISTING, **updates: Any) -> None:
     """Replace top-level keys of a listing -- ``prices``, ``colors``, ``media``."""
     path = listing_file(root, listing)
+    document = _read_yaml(path)
+    document.update(updates)
+    _write_yaml(path, document)
+
+
+def garment_profile_file(root: Path, garment_profile: str) -> Path:
+    return root / "garment-profiles" / f"{garment_profile}.yaml"
+
+
+def edit_garment_profile(root: Path, garment_profile: str, **updates: Any) -> None:
+    """Replace top-level keys of a garment profile -- ``sizes``, ``print_provider``."""
+    path = garment_profile_file(root, garment_profile)
     document = _read_yaml(path)
     document.update(updates)
     _write_yaml(path, document)
@@ -143,7 +158,34 @@ def set_shop_id(root: Path, shop_id: int) -> Path:
     a configured workspace can say so in one line."""
     path = root / "shop.yaml"
     document = _read_yaml(path)
-    document["printify"] = {"shop_id": shop_id}
+    # Merged, not replaced: the fixture's `preferred_print_provider` lives in
+    # this block too (PRD 51), and a helper that quietly dropped it would
+    # change what the product stage offers.
+    document["printify"] = {**(document.get("printify") or {}), "shop_id": shop_id}
+    _write_yaml(path, document)
+    return root
+
+
+def set_etsy_shop_id(root: Path, shop_id: int) -> Path:
+    """Opt the workspace into the Etsy stages (Phase 3), the same way
+    :func:`set_shop_id` opts it into Printify's. Merged, not replaced."""
+    path = root / "shop.yaml"
+    document = _read_yaml(path)
+    document["etsy"] = {**(document.get("etsy") or {}), "shop_id": shop_id}
+    _write_yaml(path, document)
+    return root
+
+
+def set_etsy_listing_defaults(root: Path, **overrides: Any) -> Path:
+    """Merge ``etsy.listing_defaults`` overrides into ``shop.yaml`` --
+    ``shipping_profile``, ``return_policy``, ``production_partner``,
+    ``who_made`` and friends (Phase 3, decision 7). Merged, not replaced, for
+    the same reason :func:`set_shop_id` merges `printify:`."""
+    path = root / "shop.yaml"
+    document = _read_yaml(path)
+    etsy = dict(document.get("etsy") or {})
+    etsy["listing_defaults"] = {**(etsy.get("listing_defaults") or {}), **overrides}
+    document["etsy"] = etsy
     _write_yaml(path, document)
     return root
 
@@ -152,8 +194,8 @@ def write_design(root: Path, size: tuple[int, int], *, name: str = FIXTURE_LISTI
     """Replace a design with a solid image of a given pixel size.
 
     The size is the point: the product stage refuses a design smaller than the
-    profile's print area, so "at print resolution" and "too small" are both
-    just a number here.
+    garment profile's print area, so "at print resolution" and "too small" are
+    both just a number here.
     """
     path = root / "designs" / f"{name}.png"
     Image.new("RGBA", size, (10, 20, 30, 255)).save(path)

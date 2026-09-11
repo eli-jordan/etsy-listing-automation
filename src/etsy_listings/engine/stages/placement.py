@@ -21,8 +21,8 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
+from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
-from etsy_listings.config.profile import Profile
 from etsy_listings.engine.lock import hash_file
 from etsy_listings.workspace.workspace import Workspace
 
@@ -89,14 +89,14 @@ class DesignPlacement:
     """
 
     listing: Listing
-    profile: Profile
+    profile: GarmentProfile
     paths: dict[str, Path]
     """Artwork key -> the design file it names, resolved through
     :meth:`Workspace.resolve` (so a ``design:`` ref cannot escape the root)."""
 
     @classmethod
     def resolve(
-        cls, workspace: Workspace, listing_name: str, listing: Listing, profile: Profile
+        cls, workspace: Workspace, listing_name: str, listing: Listing, profile: GarmentProfile
     ) -> DesignPlacement:
         listing_dir = workspace.listing_dir(listing_name)
         return cls(
@@ -113,7 +113,7 @@ class DesignPlacement:
         1. ``listing.artwork[colour]`` -- explicit per-design override, wins even
            over the template's own override (deliberately -- see the doc).
         2. The template/placement's own ``artwork`` override.
-        3. ``on-{profile.colour_tone[colour]}``, if that key exists in the design map.
+        3. ``on-{profile.colors[colour]}``, if that key exists in the design map.
         4. The design map's sole key, if it has exactly one entry.
         """
         keys = list(self.listing.design.keys())
@@ -125,16 +125,16 @@ class DesignPlacement:
             candidate, source = self.listing.artwork[colour], f"the listing's artwork[{colour!r}]"
         elif template_override is not None:
             candidate, source = template_override, "the template's own artwork: override"
-        elif colour is not None and colour in self.profile.colour_tone:
-            toned = f"on-{self.profile.colour_tone[colour]}"
+        elif colour is not None and colour in self.profile.colors:
+            toned = f"on-{self.profile.colors[colour]}"
             if toned in key_set:
-                candidate, source = toned, f"the profile's colour_tone[{colour!r}]"
+                candidate, source = toned, f"the garment profile's colors[{colour!r}]"
 
         if candidate is None and len(keys) == 1:
             candidate, source = keys[0], "the design's sole key"
 
         if candidate is None or candidate not in key_set:
-            tone = self.profile.colour_tone.get(colour) if colour is not None else None
+            tone = self.profile.colors.get(colour) if colour is not None else None
             raise ArtworkResolutionError(
                 colour, tone, sorted(keys), wanted=candidate, source=source
             )

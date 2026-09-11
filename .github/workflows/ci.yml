@@ -5,10 +5,16 @@
 # floor. None of that touches a network or a browser, so a PR cannot go red on
 # somebody else's infrastructure.
 #
-# main gets the two expensive layers on top: `browser` (playwright over the
-# built SPA served by FastAPI) and `e2e` (the real Printify catalog, via the
-# repository's PRINTIFY_API_TOKEN secret). Phase 1's e2e tests are read-only
-# GETs, so running them on every push to main costs no state.
+# main gets the `browser` layer on top -- playwright over the built SPA served
+# by FastAPI, which needs chromium and so cannot sit on a PR.
+#
+# The `e2e` layer lives in its own workflow ([e2e.yml](e2e.yml)) rather than
+# here, because it is the one layer worth running on its own: it talks to real
+# Printify and Etsy shops, it is the slowest thing in the repo, and its Etsy
+# credentials expire in a way that needs re-running it by hand after a fix
+# (see that file's note on refresh-token rotation). Splitting it means
+# `gh workflow run e2e` re-runs it without also re-running lint, both test
+# matrices and the browser layer.
 #
 # The gates mirror scripts/check.sh rather than calling it: that script is bash
 # and reformats in place (`ruff format .`), neither of which suits a Windows
@@ -116,17 +122,17 @@ jobs:
       - name: vitest + coverage (branch, fail under 85%)
         run: npm run test:coverage
 
-  integration:
+  browser:
     # main, or a deliberate manual run. Gated on the ref rather than merely
     # on the event: `on.push`
     # is filtered to main today, so `event_name == 'push'` would be equivalent
     # -- but only by a coupling to a filter twelve lines away, and adding a
-    # release branch there would silently start spending the Printify token on
-    # it. A pull_request event runs at refs/pull/<n>/merge, so it cannot match.
+    # release branch there would silently start spending runner time on it.
+    # A pull_request event runs at refs/pull/<n>/merge, so it cannot match.
     #
-    # `needs` keeps these from burning ten minutes on a commit whose lint is
+    # `needs` keeps this from burning ten minutes on a commit whose lint is
     # already broken.
-    name: browser + e2e
+    name: browser
     if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     needs: [python, frontend]
     runs-on: ubuntu-latest
@@ -156,17 +162,11 @@ jobs:
       - name: install chromium
         run: uv run playwright install --with-deps chromium
 
-      # Both layers skip themselves when a prerequisite is missing -- chromium,
-      # a built SPA, a Printify token -- and a layer that runs nothing still
-      # reports green. ETSY_LISTINGS_REQUIRE_EVERY_LAYER makes that a failure
-      # naming the prerequisite, so this tier cannot pass without doing its job.
+      # The layer skips itself when a prerequisite is missing -- chromium, a
+      # built SPA -- and a layer that runs nothing still reports green.
+      # ETSY_LISTINGS_REQUIRE_EVERY_LAYER makes that a failure naming the
+      # prerequisite, so this job cannot pass without doing its job.
       - name: pytest -m browser
         env:
           ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
         run: uv run pytest -m browser
-
-      - name: pytest -m e2e
-        env:
-          ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
-          PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
-        run: uv run pytest -m e2e

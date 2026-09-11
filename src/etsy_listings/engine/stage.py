@@ -17,12 +17,15 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Protocol, TypeVar
 
-from etsy_listings.engine.change import StagePlan
+from pydantic import BaseModel
+
+from etsy_listings.engine.change import Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile, StageApplyResult
 from etsy_listings.errors import UserFacingError
 
 D = TypeVar("D")
+A = TypeVar("A", bound=BaseModel)
 L = TypeVar("L")
 
 __all__ = ["AnyStage", "Blocked", "Stage", "StageApplyResult", "StageBlockedError"]
@@ -63,47 +66,112 @@ class StageBlockedError(UserFacingError):
     """
 
 
-class Stage(Protocol[D, L]):
+class Stage(Protocol[D, A, L]):
+    """Three states and three questions, and nothing about bookkeeping.
+
+    What a stage author must supply is deliberately smaller than it was. The
+    engine now owns: looking up this stage's lockfile subtree, decoding it
+    (:meth:`~etsy_listings.engine.lock.Lockfile.parse_applied_for`), naming
+    the stage in the plan it produced, and turning a refusal into a blocked
+    plan. Each of those was written out once per stage, and each had already
+    been written two different ways with only two stages in the pipeline.
+    """
+
     name: str
     local: bool  # True => no remote state; differences are work, not drift
 
-    def desired(self, ctx: RunContext, listing: str) -> D: ...
+    applied_model: type[A]
+    """The type this stage's lockfile subtree decodes into.
 
-    def read_live(self, ctx: RunContext, listing: str, lock: Lockfile) -> L | None: ...
+    Declared rather than parsed: ``build_plan`` hands ``plan()`` a typed
+    document, so no stage writes a ``parse()`` of its own and no stage can
+    write one that raises where the others return ``None``. A model, always --
+    a document read back as a dict is a document whose key names get spelled
+    again in every function that touches it.
+    """
 
-    def plan(self, desired: D, applied: dict[str, Any] | None, live: L | None) -> StagePlan: ...
+    def desired(self, ctx: RunContext, listing: str, applied: A | None) -> D | Blocked: ...
 
-    """``applied`` is this stage's own subtree of the lockfile, already looked
-    up by ``build_plan`` through ``Lockfile.applied_for(name)`` -- not the
-    whole lockfile with an instruction to take one key out of it.
+    """What this listing wants from this stage, or why it cannot have it.
 
-    It arrives as the raw document, because that is what was written: a
-    stage that wants a typed view parses one at the top of its ``plan()``,
-    where the parse sits next to the comparison it feeds. There used to be a
-    ``last_applied(lock)`` method for this, and every stage implemented it as
-    ``lock.applied.get(self.name)`` -- the same lookup, written out once per
-    stage, on a protocol wide enough to reach every other stage's state."""
+    **Where a pre-flight refusal is spoken** -- everything decidable from
+    config and the last-applied document, which is nearly all of them. It is
+    the earliest point one can be raised, and raising it here is what stops a
+    fully resolved document being built for a run that was never going to
+    happen. The exception is a refusal only the live state can prove, which
+    belongs to ``plan()`` as :meth:`~etsy_listings.engine.change.Verdict.refused`
+    because the fact it turns on does not exist yet.
+
+    ``applied`` is passed because some refusals are about what was applied
+    last time -- changing the garment under an existing product is the one
+    that exists today (PRD 37)."""
+
+    def read_live(
+        self, ctx: RunContext, listing: str, lock: Lockfile, applied: A | None
+    ) -> L | None: ...
+
+    """The state outside the lockfile: a remote object, or files on disk.
+
+    Called for ``local`` stages too -- ``local`` means "no *remote* state", so
+    no drift reporting and no fan-out, never "reads nothing" (A1). ``applied``
+    arrives already decoded, so a stage no longer re-looks-up and re-parses
+    its own subtree here having just been handed it. ``lock`` stays for the
+    rest of the file: the ids under ``lock.remote`` are not live state and
+    exist nowhere on the API's side of the seam."""
+
+    def plan(self, desired: D, applied: A | None, live: L | None) -> Verdict: ...
+
+    """Compare the three states. A2: every stage writes its own.
+
+    It returns a :class:`~etsy_listings.engine.change.Verdict` rather than a
+    ``StagePlan`` because the one thing a ``StagePlan`` has and a verdict does
+    not -- the stage's own name -- is the engine's to supply, and a name a
+    stage stamps for itself is a name it can stamp wrongly.
+
+    A verdict may also *refuse*
+    (:meth:`~etsy_listings.engine.change.Verdict.refused`), for the refusals
+    that only ``live`` could have proved. It is the same refusal ``desired()``
+    speaks and lands in the same place; what a verdict must never do is
+    decline to run while reporting a mere ``reason``, which renders as
+    nothing at all.
+
+    This signature is pure by construction: no context, no clock, no client,
+    so a stage's comparison is unit-testable without any of them."""
 
     def apply(
         self,
         ctx: RunContext,
-        stage_plan: StagePlan,
         desired: D,
+        applied: A | None,
         live: L | None,
         lock: Lockfile,
     ) -> StageApplyResult: ...
 
-    """``desired`` and ``live`` are the ones ``build_plan`` already resolved,
-    handed back rather than re-derived. That is what makes "the document that
-    was hashed is the document that was sent" true by construction, and it is
-    why the product stage no longer issues a second ``GET`` for a product it
-    read moments ago.
+    """``desired``, ``applied`` and ``live`` are the ones ``build_plan``
+    already resolved, handed back rather than re-derived. That is what makes
+    "the document that was hashed is the document that was sent" true by
+    construction, and it is why the product stage no longer issues a second
+    ``GET`` for a product it read moments ago.
+
+    ``applied`` is here for the same reason it is passed to the other three
+    questions: decoding a stage's own subtree is the engine's job, and a
+    stage that cannot get the document handed to it goes and decodes one --
+    ``etsy_media`` did, which put a second implementation of that rule in a
+    file that had just been given the first. This parameter replaces the
+    ``stage_plan`` that used to sit here, which no stage read: three deleted
+    it outright and the protocol had already drifted, one stage typing it
+    ``object`` while the rest said ``StagePlan``. A plan is the engine's
+    account of what a stage said; handing it back to that stage tells it
+    nothing it did not say.
+
+    ``desired`` is a ``D``, never a ``Blocked``: a blocked stage is never
+    flagged to run, so the branch every stage used to open here is gone.
 
     ``lock`` is the *previous* one, and stays because not all remote state is
     *live* state: the upload ids a stage may skip re-shipping were written by
     the last apply and exist nowhere on the API's side of the seam."""
 
 
-AnyStage = Stage[Any, Any]
-"""A stage with its desired/live types erased, for heterogeneous lists
+AnyStage = Stage[Any, Any, Any]
+"""A stage with its desired/applied/live types erased, for heterogeneous lists
 (the ``STAGES`` pipeline mixes stages with unrelated types by design -- A1)."""

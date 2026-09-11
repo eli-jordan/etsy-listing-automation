@@ -1,43 +1,41 @@
 """Typer CLI. One module per command; this module wires them into one app.
 
-``plan``, ``apply``, ``new`` and ``ui`` exist as of Phase 1 -- ``auth``,
-``catalog refresh``, ``unlock`` and ``status`` are built in later phases, per
-A10's strict phase order.
+``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth`` and ``unlock`` are
+built, per A10's strict phase order. ``catalog refresh`` and ``status``
+remain for Phase 6.
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
 import typer
 
-from etsy_listings import prompts, terminal
+from etsy_listings import connections, prompts, terminal
+from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
+from etsy_listings.authcmd import Part as AuthPart
 from etsy_listings.cli.render import format_blocked, format_plan
 from etsy_listings.clients.printify import (
-    CachedCatalogClient,
-    CatalogClient,
-    HttpCatalogClient,
-    HttpPrintifyClient,
     PrintifyAuthError,
-    PrintifyClient,
-    Transport,
 )
+from etsy_listings.config.defaults import MissingDefaultError
 from etsy_listings.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
-    Secrets,
 )
 from etsy_listings.engine.change import Plan
-from etsy_listings.engine.context import Event, EventSink, RunContext
+from etsy_listings.engine.context import Event
+from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
 from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
+from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.errors import UserFacingError
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.userpath import to_native_path
@@ -88,10 +86,9 @@ def _root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this b
 def _root_callback() -> None:
     """Etsy print-on-demand listing automation.
 
-    Renders mockups locally, configures the product in Printify and patches the
-    resulting Etsy listing. Idempotent: re-running against unchanged inputs
-    makes no remote changes. Only the local `render` stage is implemented so
-    far -- `plan` and `apply` are real, and neither touches Printify or Etsy yet.
+    Renders mockups locally, configures the product in Printify, publishes it
+    and patches the resulting Etsy listing's copy and media. Idempotent:
+    re-running against unchanged inputs makes no remote changes.
     """
     # A no-op callback keeps `plan` addressed as a subcommand (`etsy-listings
     # plan ...`) -- Typer otherwise collapses a single-command app so its
@@ -107,39 +104,11 @@ def _open_workspace(root: str | None) -> Workspace:
         raise typer.Exit(code=1) from exc
 
 
-def _transport(workspace: Workspace) -> Transport:
-    """One connection to Printify, with its token resolved lazily.
-
-    ``plan`` and ``apply`` build a ``RunContext`` eagerly, but no Phase 0/1
-    stage calls Printify at all, and a cached catalog read never needs a token
-    either. Resolving one at construction time would make every ``plan`` fail
-    in a workspace that has no ``.env`` -- including the fixture workspace the
-    getting-started guide points at.
-
-    Shared by both clients because it is one host and one token: they differ in
-    what they are allowed to *ask*, which is a matter of which protocol the
-    caller holds, not of which socket the bytes leave through.
-    """
-
-    def token() -> str:
-        return Secrets.load(workspace.env_file()).require_printify_api_token()
-
-    return Transport(token)
-
-
-def _clients(workspace: Workspace) -> tuple[CatalogClient, PrintifyClient]:
-    transport = _transport(workspace)
-    return (
-        CachedCatalogClient(HttpCatalogClient(transport), workspace.catalog_cache_dir()),
-        HttpPrintifyClient(transport),
-    )
-
-
-def _run_context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
-    catalog, printify = _clients(workspace)
-    if on_event is None:
-        return RunContext(workspace=workspace, catalog=catalog, printify=printify)
-    return RunContext(workspace=workspace, catalog=catalog, printify=printify, on_event=on_event)
+# How a client is built is `connections`', not this module's. Which credential
+# is resolved when, what a missing one means, and where the Etsy token file
+# lives were written out here *and* in `setup`, `auth` and the e2e layer --
+# four copies of one five-step sequence. What is left here is deciding *when*
+# to ask for a connection, which is genuinely the entry point's business.
 
 
 SWATCH_GLYPH = "██"
@@ -283,6 +252,99 @@ def setup(
         run_setup(target)
 
 
+auth_app = typer.Typer(
+    epilog=EPILOG,
+    invoke_without_command=True,
+    help="Capture every credential: Printify, Etsy, and the Anthropic key.",
+)
+app.add_typer(auth_app, name="auth")
+
+
+def _check_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
+    return typer.Option(
+        False,
+        "--check",
+        help="Report what is stored and how long the Etsy consent has left. Writes nothing.",
+    )
+
+
+def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
+    """``--root`` as `auth` needs it: no shop.yaml required.
+
+    `auth` and `setup` are the two commands that run *before* a workspace
+    exists, so neither can discover one by walking up for its marker file --
+    they take the directory they are given (PRD 49).
+    """
+    return typer.Option(
+        None,
+        "--root",
+        help=(
+            "Which workspace to store credentials in. Defaults to the current "
+            "directory; unlike most commands this one does not need a shop.yaml "
+            "to exist there yet."
+        ),
+        envvar=layout.ROOT_ENV_VAR,
+        show_envvar=True,
+        metavar="PATH",
+    )
+
+
+def _run_auth(root: str | None, check: bool, parts: Sequence[AuthPart]) -> None:
+    from etsy_listings.authcmd import run_auth
+
+    target = to_native_path(root) if root else Path.cwd()
+    with _wizard():
+        run_auth(target, check=check, parts=parts)
+
+
+@auth_app.callback(invoke_without_command=True)
+def auth(
+    ctx: typer.Context,
+    root: str | None = _auth_root_option(),
+    check: bool = _check_option(),
+) -> None:
+    """Capture every credential: Printify, Etsy, and the Anthropic key.
+
+    Verifies each one against its own API before storing it, and signs in to
+    Etsy through the browser. Keys go to the workspace's .env, OAuth tokens to
+    .auth/, and both are gitignored before the first one is written.
+
+    Run one at a time with `auth printify`, `auth etsy` or `auth anthropic`.
+    Safe to re-run: it fills in what is missing, leaves what is present alone,
+    and is how you renew the Etsy consent before its 90 days are up.
+    """
+    if ctx.invoked_subcommand is not None:
+        return
+    _run_auth(root, check, ALL_AUTH_PARTS)
+
+
+@auth_app.command("printify", epilog=EPILOG)
+def auth_printify(
+    root: str | None = _auth_root_option(),
+    check: bool = _check_option(),
+) -> None:
+    """Capture just the Printify API token, verified against the live API."""
+    _run_auth(root, check, ["printify"])
+
+
+@auth_app.command("etsy", epilog=EPILOG)
+def auth_etsy(
+    root: str | None = _auth_root_option(),
+    check: bool = _check_option(),
+) -> None:
+    """Capture just the Etsy app key pair and sign in through the browser."""
+    _run_auth(root, check, ["etsy"])
+
+
+@auth_app.command("anthropic", epilog=EPILOG)
+def auth_anthropic(
+    root: str | None = _auth_root_option(),
+    check: bool = _check_option(),
+) -> None:
+    """Capture just the Anthropic API key (used by `generate`, from Phase 4)."""
+    _run_auth(root, check, ["anthropic"])
+
+
 @app.command(epilog=EPILOG)
 def plan(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
@@ -303,7 +365,7 @@ def plan(
 
     _exit_for(
         plan_listings(
-            _run_context(workspace),
+            connections.run_context(workspace),
             _target_listings(workspace, listing, all),
             STAGES,
             on_planned=show,
@@ -318,8 +380,10 @@ def apply(
     all: bool = typer.Option(False, "--all", help="Apply every listing in the workspace"),
     root: str | None = _root_option(),
 ) -> None:
-    """Execute every stage the plan identified. Only local stages (render) run
-    until later phases add Printify/Etsy."""
+    """Execute every stage the plan identified: render, create or update the
+    Printify product, publish it, and patch the resulting Etsy listing's
+    copy and media. A stage a workspace has not configured (no Printify or
+    Etsy shop id) reports itself blocked rather than running."""
     workspace = _open_workspace(root)
 
     def announce(name: str, planned: PlannedRun) -> None:
@@ -334,13 +398,47 @@ def apply(
 
     _exit_for(
         apply_listings(
-            _run_context(workspace, on_event=_echo_event),
+            connections.run_context(workspace, on_event=_echo_event),
             _target_listings(workspace, listing, all),
             STAGES,
             on_planned=announce,
             on_failure=_echo_failure,
         )
     )
+
+
+@app.command(epilog=EPILOG)
+def unlock(
+    listing: str = typer.Argument(help="Listing name, e.g. take-a-hike"),
+    root: str | None = _root_option(),
+) -> None:
+    """Clear a Printify product stuck publishing (`is_locked: true`).
+
+    `publish` polls for up to ~10 minutes before giving up; this calls
+    Printify's own remedy (`publishing_failed.json`) for the product that
+    poll named. Its one job has never been exercised against a genuinely
+    stuck publish -- none has stuck in probing -- so it ships built and
+    unverified rather than withheld. Re-run `apply` afterwards; this command
+    only asks Printify to clear the lock, it does not touch the lockfile.
+    """
+    workspace = _open_workspace(root)
+    lock = Lockfile.read(workspace.lock_file(listing))
+    product_id = lock.remote.get(PRODUCT_ID_KEY) if lock is not None else None
+    if not product_id:
+        typer.echo(f"{listing}: no Printify product on record -- nothing to unlock", err=True)
+        raise typer.Exit(code=1)
+
+    try:
+        shop_id = workspace.defaults.printify.require_shop_id()
+    except MissingDefaultError as exc:
+        typer.echo(f"{listing}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+    printify = connections.printify_client(workspace)
+    printify.publishing_failed(
+        shop_id, str(product_id), reason="cleared via `etsy-listings unlock`"
+    )
+    typer.echo(f"{listing}: asked Printify to clear the publish lock on product {product_id}")
+    typer.echo("Run `etsy-listings apply` again to continue.")
 
 
 @app.command(epilog=EPILOG)
@@ -353,7 +451,7 @@ def new(
     ),
     root: str | None = _root_option(),
 ) -> None:
-    """Interactive design/garment/provider picker; writes profile (if absent) + listing.
+    """Interactive design/garment/provider picker; writes garment profile (if absent) + listing.
 
     Reads Printify's catalog, so it needs PRINTIFY_API_TOKEN with the
     `catalog.read` scope (see the environment variables below).
@@ -363,7 +461,7 @@ def new(
     workspace = _open_workspace(root)
     try:
         with _wizard():
-            run_new(workspace, _clients(workspace)[0], design, category)
+            run_new(workspace, connections.catalog_client(workspace), design, category)
     except (MissingCredentialError, PrintifyAuthError) as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=1) from exc

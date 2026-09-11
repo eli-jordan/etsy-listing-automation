@@ -37,7 +37,12 @@ from etsy_listings.clients.printify.models import (
     Upload,
 )
 from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.clients.printify.transport import HTTP_NOT_FOUND, PrintifyApiError, Transport
+from etsy_listings.clients.printify.transport import (
+    HTTP_NOT_FOUND,
+    WRONG_SHOP_CODE,
+    PrintifyApiError,
+    Transport,
+)
 
 PRODUCTS_PAGE_SIZE = 50
 
@@ -66,17 +71,24 @@ class HttpPrintifyClient(PrintifyClient):
     # ------------------------------------------------------------ products
 
     def get_product(self, shop_id: int, product_id: str) -> Product | None:
-        """The product, or ``None`` if it is gone.
+        """The product, or ``None`` if this shop does not have it.
 
         Deleted in Printify's web app between runs is an ordinary thing to
         happen, and it means "create one", not "crash".
+
+        Two answers mean the same thing here. `404` is the id nothing knows,
+        and `400`/:data:`~etsy_listings.clients.printify.transport.WRONG_SHOP_CODE`
+        is the id another shop holds -- which, from this shop's side, is the
+        same absence. Catching only the first turns reconnecting a store into
+        a hard failure on the next `plan`, because the lockfile still names
+        the product the old shop had.
         """
         try:
             response = self._transport.request(
                 "GET", f"/v1/shops/{shop_id}/products/{product_id}.json"
             )
         except PrintifyApiError as exc:
-            if exc.status_code == HTTP_NOT_FOUND:
+            if exc.status_code == HTTP_NOT_FOUND or exc.code == WRONG_SHOP_CODE:
                 return None
             raise
         return Product.model_validate(response.json())
@@ -136,6 +148,18 @@ class HttpPrintifyClient(PrintifyClient):
 
     def delete_product(self, shop_id: int, product_id: str) -> None:
         self._transport.request("DELETE", f"/v1/shops/{shop_id}/products/{product_id}.json")
+
+    def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
+        self._transport.request(
+            "POST", f"/v1/shops/{shop_id}/products/{product_id}/publish.json", json=sync_flags
+        )
+
+    def publishing_failed(self, shop_id: int, product_id: str, *, reason: str) -> None:
+        self._transport.request(
+            "POST",
+            f"/v1/shops/{shop_id}/products/{product_id}/publishing_failed.json",
+            json={"reason": reason},
+        )
 
     def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
         """The id of a product already carrying this copy, or ``None``. PRD 48.

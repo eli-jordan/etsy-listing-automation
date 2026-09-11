@@ -8,17 +8,30 @@ the same object the UI will serialise in Phase 5.
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
+import pytest
+
+from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
+from etsy_listings.clients.printify.models import Blueprint
+from etsy_listings.clients.printify.transport import PrintifyApiError, PrintifyAuthError
+from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
 from etsy_listings.engine.run import apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
 
+from tests.support.builders import (
+    APPLIED_AT,
+    a_context,
+    copy_listing,
+    set_copy,
+    set_shop_id,
+    write_design,
+)
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import a_context, copy_listing
 
 
 def _ctx(root: Path, **overrides: object) -> RunContext:
@@ -34,7 +47,7 @@ def _ctx(root: Path, **overrides: object) -> RunContext:
 
 def test_one_bad_listing_does_not_stop_the_rest(workspace_root: Path) -> None:
     """The whole reason `--all` is safe to run over a real catalogue."""
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
     copy_listing(workspace_root, "fine")
 
     report = plan_listings(_ctx(workspace_root), ["broken", "fine", LISTING], STAGES)
@@ -46,7 +59,7 @@ def test_one_bad_listing_does_not_stop_the_rest(workspace_root: Path) -> None:
 def test_a_report_with_any_failure_is_failed(workspace_root: Path) -> None:
     """What the CLI turns into an exit code, and the one thing watching a
     batch go past does not tell you."""
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
 
     report = plan_listings(_ctx(workspace_root), ["broken", LISTING], STAGES)
 
@@ -64,7 +77,7 @@ def test_a_clean_batch_reports_no_failure(workspace_root: Path) -> None:
 def test_a_failure_carries_the_message_not_a_stack(workspace_root: Path) -> None:
     """The error is the whole useful output -- that is what `UserFacingError`
     means, and the run module catches nothing else."""
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
 
     report = plan_listings(_ctx(workspace_root), ["broken"], STAGES)
 
@@ -72,6 +85,122 @@ def test_a_failure_carries_the_message_not_a_stack(workspace_root: Path) -> None
     assert error is not None
     assert "no-such-profile" in str(error)
     assert report.outcomes[0].planned is None
+
+
+class _RefusingCatalog(FakeCatalogClient):
+    """A catalog whose every read is refused, the way a live one refuses.
+
+    Subclassed rather than made configurable on the fake itself: refusing is
+    not behaviour Printify *has*, it is what the transport produces out of a
+    500 or a revoked token, and a fake that could be told to refuse invites
+    tests that assert against a flag instead of against an error.
+    """
+
+    def __init__(self, error: Exception) -> None:
+        super().__init__([], {}, {})
+        self._error = error
+
+    def blueprints(self) -> list[Blueprint]:
+        raise self._error
+
+
+def _configured(root: Path) -> Path:
+    """A workspace the product stage will actually run in, so that the
+    catalog is reached rather than blocked in front of."""
+    set_shop_id(root, 28819281)
+    set_copy(root, title="Take a Hike", description="A shirt for walking.")
+    write_design(root, (4500, 5400))
+    return root
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        PrintifyApiError(500, code=None, reason="upstream failure"),
+        PrintifyAuthError(401),
+        MissingCredentialError(
+            PRINTIFY_TOKEN_VAR, Path(".env"), "read the catalog", "Generate one at printify.com."
+        ),
+    ],
+    ids=["api-refused", "token-rejected", "no-credential"],
+)
+def test_a_client_refusal_fails_its_listing_rather_than_the_run(
+    workspace_root: Path, error: Exception
+) -> None:
+    """PRD 16 covers the API refusing, not only the config being wrong.
+
+    These three used to be plain ``RuntimeError``s, and ``run`` catches only
+    :class:`UserFacingError` -- so a 500, a revoked token or an unset variable
+    on the third listing of a fifty-listing `--all` ended the batch with a
+    traceback and lost the forty-seven behind it. What makes the difference is
+    the *type*; the messages were always written for a user to read.
+    """
+    _configured(workspace_root)
+    copy_listing(workspace_root, "second")
+
+    report = plan_listings(
+        _ctx(workspace_root, catalog=_RefusingCatalog(error)), [LISTING, "second"], STAGES
+    )
+
+    assert [outcome.listing for outcome in report.outcomes] == [LISTING, "second"]
+    assert report.failed
+    assert [outcome.ok for outcome in report.outcomes] == [False, False], (
+        "the run reached the second listing instead of dying on the first"
+    )
+
+
+def test_a_client_refusal_arrives_as_its_message(workspace_root: Path) -> None:
+    """The refusal Printify explained is the whole of what the user needs."""
+    _configured(workspace_root)
+
+    report = plan_listings(
+        _ctx(
+            workspace_root,
+            catalog=_RefusingCatalog(PrintifyApiError(422, code=8254, reason="shop not connected")),
+        ),
+        [LISTING],
+        STAGES,
+    )
+
+    error = report.outcomes[0].error
+    assert error is not None
+    assert "shop not connected" in str(error)
+
+
+def test_an_unreadable_lockfile_redoes_the_work_instead_of_ending_the_run(
+    workspace_root: Path,
+) -> None:
+    """A lockfile some other version wrote, or a truncated one.
+
+    The render stage used to index its subtree directly, so a document missing
+    a key raised `KeyError` -- not a `UserFacingError`, so it escaped the run
+    loop and took the batch with it. Decoding is the lockfile's job now, and a
+    document it cannot read means what "never applied" already means: redo the
+    work.
+    """
+    copy_listing(workspace_root, "second")
+    for name in (LISTING, "second"):
+        path = workspace_root / "listings" / name / "state.lock.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "tool_version": "0.0.0",
+                    "applied_at": APPLIED_AT,
+                    "applied": {"render": {"scenes": ["gone"]}},
+                }
+            ),
+            encoding="utf-8",
+        )
+
+    report = plan_listings(_ctx(workspace_root), [LISTING, "second"], STAGES)
+
+    assert [outcome.ok for outcome in report.outcomes] == [True, True]
+    planned = report.outcomes[0].planned
+    assert planned is not None
+    render = next(sp for sp in planned.plan.stage_plans if sp.stage == "render")
+    assert render.will_run
+    assert render.reason == "no previous render"
 
 
 # ------------------------------------------------------------------- sinks
@@ -94,7 +223,7 @@ def test_planned_fires_per_listing_as_the_run_goes(workspace_root: Path) -> None
 
 
 def test_failure_sink_fires_only_for_the_listing_that_failed(workspace_root: Path) -> None:
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
     planned: list[str] = []
     failed: list[str] = []
 
@@ -141,7 +270,7 @@ def test_apply_writes_a_lockfile_per_listing(workspace_root: Path) -> None:
 
 
 def test_a_failed_listing_writes_no_lockfile(workspace_root: Path) -> None:
-    copy_listing(workspace_root, "broken", profile="no-such-profile")
+    copy_listing(workspace_root, "broken", garment_profile="no-such-profile")
 
     apply_listings(_ctx(workspace_root), ["broken"], STAGES)
 

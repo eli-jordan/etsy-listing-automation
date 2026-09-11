@@ -15,13 +15,14 @@ from typing import Any
 
 import yaml
 
+from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.printify.models import Shop
 from etsy_listings.workspace import layout
 
 WORKSPACE_DIRS: tuple[str, ...] = (
     layout.DESIGNS_DIR,
     layout.LISTINGS_DIR,
-    layout.PROFILES_DIR,
+    layout.GARMENT_PROFILES_DIR,
     layout.PRICING_PLANS_DIR,
     layout.MOCKUP_TEMPLATES_DIR,
     layout.COMMON_MEDIA_DIR,
@@ -34,19 +35,6 @@ WORKSPACE_DIRS: tuple[str, ...] = (
 into it, and it is the one directory users are invited to delete. Creating it
 here would suggest it is structural, which is exactly the misunderstanding
 ``plan``'s "is the output still there?" check exists to survive.
-"""
-
-GITIGNORE_ENTRIES: tuple[tuple[str, str], ...] = (
-    (layout.ENV_FILE, "API tokens -- never commit"),
-    (f"{layout.AUTH_DIR}/", "OAuth tokens -- never commit"),
-    (f"{layout.CACHE_DIR}/", "derived: catalog, renders, run history"),
-)
-"""What must not reach a repository, and why.
-
-A workspace is not a git repository by default, but people put one around it
--- the listings and pricing are worth versioning. The two that would leak a
-credential are the reason this file is written at all; ``.cache/`` is there
-because it is large and fully derivable.
 """
 
 
@@ -64,30 +52,6 @@ def create_directories(root: Path) -> tuple[str, ...]:
     for name in created:
         (root / name).mkdir(parents=True, exist_ok=True)
     return created
-
-
-def update_gitignore(root: Path) -> tuple[str, ...]:
-    """Append any missing entry to ``.gitignore``; return the lines added.
-
-    Appends rather than rewrites: the file may already carry rules that have
-    nothing to do with us, and a workspace's ``.gitignore`` is the user's.
-    """
-    path = root / ".gitignore"
-    existing = path.read_text(encoding="utf-8") if path.is_file() else ""
-    # The pattern, not the line: the entries this function writes carry a
-    # trailing `# why` comment, so comparing whole lines made every run think
-    # its own previous output was missing and append it again.
-    present = {line.split("#", 1)[0].strip() for line in existing.splitlines()}
-
-    added = tuple(
-        f"{pattern:<12} # {why}" for pattern, why in GITIGNORE_ENTRIES if pattern not in present
-    )
-    if not added:
-        return ()
-
-    prefix = existing if not existing or existing.endswith("\n") else existing + "\n"
-    path.write_text(prefix + "\n".join(added) + "\n", encoding="utf-8")
-    return added
 
 
 @dataclass(frozen=True)
@@ -118,30 +82,67 @@ def select_shop(shops: Sequence[Shop]) -> ShopSelection:
     return ShopSelection(needs_choice=True)
 
 
+def exact_shop_match(candidates: Sequence[EtsyShop], name: str) -> EtsyShop | None:
+    """The one shop whose name *is* ``name``, or ``None``.
+
+    Etsy's shop search matches loosely -- it is built for buyers browsing, not
+    for resolving an identifier -- so "TakeAHike" can come back alongside
+    "TakeAHikeVintage" and a dozen others. Taking the first row would give a
+    workspace that publishes to a stranger's shop, so anything less certain
+    than a single exact match (case aside) is treated as no answer at all and
+    put in front of the user.
+    """
+    matches = [shop for shop in candidates if shop.shop_name.casefold() == name.casefold()]
+    return matches[0] if len(matches) == 1 else None
+
+
 @dataclass(frozen=True)
 class SetupAnswers:
     """Everything ``setup`` collects, in one value the renderer can be tested
     against without a terminal."""
 
     printify_shop_id: int
+    printify_shop_name: str
+    preferred_print_provider: str | None
     currency: str
     who_made: str
     when_made: str
     is_supply: bool
     renewal: str
-    preferred_print_provider: str | None
-    etsy_shop_id: int | None
+    etsy_shop_name: str | None = None
+    etsy_shop_id: int | None = None
+    etsy_shipping_profile: str | None = None
+    """By name (PRD 54). Free text: resolving it against the shop's live list
+    needs `shops_r` and a bearer, which `setup` may not have -- that
+    resolution happens once per run in `EtsyShopCatalog`, at plan time."""
+    etsy_return_policy: dict[str, Any] | None = None
+    """The three terms (`accepts_returns`, `accepts_exchanges`,
+    `within_days`), since Etsy gives the resource no title (PRD 59). Built
+    from a live pick when the discovery step can reach the Etsy API."""
+    etsy_production_partner: str | None = None
+    """By name; omitted when the shop has exactly one (decision 3's
+    resolution ladder), same free-text reasoning as ``etsy_shipping_profile``."""
 
 
-ASKED_ETSY_KEYS = ("shop_id", "who_made", "when_made", "is_supply", "renewal")
-ASKED_TOP_LEVEL_KEYS = ("printify", "etsy", "currency", "preferred_print_provider")
-"""What ``setup`` puts a question in front of the user for.
+ASKED_PRINTIFY_KEYS = ("shop_name", "shop_id", "preferred_print_provider")
+ASKED_ETSY_KEYS = ("shop_name", "shop_id", "currency")
+ASKED_LISTING_DEFAULT_KEYS = (
+    "who_made",
+    "when_made",
+    "is_supply",
+    "renewal",
+    "shipping_profile",
+    "return_policy",
+    "production_partner",
+)
+ASKED_TOP_LEVEL_KEYS = ("printify", "etsy")
+"""What ``setup`` puts a question in front of the user for, or resolves on
+their behalf.
 
 The split matters, and it is the half that is easy to get backwards. Anything
-*not* named here -- ``etsy.shop_section_id`` and ``etsy.return_policy_id``
-that Phase 3 fills in, plus any top-level key a later version adds -- is
-carried through untouched, because dropping a value nobody was asked about is
-how a re-runnable command becomes a destructive one.
+*not* named here -- any key a later version adds -- is carried through
+untouched, because dropping a value nobody was asked about is how a re-runnable
+command becomes a destructive one.
 """
 
 
@@ -151,7 +152,7 @@ def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -
     Two rules, and they are complements rather than a compromise:
 
     - **What ``setup`` never asked about is kept**, verbatim. See
-      :data:`ASKED_ETSY_KEYS`.
+      :data:`ASKED_ETSY_KEYS` and :data:`ASKED_LISTING_DEFAULT_KEYS`.
     - **What it did ask about, the answer wins.** Asking a question and then
       discarding the answer is worse than either overwriting or not asking:
       it silently tells the user their input does not matter. The caller seeds
@@ -159,16 +160,38 @@ def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -
       re-run keeps everything -- which is what makes this safe.
 
     ``None`` for an optional answer means "not known", never "delete it": a
-    prompt seeded with a value cannot come back blank.
+    prompt seeded with a value cannot come back blank, and a discovery that
+    found nothing must not erase what a previous run found. That rule now
+    applies one level deeper too -- ``listing_defaults``' own optional names.
     """
     prior: dict[str, Any] = dict(existing or {})
     prior_etsy: dict[str, Any] = dict(prior.get("etsy") or {})
     prior_printify: dict[str, Any] = dict(prior.get("printify") or {})
+    prior_listing_defaults: dict[str, Any] = dict(prior_etsy.get("listing_defaults") or {})
 
-    printify = {**prior_printify, "shop_id": answers.printify_shop_id}
+    printify: dict[str, Any] = {
+        k: v for k, v in prior_printify.items() if k not in ASKED_PRINTIFY_KEYS
+    }
+    printify.update({"shop_name": answers.printify_shop_name, "shop_id": answers.printify_shop_id})
+    if answers.preferred_print_provider:
+        printify["preferred_print_provider"] = answers.preferred_print_provider
 
-    etsy: dict[str, Any] = {k: v for k, v in prior_etsy.items() if k not in ASKED_ETSY_KEYS}
-    etsy.update(
+    etsy: dict[str, Any] = {
+        k: v for k, v in prior_etsy.items() if k not in (*ASKED_ETSY_KEYS, "listing_defaults")
+    }
+    for key, answer in (("shop_name", answers.etsy_shop_name), ("shop_id", answers.etsy_shop_id)):
+        # Omitted rather than defaulted when unknown: a placeholder id looks
+        # real enough to be published against, which is how `12345678` ended
+        # up in a workspace that had no Etsy shop at all.
+        kept = answer if answer is not None else prior_etsy.get(key)
+        if kept is not None:
+            etsy[key] = kept
+    etsy["currency"] = answers.currency
+
+    listing_defaults: dict[str, Any] = {
+        k: v for k, v in prior_listing_defaults.items() if k not in ASKED_LISTING_DEFAULT_KEYS
+    }
+    listing_defaults.update(
         {
             "who_made": answers.who_made,
             "when_made": answers.when_made,
@@ -176,51 +199,112 @@ def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -
             "renewal": answers.renewal,
         }
     )
-    etsy_shop_id = (
-        answers.etsy_shop_id if answers.etsy_shop_id is not None else prior_etsy.get("shop_id")
+    for key, answer in (
+        ("shipping_profile", answers.etsy_shipping_profile),
+        ("production_partner", answers.etsy_production_partner),
+    ):
+        kept = answer if answer is not None else prior_listing_defaults.get(key)
+        if kept:
+            listing_defaults[key] = kept
+    return_policy = (
+        answers.etsy_return_policy
+        if answers.etsy_return_policy is not None
+        else prior_listing_defaults.get("return_policy")
     )
-    if etsy_shop_id is not None:
-        # Omitted rather than defaulted when unknown: a placeholder id looks
-        # real enough to be published against, which is how `12345678` ended
-        # up in a workspace that had no Etsy shop at all.
-        etsy["shop_id"] = etsy_shop_id
+    if return_policy:
+        listing_defaults["return_policy"] = return_policy
+    etsy["listing_defaults"] = listing_defaults
 
     carried = {k: v for k, v in prior.items() if k not in ASKED_TOP_LEVEL_KEYS}
-    document: dict[str, Any] = {"printify": printify, "etsy": etsy, "currency": answers.currency}
-    if answers.preferred_print_provider:
-        document["preferred_print_provider"] = answers.preferred_print_provider
+    document: dict[str, Any] = {"printify": printify, "etsy": etsy}
     document.update(carried)
     return document
 
 
-SHOP_YAML_HEADER = (
-    "# Written by `etsy-listings setup`. Safe to edit by hand -- but a later\n"
-    "# `setup` run rewrites this file, so its own comments will not survive.\n"
-)
+SHOP_YAML_HEADER = """\
+# This workspace's shop-wide configuration, written by `etsy-listings setup`.
+#
+# Safe to edit by hand -- but a later `setup` run rewrites the file, so these
+# comments are regenerated and any of your own will not survive.
+#
+# No credentials live here. Tokens and API keys are in .env, and the Etsy
+# OAuth tokens in .auth/, both gitignored and both written by
+# `etsy-listings auth`.
+"""
+
+FIELD_COMMENTS: dict[str, str] = {
+    "printify": "Where products are created. `setup` reads these from your token.",
+    "printify.shop_name": "the shop's name in Printify -- so the id below is checkable",
+    "printify.shop_id": "every product call is scoped to this",
+    "printify.preferred_print_provider": (
+        "by name, not id; preselected by `new` when it offers this garment"
+    ),
+    "etsy": "The shop listings are published to, and the defaults every listing inherits.",
+    "etsy.shop_name": "the shop's name on Etsy",
+    "etsy.shop_id": "resolved from the name above",
+    "etsy.currency": (
+        "read from the Etsy shop; every price in this workspace must be written in it"
+    ),
+    "etsy.listing_defaults": (
+        "every field a listing inherits -- override any of these in a listing's own etsy: block"
+    ),
+    "etsy.listing_defaults.who_made": (
+        "i_did | someone_else | collective -- someone_else needs a production_partner below"
+    ),
+    "etsy.listing_defaults.when_made": "made_to_order for print-on-demand",
+    "etsy.listing_defaults.is_supply": "false for a finished item",
+    "etsy.listing_defaults.renewal": (
+        "manual | auto -- whether a listing renews itself after four months"
+    ),
+    "etsy.listing_defaults.shipping_profile": (
+        "by name, not id -- resolved against the shop's shipping profiles when a listing is planned"
+    ),
+    "etsy.listing_defaults.return_policy": (
+        "by its terms, not an id -- Etsy gives the resource no title"
+    ),
+    "etsy.listing_defaults.production_partner": (
+        "by name; omit if the shop has exactly one -- required alongside who_made: someone_else"
+    ),
+}
+"""One line per field, in the file itself.
+
+`shop.yaml` is the one file in a workspace people open by hand, and every
+value in it is either an opaque number or a term of art from somebody's API.
+A comment costs a line and saves a trip to the documentation."""
 
 
 def render_shop_yaml(document: dict[str, Any]) -> str:
-    """``sort_keys=False`` so the file reads in the order it was built, with
-    the shop identifiers before the long tail of Etsy defaults."""
-    return SHOP_YAML_HEADER + yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
+    """The file as written: header, then the document with a comment per field.
 
+    Comments are woven into `safe_dump`'s output rather than templated around
+    it, because the document's shape is not fixed -- optional keys come and go
+    -- and a template would have to know every one of them twice.
+    ``sort_keys=False`` keeps the order the document was built in, with the
+    shop identifiers before the long tail of Etsy defaults.
 
-def env_with(existing: str, key: str, value: str) -> str:
-    """``existing`` with ``key`` set to ``value``, everything else untouched.
-
-    Rewriting the line in place rather than appending keeps a second
-    assignment from shadowing the first, and leaves comments and unrelated
-    keys exactly where the user put them. A commented-out assignment is not a
-    match -- it is a note, and silently un-commenting one would be a surprise.
+    The dotted path a line maps to is tracked by indentation depth rather than
+    by a single top-level "section", so a field nested two deep --
+    ``etsy.listing_defaults.shipping_profile`` -- resolves as reliably as a
+    top-level one. A stack of ``(indent, key)`` ancestors is popped back to
+    whatever level the current line sits at, exactly like matching brackets.
     """
-    lines = existing.splitlines()
-    prefix = f"{key}="
-    replaced = False
-    for index, line in enumerate(lines):
-        if line.startswith(prefix):
-            lines[index] = f"{key}={value}"
-            replaced = True
-            break
-    if not replaced:
-        lines.append(f"{key}={value}")
-    return "\n".join(lines) + "\n"
+    dumped = yaml.safe_dump(document, sort_keys=False, allow_unicode=True)
+    lines: list[str] = []
+    ancestors: list[tuple[int, str]] = []
+    for line in dumped.splitlines():
+        stripped = line.strip()
+        indent = len(line) - len(line.lstrip(" "))
+        key = stripped.split(":", 1)[0] if ":" in stripped and not stripped.startswith("-") else ""
+        path = ""
+        if key:
+            while ancestors and ancestors[-1][0] >= indent:
+                ancestors.pop()
+            path = ".".join([*(k for _, k in ancestors), key])
+            ancestors.append((indent, key))
+        comment = FIELD_COMMENTS.get(path)
+        if comment:
+            if indent == 0:
+                lines.append("")
+            lines.append(f"{' ' * indent}# {comment}")
+        lines.append(line)
+    return SHOP_YAML_HEADER + "\n".join(lines) + "\n"

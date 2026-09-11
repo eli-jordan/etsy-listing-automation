@@ -84,6 +84,20 @@ class PrintifyClient(Protocol):
 
     def delete_product(self, shop_id: int, product_id: str) -> None: ...
 
+    def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
+        """Ask Printify to push this product to its connected sales channel.
+
+        Fire-and-forget by design: Printify answers `200 {}` immediately and
+        the actual publish happens asynchronously, behind `is_locked` --
+        polling `get_product` is the caller's job (`publish` stage, A28)."""
+        ...
+
+    def publishing_failed(self, shop_id: int, product_id: str, *, reason: str) -> None:
+        """Clear a publish lock stuck `is_locked: true` (PRD risk 6, `unlock`).
+        Never verified against a genuinely stuck publish -- the lock is real,
+        measured; the remedy is not."""
+        ...
+
     def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
         """The id of a product already carrying this copy, or ``None``.
 

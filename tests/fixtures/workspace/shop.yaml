@@ -1,10 +1,13 @@
+# The fixture workspace: deliberately *without* printify.shop_id or
+# etsy.shop_id, so the Printify and Etsy stages opt out until a test opts in
+# with `set_shop_id` / `set_etsy_shop_id`.
+printify:
+  preferred_print_provider: Monster Digital
 etsy:
-  shop_id: 12345678
-  who_made: i_did
-  when_made: made_to_order
-  is_supply: false
-  shop_section_id: 4455667
-  return_policy_id: 1122334
-  renewal: manual
-currency: NOK
-preferred_print_provider: Monster Digital
+  shop_name: TakeAHikeTees
+  currency: NOK
+  listing_defaults:
+    who_made: i_did
+    when_made: made_to_order
+    is_supply: false
+    renewal: manual

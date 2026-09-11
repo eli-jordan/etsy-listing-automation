@@ -22,9 +22,14 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any
+from typing import Any, TypeVar
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, ValidationError
+
+AppliedT = TypeVar("AppliedT", bound=BaseModel)
+"""A stage's applied document. Always a model, never a dict: that is what
+makes :meth:`Lockfile.parse_applied_for` able to own the decode rule for every
+stage rather than each stage owning a copy of it."""
 
 SCHEMA_VERSION = 1
 
@@ -126,6 +131,32 @@ class Lockfile(BaseModel):
         """
         data: dict[str, Any] | None = self.applied.get(stage)
         return data
+
+    def parse_applied_for(self, stage: str, model: type[AppliedT]) -> AppliedT | None:
+        """One stage's last-applied document, as the type that stage reads it as.
+
+        The rule, written once. ``None`` in, ``None`` out -- a stage that has
+        never run has no applied document. A document that will not *decode*
+        answers ``None`` as well, and that is a reading rather than a
+        swallowed error: a document we cannot read is one we cannot prove the
+        live state matches, which is what "never applied" already means. The
+        cost is redoing work that was probably already done; the alternative
+        is `plan` dying on a lockfile some other version wrote.
+
+        It was written twice, and the copies disagreed. The product stage
+        caught ``ValidationError`` and answered ``None``; the render stage
+        indexed ``data["input_hash"]`` and raised ``KeyError`` -- which is not
+        a :class:`~etsy_listings.errors.UserFacingError`, so a single
+        truncated lockfile ended a whole ``--all`` batch with a traceback.
+        Neither stage decides this any more.
+        """
+        data = self.applied_for(stage)
+        if data is None:
+            return None
+        try:
+            return model.model_validate(data)
+        except ValidationError:
+            return None
 
     def fold(self, stage: str, result: StageApplyResult) -> Lockfile:
         """``result`` merged in, as a new lockfile.

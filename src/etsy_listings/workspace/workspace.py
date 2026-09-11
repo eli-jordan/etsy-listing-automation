@@ -20,9 +20,9 @@ from pydantic import ValidationError
 from etsy_listings.config.defaults import Defaults
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
+from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.profile import Profile
 from etsy_listings.config.slug import ColourExceptions
 
 # `template.yaml` is render geometry and render settings from top to bottom, so
@@ -65,6 +65,37 @@ def _segment(name: str) -> str:
     if not name or name in (".", "..") or "/" in name or "\\" in name or ":" in name:
         raise InvalidNameError(name)
     return name
+
+
+class AmbiguousColourSuffixError(ValueError):
+    """More than one photo in a template's directory ends in the same colour
+    slug's hyphen segments, so :func:`Workspace.template_base_image`'s
+    trailing-segment fallback (PRD 7a) has no single answer. Refused rather
+    than guessed at -- an arbitrary pick here would ship the wrong photo."""
+
+    def __init__(self, template: str, colour: str, candidates: list[Path]) -> None:
+        names = ", ".join(sorted(p.name for p in candidates))
+        super().__init__(
+            f"template {template!r}: colour {colour!r} matches more than one photo by "
+            f"filename suffix ({names}); rename the files so one matches exactly, or add "
+            f"an exceptions.yaml entry"
+        )
+
+
+def _ends_with_colour_segments(stem: str, colour: str) -> bool:
+    """Does ``stem``'s hyphen segments end with ``colour``'s own segments?
+
+    Segment-aligned, not a raw substring test: colour ``blue`` must not match
+    filename ``flo-blue`` because ``"blue"`` appears inside it, only because
+    ``"blue"`` is the filename's own trailing segment. A raw ``str.endswith``
+    would additionally match a colour ``"o-blue"`` against the same file,
+    which is not a colour, just a coincidence of characters.
+    """
+    stem_segments = stem.split("-")
+    colour_segments = colour.split("-")
+    if len(colour_segments) > len(stem_segments):
+        return False
+    return stem_segments[len(stem_segments) - len(colour_segments) :] == colour_segments
 
 
 def _looks_like_windows_absolute(ref: str) -> bool:
@@ -202,21 +233,21 @@ class Workspace:
             return []
         return sorted(p for p in designs.glob("*.png") if p.is_file())
 
-    def profile_names(self) -> list[str]:
-        profiles = self.root / layout.PROFILES_DIR
-        if not profiles.is_dir():
+    def garment_profile_names(self) -> list[str]:
+        garment_profiles = self.root / layout.GARMENT_PROFILES_DIR
+        if not garment_profiles.is_dir():
             return []
-        return sorted(p.stem for p in profiles.glob("*.yaml") if p.is_file())
+        return sorted(p.stem for p in garment_profiles.glob("*.yaml") if p.is_file())
 
-    def profile_file(self, profile: str) -> Path:
-        return self.root / layout.PROFILES_DIR / f"{_segment(profile)}.yaml"
+    def garment_profile_file(self, garment_profile: str) -> Path:
+        return self.root / layout.GARMENT_PROFILES_DIR / f"{_segment(garment_profile)}.yaml"
 
     def pricing_plans_dir(self) -> Path:
         return self.root / layout.PRICING_PLANS_DIR
 
     def pricing_plan_files(self) -> list[Path]:
         """Every ``*.yaml`` under ``pricing-plans/``, recursively -- nested
-        layouts are allowed here (unlike ``profiles/``/``mockup-templates/``),
+        layouts are allowed here (unlike ``garment-profiles/``/``mockup-templates/``),
         since a plan's directory has no enforced meaning; it's purely where
         the user chose to file it. Discovery only -- a listing may reference
         a plan anywhere in the workspace via its relative path, the same
@@ -233,6 +264,17 @@ class Workspace:
         """The workspace's gitignored ``.env``. Secrets live in the *workspace*,
         never in this repository -- see ``config/secrets.py``."""
         return self.root / layout.ENV_FILE
+
+    def etsy_tokens_file(self) -> Path:
+        """Where ``auth`` leaves the OAuth tokens, and where every later run
+        reads them from.
+
+        ``auth`` itself cannot use this accessor -- it runs before there is a
+        ``shop.yaml`` to discover a workspace by, so it joins the same two
+        layout constants against the root it was given (PRD 49). This exists
+        for everything downstream of it, which does have a workspace.
+        """
+        return self.root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE
 
     def templates_dir(self) -> Path:
         return self.root / layout.MOCKUP_TEMPLATES_DIR
@@ -317,8 +359,27 @@ class Workspace:
 
     def template_base_image(self, template: str, colour: str) -> Path:
         """``colour-matrix``-kind templates only (PRD 7a): the mockup filename
-        *is* the slugified colour name."""
-        return self.template_dir(template) / f"{_segment(colour)}.png"
+        *is* the slugified colour name.
+
+        Falls back to a trailing-segment match against the directory's actual
+        photos when no exact ``{colour}.png`` exists -- a vendor photo pack
+        delivered as ``comfort-colors-flat-lay-black.png`` still resolves
+        colour ``black``, without renaming every file to drop the shared
+        prefix. Only when exactly one photo qualifies: zero leaves the
+        (non-existent) exact path for the caller's own "no mockup base image"
+        error, and more than one raises rather than guessing.
+        """
+        exact = self.template_dir(template) / f"{_segment(colour)}.png"
+        if exact.is_file():
+            return exact
+        matches = [
+            photo
+            for photo in self.template_photos(template)
+            if _ends_with_colour_segments(photo.stem, colour)
+        ]
+        if len(matches) > 1:
+            raise AmbiguousColourSuffixError(template, colour, matches)
+        return matches[0] if matches else exact
 
     def template_scene_image(self, template: str) -> Path:
         """``multiple``/``single``-kind templates: exactly one photo, fixed
@@ -381,18 +442,19 @@ class Workspace:
     # ------------------------------------------------------------------
 
     def load_listing(self, listing: str) -> Listing:
-        return Listing.load(self.listing_file(listing), currency=self.defaults.currency)
+        return Listing.load(self.listing_file(listing), currency=self.defaults.etsy.currency)
 
-    def load_profile(self, profile: str) -> Profile:
-        return Profile.load(self.profile_file(profile))
+    def load_garment_profile(self, garment_profile: str) -> GarmentProfile:
+        return GarmentProfile.load(self.garment_profile_file(garment_profile))
 
     def load_pricing_plan(self, path: Path) -> PricingPlan:
-        """Attaches workspace currency, like ``load_profile``/``load_listing``
+        """Attaches workspace currency, like
+        ``load_garment_profile``/``load_listing``
         -- but path-based, not bare-name: pricing-plan refs are path refs
         (see ``Listing.pricing_plan``'s docstring), so resolving a name to a
         path is the caller's job, the same point ``design:`` refs are
         resolved. This method only owns "attach currency, wrap load errors"."""
-        return PricingPlan.load(path, currency=self.defaults.currency)
+        return PricingPlan.load(path, currency=self.defaults.etsy.currency)
 
     def load_exceptions(self) -> ColourExceptions:
         return load_exceptions(self.exceptions_file())
@@ -405,7 +467,7 @@ class Workspace:
         and ``new``'s kind lookup -- each doing its own
         ``yaml.safe_load(path.read_text(...))``. That is exactly the joining
         of a layout that the layout accessors above exist to prevent, so it
-        lives here with ``load_listing`` and ``load_profile``.
+        lives here with ``load_listing`` and ``load_garment_profile``.
         """
         path = self.template_config_file(template)
         if not path.is_file():

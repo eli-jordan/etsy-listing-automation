@@ -13,7 +13,7 @@ of their own.
 
 So: ask for ``workspace.lock_file(name)``, never join
 ``listings/<name>/state.lock.json``. The same goes for reading -- ``load_listing``,
-``load_profile``, ``load_pricing_plan``, ``load_template_config`` and
+``load_garment_profile``, ``load_pricing_plan``, ``load_template_config`` and
 ``load_exceptions`` are how the tree's files are opened, so no caller writes
 its own ``yaml.safe_load`` against a path it assembled.
 """
@@ -21,6 +21,7 @@ its own ``yaml.safe_load`` against a path it assembled.
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import (
+    AmbiguousColourSuffixError,
     InvalidNameError,
     PathEscapesWorkspaceError,
     ScenePhoto,
@@ -31,10 +32,11 @@ from etsy_listings.workspace.workspace import (
 __all__ = [
     "Workspace",
     "ScenePhoto",
-    # The three refusals, each naming what it refused and why.
+    # The four refusals, each naming what it refused and why.
     "WorkspaceNotFoundError",
     "PathEscapesWorkspaceError",
     "InvalidNameError",
+    "AmbiguousColourSuffixError",
     # Every filename and directory name in the tree, in one module.
     "layout",
     # Cygwin/Windows path translation, for user-supplied path options (--root).

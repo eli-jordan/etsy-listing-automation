@@ -33,23 +33,23 @@ from etsy_listings.newcmd.fx_rate import FxRate
 from etsy_listings.newcmd.logic import (
     build_blueprint_choices,
     build_design_choices,
+    build_garment_profile,
     build_listing_stub,
     build_media_entries,
     build_pricing_plan_choices,
-    build_profile,
     compute_starting_prices,
     filter_blueprints_by_category,
+    garment_profile_slug_for,
     load_candidate_pricing_plans,
     load_template_kind,
     local_blueprint_keys,
     pricing_plan_ref,
-    profile_slug_for,
     resolve_colour_slugs,
     sort_sizes,
     validate_listing_stub,
+    write_garment_profile_if_absent,
     write_listing,
     write_pricing_plan,
-    write_profile_if_absent,
 )
 from etsy_listings.workspace.workspace import Workspace
 
@@ -113,7 +113,7 @@ def test_sort_sizes_orders_known_sizes_then_appends_unknown() -> None:
 def test_sort_sizes_knows_printifys_numeric_spelling_of_the_big_sizes() -> None:
     """The real catalog sends `2XL`/`3XL`, not `XXL`/`XXXL`. With only the
     lettered spellings known, they sorted into the alphabetical unknown tail
-    while `4XL` sorted normally -- so a real profile came out `S M L XL 4XL
+    while `4XL` sorted normally -- so a real garment profile came out `S M L XL 4XL
     2XL 3XL`."""
     assert sort_sizes({"S", "M", "L", "XL", "2XL", "3XL", "4XL"}) == [
         "S",
@@ -146,11 +146,11 @@ def test_resolve_colour_slugs_raises_on_collision() -> None:
         resolve_colour_slugs(collision_set, ColourExceptions(root={}))
 
 
-def test_build_profile_reads_print_area_from_the_largest_placeholder() -> None:
-    """One profile, one print area (PRD 8a), but the catalog offers one per
-    garment size -- the largest wins, so the design is sized for the panel
-    that needs the most pixels."""
-    profile = build_profile(
+def test_build_garment_profile_reads_print_area_from_the_largest_placeholder() -> None:
+    """One garment profile, one print area (PRD 8a), but the catalog offers
+    one per garment size -- the largest wins, so the design is sized for the
+    panel that needs the most pixels."""
+    profile = build_garment_profile(
         blueprint=TSHIRT,
         provider_title=PROVIDER.title,
         placeholder="front",
@@ -161,9 +161,9 @@ def test_build_profile_reads_print_area_from_the_largest_placeholder() -> None:
     assert profile.sizes == ["S", "M"]
 
 
-def test_build_profile_raises_actionable_error_for_missing_placeholder() -> None:
+def test_build_garment_profile_raises_actionable_error_for_missing_placeholder() -> None:
     with pytest.raises(ValueError, match="back"):
-        build_profile(
+        build_garment_profile(
             blueprint=TSHIRT,
             provider_title=PROVIDER.title,
             placeholder="back",
@@ -171,66 +171,67 @@ def test_build_profile_raises_actionable_error_for_missing_placeholder() -> None
         )
 
 
-def test_profile_slug_for_is_brand_and_model_not_the_title() -> None:
+def test_garment_profile_slug_for_is_brand_and_model_not_the_title() -> None:
     """PRD 23. A title slug would file every brand's version of the same shirt
     under one name -- Printify calls the Comfort Colors 1717 "Unisex
     Garment-Dyed T-shirt", and so do several other brands' entries."""
-    assert profile_slug_for(TSHIRT) == "comfort-colors-1717"
+    assert garment_profile_slug_for(TSHIRT) == "comfort-colors-1717"
 
 
-def test_profile_slug_drops_the_trademark_sign() -> None:
+def test_garment_profile_slug_drops_the_trademark_sign() -> None:
     """The catalog's brand really is "Comfort Colors®"; a filename with a ® in
     it is not one anyone wants to type at a shell."""
     catalog_entry = Blueprint(
         id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
     )
-    assert profile_slug_for(catalog_entry) == "comfort-colors-1717"
+    assert garment_profile_slug_for(catalog_entry) == "comfort-colors-1717"
 
 
-def test_write_profile_if_absent_writes_once_then_reuses(workspace_root: Path) -> None:
+def test_write_garment_profile_if_absent_writes_once_then_reuses(workspace_root: Path) -> None:
     workspace = Workspace.discover(root_override=workspace_root)
-    profile = build_profile(
+    profile = build_garment_profile(
         blueprint=HOODIE,
         provider_title=PROVIDER.title,
         placeholder="front",
         variant_set=VARIANT_SET,
     )
-    slug = profile_slug_for(HOODIE)  # gildan-18500: not in the fixture workspace
+    slug = garment_profile_slug_for(HOODIE)  # gildan-18500: not in the fixture workspace
 
-    first = write_profile_if_absent(workspace, slug, profile)
-    second = write_profile_if_absent(workspace, slug, profile)
+    first = write_garment_profile_if_absent(workspace, slug, profile)
+    second = write_garment_profile_if_absent(workspace, slug, profile)
 
     assert first is True
     assert second is False
-    assert (workspace.root / "profiles" / f"{slug}.yaml").is_file()
+    assert (workspace.root / "garment-profiles" / f"{slug}.yaml").is_file()
 
 
-def test_an_existing_profile_for_the_same_garment_is_reused_untouched(
+def test_an_existing_garment_profile_for_the_same_garment_is_reused_untouched(
     workspace_root: Path,
 ) -> None:
-    """PRD: `new` "writes profiles/{slug}.yaml if absent; reuses it silently if
-    present". Since the slug is brand+model, a second listing on the garment
-    the workspace already has a profile for finds it -- which is the whole
-    point of the profile being shared. The fixture's Comfort Colors 1717 is
-    that case."""
+    """PRD: `new` "writes garment-profiles/{slug}.yaml if absent; reuses it
+    silently if present". Since the slug is brand+model, a second listing on
+    the garment the workspace already has a garment profile for finds it --
+    which is the whole point of the garment profile being shared. The
+    fixture's Comfort Colors 1717 is that case."""
     workspace = Workspace.discover(root_override=workspace_root)
-    existing = workspace.profile_file(profile_slug_for(TSHIRT))
+    existing = workspace.garment_profile_file(garment_profile_slug_for(TSHIRT))
     assert existing.is_file(), "fixture should already hold this garment's profile"
     before = existing.read_bytes()
 
-    profile = build_profile(
+    profile = build_garment_profile(
         blueprint=TSHIRT,
         provider_title=PROVIDER.title,
         placeholder="front",
         variant_set=VARIANT_SET,
     )
-    assert write_profile_if_absent(workspace, profile_slug_for(TSHIRT), profile) is False
-    assert existing.read_bytes() == before, "an existing profile must not be rewritten"
+    slug = garment_profile_slug_for(TSHIRT)
+    assert write_garment_profile_if_absent(workspace, slug, profile) is False
+    assert existing.read_bytes() == before, "an existing garment profile must not be rewritten"
 
 
 def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() -> None:
     data = build_listing_stub(
-        profile_slug="unisex-garment-dyed-heavy-weight-tee",
+        garment_profile_slug="unisex-garment-dyed-heavy-weight-tee",
         design_ref="../../designs/take-a-hike.png",
         colours=["black", "blue-jean"],
         pricing_plan_ref="../../pricing-plans/launch-low.yaml",
@@ -250,7 +251,7 @@ def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() 
 
 def test_validate_listing_stub_accepts_a_pricing_plan_reference_with_no_prices() -> None:
     data = build_listing_stub(
-        profile_slug="p",
+        garment_profile_slug="p",
         design_ref="../../designs/x.png",
         colours=["black"],
         pricing_plan_ref="../../pricing-plans/x.yaml",
@@ -281,7 +282,7 @@ def test_a_colour_matrix_template_gets_one_media_entry_per_colour() -> None:
     ]
 
 
-def test_media_stops_at_etsys_ten_image_limit() -> None:
+def test_media_stops_at_etsys_image_limit() -> None:
     """33 colours produced 33 media entries and a listing that would not
     validate -- the failure `new` hit on a real Printify provider."""
     colours = [f"colour-{n:02d}" for n in range(33)]
@@ -296,7 +297,7 @@ def test_a_truncated_stub_still_validates_and_still_sells_every_colour() -> None
     Printify variants sell, photos are a separate axis (PRD 31)."""
     colours = [f"colour-{n:02d}" for n in range(33)]
     data = build_listing_stub(
-        profile_slug="p",
+        garment_profile_slug="p",
         design_ref="../../designs/x.png",
         colours=colours,
         pricing_plan_ref="../../pricing-plans/x.yaml",
@@ -343,8 +344,7 @@ def test_template_names_lists_only_calibrated_templates(workspace_root: Path) ->
 
 def test_template_names_is_empty_without_a_templates_directory(tmp_path: Path) -> None:
     (tmp_path / "shop.yaml").write_text(
-        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
-        "  is_supply: false\ncurrency: NOK\n",
+        "etsy:\n  shop_id: 1\n  currency: NOK\n",
         encoding="utf-8",
     )
     assert Workspace.discover(root_override=tmp_path).template_names() == []
@@ -353,7 +353,7 @@ def test_template_names_is_empty_without_a_templates_directory(tmp_path: Path) -
 def test_write_listing_refuses_to_overwrite_an_existing_listing(workspace_root: Path) -> None:
     workspace = Workspace.discover(root_override=workspace_root)
     data = build_listing_stub(
-        profile_slug="comfort-colors-1717",
+        garment_profile_slug="comfort-colors-1717",
         design_ref="../../designs/take-a-hike.png",
         colours=["black"],
         pricing_plan_ref="../../pricing-plans/x.yaml",
@@ -368,8 +368,10 @@ def test_write_listing_refuses_to_overwrite_an_existing_listing(workspace_root: 
 
 
 def test_build_pricing_plan_choices_marks_the_exact_profile_match(tmp_path: Path) -> None:
-    matching = PricingPlan(profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
-    other = PricingPlan(profile="a-different-profile", prices={"S": Money.parse("100 NOK")})
+    matching = PricingPlan(
+        garment_profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")}
+    )
+    other = PricingPlan(garment_profile="a-different-profile", prices={"S": Money.parse("100 NOK")})
     plans = [(tmp_path / "b-other.yaml", other), (tmp_path / "a-matching.yaml", matching)]
 
     choices = build_pricing_plan_choices(plans, "comfort-colors-1717")
@@ -386,9 +388,9 @@ def test_load_candidate_pricing_plans_skips_a_broken_plan_not_the_whole_picker(
     plans_dir = workspace_root / "pricing-plans"
     plans_dir.mkdir()
     (plans_dir / "good.yaml").write_text(
-        "profile: comfort-colors-1717\nprices:\n  S: 100 NOK\n", encoding="utf-8"
+        "garment_profile: comfort-colors-1717\nprices:\n  S: 100 NOK\n", encoding="utf-8"
     )
-    (plans_dir / "bad.yaml").write_text("profile: x\nprices:\n  S: 100\n", encoding="utf-8")
+    (plans_dir / "bad.yaml").write_text("garment_profile: x\nprices:\n  S: 100\n", encoding="utf-8")
 
     workspace = Workspace.discover(root_override=workspace_root)
     candidates = load_candidate_pricing_plans(workspace)
@@ -420,7 +422,7 @@ def test_write_pricing_plan_sets_profile_from_the_chosen_garment_profile(
 
     assert path == workspace.pricing_plans_dir() / "launch-low.yaml"
     plan = workspace.load_pricing_plan(path)
-    assert plan.profile == "comfort-colors-1717"
+    assert plan.garment_profile == "comfort-colors-1717"
     assert plan.prices == prices
     assert "a note" in path.read_text(encoding="utf-8")
 
@@ -595,8 +597,7 @@ def test_design_files_lists_only_flat_pngs(workspace_root: Path) -> None:
 
 def test_design_files_is_empty_without_a_designs_directory(tmp_path: Path) -> None:
     (tmp_path / "shop.yaml").write_text(
-        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
-        "  is_supply: false\ncurrency: NOK\n",
+        "etsy:\n  shop_id: 1\n  currency: NOK\n",
         encoding="utf-8",
     )
     assert Workspace.discover(root_override=tmp_path).design_files() == []
@@ -676,15 +677,16 @@ def test_no_blueprints_produces_no_rows() -> None:
 # --- which garments count as "already used here" -----------------------------
 
 
-def test_local_blueprint_keys_reads_the_workspace_profiles(workspace_root: Path) -> None:
-    """The fixture workspace holds one profile, `comfort-colors-1717`, whose
-    `blueprint:` says `brand: Comfort Colors` / `model: "1717"`.
+def test_local_blueprint_keys_reads_the_workspace_garment_profiles(workspace_root: Path) -> None:
+    """The fixture workspace holds one garment profile, `comfort-colors-1717`,
+    whose `blueprint:` says `brand: Comfort Colors` / `model: "1717"`.
 
     Written out as a literal. Deriving the expected set the way the code does
-    -- `normalise(profile.blueprint.brand)` over `profile_names()` -- passes
-    for *any* behaviour `normalise` might have, including none: both sides move
-    together, so the assertion can never disagree with the implementation. The
-    casefolding it is really claiming is only visible when one side is fixed.
+    -- `normalise(profile.blueprint.brand)` over `garment_profile_names()` --
+    passes for *any* behaviour `normalise` might have, including none: both
+    sides move together, so the assertion can never disagree with the
+    implementation. The casefolding it is really claiming is only visible
+    when one side is fixed.
     """
     workspace = Workspace.discover(root_override=workspace_root)
 
@@ -692,7 +694,7 @@ def test_local_blueprint_keys_reads_the_workspace_profiles(workspace_root: Path)
 
 
 def test_a_local_key_ignores_case_and_the_trademark_sign(workspace_root: Path) -> None:
-    """The catalog says "Comfort Colors®"; a hand-written profile says
+    """The catalog says "Comfort Colors®"; a hand-written garment profile says
     "Comfort Colors". The marker has to survive that, or the garment you used
     yesterday stops sorting to the top for a reason nobody can see."""
     workspace = Workspace.discover(root_override=workspace_root)
@@ -703,18 +705,23 @@ def test_a_local_key_ignores_case_and_the_trademark_sign(workspace_root: Path) -
     assert choices[0].marked is True
 
 
-def test_a_broken_profile_costs_a_marker_not_the_whole_picker(workspace_root: Path) -> None:
-    (workspace_root / "profiles" / "broken.yaml").write_text("not: a profile\n", encoding="utf-8")
+def test_a_broken_garment_profile_costs_a_marker_not_the_whole_picker(
+    workspace_root: Path,
+) -> None:
+    (workspace_root / "garment-profiles" / "broken.yaml").write_text(
+        "not: a garment profile\n", encoding="utf-8"
+    )
     workspace = Workspace.discover(root_override=workspace_root)
     assert local_blueprint_keys(workspace)  # the valid ones still resolve
 
 
-def test_a_workspace_with_no_profiles_directory_has_no_local_keys(tmp_path: Path) -> None:
+def test_a_workspace_with_no_garment_profiles_directory_has_no_local_keys(
+    tmp_path: Path,
+) -> None:
     (tmp_path / "shop.yaml").write_text(
-        "etsy:\n  shop_id: 1\n  who_made: i_did\n  when_made: made_to_order\n"
-        "  is_supply: false\ncurrency: NOK\n",
+        "etsy:\n  shop_id: 1\n  currency: NOK\n",
         encoding="utf-8",
     )
     workspace = Workspace.discover(root_override=tmp_path)
-    assert workspace.profile_names() == []
+    assert workspace.garment_profile_names() == []
     assert local_blueprint_keys(workspace) == set()

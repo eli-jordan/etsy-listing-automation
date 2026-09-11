@@ -22,14 +22,14 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from etsy_listings.config.profile import BlueprintRef, PrintArea, Profile
+from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
 from etsy_listings.engine.stage import Blocked
 from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
 )
 
-PROFILE = Profile(
+PROFILE = GarmentProfile(
     blueprint=BlueprintRef(brand="Comfort Colors", model="1717"),
     print_provider="Monster Digital",
     placeholder="front",

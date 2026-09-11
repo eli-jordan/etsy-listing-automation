@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.workspace.workspace import (
+    AmbiguousColourSuffixError,
     InvalidNameError,
     PathEscapesWorkspaceError,
     Workspace,
@@ -105,7 +106,10 @@ def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path
     root = ws.root
     assert ws.listing_file("take-a-hike") == root / "listings" / "take-a-hike" / "listing.yaml"
     assert ws.lock_file("take-a-hike") == root / "listings" / "take-a-hike" / "state.lock.json"
-    assert ws.profile_file("comfort-colors-1717") == root / "profiles" / "comfort-colors-1717.yaml"
+    assert (
+        ws.garment_profile_file("comfort-colors-1717")
+        == root / "garment-profiles" / "comfort-colors-1717.yaml"
+    )
     assert ws.exceptions_file() == root / "exceptions.yaml"
     assert ws.template_dir("flat-lay-01") == root / "mockup-templates" / "flat-lay-01"
     assert (
@@ -175,6 +179,61 @@ def test_a_templates_photos_are_everything_but_the_scene(workspace_root: Path) -
     assert ws.template_colours("colour-chart-01") == []  # one photo, and it is the scene
 
 
+def test_template_base_image_falls_back_to_a_trailing_segment_match(
+    workspace_root: Path,
+) -> None:
+    """A vendor photo pack sharing one uninformative prefix across every file
+    (PRD 7a) still resolves each colour, without renaming anything."""
+    pack = workspace_root / "mockup-templates" / "vendor-pack"
+    pack.mkdir()
+    (pack / "comfort-colors-flat-lay-black.png").write_bytes(b"")
+    (pack / "comfort-colors-flat-lay-blue-jean.png").write_bytes(b"")
+    ws = Workspace.discover(root_override=workspace_root)
+
+    assert ws.template_base_image("vendor-pack", "black") == (
+        pack / "comfort-colors-flat-lay-black.png"
+    )
+    assert ws.template_base_image("vendor-pack", "blue-jean") == (
+        pack / "comfort-colors-flat-lay-blue-jean.png"
+    )
+
+
+def test_template_base_image_prefers_an_exact_match_over_the_fallback(
+    workspace_root: Path,
+) -> None:
+    pack = workspace_root / "mockup-templates" / "vendor-pack"
+    pack.mkdir()
+    (pack / "black.png").write_bytes(b"")
+    (pack / "vendor-black.png").write_bytes(b"")
+    ws = Workspace.discover(root_override=workspace_root)
+
+    assert ws.template_base_image("vendor-pack", "black") == pack / "black.png"
+
+
+def test_template_base_image_refuses_an_ambiguous_suffix_match(
+    workspace_root: Path,
+) -> None:
+    pack = workspace_root / "mockup-templates" / "vendor-pack"
+    pack.mkdir()
+    (pack / "front-black.png").write_bytes(b"")
+    (pack / "back-black.png").write_bytes(b"")
+    ws = Workspace.discover(root_override=workspace_root)
+
+    with pytest.raises(AmbiguousColourSuffixError):
+        ws.template_base_image("vendor-pack", "black")
+
+
+def test_template_base_image_with_no_match_at_all_answers_the_exact_path(
+    workspace_root: Path,
+) -> None:
+    """Preserves the caller's own "no mockup base image" error (render.py's
+    ``TemplateAssetError``) for a colour that truly has no photo."""
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.template_base_image("flat-lay-01", "teal") == (
+        ws.template_dir("flat-lay-01") / "teal.png"
+    )
+
+
 def test_the_preview_photo_prefers_the_scene_and_falls_back_to_a_colour(
     workspace_root: Path,
 ) -> None:
@@ -239,12 +298,12 @@ def test_workspace_loads_listing_with_the_workspace_currency(workspace_root: Pat
     themselves -- the one argument it was possible to get quietly wrong."""
     ws = Workspace.discover(root_override=workspace_root)
     listing = ws.load_listing("take-a-hike")
-    assert listing.prices["S"].currency == ws.defaults.currency
+    assert listing.prices["S"].currency == ws.defaults.etsy.currency
 
 
-def test_workspace_loads_profile_and_exceptions(workspace_root: Path) -> None:
+def test_workspace_loads_garment_profile_and_exceptions(workspace_root: Path) -> None:
     ws = Workspace.discover(root_override=workspace_root)
-    blueprint = ws.load_profile("comfort-colors-1717").blueprint
+    blueprint = ws.load_garment_profile("comfort-colors-1717").blueprint
     assert (blueprint.brand, blueprint.model) == ("Comfort Colors", "1717")
     assert blueprint.title == "Unisex Garment-Dyed T-shirt"
     assert ws.load_exceptions().root == {}  # absent exceptions.yaml means "no exceptions"
@@ -266,14 +325,14 @@ def test_pricing_plan_files_is_empty_without_a_pricing_plans_directory(
 
 
 def test_pricing_plan_files_finds_flat_and_nested_files(workspace_root: Path) -> None:
-    """Nested layouts are allowed here, unlike profiles/mockup-templates --
+    """Nested layouts are allowed here, unlike garment-profiles/mockup-templates --
     a plan's directory has no enforced meaning."""
     plans_dir = workspace_root / "pricing-plans"
     plans_dir.mkdir()
-    (plans_dir / "launch-low.yaml").write_text("profile: p\nprices: {}\n", encoding="utf-8")
+    (plans_dir / "launch-low.yaml").write_text("garment_profile: p\nprices: {}\n", encoding="utf-8")
     nested = plans_dir / "comfort-colors-1717"
     nested.mkdir()
-    (nested / "premium.yaml").write_text("profile: p\nprices: {}\n", encoding="utf-8")
+    (nested / "premium.yaml").write_text("garment_profile: p\nprices: {}\n", encoding="utf-8")
 
     ws = Workspace.discover(root_override=workspace_root)
     found = ws.pricing_plan_files()
@@ -288,10 +347,12 @@ def test_load_pricing_plan_attaches_the_workspace_currency(workspace_root: Path)
     plans_dir = workspace_root / "pricing-plans"
     plans_dir.mkdir()
     path = plans_dir / "launch-low.yaml"
-    path.write_text("profile: comfort-colors-1717\nprices:\n  S: 100 NOK\n", encoding="utf-8")
+    path.write_text(
+        "garment_profile: comfort-colors-1717\nprices:\n  S: 100 NOK\n", encoding="utf-8"
+    )
 
     ws = Workspace.discover(root_override=workspace_root)
     plan = ws.load_pricing_plan(path)
 
-    assert plan.profile == "comfort-colors-1717"
-    assert plan.prices["S"].currency == ws.defaults.currency
+    assert plan.garment_profile == "comfort-colors-1717"
+    assert plan.prices["S"].currency == ws.defaults.etsy.currency

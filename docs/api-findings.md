@@ -18,6 +18,12 @@ the publish lock, `external.id`, draft-vs-live — is either unanswerable here o
 answered only in the negative, and is marked as such. Publishing moved to
 Phase 3 for that reason.
 
+**That bound has since been lifted.** A shop was connected on 2026-09-10 and
+the publishing questions were measured against it; the answers live in
+[printify-etsy-integration.md](printify-etsy-integration.md). Where the two
+documents touch the same subject, that one is later and wins — including on
+this one's claim that *errors have one shape*, which a wider sample falsified.
+
 What this produced elsewhere: PRD decisions **37** (a garment change is refused,
 not automated), **38** (a design must be within 10% of the print area), **39**
 (what Printify's price integers are denominated in) and **40** (NOK goes to
@@ -253,11 +259,11 @@ downstream catches a blurry print, which is what makes the PRD's design
 validation (17) a real gate rather than a courtesy.
 
 The gate is now concrete (PRD 38): **a design must be within 10% of the
-profile's print area** — at least 90% of its width and 90% of its height. That
+garment profile's print area** — at least 90% of its width and 90% of its height. That
 replaces "~300 DPI for the print area", which said the same thing less
 checkably: Printify's placeholder dimensions already are the pixels it wants at
 its own print resolution, and the editor states the figure outright ("Print area
-size: 4200 × 4800 px", matching the profile `new` wrote).
+size: 4200 × 4800 px", matching the garment profile `new` wrote).
 
 The tolerance was set by the first file it was pointed at. The workspace's own
 `designs/duke-java-developer.png` is **4000×4800** — 4.8% short on the width
@@ -469,6 +475,12 @@ directly.
 
 ## Open questions, for when an Etsy shop exists
 
+**The shop now exists.** Questions 1, 2, 3 and 7 are answered in
+[printify-etsy-integration.md](printify-etsy-integration.md), and 5 is half
+answered there — the publish lock is real, its remedy still unobserved.
+Questions 4, 6, 8 and 9 remain open. The list is kept as written because what
+was asked, and why, is the useful part; go there for what came back.
+
 1. **Does `29900` land on the NOK listing as `299,00`?** Printify's
    documentation says yes and risk 12 is closed on that basis; this is the
    measurement that would make it a fact. The same run answers whether the
@@ -487,7 +499,7 @@ directly.
    description is already recorded in the PRD as harmless; images are not
    harmless. If `publish.json` ignores `{images: false}` on a first publish,
    every listing is born carrying Printify's generated mockups — 8 of them on
-   the probe product, against Etsy's 10-image cap — and the media stage has to
+   the probe product, against Etsy's 20-image cap — and the media stage has to
    **delete** them before uploading ours, not merely add. That changes what the
    stage does, so it needs answering before the stage is written (PRD 41).
 8. **How do per-colour variation images get set?** Etsy shows a thumbnail per
@@ -569,7 +581,7 @@ Concretely, from the above:
   `read_live`; asserting it here would mean either skipping it on the run that
   matters or breaching A17 to reach cost data.
 - Placement is fixed: centred, `scale: 1.0`, `angle: 0`, into
-  `profile.placeholder` (PRD 45). PRD 38's ≥90% gate is what makes that the
+  `garment_profile.placeholder` (PRD 45). PRD 38's ≥90% gate is what makes that the
   right constant rather than a default nobody chose.
 - A colour × size cell the catalog does not offer is reported and skipped, not
   fatal (PRD 46) — a discontinued combination is Printify's fact, not the

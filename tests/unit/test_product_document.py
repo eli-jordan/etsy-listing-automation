@@ -17,7 +17,7 @@ from pathlib import Path
 from etsy_listings.engine.lock import canonical_hash
 from etsy_listings.engine.stage import Blocked
 from etsy_listings.engine.stages.placement import ArtworkGroup
-from etsy_listings.engine.stages.printify_product import (
+from etsy_listings.engine.stages.product_document import (
     AppliedProduct,
     PricedVariant,
     PrintifyProductDesired,
@@ -72,6 +72,33 @@ def test_the_document_does_not_depend_on_the_order_colours_were_resolved_in() ->
     assert one == another
 
 
+def test_the_print_areas_do_not_depend_on_the_order_the_colours_were_written_in() -> None:
+    """The same rule, one level up -- and the level the first version missed.
+
+    ``group_by_artwork`` deduplicates in first-seen order on purpose, so the
+    print areas follow the order the listing wrote ``colors:`` in. That is
+    right for the payload and wrong for a document that is compared and
+    hashed: moving a colour to the top of ``colors:`` reordered this list and
+    made an unchanged product look changed. The test above only ever had one
+    group, so it could not see this.
+    """
+    on_light = ArtworkGroup(
+        artwork="on-light", colours=("ivory",), design=Path("l.png"), design_hash="sha256:l"
+    )
+    on_dark = ArtworkGroup(
+        artwork="on-dark", colours=("black",), design=Path("d.png"), design_hash="sha256:d"
+    )
+
+    one = _desired(groups=(on_light, on_dark)).applied()
+    another = _desired(groups=(on_dark, on_light)).applied()
+
+    assert [area.artwork for area in one.print_areas] == ["on-dark", "on-light"]
+    assert one == another
+    assert canonical_hash(one.model_dump(mode="json")) == canonical_hash(
+        another.model_dump(mode="json")
+    )
+
+
 def test_the_document_hashes_the_same_as_the_dict_it_replaced() -> None:
     """The shape written to `state.lock.json`, pinned as a literal.
 
@@ -96,47 +123,12 @@ def test_a_document_round_trips_through_json_unchanged() -> None:
     """It goes to disk as JSON and comes back as one. A field that survived the
     dump and not the parse would show as a permanent diff."""
     wanted = _desired().applied()
-    reparsed = AppliedProduct.parse(wanted.model_dump(mode="json"))
+    reparsed = AppliedProduct.model_validate(wanted.model_dump(mode="json"))
 
     assert reparsed == wanted
     assert canonical_hash(reparsed.model_dump(mode="json")) == canonical_hash(
         wanted.model_dump(mode="json")
     )
-
-
-# ------------------------------------------------------------ what parses
-
-
-def test_no_previous_document_is_none_not_an_error() -> None:
-    assert AppliedProduct.parse(None) is None
-
-
-def test_a_document_carrying_fields_this_version_does_not_know_still_parses() -> None:
-    """A lockfile written by a later build. Refusing it would make an upgrade
-    that adds one field re-apply every product in the workspace."""
-    document = _desired().applied().model_dump(mode="json")
-    document["some_future_field"] = "surprise"
-
-    parsed = AppliedProduct.parse(document)
-
-    assert parsed is not None
-    assert parsed.title == "Take A Hike Tee"
-
-
-def test_a_document_that_will_not_parse_reads_as_never_applied() -> None:
-    """Not an exception. An applied document we cannot decode is one we cannot
-    prove the live product matches, which is what "never applied" means -- and
-    PRD 48's copy walk is what stops that becoming a duplicate product rather
-    than an adopt.
-    """
-    assert AppliedProduct.parse({"title": "only this"}) is None
-
-
-def test_prices_are_read_back_off_the_variant_list() -> None:
-    parsed = AppliedProduct.parse(_desired(BLACK_M, IVORY_S).applied().model_dump(mode="json"))
-
-    assert parsed is not None
-    assert parsed.prices == {1: 34900, 3: 37900}
 
 
 # ---------------------------------------------------- garment change (PRD 37)

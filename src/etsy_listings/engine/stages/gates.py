@@ -32,8 +32,8 @@ from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
 
+from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import GENERATE
-from etsy_listings.config.profile import Profile
 from etsy_listings.engine.stage import Blocked
 
 RESOLUTION_TOLERANCE = 0.9
@@ -46,14 +46,14 @@ fires on work nobody would call wrong is a rule that gets switched off.
 """
 
 
-def _required_pixels(profile: Profile) -> tuple[int, int]:
+def _required_pixels(profile: GarmentProfile) -> tuple[int, int]:
     return (
         int(profile.print_area.width * RESOLUTION_TOLERANCE),
         int(profile.print_area.height * RESOLUTION_TOLERANCE),
     )
 
 
-def check_design_resolution(design: Path, profile: Profile) -> Blocked | None:
+def check_design_resolution(design: Path, profile: GarmentProfile) -> Blocked | None:
     """Refuse a design that will print soft, or print its background.
 
     Never auto-upscaled and never converted (PRD 17): a silently upscaled

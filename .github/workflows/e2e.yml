@@ -1,0 +1,113 @@
+# The e2e layer, on its own, because it is the one layer worth running alone.
+#
+# It talks to the real Printify and Etsy APIs against a throwaway shop, and it
+# costs state: Phase 3's tests create a Printify product, publish it as a real
+# Etsy draft, upload real images, and leave the draft behind (Etsy has no
+# delete this tool is scoped for). Phase 1's catalog tests are read-only GETs.
+#
+# Split out of [ci.yml](ci.yml) so that `gh workflow run e2e --ref <branch>`
+# re-runs *only* this, without also re-running lint, both test matrices and the
+# browser layer. That matters more here than anywhere else in the repo, because
+# the credential below expires in a way that is fixed by hand and then re-run
+# (see "the Etsy sign-in expires" at the bottom).
+#
+# The cost of the split is the `needs: [python, frontend]` gate the layer used
+# to sit behind: nothing here checks that lint and the offline suite pass
+# first, so a push to main with broken lint now spends a couple of minutes of
+# real API calls before CI reports the lint failure separately. Deliberate --
+# a gate that also blocks the manual re-run is worse than the two wasted
+# minutes, and both workflows report on the same commit anyway.
+name: e2e
+
+on:
+  push:
+    branches: [main]
+  # The point of the file. `gh workflow run e2e --ref <branch>` runs the layer
+  # against a branch, which is the only way to exercise it before merging: a
+  # pull_request event runs at refs/pull/<n>/merge and this workflow rightly
+  # never triggers on one.
+  workflow_dispatch:
+
+concurrency:
+  # Not `cancel-in-progress`, unlike CI. A cancelled run leaves the Printify
+  # product its teardown would have deleted, and orphans an Etsy draft that
+  # has to be cleared by hand.
+  group: e2e-${{ github.ref }}
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: lts/*
+          cache: npm
+          cache-dependency-path: src/etsy_listings/ui/frontend/package-lock.json
+
+      # Nothing in this layer serves the SPA. It is built anyway because
+      # hatch_build.py builds dist/ during the editable install when it is
+      # absent, and does it with `npm install` -- building first makes that
+      # hook a no-op, so every node install in CI comes from package-lock.json.
+      - name: build the calibrator frontend
+        working-directory: src/etsy_listings/ui/frontend
+        run: npm ci && npm run build
+
+      # Pinned exactly: setup-uv publishes no moving major tag past v7.
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+
+      - name: install (locked)
+        run: uv sync --frozen
+
+      # Phase 3's Etsy e2e tests need a workspace that has already run `setup`
+      # and `auth etsy` -- Etsy's OAuth handshake needs a real browser consent
+      # step, so unlike the Printify token it cannot be a bare secret. This
+      # materialises one from the stored token pair plus the (non-secret) shop
+      # ids, in $RUNNER_TEMP so it never touches the checkout.
+      #
+      # The shape is `shop.yaml`'s current one, and only the fields this layer
+      # borrows: the two shop ids and the currency. Everything a listing
+      # inherits lives under `etsy.listing_defaults`, and the tests write their
+      # own into their own copy of the fixture workspace.
+      - name: set up the Etsy e2e workspace
+        env:
+          ETSY_TOKENS_JSON: ${{ secrets.ETSY_TOKENS_JSON }}
+        run: |
+          workspace="$RUNNER_TEMP/etsy-e2e-workspace"
+          mkdir -p "$workspace/.auth"
+          {
+            echo "printify:"
+            echo "  shop_id: 28877318"
+            echo "etsy:"
+            echo "  shop_id: 67961328"
+            echo "  currency: NOK"
+          } > "$workspace/shop.yaml"
+          printf '%s' "$ETSY_TOKENS_JSON" > "$workspace/.auth/etsy-tokens.json"
+          echo "ETSY_LISTINGS_ROOT=$workspace" >> "$GITHUB_ENV"
+
+      # The layer skips itself, every test, when a credential is missing --
+      # which is right on a contributor's machine and wrong here, where a layer
+      # that runs nothing still reports green.
+      # ETSY_LISTINGS_REQUIRE_EVERY_LAYER turns each such skip into a failure
+      # naming the prerequisite.
+      #
+      # **The Etsy sign-in expires.** Etsy rotates the refresh token on every
+      # use, and this workspace is thrown away at the end of the job -- so the
+      # first run that needs a refresh (the access token is good for ~1h)
+      # invalidates ETSY_TOKENS_JSON for every run after it. There is no
+      # write-back here: when this job starts failing to authenticate, re-run
+      # `etsy-listings auth etsy` locally and update the secret.
+      - name: pytest -m e2e
+        env:
+          ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
+          PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
+          ETSY_KEYSTRING: ${{ secrets.ETSY_KEYSTRING }}
+          ETSY_SHARED_SECRET: ${{ secrets.ETSY_SHARED_SECRET }}
+        run: uv run pytest -m e2e
