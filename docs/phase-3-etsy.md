@@ -554,6 +554,12 @@ says it must: `variants[].cost` exists only on a product that already exists,
 and `read_live` has one in hand. Printify refuses to publish below cost, so
 the check turns a remote `400` into a plan-time refusal naming the size.
 
+It is spoken as `Verdict.refused(...)`, not as a verdict that will not run
+carrying a `reason`. A refusal this stage can only reach *after* `read_live`
+is still a refusal, and has to render as one — `plan` prints a `reason` only
+for stages that run, so the first shape of this check was invisible: the
+listing was skipped under a plan reading "No changes."
+
 On a poll timeout the product is recorded locked and the listing is abandoned
 with a message naming `unlock` — which is also built in this phase, and whose
 one job (`publishing_failed.json` clearing a genuine lock) remains

@@ -227,12 +227,20 @@ later. Each traces to a decision.
   because it was two stages' and they disagreed: one caught `ValidationError`
   and answered `None`, the other indexed the dict and raised `KeyError`, which
   is not a `UserFacingError` and so ended a whole `--all` batch.
-- **A stage refuses from `desired()`, and nowhere else.** `Blocked` is the one
-  vocabulary for "this cannot run", and `desired()` is the one place it is
-  spoken: `plan()` returns a `Verdict`, which has no way to express a refusal
-  and no way to name its own stage. Two places to refuse meant a refusal could
-  arrive carrying a fully resolved document for a run that was never going to
-  happen.
+- **A refusal is `Blocked`, whichever question produced it.** One vocabulary for
+  "this cannot run", reaching the plan two ways because a refusal has two
+  moments. A **pre-flight** refusal — no shop configured, copy still a
+  sentinel, a design too small — is `desired()` returning `Blocked`, before a
+  document exists for a run that was never going to happen. A refusal only the
+  live state can prove — a retail price below Printify's cost, which needs
+  `variants[].cost` and therefore cannot be known before `read_live` (PRD 40's
+  amendment) — is `plan()` returning `Verdict.refused(...)`, which the engine
+  turns into the same `StagePlan.blocked`. Neither may raise, and a stage still
+  never names itself. What is forbidden is the third shape: a stage that will
+  not run reporting a `reason` instead. That is what shipped first, and
+  `format_plan` prints a reason only for stages that *do* run — so a listing
+  priced under cost skipped `publish` in silence, under a plan reading "No
+  changes." The vocabulary exists to make exactly that impossible.
 - **`will_run` is derived from a reason, never computed beside one.** They were
   two expressions of one rule — `was is None or bool(changes) or live is None`
   standing next to a three-branch string — and two expressions of one rule are
