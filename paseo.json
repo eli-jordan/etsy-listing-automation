@@ -1,0 +1,16 @@
+{
+  "worktree": {
+    "setup": "uv sync"
+  },
+  "metadataGeneration": {
+    "branchName": {
+      "instructions": "Use feat/ and fix/ etc.. prefixes for branch names."
+    },
+    "commitMessage": {
+      "instructions": "Use conventional commits. \nKeep the long text of commit messages very concise."
+    },
+    "pullRequest": {
+      "instructions": "The PR title should follow conventional commit format.\n\nStart with a concise summary of the changes that were made.\nCallout any issues that were accounted for during the implementation plan.\nDescribe what steps were taken to verify the change"
+    }
+  }
+}

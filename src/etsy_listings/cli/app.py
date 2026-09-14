@@ -472,15 +472,32 @@ def ui(
     root: str | None = _root_option(),
     host: str = typer.Option("127.0.0.1", "--host", help="Interface to bind the server to"),
     port: int = typer.Option(8000, "--port", help="Port to serve on"),
+    browser: bool = typer.Option(
+        False,
+        "--browser",
+        help="Serve HTTP only and leave the calibrator in a regular browser, "
+        "instead of opening a native window.",
+    ),
+    debug: bool = typer.Option(
+        False,
+        "--debug",
+        help="Open the native window with the web inspector. Ignored with --browser.",
+    ),
 ) -> None:
-    """Serve the calibrator (Phase 1). The dashboard/setup wizard/run runner
-    described in the PRD's ``## UI`` section land in Phase 5."""
-    import uvicorn
+    """Open the calibrator in a native window (Phase 1).
 
-    from etsy_listings.ui.api.app import create_app
+    The dashboard/setup wizard/run runner described in the PRD's ``## UI``
+    section land in Phase 5. Pass ``--browser`` to serve HTTP only, as this
+    command did before the pywebview experiment.
+    """
+    from etsy_listings.ui.desktop import run_calibrator
 
     workspace = _open_workspace(root)
-    uvicorn.run(create_app(workspace), host=host, port=port)
+    try:
+        run_calibrator(workspace, host=host, port=port, browser=browser, debug=debug)
+    except UserFacingError as exc:
+        typer.echo(str(exc), err=True)
+        raise typer.Exit(code=1) from exc
 
 
 def main() -> None:
