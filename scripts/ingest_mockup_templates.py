@@ -28,7 +28,6 @@ import os
 import re
 import shutil
 import subprocess
-import sys
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -95,9 +94,7 @@ def split_color(stem: str) -> str:
 
 def find_pngs(root: Path) -> list[Path]:
     return sorted(
-        p
-        for p in root.rglob("*.png")
-        if "__MACOSX" not in p.parts and not p.name.startswith(".")
+        p for p in root.rglob("*.png") if "__MACOSX" not in p.parts and not p.name.startswith(".")
     )
 
 
@@ -116,9 +113,7 @@ def collect_pairs(root: Path) -> list[Pair]:
 
         bucket = text_files if is_text else base_files
         if core in bucket:
-            raise SystemExit(
-                f"Duplicate file for '{core}': '{bucket[core]}' and '{path}'"
-            )
+            raise SystemExit(f"Duplicate file for '{core}': '{bucket[core]}' and '{path}'")
         bucket[core] = path
 
     errors: list[str] = []
@@ -148,9 +143,7 @@ def collect_pairs(root: Path) -> list[Pair]:
 
 def render_pair(pair: Pair, output_dir: Path, prefix: str) -> Path:
     with Image.open(pair.base_path) as base_img, Image.open(pair.text_path) as text_img:
-        composited = Image.alpha_composite(
-            base_img.convert("RGBA"), text_img.convert("RGBA")
-        )
+        composited = Image.alpha_composite(base_img.convert("RGBA"), text_img.convert("RGBA"))
     output_path = output_dir / f"{prefix}-{slugify(pair.color)}.png"
     composited.save(output_path)
     return output_path
@@ -179,7 +172,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("input", help="Zip file or directory of exported PNGs")
     parser.add_argument("--output-dir", required=True, help="Where to write the composited PNGs")
-    parser.add_argument("--prefix", required=True, help="Output filename prefix, e.g. 'flat-lay-01'")
+    parser.add_argument(
+        "--prefix", required=True, help="Output filename prefix, e.g. 'flat-lay-01'"
+    )
     args = parser.parse_args()
 
     input_path = to_native_path(args.input)

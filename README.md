@@ -201,9 +201,9 @@ uv run python scripts/generate_test_assets.py
 Deterministic (fixed seed, no clock input) — re-running should reproduce
 byte-identical files.
 
-## Environment notes (Windows + cygwin git)
+## Environment notes (Windows + cygwin)
 
 See [CLAUDE.md](CLAUDE.md) for the full detail — in short: this repo is edited
-under cygwin/zsh but built with Windows-native Python and Node, `core.fileMode`
-is deliberately `false`, and `git push`/`gh` are currently broken in this
-environment (dead GitHub CLI credential helper) — commits happen locally.
+under cygwin/zsh but built with Windows-native Python and Node, and
+`core.fileMode` is deliberately `false`. Git and `gh` work from PowerShell and
+Git Bash as well as from cygwin.

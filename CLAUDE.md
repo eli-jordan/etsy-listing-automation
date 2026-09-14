@@ -42,17 +42,17 @@ last-applied doc` saves the next reader a trip through 700 lines of PRD.
 ## Environment
 
 **Run everything in zsh under cygwin.** Commands, test runs, linters, the type
-checker, git, `npm`, and tool installs all belong in that shell — it is the
+checker, `npm`, and tool installs all belong in that shell — it is the
 environment this project is developed and verified in, and the only one its
 paths, PATH setup and scripts are known to work in. Do not reach for
-PowerShell, `cmd`, or Git Bash: Git Bash in particular *looks* like it works
-and then bites. It mangles POSIX arguments (`/home/Admin` becomes
-`C:/Program Files/Git/home/Admin`); it puts its own `bash` ahead of cygwin's,
-which breaks the `npm` launcher script; and — worst of the three, because it
-hangs instead of erroring — its git cannot resolve the cygwin-style credential
-helper, so anything touching `origin` blocks until something kills it (see
-"GitHub access"). If a command is worth running, run it in cygwin zsh; if it
-fails there, that is a real failure, not an artefact.
+PowerShell, `cmd`, or Git Bash for those: Git Bash in particular *looks* like
+it works and then bites. It mangles POSIX arguments (`/home/Admin` becomes
+`C:/Program Files/Git/home/Admin`), and it puts its own `bash` ahead of
+cygwin's, which breaks the `npm` launcher script. Git and `gh` are the
+exception — they work from PowerShell and Git Bash; `~/.gitconfig` routes
+GitHub HTTPS auth through `gh.exe` with a Windows path, so they do not need
+cygwin. If a command is worth running, run it in cygwin zsh; if it fails
+there, that is a real failure, not an artefact.
 
 ### The cygwin pty is not a Windows console
 
@@ -102,40 +102,6 @@ Windows tools. Use POSIX paths and shell syntax.
   Leave it off; do not commit mode-only changes.
 - Line endings: git warns about `LF → CRLF` on write. Content is stored LF. The
   warnings are noise, not a problem to fix.
-
-### GitHub access — use cygwin git, and only cygwin git
-
-Working, as of GitHub CLI 2.98.0. `~/.gitconfig` routes GitHub HTTPS auth
-through `gh`:
-
-```
-credential.https://github.com.helper !'/cygdrive/c/Program Files/GitHub CLI/gh.exe' auth git-credential
-```
-
-`git push`, `git fetch` and `gh pr create` all work — **from cygwin zsh**,
-where `git` is `/usr/bin/git`.
-
-That helper path is a **cygwin** path. Only cygwin's git can resolve it. Run
-git from Git Bash (`/mingw64/bin/git`) and the helper cannot be found, but git
-does not report that: the command **hangs** until something kills it, and then
-reports
-
-```
-fatal: helper error (143): Unknown
-```
-
-143 is SIGTERM — the exit code of whatever killed it, not a diagnosis. This
-looks exactly like a missing `gh.exe`, and previously *was* one, so it is easy
-to misread as "GitHub access is broken" and go hunting for an install that is
-already there.
-
-**If anything touching `origin` hangs, check which git you are running before
-anything else** (`which git` — it must be `/usr/bin/git`). This is the sharpest
-instance of the general rule above: run everything in cygwin zsh.
-
-To distinguish a genuine auth failure from the wrong-git hang:
-`GIT_TERMINAL_PROMPT=0 git ls-remote origin` fails fast on real auth problems,
-and `gh auth status` confirms the account and scopes independently of git.
 
 ## Toolchain
 
