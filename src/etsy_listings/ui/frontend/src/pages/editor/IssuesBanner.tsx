@@ -38,7 +38,13 @@ function summarise(issues: Issue[]): string {
 
 function BlockIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round">
+    <svg
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.2"
+      strokeLinecap="round"
+    >
       <circle cx="12" cy="12" r="9" />
       <path d="M12 7.5v5.5M12 16.4v.01" />
     </svg>
@@ -70,7 +76,9 @@ export function IssuesBanner({ issues, activeTab, onJumpTo }: Props) {
       <div className="issues__head">
         <span
           className={
-            blocking ? "issues__summary issues__summary--block" : "issues__summary issues__summary--warn"
+            blocking
+              ? "issues__summary issues__summary--block"
+              : "issues__summary issues__summary--warn"
           }
         >
           {summarise(issues)}

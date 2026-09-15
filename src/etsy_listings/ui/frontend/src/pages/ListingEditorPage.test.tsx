@@ -53,6 +53,7 @@ function renderAt(path: string) {
 beforeEach(() => {
   vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
   vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([]);
+  vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([]);
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -62,14 +63,16 @@ describe("ListingEditorPage", () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
 
-    await waitFor(() => expect(screen.getByText("take-a-hike")).toBeInTheDocument());
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "take-a-hike" })).toBeInTheDocument(),
+    );
     expect(screen.getByLabelText("Garment profile")).toBeInTheDocument();
   });
 
   it("switches tabs", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
-    await screen.findByText("take-a-hike");
+    await screen.findByRole("heading", { name: "take-a-hike" });
 
     fireEvent.click(screen.getByText("Listing Details"));
     expect(screen.getByLabelText("Title")).toBeInTheDocument();
@@ -79,7 +82,7 @@ describe("ListingEditorPage", () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const patchSpy = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
-    await screen.findByText("take-a-hike");
+    await screen.findByRole("heading", { name: "take-a-hike" });
 
     fireEvent.click(screen.getByText("Listing Details"));
     fireEvent.change(screen.getByLabelText("Title"), { target: { value: "Take A Hike Tee" } });
@@ -174,6 +177,36 @@ describe("ListingEditorPage", () => {
     await screen.findByText("Below");
   });
 
+  it("carries the design strip above the tabs, where both tabs can see it", async () => {
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "take-a-hike", file: "designs/take-a-hike.png" },
+    ]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    renderAt("/listings/take-a-hike");
+
+    expect(await screen.findByText("designs/take-a-hike.png")).toBeInTheDocument();
+  });
+
+  it("saves a newly picked design", async () => {
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "take-a-hike", file: "designs/take-a-hike.png" },
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const patchSpy = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
+    renderAt("/listings/take-a-hike");
+    await screen.findByText("designs/take-a-hike.png");
+
+    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(screen.getByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() =>
+      expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
+        design: "../../designs/cosmic-cat.png",
+      }),
+    );
+  });
+
   it("shows the listing's path on disk in the page head", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
@@ -190,7 +223,7 @@ describe("ListingEditorPage", () => {
       }),
     );
     const { container } = renderAt("/listings/take-a-hike");
-    await screen.findByText("take-a-hike");
+    await screen.findByRole("heading", { name: "take-a-hike" });
     const imagesTabButton = Array.from(container.querySelectorAll(".seg-opt")).find((el) =>
       el.textContent?.startsWith("Listing Images"),
     ) as HTMLElement;
@@ -219,7 +252,7 @@ describe("ListingEditorPage", () => {
   it("goes back to the listings page when the breadcrumb is clicked", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
-    await screen.findByText("take-a-hike");
+    await screen.findByRole("heading", { name: "take-a-hike" });
 
     fireEvent.click(screen.getByText("Listings"));
     await waitFor(() => expect(screen.getByText("listings page")).toBeInTheDocument());

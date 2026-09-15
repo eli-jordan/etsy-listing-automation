@@ -6,6 +6,7 @@ import type {
   ListingDetail,
   ListingSummary,
   PricingPlanSummary,
+  WorkspaceSummary,
 } from "../types";
 
 /**
@@ -64,6 +65,12 @@ export async function listPricingPlans(garmentProfile: string): Promise<PricingP
     params: { query: { garment_profile: garmentProfile } },
   });
   if (error || !data) throw new ListingsApiError("could not load pricing plans");
+  return data;
+}
+
+export async function getWorkspace(): Promise<WorkspaceSummary> {
+  const { data, error } = await api.GET("/api/workspace");
+  if (error || !data) throw new ListingsApiError("could not load the workspace");
   return data;
 }
 

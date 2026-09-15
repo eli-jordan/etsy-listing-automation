@@ -1407,6 +1407,23 @@ fieldset label {
   line-height: 1.1;
 }
 
+.sidebar__shop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.sidebar__dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--color-accent-2);
+}
+
 .sidebar__nav {
   display: flex;
   flex-direction: column;
@@ -1619,11 +1636,7 @@ table.listings tbody tr:last-child td {
    stays an empty well rather than showing one of the two inks. */
 .listing-thumb--empty {
   display: block;
-  background: linear-gradient(
-    135deg,
-    var(--color-neutral-200),
-    var(--color-neutral-300)
-  );
+  background: linear-gradient(135deg, var(--color-neutral-200), var(--color-neutral-300));
 }
 
 .listing-hover:hover .listing-row__link {
@@ -1880,6 +1893,133 @@ table.listings tbody tr:last-child td {
   border-color: var(--color-accent);
 }
 
+/* — the design strip: which artwork this listing prints, above the tabs
+     because both Variants and Listing Images are about it — */
+.design-select {
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.design-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px;
+  border-radius: var(--radius-md);
+}
+
+.design-thumb {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-neutral-200);
+  box-shadow: var(--shadow-sm);
+}
+
+.design-thumb--empty {
+  display: block;
+  background: linear-gradient(135deg, var(--color-neutral-200), var(--color-neutral-300));
+}
+
+.design-row__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.design-row__name {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.design-row__name--empty {
+  font-style: italic;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.design-row__file {
+  font-size: 11px;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.design-row__change {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.design-row__change:hover {
+  text-decoration: underline;
+}
+
+/* The inline picker the strip drops open, and the card grid inside it --
+   also the shape the locator's non-matrix bodies use. */
+.add-panel {
+  margin-top: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px dashed var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+/* auto-*fill*, not auto-fit: a single design must occupy one track, not
+   stretch across the whole strip. */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.template-card {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-divider);
+  background: var(--color-neutral-100);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  /* The UA centres a button's contents on both axes; these are left-aligned
+     rows of text, like every other card in the app. */
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+.template-card:hover {
+  border-color: var(--color-accent);
+}
+
+.template-card--active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-neutral-100));
+}
+
+.template-card__name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.template-card__kind {
+  font-size: 10px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
 /* — editor: tabs, layout, validation issues — */
 .editor {
   max-width: 1400px;
@@ -1955,12 +2095,32 @@ table.listings tbody tr:last-child td {
   background: var(--color-accent-100);
 }
 
+/* `--selected` is the colour on the preview stage, not "enabled" -- the two
+   were conflated, so every enabled row wore the highlight and the panel read
+   as one solid block of accent. */
 .color-row__text {
   flex: 1;
   min-width: 0;
   display: flex;
   align-items: center;
+  /* The UA centres a <button>'s contents, flex or not -- a colour list has to
+     read as a column of names, not a column of centred labels. */
+  justify-content: flex-start;
   gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Switched off: still listed, so turning one back on doesn't need the user to
+   remember it existed. */
+.color-row--off .color-row__name,
+.color-row--off .tag {
+  opacity: 0.45;
 }
 
 .color-row__name {
@@ -2324,6 +2484,28 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 48%, transparent);
 }
 
+.locator__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.locator__search svg {
+  position: absolute;
+  left: 11px;
+  width: 13px;
+  height: 13px;
+  stroke: color-mix(in srgb, var(--color-text) 45%, transparent);
+  fill: none;
+  pointer-events: none;
+}
+
+.locator__search .input {
+  width: 100%;
+  padding-left: 31px;
+  background: var(--color-neutral-100);
+}
+
 .locator__list {
   flex: 1;
   min-height: 240px;
@@ -2364,6 +2546,22 @@ table.listings tbody tr:last-child td {
   background: color-mix(in srgb, var(--color-accent) 7%, transparent);
 }
 
+.loc-tmpl__mini {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--color-neutral-200);
+  overflow: hidden;
+}
+
+.loc-tmpl__mini img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
 .loc-tmpl__text {
   flex: 1;
   min-width: 0;
@@ -2381,6 +2579,16 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 52%, transparent);
 }
 
+.loc-tmpl__count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-accent-2-100);
+  color: var(--color-accent-2-800);
+  white-space: nowrap;
+}
+
 .loc-tmpl__caret {
   font-size: 9px;
   color: color-mix(in srgb, var(--color-text) 45%, transparent);
@@ -2391,6 +2599,63 @@ table.listings tbody tr:last-child td {
   display: flex;
   flex-direction: column;
   gap: 7px;
+  align-items: flex-start;
+}
+
+.loc-tmpl__note {
+  margin: 0;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
+/* — the Etsy colour-swatch source (PRD 56), on a colour-matrix template this
+     listing already uses — */
+.tmpl-swatch {
+  align-self: stretch;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tmpl-swatch__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tmpl-swatch__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.tmpl-swatch__sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
+.swatch-status {
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.swatch-status--ok {
+  color: var(--color-accent-2-700);
+}
+
+.swatch-status--warn {
+  color: var(--color-accent-700);
+}
+
+.swatch-note {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--color-accent-700);
 }
 
 .cchips {
@@ -2421,6 +2686,18 @@ table.listings tbody tr:last-child td {
   background: var(--color-accent-2-100);
   border-color: var(--color-accent-2-400);
   font-weight: 700;
+}
+
+.cchip__tick {
+  width: 10px;
+  height: 10px;
+  stroke: var(--color-accent-2-700);
+  fill: none;
+  flex: none;
+}
+
+.btn-like--ghost {
+  background: transparent;
 }
 
 /* — the locator's "Images" concept isn't wired yet (no endpoint lists
@@ -2475,13 +2752,71 @@ table.listings tbody tr:last-child td {
   min-height: 260px;
 }
 
+.preview-stage--compact {
+  min-height: 320px;
+}
+
+/* Which colour the stage is showing, over the photo's top-left corner. */
+.preview-stage__tag {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+}
+
+.variants-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.variants-preview__hint {
+  margin: 0;
+  font-size: 11px;
+  text-align: center;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
 .image-placeholder {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 8px;
+  padding: 0 var(--space-4);
+  text-align: center;
   color: color-mix(in srgb, var(--color-text) 45%, transparent);
   font-size: 12.5px;
+}
+
+/* — what the stage is showing, and what to do about it — */
+.preview-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.preview-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-meta__title {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.preview-meta__path {
+  display: block;
+  font-size: 10.5px;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 /* — the reel: ordered listing images, Etsy's own presentation order — */
@@ -2560,8 +2895,38 @@ table.listings tbody tr:last-child td {
   object-fit: cover;
 }
 
+.rtile--selected .rtile__face {
+  border-color: var(--color-accent);
+}
+
 .rtile--dragging {
   opacity: 0.35;
+}
+
+/* Where the dragged tile would land. */
+.rtile--over .rtile__face {
+  border-color: var(--color-accent-2);
+  border-style: dashed;
+}
+
+/* This tile is what Etsy shows beside its colour option (PRD 56). */
+.rtile__swatch {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--color-accent-2);
+  color: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rtile__swatch svg {
+  width: 10px;
+  height: 10px;
 }
 
 .rtile__pos {
@@ -2678,4 +3043,58 @@ table.listings tbody tr:last-child td {
 
 .modal-dialog__close:hover {
   background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.modal-dialog__list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 2px;
+}
+
+.modal-design-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modal-design-row:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.modal-design-row__thumb {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-neutral-200);
+}
+
+.modal-design-row__name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modal-design-row__file {
+  display: block;
+  font-size: 10.5px;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.modal-empty {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  padding: var(--space-3) 0;
+  text-align: center;
 }

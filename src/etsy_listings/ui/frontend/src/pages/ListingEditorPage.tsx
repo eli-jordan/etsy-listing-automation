@@ -4,6 +4,7 @@ import { getListing } from "../api/listings";
 import { OpenOnMenu } from "../components/OpenOnMenu";
 import { useAutosave } from "../hooks/useAutosave";
 import type { Issue, IssueTab, ListingDetail } from "../types";
+import { DesignSelect } from "./editor/DesignSelect";
 import { DetailsTab } from "./editor/DetailsTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
 import { ImagesTab } from "./editor/ImagesTab";
@@ -113,6 +114,11 @@ function ListingEditorPageContent({
       </div>
 
       <IssuesBanner issues={detail.issues} activeTab={tab} onJumpTo={pickTab} />
+
+      {/* Above the tabs, not inside one: the artwork is what both Variants
+          (which colours suit it) and Listing Images (which mockups show it)
+          are about. */}
+      <DesignSelect design={detail.design} onPick={(ref) => update({ design: ref })} />
 
       <div className="tabs seg">
         {TABS.map((t) => {

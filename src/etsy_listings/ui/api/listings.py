@@ -61,6 +61,7 @@ from etsy_listings.ui.api.schemas import (
     ListingSummary,
     PricingPlanSummary,
     ResolvedPrice,
+    WorkspaceSummary,
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.workspace.workspace import PathEscapesWorkspaceError, Workspace
@@ -366,6 +367,11 @@ def list_pricing_plans(request: Request, garment_profile: str) -> list[PricingPl
         )
         for choice in choices
     ]
+
+
+@support_router.get("/api/workspace", response_model=WorkspaceSummary)
+def get_workspace(request: Request) -> WorkspaceSummary:
+    return WorkspaceSummary(shop_name=_workspace(request).defaults.etsy.shop_name)
 
 
 @support_router.get("/api/listing-designs", response_model=list[ListingDesignSummary])

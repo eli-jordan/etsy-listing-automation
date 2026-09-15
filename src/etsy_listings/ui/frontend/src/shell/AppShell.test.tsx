@@ -1,6 +1,7 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import * as listingsApi from "../api/listings";
 import { AppShell } from "./AppShell";
 
 function renderAt(path: string) {
@@ -18,7 +19,28 @@ function renderAt(path: string) {
   );
 }
 
+beforeEach(() => {
+  vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: null });
+});
+
+afterEach(() => vi.restoreAllMocks());
+
 describe("AppShell", () => {
+  it("names the shop this workspace is for", async () => {
+    /* One workspace is one shop, and the difference between the test shop and
+       the real one is worth seeing before an edit, not after an apply. */
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "TakeAHikeTees" });
+    renderAt("/");
+
+    await waitFor(() => expect(screen.getByText("TakeAHikeTees")).toBeInTheDocument());
+  });
+
+  it("says nothing rather than guessing when the shop has no name yet", async () => {
+    renderAt("/");
+    await waitFor(() => expect(screen.getByText("dashboard content")).toBeInTheDocument());
+    expect(screen.queryByText(/shop/i)).not.toBeInTheDocument();
+  });
+
   it("renders the nav items", () => {
     renderAt("/");
     expect(screen.getByRole("link", { name: /Dashboard/ })).toBeInTheDocument();

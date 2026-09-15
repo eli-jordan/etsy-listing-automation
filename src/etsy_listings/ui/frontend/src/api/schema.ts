@@ -298,6 +298,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/workspace": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Workspace */
+    get: operations["get_workspace_api_workspace_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/{full_path}": {
     parameters: {
       query?: never;
@@ -899,6 +916,16 @@ export interface components {
       /** Error Type */
       type: string;
     };
+    /**
+     * WorkspaceSummary
+     * @description Which workspace the UI is pointed at. One workspace is one shop, so the
+     *     sidebar names it -- the difference between a test shop and the real one is
+     *     worth seeing before an edit, not after an apply.
+     */
+    WorkspaceSummary: {
+      /** Shop Name */
+      shop_name: string | null;
+    };
   };
   responses: never;
   parameters: never;
@@ -1439,6 +1466,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_workspace_api_workspace_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceSummary"];
         };
       };
     };

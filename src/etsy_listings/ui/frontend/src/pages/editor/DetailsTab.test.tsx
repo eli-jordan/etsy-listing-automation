@@ -99,6 +99,55 @@ describe("DetailsTab", () => {
     expect(screen.getByText("No tags yet")).toBeInTheDocument();
   });
 
+  it("counts the title against Etsy's own 140-character limit", () => {
+    /* The limit is Etsy's and the server refuses past it, so the counter is
+       what stops a long title being typed blind and rejected on save. */
+    render(
+      <DetailsTab
+        detail={detail({ etsy: { ...detail().etsy, title: "Take A Hike Tee" } })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("15 / 140")).toBeInTheDocument();
+  });
+
+  it("counts the tags against Etsy's 13-tag limit", () => {
+    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    expect(screen.getByText("2 / 13")).toBeInTheDocument();
+  });
+
+  it("does not count a <generate> title, which is a sentinel and not copy", () => {
+    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    expect(screen.queryByText("10 / 140")).not.toBeInTheDocument();
+  });
+
+  it("edits etsy.materials as comma-separated text", () => {
+    const onUpdate = vi.fn();
+    render(
+      <DetailsTab
+        detail={detail({ etsy: { ...detail().etsy, materials: ["cotton", "水性インク"] } })}
+        onUpdate={onUpdate}
+        onFlush={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Materials")).toHaveValue("cotton, 水性インク");
+
+    fireEvent.change(screen.getByLabelText("Materials"), {
+      target: { value: "combed ring-spun cotton, polyester" },
+    });
+    expect(onUpdate).toHaveBeenCalledWith({
+      etsy: { materials: ["combed ring-spun cotton", "polyester"] },
+    });
+  });
+
+  it("treats an emptied materials field as no materials, not one blank one", () => {
+    const onUpdate = vi.fn();
+    render(<DetailsTab detail={detail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
+    fireEvent.change(screen.getByLabelText("Materials"), { target: { value: "  " } });
+    expect(onUpdate).toHaveBeenCalledWith({ etsy: { materials: [] } });
+  });
+
   it("shows the resolved pricing plan and price table", () => {
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     expect(screen.getByText("Plan: tee-basic")).toBeInTheDocument();

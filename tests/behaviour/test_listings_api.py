@@ -48,9 +48,7 @@ class TestListListings:
         assert row["colour_count"] == 4
         assert row["status"] == "draft"
 
-    def test_a_row_names_the_design_its_thumbnail_is_addressed_by(
-        self, client: TestClient
-    ) -> None:
+    def test_a_row_names_the_design_its_thumbnail_is_addressed_by(self, client: TestClient) -> None:
         """The table shows the artwork, so a row has to carry the name
         `GET /api/listing-designs/{name}/thumbnail` takes -- the stem, not
         the ``../../designs/take-a-hike.png`` ref stored in listing.yaml."""
@@ -329,3 +327,31 @@ class TestSupportingEndpoints:
 
     def test_a_design_thumbnail_404s_for_an_unknown_design(self, client: TestClient) -> None:
         assert client.get("/api/listing-designs/no-such-art/thumbnail").status_code == 404
+
+    def test_names_the_shop_the_sidebar_says_you_are_working_on(self, client: TestClient) -> None:
+        """One workspace per shop, so the sidebar says which -- the difference
+        between a test shop and the real one is worth seeing before an edit,
+        not after an apply."""
+        response = client.get("/api/workspace")
+        assert response.status_code == 200
+        assert response.json()["shop_name"] == "TakeAHikeTees"
+
+    def test_reports_a_shop_with_no_name_yet_rather_than_failing(
+        self, workspace_root: Path
+    ) -> None:
+        """`etsy.shop_name` arrives from Etsy during `setup`, so a workspace
+        that has only ever rendered mockups has none.
+
+        Builds its own client rather than taking the fixture: ``shop.yaml`` is
+        read once, at ``Workspace.discover``, so editing it afterwards would
+        change nothing this request can see.
+        """
+        path = workspace_root / "shop.yaml"
+        raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+        del raw["etsy"]["shop_name"]
+        path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+
+        nameless = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+        response = nameless.get("/api/workspace")
+        assert response.status_code == 200
+        assert response.json()["shop_name"] is None

@@ -218,6 +218,17 @@ class ListingDesignSummary(BaseModel):
     ``designs/take-a-hike.png``."""
 
 
+class WorkspaceSummary(BaseModel):
+    """Which workspace the UI is pointed at. One workspace is one shop, so the
+    sidebar names it -- the difference between a test shop and the real one is
+    worth seeing before an edit, not after an apply."""
+
+    shop_name: str | None
+    """`etsy.shop_name` from `shop.yaml`. ``None`` until `setup` reads it back
+    from Etsy (PRD 51), which a workspace that has only ever rendered mockups
+    never has."""
+
+
 class CreateListingRequest(BaseModel):
     name: str
     design: str

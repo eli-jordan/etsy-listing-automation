@@ -8,6 +8,17 @@ import type { ListingDetail } from "../../types";
  * exists on the live Etsy shop and validating it needs a real `plan()`,
  * explicitly out of scope for this module. */
 
+/** Etsy's own ceilings, mirrored from `config/listing.py`'s MAX_* constants.
+ * Shown as counters rather than enforced here: the server is what refuses a
+ * candidate (and says so through `field_errors`), and a field that silently
+ * truncates what you paste is worse than one that tells you it is over. */
+const MAX_TITLE_LENGTH = 140;
+const MAX_TAGS = 13;
+
+/** The sentinel `generate` fills in for copy nobody has written yet -- it is
+ * not a title, so counting its characters would be counting the placeholder. */
+const GENERATE = "<generate>";
+
 interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
@@ -19,6 +30,8 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   const tags = Array.isArray(detail.etsy.tags) ? detail.etsy.tags : [];
   const titleError = detail.field_errors["etsy.title"];
   const sectionError = detail.field_errors["etsy.section"];
+  const title = detail.etsy.title;
+  const materials = detail.etsy.materials ?? [];
 
   function commitTags() {
     const additions = tagDraft
@@ -52,6 +65,11 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
             onBlur={onFlush}
           />
           {titleError && <span className="field__error">{titleError}</span>}
+          {title !== GENERATE && (
+            <span className="field__hint">
+              {title.length} / {MAX_TITLE_LENGTH}
+            </span>
+          )}
         </div>
 
         <div className="field">
@@ -82,6 +100,9 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
             }}
             onBlur={commitTags}
           />
+          <span className="field__hint">
+            {tags.length} / {MAX_TAGS}
+          </span>
         </div>
 
         <div className="field">
@@ -105,6 +126,31 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
             onBlur={onFlush}
           />
           {sectionError && <span className="field__error">{sectionError}</span>}
+        </div>
+
+        {/* A list on disk, a comma-separated line here -- Etsy's own field is
+            a short list of fibre names, so a chip editor would be more
+            machinery than the content deserves. */}
+        <div className="field">
+          <label htmlFor="details-materials">Materials</label>
+          <input
+            id="details-materials"
+            className="input"
+            type="text"
+            placeholder="cotton, polyester"
+            value={materials.join(", ")}
+            onChange={(event) =>
+              onUpdate({
+                etsy: {
+                  materials: event.target.value
+                    .split(",")
+                    .map((m) => m.trim())
+                    .filter((m) => m !== ""),
+                },
+              })
+            }
+            onBlur={onFlush}
+          />
         </div>
       </fieldset>
 

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listTemplates, templateThumbnailUrl } from "../../api/calibrator";
-import type { ListingDetail, MediaEntry, TemplateSummary } from "../../types";
+import type { ListingDetail, MediaEntry, TemplateMediaEntry, TemplateSummary } from "../../types";
 
 /**
  * Locator (browse calibrated templates) + preview pane + reel (phase 5).
@@ -15,16 +15,26 @@ import type { ListingDetail, MediaEntry, TemplateSummary } from "../../types";
  * design overlay would need the preview endpoint to grow a third way to
  * resolve `design`, which is out of scope for this pass.
  *
+ * The thumbnail *is* asked for a colour, though (`?colour=`): without it a
+ * colour-matrix set answers with the same photo every time, and a reel of
+ * eight identical tiles labelled with eight different colours is worse than
+ * no picture at all.
+ *
  * There is also no endpoint (yet) that lists `common-media/`'s bare shared
  * assets, so the locator only browses mockup templates -- a bare-path media
  * entry can still exist (the fixture listing has one), it is just not
- * addable from this tab yet.
+ * addable from this tab yet. It is still *shown* in the reel, because a
+ * listing that has one must not look like it has lost an image.
  */
 
 interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
 }
+
+/** Etsy's ceiling on listing images, mirrored from `config/listing.py`'s
+ * `MAX_MEDIA_ENTRIES`. Shown, not enforced -- the server refuses past it. */
+const MAX_MEDIA = 20;
 
 function kindLabel(kind: TemplateSummary["kind"]): string {
   if (kind === "colour-matrix") return "Colour matrix · one photo per colour";
@@ -38,10 +48,25 @@ function mediaLabel(entry: MediaEntry): string {
   return entry.colour ? `${entry.template} · ${entry.colour}` : entry.template;
 }
 
+/** The file on disk this entry renders from. PRD 7a: a colour-matrix photo is
+ * named for the slugified colour; the other two kinds have a fixed `scene.png`
+ * because there is no per-colour name to derive one from. */
+function scenePath(template: string, colour: string | null): string {
+  const file = colour === null ? "scene" : colour;
+  return `mockup-templates/${template}/${file}.png`;
+}
+
 function isInMedia(media: MediaEntry[], template: string, colour: string | null): boolean {
   return media.some(
     (m) => typeof m !== "string" && m.template === template && (m.colour ?? null) === colour,
   );
+}
+
+/** What the preview pane is pointing at. `null` colour means the template's
+ * fixed scene, which is also what a `multiple`/`single` template always is. */
+interface Focus {
+  template: string;
+  colour: string | null;
 }
 
 export function ImagesTab({ detail, onUpdate }: Props) {
@@ -49,8 +74,10 @@ export function ImagesTab({ detail, onUpdate }: Props) {
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
   const [openTemplate, setOpenTemplate] = useState<string | null>(null);
-  const [focusName, setFocusName] = useState<string | null>(null);
+  const [focus, setFocus] = useState<Focus | null>(null);
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   useEffect(() => {
     listTemplates()
@@ -60,10 +87,57 @@ export function ImagesTab({ detail, onUpdate }: Props) {
 
   const calibrated = templates.filter((t) => t.status === "calibrated");
   const filtered = calibrated.filter((t) => t.name.toLowerCase().includes(query.toLowerCase()));
+  const swatchTemplate = detail.etsy.variation_images ?? null;
 
-  function addEntry(template: string, colour: string | null) {
-    if (isInMedia(detail.media, template, colour)) return;
+  function entriesFor(template: string): number {
+    return detail.media.filter((m) => typeof m !== "string" && m.template === template).length;
+  }
+
+  /** Colours this listing sells that `template` has no media entry for.
+   * Driven by `colors:`, not by the template's own photo set -- a swatch is
+   * owed for every colour on sale, and one the template cannot supply is
+   * exactly what the coverage warning is for. */
+  function missingColours(template: string): string[] {
+    return detail.colors.filter((c) => !isInMedia(detail.media, template, c));
+  }
+
+  function toggleEntry(template: string, colour: string | null) {
+    if (isInMedia(detail.media, template, colour)) {
+      onUpdate({
+        media: detail.media.filter(
+          (m) => typeof m === "string" || m.template !== template || (m.colour ?? null) !== colour,
+        ),
+      });
+      return;
+    }
+    if (detail.media.length >= MAX_MEDIA) return;
     onUpdate({ media: [...detail.media, { template, colour }] });
+  }
+
+  function addEveryMissingColour(template: string) {
+    const additions: TemplateMediaEntry[] = missingColours(template)
+      .slice(0, Math.max(0, MAX_MEDIA - detail.media.length))
+      .map((colour) => ({ template, colour }));
+    if (additions.length === 0) return;
+    onUpdate({ media: [...detail.media, ...additions] });
+  }
+
+  /** Turning the swatch source on also adds the colours it lacks: PRD 56's
+   * gate (`EtsyMediaStage.desired()`) refuses a `variation_images` template
+   * whose colours the media does not carry, so naming one without filling it
+   * in would write a listing the engine then refuses to apply. */
+  function toggleSwatchSource(template: string) {
+    if (swatchTemplate === template) {
+      onUpdate({ etsy: { variation_images: null } });
+      return;
+    }
+    const additions: TemplateMediaEntry[] = missingColours(template)
+      .slice(0, Math.max(0, MAX_MEDIA - detail.media.length))
+      .map((colour) => ({ template, colour }));
+    onUpdate({
+      media: [...detail.media, ...additions],
+      etsy: { variation_images: template },
+    });
   }
 
   function removeAt(index: number) {
@@ -80,6 +154,8 @@ export function ImagesTab({ detail, onUpdate }: Props) {
     onUpdate({ media: next });
   }
 
+  const focusInListing = focus !== null && isInMedia(detail.media, focus.template, focus.colour);
+
   return (
     <div className="images-tab">
       <div className="locator">
@@ -89,6 +165,10 @@ export function ImagesTab({ detail, onUpdate }: Props) {
         </div>
 
         <div className="locator__search">
+          <svg viewBox="0 0 24 24" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <circle cx="11" cy="11" r="7" />
+            <path d="M20 20l-3.5-3.5" />
+          </svg>
           <input
             className="input"
             type="text"
@@ -99,56 +179,162 @@ export function ImagesTab({ detail, onUpdate }: Props) {
         </div>
 
         <div className="locator__list">
-          {filtered.map((t) => (
-            <div
-              key={t.name}
-              className={openTemplate === t.name ? "loc-tmpl loc-tmpl--open" : "loc-tmpl"}
-            >
-              <div
-                className="loc-tmpl__head"
-                onClick={() => setOpenTemplate((current) => (current === t.name ? null : t.name))}
-                onMouseEnter={() => setFocusName(t.name)}
-              >
-                <span className="loc-tmpl__text">
-                  <span className="loc-tmpl__name">{t.name}</span>
-                  <span className="loc-tmpl__kind">{kindLabel(t.kind)}</span>
-                </span>
-                <span className="loc-tmpl__caret">{openTemplate === t.name ? "▴" : "▾"}</span>
-              </div>
-
-              {openTemplate === t.name && (
-                <div className="loc-tmpl__body">
-                  {t.kind === "colour-matrix" ? (
-                    <div className="cchips">
-                      {t.colours.map((colour) => {
-                        const inListing = isInMedia(detail.media, t.name, colour);
-                        return (
-                          <button
-                            key={colour}
-                            type="button"
-                            className={inListing ? "cchip cchip--in" : "cchip"}
-                            onClick={() => addEntry(t.name, colour)}
-                            onMouseEnter={() => setFocusName(t.name)}
-                          >
-                            {colour}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  ) : (
-                    <button
-                      type="button"
-                      className="btn-like btn-like--primary btn-sm"
-                      disabled={isInMedia(detail.media, t.name, null)}
-                      onClick={() => addEntry(t.name, null)}
-                    >
-                      {isInMedia(detail.media, t.name, null) ? "Added" : "+ Add"}
-                    </button>
-                  )}
+          {filtered.map((t) => {
+            const open = openTemplate === t.name;
+            const inCount = entriesFor(t.name);
+            const missing = missingColours(t.name);
+            const uncovered = swatchTemplate === t.name ? missing : [];
+            return (
+              <div key={t.name} className={open ? "loc-tmpl loc-tmpl--open" : "loc-tmpl"}>
+                <div
+                  className="loc-tmpl__head"
+                  onClick={() => setOpenTemplate((current) => (current === t.name ? null : t.name))}
+                  onMouseEnter={() =>
+                    setFocus({
+                      template: t.name,
+                      colour: t.kind === "colour-matrix" ? (detail.colors[0] ?? null) : null,
+                    })
+                  }
+                >
+                  <span className="loc-tmpl__mini">
+                    <img src={templateThumbnailUrl(t.name)} alt="" loading="lazy" />
+                  </span>
+                  <span className="loc-tmpl__text">
+                    <span className="loc-tmpl__name">{t.name}</span>
+                    <span className="loc-tmpl__kind">{kindLabel(t.kind)}</span>
+                  </span>
+                  {inCount > 0 && <span className="loc-tmpl__count">{inCount} in listing</span>}
+                  <span className="loc-tmpl__caret" aria-hidden="true">
+                    {open ? "▾" : "▸"}
+                  </span>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {open && (
+                  <div className="loc-tmpl__body">
+                    {t.kind === "colour-matrix" ? (
+                      <>
+                        <div className="cchips">
+                          {t.colours.map((colour) => {
+                            const inListing = isInMedia(detail.media, t.name, colour);
+                            return (
+                              <button
+                                key={colour}
+                                type="button"
+                                className={inListing ? "cchip cchip--in" : "cchip"}
+                                aria-pressed={inListing}
+                                onClick={() => toggleEntry(t.name, colour)}
+                                onMouseEnter={() => setFocus({ template: t.name, colour })}
+                              >
+                                {colour}
+                                {inListing && (
+                                  <svg
+                                    className="cchip__tick"
+                                    viewBox="0 0 24 24"
+                                    strokeWidth="3.5"
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    aria-hidden="true"
+                                  >
+                                    <path d="M5 13l4 4L19 7" />
+                                  </svg>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+
+                        {missing.length > 1 && (
+                          <button
+                            type="button"
+                            className="btn-like btn-like--ghost btn-sm"
+                            onClick={() => addEveryMissingColour(t.name)}
+                          >
+                            + Add all {missing.length} remaining colours
+                          </button>
+                        )}
+                        {detail.colors.length > 0 && missing.length === 0 && (
+                          <p className="loc-tmpl__note">
+                            Every colour this listing sells is already in the reel.
+                          </p>
+                        )}
+
+                        {inCount > 0 && (
+                          <div className="tmpl-swatch">
+                            <div className="tmpl-swatch__row">
+                              <span className="tmpl-swatch__label" id={`swatch-${t.name}`}>
+                                Use for Etsy colour swatches
+                                <span className="tmpl-swatch__sub">
+                                  {swatchTemplate === t.name
+                                    ? "Etsy shows these beside each colour option"
+                                    : swatchTemplate
+                                      ? `Currently using ${swatchTemplate}`
+                                      : "Off — no swatch images sent"}
+                                </span>
+                              </span>
+                              <button
+                                type="button"
+                                role="switch"
+                                aria-checked={swatchTemplate === t.name}
+                                aria-labelledby={`swatch-${t.name}`}
+                                className={
+                                  swatchTemplate === t.name ? "switch switch--on" : "switch"
+                                }
+                                onClick={() => toggleSwatchSource(t.name)}
+                              >
+                                <span className="switch__knob" />
+                              </button>
+                            </div>
+                            {swatchTemplate === t.name && (
+                              <>
+                                <span
+                                  className={
+                                    uncovered.length > 0
+                                      ? "swatch-status swatch-status--warn"
+                                      : "swatch-status swatch-status--ok"
+                                  }
+                                >
+                                  {uncovered.length > 0
+                                    ? `${detail.colors.length - uncovered.length} of ${detail.colors.length} covered`
+                                    : `All ${detail.colors.length} covered`}
+                                </span>
+                                {uncovered.length > 0 && (
+                                  <p className="swatch-note">
+                                    {uncovered.join(", ")} {uncovered.length === 1 ? "has" : "have"}{" "}
+                                    no image here — Etsy keeps{" "}
+                                    {uncovered.length === 1 ? "that swatch" : "those swatches"}{" "}
+                                    empty.
+                                  </p>
+                                )}
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <p className="loc-tmpl__note">
+                          {t.kind === "multiple"
+                            ? "One photo showing several colours at once — it carries no colour of its own."
+                            : "One fixed photo, the same for every colour."}
+                        </p>
+                        <button
+                          type="button"
+                          className={
+                            isInMedia(detail.media, t.name, null)
+                              ? "btn-like btn-like--ghost btn-sm"
+                              : "btn-like btn-like--primary btn-sm"
+                          }
+                          onClick={() => toggleEntry(t.name, null)}
+                        >
+                          {isInMedia(detail.media, t.name, null) ? "Remove from listing" : "+ Add"}
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
           {filtered.length === 0 && (
             <p className="locator__empty">No template matches that search.</p>
           )}
@@ -159,68 +345,147 @@ export function ImagesTab({ detail, onUpdate }: Props) {
         <div className="preview-pane">
           <span className="section-label">Preview</span>
           <div className="preview-stage preview-stage--images">
-            {focusName ? (
-              <img src={templateThumbnailUrl(focusName)} alt={focusName} />
+            {focus !== null ? (
+              <>
+                {focus.colour !== null && (
+                  <span className="preview-stage__tag tag tag-neutral">{focus.colour}</span>
+                )}
+                <img
+                  src={templateThumbnailUrl(focus.template, focus.colour)}
+                  alt={mediaLabel({ template: focus.template, colour: focus.colour })}
+                />
+              </>
             ) : (
               <div className="image-placeholder">
                 <span>Point at a template on the left</span>
               </div>
             )}
           </div>
+
+          {focus !== null && (
+            <div className="preview-foot">
+              <span className="preview-meta">
+                <span className="preview-meta__title">
+                  {mediaLabel({ template: focus.template, colour: focus.colour })}
+                </span>
+                <span className="preview-meta__path">
+                  {scenePath(focus.template, focus.colour)}
+                </span>
+              </span>
+              <span className="preview-actions">
+                <button
+                  type="button"
+                  className={
+                    focusInListing
+                      ? "btn-like btn-like--ghost btn-sm"
+                      : "btn-like btn-like--primary btn-sm"
+                  }
+                  onClick={() => toggleEntry(focus.template, focus.colour)}
+                >
+                  {focusInListing ? "Remove from listing" : "+ Add to listing"}
+                </button>
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="reel">
           <div className="reel__head">
             <span className="reel__title">Listing images</span>
-            <span className="reel__count">{detail.media.length}</span>
-            <span className="reel__hint">Drag to reorder — first tile is Etsy's thumbnail</span>
+            <span className="reel__count">
+              {detail.media.length} of {MAX_MEDIA}
+            </span>
+            <span className="reel__hint">
+              {detail.media.length >= MAX_MEDIA
+                ? `At Etsy's ${MAX_MEDIA}-image limit — remove one before adding another`
+                : "Drag a tile to change the order Etsy shows them in"}
+            </span>
           </div>
           <div className="reel__track">
-            {detail.media.map((entry, index) => (
-              <div
-                key={`${mediaLabel(entry)}-${index}`}
-                className={dragIndex === index ? "rtile rtile--dragging" : "rtile"}
-                draggable
-                onDragStart={() => setDragIndex(index)}
-                onDragOver={(event) => event.preventDefault()}
-                onDrop={() => {
-                  if (dragIndex !== null) reorder(dragIndex, index);
-                  setDragIndex(null);
-                }}
-                onDragEnd={() => setDragIndex(null)}
-              >
-                <div className="rtile__face">
-                  {typeof entry === "string" ? (
-                    <span className="loc-img__name">{entry}</span>
-                  ) : (
-                    <img src={templateThumbnailUrl(entry.template)} alt={entry.template} />
-                  )}
-                  <span className="rtile__pos">{index + 1}</span>
-                  <span
-                    className="rtile__x"
-                    role="button"
-                    aria-label={`Remove ${mediaLabel(entry)}`}
-                    onClick={() => removeAt(index)}
+            {detail.media.map((entry, index) => {
+              const isTemplate = typeof entry !== "string";
+              const suppliesSwatch =
+                isTemplate &&
+                swatchTemplate !== null &&
+                entry.template === swatchTemplate &&
+                entry.colour !== null;
+              const className = [
+                "rtile",
+                selectedIndex === index ? "rtile--selected" : "",
+                dragIndex === index ? "rtile--dragging" : "",
+                dragOverIndex === index && dragIndex !== index ? "rtile--over" : "",
+              ]
+                .filter(Boolean)
+                .join(" ");
+              return (
+                <div
+                  key={`${mediaLabel(entry)}-${index}`}
+                  className={className}
+                  draggable
+                  onDragStart={() => setDragIndex(index)}
+                  onDragOver={(event) => {
+                    event.preventDefault();
+                    setDragOverIndex(index);
+                  }}
+                  onDrop={() => {
+                    if (dragIndex !== null) reorder(dragIndex, index);
+                    setDragIndex(null);
+                    setDragOverIndex(null);
+                  }}
+                  onDragEnd={() => {
+                    setDragIndex(null);
+                    setDragOverIndex(null);
+                  }}
+                >
+                  <div
+                    className="rtile__face"
+                    onClick={() => setSelectedIndex(index)}
+                    onMouseEnter={() =>
+                      isTemplate &&
+                      setFocus({ template: entry.template, colour: entry.colour ?? null })
+                    }
                   >
-                    ×
-                  </span>
-                  {index === 0 && <span className="rtile__first">Etsy thumbnail</span>}
+                    {isTemplate ? (
+                      <img
+                        src={templateThumbnailUrl(entry.template, entry.colour)}
+                        alt={mediaLabel(entry)}
+                        loading="lazy"
+                      />
+                    ) : (
+                      <span className="loc-img__name">{entry}</span>
+                    )}
+                    <span className="rtile__pos">{index + 1}</span>
+                    {suppliesSwatch && (
+                      <span className="rtile__swatch" title="Supplies this colour's Etsy swatch">
+                        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                          <path d="M12 2l10 10-10 10L2 12z" />
+                        </svg>
+                      </span>
+                    )}
+                    <span
+                      className="rtile__x"
+                      role="button"
+                      aria-label={`Remove ${mediaLabel(entry)}`}
+                      onClick={() => removeAt(index)}
+                    >
+                      ×
+                    </span>
+                    {index === 0 && <span className="rtile__first">Etsy thumbnail</span>}
+                  </div>
+                  <span className="rtile__label">{mediaLabel(entry)}</span>
                 </div>
-                <span className="rtile__label">{mediaLabel(entry)}</span>
-              </div>
-            ))}
+              );
+            })}
             {detail.media.length === 0 && (
-              <p className="reel__empty">
-                Nothing here yet -- add a mockup template from the left.
-              </p>
+              <p className="reel__empty">Nothing here yet — add a mockup template from the left.</p>
             )}
           </div>
         </div>
-      </div>
 
-      <p role="status" className="app__status">
-        {status}
-      </p>
+        <p role="status" className="app__status">
+          {status}
+        </p>
+      </div>
     </div>
   );
 }

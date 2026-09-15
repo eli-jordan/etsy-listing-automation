@@ -1,4 +1,6 @@
+import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
+import { getWorkspace } from "../api/listings";
 
 /**
  * The app shell (phase 5): a fixed sidebar (brand, nav, a placeholder Setup
@@ -13,6 +15,17 @@ function navClass({ isActive }: { isActive: boolean }): string {
 }
 
 export function AppShell() {
+  // One workspace is one shop, and the sidebar is where that is said. A
+  // failure is silence, not an error banner: the shop's name is orientation,
+  // and no page here stops working without it.
+  const [shopName, setShopName] = useState<string | null>(null);
+
+  useEffect(() => {
+    getWorkspace()
+      .then((workspace) => setShopName(workspace.shop_name))
+      .catch(() => setShopName(null));
+  }, []);
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -31,7 +44,15 @@ export function AppShell() {
               <path d="M8 3 L6 6 L4 8 L5 11 L8 10 L8 20 L16 20 L16 10 L19 11 L20 8 L18 6 L16 3 Q14 5 12 5 Q10 5 8 3 Z" />
             </svg>
           </div>
-          <div className="sidebar__wordmark">Listings</div>
+          <div>
+            <div className="sidebar__wordmark">Listings</div>
+            {shopName !== null && (
+              <div className="sidebar__shop">
+                <span className="sidebar__dot" aria-hidden="true" />
+                {shopName}
+              </div>
+            )}
+          </div>
         </div>
 
         <nav className="sidebar__nav">

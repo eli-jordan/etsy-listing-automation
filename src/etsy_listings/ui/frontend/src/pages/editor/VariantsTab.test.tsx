@@ -1,8 +1,22 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
-import type { ListingDetail } from "../../types";
+import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { VariantsTab } from "./VariantsTab";
+
+function template(over: Partial<TemplateSummary> & { name: string }): TemplateSummary {
+  return {
+    kind: "colour-matrix",
+    colours: ["black", "ivory"],
+    has_config: true,
+    status: "calibrated",
+    status_reason: null,
+    width: 480,
+    height: 576,
+    ...over,
+  };
+}
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
@@ -37,7 +51,85 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   };
 }
 
+beforeEach(() => {
+  vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
+});
+
 afterEach(() => vi.restoreAllMocks());
+
+describe("VariantsTab's preview", () => {
+  const profiles: GarmentProfileSummary[] = [
+    { name: "comfort-colors-1717", sizes: ["S"], colors: { black: "dark", ivory: "light" } },
+  ];
+
+  function renderWithFlatLay(over: Partial<ListingDetail> = {}) {
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue(profiles);
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([template({ name: "flat-lay-01" })]);
+    return render(
+      <VariantsTab
+        detail={detail({
+          colors: ["black", "ivory"],
+          media: [{ template: "flat-lay-01", colour: "black" }],
+          ...over,
+        })}
+        onUpdate={vi.fn()}
+      />,
+    );
+  }
+
+  it("previews the first enabled colour's real photo", async () => {
+    renderWithFlatLay();
+    const preview = await screen.findByAltText("black on flat-lay-01");
+    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
+  });
+
+  it("previews whichever colour was clicked", async () => {
+    renderWithFlatLay();
+    await screen.findByAltText("black on flat-lay-01");
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview ivory" }));
+
+    expect(await screen.findByAltText("ivory on flat-lay-01")).toHaveAttribute(
+      "src",
+      "/api/templates/flat-lay-01/thumbnail?colour=ivory",
+    );
+  });
+
+  it("marks exactly one colour row as the previewed one", async () => {
+    const { container } = renderWithFlatLay();
+    await screen.findByAltText("black on flat-lay-01");
+    expect(container.querySelectorAll(".color-row--selected")).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview ivory" }));
+    expect(container.querySelectorAll(".color-row--selected")).toHaveLength(1);
+  });
+
+  it("dims a colour the listing has switched off rather than hiding it", async () => {
+    const { container } = renderWithFlatLay({ colors: ["black"] });
+    await screen.findByText("ivory");
+
+    const ivoryRow = screen.getByText("ivory").closest(".color-row");
+    expect(ivoryRow).toHaveClass("color-row--off");
+    expect(container.querySelector(".color-row--selected")).not.toHaveClass("color-row--off");
+  });
+
+  it("explains itself when the listing uses no colour-matrix template", async () => {
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue(profiles);
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
+      template({ name: "sizing-chart", kind: "single", colours: [] }),
+    ]);
+    render(
+      <VariantsTab
+        detail={detail({ colors: ["black"], media: [{ template: "sizing-chart", colour: null }] })}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    expect(
+      await screen.findByText(/Add a colour-matrix mockup on Listing Images/),
+    ).toBeInTheDocument();
+  });
+});
 
 describe("VariantsTab", () => {
   it("shows the garment profile's sizes once profiles load", async () => {

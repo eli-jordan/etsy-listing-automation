@@ -98,9 +98,15 @@ export async function uploadDesign(file: File): Promise<DesignSummary> {
  * The rail's per-template photo. A plain URL rather than a fetch: the browser
  * loads, caches and evicts these itself, and there is no object URL for anyone
  * to leak by forgetting to revoke it.
+ *
+ * `colour` narrows a `colour-matrix` set to one of its photos. Omit it for the
+ * calibrator's rail, which is standing in for the whole template; pass it
+ * anywhere a *particular* variant is on screen (the listings editor's reel and
+ * its previews), or every colour of a set draws the same picture.
  */
-export function templateThumbnailUrl(name: string): string {
-  return `/api/templates/${encodeURIComponent(name)}/thumbnail`;
+export function templateThumbnailUrl(name: string, colour?: string | null): string {
+  const base = `/api/templates/${encodeURIComponent(name)}/thumbnail`;
+  return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
 }
 
 type PreviewBody =

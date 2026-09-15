@@ -1179,6 +1179,27 @@
         ],
         "title": "ValidationError",
         "type": "object"
+      },
+      "WorkspaceSummary": {
+        "description": "Which workspace the UI is pointed at. One workspace is one shop, so the\nsidebar names it -- the difference between a test shop and the real one is\nworth seeing before an edit, not after an apply.",
+        "properties": {
+          "shop_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Name"
+          }
+        },
+        "required": [
+          "shop_name"
+        ],
+        "title": "WorkspaceSummary",
+        "type": "object"
       }
     }
   },
@@ -1983,6 +2004,27 @@
         "summary": "Thumbnail",
         "tags": [
           "templates"
+        ]
+      }
+    },
+    "/api/workspace": {
+      "get": {
+        "operationId": "get_workspace_api_workspace_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/WorkspaceSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Workspace",
+        "tags": [
+          "listings-support"
         ]
       }
     },
