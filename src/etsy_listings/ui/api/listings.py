@@ -211,7 +211,7 @@ def _sole_design_name(listing: Listing) -> str | None:
 
 def _summarize_listing(workspace: Workspace, name: str) -> ListingSummary:
     listing = workspace.load_listing(name)
-    etsy_listing_id, _ = _remote_ids(workspace, name)
+    etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     issues = _business_issues(workspace, name, listing)
     counts = IssueCounts(
         block=sum(1 for i in issues if i.severity == "block"),
@@ -224,6 +224,8 @@ def _summarize_listing(workspace: Workspace, name: str) -> ListingSummary:
         colour_count=len(listing.colors),
         status=_status(etsy_listing_id),
         issue_counts=counts,
+        etsy_listing_id=etsy_listing_id,
+        printify_product_id=printify_product_id,
     )
 
 

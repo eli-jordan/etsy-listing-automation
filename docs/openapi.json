@@ -639,6 +639,17 @@
             ],
             "title": "Design"
           },
+          "etsy_listing_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etsy Listing Id"
+          },
           "garment_profile": {
             "title": "Garment Profile",
             "type": "string"
@@ -649,6 +660,17 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "printify_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printify Product Id"
           },
           "status": {
             "enum": [

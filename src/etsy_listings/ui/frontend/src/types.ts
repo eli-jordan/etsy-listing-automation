@@ -25,3 +25,19 @@ export type SingleTemplate = components["schemas"]["SingleTemplate"];
 export type TemplateConfigState = ColourMatrixTemplate | MultipleTemplate | SingleTemplate;
 
 export type TemplateSummary = components["schemas"]["TemplateSummary"];
+
+// ── Listings UI (phase 5) ──────────────────────────────────────────────────
+
+export type Issue = components["schemas"]["Issue"];
+export type IssueTab = Issue["tab"];
+export type ListingSummary = components["schemas"]["ListingSummary"];
+export type ListingDetail = components["schemas"]["ListingDetail"];
+export type ListingStatus = ListingSummary["status"];
+export type GarmentProfileSummary = components["schemas"]["GarmentProfileSummary"];
+export type PricingPlanSummary = components["schemas"]["PricingPlanSummary"];
+export type ListingDesignSummary = components["schemas"]["ListingDesignSummary"];
+export type CreateListingRequest = components["schemas"]["CreateListingRequest"];
+export type TemplateMediaEntry = components["schemas"]["TemplateMediaEntry"];
+/** Either an explicit template reference, or a bare path string to a shared
+ * asset under `common-media/` -- mirrors `config/listing.py`'s `MediaEntry`. */
+export type MediaEntry = TemplateMediaEntry | string;

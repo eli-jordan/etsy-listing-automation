@@ -160,6 +160,12 @@ class ListingSummary(BaseModel):
     colour_count: int
     status: ListingStatus
     issue_counts: IssueCounts
+    etsy_listing_id: int | None = None
+    printify_product_id: str | None = None
+    """Carried on the summary, not just on `ListingDetail`, because the table
+    offers the same "Open on Etsy / Printify" menu the editor's page head
+    does -- and a menu per row that each had to fetch its own ids would be one
+    request per listing to render a list."""
 
 
 class ResolvedPrice(BaseModel):

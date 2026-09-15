@@ -638,11 +638,15 @@ export interface components {
       colour_count: number;
       /** Design */
       design: string | null;
+      /** Etsy Listing Id */
+      etsy_listing_id?: number | null;
       /** Garment Profile */
       garment_profile: string;
       issue_counts: components["schemas"]["IssueCounts"];
       /** Name */
       name: string;
+      /** Printify Product Id */
+      printify_product_id?: string | null;
       /**
        * Status
        * @enum {string}

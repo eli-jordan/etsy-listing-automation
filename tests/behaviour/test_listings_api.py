@@ -76,6 +76,27 @@ class TestListListings:
         row = {r["name"]: r for r in client.get("/api/listings").json()}["take-a-hike"]
         assert row["design"] is None
 
+    def test_a_published_row_carries_the_ids_its_open_menu_links_to(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """The table offers "Open on Etsy / Open on Printify" on a published
+        row, the same menu the editor's page head has. Carried on the summary
+        so the menu costs no extra request per row."""
+        lock = Lockfile.empty(tool_version="test", applied_at="2024-01-01T00:00:00")
+        lock = lock.model_copy(
+            update={"remote": {"etsy_listing_id": 555, "printify_product_id": "abc123"}}
+        )
+        lock.write(workspace_root / "listings" / "take-a-hike" / "state.lock.json")
+
+        row = {r["name"]: r for r in client.get("/api/listings").json()}["take-a-hike"]
+        assert row["etsy_listing_id"] == 555
+        assert row["printify_product_id"] == "abc123"
+
+    def test_a_draft_row_has_no_remote_ids(self, client: TestClient) -> None:
+        row = {r["name"]: r for r in client.get("/api/listings").json()}["take-a-hike"]
+        assert row["etsy_listing_id"] is None
+        assert row["printify_product_id"] is None
+
     def test_a_generate_title_and_an_undersized_design_both_count_as_blocking(
         self, client: TestClient
     ) -> None:
