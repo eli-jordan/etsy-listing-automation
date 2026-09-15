@@ -22,6 +22,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/garment-profiles": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Garment Profiles */
+    get: operations["list_garment_profiles_api_garment_profiles_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/health": {
     parameters: {
       query?: never;
@@ -31,6 +48,105 @@ export interface paths {
     };
     /** Health */
     get: operations["health_api_health_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-designs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Listing Designs */
+    get: operations["list_listing_designs_api_listing_designs_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-designs/{name}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Design Thumbnail
+     * @description The artwork itself, downscaled -- what the listings table, its hover
+     *     card and the editor's design strip all show.
+     *
+     *     Distinct from ``designs.py``'s calibrator library for the same reason
+     *     ``GET /api/listing-designs`` is: ``designs/`` holds artwork that ships,
+     *     ``test-designs/`` holds calibration targets, and a listing's design is
+     *     never one of the latter.
+     *
+     *     An unusable *name* needs nothing here: ``InvalidNameError`` out of
+     *     ``design_file`` becomes a 400 through the app-wide handler in ``app.py``.
+     */
+    get: operations["listing_design_thumbnail_api_listing_designs__name__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Listings */
+    get: operations["list_listings_api_listings_get"];
+    put?: never;
+    /** Create Listing */
+    post: operations["create_listing_api_listings_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Listing */
+    get: operations["get_listing_api_listings__name__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Patch Listing */
+    patch: operations["patch_listing_api_listings__name__patch"];
+    trace?: never;
+  };
+  "/api/pricing-plans": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Pricing Plans */
+    get: operations["list_pricing_plans_api_pricing_plans_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -156,14 +272,22 @@ export interface paths {
      *
      *     Not a render: the rail shows every template in the workspace at once, and
      *     running the real pipeline once per row would make opening the calibrator
-     *     cost as much as calibrating. Which photo hardly matters -- a colour-matrix
-     *     set's colours are all the same garment -- so this takes ``scene.png`` when
-     *     there is one and the first colour otherwise, without reading the config.
+     *     cost as much as calibrating. Which photo is shown is
+     *     :meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s
+     *     question, not this endpoint's.
      *
-     *     Regenerated per request rather than cached on disk; the resize is cheap
-     *     next to the response, and a cache in the workspace would be one more
-     *     derived directory to invalidate. Repeat loads are handled by the
-     *     ``Cache-Control`` header instead.
+     *     ``colour`` narrows that to one photo of a ``colour-matrix`` set, for
+     *     callers that are showing a *particular* variant rather than standing in
+     *     for the template: the listings editor's reel draws one tile per
+     *     ``media`` entry, and without this every colour of a set drew the same
+     *     picture, since ``template_preview_photo`` deliberately answers "any one
+     *     of them". Resolution goes through
+     *     :meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,
+     *     which owns PRD 7a's filename convention and its trailing-segment
+     *     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
+     *
+     *     How it is downscaled and served is :mod:`etsy_listings.ui.api.thumbnails`'
+     *     question -- the listings table asks the same one of a design.
      */
     get: operations["thumbnail_api_templates__name__thumbnail_get"];
     put?: never;
@@ -298,6 +422,17 @@ export interface components {
       /** Filename */
       filename: string;
     };
+    /** CreateListingRequest */
+    CreateListingRequest: {
+      /** Colors */
+      colors: string[];
+      /** Design */
+      design: string;
+      /** Garment Profile */
+      garment_profile: string;
+      /** Name */
+      name: string;
+    };
     /**
      * DesignSummary
      * @description One entry in the calibrator's test-design library (A19).
@@ -337,10 +472,182 @@ export interface components {
        */
       strength: number;
     };
+    /** EtsyListingConfig */
+    EtsyListingConfig: {
+      /**
+       * Description
+       * @default <generate>
+       */
+      description: string;
+      /**
+       * Materials
+       * @default []
+       */
+      materials: string[];
+      /** Renewal */
+      renewal?: ("manual" | "auto") | null;
+      /** Section */
+      section?: string | null;
+      /** Shipping Profile */
+      shipping_profile?: string | null;
+      /**
+       * Tags
+       * @default <generate>
+       */
+      tags: string[] | "<generate>";
+      /**
+       * Title
+       * @default <generate>
+       */
+      title: string;
+      /** Variation Images */
+      variation_images?: string | null;
+    };
+    /** GarmentProfileSummary */
+    GarmentProfileSummary: {
+      /** Colors */
+      colors: {
+        [key: string]: "light" | "dark";
+      };
+      /** Name */
+      name: string;
+      /** Sizes */
+      sizes: string[];
+    };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /** Issue */
+    Issue: {
+      /** Message */
+      message: string;
+      /**
+       * Severity
+       * @enum {string}
+       */
+      severity: "block" | "warn";
+      /**
+       * Tab
+       * @enum {string}
+       */
+      tab: "variants" | "images" | "details";
+      /** Where */
+      where: string;
+    };
+    /** IssueCounts */
+    IssueCounts: {
+      /** Block */
+      block: number;
+      /** Warn */
+      warn: number;
+    };
+    /** ListingDesignSummary */
+    ListingDesignSummary: {
+      /** File */
+      file: string;
+      /** Name */
+      name: string;
+    };
+    /**
+     * ListingDetail
+     * @description The full `Listing`, plus what the editor needs and nothing a listing
+     *     itself would ever store: computed status, computed issues, and (only
+     *     meaningful right after a PATCH) which fields a rejected candidate failed
+     *     on.
+     */
+    ListingDetail: {
+      /**
+       * Artwork
+       * @default {}
+       */
+      artwork: {
+        [key: string]: string;
+      };
+      /** Brief */
+      brief: string;
+      /** Colors */
+      colors: string[];
+      /** Design */
+      design: {
+        [key: string]: string;
+      };
+      /**
+       * @default {
+       *       "description": "<generate>",
+       *       "materials": [],
+       *       "tags": "<generate>",
+       *       "title": "<generate>"
+       *     }
+       */
+      etsy: components["schemas"]["EtsyListingConfig"];
+      /** Etsy Listing Id */
+      etsy_listing_id?: number | null;
+      /**
+       * Field Errors
+       * @default {}
+       */
+      field_errors: {
+        [key: string]: string;
+      };
+      /** Garment Profile */
+      garment_profile: string;
+      /** Issues */
+      issues: components["schemas"]["Issue"][];
+      /** Media */
+      media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /** Name */
+      name: string;
+      /**
+       * Price Overrides
+       * @default {}
+       */
+      price_overrides: {
+        [key: string]: {
+          [key: string]: string;
+        };
+      };
+      /**
+       * Prices
+       * @default {}
+       */
+      prices: {
+        [key: string]: string;
+      };
+      /** Pricing Plan */
+      pricing_plan?: string | null;
+      /** Pricing Plan Name */
+      pricing_plan_name?: string | null;
+      /** Printify Product Id */
+      printify_product_id?: string | null;
+      /**
+       * Resolved Prices
+       * @default []
+       */
+      resolved_prices: components["schemas"]["ResolvedPrice"][];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "draft" | "published";
+    };
+    /** ListingSummary */
+    ListingSummary: {
+      /** Colour Count */
+      colour_count: number;
+      /** Design */
+      design: string | null;
+      /** Garment Profile */
+      garment_profile: string;
+      issue_counts: components["schemas"]["IssueCounts"];
+      /** Name */
+      name: string;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "draft" | "published";
     };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
@@ -426,6 +733,22 @@ export interface components {
       x: number;
       /** Y */
       y: number;
+    };
+    /** PricingPlanSummary */
+    PricingPlanSummary: {
+      /** Compatible */
+      compatible: boolean;
+      /** Garment Profile */
+      garment_profile: string;
+      /** Name */
+      name: string;
+    };
+    /** ResolvedPrice */
+    ResolvedPrice: {
+      /** Amount */
+      amount: string;
+      /** Size */
+      size: string;
     };
     /**
      * ShadeConfig
@@ -522,6 +845,20 @@ export interface components {
        *     }
        */
       shade: components["schemas"]["ShadeConfig"];
+    };
+    /**
+     * TemplateMediaEntry
+     * @description Always-explicit template reference -- there is no bare-colour
+     *     shorthand. ``colour`` is required when the referenced template is
+     *     ``colour-matrix`` kind (which colour's photo) and must be omitted for
+     *     ``multiple``/``single`` kind (exactly one output each, nothing to
+     *     disambiguate).
+     */
+    TemplateMediaEntry: {
+      /** Colour */
+      colour?: string | null;
+      /** Template */
+      template: string;
     };
     /** TemplateSummary */
     TemplateSummary: {
@@ -620,6 +957,26 @@ export interface operations {
       };
     };
   };
+  list_garment_profiles_api_garment_profiles_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GarmentProfileSummary"][];
+        };
+      };
+    };
+  };
   health_api_health_get: {
     parameters: {
       query?: never;
@@ -638,6 +995,209 @@ export interface operations {
           "application/json": {
             [key: string]: string;
           };
+        };
+      };
+    };
+  };
+  list_listing_designs_api_listing_designs_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDesignSummary"][];
+        };
+      };
+    };
+  };
+  listing_design_thumbnail_api_listing_designs__name__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_listings_api_listings_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingSummary"][];
+        };
+      };
+    };
+  };
+  create_listing_api_listings_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateListingRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_listing_api_listings__name__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  patch_listing_api_listings__name__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_pricing_plans_api_pricing_plans_get: {
+    parameters: {
+      query: {
+        garment_profile: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PricingPlanSummary"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };
@@ -848,7 +1408,9 @@ export interface operations {
   };
   thumbnail_api_templates__name__thumbnail_get: {
     parameters: {
-      query?: never;
+      query?: {
+        colour?: string | null;
+      };
       header?: never;
       path: {
         name: string;

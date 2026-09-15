@@ -163,6 +163,37 @@
         "title": "ColourReportRow",
         "type": "object"
       },
+      "CreateListingRequest": {
+        "properties": {
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Colors",
+            "type": "array"
+          },
+          "design": {
+            "title": "Design",
+            "type": "string"
+          },
+          "garment_profile": {
+            "title": "Garment Profile",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "design",
+          "garment_profile",
+          "colors"
+        ],
+        "title": "CreateListingRequest",
+        "type": "object"
+      },
       "DesignSummary": {
         "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
         "properties": {
@@ -208,6 +239,128 @@
         "title": "DisplaceConfig",
         "type": "object"
       },
+      "EtsyListingConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "description": {
+            "default": "<generate>",
+            "title": "Description",
+            "type": "string"
+          },
+          "materials": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "renewal": {
+            "anyOf": [
+              {
+                "enum": [
+                  "manual",
+                  "auto"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "shipping_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipping Profile"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "const": "<generate>",
+                "type": "string"
+              }
+            ],
+            "default": "<generate>",
+            "title": "Tags"
+          },
+          "title": {
+            "default": "<generate>",
+            "title": "Title",
+            "type": "string"
+          },
+          "variation_images": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variation Images"
+          }
+        },
+        "title": "EtsyListingConfig",
+        "type": "object"
+      },
+      "GarmentProfileSummary": {
+        "properties": {
+          "colors": {
+            "additionalProperties": {
+              "enum": [
+                "light",
+                "dark"
+              ],
+              "type": "string"
+            },
+            "title": "Colors",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sizes": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sizes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "name",
+          "sizes",
+          "colors"
+        ],
+        "title": "GarmentProfileSummary",
+        "type": "object"
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -219,6 +372,302 @@
           }
         },
         "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "Issue": {
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "severity": {
+            "enum": [
+              "block",
+              "warn"
+            ],
+            "title": "Severity",
+            "type": "string"
+          },
+          "tab": {
+            "enum": [
+              "variants",
+              "images",
+              "details"
+            ],
+            "title": "Tab",
+            "type": "string"
+          },
+          "where": {
+            "title": "Where",
+            "type": "string"
+          }
+        },
+        "required": [
+          "severity",
+          "tab",
+          "where",
+          "message"
+        ],
+        "title": "Issue",
+        "type": "object"
+      },
+      "IssueCounts": {
+        "properties": {
+          "block": {
+            "title": "Block",
+            "type": "integer"
+          },
+          "warn": {
+            "title": "Warn",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "block",
+          "warn"
+        ],
+        "title": "IssueCounts",
+        "type": "object"
+      },
+      "ListingDesignSummary": {
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "file"
+        ],
+        "title": "ListingDesignSummary",
+        "type": "object"
+      },
+      "ListingDetail": {
+        "additionalProperties": false,
+        "description": "The full `Listing`, plus what the editor needs and nothing a listing\nitself would ever store: computed status, computed issues, and (only\nmeaningful right after a PATCH) which fields a rejected candidate failed\non.",
+        "properties": {
+          "artwork": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Artwork",
+            "type": "object"
+          },
+          "brief": {
+            "title": "Brief",
+            "type": "string"
+          },
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Colors",
+            "type": "array"
+          },
+          "design": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Design",
+            "type": "object"
+          },
+          "etsy": {
+            "$ref": "#/components/schemas/EtsyListingConfig",
+            "default": {
+              "description": "<generate>",
+              "materials": [],
+              "tags": "<generate>",
+              "title": "<generate>"
+            }
+          },
+          "etsy_listing_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etsy Listing Id"
+          },
+          "field_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "garment_profile": {
+            "title": "Garment Profile",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "media": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TemplateMediaEntry"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Media",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_overrides": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "examples": [
+                  "349 NOK"
+                ],
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Price Overrides",
+            "type": "object"
+          },
+          "prices": {
+            "additionalProperties": {
+              "examples": [
+                "349 NOK"
+              ],
+              "type": "string"
+            },
+            "default": {},
+            "title": "Prices",
+            "type": "object"
+          },
+          "pricing_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Plan"
+          },
+          "pricing_plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Plan Name"
+          },
+          "printify_product_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Printify Product Id"
+          },
+          "resolved_prices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResolvedPrice"
+            },
+            "title": "Resolved Prices",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "garment_profile",
+          "design",
+          "colors",
+          "brief",
+          "media",
+          "name",
+          "status",
+          "issues"
+        ],
+        "title": "ListingDetail",
+        "type": "object"
+      },
+      "ListingSummary": {
+        "properties": {
+          "colour_count": {
+            "title": "Colour Count",
+            "type": "integer"
+          },
+          "design": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design"
+          },
+          "garment_profile": {
+            "title": "Garment Profile",
+            "type": "string"
+          },
+          "issue_counts": {
+            "$ref": "#/components/schemas/IssueCounts"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "draft",
+              "published"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "garment_profile",
+          "design",
+          "colour_count",
+          "status",
+          "issue_counts"
+        ],
+        "title": "ListingSummary",
         "type": "object"
       },
       "MultiplePreviewRequest": {
@@ -368,6 +817,47 @@
         "title": "Point",
         "type": "object"
       },
+      "PricingPlanSummary": {
+        "properties": {
+          "compatible": {
+            "title": "Compatible",
+            "type": "boolean"
+          },
+          "garment_profile": {
+            "title": "Garment Profile",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "garment_profile",
+          "compatible"
+        ],
+        "title": "PricingPlanSummary",
+        "type": "object"
+      },
+      "ResolvedPrice": {
+        "properties": {
+          "amount": {
+            "title": "Amount",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "string"
+          }
+        },
+        "required": [
+          "size",
+          "amount"
+        ],
+        "title": "ResolvedPrice",
+        "type": "object"
+      },
       "ShadeConfig": {
         "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
         "properties": {
@@ -515,6 +1005,32 @@
           "bounding_box"
         ],
         "title": "SingleTemplate",
+        "type": "object"
+      },
+      "TemplateMediaEntry": {
+        "additionalProperties": false,
+        "description": "Always-explicit template reference -- there is no bare-colour\nshorthand. ``colour`` is required when the referenced template is\n``colour-matrix`` kind (which colour's photo) and must be omitted for\n``multiple``/``single`` kind (exactly one output each, nothing to\ndisambiguate).",
+        "properties": {
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "template"
+        ],
+        "title": "TemplateMediaEntry",
         "type": "object"
       },
       "TemplateSummary": {
@@ -714,6 +1230,31 @@
         ]
       }
     },
+    "/api/garment-profiles": {
+      "get": {
+        "operationId": "list_garment_profiles_api_garment_profiles_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/GarmentProfileSummary"
+                  },
+                  "title": "Response List Garment Profiles Api Garment Profiles Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Garment Profiles",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
     "/api/health": {
       "get": {
         "operationId": "health_api_health_get",
@@ -734,6 +1275,276 @@
           }
         },
         "summary": "Health"
+      }
+    },
+    "/api/listing-designs": {
+      "get": {
+        "operationId": "list_listing_designs_api_listing_designs_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ListingDesignSummary"
+                  },
+                  "title": "Response List Listing Designs Api Listing Designs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Listing Designs",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
+    "/api/listing-designs/{name}/thumbnail": {
+      "get": {
+        "description": "The artwork itself, downscaled -- what the listings table, its hover\ncard and the editor's design strip all show.\n\nDistinct from ``designs.py``'s calibrator library for the same reason\n``GET /api/listing-designs`` is: ``designs/`` holds artwork that ships,\n``test-designs/`` holds calibration targets, and a listing's design is\nnever one of the latter.\n\nAn unusable *name* needs nothing here: ``InvalidNameError`` out of\n``design_file`` becomes a 400 through the app-wide handler in ``app.py``.",
+        "operationId": "listing_design_thumbnail_api_listing_designs__name__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Design Thumbnail",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
+    "/api/listings": {
+      "get": {
+        "operationId": "list_listings_api_listings_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ListingSummary"
+                  },
+                  "title": "Response List Listings Api Listings Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Listings",
+        "tags": [
+          "listings"
+        ]
+      },
+      "post": {
+        "operationId": "create_listing_api_listings_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateListingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Listing",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
+    "/api/listings/{name}": {
+      "get": {
+        "operationId": "get_listing_api_listings__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Listing",
+        "tags": [
+          "listings"
+        ]
+      },
+      "patch": {
+        "operationId": "patch_listing_api_listings__name__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Listing",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
+    "/api/pricing-plans": {
+      "get": {
+        "operationId": "list_pricing_plans_api_pricing_plans_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "garment_profile",
+            "required": true,
+            "schema": {
+              "title": "Garment Profile",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/PricingPlanSummary"
+                  },
+                  "title": "Response List Pricing Plans Api Pricing Plans Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Pricing Plans",
+        "tags": [
+          "listings-support"
+        ]
       }
     },
     "/api/templates": {
@@ -1098,7 +1909,7 @@
     },
     "/api/templates/{name}/thumbnail": {
       "get": {
-        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo hardly matters -- a colour-matrix\nset's colours are all the same garment -- so this takes ``scene.png`` when\nthere is one and the first colour otherwise, without reading the config.\n\nRegenerated per request rather than cached on disk; the resize is cheap\nnext to the response, and a cache in the workspace would be one more\nderived directory to invalidate. Repeat loads are handled by the\n``Cache-Control`` header instead.",
+        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo is shown is\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s\nquestion, not this endpoint's.\n\n``colour`` narrows that to one photo of a ``colour-matrix`` set, for\ncallers that are showing a *particular* variant rather than standing in\nfor the template: the listings editor's reel draws one tile per\n``media`` entry, and without this every colour of a set drew the same\npicture, since ``template_preview_photo`` deliberately answers \"any one\nof them\". Resolution goes through\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,\nwhich owns PRD 7a's filename convention and its trailing-segment\nfallback -- this endpoint must not glob for ``{colour}.png`` itself.\n\nHow it is downscaled and served is :mod:`etsy_listings.ui.api.thumbnails`'\nquestion -- the listings table asks the same one of a design.",
         "operationId": "thumbnail_api_templates__name__thumbnail_get",
         "parameters": [
           {
@@ -1108,6 +1919,22 @@
             "schema": {
               "title": "Name",
               "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Colour"
             }
           }
         ],

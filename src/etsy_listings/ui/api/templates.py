@@ -57,14 +57,10 @@ from etsy_listings.ui.api.schemas import (
     TemplateKind,
     TemplateSummary,
 )
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.ui.api.thumbnails import thumbnail_response
+from etsy_listings.workspace.workspace import AmbiguousColourSuffixError, Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
-
-THUMBNAIL_MAX = 160
-"""Longest edge of a rail thumbnail, in px. The rail draws them at ~26x30 CSS
-px (wireframe 2a), so this leaves headroom for a HiDPI screen without turning
-the list into a megabyte of PNG."""
 
 
 def _workspace(request: Request) -> Workspace:
@@ -324,8 +320,25 @@ def assign_kind(template: Existing, body: AssignKindRequest) -> AnyTemplate:
     return config
 
 
+def _thumbnail_source(template: Existing, colour: str | None) -> Path | None:
+    """Which photo :func:`thumbnail` should downscale.
+
+    An ambiguous colour suffix is reported as "no photo" rather than escaping
+    as a 500: two candidate files is exactly the case
+    ``template_base_image`` refuses to guess at, so there genuinely is no one
+    photo to serve, and the caller picked this colour from a list this API
+    handed out.
+    """
+    if colour is None:
+        return template.workspace.template_preview_photo(template.name)
+    try:
+        return template.workspace.template_base_image(template.name, colour)
+    except AmbiguousColourSuffixError:
+        return None
+
+
 @router.get("/{name}/thumbnail")
-def thumbnail(template: Existing) -> Response:
+def thumbnail(template: Existing, colour: str | None = None) -> Response:
     """The template's own photo, downscaled, for the rail.
 
     Not a render: the rail shows every template in the workspace at once, and
@@ -334,25 +347,24 @@ def thumbnail(template: Existing) -> Response:
     :meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s
     question, not this endpoint's.
 
-    Regenerated per request rather than cached on disk; the resize is cheap
-    next to the response, and a cache in the workspace would be one more
-    derived directory to invalidate. Repeat loads are handled by the
-    ``Cache-Control`` header instead.
-    """
-    source = template.workspace.template_preview_photo(template.name)
-    if source is None:
-        raise HTTPException(status_code=404, detail=f"no photo for {template.name!r}")
+    ``colour`` narrows that to one photo of a ``colour-matrix`` set, for
+    callers that are showing a *particular* variant rather than standing in
+    for the template: the listings editor's reel draws one tile per
+    ``media`` entry, and without this every colour of a set drew the same
+    picture, since ``template_preview_photo`` deliberately answers "any one
+    of them". Resolution goes through
+    :meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,
+    which owns PRD 7a's filename convention and its trailing-segment
+    fallback -- this endpoint must not glob for ``{colour}.png`` itself.
 
-    buffer = BytesIO()
-    with Image.open(source) as img:
-        img = img.convert("RGB")
-        img.thumbnail((THUMBNAIL_MAX, THUMBNAIL_MAX))
-        img.save(buffer, format="PNG")
-    return Response(
-        content=buffer.getvalue(),
-        media_type="image/png",
-        headers={"Cache-Control": "no-cache"},
-    )
+    How it is downscaled and served is :mod:`etsy_listings.ui.api.thumbnails`'
+    question -- the listings table asks the same one of a design.
+    """
+    source = _thumbnail_source(template, colour)
+    if source is None or not source.is_file():
+        wanted = f"{template.name!r}" if colour is None else f"{template.name!r} colour {colour!r}"
+        raise HTTPException(status_code=404, detail=f"no photo for {wanted}")
+    return thumbnail_response(source)
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)

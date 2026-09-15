@@ -146,6 +146,30 @@ class TestThumbnails:
         with Image.open(BytesIO(client.get("/api/templates/flat-lay-01/thumbnail").content)) as img:
             assert max(img.size) <= 160
 
+    def _mean_brightness(self, payload: bytes) -> float:
+        with Image.open(BytesIO(payload)) as img:
+            return float(np.asarray(img.convert("L"), dtype=np.float64).mean())
+
+    def test_thumbnail_serves_the_asked_for_colours_own_photo(self, client: TestClient) -> None:
+        """Without a colour the endpoint answers "any one of them"
+        (`template_preview_photo`), which made every colour of a set draw the
+        same tile. The fixture's ivory garment is far lighter than its black
+        one, so the two responses cannot be the same photo."""
+        ivory = client.get("/api/templates/flat-lay-01/thumbnail", params={"colour": "ivory"})
+        black = client.get("/api/templates/flat-lay-01/thumbnail", params={"colour": "black"})
+        assert ivory.status_code == 200
+        assert black.status_code == 200
+        assert self._mean_brightness(ivory.content) > self._mean_brightness(black.content) + 50
+
+    def test_thumbnail_404s_for_a_colour_the_template_has_no_photo_for(
+        self, client: TestClient
+    ) -> None:
+        """A colour is picked from a list this API handed out, so one that
+        resolves to nothing means the listing names a colour the template
+        never shipped -- reported, not served as some other colour's photo."""
+        response = client.get("/api/templates/flat-lay-01/thumbnail", params={"colour": "maroon"})
+        assert response.status_code == 404
+
     def test_thumbnail_404s_for_a_template_with_no_photo(
         self, client: TestClient, workspace_root: Path
     ) -> None:

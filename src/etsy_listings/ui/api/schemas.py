@@ -11,6 +11,7 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from etsy_listings.config.listing import Listing
 from etsy_listings.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
@@ -116,3 +117,104 @@ PreviewRequest = ColourMatrixPreviewRequest | MultiplePreviewRequest | SinglePre
 """Which shape applies is decided by which kind the target template already
 is -- the endpoint validates the body against that one kind's model, rather
 than relying on shape-sniffing across all three."""
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Listings UI (phase 5). ListingDetail reuses `Listing` directly for the
+# read/write body -- the wire shape *is* listing.yaml -- the same rule
+# TemplateSummary above follows for template.yaml.
+# ──────────────────────────────────────────────────────────────────────────
+
+IssueSeverity = Literal["block", "warn"]
+IssueTab = Literal["variants", "images", "details"]
+
+
+class Issue(BaseModel):
+    severity: IssueSeverity
+    tab: IssueTab
+    where: str
+    message: str
+
+
+class IssueCounts(BaseModel):
+    block: int
+    warn: int
+
+
+ListingStatus = Literal["draft", "published"]
+"""Derived on every read, never persisted -- `published` iff a lockfile
+exists and carries an Etsy listing id, the same "derived" principle already
+stated for `TemplateSummary.status`."""
+
+
+class ListingSummary(BaseModel):
+    name: str
+    garment_profile: str
+    design: str | None
+    """The design's name, as `GET /api/listing-designs/{name}/thumbnail`
+    takes it -- so the table can show the artwork without a second round
+    trip per row. ``None`` when `Listing.design` carries more than one
+    artwork key (``on-light``/``on-dark``): there is then no single picture
+    that stands for the listing, and an arbitrary pick would show the wrong
+    ink half the time."""
+    colour_count: int
+    status: ListingStatus
+    issue_counts: IssueCounts
+
+
+class ResolvedPrice(BaseModel):
+    size: str
+    amount: str
+    """Formatted as `Money` prints itself, e.g. ``"249 NOK"``."""
+
+
+class ListingDetail(Listing):
+    """The full `Listing`, plus what the editor needs and nothing a listing
+    itself would ever store: computed status, computed issues, and (only
+    meaningful right after a PATCH) which fields a rejected candidate failed
+    on."""
+
+    name: str
+    status: ListingStatus
+    issues: list[Issue]
+    field_errors: dict[str, str] = {}
+    """Populated only when a PATCH's candidate failed `Listing.model_validate`
+    -- the write was skipped and every other field here still describes the
+    listing as it was before the PATCH. Empty on every GET and every
+    successful PATCH; the frontend never re-implements this validation; it
+    only renders what the server returns."""
+    etsy_listing_id: int | None = None
+    printify_product_id: str | None = None
+    pricing_plan_name: str | None = None
+    """The resolved plan's filename stem, for display -- selecting a
+    different plan from the UI is deferred (phase-5-listings-ui.md)."""
+    resolved_prices: list[ResolvedPrice] = []
+
+
+class GarmentProfileSummary(BaseModel):
+    name: str
+    sizes: list[str]
+    colors: dict[str, Literal["light", "dark"]]
+
+
+class PricingPlanSummary(BaseModel):
+    name: str
+    garment_profile: str
+    compatible: bool
+    """Whether this plan declares the exact garment profile asked for --
+    mirrors `newcmd.logic.build_pricing_plan_choices`'s marker."""
+
+
+class ListingDesignSummary(BaseModel):
+    name: str
+    file: str
+    """Workspace-relative path under ``designs/``, e.g.
+    ``designs/take-a-hike.png``."""
+
+
+class CreateListingRequest(BaseModel):
+    name: str
+    design: str
+    """A design's ``name`` from `GET /api/listing-designs`."""
+    garment_profile: str
+    colors: list[str]
