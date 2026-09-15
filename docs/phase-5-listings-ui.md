@@ -277,6 +277,17 @@ PATCH /api/listings/{name}          -> partial update; the autosave endpoint
   the same reason `GET /api/listing-designs` is: `designs/` is artwork that
   ships, `test-designs/` is calibration targets. `ListingSummary` grows a
   `design` field so a row can address it.
+- `GET /api/common-media` and `GET /api/common-media/{name}/thumbnail` — the
+  bare-path half of `media:`, which the first pass left unaddressable: a
+  listing could hold a shared asset (the fixture one does) but nothing in the
+  UI could add one, and the reel drew it as raw text. The list hands back the
+  **listing-relative** ref (`../../common-media/x.png`) as well as the display
+  path, because that is the form `media:` stores — PRD 8a's convention, shared
+  with `design:` — and leaving each caller to rebuild it is how two spellings
+  of one rule drift apart. Backed by new `Workspace.common_media_files()` /
+  `common_media_file()`, since only `workspace` knows a directory's layout,
+  including how to list one; PNG-only and flat for the same reason
+  `design_files()` is.
 
 ### Tests
 
@@ -309,9 +320,10 @@ pages/
     VariantsTab.tsx        garment dropdown, sizes, colour list (name +
                            light/dark badge, no invented hex swatch) beside
                            a preview stage showing the focused colour's photo
-    ImagesTab.tsx           locator (templates) + preview pane (real
-                           renders) + reel (drag-reorder), plus the
-                           per-template Etsy colour-swatch toggle
+    ImagesTab.tsx           locator (mockup templates | common-media/
+                           images) + preview pane (real renders) + reel
+                           (drag-reorder), plus the per-template Etsy
+                           colour-swatch toggle
     DetailsTab.tsx          title/tags/description/section/materials, with
                            Etsy's own limits shown as counters; pricing display
 api/
