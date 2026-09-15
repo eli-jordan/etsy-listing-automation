@@ -4,6 +4,52 @@
  */
 
 export interface paths {
+  "/api/common-media": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Common Media
+     * @description The shared assets a listing can add to `media:` as a bare path.
+     *
+     *     Distinct from both design endpoints: ``designs/`` is the artwork that gets
+     *     printed, ``test-designs/`` is calibration targets, and these are finished
+     *     pictures (a sizing chart, care instructions) uploaded to Etsy as-is,
+     *     never rendered onto a garment.
+     */
+    get: operations["list_common_media_api_common_media_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/common-media/{name}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Common Media Thumbnail
+     * @description An unusable *name* needs nothing here: ``InvalidNameError`` out of
+     *     ``common_media_file`` becomes a 400 through the app-wide handler.
+     */
+    get: operations["common_media_thumbnail_api_common_media__name__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/designs": {
     parameters: {
       query?: never;
@@ -438,6 +484,19 @@ export interface components {
       colour: string;
       /** Filename */
       filename: string;
+    };
+    /**
+     * CommonMediaSummary
+     * @description One shared asset under ``common-media/`` -- the other half of `media:`,
+     *     a bare path rather than a rendered mockup.
+     */
+    CommonMediaSummary: {
+      /** File */
+      file: string;
+      /** Name */
+      name: string;
+      /** Ref */
+      ref: string;
     };
     /** CreateListingRequest */
     CreateListingRequest: {
@@ -935,6 +994,57 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  list_common_media_api_common_media_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommonMediaSummary"][];
+        };
+      };
+    };
+  };
+  common_media_thumbnail_api_common_media__name__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   list_designs_api_designs_get: {
     parameters: {
       query?: never;

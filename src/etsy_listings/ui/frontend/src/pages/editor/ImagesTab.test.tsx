@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../../api/calibrator";
+import * as listingsApi from "../../api/listings";
 import type { ListingDetail, TemplateSummary } from "../../types";
 import { ImagesTab } from "./ImagesTab";
 
@@ -49,6 +50,10 @@ function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSum
     ...over,
   };
 }
+
+beforeEach(() => {
+  vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
+});
 
 afterEach(() => vi.restoreAllMocks());
 
@@ -423,6 +428,99 @@ describe("ImagesTab's Etsy colour-swatch toggle (PRD 56)", () => {
     );
 
     expect(container.querySelectorAll(".rtile__swatch")).toHaveLength(1);
+  });
+});
+
+describe("ImagesTab's shared images (common-media/)", () => {
+  const SHARED = [
+    {
+      name: "size-guide",
+      file: "common-media/size-guide.png",
+      ref: "../../common-media/size-guide.png",
+    },
+    {
+      name: "care-instructions",
+      file: "common-media/care-instructions.png",
+      ref: "../../common-media/care-instructions.png",
+    },
+  ];
+
+  function renderShared(over: Partial<ListingDetail> = {}, onUpdate = vi.fn()) {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue(SHARED);
+    render(<ImagesTab detail={detail(over)} onUpdate={onUpdate} />);
+    return onUpdate;
+  }
+
+  it("browses templates until you ask for images", async () => {
+    renderShared();
+    await screen.findByText("flat-lay-01");
+    expect(screen.queryByText("size-guide.png")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Images" }));
+
+    expect(await screen.findByText("size-guide.png")).toBeInTheDocument();
+    expect(screen.queryByText("flat-lay-01")).not.toBeInTheDocument();
+  });
+
+  it("adds one as the listing-relative bare path a listing stores", async () => {
+    /* `media:` holds these as a plain string resolved against the listing's
+       own directory, not as a {template, colour} entry. */
+    const onUpdate = renderShared();
+    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.click(await screen.findByRole("button", { name: "size-guide.png" }));
+
+    expect(onUpdate).toHaveBeenCalledWith({ media: ["../../common-media/size-guide.png"] });
+  });
+
+  it("takes one back out when it is already in the listing", async () => {
+    const onUpdate = renderShared({ media: ["../../common-media/size-guide.png"] });
+    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.click(await screen.findByRole("button", { name: "size-guide.png" }));
+
+    expect(onUpdate).toHaveBeenCalledWith({ media: [] });
+  });
+
+  it("previews one, naming the file it would upload", async () => {
+    renderShared();
+    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "care-instructions.png" }));
+
+    expect(screen.getByAltText("care-instructions")).toHaveAttribute(
+      "src",
+      "/api/common-media/care-instructions/thumbnail",
+    );
+    expect(screen.getByText("common-media/care-instructions.png")).toBeInTheDocument();
+  });
+
+  it("draws a shared asset in the reel as a picture, not as its raw path", async () => {
+    renderShared({ media: ["../../common-media/size-guide.png"] });
+    await screen.findByText("flat-lay-01");
+
+    expect(screen.getByAltText("size-guide")).toHaveAttribute(
+      "src",
+      "/api/common-media/size-guide/thumbnail",
+    );
+  });
+
+  it("searches shared assets by name", async () => {
+    renderShared();
+    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.change(screen.getByPlaceholderText("Search common-media…"), {
+      target: { value: "care" },
+    });
+
+    expect(screen.getByText("care-instructions.png")).toBeInTheDocument();
+    expect(screen.queryByText("size-guide.png")).not.toBeInTheDocument();
+  });
+
+  it("says where to put one when the workspace has none", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    expect(await screen.findByText(/common-media\//)).toBeInTheDocument();
   });
 });
 

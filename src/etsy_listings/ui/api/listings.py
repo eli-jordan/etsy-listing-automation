@@ -51,6 +51,7 @@ from etsy_listings.newcmd.logic import (
 )
 from etsy_listings.render.config import ColourMatrixTemplate, MultipleTemplate
 from etsy_listings.ui.api.schemas import (
+    CommonMediaSummary,
     CreateListingRequest,
     GarmentProfileSummary,
     Issue,
@@ -64,6 +65,7 @@ from etsy_listings.ui.api.schemas import (
     WorkspaceSummary,
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
+from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import PathEscapesWorkspaceError, Workspace
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
@@ -367,6 +369,36 @@ def list_pricing_plans(request: Request, garment_profile: str) -> list[PricingPl
         )
         for choice in choices
     ]
+
+
+@support_router.get("/api/common-media", response_model=list[CommonMediaSummary])
+def list_common_media(request: Request) -> list[CommonMediaSummary]:
+    """The shared assets a listing can add to `media:` as a bare path.
+
+    Distinct from both design endpoints: ``designs/`` is the artwork that gets
+    printed, ``test-designs/`` is calibration targets, and these are finished
+    pictures (a sizing chart, care instructions) uploaded to Etsy as-is,
+    never rendered onto a garment.
+    """
+    workspace = _workspace(request)
+    return [
+        CommonMediaSummary(
+            name=path.stem,
+            file=f"{layout.COMMON_MEDIA_DIR}/{path.name}",
+            ref=f"../../{layout.COMMON_MEDIA_DIR}/{path.name}",
+        )
+        for path in workspace.common_media_files()
+    ]
+
+
+@support_router.get("/api/common-media/{name}/thumbnail")
+def common_media_thumbnail(request: Request, name: str) -> Response:
+    """An unusable *name* needs nothing here: ``InvalidNameError`` out of
+    ``common_media_file`` becomes a 400 through the app-wide handler."""
+    path = _workspace(request).common_media_file(name)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"no shared asset {name!r}")
+    return thumbnail_response(path)
 
 
 @support_router.get("/api/workspace", response_model=WorkspaceSummary)

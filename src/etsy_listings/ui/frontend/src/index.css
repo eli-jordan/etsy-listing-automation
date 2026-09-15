@@ -2700,8 +2700,14 @@ table.listings tbody tr:last-child td {
   background: transparent;
 }
 
-/* — the locator's "Images" concept isn't wired yet (no endpoint lists
-   common-media/'s bare files), but the tile shape is kept for when it is — */
+/* — the locator's Images mode: common-media/'s shared assets, the bare-path
+   half of `media:` — */
+.loc-images {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
 .loc-img {
   border: 1px solid var(--color-divider);
   border-radius: 4px;
@@ -2712,6 +2718,33 @@ table.listings tbody tr:last-child td {
   flex-direction: column;
   align-items: center;
   gap: 4px;
+}
+
+.loc-img:hover {
+  border-color: var(--color-accent);
+}
+
+.loc-img--in {
+  border-color: var(--color-accent-2-400);
+  background: var(--color-accent-2-100);
+}
+
+.loc-img__face {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  background: var(--color-neutral-200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.loc-img__face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
 }
 
 .loc-img__name {

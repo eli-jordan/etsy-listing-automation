@@ -233,6 +233,28 @@ class Workspace:
             return []
         return sorted(p for p in designs.glob("*.png") if p.is_file())
 
+    def common_media_dir(self) -> Path:
+        return self.root / layout.COMMON_MEDIA_DIR
+
+    def common_media_file(self, asset: str) -> Path:
+        return self.common_media_dir() / f"{_segment(asset)}.png"
+
+    def common_media_files(self) -> list[Path]:
+        """Every ``common-media/*.png``: the shared assets a listing can put in
+        ``media:`` as a bare path (a sizing chart, care instructions), as
+        opposed to a rendered mockup.
+
+        PNG only and flat, for the same reason :meth:`design_files` is:
+        :meth:`common_media_file` derives one fixed path per name, so anything
+        listed here that it could not resolve would be offered and then fail.
+        Sorted by name rather than mtime -- unlike a design, a shared asset is
+        written once and reused for years, so recency says nothing useful.
+        """
+        shared = self.common_media_dir()
+        if not shared.is_dir():
+            return []
+        return sorted((p for p in shared.glob("*.png") if p.is_file()), key=lambda p: p.name)
+
     def garment_profile_names(self) -> list[str]:
         garment_profiles = self.root / layout.GARMENT_PROFILES_DIR
         if not garment_profiles.is_dir():

@@ -131,6 +131,29 @@ def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path
         root / ".cache" / "renders" / "take-a-hike" / "colour-chart-01" / "scene.png"
     )
     assert ws.catalog_cache_dir() == root / ".cache" / "catalog"
+    assert ws.common_media_file("size-guide") == root / "common-media" / "size-guide.png"
+
+
+def test_common_media_files_lists_the_shared_assets(workspace_root: Path) -> None:
+    """The other half of `media:` -- a bare path string to something shared
+    across listings, rather than a rendered mockup."""
+    shared = workspace_root / "common-media"
+    shared.mkdir(exist_ok=True)
+    (shared / "size-guide.png").write_bytes(b"")
+    (shared / "care-instructions.png").write_bytes(b"")
+    (shared / "notes.txt").write_text("not an image", encoding="utf-8")
+
+    ws = Workspace.discover(root_override=workspace_root)
+    assert [p.name for p in ws.common_media_files()] == [
+        "care-instructions.png",
+        "size-guide.png",
+    ]
+
+
+def test_common_media_files_is_empty_when_the_directory_is_absent(workspace_root: Path) -> None:
+    """A workspace that has never needed a shared asset still lists."""
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.common_media_files() == []
 
 
 def test_listing_names_finds_listings_with_a_listing_file(workspace_root: Path) -> None:

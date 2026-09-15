@@ -163,6 +163,30 @@
         "title": "ColourReportRow",
         "type": "object"
       },
+      "CommonMediaSummary": {
+        "description": "One shared asset under ``common-media/`` -- the other half of `media:`,\na bare path rather than a rendered mockup.",
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "file",
+          "ref"
+        ],
+        "title": "CommonMediaSummary",
+        "type": "object"
+      },
       "CreateListingRequest": {
         "properties": {
           "colors": {
@@ -1209,6 +1233,73 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/common-media": {
+      "get": {
+        "description": "The shared assets a listing can add to `media:` as a bare path.\n\nDistinct from both design endpoints: ``designs/`` is the artwork that gets\nprinted, ``test-designs/`` is calibration targets, and these are finished\npictures (a sizing chart, care instructions) uploaded to Etsy as-is,\nnever rendered onto a garment.",
+        "operationId": "list_common_media_api_common_media_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CommonMediaSummary"
+                  },
+                  "title": "Response List Common Media Api Common Media Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Common Media",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
+    "/api/common-media/{name}/thumbnail": {
+      "get": {
+        "description": "An unusable *name* needs nothing here: ``InvalidNameError`` out of\n``common_media_file`` becomes a 400 through the app-wide handler.",
+        "operationId": "common_media_thumbnail_api_common_media__name__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Common Media Thumbnail",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
     "/api/designs": {
       "get": {
         "operationId": "list_designs_api_designs_get",

@@ -37,6 +37,7 @@ export type GarmentProfileSummary = components["schemas"]["GarmentProfileSummary
 export type PricingPlanSummary = components["schemas"]["PricingPlanSummary"];
 export type ListingDesignSummary = components["schemas"]["ListingDesignSummary"];
 export type WorkspaceSummary = components["schemas"]["WorkspaceSummary"];
+export type CommonMediaSummary = components["schemas"]["CommonMediaSummary"];
 export type CreateListingRequest = components["schemas"]["CreateListingRequest"];
 export type TemplateMediaEntry = components["schemas"]["TemplateMediaEntry"];
 /** Either an explicit template reference, or a bare path string to a shared

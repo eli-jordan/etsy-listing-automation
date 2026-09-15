@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type {
+  CommonMediaSummary,
   CreateListingRequest,
   GarmentProfileSummary,
   ListingDesignSummary,
@@ -66,6 +67,17 @@ export async function listPricingPlans(garmentProfile: string): Promise<PricingP
   });
   if (error || !data) throw new ListingsApiError("could not load pricing plans");
   return data;
+}
+
+export async function listCommonMedia(): Promise<CommonMediaSummary[]> {
+  const { data, error } = await api.GET("/api/common-media");
+  if (error || !data) throw new ListingsApiError("could not load shared images");
+  return data;
+}
+
+/** The shared asset's own picture. A URL, like the two thumbnails above. */
+export function commonMediaThumbnailUrl(name: string): string {
+  return `/api/common-media/${encodeURIComponent(name)}/thumbnail`;
 }
 
 export async function getWorkspace(): Promise<WorkspaceSummary> {

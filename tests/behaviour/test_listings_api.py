@@ -328,6 +328,41 @@ class TestSupportingEndpoints:
     def test_a_design_thumbnail_404s_for_an_unknown_design(self, client: TestClient) -> None:
         assert client.get("/api/listing-designs/no-such-art/thumbnail").status_code == 404
 
+    def test_lists_common_media_with_the_ref_a_listing_stores(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """A bare media entry resolves relative to the listing's own directory
+        (PRD 8a), the same as `design:` -- so the picker hands back the ref
+        ready to write, not a workspace-relative path the caller must fix up."""
+        shared = workspace_root / "common-media"
+        shared.mkdir(exist_ok=True)
+        (shared / "size-guide.png").write_bytes(b"")
+
+        response = client.get("/api/common-media")
+        assert response.status_code == 200
+        by_name = {row["name"]: row for row in response.json()}
+        assert by_name["size-guide"]["ref"] == "../../common-media/size-guide.png"
+        assert by_name["size-guide"]["file"] == "common-media/size-guide.png"
+
+    def test_common_media_is_empty_on_a_workspace_that_has_none(self, client: TestClient) -> None:
+        assert client.get("/api/common-media").json() == []
+
+    def test_serves_a_common_media_thumbnail(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        shared = workspace_root / "common-media"
+        shared.mkdir(exist_ok=True)
+        Image.new("RGB", (900, 700), (210, 180, 140)).save(shared / "size-guide.png")
+
+        response = client.get("/api/common-media/size-guide/thumbnail")
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        with Image.open(BytesIO(response.content)) as img:
+            assert max(img.size) <= 160
+
+    def test_a_common_media_thumbnail_404s_for_an_unknown_asset(self, client: TestClient) -> None:
+        assert client.get("/api/common-media/no-such-asset/thumbnail").status_code == 404
+
     def test_names_the_shop_the_sidebar_says_you_are_working_on(self, client: TestClient) -> None:
         """One workspace per shop, so the sidebar says which -- the difference
         between a test shop and the real one is worth seeing before an edit,

@@ -218,6 +218,20 @@ class ListingDesignSummary(BaseModel):
     ``designs/take-a-hike.png``."""
 
 
+class CommonMediaSummary(BaseModel):
+    """One shared asset under ``common-media/`` -- the other half of `media:`,
+    a bare path rather than a rendered mockup."""
+
+    name: str
+    file: str
+    """Workspace-relative, for display: ``common-media/size-guide.png``."""
+    ref: str
+    """Listing-relative, ready to write into `media:` unchanged. A bare media
+    entry resolves against the listing's own directory (PRD 8a), the same rule
+    `design:` follows, so the picker hands back the stored form rather than
+    leaving every caller to rebuild it."""
+
+
 class WorkspaceSummary(BaseModel):
     """Which workspace the UI is pointed at. One workspace is one shop, so the
     sidebar names it -- the difference between a test shop and the real one is
