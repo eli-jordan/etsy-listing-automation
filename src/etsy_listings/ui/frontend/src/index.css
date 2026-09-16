@@ -2885,13 +2885,6 @@ table.listings tbody tr:last-child td {
   outline-offset: 3px;
 }
 
-/* Which colour the stage is showing, over the photo's top-left corner. */
-.preview-stage__tag {
-  position: absolute;
-  top: var(--space-3);
-  left: var(--space-3);
-}
-
 .variants-preview {
   display: flex;
   flex-direction: column;

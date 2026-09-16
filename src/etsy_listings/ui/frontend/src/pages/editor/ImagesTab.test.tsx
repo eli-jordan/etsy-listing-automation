@@ -588,6 +588,16 @@ describe("ImagesTab's full-size carousel", () => {
     );
   });
 
+  it("does not label the stage or overlay the colour name on it", async () => {
+    /* Aligns the photo with the locator on the left; the colour is already
+       in the image's alt and the locator chip that pointed here. */
+    const { container } = renderReel();
+    fireEvent.mouseEnter(await tile("flat-lay-01 · black"));
+    expect(previewImage(container)).toBeTruthy();
+    expect(screen.queryByText(/^Preview$/)).not.toBeInTheDocument();
+    expect(container.querySelector(".preview-stage__tag")).toBeNull();
+  });
+
   it("opens the whole reel when a tile is clicked, at that tile", async () => {
     renderReel();
     fireEvent.click(await tile("flat-lay-01 · white"));

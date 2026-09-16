@@ -286,20 +286,16 @@ export function VariantsTab({ detail, onUpdate }: Props) {
       </fieldset>
 
       <div className="variants-preview">
-        <span className="section-label">Preview</span>
         <div className="preview-stage preview-stage--large">
           {template !== null && shown !== null ? (
-            <>
-              <span className="preview-stage__tag tag tag-neutral">{shown}</span>
-              <img
-                src={
-                  design !== null
-                    ? templateDesignPreviewUrl(template, design, shown)
-                    : templateThumbnailUrl(template, shown)
-                }
-                alt={`${shown} on ${template}`}
-              />
-            </>
+            <img
+              src={
+                design !== null
+                  ? templateDesignPreviewUrl(template, design, shown)
+                  : templateThumbnailUrl(template, shown)
+              }
+              alt={`${shown} on ${template}`}
+            />
           ) : (
             <div className="image-placeholder">
               <span>Set preview_template on the garment profile to a colour-matrix mockup.</span>

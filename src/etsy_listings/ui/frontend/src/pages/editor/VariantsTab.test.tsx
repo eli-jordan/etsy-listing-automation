@@ -90,6 +90,16 @@ describe("VariantsTab's preview", () => {
     expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
   });
 
+  it("does not label the stage or overlay the colour name on it", async () => {
+    /* The left column's fieldset already starts at the top of the grid; a
+       "Preview" heading above the photo pushed the stage down, and the
+       colour is in the image's alt (and the selected row) already. */
+    const { container } = renderWithFlatLay();
+    await screen.findByAltText("black on flat-lay-01");
+    expect(screen.queryByText(/^Preview$/)).not.toBeInTheDocument();
+    expect(container.querySelector(".preview-stage__tag")).toBeNull();
+  });
+
   it("overlays the listing's real design once it has exactly one", async () => {
     renderWithFlatLay({ design: { default: "../../designs/take-a-hike.png" } });
     const preview = await screen.findByAltText("black on flat-lay-01");

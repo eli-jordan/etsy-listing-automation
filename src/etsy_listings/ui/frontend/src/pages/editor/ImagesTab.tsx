@@ -534,7 +534,6 @@ export function ImagesTab({ detail, onUpdate }: Props) {
 
       <div className="images-right">
         <div className="preview-pane">
-          <span className="section-label">Preview</span>
           <div className="preview-stage preview-stage--large">
             {focus === null && (
               <div className="image-placeholder">
@@ -542,35 +541,30 @@ export function ImagesTab({ detail, onUpdate }: Props) {
               </div>
             )}
             {focus !== null && (
-              <>
-                {focus.kind === "template" && focus.colour !== null && (
-                  <span className="preview-stage__tag tag tag-neutral">{focus.colour}</span>
-                )}
-                {/* A button, not a bare `<img onClick>`: opening the carousel
-                    is an action, and the keyboard has to be able to take it. */}
-                <button
-                  type="button"
-                  className="preview-stage__open"
-                  title={
-                    focusInListing
-                      ? "Open the listing's images at full size"
-                      : "Add it to the listing to open it at full size"
+              /* A button, not a bare `<img onClick>`: opening the carousel
+                  is an action, and the keyboard has to be able to take it. */
+              <button
+                type="button"
+                className="preview-stage__open"
+                title={
+                  focusInListing
+                    ? "Open the listing's images at full size"
+                    : "Add it to the listing to open it at full size"
+                }
+                onClick={() => {
+                  const index = focusedReelIndex();
+                  if (index >= 0) setLightboxIndex(index);
+                }}
+              >
+                <img
+                  src={
+                    focus.kind === "shared"
+                      ? commonMediaFileUrl(focus.asset.name)
+                      : fullSizeUrl({ template: focus.template, colour: focus.colour }, design)
                   }
-                  onClick={() => {
-                    const index = focusedReelIndex();
-                    if (index >= 0) setLightboxIndex(index);
-                  }}
-                >
-                  <img
-                    src={
-                      focus.kind === "shared"
-                        ? commonMediaFileUrl(focus.asset.name)
-                        : fullSizeUrl({ template: focus.template, colour: focus.colour }, design)
-                    }
-                    alt={focusTitle}
-                  />
-                </button>
-              </>
+                  alt={focusTitle}
+                />
+              </button>
             )}
           </div>
 
