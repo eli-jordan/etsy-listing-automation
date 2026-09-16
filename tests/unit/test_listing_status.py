@@ -48,6 +48,40 @@ class TestTheTransitionTable:
         assert listing_status(applied=False, edited=False, live=True) == "live"
 
 
+class TestTheIncompleteMarker:
+    """A29. A per-stage lockfile write makes `state.lock.json` newer than
+    `listing.yaml` partway through a deploy that then fails, so
+    `edited_since_apply` alone would read a partially-applied live listing as
+    clean. A set marker must read exactly like an edit would."""
+
+    def test_a_marked_live_listing_reads_dirty_even_though_nothing_looks_edited(self) -> None:
+        assert listing_status(applied=True, edited=False, live=True, incomplete=True) == "dirty"
+
+    def test_an_unmarked_live_listing_still_reads_live(self) -> None:
+        assert listing_status(applied=True, edited=False, live=True, incomplete=False) == "live"
+
+    def test_the_marker_does_not_invent_a_new_status_for_a_never_applied_listing(self) -> None:
+        """Never live and never fully applied is `draft` regardless -- the
+        marker piggybacks on the existing `edited` branch rather than adding
+        a state of its own."""
+        assert listing_status(applied=False, edited=False, live=False, incomplete=True) == "draft"
+
+    def test_delete_retire_still_win_over_a_marked_listing(self) -> None:
+        """PRD 61-67's lifecycle badges take precedence over live/dirty
+        already; the marker must not change that ordering."""
+        assert (
+            listing_status(
+                applied=True,
+                edited=False,
+                live=True,
+                lifecycle="retired",
+                etsy_state="active",
+                incomplete=True,
+            )
+            == "pending-retire"
+        )
+
+
 class TestDeleteAndRetireBadges:
     """PRD 61–67: the original four remain; these add, and win when both
     could apply. `live` still means "has left draft"; `etsy_state` names

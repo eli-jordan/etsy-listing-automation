@@ -201,6 +201,10 @@ def _status(
         lifecycle=lifecycle,
         etsy_state=etsy_state,
         last_applied_lifecycle=_last_applied_lifecycle(lock),
+        # A29: a stage raised mid-apply, and the per-stage write already made
+        # the lockfile newer than the yaml -- `edited` alone would read this
+        # as clean.
+        incomplete=lock is not None and lock.incomplete is not None,
     )
 
 

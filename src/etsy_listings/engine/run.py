@@ -130,22 +130,25 @@ def apply_listings(
     on_planned: PlannedSink = _ignore_planned,
     on_failure: FailureSink = _ignore_failure,
 ) -> RunReport:
-    """Plan and then execute every listing, writing each lockfile as it goes.
+    """Plan and then execute every listing, writing the lockfile after every
+    stage that succeeds, not just once at the end.
 
-    The lockfile is written per listing rather than at the end of the batch,
-    which is what makes a half-finished ``--all`` run resumable: the listings
-    that succeeded have recorded that they did, and re-running skips them.
+    A29: this is what makes a partial apply resumable rather than only a
+    complete one. ``execute``'s ``record`` callback is what actually reaches
+    disk on the way through -- passing it a stage's own ``write`` is the
+    whole of what this function adds; a stage failing after a create (PRD 48)
+    is ``execute``'s to record, not this loop's to notice and redo.
     """
 
     def work(listing: str) -> PlannedRun:
         lock = _read_lock(ctx, listing)
         planned = build_plan(ctx, listing, lock, stages)
         on_planned(listing, planned)
-        result = execute(ctx, planned, lock)
+        lock_file = ctx.workspace.lock_file(listing)
+        execute(ctx, planned, lock, record=lambda updated: updated.write(lock_file))
         if _retract_succeeded(planned):
             ctx.workspace.remove_listing(listing)
             return planned
-        result.write(ctx.workspace.lock_file(listing))
         _omit_consumed_renew(ctx, listing, planned)
         return planned
 
