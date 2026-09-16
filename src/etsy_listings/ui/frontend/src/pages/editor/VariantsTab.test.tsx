@@ -87,7 +87,7 @@ describe("VariantsTab's preview", () => {
   it("previews the first enabled colour's real photo", async () => {
     renderWithFlatLay();
     const preview = await screen.findByAltText("black on flat-lay-01");
-    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
+    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/photo?colour=black");
   });
 
   it("does not wait for the templates list before using preview_template", async () => {
@@ -100,7 +100,7 @@ describe("VariantsTab's preview", () => {
       <VariantsTab detail={detail({ colors: ["black", "ivory"], media: [] })} onUpdate={vi.fn()} />,
     );
     const preview = await screen.findByAltText("black on flat-lay-01");
-    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
+    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/photo?colour=black");
   });
 
   it("does not label the stage or overlay the colour name on it", async () => {
@@ -130,7 +130,7 @@ describe("VariantsTab's preview", () => {
       },
     });
     const preview = await screen.findByAltText("black on flat-lay-01");
-    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
+    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/photo?colour=black");
   });
 
   it("shows a swatch dot sampled off the preview template", async () => {
@@ -153,7 +153,7 @@ describe("VariantsTab's preview", () => {
 
     expect(await screen.findByAltText("ivory on flat-lay-01")).toHaveAttribute(
       "src",
-      "/api/templates/flat-lay-01/thumbnail?colour=ivory",
+      "/api/templates/flat-lay-01/photo?colour=ivory",
     );
   });
 

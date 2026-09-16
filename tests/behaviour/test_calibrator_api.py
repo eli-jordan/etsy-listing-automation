@@ -189,6 +189,48 @@ class TestThumbnails:
         assert client.get("/api/templates/..%2F..%2Fetc/thumbnail").status_code == 404
 
 
+class TestPhoto:
+    """`GET .../photo`: the same bare scene photo as the thumbnail, at its own
+    resolution -- the listing editor's Variants/Listing Images preview stage
+    for a listing that has not picked a design yet, which must not be stuck
+    showing the rail's 160px tile."""
+
+    def test_photo_returns_a_png_for_a_colour_matrix_template(self, client: TestClient) -> None:
+        response = client.get("/api/templates/flat-lay-01/photo", params={"colour": "black"})
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+    def test_photo_returns_a_png_for_a_scene_template(self, client: TestClient) -> None:
+        response = client.get("/api/templates/colour-chart-01/photo")
+        assert response.status_code == 200
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+    def test_is_full_resolution_not_the_capped_thumbnail(self, client: TestClient) -> None:
+        thumb = client.get("/api/templates/flat-lay-01/thumbnail", params={"colour": "black"})
+        with Image.open(BytesIO(thumb.content)) as img:
+            thumb_size = img.size
+        full = client.get("/api/templates/flat-lay-01/photo", params={"colour": "black"})
+        with Image.open(BytesIO(full.content)) as img:
+            full_size = img.size
+        assert full_size[0] > thumb_size[0]
+
+    def test_photo_404s_for_a_colour_the_template_has_no_photo_for(
+        self, client: TestClient
+    ) -> None:
+        response = client.get("/api/templates/flat-lay-01/photo", params={"colour": "maroon"})
+        assert response.status_code == 404
+
+    def test_photo_404s_for_a_template_with_no_photo(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        (workspace_root / "mockup-templates" / "photoless").mkdir()
+        assert client.get("/api/templates/photoless/photo").status_code == 404
+
+    def test_a_dot_dot_photo_url_reaches_no_template_at_all(self, client: TestClient) -> None:
+        assert client.get("/api/templates/..%2F..%2Fetc/photo").status_code == 404
+
+
 class TestDesignLibrary:
     """A19: the test design is a library, not a fixed literal. The grid target
     answers "is the warp right?" and says nothing about how a real ink weight
@@ -758,6 +800,7 @@ bouncing off request validation before the name is ever looked at."""
     [
         ("GET", "/api/templates/bad%3Aname/config", None),
         ("GET", "/api/templates/bad%3Aname/thumbnail", None),
+        ("GET", "/api/templates/bad%3Aname/photo", None),
         ("GET", "/api/templates/bad%3Aname/colour-report", None),
         ("POST", "/api/templates/bad%3Aname/kind", {"kind": "single"}),
         ("PUT", "/api/templates/bad%3Aname/config", SINGLE_CONFIG),

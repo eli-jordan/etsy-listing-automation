@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import {
   listTemplates,
   templateDesignPreviewUrl,
+  templatePhotoUrl,
   templateThumbnailUrl,
 } from "../../api/calibrator";
 import { commonMediaFileUrl, commonMediaThumbnailUrl, listCommonMedia } from "../../api/listings";
@@ -84,14 +85,14 @@ function scenePath(template: string, colour: string | null): string {
  * A template entry is a *render*: the listing's real artwork composited onto
  * the template's saved geometry, at the scene photo's own size. `design` is
  * null for a multi-artwork listing (`on-light`/`on-dark`), where there is no
- * single design to composite, and that case falls back to the bare photo --
- * the thumbnail, since no endpoint serves an inkless scene at full size. A
- * shared asset is already exactly the file Etsy would receive, so it is
- * served as-is.
+ * single design to composite, and that case falls back to the bare photo at
+ * its own resolution (`templatePhotoUrl`, not the list-sized
+ * `templateThumbnailUrl` the reel's tiles use). A shared asset is already
+ * exactly the file Etsy would receive, so it is served as-is.
  */
 function fullSizeUrl(entry: MediaEntry, design: string | null): string {
   if (typeof entry === "string") return commonMediaFileUrl(sharedName(entry));
-  if (design === null) return templateThumbnailUrl(entry.template, entry.colour);
+  if (design === null) return templatePhotoUrl(entry.template, entry.colour);
   return templateDesignPreviewUrl(entry.template, design, entry.colour);
 }
 

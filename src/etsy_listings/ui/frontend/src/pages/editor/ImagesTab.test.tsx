@@ -312,7 +312,7 @@ describe("ImagesTab", () => {
 
     expect(screen.getByAltText("flat-lay-01 · black")).toHaveAttribute(
       "src",
-      "/api/templates/flat-lay-01/thumbnail?colour=black",
+      "/api/templates/flat-lay-01/photo?colour=black",
     );
     expect(screen.getByText("mockup-templates/flat-lay-01/black.png")).toBeInTheDocument();
   });

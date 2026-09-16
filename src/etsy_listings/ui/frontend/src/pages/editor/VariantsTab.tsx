@@ -3,7 +3,7 @@ import {
   getTemplateSwatch,
   listTemplates,
   templateDesignPreviewUrl,
-  templateThumbnailUrl,
+  templatePhotoUrl,
 } from "../../api/calibrator";
 import { listGarmentProfiles } from "../../api/listings";
 import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
@@ -296,7 +296,7 @@ export function VariantsTab({ detail, onUpdate }: Props) {
               src={
                 design !== null
                   ? templateDesignPreviewUrl(template, design, shown)
-                  : templateThumbnailUrl(template, shown)
+                  : templatePhotoUrl(template, shown)
               }
               alt={`${shown} on ${template}`}
             />

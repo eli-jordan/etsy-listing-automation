@@ -110,11 +110,23 @@ export function templateThumbnailUrl(name: string, colour?: string | null): stri
 }
 
 /**
+ * The same bare, inkless photo as {@link templateThumbnailUrl}, at its own
+ * resolution rather than downscaled to list size. For the large preview
+ * stages (the listing editor's Variants and Listing Images tabs) when there
+ * is no design yet to composite -- {@link templateThumbnailUrl}'s 160px cap
+ * is sized for a row of tiles, not a hero image.
+ */
+export function templatePhotoUrl(name: string, colour?: string | null): string {
+  const base = `/api/templates/${encodeURIComponent(name)}/photo`;
+  return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
+}
+
+/**
  * A listing's real design, composited onto this template's *saved* geometry
- * -- unlike {@link templateThumbnailUrl}, which is a bare, inkless photo, or
- * {@link renderPreview}, which composites a calibrator test design against
- * *unsaved* geometry. A plain URL for the same reason `templateThumbnailUrl`
- * is: the browser owns loading and caching it.
+ * -- unlike {@link templateThumbnailUrl}/{@link templatePhotoUrl}, which are
+ * a bare, inkless photo, or {@link renderPreview}, which composites a
+ * calibrator test design against *unsaved* geometry. A plain URL for the
+ * same reason those are: the browser owns loading and caching it.
  */
 export function templateDesignPreviewUrl(
   name: string,

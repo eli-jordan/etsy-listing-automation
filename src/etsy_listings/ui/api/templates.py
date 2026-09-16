@@ -369,6 +369,27 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
     return thumbnail_response(source)
 
 
+@router.get("/{name}/photo")
+def photo(template: Existing, colour: str | None = None) -> Response:
+    """The template's own photo, at its own resolution -- the bare-scene
+    counterpart of ``GET .../design-preview`` for a listing that has not
+    picked a design yet.
+
+    Same photo :func:`thumbnail` serves, same resolution rule
+    (:func:`_thumbnail_source`), just not downscaled to list size: the
+    listing editor's Variants and Listing Images previews are a large hero
+    stage, not a row of tiles, and serving them the 160px list thumbnail is
+    why that stage used to look tiny for a listing with no design picked yet.
+    """
+    source = _thumbnail_source(template, colour)
+    if source is None or not source.is_file():
+        wanted = f"{template.name!r}" if colour is None else f"{template.name!r} colour {colour!r}"
+        raise HTTPException(status_code=404, detail=f"no photo for {wanted}")
+    return Response(
+        content=source.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-cache"}
+    )
+
+
 @router.get("/{name}/config", response_model=TemplateConfig)
 def get_config(template: Existing) -> AnyTemplate:
     return _load_config(template.workspace, template.name)
