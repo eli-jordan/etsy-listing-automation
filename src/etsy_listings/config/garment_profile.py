@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Literal
 
 import yaml
-from pydantic import BaseModel, ConfigDict, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 
@@ -59,6 +59,25 @@ class GarmentProfile(BaseModel):
     """Human-classified once via ``new``, not auto-seeded -- Printify's
     catalog carries no hex colour value in this codebase. Drives artwork
     (light/dark ink) resolution for listings with more than one design file."""
+
+    preview_template: str | None = None
+    """A ``colour-matrix`` template the editor uses to judge colours.
+
+    Not a ``media:`` default -- listing mockups still live in
+    ``listing.media``, and a listing that never names this template still
+    renders whatever ``media:`` does (A13, PRD 29). Optional so garment
+    profiles written before the field existed still load. ``new`` does not
+    prompt; it is hand-edited the same way ``colors:`` is classified.
+    """
+
+    @field_validator("preview_template", mode="before")
+    @classmethod
+    def _blank_preview_template_is_unset(cls, value: object) -> object:
+        """``preview_template:`` with nothing after it, or a blank string,
+        names no template -- the same as omitting the field."""
+        if value == "":
+            return None
+        return value
 
     @classmethod
     def load(cls, path: Path) -> GarmentProfile:
