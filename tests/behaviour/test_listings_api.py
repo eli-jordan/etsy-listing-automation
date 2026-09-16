@@ -24,7 +24,7 @@ from etsy_listings.ui.api import etsystate
 from etsy_listings.ui.api.app import create_app
 from etsy_listings.workspace.workspace import Workspace
 
-from tests.support.builders import edit_garment_profile, set_etsy_shop_id
+from tests.support.builders import copy_listing, edit_garment_profile, set_etsy_shop_id
 
 
 @pytest.fixture
@@ -327,6 +327,34 @@ class TestListingStatus:
 
         assert rows["take-a-hike"]["status"] == "live"
         assert fake.batch_calls == 1
+
+    def test_the_table_reads_the_template_catalogue_once_for_every_row(
+        self, client: TestClient, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The Etsy rule above, applied to the workspace.
+
+        Every row's issue check needs each template's real kind and colours,
+        and each row used to re-list and re-parse the whole catalogue to get
+        them -- twenty listings over twenty templates parsed four hundred
+        ``template.yaml`` files per paint. `WorkspaceFacts` gathers them once
+        for the request, so no template is parsed twice however many rows the
+        table has.
+        """
+        copy_listing(workspace_root, "second-listing")
+        parsed: list[str] = []
+        real = Workspace.load_template_config
+
+        def counting(self: Workspace, template: str) -> object:
+            parsed.append(template)
+            return real(self, template)
+
+        monkeypatch.setattr(Workspace, "load_template_config", counting)
+
+        rows = client.get("/api/listings").json()
+
+        assert {r["name"] for r in rows} == {"take-a-hike", "second-listing"}
+        assert parsed, "the check really does read the catalogue"
+        assert sorted(parsed) == sorted(set(parsed)), f"a template parsed twice: {parsed}"
 
     def test_a_workspace_with_no_etsy_credentials_still_lists(
         self, client: TestClient, workspace_root: Path

@@ -16,10 +16,13 @@ the second is a whole module (``config/listing_validation.py``):
   ``field_errors`` on the (unchanged) ``ListingDetail``.
 * **Business** -- pydantic-valid but incomplete (empty media, a `<generate>`
   title, a colour-swatch template missing a colour). Reused via
-  ``check_listing``, surfaced as the ``issues`` list. This layer's only job is
-  assembling that function's inputs from the workspace: which garment profile
-  resolved (or didn't), which design paths resolved, and what every
-  referenced template's real kind and colours are.
+  ``check_listing``, surfaced as the ``issues`` list.
+
+Assembling that function's inputs is `WorkspaceFacts`'s job, not this module's:
+every endpoint below builds one at the top and hands it down, so a request
+reads the template catalogue once however many listings it describes. Only the
+per-listing paths stay here, because they resolve against a listing's own
+directory rather than the workspace as a whole.
 """
 
 from __future__ import annotations
@@ -38,10 +41,9 @@ from etsy_listings import connections
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import EMPTY_DRAFT, Listing
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
-from etsy_listings.config.listing_validation import TemplateInfo, check_listing
+from etsy_listings.config.listing_validation import check_listing
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
@@ -52,7 +54,6 @@ from etsy_listings.newcmd.logic import (
     pricing_plan_ref,
     write_listing,
 )
-from etsy_listings.render.config import ColourMatrixTemplate, MultipleTemplate
 from etsy_listings.ui.api.etsystate import live_listing_ids
 from etsy_listings.ui.api.schemas import (
     CommonMediaSummary,
@@ -72,8 +73,8 @@ from etsy_listings.ui.api.schemas import (
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import (
-    InvalidNameError,
     PathEscapesWorkspaceError,
     Workspace,
 )
@@ -107,21 +108,6 @@ def target(request: Request, name: str) -> Target:
 Existing = Annotated[Target, Depends(target)]
 
 
-def _garment_profile(workspace: Workspace, name: str) -> GarmentProfile | None:
-    """``None`` for a profile that will not load *and* for a name that could
-    never name a file at all -- ``""`` (a new listing, before the Variants
-    dropdown has been touched) or anything that is not a single path segment.
-
-    ``_segment``'s refusal is still the security boundary; all this decides is
-    that an unusable value *stored in a listing* is a business issue
-    (`_check_garment_profile_exists` reports it) rather than a 400 that takes
-    the whole editor down with it."""
-    try:
-        return workspace.load_garment_profile(name)
-    except (ConfigLoadError, InvalidNameError):
-        return None
-
-
 def _resolve_design_paths(
     workspace: Workspace, listing: Listing, listing_dir: Path
 ) -> dict[str, Path]:
@@ -134,40 +120,20 @@ def _resolve_design_paths(
     return paths
 
 
-def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
-    """Every *calibrated* template's real kind and colours, the way
-    ``check_listing`` needs them -- an uncalibrated one has no kind to compare
-    against and is silently skipped, the same as a template name that has
-    since been renamed or deleted from under a listing."""
-    result: dict[str, TemplateInfo] = {}
-    for name in workspace.template_names():
-        try:
-            config = workspace.load_template_config(name)
-        except ConfigLoadError:
-            continue
-        if isinstance(config, ColourMatrixTemplate):
-            colours = frozenset(workspace.template_colours(name))
-        elif isinstance(config, MultipleTemplate):
-            colours = frozenset(p.colour for p in config.placements if p.colour)
-        else:
-            colours = frozenset({config.colour}) if config.colour else frozenset()
-        result[name] = TemplateInfo(kind=config.kind, colours=colours)
-    return result
-
-
-def _business_issues(workspace: Workspace, listing_dir: Path, listing: Listing) -> list[Issue]:
+def _business_issues(
+    workspace: Workspace, facts: WorkspaceFacts, listing_dir: Path, listing: Listing
+) -> list[Issue]:
     """*listing_dir* rather than a listing name, because the not-yet-created
     draft the editor opens on ``/listings/new`` has no name and no directory
     -- and every ref in a listing resolves against a directory at one fixed
     depth (`listings/{name}/`), so `_any_listing_dir` answers for it exactly
     as a real one would."""
-    profile = _garment_profile(workspace, listing.garment_profile)
     raw_issues: list[ValidationIssue] = check_listing(
         listing,
-        garment_profile=profile,
-        garment_profile_names=workspace.garment_profile_names(),
+        garment_profile=facts.garment_profile(listing.garment_profile),
+        garment_profile_names=facts.garment_profile_names,
         design_paths=_resolve_design_paths(workspace, listing, listing_dir),
-        templates=_template_info_map(workspace),
+        templates=facts.templates,
     )
     return [
         Issue(severity=i.severity, tab=i.tab, where=i.where, message=i.message) for i in raw_issues
@@ -210,7 +176,7 @@ def _live(workspace: Workspace, etsy_listing_id: int | None) -> bool:
 
 
 def _pricing_summary(
-    workspace: Workspace, listing_dir: Path, listing: Listing
+    workspace: Workspace, facts: WorkspaceFacts, listing_dir: Path, listing: Listing
 ) -> tuple[str | None, list[ResolvedPrice]]:
     """Display only (selecting a different plan from the UI is deferred): the
     resolved plan's name, and one resolved price per size -- using the
@@ -227,7 +193,7 @@ def _pricing_summary(
             plan = None
             plan_name = None
 
-    profile = _garment_profile(workspace, listing.garment_profile)
+    profile = facts.garment_profile(listing.garment_profile)
     sizes = profile.sizes if profile is not None else sorted(listing.prices)
     colour = listing.colors[0] if listing.colors else ""
     prices: list[ResolvedPrice] = []
@@ -254,10 +220,12 @@ def _sole_design_name(listing: Listing) -> str | None:
     return Path(next(iter(listing.design.values()))).stem
 
 
-def _summarize_listing(workspace: Workspace, name: str, *, live: bool) -> ListingSummary:
+def _summarize_listing(
+    workspace: Workspace, facts: WorkspaceFacts, name: str, *, live: bool
+) -> ListingSummary:
     listing = workspace.load_listing(name)
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
-    issues = _business_issues(workspace, workspace.listing_dir(name), listing)
+    issues = _business_issues(workspace, facts, workspace.listing_dir(name), listing)
     counts = IssueCounts(
         block=sum(1 for i in issues if i.severity == "block"),
         warn=sum(1 for i in issues if i.severity == "warn"),
@@ -281,6 +249,7 @@ def _detail(
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     return _describe(
         workspace,
+        WorkspaceFacts.gather(workspace),
         listing,
         name=name,
         listing_dir=workspace.listing_dir(name),
@@ -293,6 +262,7 @@ def _detail(
 
 def _describe(
     workspace: Workspace,
+    facts: WorkspaceFacts,
     listing: Listing,
     *,
     name: str,
@@ -310,8 +280,8 @@ def _describe(
     and the same resolved prices, or the editor would show one thing before
     the listing was named and another after.
     """
-    issues = _business_issues(workspace, listing_dir, listing)
-    plan_name, resolved_prices = _pricing_summary(workspace, listing_dir, listing)
+    issues = _business_issues(workspace, facts, listing_dir, listing)
+    plan_name, resolved_prices = _pricing_summary(workspace, facts, listing_dir, listing)
     return ListingDetail.model_validate(
         {
             **listing.model_dump(mode="json"),
@@ -356,11 +326,12 @@ def list_listings(request: Request) -> list[ListingSummary]:
     the whole table rather than one per row -- which is why the live fact is
     gathered here and handed down rather than looked up per listing."""
     workspace = _workspace(request)
+    facts = WorkspaceFacts.gather(workspace)
     names = workspace.listing_names()
     ids = {name: _remote_ids(workspace, name)[0] for name in names}
     live = live_listing_ids(workspace.root, [i for i in ids.values() if i is not None])
     return [
-        _summarize_listing(workspace, name, live=ids[name] is not None and ids[name] in live)
+        _summarize_listing(workspace, facts, name, live=ids[name] is not None and ids[name] in live)
         for name in names
     ]
 
@@ -409,6 +380,7 @@ def _describe_draft(
         field_errors = _field_errors(exc)
     return _describe(
         workspace,
+        WorkspaceFacts.gather(workspace),
         listing,
         name=name,
         listing_dir=_any_listing_dir(workspace),
@@ -514,10 +486,10 @@ def describe_listing_draft(request: Request, body: DraftListingRequest) -> Listi
 
 @support_router.get("/api/garment-profiles", response_model=list[GarmentProfileSummary])
 def list_garment_profiles(request: Request) -> list[GarmentProfileSummary]:
-    workspace = _workspace(request)
+    facts = WorkspaceFacts.gather(_workspace(request))
     result = []
-    for name in workspace.garment_profile_names():
-        profile = _garment_profile(workspace, name)
+    for name in facts.garment_profile_names:
+        profile = facts.garment_profile(name)
         if profile is None:
             continue
         result.append(
