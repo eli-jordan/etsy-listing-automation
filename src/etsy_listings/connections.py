@@ -36,6 +36,7 @@ from pathlib import Path
 
 from etsy_listings.clients.etsy.listings import EtsyListingClient, HttpEtsyListingClient
 from etsy_listings.clients.etsy.oauth import TokenResponse
+from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
 from etsy_listings.clients.etsy.tokens import TokenStore, utcnow
 from etsy_listings.clients.etsy.transport import OAuthClient
 from etsy_listings.clients.etsy.transport import Transport as EtsyTransport
@@ -164,6 +165,29 @@ def etsy_listing_client(root: Path) -> EtsyListingClient | None:
     if transport is None:
         return None
     return HttpEtsyListingClient(transport)
+
+
+def etsy_shop_client(root: Path) -> EtsyShopClient | None:
+    """The unscoped, read-only Etsy surface `setup` also uses (`shops.py`):
+    shop/section/policy lookups that need only the app key pair, never a
+    signed-in bearer -- ``None`` only when the workspace has no key pair at
+    all.
+
+    Deliberately not built from :func:`etsy_transport`: that always hands the
+    transport a bearer *callable*, which every request then calls, and the
+    store raises when no tokens have ever been saved -- fine for the scoped
+    listing surface, which cannot do anything unsigned-in anyway, but wrong
+    here. A bearer is attached only when tokens already exist, so a workspace
+    with a key pair but no sign-in yet can still resolve its own shop's
+    sections (a bearer is a bonus for these calls, never a requirement --
+    mirrors `setupcmd.interactive._default_etsy_access`).
+    """
+    app_key = etsy_app_key(root)
+    if app_key is None:
+        return None
+    tokens = etsy_token_store(root).load()
+    bearer = etsy_token_store(root).access_token if tokens is not None else None
+    return HttpEtsyShopClient(EtsyTransport(app_key, bearer=bearer))
 
 
 # ------------------------------------------------------------------- the run
