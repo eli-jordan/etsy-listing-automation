@@ -1,14 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  getTemplateSwatch,
-  listTemplates,
-  templateDesignPreviewUrl,
-  templatePhotoUrl,
-} from "../../api/calibrator";
+import { getTemplateSwatch, listTemplates } from "../../api/calibrator";
 import { listGarmentProfiles } from "../../api/listings";
+import { singleDesignName, templatePicture } from "../../media";
 import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelection";
-import { singleDesignName } from "./designName";
 
 /**
  * Garment dropdown, sizes, colour list, and a preview of the colour under the
@@ -292,14 +287,7 @@ export function VariantsTab({ detail, onUpdate }: Props) {
       <div className="variants-preview">
         <div className="preview-stage preview-stage--large">
           {template !== null && shown !== null ? (
-            <img
-              src={
-                design !== null
-                  ? templateDesignPreviewUrl(template, design, shown)
-                  : templatePhotoUrl(template, shown)
-              }
-              alt={`${shown} on ${template}`}
-            />
+            <img src={templatePicture(template, shown, design)} alt={`${shown} on ${template}`} />
           ) : (
             <div className="image-placeholder">
               <span>Set preview_template on the garment profile to a colour-matrix mockup.</span>

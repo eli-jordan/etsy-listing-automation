@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { listingDesignThumbnailUrl, listListingDesigns } from "../../api/listings";
+import { refName } from "../../media";
 import type { ListingDesignSummary } from "../../types";
 
 /**
@@ -34,11 +35,6 @@ const RECENT = 4;
  * against a fixed root (PRD 34's rule, shared with `pricing_plan`). */
 function refFor(design: ListingDesignSummary): string {
   return `../../${design.file}`;
-}
-
-function nameOf(ref: string): string {
-  const file = ref.split("/").pop() ?? ref;
-  return file.replace(/\.png$/i, "");
 }
 
 /** The workspace-relative path, for display: a listing-relative ref is what
@@ -78,7 +74,7 @@ export function DesignSelect({ design, onPick }: Props) {
         {single !== null ? (
           <img
             className="design-thumb"
-            src={listingDesignThumbnailUrl(nameOf(single))}
+            src={listingDesignThumbnailUrl(refName(single))}
             alt=""
             loading="lazy"
           />
@@ -94,7 +90,7 @@ export function DesignSelect({ design, onPick }: Props) {
             </>
           ) : single !== null ? (
             <>
-              <div className="design-row__name">{nameOf(single)}</div>
+              <div className="design-row__name">{refName(single)}</div>
               <div className="design-row__file">{displayPath(single)}</div>
             </>
           ) : (
@@ -129,7 +125,7 @@ export function DesignSelect({ design, onPick }: Props) {
                 key={d.name}
                 type="button"
                 className={
-                  single !== null && nameOf(single) === d.name
+                  single !== null && refName(single) === d.name
                     ? "template-card template-card--active"
                     : "template-card"
                 }
