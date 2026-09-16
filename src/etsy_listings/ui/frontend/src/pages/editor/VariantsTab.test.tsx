@@ -9,6 +9,7 @@ function template(over: Partial<TemplateSummary> & { name: string }): TemplateSu
   return {
     kind: "colour-matrix",
     colours: ["black", "ivory"],
+    photos: [],
     has_config: true,
     status: "calibrated",
     status_reason: null,

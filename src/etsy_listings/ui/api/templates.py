@@ -57,9 +57,11 @@ from etsy_listings.ui.api.schemas import (
     SinglePreviewRequest,
     SwatchResponse,
     TemplateKind,
+    TemplatePhoto,
     TemplateSummary,
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
+from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import AmbiguousColourSuffixError, Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
@@ -160,6 +162,37 @@ def _status_reason(config: AnyTemplate) -> str | None:
     return None
 
 
+def _photos(workspace: Workspace, name: str, config: AnyTemplate) -> list[TemplatePhoto]:
+    """Where each of this template's scenes really is, workspace-relative.
+
+    Asked of ``Workspace.scene_photo`` rather than composed from PRD 7a's
+    convention, because that convention has a documented exception the
+    convention itself cannot express -- ``template_base_image``'s
+    trailing-segment fallback. An ambiguous colour is skipped rather than
+    guessed at, the same answer ``AmbiguousColourSuffixError`` gives everywhere
+    else; the client falls back to the plain convention for anything not
+    listed here, which is no worse than what it did for all of them before.
+    """
+    if not isinstance(config, ColourMatrixTemplate):
+        scene = workspace.template_scene_image(name)
+        return [TemplatePhoto(colour=None, file=_relative(name, scene))]
+    photos: list[TemplatePhoto] = []
+    for colour in workspace.template_colours(name):
+        try:
+            path = workspace.scene_photo(name, colour).path
+        except AmbiguousColourSuffixError:
+            continue
+        photos.append(TemplatePhoto(colour=colour, file=_relative(name, path)))
+    return photos
+
+
+def _relative(template: str, photo: Path) -> str:
+    """Forward-slashed and workspace-relative, the shape every other served
+    path uses (`CommonMediaSummary.file`). Built from the layout rather than
+    `relative_to(root)` so it cannot come back as a Windows path."""
+    return f"{layout.MOCKUP_TEMPLATES_DIR}/{template}/{photo.name}"
+
+
 def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
     width, height = _photo_size(workspace, name)
     try:
@@ -187,6 +220,7 @@ def _summarize(workspace: Workspace, name: str) -> TemplateSummary:
         name=name,
         kind=config.kind,
         colours=colours,
+        photos=_photos(workspace, name, config),
         has_config=True,
         status="needs-calibration" if reason else "calibrated",
         status_reason=reason,

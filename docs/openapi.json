@@ -1146,6 +1146,32 @@
         "title": "TemplateMediaEntry",
         "type": "object"
       },
+      "TemplatePhoto": {
+        "description": "One scene photo in a template's directory: which colour it is, and where\nit actually is.\n\n``file`` is workspace-relative and forward-slashed, resolved through\n``Workspace.scene_photo`` -- the same rule the renderer uses, including the\ntrailing-segment fallback for a vendor pack delivered as\n``{template}-{colour}.png``. The listings editor shows it under its preview\nso the user knows which file to go and edit, and it used to *derive* that\ncaption from PRD 7a's convention in TypeScript, which named a file that was\nnot there for exactly the pack the fallback exists for.\n\n``colour`` is ``None`` for a ``multiple``/``single`` template's fixed\n``scene.png``: there is no per-colour name to derive one from (PRD 28).",
+        "properties": {
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          }
+        },
+        "required": [
+          "colour",
+          "file"
+        ],
+        "title": "TemplatePhoto",
+        "type": "object"
+      },
       "TemplateSummary": {
         "properties": {
           "colours": {
@@ -1189,6 +1215,14 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "photos": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/TemplatePhoto"
+            },
+            "title": "Photos",
+            "type": "array"
           },
           "status": {
             "enum": [
@@ -2294,6 +2328,63 @@
           }
         },
         "summary": "Assign Kind",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/photo": {
+      "get": {
+        "description": "The template's own photo, at its own resolution -- the bare-scene\ncounterpart of ``GET .../design-preview`` for a listing that has not\npicked a design yet.\n\nSame photo :func:`thumbnail` serves, same resolution rule\n(:func:`_thumbnail_source`), just not downscaled to list size: the\nlisting editor's Variants and Listing Images previews are a large hero\nstage, not a row of tiles, and serving them the 160px list thumbnail is\nwhy that stage used to look tiny for a listing with no design picked yet.",
+        "operationId": "photo_api_templates__name__photo_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Colour"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Photo",
         "tags": [
           "templates"
         ]

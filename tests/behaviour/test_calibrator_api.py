@@ -51,6 +51,9 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
         "name": "not-calibrated-yet",
         "kind": None,
         "colours": [],
+        # No kind, so no way to say whether its photos are per-colour scenes or
+        # one fixed one -- and nothing to caption until there is.
+        "photos": [],
         "has_config": False,
         "status": "needs-calibration",
         "status_reason": "no kind set",
@@ -59,6 +62,48 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
         "width": None,
         "height": None,
     }
+
+
+class TestTemplatePhotos:
+    """Where each scene really is, so the listings editor can caption its
+    preview with a path that exists.
+
+    It used to compose that path client-side from PRD 7a's convention, which is
+    exactly the rule `template_base_image`'s fallback exists to bend -- so the
+    caption named a missing file for the one pack layout the renderer handles.
+    """
+
+    def photos(self, client: TestClient, name: str) -> list[dict[str, object]]:
+        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+        return list(by_name[name]["photos"])
+
+    def test_a_colour_matrix_lists_one_photo_per_colour(self, client: TestClient) -> None:
+        assert self.photos(client, "flat-lay-01") == [
+            {"colour": "black", "file": "mockup-templates/flat-lay-01/black.png"},
+            {"colour": "blue-jean", "file": "mockup-templates/flat-lay-01/blue-jean.png"},
+            {"colour": "ivory", "file": "mockup-templates/flat-lay-01/ivory.png"},
+            {"colour": "moss", "file": "mockup-templates/flat-lay-01/moss.png"},
+        ]
+
+    def test_a_fixed_scene_carries_no_colour(self, client: TestClient) -> None:
+        """PRD 28: a `multiple`/`single` template has one photo and no
+        per-colour name to derive it from."""
+        assert self.photos(client, "colour-chart-01") == [
+            {"colour": None, "file": "mockup-templates/colour-chart-01/scene.png"}
+        ]
+
+    def test_a_prefixed_vendor_pack_reports_the_file_that_is_really_there(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """`{template}-{colour}.png`, which `template_base_image` resolves and
+        the old client-side derivation did not."""
+        directory = workspace_root / "mockup-templates" / "flat-lay-01"
+        (directory / "black.png").rename(directory / "flat-lay-01-black.png")
+
+        assert {
+            "colour": "flat-lay-01-black",
+            "file": "mockup-templates/flat-lay-01/flat-lay-01-black.png",
+        } in self.photos(client, "flat-lay-01")
 
 
 class TestCalibrationStatus:

@@ -50,10 +50,31 @@ no PRD decision covers -- as well as something that could disagree with the
 config sitting next to it."""
 
 
+class TemplatePhoto(BaseModel):
+    """One scene photo in a template's directory: which colour it is, and where
+    it actually is.
+
+    ``file`` is workspace-relative and forward-slashed, resolved through
+    ``Workspace.scene_photo`` -- the same rule the renderer uses, including the
+    trailing-segment fallback for a vendor pack delivered as
+    ``{template}-{colour}.png``. The listings editor shows it under its preview
+    so the user knows which file to go and edit, and it used to *derive* that
+    caption from PRD 7a's convention in TypeScript, which named a file that was
+    not there for exactly the pack the fallback exists for.
+
+    ``colour`` is ``None`` for a ``multiple``/``single`` template's fixed
+    ``scene.png``: there is no per-colour name to derive one from (PRD 28).
+    """
+
+    colour: str | None
+    file: str
+
+
 class TemplateSummary(BaseModel):
     name: str
     kind: TemplateKind | None
     colours: list[str]
+    photos: list[TemplatePhoto] = []
     has_config: bool
     status: TemplateStatus
     status_reason: str | None = None

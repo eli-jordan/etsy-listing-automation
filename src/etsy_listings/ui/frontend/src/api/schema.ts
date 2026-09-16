@@ -469,6 +469,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/templates/{name}/photo": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Photo
+     * @description The template's own photo, at its own resolution -- the bare-scene
+     *     counterpart of ``GET .../design-preview`` for a listing that has not
+     *     picked a design yet.
+     *
+     *     Same photo :func:`thumbnail` serves, same resolution rule
+     *     (:func:`_thumbnail_source`), just not downscaled to list size: the
+     *     listing editor's Variants and Listing Images previews are a large hero
+     *     stage, not a row of tiles, and serving them the 160px list thumbnail is
+     *     why that stage used to look tiny for a listing with no design picked yet.
+     */
+    get: operations["photo_api_templates__name__photo_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/templates/{name}/preview": {
     parameters: {
       query?: never;
@@ -1198,6 +1226,28 @@ export interface components {
       /** Template */
       template: string;
     };
+    /**
+     * TemplatePhoto
+     * @description One scene photo in a template's directory: which colour it is, and where
+     *     it actually is.
+     *
+     *     ``file`` is workspace-relative and forward-slashed, resolved through
+     *     ``Workspace.scene_photo`` -- the same rule the renderer uses, including the
+     *     trailing-segment fallback for a vendor pack delivered as
+     *     ``{template}-{colour}.png``. The listings editor shows it under its preview
+     *     so the user knows which file to go and edit, and it used to *derive* that
+     *     caption from PRD 7a's convention in TypeScript, which named a file that was
+     *     not there for exactly the pack the fallback exists for.
+     *
+     *     ``colour`` is ``None`` for a ``multiple``/``single`` template's fixed
+     *     ``scene.png``: there is no per-colour name to derive one from (PRD 28).
+     */
+    TemplatePhoto: {
+      /** Colour */
+      colour: string | null;
+      /** File */
+      file: string;
+    };
     /** TemplateSummary */
     TemplateSummary: {
       /** Colours */
@@ -1210,6 +1260,11 @@ export interface components {
       kind: ("colour-matrix" | "multiple" | "single") | null;
       /** Name */
       name: string;
+      /**
+       * Photos
+       * @default []
+       */
+      photos: components["schemas"]["TemplatePhoto"][];
       /**
        * Status
        * @enum {string}
@@ -1926,6 +1981,39 @@ export interface operations {
             | components["schemas"]["ColourMatrixTemplate"]
             | components["schemas"]["MultipleTemplate"]
             | components["schemas"]["SingleTemplate"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  photo_api_templates__name__photo_get: {
+    parameters: {
+      query?: {
+        colour?: string | null;
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

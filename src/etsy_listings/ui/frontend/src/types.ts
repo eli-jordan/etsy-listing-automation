@@ -25,6 +25,9 @@ export type SingleTemplate = components["schemas"]["SingleTemplate"];
 export type TemplateConfigState = ColourMatrixTemplate | MultipleTemplate | SingleTemplate;
 
 export type TemplateSummary = components["schemas"]["TemplateSummary"];
+/** Where one of a template's scene photos really is -- resolved server-side
+ * through `Workspace.scene_photo`, not composed from PRD 7a's convention. */
+export type TemplatePhoto = components["schemas"]["TemplatePhoto"];
 
 // ── Listings UI (phase 5) ──────────────────────────────────────────────────
 

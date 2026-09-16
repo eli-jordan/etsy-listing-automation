@@ -11,6 +11,7 @@ function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSum
   return {
     kind: "colour-matrix",
     colours: [],
+    photos: [],
     has_config: true,
     status: "calibrated",
     status_reason: null,
