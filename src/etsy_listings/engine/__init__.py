@@ -79,6 +79,12 @@ from etsy_listings.engine.stage import (
     StageBlockedError,
 )
 from etsy_listings.engine.stages import STAGES
+from etsy_listings.engine.status import (
+    ListingStatus,
+    edited_since_apply,
+    is_live_etsy_state,
+    listing_status,
+)
 
 __all__ = [
     # Running the pipeline over a set of listings -- what `cli` calls, and
@@ -120,6 +126,12 @@ __all__ = [
     "scalar",
     "sequence",
     "drift",
+    # Where a listing has got to -- the lifecycle rule the UI badges and
+    # (Phase 6) `status` prints, in one place so the two cannot disagree.
+    "ListingStatus",
+    "listing_status",
+    "edited_since_apply",
+    "is_live_etsy_state",
     # state.lock.json, and the hashing helpers everything must go through.
     "Lockfile",
     "canonical_hash",
