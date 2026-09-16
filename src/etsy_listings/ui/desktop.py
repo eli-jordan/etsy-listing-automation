@@ -136,7 +136,7 @@ def open_window(url: str, *, debug: bool = False, webview: Any | None = None) ->
 def run_calibrator(
     workspace: Workspace,
     *,
-    host: str = "127.0.0.1",
+    host: str = "0.0.0.0",  # noqa: S104 -- `page_url` still points the window at loopback
     port: int = 8000,
     browser: bool = False,
     debug: bool = False,

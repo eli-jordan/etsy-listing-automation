@@ -35,7 +35,10 @@ def test_ui_defaults_to_a_native_window(
     assert result.exit_code == 0, result.output
     assert seen["browser"] is False
     assert seen["debug"] is False
-    assert seen["host"] == "127.0.0.1"
+    # Every interface, not loopback: the workspace is reachable from a phone
+    # or another machine on the LAN, which is the point of serving it at all.
+    # `page_url` still points the native window itself at 127.0.0.1.
+    assert seen["host"] == "0.0.0.0"
     assert seen["port"] == 8000
 
 

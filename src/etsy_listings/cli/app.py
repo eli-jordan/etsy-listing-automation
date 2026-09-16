@@ -470,7 +470,12 @@ def new(
 @app.command(epilog=EPILOG)
 def ui(
     root: str | None = _root_option(),
-    host: str = typer.Option("127.0.0.1", "--host", help="Interface to bind the server to"),
+    host: str = typer.Option(
+        "0.0.0.0",  # noqa: S104 -- see the option help; the window still opens on loopback
+        "--host",
+        help="Interface to bind the server to. The default reaches the workspace "
+        "from another machine on the LAN; pass 127.0.0.1 for loopback only.",
+    ),
     port: int = typer.Option(8000, "--port", help="Port to serve on"),
     browser: bool = typer.Option(
         False,

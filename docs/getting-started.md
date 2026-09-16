@@ -213,7 +213,10 @@ A template is a folder you create yourself — `mockup-templates/<name>/` with
 the photo(s) in it: one file for `multiple`/`single`, one per colour for
 `colour-matrix`. The calibrator calibrates; it does not copy your files about.
 
-Open `http://localhost:8000`. From there:
+Open `http://localhost:8000`. The server binds every interface, so the same
+page is reachable from a phone or another machine on the network at
+`http://<this-machine>:8000` — pass `--host 127.0.0.1` to keep it to loopback.
+From there:
 
 1. Pick the template from the rail and answer what kind it is. Uncalibrated
    ones sort to the top and say what they are missing.
