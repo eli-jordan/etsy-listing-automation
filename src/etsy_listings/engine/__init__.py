@@ -80,9 +80,12 @@ from etsy_listings.engine.stage import (
 )
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.status import (
+    ListingGesture,
+    ListingLifecycle,
     ListingStatus,
     edited_since_apply,
     is_live_etsy_state,
+    listing_gestures,
     listing_status,
 )
 
@@ -129,7 +132,10 @@ __all__ = [
     # Where a listing has got to -- the lifecycle rule the UI badges and
     # (Phase 6) `status` prints, in one place so the two cannot disagree.
     "ListingStatus",
+    "ListingLifecycle",
+    "ListingGesture",
     "listing_status",
+    "listing_gestures",
     "edited_since_apply",
     "is_live_etsy_state",
     # state.lock.json, and the hashing helpers everything must go through.

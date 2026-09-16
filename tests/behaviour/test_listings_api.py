@@ -24,7 +24,12 @@ from etsy_listings.ui.api import etsystate
 from etsy_listings.ui.api.app import create_app
 from etsy_listings.workspace.workspace import Workspace
 
-from tests.support.builders import copy_listing, edit_garment_profile, set_etsy_shop_id
+from tests.support.builders import (
+    copy_listing,
+    edit_garment_profile,
+    listing_file,
+    set_etsy_shop_id,
+)
 
 
 @pytest.fixture
@@ -878,3 +883,84 @@ class TestEtsySections:
             {"id": 1, "title": "Tees"},
             {"id": 2, "title": "Hoodies"},
         ]
+
+
+class TestLifecycle:
+    def _row(self, client: TestClient, name: str = "take-a-hike") -> dict:
+        rows = {r["name"]: r for r in client.get("/api/listings").json()}
+        return rows[name]
+
+    def test_a_never_live_row_offers_delete(self, client: TestClient) -> None:
+        assert self._row(client)["gestures"] == ["delete"]
+
+    def test_a_live_row_offers_retire(
+        self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
+    ) -> None:
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
+        etsy_says({555: "active"})
+        assert self._row(client)["gestures"] == ["retire"]
+        assert self._row(client)["status"] == "live"
+
+    def test_etsy_paused_us_offers_retire_and_renew(
+        self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
+    ) -> None:
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
+        etsy_says({555: "inactive"})
+        assert self._row(client)["gestures"] == ["retire", "renew"]
+        assert self._row(client)["status"] == "inactive"
+
+    def test_expired_is_named(
+        self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
+    ) -> None:
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
+        etsy_says({555: "expired"})
+        assert self._row(client)["status"] == "expired"
+
+    def test_patch_writes_retired_and_un_retire_deletes_the_key(
+        self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
+    ) -> None:
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
+        etsy_says({555: "active"})
+        client.patch("/api/listings/take-a-hike", json={"lifecycle": "retired"})
+        assert self._row(client)["gestures"] == ["un-retire"]
+        assert self._row(client)["status"] == "pending-retire"
+        client.patch("/api/listings/take-a-hike", json={"lifecycle": None})
+        written = yaml.safe_load(listing_file(workspace_root).read_text(encoding="utf-8"))
+        assert "lifecycle" not in written
+        assert self._row(client)["gestures"] == ["retire"]
+
+    def test_delete_without_remotes_wipes_now(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        response = client.delete("/api/listings/take-a-hike")
+        assert response.status_code == 204
+        assert not (workspace_root / "listings" / "take-a-hike").exists()
+
+    def test_delete_with_remotes_marks_pending_delete(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        write_lock(workspace_root, "take-a-hike", product_id="abc123")
+        response = client.delete("/api/listings/take-a-hike")
+        assert response.status_code == 200
+        assert response.json()["status"] == "pending-delete"
+        assert response.json()["gestures"] == ["cancel"]
+        written = yaml.safe_load(listing_file(workspace_root).read_text(encoding="utf-8"))
+        assert written["lifecycle"] == "deleted"
+
+    def test_delete_of_a_published_listing_is_refused(
+        self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
+    ) -> None:
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
+        etsy_says({555: "active"})
+        response = client.delete("/api/listings/take-a-hike")
+        assert response.status_code == 409
+        assert "published" in response.json()["detail"]
+
+    def test_a_lockfile_only_row_still_appears(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
+        listing_file(workspace_root).unlink()
+        row = self._row(client)
+        assert row["issue_counts"]["block"] == 1
+        assert row["gestures"] == []

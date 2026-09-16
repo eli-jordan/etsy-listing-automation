@@ -374,4 +374,16 @@ describe("ListingEditorPage renaming", () => {
     await waitFor(() => expect(screen.getByText(/already a listing called/i)).toBeInTheDocument());
     expect(screen.getByRole("alert")).toBeInTheDocument();
   });
+
+  it("has no delete or retire buttons — those live on the listings table", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    renderAt("/listings/take-a-hike");
+    await screen.findByRole("heading", { name: "take-a-hike" });
+
+    expect(screen.queryByRole("button", { name: "Delete" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Retire" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Un-retire" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Renew" })).not.toBeInTheDocument();
+  });
 });

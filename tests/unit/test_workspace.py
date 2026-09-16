@@ -167,6 +167,15 @@ def test_listing_names_ignores_directories_without_a_listing_file(workspace_root
     assert ws.listing_names() == ["take-a-hike"]
 
 
+def test_listing_names_includes_a_lockfile_only_directory(workspace_root: Path) -> None:
+    """PRD 67: yaml gone, lockfile still there -- the row still appears."""
+    orphan = workspace_root / "listings" / "orphan"
+    orphan.mkdir()
+    (orphan / "state.lock.json").write_text("{}", encoding="utf-8")
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.listing_names() == ["orphan", "take-a-hike"]
+
+
 def test_template_names_can_include_uncalibrated_directories(workspace_root: Path) -> None:
     """The calibrator is what writes template.yaml, so its UI has to see past
     the default filter -- otherwise a directory could never be selected in

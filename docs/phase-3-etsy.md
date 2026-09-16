@@ -776,7 +776,9 @@ set that detaches omissions, and a refusal to delete the last remaining image.
    shop. The one item that may be worth simply accepting.
 2. **Does `publishing_failed.json` clear a genuine publish lock?** `unlock`
    ships unverified, as it has since Phase 2.
-3. **Etsy's cleanup asymmetry.** Deleting a Printify product orphans its Etsy
-   listing — `listings_d` is deliberately outside `SCOPES` — so anything that
-   deletes a product must say the listing stays behind rather than implying it
-   went too.
+3. **Etsy's cleanup asymmetry — settled, not open.** Unpublish-then-DELETE
+   orphans the Etsy draft (this recon). DELETE of a still-connected product
+   takes the draft with it (e2e teardown, `404`). The tool takes the second
+   path and never unpublishes first. `listings_d` stays outside `SCOPES`; live
+   listings are never deleted this way. PRD 63,
+   [listing-lifecycle.md](listing-lifecycle.md).

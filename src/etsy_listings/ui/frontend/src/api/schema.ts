@@ -288,7 +288,14 @@ export interface paths {
     get: operations["get_listing_api_listings__name__get"];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Delete Listing
+     * @description Delete from the listings table (PRD 63, 66).
+     *
+     *     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
+     *     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
+     */
+    delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
     head?: never;
     /** Patch Listing */
@@ -940,6 +947,8 @@ export interface components {
       garment_profile: string;
       /** Issues */
       issues: components["schemas"]["Issue"][];
+      /** Lifecycle */
+      lifecycle?: ("retired" | "deleted" | "renew") | null;
       /** Media */
       media: (components["schemas"]["TemplateMediaEntry"] | string)[];
       /** Name */
@@ -975,7 +984,15 @@ export interface components {
        * Status
        * @enum {string}
        */
-      status: "draft" | "deployed" | "live" | "dirty";
+      status:
+        | "draft"
+        | "deployed"
+        | "live"
+        | "dirty"
+        | "pending-delete"
+        | "pending-retire"
+        | "inactive"
+        | "expired";
     };
     /** ListingSummary */
     ListingSummary: {
@@ -987,6 +1004,11 @@ export interface components {
       etsy_listing_id?: number | null;
       /** Garment Profile */
       garment_profile: string;
+      /**
+       * Gestures
+       * @default []
+       */
+      gestures: ("delete" | "retire" | "un-retire" | "cancel" | "renew")[];
       issue_counts: components["schemas"]["IssueCounts"];
       /** Name */
       name: string;
@@ -996,7 +1018,15 @@ export interface components {
        * Status
        * @enum {string}
        */
-      status: "draft" | "deployed" | "live" | "dirty";
+      status:
+        | "draft"
+        | "deployed"
+        | "live"
+        | "dirty"
+        | "pending-delete"
+        | "pending-retire"
+        | "inactive"
+        | "expired";
     };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
@@ -1679,6 +1709,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_listing_api_listings__name__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

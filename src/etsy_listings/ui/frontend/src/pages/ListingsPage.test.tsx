@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/rea
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import * as listingsApi from "../api/listings";
-import type { ListingSummary } from "../types";
+import type { ListingDetail, ListingSummary } from "../types";
 import { ListingsPage } from "./ListingsPage";
 
 function EditorStub() {
@@ -17,6 +17,7 @@ function summary(over: Partial<ListingSummary> & { name: string }): ListingSumma
     colour_count: 2,
     status: "draft",
     issue_counts: { block: 0, warn: 0 },
+    gestures: [],
     ...over,
   };
 }
@@ -181,7 +182,7 @@ describe("ListingsPage", () => {
     expect(within(rowFor("broken-listing")).getByText("2")).toBeInTheDocument();
   });
 
-  it("offers one filter pill per lifecycle state", async () => {
+  it("filters by the status dropdown", async () => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([
       summary({ name: "draft-one", status: "draft" }),
       summary({ name: "deployed-one", status: "deployed" }),
@@ -191,11 +192,12 @@ describe("ListingsPage", () => {
     renderPage();
     await findRowLink("draft-one");
 
-    fireEvent.click(screen.getByRole("button", { name: "Live" }));
+    const filter = screen.getByRole("combobox", { name: "Status" });
+    fireEvent.change(filter, { target: { value: "live" } });
     expect(queryRowLink("draft-one")).not.toBeInTheDocument();
     expect(queryRowLink("live-one")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Dirty" }));
+    fireEvent.change(filter, { target: { value: "dirty" } });
     expect(queryRowLink("live-one")).not.toBeInTheDocument();
     expect(queryRowLink("dirty-one")).toBeInTheDocument();
   });
@@ -228,6 +230,194 @@ describe("ListingsPage", () => {
     vi.spyOn(listingsApi, "listListings").mockRejectedValue(new Error("network"));
     renderPage();
     await waitFor(() => expect(screen.getByText("failed to load listings")).toBeInTheDocument());
+  });
+
+  it("puts lifecycle buttons in the rightmost column", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({ name: "draft-one", gestures: ["delete"] }),
+      summary({ name: "live-one", status: "live", gestures: ["retire"] }),
+    ]);
+    renderPage();
+    await findRowLink("draft-one");
+
+    const deleteBtn = within(rowFor("draft-one")).getByRole("button", { name: "Delete" });
+    const retireBtn = within(rowFor("live-one")).getByRole("button", { name: "Retire" });
+    expect(deleteBtn.closest("td")).toHaveClass("listings__actions");
+    expect(retireBtn.closest("td")).toHaveClass("listings__actions");
+    expect(rowFor("draft-one").querySelector("td:last-child")).toBe(deleteBtn.closest("td"));
+  });
+
+  it("confirms before deleting and skips when cancelled", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({ name: "draft-one", gestures: ["delete"] }),
+    ]);
+    const del = vi.spyOn(listingsApi, "deleteListing").mockResolvedValue(null);
+    renderPage();
+    fireEvent.click(
+      within(await findRowLink("draft-one").then(() => rowFor("draft-one"))).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAccessibleName("Are you sure you want to delete draft-one?");
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(del).not.toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("deletes after confirm", async () => {
+    vi.spyOn(listingsApi, "listListings")
+      .mockResolvedValueOnce([summary({ name: "draft-one", gestures: ["delete"] })])
+      .mockResolvedValueOnce([]);
+    const del = vi.spyOn(listingsApi, "deleteListing").mockResolvedValue(null);
+    renderPage();
+    fireEvent.click(
+      within(await findRowLink("draft-one").then(() => rowFor("draft-one"))).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+    await waitFor(() => expect(del).toHaveBeenCalledWith("draft-one"));
+  });
+
+  it("labels a remote draft Mark for deletion, with collapsed details", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({
+        name: "deployed-one",
+        status: "deployed",
+        gestures: ["delete"],
+        etsy_listing_id: 4572960161,
+        printify_product_id: "6aa332559f8d2ff30103b4c9",
+      }),
+    ]);
+    renderPage();
+    fireEvent.click(
+      within(await findRowLink("deployed-one").then(() => rowFor("deployed-one"))).getByRole(
+        "button",
+        { name: "Mark for deletion" },
+      ),
+    );
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAccessibleName("Are you sure you want to mark deployed-one for deletion?");
+    const details = dialog.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute("open");
+    fireEvent.click(within(dialog).getByText("Details"));
+    expect(details).toHaveAttribute("open");
+    expect(dialog).toHaveTextContent("pending-delete");
+  });
+
+  it("explains a never-pushed wipe behind collapsed details", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({ name: "draft-one", gestures: ["delete"] }),
+    ]);
+    renderPage();
+    fireEvent.click(
+      within(await findRowLink("draft-one").then(() => rowFor("draft-one"))).getByRole("button", {
+        name: "Delete",
+      }),
+    );
+    const dialog = screen.getByRole("dialog");
+    const details = dialog.querySelector("details");
+    expect(details).not.toBeNull();
+    expect(details).not.toHaveAttribute("open");
+    fireEvent.click(within(dialog).getByText("Details"));
+    expect(details).toHaveAttribute("open");
+    expect(dialog).toHaveTextContent("removed now");
+  });
+
+  it("marks for deletion after confirm", async () => {
+    vi.spyOn(listingsApi, "listListings")
+      .mockResolvedValueOnce([
+        summary({
+          name: "deployed-one",
+          status: "deployed",
+          gestures: ["delete"],
+          etsy_listing_id: 1,
+        }),
+      ])
+      .mockResolvedValueOnce([
+        summary({ name: "deployed-one", status: "pending-delete", gestures: ["cancel"] }),
+      ]);
+    const del = vi
+      .spyOn(listingsApi, "deleteListing")
+      .mockResolvedValue(
+        summary({ name: "deployed-one", status: "pending-delete", gestures: ["cancel"] }),
+      );
+    renderPage();
+    fireEvent.click(
+      within(await findRowLink("deployed-one").then(() => rowFor("deployed-one"))).getByRole(
+        "button",
+        { name: "Mark for deletion" },
+      ),
+    );
+    fireEvent.click(
+      within(screen.getByRole("dialog")).getByRole("button", { name: "Mark for deletion" }),
+    );
+    await waitFor(() => expect(del).toHaveBeenCalledWith("deployed-one"));
+  });
+
+  it("puts an undo control next to pending-delete instead of a Cancel button", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({
+        name: "deployed-one",
+        status: "pending-delete",
+        gestures: ["cancel"],
+        etsy_listing_id: 1,
+        printify_product_id: "abc",
+      }),
+    ]);
+    const patch = vi.spyOn(listingsApi, "patchListing").mockResolvedValue({} as ListingDetail);
+    renderPage();
+    await findRowLink("deployed-one");
+
+    expect(within(rowFor("deployed-one")).queryByRole("button", { name: "Cancel" })).toBeNull();
+    const undo = within(rowFor("deployed-one")).getByRole("button", {
+      name: "Undo mark for delete",
+    });
+    expect(within(rowFor("deployed-one")).getByText("Undo mark for delete")).toBeInTheDocument();
+    expect(undo.closest("td")).not.toHaveClass("listings__actions");
+
+    fireEvent.click(undo);
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("deployed-one", { lifecycle: null }));
+  });
+
+  it("explains the status badge in a hover hint", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({ name: "draft-one", status: "draft" }),
+    ]);
+    renderPage();
+    await findRowLink("draft-one");
+    expect(
+      within(rowFor("draft-one")).getAllByText(
+        "Never applied, or edited since the last apply and not yet on Etsy",
+      ).length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("retires without a confirm dialog", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({ name: "live-one", status: "live", gestures: ["retire"] }),
+    ]);
+    const patch = vi.spyOn(listingsApi, "patchListing").mockResolvedValue({} as ListingDetail);
+    renderPage();
+    fireEvent.click(
+      within(await findRowLink("live-one").then(() => rowFor("live-one"))).getByRole("button", {
+        name: "Retire",
+      }),
+    );
+    await waitFor(() => expect(patch).toHaveBeenCalledWith("live-one", { lifecycle: "retired" }));
+  });
+
+  it("offers retire and renew when Etsy paused us", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({ name: "paused", status: "inactive", gestures: ["retire", "renew"] }),
+    ]);
+    renderPage();
+    await findRowLink("paused");
+    expect(within(rowFor("paused")).getByRole("button", { name: "Retire" })).toBeInTheDocument();
+    expect(within(rowFor("paused")).getByRole("button", { name: "Renew" })).toBeInTheDocument();
   });
 
   it("navigates to the new-listing page when + New listing is clicked", async () => {

@@ -42,19 +42,31 @@ from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import EMPTY_DRAFT, Listing
+from etsy_listings.config.listing_validation import (
+    DELETED_ON_PUBLISHED,
+    check_listing,
+    check_listing_yaml_present,
+)
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
-from etsy_listings.config.listing_validation import check_listing
 from etsy_listings.engine.lock import Lockfile
+from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.engine.status import ListingStatus, edited_since_apply, listing_status
+from etsy_listings.engine.status import (
+    ListingLifecycle,
+    ListingStatus,
+    edited_since_apply,
+    is_live_etsy_state,
+    listing_gestures,
+    listing_status,
+)
 from etsy_listings.newcmd.logic import (
     build_pricing_plan_choices,
     load_candidate_pricing_plans,
     pricing_plan_ref,
     write_listing,
 )
-from etsy_listings.ui.api.etsystate import live_listing_ids
+from etsy_listings.ui.api.etsystate import etsy_states
 from etsy_listings.ui.api.schemas import (
     CommonMediaSummary,
     CreateListingRequest,
@@ -121,7 +133,12 @@ def _resolve_design_paths(
 
 
 def _business_issues(
-    workspace: Workspace, facts: WorkspaceFacts, listing_dir: Path, listing: Listing
+    workspace: Workspace,
+    facts: WorkspaceFacts,
+    listing_dir: Path,
+    listing: Listing,
+    *,
+    published: bool | None = None,
 ) -> list[Issue]:
     """*listing_dir* rather than a listing name, because the not-yet-created
     draft the editor opens on ``/listings/new`` has no name and no directory
@@ -134,6 +151,7 @@ def _business_issues(
         garment_profile_names=facts.garment_profile_names,
         design_paths=_resolve_design_paths(workspace, listing, listing_dir),
         templates=facts.templates,
+        published=published,
     )
     return [
         Issue(severity=i.severity, tab=i.tab, where=i.where, message=i.message) for i in raw_issues
@@ -149,7 +167,23 @@ def _remote_ids(workspace: Workspace, name: str) -> tuple[int | None, str | None
     return (int(raw_etsy) if raw_etsy else None), (str(raw_product) if raw_product else None)
 
 
-def _status(workspace: Workspace, name: str, *, live: bool) -> ListingStatus:
+def _last_applied_lifecycle(lock: Lockfile | None) -> ListingLifecycle | None:
+    if lock is None:
+        return None
+    applied = lock.parse_applied_for("etsy_listing", AppliedEtsyListing)
+    if applied is not None and applied.state == "inactive":
+        return "retired"
+    return None
+
+
+def _status(
+    workspace: Workspace,
+    name: str,
+    *,
+    live: bool,
+    lifecycle: ListingLifecycle | None = None,
+    etsy_state: str | None = None,
+) -> ListingStatus:
     """This listing's place in the lifecycle
     (:mod:`etsy_listings.engine.status`).
 
@@ -164,15 +198,18 @@ def _status(workspace: Workspace, name: str, *, live: bool) -> ListingStatus:
         applied=lock is not None and bool(lock.stages_completed),
         edited=edited_since_apply(workspace.listing_file(name), workspace.lock_file(name)),
         live=live,
+        lifecycle=lifecycle,
+        etsy_state=etsy_state,
+        last_applied_lifecycle=_last_applied_lifecycle(lock),
     )
 
 
-def _live(workspace: Workspace, etsy_listing_id: int | None) -> bool:
-    """One listing's live-on-Etsy fact. For the single-listing endpoints; the
-    table asks :func:`live_listing_ids` once for every row instead."""
+def _etsy_state(workspace: Workspace, etsy_listing_id: int | None) -> str | None:
+    """One listing's Etsy ``state``. For the single-listing endpoints; the
+    table asks :func:`etsy_states` once for every row instead."""
     if etsy_listing_id is None:
-        return False
-    return etsy_listing_id in live_listing_ids(workspace.root, [etsy_listing_id])
+        return None
+    return etsy_states(workspace.root, [etsy_listing_id]).get(etsy_listing_id)
 
 
 def _pricing_summary(
@@ -221,11 +258,36 @@ def _sole_design_name(listing: Listing) -> str | None:
 
 
 def _summarize_listing(
-    workspace: Workspace, facts: WorkspaceFacts, name: str, *, live: bool
+    workspace: Workspace,
+    facts: WorkspaceFacts,
+    name: str,
+    *,
+    live: bool,
+    etsy_state: str | None = None,
 ) -> ListingSummary:
-    listing = workspace.load_listing(name)
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
-    issues = _business_issues(workspace, facts, workspace.listing_dir(name), listing)
+    if not workspace.listing_file(name).is_file():
+        missing = check_listing_yaml_present(present=False)
+        return ListingSummary(
+            name=name,
+            garment_profile="",
+            design=None,
+            colour_count=0,
+            status=_status(workspace, name, live=live, etsy_state=etsy_state),
+            issue_counts=IssueCounts(block=len(missing), warn=0),
+            etsy_listing_id=etsy_listing_id,
+            printify_product_id=printify_product_id,
+            gestures=[],
+        )
+    listing = workspace.load_listing(name)
+    published = is_live_etsy_state(etsy_state) if etsy_listing_id is not None else False
+    issues = _business_issues(
+        workspace,
+        facts,
+        workspace.listing_dir(name),
+        listing,
+        published=published,
+    )
     counts = IssueCounts(
         block=sum(1 for i in issues if i.severity == "block"),
         warn=sum(1 for i in issues if i.severity == "warn"),
@@ -235,10 +297,19 @@ def _summarize_listing(
         garment_profile=listing.garment_profile,
         design=_sole_design_name(listing),
         colour_count=len(listing.colors),
-        status=_status(workspace, name, live=live),
+        status=_status(
+            workspace, name, live=live, lifecycle=listing.lifecycle, etsy_state=etsy_state
+        ),
         issue_counts=counts,
         etsy_listing_id=etsy_listing_id,
         printify_product_id=printify_product_id,
+        gestures=list(
+            listing_gestures(
+                lifecycle=listing.lifecycle,
+                etsy_state=etsy_state,
+                published=published,
+            )
+        ),
     )
 
 
@@ -247,13 +318,20 @@ def _detail(
 ) -> ListingDetail:
     listing = workspace.load_listing(name)
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
+    etsy_state = _etsy_state(workspace, etsy_listing_id)
     return _describe(
         workspace,
         WorkspaceFacts.gather(workspace),
         listing,
         name=name,
         listing_dir=workspace.listing_dir(name),
-        status=_status(workspace, name, live=_live(workspace, etsy_listing_id)),
+        status=_status(
+            workspace,
+            name,
+            live=is_live_etsy_state(etsy_state),
+            lifecycle=listing.lifecycle,
+            etsy_state=etsy_state,
+        ),
         etsy_listing_id=etsy_listing_id,
         printify_product_id=printify_product_id,
         field_errors=field_errors,
@@ -280,7 +358,15 @@ def _describe(
     and the same resolved prices, or the editor would show one thing before
     the listing was named and another after.
     """
-    issues = _business_issues(workspace, facts, listing_dir, listing)
+    issues = _business_issues(
+        workspace,
+        facts,
+        listing_dir,
+        listing,
+        published=is_live_etsy_state(_etsy_state(workspace, etsy_listing_id))
+        if etsy_listing_id is not None
+        else False,
+    )
     plan_name, resolved_prices = _pricing_summary(workspace, facts, listing_dir, listing)
     return ListingDetail.model_validate(
         {
@@ -315,6 +401,9 @@ def _merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     for key, value in patch.items():
         if key == "etsy" and isinstance(value, dict) and isinstance(merged.get("etsy"), dict):
             merged["etsy"] = {**merged["etsy"], **value}
+        elif key == "lifecycle" and value is None:
+            # Un-retire / Cancel: deleting the key, not writing `active` (PRD 62).
+            merged.pop("lifecycle", None)
         else:
             merged[key] = value
     return merged
@@ -329,11 +418,21 @@ def list_listings(request: Request) -> list[ListingSummary]:
     facts = WorkspaceFacts.gather(workspace)
     names = workspace.listing_names()
     ids = {name: _remote_ids(workspace, name)[0] for name in names}
-    live = live_listing_ids(workspace.root, [i for i in ids.values() if i is not None])
-    return [
-        _summarize_listing(workspace, facts, name, live=ids[name] is not None and ids[name] in live)
-        for name in names
-    ]
+    states = etsy_states(workspace.root, [i for i in ids.values() if i is not None])
+    live = {i for i, state in states.items() if is_live_etsy_state(state)}
+    rows: list[ListingSummary] = []
+    for name in names:
+        listing_id = ids[name]
+        rows.append(
+            _summarize_listing(
+                workspace,
+                facts,
+                name,
+                live=listing_id is not None and listing_id in live,
+                etsy_state=states.get(listing_id) if listing_id is not None else None,
+            )
+        )
+    return rows
 
 
 @router.get("/{name}", response_model=ListingDetail)
@@ -353,6 +452,29 @@ def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
         return _detail(workspace, name, field_errors=_field_errors(exc))
     path.write_text(yaml.safe_dump(merged, sort_keys=False), encoding="utf-8")
     return _detail(workspace, name)
+
+
+@router.delete("/{name}", response_model=None)
+def delete_listing(target: Existing) -> ListingSummary | Response:
+    """Delete from the listings table (PRD 63, 66).
+
+    No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
+    row pending. Published: 409 -- retire it instead. Confirm is the UI's.
+    """
+    workspace, name = target.workspace, target.name
+    etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
+    etsy_state = _etsy_state(workspace, etsy_listing_id)
+    if is_live_etsy_state(etsy_state):
+        raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
+    if etsy_listing_id is not None or printify_product_id is not None:
+        path = workspace.listing_file(name)
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw["lifecycle"] = "deleted"
+        path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+        facts = WorkspaceFacts.gather(workspace)
+        return _summarize_listing(workspace, facts, name, live=False, etsy_state=etsy_state)
+    workspace.remove_listing(name)
+    return Response(status_code=204)
 
 
 def _describe_draft(

@@ -1,22 +1,56 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listingDesignThumbnailUrl, listListings } from "../api/listings";
+import {
+  deleteListing,
+  listingDesignThumbnailUrl,
+  listListings,
+  patchListing,
+} from "../api/listings";
+import { ConfirmDialog } from "../components/ConfirmDialog";
 import { OpenOnMenu } from "../components/OpenOnMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
 import type { ListingStatus, ListingSummary } from "../types";
 
-/** The listings list (phase 5): table + search + status filter pills, from
+type Gesture = ListingSummary["gestures"][number];
+
+const GESTURE_LABELS: Record<Gesture, string> = {
+  delete: "Delete",
+  retire: "Retire",
+  "un-retire": "Un-retire",
+  cancel: "Cancel",
+  renew: "Renew",
+};
+
+const MARK_FOR_DELETION_DETAILS =
+  "The listing stays in this table as pending-delete. The next apply will retract the Printify product — the Etsy draft goes with it — then remove the local files. Until then you can undo the mark.";
+
+const DELETE_DETAILS =
+  "The listing folder and its render cache are removed now. There is nothing on Printify or Etsy to retract. Designs, garment profiles and pricing plans stay.";
+
+/** The listings list (phase 5): table + search + status filter, from
  * the design mockup's listings section, backed by `GET /api/listings`. */
 
 type Filter = "all" | ListingStatus;
 
-/** One pill per state the server can report, plus All -- derived from
+/** One option per state the server can report, plus All -- derived from
  * `STATUS_LABELS` rather than listed again, so a fifth state cannot arrive
  * with a badge and no way to filter for it. */
 const FILTERS: Filter[] = ["all", ...(Object.keys(STATUS_LABELS) as ListingStatus[])];
 
-const FILTER_LABELS: Record<Filter, string> = { all: "All", ...STATUS_LABELS };
+const FILTER_LABELS: Record<Filter, string> = { all: "All statuses", ...STATUS_LABELS };
+
+function hasRemotes(row: ListingSummary): boolean {
+  return row.etsy_listing_id != null || row.printify_product_id != null;
+}
+
+function deleteLabel(row: ListingSummary): string {
+  return hasRemotes(row) ? "Mark for deletion" : "Delete";
+}
+
+function gestureLabel(row: ListingSummary, gesture: Gesture): string {
+  return gesture === "delete" ? deleteLabel(row) : GESTURE_LABELS[gesture];
+}
 
 /** The listing's artwork, or an empty tile when `design` is null -- which is
  * what a multi-artwork listing (`on-light`/`on-dark`) reports, since no single
@@ -57,11 +91,27 @@ function ListingCard({ row }: { row: ListingSummary }) {
   );
 }
 
+function UndoMarkIcon() {
+  return (
+    <svg viewBox="0 0 14 16" aria-hidden="true">
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M5.4 2.6 2.2 5.6l3.2 3M2.2 5.6h7.6A3.1 3.1 0 0 1 9.8 11.8H4.2"
+      />
+    </svg>
+  );
+}
+
 export function ListingsPage() {
   const [listings, setListings] = useState<ListingSummary[]>([]);
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
+  const [pendingDelete, setPendingDelete] = useState<ListingSummary | null>(null);
   const navigate = useNavigate();
 
   const refresh = useCallback(() => {
@@ -72,6 +122,35 @@ export function ListingsPage() {
       })
       .catch(() => setStatus("failed to load listings"));
   }, []);
+
+  const runGesture = useCallback(
+    async (row: ListingSummary, gesture: Gesture) => {
+      if (gesture === "delete") {
+        setPendingDelete(row);
+        return;
+      }
+      const lifecycle = gesture === "retire" ? "retired" : gesture === "renew" ? "renew" : null;
+      try {
+        await patchListing(row.name, { lifecycle });
+        refresh();
+      } catch {
+        setStatus(`could not ${GESTURE_LABELS[gesture].toLowerCase()} ${row.name}`);
+      }
+    },
+    [refresh],
+  );
+
+  const confirmDelete = useCallback(async () => {
+    if (pendingDelete === null) return;
+    const name = pendingDelete.name;
+    setPendingDelete(null);
+    try {
+      await deleteListing(name);
+      refresh();
+    } catch {
+      setStatus(`could not delete ${name}`);
+    }
+  }, [pendingDelete, refresh]);
 
   useEffect(() => {
     refresh();
@@ -109,16 +188,20 @@ export function ListingsPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        {FILTERS.map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={filter === f ? "pill pill--on" : "pill"}
-            onClick={() => setFilter(f)}
+        <label className="toolbar__filter">
+          <span className="toolbar__filter-label">Status</span>
+          <select
+            className="input"
+            value={filter}
+            onChange={(event) => setFilter(event.target.value as Filter)}
           >
-            {FILTER_LABELS[f]}
-          </button>
-        ))}
+            {FILTERS.map((f) => (
+              <option key={f} value={f}>
+                {FILTER_LABELS[f]}
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       <p className="app__status" role="status">
@@ -131,6 +214,7 @@ export function ListingsPage() {
             <th>Listing</th>
             <th>Garment</th>
             <th>Status</th>
+            <th className="listings__actions"> </th>
           </tr>
         </thead>
         <tbody>
@@ -165,7 +249,38 @@ export function ListingsPage() {
               </td>
               <td className="listing-row__garment">{row.garment_profile}</td>
               <td>
-                <StatusTag status={row.status} />
+                <span className="listings__status">
+                  <StatusTag status={row.status} />
+                  {(row.gestures ?? []).includes("cancel") && (
+                    <span className="status-tag">
+                      <button
+                        type="button"
+                        className="listings__undo"
+                        aria-label="Undo mark for delete"
+                        onClick={() => void runGesture(row, "cancel")}
+                      >
+                        <UndoMarkIcon />
+                      </button>
+                      <span className="status-tag__hint" role="tooltip">
+                        Undo mark for delete
+                      </span>
+                    </span>
+                  )}
+                </span>
+              </td>
+              <td className="listings__actions">
+                {(row.gestures ?? [])
+                  .filter((gesture) => gesture !== "cancel")
+                  .map((gesture) => (
+                    <button
+                      key={gesture}
+                      type="button"
+                      className={gesture === "delete" ? "listings__quiet" : "btn btn-ghost"}
+                      onClick={() => void runGesture(row, gesture)}
+                    >
+                      {gestureLabel(row, gesture)}
+                    </button>
+                  ))}
               </td>
             </tr>
           ))}
@@ -173,6 +288,20 @@ export function ListingsPage() {
       </table>
 
       {rows.length === 0 && !status && <p className="text-muted">No listings match.</p>}
+
+      {pendingDelete !== null && (
+        <ConfirmDialog
+          title={
+            hasRemotes(pendingDelete)
+              ? `Are you sure you want to mark ${pendingDelete.name} for deletion?`
+              : `Are you sure you want to delete ${pendingDelete.name}?`
+          }
+          confirmLabel={deleteLabel(pendingDelete)}
+          details={hasRemotes(pendingDelete) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS}
+          onConfirm={() => void confirmDelete()}
+          onCancel={() => setPendingDelete(null)}
+        />
+      )}
     </div>
   );
 }

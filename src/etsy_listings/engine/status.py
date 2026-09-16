@@ -1,6 +1,7 @@
-"""Where a listing has got to: the four states the UI badges it with.
+"""Where a listing has got to: the states the UI badges it with.
 
-Two independent facts decide it, and neither is a state in its own right:
+Two independent facts decide the original four, and neither is a state in
+its own right:
 
 * **has it been applied, and has it been edited since?** -- local, and the
   lockfile's question, since the lockfile *is* the record of the last apply.
@@ -20,9 +21,15 @@ nobody is looking at the stale version -- whereas an edit to a live listing is
 ``dirty``, because a buyer *is*, and the gap between what Etsy shows and what
 the workspace says is the thing worth a different colour.
 
+PRD 61–67 add delete/retire on top of those four, from two more facts:
+``listing.yaml``'s optional ``lifecycle:`` key, and Etsy's actual ``state``
+(not the collapsed live-or-not). Those win when both could apply: a retired
+listing is ``inactive``, not ``dirty``, even if the yaml was edited.
+
 This module lives in ``engine`` for the reason the "only ``engine`` computes a
 diff" invariant gives: it is the shop-side lifecycle rule, and the CLI's
 `status` command (Phase 6) has to answer it the same way the UI's badge does.
+The table's buttons are the same facts, as :func:`listing_gestures`.
 """
 
 from __future__ import annotations
@@ -30,7 +37,18 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-ListingStatus = Literal["draft", "deployed", "live", "dirty"]
+ListingLifecycle = Literal["retired", "deleted", "renew"]
+ListingStatus = Literal[
+    "draft",
+    "deployed",
+    "live",
+    "dirty",
+    "pending-delete",
+    "pending-retire",
+    "inactive",
+    "expired",
+]
+ListingGesture = Literal["delete", "retire", "un-retire", "cancel", "renew"]
 
 LIVE_ETSY_STATES = frozenset({"active", "inactive", "sold_out", "expired", "removed"})
 """Etsy ``state`` values that mean the listing left draft at some point.
@@ -73,11 +91,64 @@ def edited_since_apply(listing_file: Path, lock_file: Path) -> bool:
     return listing_file.stat().st_mtime > lock_file.stat().st_mtime
 
 
-def listing_status(*, applied: bool, edited: bool, live: bool) -> ListingStatus:
-    """The badge, from the two facts above. Pure -- see the module docstring
-    for what each combination means and why."""
+def listing_status(
+    *,
+    applied: bool,
+    edited: bool,
+    live: bool,
+    lifecycle: ListingLifecycle | None = None,
+    etsy_state: str | None = None,
+    last_applied_lifecycle: ListingLifecycle | None = None,
+) -> ListingStatus:
+    """The badge. Pure -- see the module docstring for what each combination
+    means and why.
+
+    ``lifecycle`` / ``etsy_state`` / ``last_applied_lifecycle`` are optional
+    so the original four-state table still answers from the two facts it
+    always had. When they *are* passed, delete/retire (PRD 61–67) win over
+    ``live``/``dirty``: calling a paused listing ``live`` would lie.
+    """
+    if lifecycle == "deleted":
+        return "pending-delete"
+    if lifecycle == "renew" or (lifecycle is None and last_applied_lifecycle == "retired"):
+        # Un-retire and pending renew: the workspace wants it on sale, Etsy
+        # does not. Etsy cannot go back to `draft` (birth-only), so the
+        # badge is ours.
+        return "draft"
+    if lifecycle == "retired":
+        if etsy_state == "active":
+            return "pending-retire"
+        return "inactive"
+    if etsy_state == "expired":
+        return "expired"
+    if etsy_state in {"inactive", "removed"}:
+        return "inactive"
     if live:
         return "dirty" if edited else "live"
     if not applied or edited:
         return "draft"
     return "deployed"
+
+
+def listing_gestures(
+    *,
+    lifecycle: ListingLifecycle | None = None,
+    etsy_state: str | None = None,
+    published: bool = False,
+) -> tuple[ListingGesture, ...]:
+    """Which buttons the listings table offers for this row (PRD 66).
+
+    ``published`` is :func:`is_live_etsy_state`: the listing has left
+    ``draft``. The original four badges do not decide the buttons -- a
+    ``dirty`` live listing still retires; a never-live ``draft`` still
+    deletes.
+    """
+    if lifecycle == "deleted":
+        return ("cancel",)
+    if lifecycle == "retired":
+        return ("un-retire",)
+    if not published:
+        return ("delete",)
+    if etsy_state in {"inactive", "expired", "removed"}:
+        return ("retire", "renew")
+    return ("retire",)

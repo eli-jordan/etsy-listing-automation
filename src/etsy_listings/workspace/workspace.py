@@ -11,6 +11,7 @@ future file-serving endpoints safe), not a tidiness rule.
 from __future__ import annotations
 
 import os
+import shutil
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
@@ -199,10 +200,29 @@ class Workspace:
     # ------------------------------------------------------------------
 
     def listing_names(self) -> list[str]:
+        """Directories that still have ``listing.yaml``, or a lockfile with
+        the yaml gone (PRD 67: the row still appears, ``Blocked``). An empty
+        directory is not a listing.
+        """
         listings = self.root / layout.LISTINGS_DIR
         if not listings.is_dir():
             return []
-        return sorted(p.name for p in listings.iterdir() if (p / layout.LISTING_FILE).is_file())
+        names: list[str] = []
+        for path in listings.iterdir():
+            if not path.is_dir():
+                continue
+            if (path / layout.LISTING_FILE).is_file() or (path / layout.LOCK_FILE).is_file():
+                names.append(path.name)
+        return sorted(names)
+
+    def remove_listing(self, listing: str) -> None:
+        """Wipe ``listings/{name}/`` and ``.cache/renders/{name}/`` (PRD 63).
+
+        Designs, garment profiles and pricing plans stay -- they are reusable.
+        """
+        for path in (self.listing_dir(listing), self.renders_dir(listing)):
+            if path.is_dir():
+                shutil.rmtree(path)
 
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)

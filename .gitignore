@@ -11,6 +11,7 @@ __pycache__/
 htmlcov/
 dist/
 *.egg-info/
+.playwright-mcp/
 
 # Node / frontend
 node_modules/
