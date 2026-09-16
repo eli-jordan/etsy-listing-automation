@@ -441,6 +441,15 @@ class Workspace:
             return []
         return sorted(p.stem for p in directory.glob("*.png") if p.is_file())
 
+    def renders_dir(self, listing: str) -> Path:
+        """Every render this listing has cached.
+
+        Exists because the render cache is keyed by listing *name*, so renaming
+        a listing has to move it -- and the rename endpoint knowing how to spell
+        `.cache/renders/{listing}` itself would be the second place that knows
+        where renders live."""
+        return self.cache(layout.RENDERS_DIR, _segment(listing))
+
     def render_file(self, listing: str, template: str, colour: str | None = None) -> Path:
         """Namespaced by template: a listing can reference several templates
         (item 4), including more than one ``colour-matrix``-kind set, so a
@@ -450,7 +459,7 @@ class Workspace:
         ``colour``), ``scene.png`` for ``multiple``/``single`` kind (omit
         ``colour`` -- exactly one output, nothing to disambiguate)."""
         filename = f"{_segment(colour)}.png" if colour is not None else "scene.png"
-        return self.cache(layout.RENDERS_DIR, _segment(listing), _segment(template), filename)
+        return self.renders_dir(listing) / _segment(template) / filename
 
     def catalog_cache_dir(self) -> Path:
         return self.cache(layout.CATALOG_DIR)

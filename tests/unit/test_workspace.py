@@ -379,3 +379,19 @@ def test_load_pricing_plan_attaches_the_workspace_currency(workspace_root: Path)
 
     assert plan.garment_profile == "comfort-colors-1717"
     assert plan.prices["S"].currency == ws.defaults.etsy.currency
+
+
+def test_renders_dir_is_the_parent_of_every_render_for_that_listing(workspace_root: Path) -> None:
+    """Renaming a listing has to move this, so it is an accessor rather than a
+    path the rename endpoint spells for itself (A8)."""
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.renders_dir("take-a-hike") == workspace_root / ".cache" / "renders" / "take-a-hike"
+    assert ws.render_file("take-a-hike", "flat-lay-01", "black").parent.parent == ws.renders_dir(
+        "take-a-hike"
+    )
+
+
+def test_renders_dir_refuses_a_name_that_is_not_a_path_segment(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    with pytest.raises(InvalidNameError):
+        ws.renders_dir("../escape")
