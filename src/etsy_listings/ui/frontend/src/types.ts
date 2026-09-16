@@ -39,6 +39,7 @@ export type ListingDesignSummary = components["schemas"]["ListingDesignSummary"]
 export type WorkspaceSummary = components["schemas"]["WorkspaceSummary"];
 export type CommonMediaSummary = components["schemas"]["CommonMediaSummary"];
 export type CreateListingRequest = components["schemas"]["CreateListingRequest"];
+export type EtsySectionSummary = components["schemas"]["EtsySectionSummary"];
 export type TemplateMediaEntry = components["schemas"]["TemplateMediaEntry"];
 /** Either an explicit template reference, or a bare path string to a shared
  * asset under `common-media/` -- mirrors `config/listing.py`'s `MediaEntry`. */

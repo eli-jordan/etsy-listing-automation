@@ -131,11 +131,13 @@ describe("useAutosave", () => {
     expect(spy).toHaveBeenCalledWith("take-a-hike", { colors: ["white"] });
   });
 
-  it("flush() with nothing pending does not call the server", () => {
+  it("flush() with nothing pending does not call the server", async () => {
     const spy = vi.spyOn(listingsApi, "patchListing");
     const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
 
-    act(() => result.current.flush());
+    await act(async () => {
+      await result.current.flush();
+    });
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -147,5 +149,169 @@ describe("useAutosave", () => {
     unmount();
 
     expect(spy).toHaveBeenCalledWith("take-a-hike", { colors: ["white"] });
+  });
+});
+
+describe("useAutosave before the listing exists", () => {
+  const draft = () =>
+    detail({ name: "", garment_profile: "", design: {}, colors: [], prices: {}, media: [] });
+
+  it("sends edits to the draft endpoint, never to /api/listings, while unnamed", async () => {
+    const describe_ = vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft());
+    const create = vi.spyOn(listingsApi, "createListing");
+    const { result, unmount } = renderHook(() => useAutosave(null, draft()));
+
+    act(() => result.current.update({ colors: ["black"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(create).not.toHaveBeenCalled();
+    // The whole document, not the delta: there is nothing on the server to
+    // merge a delta into.
+    expect(describe_.mock.calls[0]?.[0]).toMatchObject({ colors: ["black"] });
+    expect(result.current.save.kind).toBe("unnamed");
+    // An unnamed draft never clears `pending` -- it is what a create will
+    // carry -- so unmount here, while the mock is still installed.
+    unmount();
+  });
+
+  it("naming it creates it, carrying everything edited beforehand", async () => {
+    vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft());
+    const create = vi
+      .spyOn(listingsApi, "createListing")
+      .mockResolvedValue(detail({ name: "my-shirt" }));
+    const onNamed = vi.fn();
+    const { result } = renderHook(() => useAutosave(null, draft(), { onNamed }));
+
+    act(() => result.current.update({ colors: ["black"] }));
+    await act(async () => {
+      result.current.commitName("my-shirt");
+      await Promise.resolve();
+    });
+
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]?.[0].name).toBe("my-shirt");
+    expect(create.mock.calls[0]?.[0].document).toMatchObject({ colors: ["black"] });
+    expect(onNamed).toHaveBeenCalledWith("my-shirt", expect.objectContaining({ name: "my-shirt" }));
+    expect(result.current.save.kind).toBe("saved");
+  });
+
+  it("a document the server will not write leaves it unsaved, and retries on the next edit", async () => {
+    vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft());
+    const create = vi
+      .spyOn(listingsApi, "createListing")
+      // An empty `name` is the "not created" signal (see `createListing`).
+      .mockResolvedValueOnce(draft())
+      .mockResolvedValueOnce(detail({ name: "my-shirt" }));
+    const onNamed = vi.fn();
+    const { result } = renderHook(() => useAutosave(null, draft(), { onNamed }));
+
+    await act(async () => {
+      result.current.commitName("my-shirt");
+      await Promise.resolve();
+    });
+    expect(result.current.save.kind).toBe("unsaved");
+    expect(onNamed).not.toHaveBeenCalled();
+
+    // The edit that supplies what was missing is the retry -- the user does
+    // not have to type the name again.
+    act(() => result.current.update({ pricing_plan: "../../pricing-plans/tee.yaml" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create.mock.calls[1]?.[0].document).toMatchObject({
+      pricing_plan: "../../pricing-plans/tee.yaml",
+    });
+    expect(onNamed).toHaveBeenCalledWith("my-shirt", expect.objectContaining({ name: "my-shirt" }));
+  });
+
+  it("a taken name is reported without losing the draft", async () => {
+    vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft());
+    vi.spyOn(listingsApi, "createListing").mockRejectedValue(
+      new listingsApi.ListingsApiError("409"),
+    );
+    const { result, unmount } = renderHook(() => useAutosave(null, draft()));
+
+    act(() => result.current.update({ colors: ["black"] }));
+    await act(async () => {
+      result.current.commitName("take-a-hike");
+      await Promise.resolve();
+    });
+
+    expect(result.current.save).toEqual({ kind: "name-taken", name: "take-a-hike" });
+    expect(result.current.detail.colors).toEqual(["black"]);
+    unmount();
+  });
+
+  it("normalises a bare design ref locally the way the server stores it", () => {
+    vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft());
+    const { result, unmount } = renderHook(() => useAutosave(null, draft()));
+
+    // What `DesignSelect` sends. Held as a string, `Object.keys` on it reports
+    // one "artwork" per character.
+    act(() => result.current.update({ design: "../../designs/take-a-hike.png" }));
+
+    expect(result.current.detail.design).toEqual({ default: "../../designs/take-a-hike.png" });
+    unmount();
+  });
+});
+
+describe("useAutosave renaming", () => {
+  it("drains pending edits under the old name before the directory moves", async () => {
+    const order: string[] = [];
+    vi.spyOn(listingsApi, "patchListing").mockImplementation(async () => {
+      order.push("patch");
+      return detail();
+    });
+    vi.spyOn(listingsApi, "renameListing").mockImplementation(async () => {
+      order.push("rename");
+      return detail({ name: "hike-away" });
+    });
+    const onNamed = vi.fn();
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail(), { onNamed }));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      result.current.commitName("hike-away");
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(order).toEqual(["patch", "rename"]);
+    expect(onNamed).toHaveBeenCalledWith(
+      "hike-away",
+      expect.objectContaining({ name: "hike-away" }),
+    );
+  });
+
+  it("a rename the server refuses leaves the listing where it was", async () => {
+    vi.spyOn(listingsApi, "renameListing").mockRejectedValue(
+      new listingsApi.ListingsApiError("409"),
+    );
+    const onNamed = vi.fn();
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail(), { onNamed }));
+
+    await act(async () => {
+      result.current.commitName("taken");
+      await Promise.resolve();
+    });
+
+    expect(result.current.save).toEqual({ kind: "name-taken", name: "taken" });
+    expect(onNamed).not.toHaveBeenCalled();
+  });
+
+  it("committing the name it already has does nothing", async () => {
+    const rename = vi.spyOn(listingsApi, "renameListing");
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    await act(async () => {
+      result.current.commitName("take-a-hike");
+      await Promise.resolve();
+    });
+
+    expect(rename).not.toHaveBeenCalled();
   });
 });

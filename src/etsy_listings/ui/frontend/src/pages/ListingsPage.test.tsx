@@ -53,7 +53,7 @@ describe("ListingsPage", () => {
   it("lists every listing with its garment and status", async () => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([
       summary({ name: "take-a-hike", status: "draft" }),
-      summary({ name: "wildflower-crew", status: "published" }),
+      summary({ name: "wildflower-crew", status: "live" }),
     ]);
 
     renderPage();
@@ -94,7 +94,7 @@ describe("ListingsPage", () => {
        and the colour count the table has no column for. That it appears on
        hover is a CSS rule, checked in the browser layer. */
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([
-      summary({ name: "take-a-hike", colour_count: 4, status: "published" }),
+      summary({ name: "take-a-hike", colour_count: 4, status: "live" }),
     ]);
     renderPage();
     await findRowLink("take-a-hike");
@@ -103,7 +103,7 @@ describe("ListingsPage", () => {
     expect(card).not.toBeNull();
     expect(within(card as HTMLElement).getByText("4 colours")).toBeInTheDocument();
     expect(within(card as HTMLElement).getByText("comfort-colors-1717")).toBeInTheDocument();
-    expect(within(card as HTMLElement).getByText("Published")).toBeInTheDocument();
+    expect(within(card as HTMLElement).getByText("Live")).toBeInTheDocument();
   });
 
   it("says «1 colour» rather than «1 colours» on a single-colour listing", async () => {
@@ -117,13 +117,13 @@ describe("ListingsPage", () => {
     expect(within(card as HTMLElement).getByText("1 colour")).toBeInTheDocument();
   });
 
-  it("offers a published row the same open-on-Etsy menu the editor has", async () => {
+  it("links a row's open-on menu at the listing and product themselves", async () => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([
       summary({
         name: "live-one",
-        status: "published",
-        etsy_listing_id: 555,
-        printify_product_id: "abc123",
+        status: "live",
+        etsy_listing_id: 4572960161,
+        printify_product_id: "6aa332559f8d2ff30103b4c9",
       }),
     ]);
     renderPage();
@@ -135,14 +135,32 @@ describe("ListingsPage", () => {
 
     expect(within(rowFor("live-one")).getByRole("link", { name: /Open on Etsy/ })).toHaveAttribute(
       "href",
-      "https://www.etsy.com/listing/555",
+      "https://www.etsy.com/your/shops/me/listing-editor/edit/4572960161",
     );
     expect(
       within(rowFor("live-one")).getByRole("link", { name: /Open on Printify/ }),
-    ).toBeInTheDocument();
+    ).toHaveAttribute("href", "https://printify.com/app/product-details/6aa332559f8d2ff30103b4c9");
   });
 
-  it("offers no open menu on a draft row", async () => {
+  it("closes the open-on menu when clicking away", async () => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([
+      summary({ name: "live-one", status: "live", etsy_listing_id: 555 }),
+    ]);
+    renderPage();
+    await findRowLink("live-one");
+
+    fireEvent.click(
+      within(rowFor("live-one")).getByRole("button", { name: "Open on Etsy or Printify" }),
+    );
+    expect(within(rowFor("live-one")).getByRole("link", { name: /Open on Etsy/ })).toBeVisible();
+
+    fireEvent.mouseDown(document.body);
+    expect(
+      within(rowFor("live-one")).queryByRole("link", { name: /Open on Etsy/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("offers no open menu on a row with nothing to open", async () => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([
       summary({ name: "draft-one", status: "draft" }),
     ]);
@@ -163,18 +181,23 @@ describe("ListingsPage", () => {
     expect(within(rowFor("broken-listing")).getByText("2")).toBeInTheDocument();
   });
 
-  it("filters to only published listings", async () => {
+  it("offers one filter pill per lifecycle state", async () => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([
       summary({ name: "draft-one", status: "draft" }),
-      summary({ name: "published-one", status: "published" }),
+      summary({ name: "deployed-one", status: "deployed" }),
+      summary({ name: "live-one", status: "live" }),
+      summary({ name: "dirty-one", status: "dirty" }),
     ]);
     renderPage();
     await findRowLink("draft-one");
 
-    fireEvent.click(screen.getByRole("button", { name: "Published" }));
-
+    fireEvent.click(screen.getByRole("button", { name: "Live" }));
     expect(queryRowLink("draft-one")).not.toBeInTheDocument();
-    expect(queryRowLink("published-one")).toBeInTheDocument();
+    expect(queryRowLink("live-one")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dirty" }));
+    expect(queryRowLink("live-one")).not.toBeInTheDocument();
+    expect(queryRowLink("dirty-one")).toBeInTheDocument();
   });
 
   it("filters by the search box", async () => {

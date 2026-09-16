@@ -110,6 +110,7 @@ describe("ImagesTab", () => {
     render(
       <ImagesTab
         detail={detail({
+          colors: ["black", "white"],
           media: Array.from({ length: 20 }, (_, i) => ({
             template: "flat-lay-01",
             colour: `c${i}`,
@@ -488,7 +489,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
 
     expect(screen.getByAltText("care-instructions")).toHaveAttribute(
       "src",
-      "/api/common-media/care-instructions/thumbnail",
+      "/api/common-media/care-instructions/file",
     );
     expect(screen.getByText("common-media/care-instructions.png")).toBeInTheDocument();
   });
@@ -538,5 +539,113 @@ describe("ImagesTab's search", () => {
     });
     expect(screen.queryByText("flat-lay-01")).not.toBeInTheDocument();
     expect(screen.getByText("detail-chest")).toBeInTheDocument();
+  });
+});
+
+describe("ImagesTab's full-size carousel", () => {
+  const reel = detail({
+    design: { default: "../../designs/take-a-hike.png" },
+    colors: ["black", "white"],
+    media: [
+      { template: "flat-lay-01", colour: "black" },
+      { template: "flat-lay-01", colour: "white" },
+      "../../common-media/size-guide.png",
+    ],
+  });
+
+  function renderReel(onUpdate = vi.fn()) {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    const { container } = render(<ImagesTab detail={reel} onUpdate={onUpdate} />);
+    return { onUpdate, container };
+  }
+
+  /** The reel tile for a media entry. The pane and each tile draw the same
+   * picture with the same alt text, and the tile is the first of them. */
+  async function tile(alt: string): Promise<HTMLElement> {
+    const [first] = await screen.findAllByAltText(alt);
+    if (first === undefined) throw new Error(`no tile for ${alt}`);
+    return first;
+  }
+
+  /** The preview pane's own image. Queried by class rather than by role: the
+   * pane and each reel tile draw the same picture with the same alt text, and
+   * the difference between them is which one is the big one. */
+  function previewImage(container: HTMLElement): HTMLImageElement {
+    const img = container.querySelector(".preview-stage__open img");
+    if (img === null) throw new Error("the preview pane is showing nothing");
+    return img as HTMLImageElement;
+  }
+
+  it("previews the real render at full size, not a 160px thumbnail", async () => {
+    const { container } = renderReel();
+    fireEvent.mouseEnter(await tile("flat-lay-01 · black"));
+
+    // `design-preview` is the real pipeline at the photo's own resolution;
+    // `thumbnail` is a 160px picture to pick out of a list.
+    expect(previewImage(container)).toHaveAttribute(
+      "src",
+      "/api/templates/flat-lay-01/design-preview?design=take-a-hike&colour=black",
+    );
+  });
+
+  it("opens the whole reel when a tile is clicked, at that tile", async () => {
+    renderReel();
+    fireEvent.click(await tile("flat-lay-01 · white"));
+
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveAccessibleName("flat-lay-01 · white, preview 2 of 3");
+  });
+
+  it("steps through the reel with the arrow keys", async () => {
+    renderReel();
+    fireEvent.click(await tile("flat-lay-01 · black"));
+
+    fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("flat-lay-01 · white, preview 2 of 3");
+  });
+
+  it("shows a shared asset at its own size in the carousel too", async () => {
+    renderReel();
+    fireEvent.click(await tile("size-guide"));
+
+    expect(screen.getByRole("dialog")).toHaveAccessibleName("size-guide, preview 3 of 3");
+    const stage = screen.getByRole("dialog").querySelector(".lightbox__image");
+    expect(stage).toHaveAttribute("src", "/api/common-media/size-guide/file");
+  });
+
+  it("removing a tile does not also open the one that slides into its place", async () => {
+    const { onUpdate } = renderReel();
+    fireEvent.click(await screen.findByRole("button", { name: "Remove flat-lay-01 · black" }));
+
+    expect(onUpdate).toHaveBeenCalled();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
+  it("clicking a preview of something not in the listing opens nothing", async () => {
+    /* There is no carousel position for it -- adding it first is one click
+       away, and is what the pane's own button is for. */
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
+      summary({ name: "flat-lay-01" }),
+      summary({ name: "detail-chest" }),
+    ]);
+    const { container } = render(<ImagesTab detail={reel} onUpdate={vi.fn()} />);
+
+    fireEvent.mouseEnter(await screen.findByText("detail-chest"));
+    fireEvent.click(container.querySelector(".preview-stage__open") as HTMLElement);
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+});
+
+describe("ImagesTab before any colours are chosen", () => {
+  it("says to pick colours first rather than offering a colourless entry", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    const onUpdate = vi.fn();
+    render(<ImagesTab detail={detail({ colors: [], media: [] })} onUpdate={onUpdate} />);
+
+    fireEvent.click(await screen.findByText("flat-lay-01"));
+
+    expect(screen.getByText("Pick colours on Variants first.")).toBeInTheDocument();
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 });

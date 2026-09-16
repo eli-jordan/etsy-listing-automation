@@ -7,7 +7,6 @@ import { AppShell } from "./shell/AppShell";
 import { DashboardPage } from "./pages/DashboardPage";
 import { ListingEditorPage } from "./pages/ListingEditorPage";
 import { ListingsPage } from "./pages/ListingsPage";
-import { NewListingPage } from "./pages/NewListingPage";
 
 const container = document.getElementById("root");
 if (!container) {
@@ -21,7 +20,10 @@ createRoot(container).render(
         <Route element={<AppShell />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/listings" element={<ListingsPage />} />
-          <Route path="/listings/new" element={<NewListingPage />} />
+          {/* Both routes, one component: /listings/new is the editor opened on
+              an empty draft, and naming it is what creates it. React Router
+              ranks the static segment above the dynamic one. */}
+          <Route path="/listings/new" element={<ListingEditorPage />} />
           <Route path="/listings/:name" element={<ListingEditorPage />} />
           {/* The calibrator, unmounted -- mounted here unchanged. */}
           <Route path="/templates" element={<App />} />

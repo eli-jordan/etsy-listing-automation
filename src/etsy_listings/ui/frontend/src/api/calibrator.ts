@@ -109,6 +109,33 @@ export function templateThumbnailUrl(name: string, colour?: string | null): stri
   return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
 }
 
+/**
+ * A listing's real design, composited onto this template's *saved* geometry
+ * -- unlike {@link templateThumbnailUrl}, which is a bare, inkless photo, or
+ * {@link renderPreview}, which composites a calibrator test design against
+ * *unsaved* geometry. A plain URL for the same reason `templateThumbnailUrl`
+ * is: the browser owns loading and caching it.
+ */
+export function templateDesignPreviewUrl(
+  name: string,
+  design: string,
+  colour?: string | null,
+): string {
+  const params = new URLSearchParams({ design });
+  if (colour) params.set("colour", colour);
+  return `/api/templates/${encodeURIComponent(name)}/design-preview?${params.toString()}`;
+}
+
+/** A colour-matrix colour's real garment shade, sampled off its own scene
+ * photo -- for a quick-glance swatch dot next to the colour's name. */
+export async function getTemplateSwatch(name: string, colour: string): Promise<string> {
+  const { data, error } = await api.GET("/api/templates/{name}/swatch", {
+    params: { path: { name }, query: { colour } },
+  });
+  if (error || !data) throw new CalibratorApiError(`no swatch for ${name} colour ${colour}`);
+  return data.hex;
+}
+
 type PreviewBody =
   | { colour: string; bounding_box: BoundingBox; displace: DisplaceConfig; shade: ShadeConfig }
   | { placements: Placement[]; displace: DisplaceConfig; shade: ShadeConfig }

@@ -38,49 +38,159 @@ def _listing_yaml(workspace_root: Path, name: str) -> dict:  # noqa: ANN401
     )
 
 
-def test_create_edit_and_autosave_a_listing(page, workspace_root: Path) -> None:  # noqa: ANN001
+def _wait_for_listing(page, workspace_root: Path, name: str, **fields: object) -> dict:  # noqa: ANN001,ANN401
+    """Poll `listing.yaml` until the UI has written *fields* into it.
+
+    The page cannot be waited on for this: "Autosaved" is the *settled* caption,
+    so it already reads true during the 800ms debounce before a save has even
+    been sent. The file is the observable effect this layer exists to check, so
+    the file is what gets waited on.
+    """
+    for _ in range(100):
+        written = _listing_yaml(workspace_root, name)
+        if all(written.get(key) == value for key, value in fields.items()):
+            return written
+        page.wait_for_timeout(100)
+    raise AssertionError(f"{name}/listing.yaml never reached {fields}: {written}")
+
+
+def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:  # noqa: ANN001
+    """`+ New listing` opens the editor on nothing, and the listing appears on
+    disk the moment it has a name and something to price it by."""
     _write_pricing_plan(workspace_root)
 
     page.goto(page.url.rsplit("/", 1)[0] + "/listings")
     page.get_by_role("button", name="+ New listing").click()
 
-    page.get_by_label("Name").fill("wildflower-crew")
-    # The design/garment-profile selects populate from the workspace once
-    # their fetches resolve -- waiting on the option proves the real
-    # /api/listing-designs and /api/garment-profiles calls landed.
-    page.get_by_label("Design").select_option("take-a-hike")
-    page.get_by_label("Garment profile").select_option("comfort-colors-1717")
-    page.get_by_role("button", name="Create").click()
+    # There is no create *form* -- this is the editor, on a draft the server
+    # built (`GET /api/listing-draft`) with nothing chosen. Waiting for the
+    # garment-profile select proves that fetch landed and the tabs are live on
+    # a listing that does not exist.
+    page.get_by_label("Garment profile").wait_for(state="visible")
+    assert not (workspace_root / "listings" / "wildflower-crew").exists()
+
+    # Everything still to pick is in the banner, which is the only way an
+    # unsaved listing can be told what it is missing.
+    issues_text = page.locator(".issues").inner_text().lower()
+    assert "garment profile" in issues_text
+    assert "design" in issues_text
+
+    page.get_by_label("Listing name").fill("wildflower-crew")
+    page.get_by_label("Listing name").press("Enter")
+
+    # Named, but `Listing` refuses a document with no pricing plan and no
+    # prices -- so nothing is written yet, and the head says so rather than
+    # leaving the user waiting for a file.
+    page.wait_for_function(
+        "document.querySelector('.page-head__meta')?.textContent?.includes('Not saved')"
+    )
+    assert not (workspace_root / "listings" / "wildflower-crew").exists()
+
+    # Supplying the missing piece retries the create: the edit is the retry.
+    page.locator(".tabs .seg-opt", has_text="Listing Details").click()
+    page.get_by_label("Plan").select_option(label="tee-basic")
 
     page.wait_for_url("**/listings/wildflower-crew")
-    # The editor's own `getListing` fetch is still in flight right after the
-    # navigation; wait for it rather than asserting the instant the URL
-    # changes.
     page.get_by_role("heading", name="wildflower-crew").wait_for(state="visible")
 
     written = _listing_yaml(workspace_root, "wildflower-crew")
-    assert written["garment_profile"] == "comfort-colors-1717"
-    assert written["design"] == "../../designs/take-a-hike.png"
+    assert written["pricing_plan"].endswith("pricing-plans/tee-basic.yaml")
     assert written["media"] == []
 
-    page.locator(".tabs .seg-opt", has_text="Listing Details").click()
-    title = page.get_by_label("Title")
-    title.fill("Wildflower Botanical Crew")
-    # Blur flushes the debounced autosave immediately (useAutosave.flush),
-    # rather than waiting out the 800ms debounce in a real browser.
-    page.get_by_label("Description").click()
-
-    # "Autosaved" is the settled state; "Saving…" is the one in flight. Waiting
-    # on the settled word is what makes the assertion below a read of a file
-    # the UI has finished writing rather than a race with it.
-    page.wait_for_function(
-        "document.querySelector('.page-head__meta')?.textContent?.includes('Autosaved')"
+    # And from here it is an ordinary listing: autosave patches it.
+    page.locator(".tabs .seg-opt", has_text="Variants").click()
+    page.get_by_label("Garment profile").select_option("comfort-colors-1717")
+    _wait_for_listing(
+        page, workspace_root, "wildflower-crew", garment_profile="comfort-colors-1717"
     )
 
-    saved = _listing_yaml(workspace_root, "wildflower-crew")
-    assert saved["etsy"]["title"] == "Wildflower Botanical Crew"
 
-    # The title issue is gone; the still-empty colours/media stay reported.
-    issues_text = page.locator(".issues").inner_text()
-    assert "title" not in issues_text.lower()
-    assert "no colours" in issues_text.lower() or "colours enabled" in issues_text.lower()
+def test_renaming_a_listing_moves_its_directory_and_render_cache(
+    page,  # noqa: ANN001
+    workspace_root: Path,
+) -> None:
+    cached = workspace_root / ".cache" / "renders" / "take-a-hike" / "flat-lay-01"
+    cached.mkdir(parents=True, exist_ok=True)
+    (cached / "black.png").write_bytes(b"not really a png")
+
+    page.goto(page.url.rsplit("/", 1)[0] + "/listings/take-a-hike")
+    page.get_by_role("heading", name="take-a-hike").dblclick()
+
+    name = page.get_by_label("Listing name")
+    name.fill("hike-away")
+    name.press("Enter")
+
+    page.wait_for_url("**/listings/hike-away")
+    page.get_by_role("heading", name="hike-away").wait_for(state="visible")
+
+    assert not (workspace_root / "listings" / "take-a-hike").exists()
+    assert (workspace_root / "listings" / "hike-away" / "listing.yaml").is_file()
+    moved = workspace_root / ".cache" / "renders" / "hike-away" / "flat-lay-01" / "black.png"
+    assert moved.read_bytes() == b"not really a png"
+
+
+def test_a_taken_name_is_refused_without_losing_the_draft(
+    page,  # noqa: ANN001
+    workspace_root: Path,
+) -> None:
+    _write_pricing_plan(workspace_root)
+
+    page.goto(page.url.rsplit("/", 1)[0] + "/listings/new")
+    page.get_by_label("Garment profile").wait_for(state="visible")
+    page.get_by_label("Garment profile").select_option("comfort-colors-1717")
+
+    page.get_by_label("Listing name").fill("take-a-hike")
+    page.get_by_label("Listing name").press("Enter")
+
+    page.get_by_role("alert").wait_for(state="visible")
+    # Still the draft, still carrying the edit made before the name was tried.
+    assert page.url.endswith("/listings/new")
+    assert page.get_by_label("Garment profile").input_value() == "comfort-colors-1717"
+
+
+def test_switching_a_colour_off_stays_off(page, workspace_root: Path) -> None:  # noqa: ANN001
+    """The bug this covers: the switch snapped straight back on.
+
+    `colors:` alone failed `listing.yaml`'s own validator server-side, which
+    answers 200 with the listing *unchanged* -- so the editor re-rendered the
+    colour as enabled and the reason never reached the screen. It needs the
+    whole stack to reproduce (real validator, real autosave, real file), which
+    is exactly what this layer is for.
+    """
+    page.goto(page.url.rsplit("/", 1)[0] + "/listings/take-a-hike")
+    page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
+
+    switch = page.get_by_role("switch", name="moss")
+    # Waiting on the PATCH itself, not on the "Autosaved" caption: that
+    # caption is also the *settled* state, so it is already true before the
+    # 800ms debounce has fired and reading the file on it would be a race.
+    with page.expect_response(
+        lambda r: r.url.endswith("/api/listings/take-a-hike") and r.request.method == "PATCH"
+    ):
+        switch.click()
+
+    saved = _listing_yaml(workspace_root, "take-a-hike")
+    assert "moss" not in saved["colors"]
+    # The mockup that referenced it went with it -- an image for a variant
+    # that no longer exists is what the server would have refused.
+    assert not any(
+        isinstance(entry, dict) and entry.get("colour") == "moss" for entry in saved["media"]
+    )
+    # The file is the assertion, not the switch: what re-enabled it was the
+    # server refusing the write and answering with the unchanged listing, so a
+    # `listing.yaml` that no longer sells the colour is the thing that was
+    # actually wrong. (The row itself is gone here -- the fixture garment
+    # profile classifies no colours, so a colour the listing has dropped is no
+    # longer one this tab knows about.)
+
+
+def test_the_shade_buttons_need_a_profile_that_classifies_its_colours(page) -> None:  # noqa: ANN001
+    """Dark/Light are driven by the garment profile's light/dark map, and the
+    fixture profile declares none -- so with nothing to act on they are not
+    offered at all, rather than offered and silently doing nothing."""
+    page.goto(page.url.rsplit("/", 1)[0] + "/listings/take-a-hike")
+    page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
+    page.get_by_role("switch", name="moss").wait_for(state="visible")
+
+    assert page.get_by_role("button", name="Dark").count() == 0
+    assert page.get_by_role("button", name="Light").count() == 0

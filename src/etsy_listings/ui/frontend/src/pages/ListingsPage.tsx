@@ -2,18 +2,21 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listingDesignThumbnailUrl, listListings } from "../api/listings";
 import { OpenOnMenu } from "../components/OpenOnMenu";
+import { hasOpenTargets } from "../components/openOn";
+import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
 import type { ListingStatus, ListingSummary } from "../types";
 
 /** The listings list (phase 5): table + search + status filter pills, from
  * the design mockup's listings section, backed by `GET /api/listings`. */
 
-type Filter = "all" | "draft" | "published";
+type Filter = "all" | ListingStatus;
 
-const FILTER_LABELS: Record<Filter, string> = {
-  all: "All",
-  draft: "Draft",
-  published: "Published",
-};
+/** One pill per state the server can report, plus All -- derived from
+ * `STATUS_LABELS` rather than listed again, so a fifth state cannot arrive
+ * with a badge and no way to filter for it. */
+const FILTERS: Filter[] = ["all", ...(Object.keys(STATUS_LABELS) as ListingStatus[])];
+
+const FILTER_LABELS: Record<Filter, string> = { all: "All", ...STATUS_LABELS };
 
 /** The listing's artwork, or an empty tile when `design` is null -- which is
  * what a multi-artwork listing (`on-light`/`on-dark`) reports, since no single
@@ -50,14 +53,6 @@ function ListingCard({ row }: { row: ListingSummary }) {
           {row.colour_count} {row.colour_count === 1 ? "colour" : "colours"}
         </span>
       </span>
-    </span>
-  );
-}
-
-function StatusTag({ status }: { status: ListingStatus }) {
-  return (
-    <span className={status === "published" ? "tag tag-accent-2" : "tag tag-neutral"}>
-      {status === "published" ? "Published" : "Draft"}
     </span>
   );
 }
@@ -114,7 +109,7 @@ export function ListingsPage() {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
-        {(Object.keys(FILTER_LABELS) as Filter[]).map((f) => (
+        {FILTERS.map((f) => (
           <button
             key={f}
             type="button"
@@ -154,7 +149,7 @@ export function ListingsPage() {
                     </button>
                     <ListingCard row={row} />
                   </span>
-                  {row.status === "published" && (
+                  {hasOpenTargets(row.etsy_listing_id, row.printify_product_id) && (
                     <OpenOnMenu
                       etsyListingId={row.etsy_listing_id}
                       printifyProductId={row.printify_product_id}

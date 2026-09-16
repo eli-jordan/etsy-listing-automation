@@ -1,14 +1,22 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { listListings } from "../api/listings";
-import type { ListingSummary } from "../types";
+import { STATUS_LABELS } from "../components/StatusTag";
+import type { ListingStatus, ListingSummary } from "../types";
 
 /**
- * The two counts the workspace already knows, from the mockup's Dashboard.
+ * The counts the workspace already knows, from the mockup's Dashboard.
+ *
+ * One card per lifecycle state (`engine/status.py`), because the three that
+ * are not "live" are three different pieces of news: `draft` is work not yet
+ * pushed anywhere, `deployed` is work waiting on a human to press publish in
+ * Shop Manager, and `dirty` is a live listing whose copy has moved on. A
+ * single "not published" number would hide the only one of those that is
+ * about something buyers can see.
  *
  * Deliberately not a second listings table: `GET /api/listings` derives
- * `status` per row on every read, so published-vs-draft costs nothing beyond
- * the request the Listings page makes anyway -- and anything richer (last run,
+ * `status` per row on every read, so the counts cost nothing beyond the
+ * request the Listings page makes anyway -- and anything richer (last run,
  * what a `plan` would do) needs the Runner, which is a later pass.
  */
 
@@ -23,8 +31,15 @@ export function DashboardPage() {
       .catch(() => setStatus("failed to load listings"));
   }, []);
 
-  const published = listings?.filter((l) => l.status === "published").length ?? 0;
-  const drafts = (listings?.length ?? 0) - published;
+  const counts = (status: ListingStatus) =>
+    listings?.filter((l) => l.status === status).length ?? 0;
+
+  const CARDS: { status: ListingStatus; caption: string }[] = [
+    { status: "draft", caption: "not applied yet" },
+    { status: "deployed", caption: "applied — publish on Etsy" },
+    { status: "live", caption: "published on Etsy" },
+    { status: "dirty", caption: "live, but edited since" },
+  ];
 
   return (
     <div>
@@ -45,16 +60,13 @@ export function DashboardPage() {
           request is still in flight states something false. */}
       {listings !== null && (
         <div className="stat-row">
-          <div className="card stat-card">
-            <span className="stat-card__label">Published</span>
-            <span className="stat-card__value">{published}</span>
-            <span className="stat-card__caption">live on Etsy</span>
-          </div>
-          <div className="card stat-card">
-            <span className="stat-card__label">Drafts</span>
-            <span className="stat-card__value">{drafts}</span>
-            <span className="stat-card__caption">not yet published</span>
-          </div>
+          {CARDS.map((card) => (
+            <div key={card.status} className="card stat-card">
+              <span className="stat-card__label">{STATUS_LABELS[card.status]}</span>
+              <span className="stat-card__value">{counts(card.status)}</span>
+              <span className="stat-card__caption">{card.caption}</span>
+            </div>
+          ))}
         </div>
       )}
 

@@ -83,6 +83,38 @@ describe("VariantsTab's preview", () => {
     expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
   });
 
+  it("overlays the listing's real design once it has exactly one", async () => {
+    renderWithFlatLay({ design: { default: "../../designs/take-a-hike.png" } });
+    const preview = await screen.findByAltText("black on flat-lay-01");
+    expect(preview).toHaveAttribute(
+      "src",
+      "/api/templates/flat-lay-01/design-preview?design=take-a-hike&colour=black",
+    );
+  });
+
+  it("falls back to the bare photo for a multi-artwork design", async () => {
+    renderWithFlatLay({
+      design: {
+        "on-light": "../../designs/take-a-hike-light.png",
+        "on-dark": "../../designs/take-a-hike-dark.png",
+      },
+    });
+    const preview = await screen.findByAltText("black on flat-lay-01");
+    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
+  });
+
+  it("shows a swatch dot sampled off the preview template", async () => {
+    vi.spyOn(calibrator, "getTemplateSwatch").mockResolvedValue("#112233");
+    const { container } = renderWithFlatLay();
+    await screen.findByAltText("black on flat-lay-01");
+    const dot = await waitFor(() => {
+      const el = container.querySelector(".color-row__swatch");
+      if (el === null) throw new Error("no swatch dot yet");
+      return el;
+    });
+    expect(dot).toHaveStyle({ background: "#112233" });
+  });
+
   it("previews whichever colour was clicked", async () => {
     renderWithFlatLay();
     await screen.findByAltText("black on flat-lay-01");
@@ -184,6 +216,123 @@ describe("VariantsTab", () => {
     expect(onUpdate).toHaveBeenCalledWith({ colors: ["black", "white"] });
   });
 
+  it("dropping a colour also drops the mockups that referenced it", async () => {
+    /* The bug this fixes: sending `colors` alone failed `listing.yaml`'s own
+       validator server-side, which answers 200 with the listing *unchanged* --
+       so the switch snapped straight back on. */
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      { name: "comfort-colors-1717", sizes: ["S"], colors: { black: "dark", white: "light" } },
+    ]);
+    const onUpdate = vi.fn();
+    render(
+      <VariantsTab
+        detail={detail({
+          colors: ["black", "white"],
+          media: [
+            { template: "flat-lay-01", colour: "black" },
+            { template: "flat-lay-01", colour: "white" },
+            "../../common-media/size-guide.png",
+          ],
+          artwork: { white: "on-light" },
+          price_overrides: { white: { S: "399 NOK" } },
+        })}
+        onUpdate={onUpdate}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("switch", { name: "white" }));
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      colors: ["black"],
+      media: [{ template: "flat-lay-01", colour: "black" }, "../../common-media/size-guide.png"],
+      artwork: {},
+      price_overrides: {},
+    });
+  });
+
+  it("leaves the colour-keyed fields alone when a colour is only added", async () => {
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      { name: "comfort-colors-1717", sizes: ["S"], colors: { black: "dark", white: "light" } },
+    ]);
+    const onUpdate = vi.fn();
+    render(
+      <VariantsTab
+        detail={detail({
+          colors: ["black"],
+          media: [{ template: "flat-lay-01", colour: "black" }],
+        })}
+        onUpdate={onUpdate}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("switch", { name: "white" }));
+    expect(onUpdate).toHaveBeenCalledWith({ colors: ["black", "white"] });
+  });
+
+  it("says so when a colour change threw listing images away", async () => {
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      { name: "comfort-colors-1717", sizes: ["S"], colors: { black: "dark", white: "light" } },
+    ]);
+    render(
+      <VariantsTab
+        detail={detail({
+          colors: ["black", "white"],
+          media: [{ template: "flat-lay-01", colour: "white" }],
+        })}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("switch", { name: "white" }));
+    expect(screen.getByText(/Removed 1 listing image/)).toBeInTheDocument();
+  });
+
+  describe("the Dark/Light bulk buttons", () => {
+    const profile = {
+      name: "comfort-colors-1717",
+      sizes: ["S"],
+      colors: { black: "dark", navy: "dark", white: "light", ivory: "light" },
+    } as const;
+
+    function renderTab(colors: string[], onUpdate = vi.fn()) {
+      vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+        profile as unknown as GarmentProfileSummary,
+      ]);
+      render(<VariantsTab detail={detail({ colors })} onUpdate={onUpdate} />);
+      return onUpdate;
+    }
+
+    it("Dark enables every dark colour and disables the light ones", async () => {
+      const onUpdate = renderTab(["white", "ivory"]);
+      fireEvent.click(await screen.findByRole("button", { name: "Dark" }));
+      expect(onUpdate).toHaveBeenCalledWith(expect.objectContaining({ colors: ["black", "navy"] }));
+    });
+
+    it("Light is its exact opposite", async () => {
+      const onUpdate = renderTab(["black", "navy"]);
+      fireEvent.click(await screen.findByRole("button", { name: "Light" }));
+      expect(onUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({ colors: ["ivory", "white"] }),
+      );
+    });
+
+    it("leaves colours the profile does not classify out of both", async () => {
+      /* Driven by the garment profile, so a colour it has no opinion about is
+         neither turned on by Dark nor by Light. */
+      const onUpdate = renderTab(["forest"]);
+      fireEvent.click(await screen.findByRole("button", { name: "Dark" }));
+      const patch = onUpdate.mock.calls[0]?.[0] as { colors: string[] };
+      expect(patch.colors).not.toContain("forest");
+    });
+
+    it("is not offered when no garment profile resolved", async () => {
+      vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([]);
+      render(<VariantsTab detail={detail({ colors: ["black"] })} onUpdate={vi.fn()} />);
+      await screen.findByText("black");
+      expect(screen.queryByRole("button", { name: "Dark" })).not.toBeInTheDocument();
+    });
+  });
+
   it("changing the garment profile dropdown updates garment_profile", async () => {
     vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
       { name: "comfort-colors-1717", sizes: ["S"], colors: {} },
@@ -199,5 +348,16 @@ describe("VariantsTab", () => {
       target: { value: "gildan-5000" },
     });
     expect(onUpdate).toHaveBeenCalledWith({ garment_profile: "gildan-5000" });
+  });
+});
+
+describe("VariantsTab with nothing chosen yet", () => {
+  it("labels the empty garment option instead of rendering a blank one", async () => {
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      { name: "comfort-colors-1717", sizes: ["S"], colors: { black: "dark" } },
+    ]);
+    render(<VariantsTab detail={detail({ garment_profile: "", colors: [] })} onUpdate={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByText("Select a garment profile…")).toBeInTheDocument());
   });
 });

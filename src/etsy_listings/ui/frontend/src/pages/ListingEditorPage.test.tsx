@@ -44,6 +44,7 @@ function renderAt(path: string) {
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/listings" element={<p>listings page</p>} />
+        <Route path="/listings/new" element={<ListingEditorPage />} />
         <Route path="/listings/:name" element={<ListingEditorPage />} />
       </Routes>
     </MemoryRouter>,
@@ -237,16 +238,34 @@ describe("ListingEditorPage", () => {
     expect(screen.queryByTitle("Open on Etsy or Printify")).not.toBeInTheDocument();
   });
 
-  it("offers an Etsy link for a published listing", async () => {
+  it("links a live listing at its own Etsy listing editor", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
-      detail({ status: "published", etsy_listing_id: 555 }),
+      detail({ status: "live", etsy_listing_id: 4572960161 }),
     );
     renderAt("/listings/take-a-hike");
-    await screen.findByText("Published");
+    await screen.findByText("Live");
 
     fireEvent.click(screen.getByTitle("Open on Etsy or Printify"));
     const link = screen.getByRole("link", { name: /Open on Etsy/ });
-    expect(link).toHaveAttribute("href", "https://www.etsy.com/listing/555");
+    expect(link).toHaveAttribute(
+      "href",
+      "https://www.etsy.com/your/shops/me/listing-editor/edit/4572960161",
+    );
+  });
+
+  it("links a listing with only a Printify product at that product", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({ status: "deployed", printify_product_id: "6aa332559f8d2ff30103b4c9" }),
+    );
+    renderAt("/listings/take-a-hike");
+    await screen.findByText("Deployed");
+
+    fireEvent.click(screen.getByTitle("Open on Etsy or Printify"));
+    expect(screen.getByRole("link", { name: /Open on Printify/ })).toHaveAttribute(
+      "href",
+      "https://printify.com/app/product-details/6aa332559f8d2ff30103b4c9",
+    );
+    expect(screen.queryByRole("link", { name: /Open on Etsy/ })).not.toBeInTheDocument();
   });
 
   it("goes back to the listings page when the breadcrumb is clicked", async () => {
@@ -264,5 +283,95 @@ describe("ListingEditorPage", () => {
     await waitFor(() =>
       expect(screen.getByText("failed to load listing does-not-exist")).toBeInTheDocument(),
     );
+  });
+});
+
+describe("ListingEditorPage at /listings/new", () => {
+  const draft = () =>
+    detail({ name: "", garment_profile: "", design: {}, colors: [], prices: {}, media: [] });
+
+  it("opens the editor itself, on a draft, with the name waiting to be typed", async () => {
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
+    renderAt("/listings/new");
+
+    await waitFor(() => expect(screen.getByLabelText("Listing name")).toBeInTheDocument());
+    // The same editor, not a second form: the tabs are right there.
+    expect(screen.getByLabelText("Garment profile")).toBeInTheDocument();
+  });
+
+  it("says what is standing between the draft and a file on disk", async () => {
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
+    renderAt("/listings/new");
+
+    await waitFor(() =>
+      expect(screen.getByText(/double-click the name above/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("naming it creates it and replaces the route with the real editor", async () => {
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
+    const create = vi
+      .spyOn(listingsApi, "createListing")
+      .mockResolvedValue(detail({ name: "my-shirt" }));
+    const get = vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ name: "my-shirt" }));
+    renderAt("/listings/new");
+
+    const input = await screen.findByLabelText("Listing name");
+    fireEvent.change(input, { target: { value: "my-shirt" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "my-shirt" })).toBeInTheDocument(),
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+    // The listing rode along in the navigation: the new route mounts a fresh
+    // editor, and making it re-fetch would open a window for a GET to answer
+    // with a document older than the create that just landed.
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("explains a draft that cannot be started at all", async () => {
+    vi.spyOn(listingsApi, "getListingDraft").mockRejectedValue(new Error("nope"));
+    renderAt("/listings/new");
+
+    await waitFor(() =>
+      expect(screen.getByText("could not start a new listing")).toBeInTheDocument(),
+    );
+  });
+});
+
+describe("ListingEditorPage renaming", () => {
+  it("double-clicking the title renames the listing and follows it to the new URL", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const rename = vi
+      .spyOn(listingsApi, "renameListing")
+      .mockResolvedValue(detail({ name: "hike-away" }));
+    renderAt("/listings/take-a-hike");
+
+    fireEvent.doubleClick(await screen.findByRole("heading", { name: "take-a-hike" }));
+    const input = screen.getByLabelText("Listing name");
+    fireEvent.change(input, { target: { value: "hike-away" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "hike-away" })).toBeInTheDocument(),
+    );
+    expect(rename).toHaveBeenCalledWith("take-a-hike", "hike-away");
+  });
+
+  it("a refused rename says so and leaves the listing where it was", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(listingsApi, "renameListing").mockRejectedValue(
+      new listingsApi.ListingsApiError("409"),
+    );
+    renderAt("/listings/take-a-hike");
+
+    fireEvent.doubleClick(await screen.findByRole("heading", { name: "take-a-hike" }));
+    const input = screen.getByLabelText("Listing name");
+    fireEvent.change(input, { target: { value: "taken" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await waitFor(() => expect(screen.getByText(/already a listing called/i)).toBeInTheDocument());
+    expect(screen.getByRole("alert")).toBeInTheDocument();
   });
 });

@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import { listTemplates, templateThumbnailUrl } from "../../api/calibrator";
-import { commonMediaThumbnailUrl, listCommonMedia } from "../../api/listings";
+import {
+  listTemplates,
+  templateDesignPreviewUrl,
+  templateThumbnailUrl,
+} from "../../api/calibrator";
+import { commonMediaFileUrl, commonMediaThumbnailUrl, listCommonMedia } from "../../api/listings";
+import { Lightbox, type LightboxItem } from "../../components/Lightbox";
 import type {
   CommonMediaSummary,
   ListingDetail,
@@ -8,24 +13,26 @@ import type {
   TemplateMediaEntry,
   TemplateSummary,
 } from "../../types";
+import { singleDesignName } from "./designName";
 
 /**
  * Locator (browse calibrated templates) + preview pane + reel (phase 5).
  *
- * The preview and the reel's tiles use `GET /templates/{name}/thumbnail` --
- * the template's own bare photo -- rather than `POST .../preview`: that
- * endpoint's `design` parameter only resolves against the calibrator's test-
- * design library (bundled targets and `test-designs/` uploads), never a
- * listing's real `designs/*.png` artwork, so rendering it here would show a
- * stand-in design, not the listing's own. A real photo with no ink on it is
- * still the "real render, not invented SVG art" the mockup asked for; a
- * design overlay would need the preview endpoint to grow a third way to
- * resolve `design`, which is out of scope for this pass.
+ * The reel's tiles use `GET /templates/{name}/thumbnail` -- the template's
+ * own bare photo, downscaled -- because a tile is a thing to pick out of a
+ * row, and running the real pipeline once per tile would make opening the tab
+ * cost a render per listing image. The thumbnail *is* asked for a colour
+ * (`?colour=`): without it a colour-matrix set answers with the same photo
+ * every time, and a reel of eight identical tiles labelled with eight
+ * different colours is worse than no picture at all.
  *
- * The thumbnail *is* asked for a colour, though (`?colour=`): without it a
- * colour-matrix set answers with the same photo every time, and a reel of
- * eight identical tiles labelled with eight different colours is worse than
- * no picture at all.
+ * The **preview pane** is the opposite question and gets the opposite answer:
+ * one image at a time, the listing's real artwork composited onto the
+ * template's saved geometry at the photo's own resolution
+ * (`GET .../design-preview`), large enough to judge -- and clicking it opens
+ * the whole reel in the calibrator's lightbox, where arrow keys walk the set
+ * and `1:1` stops the browser downsampling it. Comparing neighbours is the
+ * point: the fault worth catching is usually "this one colour is wrong".
  *
  * The locator browses the two things `media:` can hold, and the segmented
  * control is which: **Mockup templates** (a `{template, colour}` entry,
@@ -71,6 +78,23 @@ function scenePath(template: string, colour: string | null): string {
   return `mockup-templates/${template}/${file}.png`;
 }
 
+/** The full-resolution picture for one thing `media:` can hold -- what the
+ * preview pane shows and what the lightbox opens.
+ *
+ * A template entry is a *render*: the listing's real artwork composited onto
+ * the template's saved geometry, at the scene photo's own size. `design` is
+ * null for a multi-artwork listing (`on-light`/`on-dark`), where there is no
+ * single design to composite, and that case falls back to the bare photo --
+ * the thumbnail, since no endpoint serves an inkless scene at full size. A
+ * shared asset is already exactly the file Etsy would receive, so it is
+ * served as-is.
+ */
+function fullSizeUrl(entry: MediaEntry, design: string | null): string {
+  if (typeof entry === "string") return commonMediaFileUrl(sharedName(entry));
+  if (design === null) return templateThumbnailUrl(entry.template, entry.colour);
+  return templateDesignPreviewUrl(entry.template, design, entry.colour);
+}
+
 function isInMedia(media: MediaEntry[], template: string, colour: string | null): boolean {
   return media.some(
     (m) => typeof m !== "string" && m.template === template && (m.colour ?? null) === colour,
@@ -98,6 +122,8 @@ export function ImagesTab({ detail, onUpdate }: Props) {
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [actualSize, setActualSize] = useState(false);
 
   useEffect(() => {
     listTemplates()
@@ -112,6 +138,7 @@ export function ImagesTab({ detail, onUpdate }: Props) {
   const filtered = calibrated.filter((t) => t.name.toLowerCase().includes(query.toLowerCase()));
   const filteredShared = shared.filter((a) => a.name.toLowerCase().includes(query.toLowerCase()));
   const swatchTemplate = detail.etsy.variation_images ?? null;
+  const design = singleDesignName(detail.design);
 
   function entriesFor(template: string): number {
     return detail.media.filter((m) => typeof m !== "string" && m.template === template).length;
@@ -187,6 +214,30 @@ export function ImagesTab({ detail, onUpdate }: Props) {
     next.splice(from, 1);
     next.splice(to, 0, moved);
     onUpdate({ media: next });
+  }
+
+  /** The reel, as the lightbox reads it. Its order is the order Etsy will
+   * show the images in, which is the order worth stepping through. */
+  const lightboxItems: LightboxItem[] = detail.media.map((entry, index) => ({
+    id: `${mediaLabel(entry)}-${index}`,
+    label: mediaLabel(entry),
+    url: fullSizeUrl(entry, design),
+  }));
+
+  /** Where the focused preview sits in the reel, or ``-1`` when it is
+   * something the locator is offering that the listing has not taken yet.
+   * Such a thing is not in the carousel at all, so clicking it opens nothing
+   * -- adding it first is one click away and is what the pane's own button
+   * is for. */
+  function focusedReelIndex(): number {
+    if (focus === null) return -1;
+    return detail.media.findIndex((entry) =>
+      focus.kind === "shared"
+        ? entry === focus.asset.ref
+        : typeof entry !== "string" &&
+          entry.template === focus.template &&
+          (entry.colour ?? null) === focus.colour,
+    );
   }
 
   const focusInListing =
@@ -323,10 +374,32 @@ export function ImagesTab({ detail, onUpdate }: Props) {
 
                   {open && (
                     <div className="loc-tmpl__body">
-                      {t.kind === "colour-matrix" ? (
+                      {t.kind === "colour-matrix" && detail.colors.length === 0 ? (
+                        // Nothing to offer: a colour-matrix entry needs a
+                        // colour, and every colour it could name comes from
+                        // the listing's own `colors:`. Adding one anyway would
+                        // write `{template, colour: null}`, which is a block.
+                        <p className="loc-tmpl__note">Pick colours on Variants first.</p>
+                      ) : t.kind === "colour-matrix" ? (
                         <>
                           <div className="cchips">
-                            {t.colours.map((colour) => {
+                            {/* The listing's own colours, not `t.colours`:
+                                a colour-matrix set's photos are named for
+                                PRD 7a's slug, but a template with a shared
+                                filename prefix (`{template}-{colour}.png`)
+                                reports that whole prefixed stem as its
+                                "colour" (`template_colours`'s enumeration
+                                direction has no slug to match against,
+                                unlike `template_base_image`'s lookup
+                                direction, which resolves a bare slug against
+                                exactly this fallback) -- so comparing against
+                                `detail.colors` by string equality showed
+                                nothing at all for such a template. `media[]`
+                                always stores the listing's own bare slug
+                                (confirmed by `isInMedia`), so that is what a
+                                chip must offer, regardless of what the
+                                template's own photos happen to be named. */}
+                            {detail.colors.map((colour) => {
                               const inListing = isInMedia(detail.media, t.name, colour);
                               return (
                                 <button
@@ -462,25 +535,42 @@ export function ImagesTab({ detail, onUpdate }: Props) {
       <div className="images-right">
         <div className="preview-pane">
           <span className="section-label">Preview</span>
-          <div className="preview-stage preview-stage--images">
+          <div className="preview-stage preview-stage--large">
             {focus === null && (
               <div className="image-placeholder">
                 <span>Point at something on the left</span>
               </div>
             )}
-            {focus?.kind === "template" && (
+            {focus !== null && (
               <>
-                {focus.colour !== null && (
+                {focus.kind === "template" && focus.colour !== null && (
                   <span className="preview-stage__tag tag tag-neutral">{focus.colour}</span>
                 )}
-                <img
-                  src={templateThumbnailUrl(focus.template, focus.colour)}
-                  alt={mediaLabel({ template: focus.template, colour: focus.colour })}
-                />
+                {/* A button, not a bare `<img onClick>`: opening the carousel
+                    is an action, and the keyboard has to be able to take it. */}
+                <button
+                  type="button"
+                  className="preview-stage__open"
+                  title={
+                    focusInListing
+                      ? "Open the listing's images at full size"
+                      : "Add it to the listing to open it at full size"
+                  }
+                  onClick={() => {
+                    const index = focusedReelIndex();
+                    if (index >= 0) setLightboxIndex(index);
+                  }}
+                >
+                  <img
+                    src={
+                      focus.kind === "shared"
+                        ? commonMediaFileUrl(focus.asset.name)
+                        : fullSizeUrl({ template: focus.template, colour: focus.colour }, design)
+                    }
+                    alt={focusTitle}
+                  />
+                </button>
               </>
-            )}
-            {focus?.kind === "shared" && (
-              <img src={commonMediaThumbnailUrl(focus.asset.name)} alt={focus.asset.name} />
             )}
           </div>
 
@@ -561,7 +651,10 @@ export function ImagesTab({ detail, onUpdate }: Props) {
                 >
                   <div
                     className="rtile__face"
-                    onClick={() => setSelectedIndex(index)}
+                    onClick={() => {
+                      setSelectedIndex(index);
+                      setLightboxIndex(index);
+                    }}
                     onMouseEnter={() => {
                       if (isTemplate) {
                         setFocus({
@@ -603,7 +696,13 @@ export function ImagesTab({ detail, onUpdate }: Props) {
                       className="rtile__x"
                       role="button"
                       aria-label={`Remove ${mediaLabel(entry)}`}
-                      onClick={() => removeAt(index)}
+                      // The × sits inside the face, which now opens the
+                      // carousel -- so removing an image must not also open
+                      // the one that slid into its place.
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        removeAt(index);
+                      }}
                     >
                       ×
                     </span>
@@ -623,6 +722,17 @@ export function ImagesTab({ detail, onUpdate }: Props) {
           {status}
         </p>
       </div>
+
+      {lightboxIndex !== null && lightboxItems[lightboxIndex] !== undefined && (
+        <Lightbox
+          items={lightboxItems}
+          index={lightboxIndex}
+          actualSize={actualSize}
+          onActualSizeChange={setActualSize}
+          onIndexChange={setLightboxIndex}
+          onClose={() => setLightboxIndex(null)}
+        />
+      )}
     </div>
   );
 }

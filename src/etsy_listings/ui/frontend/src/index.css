@@ -292,6 +292,13 @@ input[type="checkbox"] {
   background: var(--color-neutral-100);
   color: var(--color-neutral-800);
 }
+/* `dirty` only: a live listing whose workspace copy has moved on. Louder than
+   the other three on purpose -- it is the one state where what buyers see is
+   known to be out of date. */
+.tag-dirty {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg));
+  color: var(--color-danger-700);
+}
 
 /* — segmented control — */
 .seg {
@@ -1627,7 +1634,7 @@ table.listings tbody tr:last-child td {
   height: 30px;
   flex: none;
   border-radius: var(--radius-sm);
-  object-fit: cover;
+  object-fit: contain;
   background: var(--color-neutral-200);
   box-shadow: var(--shadow-sm);
 }
@@ -1680,7 +1687,7 @@ table.listings tbody tr:last-child td {
 .listing-popup__thumb {
   width: 100%;
   height: 100px;
-  object-fit: cover;
+  object-fit: contain;
   border-radius: var(--radius-sm);
   margin-bottom: var(--space-2);
   background: var(--color-neutral-200);
@@ -2039,6 +2046,30 @@ table.listings tbody tr:last-child td {
   margin-bottom: var(--space-4);
 }
 
+/* The name field on `/listings/new`, styled to sit where the `<h1>` does on a
+   saved listing -- the editor is the same screen either way, and a name that
+   moved when it was committed would say otherwise. */
+.page-head__name {
+  font-size: 25px;
+  font-weight: 700;
+  padding: 2px 10px;
+  min-width: 20ch;
+}
+
+/* The name and whatever the server said about it, as one unit in the head's
+   flex row -- so a refusal sits beside the field being corrected rather than
+   pushing the status pill along. */
+.page-head__name-edit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.page-head__name-error {
+  font-size: 11px;
+  color: var(--color-danger-700);
+}
+
 .layout--variants {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
@@ -2062,12 +2093,21 @@ table.listings tbody tr:last-child td {
 
 .section-label {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 700;
-  letter-spacing: 0.09em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
   margin: 0 0 4px;
+}
+
+/* The design-select strip's "Find a design…" button: `.btn-like` is
+   Caprasimo (a decorative display face) everywhere else, which reads fine at
+   heading sizes but not at this one -- scoped to `.add-panel`, the only
+   place this button lives, rather than every pill button in the app. */
+.add-panel .btn-like {
+  font-family: var(--font-body);
+  font-weight: 600;
 }
 
 /* — colours (Variants tab) — */
@@ -2126,6 +2166,21 @@ table.listings tbody tr:last-child td {
 .color-row__name {
   font-size: 12.5px;
   font-weight: 600;
+}
+
+/* The real garment shade (sampled off its own scene photo), not an invented
+   hex value -- see GET /api/templates/{name}/swatch. */
+.color-row__swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.color-row--off .color-row__swatch {
+  opacity: 0.45;
 }
 
 /* A switch is a `<button role="switch">` here, not a styled checkbox --
@@ -2436,6 +2491,22 @@ table.listings tbody tr:last-child td {
   display: block;
   font-size: 12px;
   font-weight: 600;
+  margin-top: 2px;
+}
+
+.price-table__input {
+  width: 100%;
+  margin-top: 2px;
+  padding: 3px 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.price-table__currency {
+  display: block;
+  font-size: 9.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
   margin-top: 2px;
 }
 
@@ -2781,12 +2852,37 @@ table.listings tbody tr:last-child td {
   display: block;
 }
 
-.preview-stage--images {
-  min-height: 260px;
+/* The stage a picture is *judged* on, in both editor tabs: as large as the
+   column and the window allow, capped at the 1024px the artwork is drawn at.
+   A 320px tile answers "which one is this"; it cannot answer whether the ink
+   suits the cloth, which is the only reason either tab has a preview. The
+   viewport term is what keeps the reel and the colour list on screen beside
+   it on a laptop. */
+.preview-stage--large {
+  min-height: 420px;
+  padding: var(--space-2);
 }
 
-.preview-stage--compact {
-  min-height: 320px;
+.preview-stage--large img {
+  max-width: 100%;
+  max-height: min(1024px, calc(100vh - 260px));
+}
+
+/* A button only so the keyboard can open the carousel -- it must look like
+   the image it wraps and nothing else. */
+.preview-stage__open {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.preview-stage__open:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
 }
 
 /* Which colour the stage is showing, over the photo's top-left corner. */
@@ -2800,6 +2896,19 @@ table.listings tbody tr:last-child td {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+}
+
+/* The two bulk shade buttons, above the colour switches they act on. */
+.shade-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-2);
+}
+
+.shade-picker__hint {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
 .variants-preview__hint {

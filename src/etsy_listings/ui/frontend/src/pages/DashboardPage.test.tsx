@@ -38,23 +38,27 @@ function card(label: string): HTMLElement {
 afterEach(() => vi.restoreAllMocks());
 
 describe("DashboardPage", () => {
-  it("counts published and draft listings separately", async () => {
+  it("counts each lifecycle state separately", async () => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([
-      summary({ name: "a", status: "published" }),
-      summary({ name: "b", status: "published" }),
+      summary({ name: "a", status: "live" }),
+      summary({ name: "b", status: "live" }),
       summary({ name: "c", status: "draft" }),
+      summary({ name: "d", status: "deployed" }),
+      summary({ name: "e", status: "dirty" }),
     ]);
     renderPage();
 
-    await waitFor(() => expect(within(card("Published")).getByText("2")).toBeInTheDocument());
-    expect(within(card("Drafts")).getByText("1")).toBeInTheDocument();
+    await waitFor(() => expect(within(card("Live")).getByText("2")).toBeInTheDocument());
+    expect(within(card("Draft")).getByText("1")).toBeInTheDocument();
+    expect(within(card("Deployed")).getByText("1")).toBeInTheDocument();
+    expect(within(card("Dirty")).getByText("1")).toBeInTheDocument();
   });
 
   it("shows zeroes rather than nothing on an empty workspace", async () => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([]);
     renderPage();
 
-    await waitFor(() => expect(within(card("Published")).getByText("0")).toBeInTheDocument());
+    await waitFor(() => expect(within(card("Live")).getByText("0")).toBeInTheDocument());
   });
 
   it("starts a new listing from here too", async () => {
