@@ -34,6 +34,8 @@ from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
     check_garment_profile_chosen,
+    check_lifecycle_verb,
+    check_listing_yaml_present,
 )
 
 PROFILE = GarmentProfile(
@@ -211,6 +213,29 @@ def test_a_gate_agrees_with_the_banner_about_a_design(
     gate = check_design_resolution(design, PROFILE)
     banner = rules.check_design_resolution(design, PROFILE)
 
+    assert (gate is None) == (banner == [])
+    if gate is not None:
+        assert gate.message == banner[0].message
+
+
+@pytest.mark.parametrize(
+    ("lifecycle", "published"),
+    [("deleted", True), ("retired", False), ("deleted", False), (None, True)],
+)
+def test_a_gate_agrees_with_the_banner_about_the_lifecycle_verb(
+    lifecycle: str | None, published: bool
+) -> None:
+    gate = check_lifecycle_verb(lifecycle, published=published)
+    banner = rules.check_lifecycle_verb(lifecycle, published=published)
+    assert (gate is None) == (banner == [])
+    if gate is not None:
+        assert gate.message == banner[0].message
+
+
+@pytest.mark.parametrize("present", [True, False])
+def test_a_gate_agrees_with_the_banner_about_a_missing_listing_yaml(present: bool) -> None:
+    gate = check_listing_yaml_present(present=present)
+    banner = rules.check_listing_yaml_present(present=present)
     assert (gate is None) == (banner == [])
     if gate is not None:
         assert gate.message == banner[0].message

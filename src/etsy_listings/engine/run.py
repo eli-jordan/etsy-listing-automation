@@ -34,6 +34,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
+import yaml
+
 from etsy_listings import __about__
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.context import RunContext
@@ -139,7 +141,12 @@ def apply_listings(
         lock = _read_lock(ctx, listing)
         planned = build_plan(ctx, listing, lock, stages)
         on_planned(listing, planned)
-        execute(ctx, planned, lock).write(ctx.workspace.lock_file(listing))
+        result = execute(ctx, planned, lock)
+        if _retract_succeeded(planned):
+            ctx.workspace.remove_listing(listing)
+            return planned
+        result.write(ctx.workspace.lock_file(listing))
+        _omit_consumed_renew(ctx, listing, planned)
         return planned
 
     return _over(listings, work, on_failure)
@@ -167,6 +174,31 @@ def _over(
         else:
             outcomes.append(ListingOutcome(listing=listing, planned=planned))
     return RunReport(outcomes=tuple(outcomes))
+
+
+def _retract_succeeded(planned: PlannedRun) -> bool:
+    return any(
+        state.stage.name == "retract" and state.stage_plan.will_run for state in planned.states
+    )
+
+
+def _omit_consumed_renew(ctx: RunContext, listing: str, planned: PlannedRun) -> None:
+    """``lifecycle: renew`` is a one-shot mark (PRD 62). Apply sends
+    ``state=active``, then deletes the key. ``plan`` never writes the yaml."""
+    etsy_plan = next(
+        (sp for sp in planned.plan.stage_plans if sp.stage == "etsy_listing"),
+        None,
+    )
+    if etsy_plan is None or etsy_plan.blocked is not None:
+        return
+    path = ctx.workspace.listing_file(listing)
+    if not path.is_file():
+        return
+    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    if raw.get("lifecycle") != "renew":
+        return
+    del raw["lifecycle"]
+    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
 
 
 def _read_lock(ctx: RunContext, listing: str) -> Lockfile:

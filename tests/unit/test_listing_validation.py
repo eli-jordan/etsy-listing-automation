@@ -15,7 +15,13 @@ from PIL import Image
 
 from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
 from etsy_listings.config.listing import EtsyListingConfig, Listing, TemplateMediaEntry
-from etsy_listings.config.listing_validation import Issue, TemplateInfo, check_listing
+from etsy_listings.config.listing_validation import (
+    Issue,
+    TemplateInfo,
+    check_lifecycle_verb,
+    check_listing,
+    check_listing_yaml_present,
+)
 
 PROFILE = GarmentProfile(
     blueprint=BlueprintRef(brand="Comfort Colors", model="1717"),
@@ -46,6 +52,7 @@ def _listing(
     description: str = "A retro sunset scene.",
     tags: list[str] | None = None,
     variation_images: str | None = None,
+    lifecycle: str | None = None,
 ) -> Listing:
     return Listing(
         garment_profile=garment_profile,
@@ -62,6 +69,7 @@ def _listing(
             tags=tags if tags is not None else ["hiking"],
             variation_images=variation_images,
         ),
+        **({"lifecycle": lifecycle} if lifecycle is not None else {}),
     )
 
 
@@ -72,6 +80,7 @@ def _check(
     garment_profile_names: list[str] | None = None,
     design_paths: dict[str, Path] | None = None,
     templates: dict[str, TemplateInfo] | None = None,
+    published: bool | None = None,
 ) -> list[Issue]:
     return check_listing(
         listing,
@@ -81,6 +90,7 @@ def _check(
         ),
         design_paths=design_paths if design_paths is not None else {},
         templates=templates if templates is not None else {"flat-lay-01": FLAT_LAY},
+        published=published,
     )
 
 
@@ -344,3 +354,54 @@ class TestNothingChosenYet:
             update={"prices": {}, "pricing_plan": "../../pricing-plans/tee.yaml"}
         )
         assert not [i for i in _check(listing) if "Pricing" in i.where]
+
+
+class TestLifecycleVerb:
+    """PRD 62: wrong verb is Blocked, never rewritten as the right one."""
+
+    def test_deleted_on_a_published_listing_blocks_and_says_to_retire(self) -> None:
+        issues = check_lifecycle_verb("deleted", published=True)
+        assert len(issues) == 1
+        first, *rest = issues[0].message.splitlines()
+        assert first == (
+            "this listing has been published; retracting it would discard its history."
+        )
+        assert any("retire" in line.lower() for line in rest)
+        assert issues[0].severity == "block"
+
+    def test_retired_on_a_never_live_listing_blocks_and_says_there_is_nothing_to_pause(
+        self,
+    ) -> None:
+        issues = check_lifecycle_verb("retired", published=False)
+        assert len(issues) == 1
+        first, *rest = issues[0].message.splitlines()
+        assert "never been for sale" in first
+        assert "nothing to pause" in first
+        assert issues[0].severity == "block"
+
+    def test_deleted_on_a_never_live_listing_is_the_right_verb(self) -> None:
+        assert check_lifecycle_verb("deleted", published=False) == []
+
+    def test_retired_on_a_published_listing_is_the_right_verb(self) -> None:
+        assert check_lifecycle_verb("retired", published=True) == []
+
+    def test_omitted_lifecycle_is_never_the_wrong_verb(self) -> None:
+        assert check_lifecycle_verb(None, published=True) == []
+        assert check_lifecycle_verb(None, published=False) == []
+
+    def test_check_listing_surfaces_the_wrong_verb_when_it_knows_published(self) -> None:
+        issues = _check(_listing(lifecycle="deleted"), published=True)
+        blocking = [i for i in issues if i.severity == "block" and i.where == "lifecycle"]
+        assert blocking
+
+
+class TestMissingListingYaml:
+    def test_a_missing_file_is_not_consent(self) -> None:
+        issues = check_listing_yaml_present(present=False)
+        assert len(issues) == 1
+        assert "listing.yaml" in issues[0].message
+        assert "not consent" in issues[0].message
+        assert issues[0].severity == "block"
+
+    def test_a_present_file_is_silent(self) -> None:
+        assert check_listing_yaml_present(present=True) == []

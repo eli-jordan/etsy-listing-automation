@@ -16,6 +16,7 @@ import pytest
 from etsy_listings.engine.status import (
     edited_since_apply,
     is_live_etsy_state,
+    listing_gestures,
     listing_status,
 )
 
@@ -45,6 +46,154 @@ class TestTheTransitionTable:
         towards what a shop visitor can see, which is the half a user cannot
         fix by re-running anything."""
         assert listing_status(applied=False, edited=False, live=True) == "live"
+
+
+class TestDeleteAndRetireBadges:
+    """PRD 61–67: the original four remain; these add, and win when both
+    could apply. `live` still means "has left draft"; `etsy_state` names
+    which published condition, so inactive/expired are not painted live."""
+
+    def test_lifecycle_deleted_is_pending_delete(self) -> None:
+        assert (
+            listing_status(applied=True, edited=False, live=False, lifecycle="deleted")
+            == "pending-delete"
+        )
+
+    def test_retired_while_etsy_is_still_active_is_pending_retire(self) -> None:
+        assert (
+            listing_status(
+                applied=True,
+                edited=False,
+                live=True,
+                lifecycle="retired",
+                etsy_state="active",
+            )
+            == "pending-retire"
+        )
+
+    def test_retired_applied_and_etsy_inactive_is_inactive(self) -> None:
+        assert (
+            listing_status(
+                applied=True,
+                edited=False,
+                live=True,
+                lifecycle="retired",
+                etsy_state="inactive",
+                last_applied_lifecycle="retired",
+            )
+            == "inactive"
+        )
+
+    def test_edits_while_retired_stay_retired(self) -> None:
+        """A typo fix must not paint the row dirty — Un-retire is its own
+        gesture, not a side-effect of saving the yaml."""
+        assert (
+            listing_status(
+                applied=True,
+                edited=True,
+                live=True,
+                lifecycle="retired",
+                etsy_state="inactive",
+                last_applied_lifecycle="retired",
+            )
+            == "inactive"
+        )
+
+    def test_etsy_paused_us_is_inactive_until_we_renew(self) -> None:
+        assert (
+            listing_status(applied=True, edited=False, live=True, etsy_state="inactive")
+            == "inactive"
+        )
+
+    def test_etsy_removed_us_is_inactive_until_we_renew(self) -> None:
+        assert (
+            listing_status(applied=True, edited=False, live=True, etsy_state="removed")
+            == "inactive"
+        )
+
+    def test_etsy_expired_is_named_because_money(self) -> None:
+        assert (
+            listing_status(applied=True, edited=False, live=True, etsy_state="expired") == "expired"
+        )
+
+    def test_sold_out_stays_live(self) -> None:
+        """Inventory, not a pause — apply does not treat it as retirement."""
+        assert (
+            listing_status(applied=True, edited=False, live=True, etsy_state="sold_out") == "live"
+        )
+
+    def test_un_retire_is_draft_because_we_want_it_on_sale(self) -> None:
+        assert (
+            listing_status(
+                applied=True,
+                edited=False,
+                live=True,
+                etsy_state="inactive",
+                last_applied_lifecycle="retired",
+            )
+            == "draft"
+        )
+
+    def test_pending_renew_is_draft(self) -> None:
+        assert (
+            listing_status(
+                applied=True,
+                edited=False,
+                live=True,
+                lifecycle="renew",
+                etsy_state="expired",
+            )
+            == "draft"
+        )
+
+    def test_adopting_a_remote_pause_is_inactive_not_pending_retire(self) -> None:
+        """Retire on an already-inactive listing writes `retired`; Etsy is
+        not still active, so calling it pending-retire would lie."""
+        assert (
+            listing_status(
+                applied=True,
+                edited=False,
+                live=True,
+                lifecycle="retired",
+                etsy_state="inactive",
+            )
+            == "inactive"
+        )
+
+
+class TestGestures:
+    """PRD 66: which buttons the listings table offers. Derived from the
+    same facts as the badge, so the two cannot disagree about the row."""
+
+    def test_never_live_is_delete(self) -> None:
+        assert listing_gestures(published=False) == ("delete",)
+
+    def test_live_with_no_lifecycle_is_retire(self) -> None:
+        assert listing_gestures(published=True, etsy_state="active") == ("retire",)
+
+    def test_pending_retire_is_un_retire(self) -> None:
+        assert listing_gestures(lifecycle="retired", etsy_state="active") == ("un-retire",)
+
+    def test_retired_applied_is_un_retire(self) -> None:
+        assert listing_gestures(lifecycle="retired", etsy_state="inactive") == ("un-retire",)
+
+    def test_pending_delete_is_cancel(self) -> None:
+        assert listing_gestures(lifecycle="deleted") == ("cancel",)
+
+    def test_etsy_paused_us_is_retire_and_renew(self) -> None:
+        assert listing_gestures(published=True, etsy_state="inactive") == (
+            "retire",
+            "renew",
+        )
+
+    def test_expired_is_retire_and_renew(self) -> None:
+        assert listing_gestures(published=True, etsy_state="expired") == (
+            "retire",
+            "renew",
+        )
+
+    def test_sold_out_is_retire_only(self) -> None:
+        assert listing_gestures(published=True, etsy_state="sold_out") == ("retire",)
 
 
 class TestWhatCountsAsLive:

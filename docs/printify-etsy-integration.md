@@ -31,7 +31,9 @@ variants on the Printify side and republish `{variants: true}`. This is the one
 that exercises what the Phase 3 stages will do.
 
 Both products were unpublished and deleted afterwards. Both Etsy drafts
-survived — see *Cleanup does not clean up*.
+survived — see *Cleanup does not clean up*. That sequence (unpublish, then
+DELETE) is not the one the tool will use; connected DELETE takes the draft
+(PRD 63).
 
 **One conclusion from round 1 was corrected by round 2**: the number of images
 Printify sends. See *The first publish sends images regardless*.
@@ -522,17 +524,24 @@ should carry the server's own text.
 
 ## Cleanup does not clean up
 
+This probe called `unpublish.json` then `DELETE`. That sequence is what the
+measurements below describe; it is not what the tool will do (PRD 63).
+
 `POST unpublish.json` returned `200 {}` and cleared `external`;
 `DELETE products.json` returned `200 {}`. The **Etsy listing survived both**,
 still `state: "draft"`, still carrying our copy.
 
-So deleting a Printify product orphans its Etsy listing rather than retracting
-it. The tool cannot repair this itself: `listings_d` is deliberately outside
-`SCOPES` (PRD 50), so an orphaned draft is a Shop Manager job. Anything that
-deletes a product should say so rather than implying the listing went with it.
+So **unpublish then delete** orphans the Etsy listing rather than retracting
+it. A later e2e teardown — `DELETE` of a still-connected product, no
+unpublish — returned `404` for the listing that product had minted. The
+generalisation this section originally drew (any Printify delete orphans
+Etsy) mixed the two sequences. The tool deletes connected, never unpublished
+first, and fails the apply rather than wiping local files if the draft
+survives. `listings_d` stays outside `SCOPES` (PRD 50). Live listings are
+never deleted this way.
 
-Both probe listings — `4572537111` and `4572550919` — were left behind this way
-and need deleting by hand.
+Both probe listings — `4572537111` and `4572550919` — were left behind by the
+unpublish-then-delete path and needed deleting by hand.
 
 ---
 

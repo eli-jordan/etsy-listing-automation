@@ -64,3 +64,11 @@ def check_garment_profile_chosen(garment_profile: str) -> Blocked | None:
 
 def check_copy_is_concrete(*, title: str, description: str) -> Blocked | None:
     return _refuse(rules.check_copy_is_concrete(title=title, description=description))
+
+
+def check_lifecycle_verb(lifecycle: str | None, *, published: bool) -> Blocked | None:
+    return _refuse(rules.check_lifecycle_verb(lifecycle, published=published))
+
+
+def check_listing_yaml_present(*, present: bool) -> Blocked | None:
+    return _refuse(rules.check_listing_yaml_present(present=present))

@@ -90,6 +90,17 @@ export async function createListing(body: CreateListingRequest): Promise<Listing
  * 200, because the editor shows those inline and keeps going. A *name* it will
  * not take is a 400 or a 409, because there is nothing to show inline and the
  * only useful answer is to say so beside the name field. */
+/** Wipe a never-pushed listing, or mark one with remotes ``lifecycle: deleted``.
+ * 204 means the files are gone; 200 is the still-listed pending-delete row. */
+export async function deleteListing(name: string): Promise<ListingSummary | null> {
+  const { data, error, response } = await api.DELETE("/api/listings/{name}", {
+    params: { path: { name } },
+  });
+  if (response?.status === 204) return null;
+  if (error || !data) throw new ListingsApiError(`could not delete listing ${name}`);
+  return data as ListingSummary;
+}
+
 export async function renameListing(name: string, newName: string): Promise<ListingDetail> {
   const { data, error } = await api.POST("/api/listings/{name}/rename", {
     params: { path: { name } },

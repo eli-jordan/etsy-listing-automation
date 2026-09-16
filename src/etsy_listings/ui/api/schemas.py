@@ -18,7 +18,7 @@ from etsy_listings.config.listing import Listing
 # command have to agree on it), and a second `Literal` here would be a second
 # place a state could be added to. Derived on every read, never persisted --
 # the same principle `TemplateSummary.status` states below.
-from etsy_listings.engine.status import ListingStatus
+from etsy_listings.engine.status import ListingGesture, ListingStatus
 from etsy_listings.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
@@ -196,6 +196,11 @@ class ListingSummary(BaseModel):
     offers the same "Open on Etsy / Printify" menu the editor's page head
     does -- and a menu per row that each had to fetch its own ids would be one
     request per listing to render a list."""
+    gestures: list[ListingGesture] = []
+    """Which buttons the listings table offers for this row (PRD 66). Computed
+    server-side from the same facts as ``status``, so the CLI's future
+    `status` and the table cannot disagree about the row. Empty on the
+    editor's `ListingDetail` -- those buttons do not exist there."""
 
 
 class ResolvedPrice(BaseModel):

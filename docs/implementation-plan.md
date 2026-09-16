@@ -1,11 +1,12 @@
 # Implementation Plan: Etsy Listing Automation
 
-Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 59 product
+Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 67 product
 forks; this document settles *how* it is built — module boundaries, core contracts,
 and the order of work. Where the two disagree, the PRD wins and this file is wrong.
 
 Phase 3's detail lives in [phase-3-etsy.md](phase-3-etsy.md), subsidiary to
-both.
+both. Delete and retire (PRD 61–67) live in
+[listing-lifecycle.md](listing-lifecycle.md).
 
 ---
 

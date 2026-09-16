@@ -31,7 +31,10 @@ the original sketch, are out of scope; the architecture should not preclude them
 
 ## Non-goals (v1)
 
-- Activating listings. The tool creates and maintains drafts; you publish by hand.
+- Activating listings. The tool creates and maintains drafts; you publish by
+  hand. **Amended (#64):** pause and resume of something a human already
+  published is plan/apply (`state=inactive` / `state=active`). A `draft` is
+  still never activated.
 - Order or fulfilment management (Printify's native Etsy integration owns this).
 - Full Etsy fee modelling — see the deferred note at the end.
 - Occlusion masking in mockups (v2).
@@ -742,9 +745,10 @@ guided flow.
 ### Dashboard (read-only)
 - Connected shop identity and auth status.
 - Every listing grouped by state: **draft**, **deployed**, **live** and
-  **dirty**. Two independent facts decide which, and neither is a state on its
-  own: has the listing been applied (and edited since), and has a human
-  published it on Etsy.
+  **dirty**, plus the retire/delete badges in
+  [listing-lifecycle.md](listing-lifecycle.md) (#61). Two independent facts
+  decide the original four, and neither is a state on its own: has the listing
+  been applied (and edited since), and has a human published it on Etsy.
 
   | | never applied, or edited since | applied, unchanged since |
   |---|---|---|
@@ -759,9 +763,10 @@ guided flow.
 
   **published** was one state and is now two, because the two halves are
   different news. A listing this tool has applied sits at Etsy as a draft
-  until a person presses publish (non-goal 1 — the tool never activates one),
-  and that wait is *deployed*: nothing is wrong, and nothing more will happen
-  without a human. *Live* is the settled end of the line.
+  until a person presses publish (non-goal 1 — the tool never activates a
+  *draft*), and that wait is *deployed*: nothing is wrong, and nothing more
+  will happen without a human. *Live* is the settled end of the line. Pause
+  and resume of a listing already published is #64, not this wait.
 
   The asymmetry between **draft** and **dirty** is the other half. Both mean
   the workspace holds something Etsy does not; they differ in who is looking
@@ -772,6 +777,19 @@ guided flow.
 - Drift indicators where live remote state diverges from the lockfile.
 - History of `plan` and `apply` runs with status, and live progress for anything
   currently running.
+
+### Retiring and deleting
+
+Two operations, not one. **Delete** retracts a listing that has never been
+published on Etsy. **Retire** pauses one that has (`state=inactive`); local
+files and the Printify product stay. Once a listing has left `draft`, delete
+is `Blocked`. `listings_d` stays outside the granted scopes (#50). The field
+is `lifecycle:` on `listing.yaml` — omitted, `retired`, `deleted`, or a
+one-shot `renew` — not `status`, which the table already uses for the badge.
+Gestures live on the listings table, rightmost column; there is no new CLI
+verb. Detail, including what Printify `DELETE` does to an Etsy draft and what
+`plan` does when Etsy pauses a listing we did not, is
+[listing-lifecycle.md](listing-lifecycle.md) (#61–#67).
 
 ### Template authoring
 - **A template is a folder the user puts in the workspace; the calibrator does
@@ -1272,3 +1290,10 @@ whether Norway is among them needs checking, not assuming).
 | 58 | Shipping ownership | The tool owns the Etsy-side shipping profile by **asserting it on every listing it manages**, and `shipping_template: false` is treated as a hint rather than a guarantee — measured, Printify creates and attaches its own US-origin profile on first publish regardless, publishing USD rates as NOK numerals (`$10.39` → `kr 10,39`, a ~90% shortfall). This closes risk 13 by design rather than by a flag: `read_live` reads the listing's actual `shipping_profile_id`, so a profile Printify re-attaches is **drift**, `plan` reports it, and `apply` re-asserts. No always-rewrite special case, and no dependence on a boolean Printify honours only sometimes. |
 | 59 | Referring to a return policy | By its **terms**, not its id: `return_policy: {accepts_returns, accepts_exchanges, within_days}`, resolved by exact match against `getShopReturnPolicies`. Etsy gives a return policy no title, but the three terms are its identity — `return_deadline` is constrained to `[7, 14, 21, 30, 45, 60, 90]`, and Etsy ships `consolidateShopReturnPolicies` precisely because duplicate term-sets are merged rather than kept. **Omitting it is the zero-config path**: a shop with exactly one policy needs no reference. Two or more with none named is an error listing them by their terms, because guessing which refund policy was meant is not a thing a tool should do. Same ladder as #52's partner, for the same reason: when Etsy offers exactly one, do not make anyone name it. |
 | 60 | Renaming a listing | A listing's identity is its directory name, and the editor's page head renames it in place (double-click the title). The rename moves `listings/{name}/` whole — document, lockfile and Phase 4's generated copy — and `.cache/renders/{name}/` with it, so the next `plan` reports no change; leaving the cache behind would cost a full re-render (the hash carries no listing name, so nothing would re-upload) and orphan a tree nothing deletes. The lockfile's `outputs` keys are left stale deliberately: nothing reads them, they become true again at the next apply, and rewriting them from the API layer would breach "only the lockfile merges a lockfile". Nothing remote is keyed by the name — both remote titles come from `etsy.title` and both ids from the lockfile — so a rename costs no remote write. A name already in use is refused, never merged into. |
+| 61 | Delete vs retire | Two operations. **Delete** retracts never-live listings (local-only, Printify-only, Etsy `draft`). **Retire** pauses a published listing (`state=inactive`); files and the Printify product stay. Once a listing has left `draft`, delete is `Blocked` — the history PRD 37 refused to throw away for a garment change. `listings_d` stays outside `SCOPES` (#50): this tool still never calls Etsy's `deleteListing`. Draft retraction is Printify's cascade (#63), not Etsy's delete. Detail: [listing-lifecycle.md](listing-lifecycle.md). |
+| 62 | `lifecycle` field | Optional key on `listing.yaml`: omitted (working, including after Un-retire), `retired`, `deleted`, or one-shot `renew`. Named `lifecycle`, not `status`, because the table already has a Status column for the badge. `plan` never writes the yaml. Wrong verb (`deleted` on published, `retired` on never-live) is `Blocked`, never rewritten as the right one. |
+| 63 | Never-live delete | No remotes: confirm dialog, rm `listings/{name}/` and `.cache/renders/{name}/` now — `plan` never sees it. Remotes: confirm, write `lifecycle: deleted`, pending-delete badge, `apply` is retract-only. Printify `DELETE` of the **still-connected** product (never `unpublish.json` first); `GET` the Etsy id; `404` then wipe files; still there then fail and keep the files. Unpublish-then-DELETE orphans the draft (measured 2026-09-10); connected DELETE takes it (measured in e2e teardown). Live cascade unmeasured, and delete is `Blocked` there anyway. |
+| 64 | Etsy `state` writes | Never sent on a `draft` — first publish stays Shop Manager, non-goal 1. `lifecycle: retired` → apply sends `inactive`. Apply sends `active` only for Un-retire (last applied was `retired`, now omitted) or `renew`. Edits while retired stay retired; a typo does not put the listing back on sale. Copy and media still sync on a retired listing; a deleted one is retract-only. |
+| 65 | Remote pause | Plan **reads** Etsy `state`. It does not write yaml and does not send `active` because the field was omitted. Names `inactive` / `expired` / `removed` and says apply will not reactivate. Two explicit gestures: Retire (adopt) and Renew (`lifecycle: renew`). `sold_out` is inventory, stays `live`. Auto-adopting `retired` into the file would make Etsy the author of `listing.yaml`. |
+| 66 | Gestures | Listings table, rightmost column. Never-live → Delete; live → Retire; pending-retire / retired applied → Un-retire; pending-delete → Cancel; Etsy paused us → Retire \| Renew. Delete confirms (dialog, no typing). No editor-page copy, no CLI twins. Yaml hand-edit still works. |
+| 67 | Missing `listing.yaml` | Directory with a lockfile and no yaml still appears, `Blocked`: restore the file. Never infer retire or delete — a missing file is not consent. Whole `listings/{name}/` tree gone is invisible and out of scope; no shop-wide crawl for ids no local file names. |

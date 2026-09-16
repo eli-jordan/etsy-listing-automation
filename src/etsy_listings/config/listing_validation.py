@@ -78,6 +78,23 @@ class TemplateInfo:
 _GARMENT_PROFILE_WHERE = "Variants › Garment profile"
 _DESIGN_WHERE = "Design"
 _COPY_WHERE = {"title": "Listing Details › Title", "description": "Listing Details › Description"}
+_LIFECYCLE_WHERE = "lifecycle"
+
+DELETED_ON_PUBLISHED = (
+    "this listing has been published; retracting it would discard its history.\n"
+    "Retire it instead -- that pauses the Etsy listing without throwing the "
+    "history away."
+)
+RETIRED_ON_NEVER_LIVE = (
+    "this listing has never been for sale; there is nothing to pause.\n"
+    "Delete it instead if you want it gone."
+)
+MISSING_LISTING_YAML = (
+    "listing.yaml is missing; a missing file is not consent to retire or "
+    "delete anything.\n"
+    "Restore listing.yaml. Until then this tool will not send state, retire, "
+    "or delete remotes."
+)
 
 RESOLUTION_TOLERANCE = 0.9
 """A design must reach 90% of the print area on each axis (PRD 38).
@@ -412,6 +429,36 @@ def _check_colours_in_garment_profile(
     ]
 
 
+def check_lifecycle_verb(lifecycle: str | None, *, published: bool) -> list[Issue]:
+    """Refuse the wrong end-of-life verb (PRD 62).
+
+    ``deleted`` on something that has left Etsy ``draft`` would throw away
+    reviews, favourites and search history -- the same history PRD 37
+    refused to discard to change a garment. ``retired`` on a never-live
+    listing pauses nothing. Wrong verb is never rewritten as the right one.
+    """
+    if lifecycle == "deleted" and published:
+        return [
+            Issue("block", "details", _LIFECYCLE_WHERE, DELETED_ON_PUBLISHED),
+        ]
+    if lifecycle == "retired" and not published:
+        return [
+            Issue("block", "details", _LIFECYCLE_WHERE, RETIRED_ON_NEVER_LIVE),
+        ]
+    return []
+
+
+def check_listing_yaml_present(*, present: bool) -> list[Issue]:
+    """Refuse to infer retire or delete from a missing file (PRD 67).
+
+    A directory that still has a lockfile is visible; a missing document is
+    not consent. Never send ``state``, never delete remotes.
+    """
+    if present:
+        return []
+    return [Issue("block", "details", _LIFECYCLE_WHERE, MISSING_LISTING_YAML)]
+
+
 def check_listing(
     listing: Listing,
     *,
@@ -419,6 +466,7 @@ def check_listing(
     garment_profile_names: Iterable[str],
     design_paths: Mapping[str, Path],
     templates: Mapping[str, TemplateInfo],
+    published: bool | None = None,
 ) -> list[Issue]:
     """Every business-level issue with ``listing``, assuming it already passed
     `Listing.model_validate` -- structural failures are the API layer's to
@@ -443,4 +491,6 @@ def check_listing(
     issues += _check_template_kind_colour_match(listing, templates)
     issues += _check_variation_images(listing, templates)
     issues += _check_tags(listing)
+    if published is not None:
+        issues += check_lifecycle_verb(listing.lifecycle, published=published)
     return issues

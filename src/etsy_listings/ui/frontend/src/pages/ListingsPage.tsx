@@ -1,10 +1,25 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { listingDesignThumbnailUrl, listListings } from "../api/listings";
+import {
+  deleteListing,
+  listingDesignThumbnailUrl,
+  listListings,
+  patchListing,
+} from "../api/listings";
 import { OpenOnMenu } from "../components/OpenOnMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
 import type { ListingStatus, ListingSummary } from "../types";
+
+type Gesture = ListingSummary["gestures"][number];
+
+const GESTURE_LABELS: Record<Gesture, string> = {
+  delete: "Delete",
+  retire: "Retire",
+  "un-retire": "Un-retire",
+  cancel: "Cancel",
+  renew: "Renew",
+};
 
 /** The listings list (phase 5): table + search + status filter pills, from
  * the design mockup's listings section, backed by `GET /api/listings`. */
@@ -73,6 +88,29 @@ export function ListingsPage() {
       .catch(() => setStatus("failed to load listings"));
   }, []);
 
+  const runGesture = useCallback(
+    async (row: ListingSummary, gesture: Gesture) => {
+      if (gesture === "delete") {
+        if (!window.confirm(`Delete ${row.name}?`)) return;
+        try {
+          await deleteListing(row.name);
+          refresh();
+        } catch {
+          setStatus(`could not delete ${row.name}`);
+        }
+        return;
+      }
+      const lifecycle = gesture === "retire" ? "retired" : gesture === "renew" ? "renew" : null;
+      try {
+        await patchListing(row.name, { lifecycle });
+        refresh();
+      } catch {
+        setStatus(`could not ${GESTURE_LABELS[gesture].toLowerCase()} ${row.name}`);
+      }
+    },
+    [refresh],
+  );
+
   useEffect(() => {
     refresh();
   }, [refresh]);
@@ -131,6 +169,7 @@ export function ListingsPage() {
             <th>Listing</th>
             <th>Garment</th>
             <th>Status</th>
+            <th className="listings__actions"> </th>
           </tr>
         </thead>
         <tbody>
@@ -166,6 +205,18 @@ export function ListingsPage() {
               <td className="listing-row__garment">{row.garment_profile}</td>
               <td>
                 <StatusTag status={row.status} />
+              </td>
+              <td className="listings__actions">
+                {(row.gestures ?? []).map((gesture) => (
+                  <button
+                    key={gesture}
+                    type="button"
+                    className={gesture === "delete" ? "btn btn-danger" : "btn btn-ghost"}
+                    onClick={() => void runGesture(row, gesture)}
+                  >
+                    {GESTURE_LABELS[gesture]}
+                  </button>
+                ))}
               </td>
             </tr>
           ))}

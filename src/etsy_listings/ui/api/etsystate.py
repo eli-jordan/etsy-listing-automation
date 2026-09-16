@@ -40,45 +40,57 @@ TTL_SECONDS = 30.0
 
 Clock = Callable[[], float]
 
-_cache: dict[int, tuple[float, bool]] = {}
-"""listing id -> (expiry, is-live). Process-wide rather than per-request: one
-`ui` process serves one workspace, and the whole point is that two requests a
-second apart share an answer."""
+_cache: dict[int, tuple[float, str | None]] = {}
+"""listing id -> (expiry, Etsy ``state`` or ``None``). Process-wide rather
+than per-request: one `ui` process serves one workspace, and the whole
+point is that two requests a second apart share an answer. The raw state
+is what delete/retire badges need (inactive vs expired vs sold_out);
+:func:`live_listing_ids` still collapses it."""
 
 
-def live_listing_ids(
+def etsy_states(
     root: Path, listing_ids: Iterable[int], *, now: Clock = time.monotonic
-) -> set[int]:
-    """Which of ``listing_ids`` Etsy reports as published.
+) -> dict[int, str | None]:
+    """Each of ``listing_ids``' Etsy ``state``, or ``None`` when unknown.
 
     Ids still inside the memo are answered from it; the rest are fetched in
-    one batch. An id Etsy does not answer for is cached as not-live like any
+    one batch. An id Etsy does not answer for is cached as ``None`` like any
     other, so a listing deleted on Etsy does not re-ask every time the table
     is drawn.
     """
     wanted = set(listing_ids)
     if not wanted:
-        return set()
+        return {}
 
     moment = now()
-    live = {i for i in wanted if i in _cache and _cache[i][0] > moment and _cache[i][1]}
-    stale = {i for i in wanted if i not in _cache or _cache[i][0] <= moment}
+    found = {i: _cache[i][1] for i in wanted if i in _cache and _cache[i][0] > moment}
+    stale = {i for i in wanted if i not in found}
     if not stale:
-        return live
+        return found
 
     expiry = moment + TTL_SECONDS
     for listing_id, state in _fetch(root, sorted(stale)).items():
         _cache[listing_id] = (expiry, state)
-        if state:
-            live.add(listing_id)
-    return live
+        found[listing_id] = state
+    return found
 
 
-def _fetch(root: Path, listing_ids: list[int]) -> dict[int, bool]:
-    """``listing_id -> is-live`` for every id asked about, including the ones
+def live_listing_ids(
+    root: Path, listing_ids: Iterable[int], *, now: Clock = time.monotonic
+) -> set[int]:
+    """Which of ``listing_ids`` Etsy reports as published."""
+    return {
+        i
+        for i, state in etsy_states(root, listing_ids, now=now).items()
+        if is_live_etsy_state(state)
+    }
+
+
+def _fetch(root: Path, listing_ids: list[int]) -> dict[int, str | None]:
+    """``listing_id -> state`` for every id asked about, including the ones
     Etsy had no answer for -- see the module docstring on why a failure is
     reported as "not live" rather than raised."""
-    absent = dict.fromkeys(listing_ids, False)
+    absent: dict[int, str | None] = dict.fromkeys(listing_ids)
     client = connections.etsy_listing_client(root)
     if client is None:
         return absent
@@ -86,7 +98,7 @@ def _fetch(root: Path, listing_ids: list[int]) -> dict[int, bool]:
         states = client.listing_states(listing_ids)
     except (EtsyApiError, EtsyAuthError, MissingCredentialError):
         return absent
-    return {**absent, **{i: is_live_etsy_state(s) for i, s in states.items()}}
+    return {**absent, **states}
 
 
 def forget() -> None:

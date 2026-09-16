@@ -163,6 +163,11 @@ class Listing(BaseModel):
     likely to actually revisit per design."""
     etsy: EtsyListingConfig = EtsyListingConfig()
     media: list[MediaEntry]
+    lifecycle: Literal["retired", "deleted", "renew"] | None = None
+    """Desired end-of-life (PRD 62). Omitted on a working listing, including
+    after Un-retire. ``plan`` never writes this key; wrong verb is ``Blocked``,
+    never rewritten as the right one. Named ``lifecycle``, not ``status``,
+    because the listings table already has a Status column."""
 
     @model_validator(mode="after")
     def _validate(self, info: ValidationInfo) -> Listing:

@@ -571,6 +571,22 @@
             "title": "Issues",
             "type": "array"
           },
+          "lifecycle": {
+            "anyOf": [
+              {
+                "enum": [
+                  "retired",
+                  "deleted",
+                  "renew"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lifecycle"
+          },
           "media": {
             "items": {
               "anyOf": [
@@ -660,7 +676,11 @@
               "draft",
               "deployed",
               "live",
-              "dirty"
+              "dirty",
+              "pending-delete",
+              "pending-retire",
+              "inactive",
+              "expired"
             ],
             "title": "Status",
             "type": "string"
@@ -711,6 +731,21 @@
             "title": "Garment Profile",
             "type": "string"
           },
+          "gestures": {
+            "default": [],
+            "items": {
+              "enum": [
+                "delete",
+                "retire",
+                "un-retire",
+                "cancel",
+                "renew"
+              ],
+              "type": "string"
+            },
+            "title": "Gestures",
+            "type": "array"
+          },
           "issue_counts": {
             "$ref": "#/components/schemas/IssueCounts"
           },
@@ -734,7 +769,11 @@
               "draft",
               "deployed",
               "live",
-              "dirty"
+              "dirty",
+              "pending-delete",
+              "pending-retire",
+              "inactive",
+              "expired"
             ],
             "title": "Status",
             "type": "string"
@@ -1774,6 +1813,45 @@
       }
     },
     "/api/listings/{name}": {
+      "delete": {
+        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.",
+        "operationId": "delete_listing_api_listings__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Listing",
+        "tags": [
+          "listings"
+        ]
+      },
       "get": {
         "operationId": "get_listing_api_listings__name__get",
         "parameters": [

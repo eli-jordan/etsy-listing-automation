@@ -14,6 +14,7 @@ function summary(over: Partial<ListingSummary> & { name: string }): ListingSumma
     issue_counts: { block: 0, warn: 0 },
     etsy_listing_id: null,
     printify_product_id: null,
+    gestures: [],
     ...over,
   };
 }

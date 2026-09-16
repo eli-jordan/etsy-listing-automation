@@ -257,6 +257,25 @@ def test_resolved_price_raises_without_a_plan_when_the_size_is_missing() -> None
 # ------------------------------------------------------- the unsaved draft
 
 
+def test_lifecycle_is_omitted_on_a_working_listing() -> None:
+    """Named `lifecycle`, not `status`: the table already has a Status column
+    (PRD 62). Working listings do not carry a third value."""
+    listing = Listing.model_validate(BASE, context={"currency": "NOK"})
+    assert listing.lifecycle is None
+
+
+@pytest.mark.parametrize("value", ["retired", "deleted", "renew"])
+def test_lifecycle_accepts_the_three_marks(value: str) -> None:
+    listing = Listing.model_validate({**BASE, "lifecycle": value}, context={"currency": "NOK"})
+    assert listing.lifecycle == value
+
+
+def test_lifecycle_rejects_a_working_state_written_as_a_value() -> None:
+    """Un-retire is deleting the key, not writing `active`."""
+    with pytest.raises(ValidationError):
+        Listing.model_validate({**BASE, "lifecycle": "active"}, context={"currency": "NOK"})
+
+
 def test_an_empty_draft_builds_with_nothing_chosen() -> None:
     """What `+ New listing` opens on. Every field is empty rather than
     invented, and the one rule that stands in the way of an empty document --

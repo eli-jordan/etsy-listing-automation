@@ -1570,6 +1570,16 @@ table.listings {
   border-collapse: collapse;
 }
 
+table.listings th.listings__actions,
+table.listings td.listings__actions {
+  text-align: right;
+  white-space: nowrap;
+}
+
+table.listings td.listings__actions .btn {
+  margin-left: var(--space-1);
+}
+
 table.listings thead th {
   text-align: left;
   font-size: 10px;

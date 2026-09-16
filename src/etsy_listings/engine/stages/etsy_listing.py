@@ -12,14 +12,18 @@ every candidate the shop actually has rather than sending Etsy a PATCH that
 would answer `400` and fail the whole thing (a stale `shop_section_id` fails
 the entire request, measured).
 
-``state`` is never sent -- Etsy's update enum is `active | inactive`, a draft
-cannot be re-drafted, and the one thing this tool must never do by accident
-is activate a listing (PRD non-goal 1).
+``state`` is omitted on a ``draft`` -- Etsy's update enum is
+`active | inactive`, a draft cannot be re-drafted, and first publish stays
+Shop Manager (PRD non-goal 1). Pause and resume of something a human already
+published is the exception: ``lifecycle: retired`` sends ``inactive``;
+Un-retire (last applied was retired, now omitted) and ``renew`` send
+``active``. A remote pause with the field omitted does not.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -84,6 +88,10 @@ class AppliedEtsyListing(BaseModel):
     production_partners: tuple[str, ...] = ()
     production_partner_ids: tuple[int, ...] = ()
     should_auto_renew: bool
+    state: Literal["active", "inactive"] | None = None
+    """What this stage last sent, when it sent ``state`` at all. ``None``
+    means it has never paused or resumed this listing -- first publish does
+    not, and a remote pause is not adopted into the applied document."""
 
 
 @dataclass(frozen=True)
@@ -104,6 +112,7 @@ class EtsyListingDesired:
     production_partners: tuple[str, ...]
     production_partner_ids: tuple[int, ...]
     should_auto_renew: bool
+    state: Literal["active", "inactive"] | None = None
 
     def applied(self) -> AppliedEtsyListing:
         return AppliedEtsyListing(**self.__dict__)
@@ -130,6 +139,8 @@ class EtsyListingDesired:
             body["shop_section_id"] = self.shop_section_id
         if self.production_partner_ids:
             body["production_partner_ids"] = list(self.production_partner_ids)
+        if self.state is not None:
+            body["state"] = self.state
         return body
 
 
@@ -141,7 +152,6 @@ class EtsyListingStage:
     def desired(
         self, ctx: RunContext, listing: str, applied: AppliedEtsyListing | None
     ) -> EtsyListingDesired | Blocked:
-        del applied
         workspace = ctx.workspace
         blocked = check_etsy_shop(ctx, consequence=NO_SHOP_CONSEQUENCE)
         if blocked is not None:
@@ -211,6 +221,7 @@ class EtsyListingStage:
             production_partners=partner_names,
             production_partner_ids=partner_ids,
             should_auto_renew=renewal == "auto",
+            state=_desired_state(config.lifecycle, applied),
         )
 
     def read_live(
@@ -259,14 +270,32 @@ class EtsyListingStage:
         live: EtsyListing | None,
         lock: Lockfile,
     ) -> StageApplyResult:
-        del applied, live
+        del applied
         listing_id = require_etsy_listing_id(lock, to="patch the listing")
 
         shop_id = ctx.workspace.defaults.etsy.require_shop_id()
         ctx.emit(f"patching Etsy listing {listing_id}")
-        ctx.require_etsy().update_listing(shop_id, listing_id, desired.patch_body())
+        body = desired.patch_body()
+        # Birth-only: Etsy will not re-draft, and activating a draft is
+        # Shop Manager's (PRD non-goal 1). A desired state computed from
+        # yaml must not ride along on a listing that is still a draft.
+        if live is not None and live.state == "draft":
+            body.pop("state", None)
+        ctx.require_etsy().update_listing(shop_id, listing_id, body)
 
         return StageApplyResult(applied=desired.applied().model_dump(mode="json"))
+
+
+def _desired_state(
+    lifecycle: str | None, applied: AppliedEtsyListing | None
+) -> Literal["active", "inactive"] | None:
+    if lifecycle == "retired":
+        return "inactive"
+    if lifecycle == "renew":
+        return "active"
+    if lifecycle is None and applied is not None and applied.state == "inactive":
+        return "active"
+    return None
 
 
 def _terms(config: EtsyReturnPolicyDefaults | None) -> ReturnPolicyTerms | None:
@@ -289,6 +318,7 @@ _FIELDS: tuple[str, ...] = (
     "when_made",
     "is_supply",
     "should_auto_renew",
+    "state",
 )
 
 
