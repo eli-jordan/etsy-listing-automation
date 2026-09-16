@@ -38,7 +38,11 @@ def thumbnail_response(source: Path) -> Response:
     """
     buffer = BytesIO()
     with Image.open(source) as img:
-        flattened = img.convert("RGB")
+        # RGBA, not RGB: a design's transparent background has no colour of
+        # its own, and flattening onto RGB bakes it to opaque black (PIL's
+        # default fill) instead of leaving it for the `<img>`'s own CSS
+        # background to show through.
+        flattened = img.convert("RGBA")
         flattened.thumbnail((THUMBNAIL_MAX, THUMBNAIL_MAX))
         flattened.save(buffer, format="PNG")
     return Response(

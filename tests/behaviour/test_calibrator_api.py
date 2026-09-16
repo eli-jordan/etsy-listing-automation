@@ -476,6 +476,82 @@ def test_preview_renders_the_full_composite_for_multiple_kind(client: TestClient
     assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+class TestDesignPreview:
+    """`GET .../design-preview`: the listing editor's real-render preview,
+    which -- unlike `preview()` above -- resolves a listing's real
+    `designs/*.png` artwork and reads geometry from the *saved*
+    template.yaml rather than the request body."""
+
+    def test_renders_a_real_png_for_a_colour_matrix_colour(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "take-a-hike", "colour": "black"},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_is_full_resolution_not_the_capped_thumbnail(self, client: TestClient) -> None:
+        thumb = client.get("/api/templates/flat-lay-01/thumbnail?colour=black")
+        with Image.open(BytesIO(thumb.content)) as img:
+            thumb_size = img.size
+        full = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "take-a-hike", "colour": "black"},
+        )
+        with Image.open(BytesIO(full.content)) as img:
+            full_size = img.size
+        assert full_size[0] > thumb_size[0]
+
+    def test_unknown_design_404s(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "no-such-design", "colour": "black"},
+        )
+        assert response.status_code == 404
+
+    def test_unknown_colour_404s(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "take-a-hike", "colour": "not-a-real-colour"},
+        )
+        assert response.status_code == 404
+
+    def test_colour_is_ignored_for_a_kind_with_no_per_colour_photo(
+        self, client: TestClient
+    ) -> None:
+        """`colour-chart-01` is `multiple`-kind -- one scene, no per-colour
+        photo -- so a stray `colour` param must not turn into a 404 the way
+        it would for a real colour-matrix miss."""
+        response = client.get(
+            "/api/templates/colour-chart-01/design-preview",
+            params={"design": "take-a-hike", "colour": "not-a-real-colour"},
+        )
+        assert response.status_code == 200
+
+
+class TestSwatch:
+    """`GET .../swatch`: a colour's real garment shade, sampled off its own
+    scene photo -- not an invented hex value."""
+
+    def test_returns_a_hex_colour_for_a_real_colour(self, client: TestClient) -> None:
+        response = client.get("/api/templates/flat-lay-01/swatch", params={"colour": "black"})
+        assert response.status_code == 200
+        hex_value = response.json()["hex"]
+        assert hex_value.startswith("#")
+        assert len(hex_value) == 7
+
+    def test_unknown_colour_404s(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/templates/flat-lay-01/swatch", params={"colour": "not-a-real-colour"}
+        )
+        assert response.status_code == 404
+
+    def test_404s_for_a_non_colour_matrix_template(self, client: TestClient) -> None:
+        response = client.get("/api/templates/colour-chart-01/swatch", params={"colour": "black"})
+        assert response.status_code == 404
+
+
 class TestPreviewScale:
     """The editor's canvas and the Preview tab are the *same* render at two
     sizes -- and the smaller one is why dragging a box stopped taking seconds

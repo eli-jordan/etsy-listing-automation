@@ -70,6 +70,14 @@ class AssignKindRequest(BaseModel):
     kind: TemplateKind
 
 
+class SwatchResponse(BaseModel):
+    """A colour-matrix colour's real garment shade, sampled off its own scene
+    photo (`render/swatch.py`'s `sample_swatch`) rather than an invented or
+    hand-typed hex value -- nothing in the domain model stores one."""
+
+    hex: str
+
+
 class ColourReportRow(BaseModel):
     """What one photo in a candidate ``colour-matrix`` set will be taken as.
 

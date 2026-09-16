@@ -41,6 +41,7 @@ from etsy_listings.render.config import (
 )
 from etsy_listings.render.io import encode_png
 from etsy_listings.render.pipeline import Layer, render_scene
+from etsy_listings.render.swatch import sample_swatch
 from etsy_listings.ui.api.designs import resolve_design
 from etsy_listings.ui.api.imagecache import (
     EDITOR_MAX_EDGE,
@@ -54,6 +55,7 @@ from etsy_listings.ui.api.schemas import (
     MultiplePreviewRequest,
     PreviewRequest,
     SinglePreviewRequest,
+    SwatchResponse,
     TemplateKind,
     TemplateSummary,
 )
@@ -483,14 +485,22 @@ def _encode_preview(image: Image.Image, scale: PreviewScale) -> Response:
     return Response(content=buffer.getvalue(), media_type=EDITOR_MEDIA_TYPE)
 
 
-@router.post("/{name}/preview")
-def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "full") -> Response:
-    workspace, name = template.workspace, template.name
-    kind = _load_config(workspace, name).kind
-    if not isinstance(body, PREVIEW_BODIES[kind]):
-        raise HTTPException(status_code=400, detail=f"expected a {kind} preview body")
-
-    colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
+def _render_preview_response(
+    workspace: Workspace,
+    name: str,
+    *,
+    colour: str | None,
+    configs: list[RenderConfig],
+    design_path: Path,
+    scale: PreviewScale,
+) -> Response:
+    """Composite ``design_path`` onto ``name``'s scene photo at ``configs``'
+    geometry. Shared by the calibrator's live-drag preview (geometry from the
+    request body, design from its own test-design library) and the listing
+    editor's read-only preview (geometry from the saved ``template.yaml``,
+    design from a listing's real artwork) -- the two differ only in *where*
+    those two things come from, never in how the render itself runs.
+    """
     photo = workspace.scene_photo(name, colour)
     if not photo.path.is_file():
         missing = f"colour {colour!r}" if colour is not None else f"{name!r}"
@@ -503,21 +513,100 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
     base: ScaledBase = PREVIEW_IMAGES.base(
         photo.path, EDITOR_MAX_EDGE if scale == "editor" else None
     )
-    design = PREVIEW_IMAGES.design(resolve_design(workspace, body.design))
-    configs = [_scaled(cfg, base.scale) for cfg in _preview_configs(body)]
+    design = PREVIEW_IMAGES.design(design_path)
+    scaled_configs = [_scaled(cfg, base.scale) for cfg in configs]
     derived = workspace.template_derived_dir(name)
     image = render_scene(
         base.image,
-        [Layer(design=design, cfg=cfg) for cfg in configs],
+        [Layer(design=design, cfg=cfg) for cfg in scaled_configs],
         height=(
             PREVIEW_IMAGES.height(derived, photo.map_key, base)
-            if any(cfg.displace.enabled for cfg in configs)
+            if any(cfg.displace.enabled for cfg in scaled_configs)
             else None
         ),
         luminance=(
             PREVIEW_IMAGES.luminance(derived, photo.map_key, base)
-            if any(cfg.shade.enabled for cfg in configs)
+            if any(cfg.shade.enabled for cfg in scaled_configs)
             else None
         ),
     )
     return _encode_preview(image, scale)
+
+
+@router.post("/{name}/preview")
+def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "full") -> Response:
+    workspace, name = template.workspace, template.name
+    kind = _load_config(workspace, name).kind
+    if not isinstance(body, PREVIEW_BODIES[kind]):
+        raise HTTPException(status_code=400, detail=f"expected a {kind} preview body")
+
+    colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
+    return _render_preview_response(
+        workspace,
+        name,
+        colour=colour,
+        configs=_preview_configs(body),
+        design_path=resolve_design(workspace, body.design),
+        scale=scale,
+    )
+
+
+def _saved_render_configs(config: AnyTemplate) -> list[RenderConfig]:
+    """The layers to composite from *saved* ``template.yaml`` geometry --
+    what the listing editor's read-only preview wants, unlike
+    :func:`_preview_configs`'s unsaved, still-being-dragged geometry."""
+    if isinstance(config, MultipleTemplate):
+        return [config.render_config_for(p) for p in config.placements]
+    return [config.render_config()]
+
+
+@router.get("/{name}/design-preview")
+def design_preview(
+    template: Existing, design: str, colour: str | None = None, scale: PreviewScale = "full"
+) -> Response:
+    """A listing's *real* artwork, composited onto this template's saved
+    geometry -- what the listing editor's Variants/Listing Images tabs show
+    so a colour can be judged against the actual design, not a bare photo.
+
+    ``design`` is a name from ``GET /api/listing-designs``, resolved through
+    ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
+    which is the calibrator's own test-design library and never sees a
+    listing's real artwork.
+    """
+    workspace, name = template.workspace, template.name
+    config = _load_config(workspace, name)
+    design_path = workspace.design_file(design)
+    if not design_path.is_file():
+        raise HTTPException(status_code=404, detail=f"no design {design!r}")
+
+    resolved_colour = colour if isinstance(config, ColourMatrixTemplate) else None
+    return _render_preview_response(
+        workspace,
+        name,
+        colour=resolved_colour,
+        configs=_saved_render_configs(config),
+        design_path=design_path,
+        scale=scale,
+    )
+
+
+@router.get("/{name}/swatch", response_model=SwatchResponse)
+def swatch(template: Existing, colour: str) -> SwatchResponse:
+    """This colour's real garment shade, for a quick-glance dot next to its
+    name -- the median pixel (`sample_swatch`) inside the saved bounding box
+    of the colour's own scene photo, not an invented hex value. Only a
+    ``colour-matrix`` template has one photo per colour to sample; any other
+    kind 404s the same way a photo-less colour does.
+    """
+    workspace, name = template.workspace, template.name
+    config = _load_config(workspace, name)
+    if not isinstance(config, ColourMatrixTemplate):
+        raise HTTPException(status_code=404, detail=f"{name!r} is not a colour-matrix template")
+
+    photo = workspace.scene_photo(name, colour)
+    if not photo.path.is_file():
+        raise HTTPException(status_code=404, detail=f"no photo for {name!r} colour {colour!r}")
+
+    base = PREVIEW_IMAGES.base(photo.path)
+    red, green, blue = sample_swatch(base.image, config.bounding_box)
+    return SwatchResponse(hex=f"#{red:02x}{green:02x}{blue:02x}")
