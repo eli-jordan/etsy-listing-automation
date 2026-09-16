@@ -59,7 +59,12 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("VariantsTab's preview", () => {
   const profiles: GarmentProfileSummary[] = [
-    { name: "comfort-colors-1717", sizes: ["S"], colors: { black: "dark", ivory: "light" } },
+    {
+      name: "comfort-colors-1717",
+      sizes: ["S"],
+      colors: { black: "dark", ivory: "light" },
+      preview_template: "flat-lay-01",
+    },
   ];
 
   function renderWithFlatLay(over: Partial<ListingDetail> = {}) {
@@ -69,7 +74,9 @@ describe("VariantsTab's preview", () => {
       <VariantsTab
         detail={detail({
           colors: ["black", "ivory"],
-          media: [{ template: "flat-lay-01", colour: "black" }],
+          // Preview is the garment profile's colour-matrix, not a media:
+          // entry -- a new listing has not picked listing images yet.
+          media: [],
           ...over,
         })}
         onUpdate={vi.fn()}
@@ -145,20 +152,50 @@ describe("VariantsTab's preview", () => {
     expect(container.querySelector(".color-row--selected")).not.toHaveClass("color-row--off");
   });
 
-  it("explains itself when the listing uses no colour-matrix template", async () => {
-    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue(profiles);
-    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
-      template({ name: "sizing-chart", kind: "single", colours: [] }),
+  it("explains itself when the garment profile names no colour-matrix preview", async () => {
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      {
+        name: "comfort-colors-1717",
+        sizes: ["S"],
+        colors: { black: "dark" },
+        preview_template: null,
+      },
     ]);
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([template({ name: "flat-lay-01" })]);
     render(
       <VariantsTab
-        detail={detail({ colors: ["black"], media: [{ template: "sizing-chart", colour: null }] })}
+        detail={detail({
+          colors: ["black"],
+          media: [{ template: "flat-lay-01", colour: "black" }],
+        })}
         onUpdate={vi.fn()}
       />,
     );
 
     expect(
-      await screen.findByText(/Add a colour-matrix mockup on Listing Images/),
+      await screen.findByText(/Set preview_template on the garment profile/),
+    ).toBeInTheDocument();
+    // media: still names a colour-matrix -- guessing from it is what made
+    // preview wait on the Images tab.
+    expect(screen.queryByAltText("black on flat-lay-01")).not.toBeInTheDocument();
+  });
+
+  it("ignores a preview_template that is not colour-matrix", async () => {
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      {
+        name: "comfort-colors-1717",
+        sizes: ["S"],
+        colors: { black: "dark" },
+        preview_template: "colour-chart-01",
+      },
+    ]);
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
+      template({ name: "colour-chart-01", kind: "multiple", colours: [] }),
+    ]);
+    render(<VariantsTab detail={detail({ colors: ["black"] })} onUpdate={vi.fn()} />);
+
+    expect(
+      await screen.findByText(/Set preview_template on the garment profile/),
     ).toBeInTheDocument();
   });
 });

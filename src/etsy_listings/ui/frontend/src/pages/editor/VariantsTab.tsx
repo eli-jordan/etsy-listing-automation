@@ -15,13 +15,16 @@ import { singleDesignName } from "./designName";
  * cursor (phase 5).
  *
  * A swatch dot next to each name is the listing's *real* garment colour, not
- * an invented hex value -- sampled off the preview template's own scene
- * photo (`render/swatch.py`'s `sample_swatch`, via `GET .../swatch`). It
- * answers "roughly what colour is this" for scanning the whole list; "does
- * this colour suit the design" is still the big preview stage beside it, which
- * overlays the listing's real artwork (`GET .../design-preview`) rather than
- * showing a bare photo -- and is rendered large, because that judgement is
- * about the ink on the cloth and a postage stamp cannot carry it.
+ * an invented hex value -- sampled off the garment profile's
+ * `preview_template` (`render/swatch.py`'s `sample_swatch`, via
+ * `GET .../swatch`). It answers "roughly what colour is this" for scanning
+ * the whole list; "does this colour suit the design" is still the big
+ * preview stage beside it, which overlays the listing's real artwork
+ * (`GET .../design-preview`) rather than showing a bare photo -- and is
+ * rendered large, because that judgement is about the ink on the cloth and
+ * a postage stamp cannot carry it. The preview template is a colour-matrix
+ * on the garment, not a `media:` entry, so a new listing can judge colours
+ * before it has picked listing images (A13).
  *
  * Two different states, deliberately distinguished, because conflating them
  * painted every enabled row in the selected-row highlight:
@@ -43,17 +46,16 @@ interface Props {
   onUpdate: (patch: Record<string, unknown>) => void;
 }
 
-/** The template whose photos stand in for this listing's colours: the first
- * `colour-matrix` one its own `media:` references. Not "any colour-matrix
- * template in the workspace" -- a preview should show a garment this listing
- * actually ships, and `media:` is where that is decided (PRD 31). */
-function previewTemplate(detail: ListingDetail, templates: TemplateSummary[]): string | null {
-  const byName = new Map(templates.map((t) => [t.name, t]));
-  for (const entry of detail.media) {
-    if (typeof entry === "string") continue;
-    if (byName.get(entry.template)?.kind === "colour-matrix") return entry.template;
-  }
-  return null;
+/** The garment profile's colour-matrix, used to judge colours before the
+ * listing has picked its Etsy images. Not a `media:` default (A13) -- a
+ * template that is missing, or not colour-matrix, is no preview. */
+function previewTemplate(
+  profile: GarmentProfileSummary | undefined,
+  templates: TemplateSummary[],
+): string | null {
+  const name = profile?.preview_template;
+  if (!name) return null;
+  return templates.find((t) => t.name === name)?.kind === "colour-matrix" ? name : null;
 }
 
 export function VariantsTab({ detail, onUpdate }: Props) {
@@ -92,7 +94,7 @@ export function VariantsTab({ detail, onUpdate }: Props) {
       ? previewColour
       : (detail.colors[0] ?? colourNames[0] ?? null);
 
-  const template = previewTemplate(detail, templates);
+  const template = previewTemplate(profile, templates);
   const design = singleDesignName(detail.design);
 
   // One request per colour, fired once the preview template and colour list
@@ -300,7 +302,7 @@ export function VariantsTab({ detail, onUpdate }: Props) {
             </>
           ) : (
             <div className="image-placeholder">
-              <span>Add a colour-matrix mockup on Listing Images to preview colours here.</span>
+              <span>Set preview_template on the garment profile to a colour-matrix mockup.</span>
             </div>
           )}
         </div>
