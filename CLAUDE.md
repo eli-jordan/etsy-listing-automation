@@ -300,11 +300,13 @@ later. Each traces to a decision.
   fixed `scene.png` instead — no per-colour photo to name (PRD 28).
 - **A template is exactly one of three kinds — never a mix.** `kind:
   colour-matrix | multiple | single`, a discriminated union (`A11`). **No
-  garment-profile-level registry of templates** — `GarmentProfile` carries no
-  `templates` field; a template lives purely in `mockup-templates/{name}/`, and any
-  listing may reference any of them. A listing's `media:` always names
-  `{template, colour?}` explicitly — there is no default template and no
-  bare-colour shorthand (`A13`, PRD 29).
+  garment-profile-level registry of listing templates** — a template lives
+  purely in `mockup-templates/{name}/`, and any listing may reference any of
+  them. A listing's `media:` always names `{template, colour?}` explicitly —
+  there is no default template and no bare-colour shorthand (`A13`, PRD 29).
+  `GarmentProfile.preview_template` is the one exception: a single
+  `colour-matrix` template the editor uses to judge colours, not a `media:`
+  default.
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
   variants sell (Phase 2), not which photos get rendered (PRD 31).

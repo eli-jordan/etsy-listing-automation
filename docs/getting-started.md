@@ -382,6 +382,7 @@ print_provider: Monster Digital
 placeholder: front
 print_area: { width: 4500, height: 5400 }
 sizes: [S, M, L, XL, XXL, XXXL]
+preview_template: flat-lay-01   # colour-matrix; editor colour preview only
 ```
 
 `blueprint` is matched on **brand and model** — the pair you'd quote to order

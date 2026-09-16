@@ -236,10 +236,10 @@ profile, no colours, no pricing plan, nothing invented — and the editor is
 where each of those gets chosen, the same way every other field already was.
 Nothing is pre-filled, which supersedes the "colours default client-side to
 every colour the chosen garment profile offers" note below; the spirit of it
-survives one step later, as *picking* a garment profile onto a listing with no
-colours yet enabling that profile's colours. That is a response to an action
-rather than a starting state, and it is the only defensible reading once the
-profile is no longer chosen before the editor opens.
+survives one step later, as *picking* a garment profile enabling every colour
+that profile classifies (replacing whatever was selected). That is a response
+to an action rather than a starting state, and it is the only defensible
+reading once the profile is no longer chosen before the editor opens.
 
 **Incompleteness is the issues banner's job, not a 400's.** Every refusal
 `_stub()` used to raise is a block issue instead: no design selected, no
@@ -506,9 +506,11 @@ PATCH /api/listings/{name}          -> partial update; the autosave endpoint
 
 ### Supporting read-only endpoints
 
-- `GET /api/garment-profiles` -> `[{name, sizes, colors}]` from
-  `workspace.garment_profile_names()` + `load_garment_profile` — feeds the
-  Variants tab's garment dropdown and the new-listing picker.
+- `GET /api/garment-profiles` -> `[{name, sizes, colors, preview_template}]`
+  from `workspace.garment_profile_names()` + `load_garment_profile` — feeds
+  the Variants tab's garment dropdown (and, via `preview_template`, its
+  colour-judgement preview). `preview_template` is null when the garment
+  profile does not name one.
 - `GET /api/pricing-plans?garment_profile=X` -> compatible plans, via the
   same `newcmd/logic.py` pure functions used by creation. The parameter is
   optional: a listing with no garment profile chosen yet has nothing to be

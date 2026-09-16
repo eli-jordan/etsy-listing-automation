@@ -150,9 +150,12 @@ literal inputs to Printify's product-creation call — a template is not,
 Printify never sees it, it's purely local and Etsy-facing. The registry also
 got in the way of a real case: two listings sharing a garment wanting
 different mockups, or a listing wanting a template no other listing on that
-garment will ever reuse. `GarmentProfile` carries no `templates` field; a template
-lives purely in `mockup-templates/{name}/`, and any listing may reference any
-of them.
+garment will ever reuse. `GarmentProfile` carries no listing-template
+registry; a template lives purely in `mockup-templates/{name}/`, and any
+listing may reference any of them. The one template name it does carry is
+`preview_template` — a single `colour-matrix` used by the editor to judge
+colours, never written into `media:` and never what decides which scenes
+render (PRD 29, A13).
 
 **Listing media always references a template explicitly** — there is no bare
 `mockup: <colour>` shorthand:
@@ -295,7 +298,7 @@ shorthand was removed, in the same spirit.
 | Per-colour override | Removed entirely for `colour-matrix` kind. A colour needing different geometry is a separate `single`-kind template instead. |
 | Artwork tone source | Human-classified once per garment profile by hand-editing the generated file (`new` does not ask), not auto-seeded — Printify hex isn't modelled in this codebase and isn't confirmed to exist in the real API. |
 | Media addressing | Always explicit `{template, colour?}` — no bare-colour shorthand, no "default template" concept. |
-| Template ownership | No per-garment registry — `GarmentProfile` carries no `templates` field; any listing may reference any template that exists in `mockup-templates/`. A template is purely local and Etsy-facing, unlike the fields (`blueprint`, `print_provider`, `sizes`) that are genuine Printify product-creation inputs and do belong on the garment profile. `TemplateNotFoundError` checks the template actually exists on disk instead of checking registry membership. |
+| Template ownership | No per-garment registry of listing templates — any listing may reference any template that exists in `mockup-templates/`. A template is purely local and Etsy-facing, unlike the fields (`blueprint`, `print_provider`, `sizes`) that are genuine Printify product-creation inputs and do belong on the garment profile. `preview_template` is the one name the garment profile does carry: a `colour-matrix` the editor uses to judge colours, not a `media:` default. `TemplateNotFoundError` checks the template actually exists on disk instead of checking registry membership. |
 | What renders | Driven purely by `media` references, not by `listing.colors` membership (a real behaviour change from before this work). |
 | Render output paths | Namespaced by template (`.cache/renders/{listing}/{template}/...`), not by colour alone — closes a collision a single-colour-matrix-template assumption used to hide. |
 | `multiple`-kind rendering | New `render_scene()`/`export_many()`, not a generalisation of the existing single-layer `render()`/`export()` — zero regression risk to existing goldens, verified by an explicit byte-identity test. |

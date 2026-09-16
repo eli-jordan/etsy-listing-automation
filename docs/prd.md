@@ -274,6 +274,7 @@ print_provider: Monster Digital     # authoritative; id resolved from cache
 placeholder: front
 print_area: { width: 4500, height: 5400 }   # px, from the catalog placeholders
 sizes: [S, M, L, XL, XXL, XXXL]
+preview_template: flat-lay-01   # colour-matrix; editor colour preview only
 ```
 
 **A blueprint is identified by brand and model, not by title.** This was a
@@ -307,7 +308,7 @@ the **largest** and says so. The print area is a resolution target — art sized
 for the 3XL panel still covers the S panel, and the reverse prints soft on the
 sizes with the most shirt to cover.
 
-Mockup templates are **not** listed here. Only fields Printify's product
+Listing mockups are **not** listed here. Only fields Printify's product
 creation actually needs live on the garment profile — `templates:` was tried and
 dropped (PRD 29): a template is a purely local, Etsy-facing rendering asset
 Printify never sees, so forcing it through a shared per-garment registry
@@ -315,6 +316,15 @@ didn't earn its keep the way `blueprint`/`sizes`/`print_area` do, and it got
 in the way of two listings on the same garment wanting different mockups. A
 listing's `media:` may reference any template that exists in
 `mockup-templates/` directly.
+
+The one exception is `preview_template:` — a single `colour-matrix` template
+the editor uses to judge colours on the Variants tab. It is not a default for
+`media:`, not a render input, and Printify never sees it. A listing that never
+mentions that template in `media:` still renders whatever `media:` does name
+(PRD 31). Optional, so a garment profile written before the field existed
+still loads; without it the Variants preview is empty until one is set. `new`
+does not prompt for it — it is hand-edited the same way `colors:` is
+classified.
 
 ### `pricing-plans/{name}.yaml` — optional, shared starting-price table
 
@@ -1230,7 +1240,7 @@ whether Norway is among them needs checking, not assuming).
 | 26 | First run | The `ui` opens a setup wizard when no shop is connected — Etsy and Printify auth, Anthropic credentials, and guided `shop.yaml` generation. |
 | 27 | Stage orchestration | `plan` determines whether render and generate need to run from input hashes; `apply` runs them. Both remain available as explicit commands. |
 | 28 | Template kinds | A template is exactly one of `colour-matrix` / `multiple` / `single`, never a mix — [docs/multi-placement-rendering.md](multi-placement-rendering.md). |
-| 29 | Multiple templates per listing | No garment-profile-level registry — a listing's `media:` may reference any template that exists in `mockup-templates/`, always naming it explicitly as `{template, colour?}`; no default, no shorthand. Superseded once from an earlier `profile.templates: list[str]` registry, dropped because a template is a purely local, Etsy-facing asset Printify never sees. |
+| 29 | Multiple templates per listing | No garment-profile-level registry of *listing* templates — a listing's `media:` may reference any template that exists in `mockup-templates/`, always naming it explicitly as `{template, colour?}`; no default, no shorthand. Superseded once from an earlier `profile.templates: list[str]` registry, dropped because a template is a purely local, Etsy-facing asset Printify never sees. **Amended:** the garment profile may name one `preview_template`, a `colour-matrix` template the editor uses to judge colours. That is not a `media:` default and does not decide what renders. |
 | 30 | Multi-artwork | `listing.design:` polymorphic (bare path or a map keyed by artwork tag); `garment_profile.colors` classified by hand-editing the generated garment profile file (`new` does not ask), not inferred from Printify. |
 | 31 | What renders | Driven purely by `media` references, not by `listing.colors` membership — a listing's colours drive which Printify variants sell, not which photos render. |
 | 32 | Frontend testing | Vitest + React Testing Library, v8 coverage provider, 80%-branch floor mirroring the Python gate, wired into `scripts/check.sh`. |
