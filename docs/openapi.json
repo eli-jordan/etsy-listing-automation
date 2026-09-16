@@ -188,21 +188,12 @@
         "type": "object"
       },
       "CreateListingRequest": {
+        "description": "The whole document, not a handful of fields to build one from.\n\nThe editor is the create form, so by the time a name is typed the user may\nhave chosen a design, colours and images -- and the shape they edited is the\nshape that should be written. A server-built stub here would be a second\nopinion about what a new listing starts as.",
         "properties": {
-          "colors": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Colors",
-            "type": "array"
-          },
-          "design": {
-            "title": "Design",
-            "type": "string"
-          },
-          "garment_profile": {
-            "title": "Garment Profile",
-            "type": "string"
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
           },
           "name": {
             "title": "Name",
@@ -211,9 +202,7 @@
         },
         "required": [
           "name",
-          "design",
-          "garment_profile",
-          "colors"
+          "document"
         ],
         "title": "CreateListingRequest",
         "type": "object"
@@ -261,6 +250,18 @@
           }
         },
         "title": "DisplaceConfig",
+        "type": "object"
+      },
+      "DraftListingRequest": {
+        "description": "A candidate ``listing.yaml``, as the editor holds it before the listing\nexists.\n\n``dict`` rather than ``Listing``, deliberately: an incomplete candidate is\nthe *normal* case on this endpoint, and rejecting it at the FastAPI boundary\nwould answer with a 422 the editor cannot render. The point is to get it as\nfar as ``Listing.draft`` and report what is missing.",
+        "properties": {
+          "document": {
+            "additionalProperties": true,
+            "title": "Document",
+            "type": "object"
+          }
+        },
+        "title": "DraftListingRequest",
         "type": "object"
       },
       "EtsyListingConfig": {
@@ -350,6 +351,25 @@
           }
         },
         "title": "EtsyListingConfig",
+        "type": "object"
+      },
+      "EtsySectionSummary": {
+        "description": "One row for the Details tab's Section dropdown, from\n`EtsyShopClient.shop_sections` -- unscoped, so this needs only the\nworkspace's app key pair, never a signed-in Etsy session.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title"
+        ],
+        "title": "EtsySectionSummary",
         "type": "object"
       },
       "GarmentProfileSummary": {
@@ -627,7 +647,9 @@
           "status": {
             "enum": [
               "draft",
-              "published"
+              "deployed",
+              "live",
+              "dirty"
             ],
             "title": "Status",
             "type": "string"
@@ -699,7 +721,9 @@
           "status": {
             "enum": [
               "draft",
-              "published"
+              "deployed",
+              "live",
+              "dirty"
             ],
             "title": "Status",
             "type": "string"
@@ -876,14 +900,32 @@
           "name": {
             "title": "Name",
             "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
           }
         },
         "required": [
           "name",
           "garment_profile",
-          "compatible"
+          "compatible",
+          "ref"
         ],
         "title": "PricingPlanSummary",
+        "type": "object"
+      },
+      "RenameListingRequest": {
+        "properties": {
+          "new_name": {
+            "title": "New Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "new_name"
+        ],
+        "title": "RenameListingRequest",
         "type": "object"
       },
       "ResolvedPrice": {
@@ -1051,6 +1093,20 @@
           "bounding_box"
         ],
         "title": "SingleTemplate",
+        "type": "object"
+      },
+      "SwatchResponse": {
+        "description": "A colour-matrix colour's real garment shade, sampled off its own scene\nphoto (`render/swatch.py`'s `sample_swatch`) rather than an invented or\nhand-typed hex value -- nothing in the domain model stores one.",
+        "properties": {
+          "hex": {
+            "title": "Hex",
+            "type": "string"
+          }
+        },
+        "required": [
+          "hex"
+        ],
+        "title": "SwatchResponse",
         "type": "object"
       },
       "TemplateMediaEntry": {
@@ -1259,6 +1315,47 @@
         ]
       }
     },
+    "/api/common-media/{name}/file": {
+      "get": {
+        "description": "The shared asset at its own size, for the editor's preview pane and its\nlightbox -- the two places a picture is *judged* rather than picked out of\na list.\n\nThe bytes as they sit on disk, not a re-encode: a mockup template's\ncounterpart (`GET .../design-preview`) has to run the real pipeline to\nexist at all, but this file is already exactly what would be uploaded to\nEtsy, and the one thing worth seeing full-size is what Etsy will get.",
+        "operationId": "common_media_file_api_common_media__name__file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Common Media File",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
     "/api/common-media/{name}/thumbnail": {
       "get": {
         "description": "An unusable *name* needs nothing here: ``InvalidNameError`` out of\n``common_media_file`` becomes a 400 through the app-wide handler.",
@@ -1361,6 +1458,32 @@
         "summary": "Upload Design",
         "tags": [
           "designs"
+        ]
+      }
+    },
+    "/api/etsy/sections": {
+      "get": {
+        "description": "The live shop's sections, for the Details tab's Section dropdown.\nEmpty (not a 500) for a workspace with no `shop_id` yet or no Etsy app\nkey pair -- both ordinary states short of `setup`/`auth etsy`, and the\nfrontend falls back to a plain text field exactly like it did before this\nendpoint existed.",
+        "operationId": "list_etsy_sections_api_etsy_sections_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/EtsySectionSummary"
+                  },
+                  "title": "Response List Etsy Sections Api Etsy Sections Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Etsy Sections",
+        "tags": [
+          "listings-support"
         ]
       }
     },
@@ -1477,8 +1600,71 @@
         ]
       }
     },
+    "/api/listing-draft": {
+      "get": {
+        "description": "The listing `+ New listing` opens the editor on, before it has a name.\n\nThere is no separate create *form* -- the editor itself is the form, and a\nlisting is written the moment it is named and priced. What the editor needs\nfirst is a document to render, and inventing one in the browser would put\nthe starting shape of a listing in two places, so the server hands over\n`EMPTY_DRAFT`: nothing chosen, nothing invented, and a block issue for each\nthing still to pick.\n\n``name`` comes back empty, which is exactly the state the editor refuses to\nsave in.",
+        "operationId": "listing_draft_api_listing_draft_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Listing Draft",
+        "tags": [
+          "listings-support"
+        ]
+      },
+      "post": {
+        "description": "The same, for a candidate the editor has since edited. Writes nothing.\n\nThe mount-time draft above answers once; this is what keeps the issues\nbanner true for every edit made before the listing has a name. Without it\nthe banner would still be saying \"no colours enabled\" about a listing whose\ncolours were picked a minute ago -- and the banner is the only way an\nunsaved listing can be told what it is still missing.",
+        "operationId": "describe_listing_draft_api_listing_draft_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DraftListingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Describe Listing Draft",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
     "/api/listings": {
       "get": {
+        "description": "Every listing, with its status resolved in **one** Etsy round trip for\nthe whole table rather than one per row -- which is why the live fact is\ngathered here and handed down rather than looked up per listing.",
         "operationId": "list_listings_api_listings_get",
         "responses": {
           "200": {
@@ -1502,6 +1688,7 @@
         ]
       },
       "post": {
+        "description": "Naming a listing is what creates it.\n\nMirrors PATCH exactly, one level up: a document that fails\n``Listing.model_validate`` is a **200** carrying ``field_errors`` with\nnothing written, so the editor never has to branch on a status code to show\ninline validation. The two things a *name* can be wrong about keep their\nstatus codes instead -- not a single path segment is the 400 `_segment`\nraises through `listing_file`, and already taken is a 409.\n\nThat 409 tests the **directory**, not ``listing.yaml``: a `listings/{name}/`\nleft behind with a `state.lock.json` and no document would otherwise be\nwritten into, and the new listing would inherit another one's\n``etsy_listing_id``.",
         "operationId": "create_listing_api_listings_post",
         "requestBody": {
           "content": {
@@ -1635,15 +1822,70 @@
         ]
       }
     },
+    "/api/listings/{name}/rename": {
+      "post": {
+        "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name (PRD 60), so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
+        "operationId": "rename_listing_api_listings__name__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameListingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Listing",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
     "/api/pricing-plans": {
       "get": {
+        "description": "Every plan, each flagged for whether it was built for this garment.\n\n``garment_profile`` is optional because a listing that has not chosen one\nyet has nothing to be compatible *with*: asking with an empty name says that\nhonestly, and the editor then drops the \"different garment\" note rather than\nlabelling every plan as differing from a garment nobody picked.",
         "operationId": "list_pricing_plans_api_pricing_plans_get",
         "parameters": [
           {
             "in": "query",
             "name": "garment_profile",
-            "required": true,
+            "required": false,
             "schema": {
+              "default": "",
               "title": "Garment Profile",
               "type": "string"
             }
@@ -1894,6 +2136,86 @@
         ]
       }
     },
+    "/api/templates/{name}/design-preview": {
+      "get": {
+        "description": "A listing's *real* artwork, composited onto this template's saved\ngeometry -- what the listing editor's Variants/Listing Images tabs show\nso a colour can be judged against the actual design, not a bare photo.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file`` -- deliberately not :func:`resolve_design`,\nwhich is the calibrator's own test-design library and never sees a\nlisting's real artwork.",
+        "operationId": "design_preview_api_templates__name__design_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "design",
+            "required": true,
+            "schema": {
+              "title": "Design",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Colour"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scale",
+            "required": false,
+            "schema": {
+              "default": "full",
+              "enum": [
+                "editor",
+                "full"
+              ],
+              "title": "Scale",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Design Preview",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
     "/api/templates/{name}/kind": {
       "post": {
         "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.\n\nRefuses a template that already has a config. Kind decides the whole file\nshape (A11), so changing it would discard whatever calibration was done in\nthe old shape's fields -- and doing that silently, from a picker, is the\nkind of data loss nobody would think to look for.",
@@ -2036,6 +2358,58 @@
           }
         },
         "summary": "Preview",
+        "tags": [
+          "templates"
+        ]
+      }
+    },
+    "/api/templates/{name}/swatch": {
+      "get": {
+        "description": "This colour's real garment shade, for a quick-glance dot next to its\nname -- the median pixel (`sample_swatch`) inside the saved bounding box\nof the colour's own scene photo, not an invented hex value. Only a\n``colour-matrix`` template has one photo per colour to sample; any other\nkind 404s the same way a photo-less colour does.",
+        "operationId": "swatch_api_templates__name__swatch_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": true,
+            "schema": {
+              "title": "Colour",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SwatchResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Swatch",
         "tags": [
           "templates"
         ]

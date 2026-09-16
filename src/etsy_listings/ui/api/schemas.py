@@ -7,11 +7,18 @@ add a ``design`` selector nothing in the engine's config needs).
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, model_validator
 
 from etsy_listings.config.listing import Listing
+
+# ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
+# the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
+# command have to agree on it), and a second `Literal` here would be a second
+# place a state could be added to. Derived on every read, never persisted --
+# the same principle `TemplateSummary.status` states below.
+from etsy_listings.engine.status import ListingStatus
 from etsy_listings.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
@@ -149,12 +156,6 @@ class IssueCounts(BaseModel):
     warn: int
 
 
-ListingStatus = Literal["draft", "published"]
-"""Derived on every read, never persisted -- `published` iff a lockfile
-exists and carries an Etsy listing id, the same "derived" principle already
-stated for `TemplateSummary.status`."""
-
-
 class ListingSummary(BaseModel):
     name: str
     garment_profile: str
@@ -204,6 +205,26 @@ class ListingDetail(Listing):
     different plan from the UI is deferred (phase-5-listings-ui.md)."""
     resolved_prices: list[ResolvedPrice] = []
 
+    @model_validator(mode="after")
+    def _require_a_price_source(self) -> ListingDetail:
+        """Describing a listing never re-decides whether it may be *written*.
+
+        A listing with neither ``pricing_plan`` nor ``prices`` is exactly the
+        state the editor exists to get a user out of -- it is what
+        ``GET /api/listing-draft`` hands back and what a refused create comes
+        back as -- so a description of it that refuses to render is a page that
+        cannot show the problem it is reporting. The write paths
+        (``Listing.load``, the PATCH, the POST) all validate a ``Listing``, not
+        this, and are unaffected.
+
+        Shadowing works because pydantic v2 collects validators by attribute
+        name across the MRO, so this replaces the parent's. That is a hazard in
+        general -- it is why `Listing` keeps its other five rules in a
+        differently-named validator this cannot touch -- and the whole reason
+        the price-source rule stands alone there.
+        """
+        return self
+
 
 class GarmentProfileSummary(BaseModel):
     name: str
@@ -217,6 +238,10 @@ class PricingPlanSummary(BaseModel):
     compatible: bool
     """Whether this plan declares the exact garment profile asked for --
     mirrors `newcmd.logic.build_pricing_plan_choices`'s marker."""
+    ref: str
+    """Listing-relative, ready to PATCH straight into `pricing_plan:`
+    unchanged -- `newcmd.logic.pricing_plan_ref`'s write-side form, the same
+    rule `CommonMediaSummary.ref` follows for a shared image."""
 
 
 class ListingDesignSummary(BaseModel):
@@ -240,6 +265,15 @@ class CommonMediaSummary(BaseModel):
     leaving every caller to rebuild it."""
 
 
+class EtsySectionSummary(BaseModel):
+    """One row for the Details tab's Section dropdown, from
+    `EtsyShopClient.shop_sections` -- unscoped, so this needs only the
+    workspace's app key pair, never a signed-in Etsy session."""
+
+    id: int
+    title: str
+
+
 class WorkspaceSummary(BaseModel):
     """Which workspace the UI is pointed at. One workspace is one shop, so the
     sidebar names it -- the difference between a test shop and the real one is
@@ -251,9 +285,29 @@ class WorkspaceSummary(BaseModel):
     never has."""
 
 
+class DraftListingRequest(BaseModel):
+    """A candidate ``listing.yaml``, as the editor holds it before the listing
+    exists.
+
+    ``dict`` rather than ``Listing``, deliberately: an incomplete candidate is
+    the *normal* case on this endpoint, and rejecting it at the FastAPI boundary
+    would answer with a 422 the editor cannot render. The point is to get it as
+    far as ``Listing.draft`` and report what is missing."""
+
+    document: dict[str, Any] = Field(default_factory=dict)
+
+
 class CreateListingRequest(BaseModel):
+    """The whole document, not a handful of fields to build one from.
+
+    The editor is the create form, so by the time a name is typed the user may
+    have chosen a design, colours and images -- and the shape they edited is the
+    shape that should be written. A server-built stub here would be a second
+    opinion about what a new listing starts as."""
+
     name: str
-    design: str
-    """A design's ``name`` from `GET /api/listing-designs`."""
-    garment_profile: str
-    colors: list[str]
+    document: dict[str, Any]
+
+
+class RenameListingRequest(BaseModel):
+    new_name: str
