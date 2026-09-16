@@ -731,8 +731,34 @@ guided flow.
 
 ### Dashboard (read-only)
 - Connected shop identity and auth status.
-- Every listing grouped by state: **draft**, **published**, and **dirty** —
-  where the backing files have changed since the last apply.
+- Every listing grouped by state: **draft**, **deployed**, **live** and
+  **dirty**. Two independent facts decide which, and neither is a state on its
+  own: has the listing been applied (and edited since), and has a human
+  published it on Etsy.
+
+  | | never applied, or edited since | applied, unchanged since |
+  |---|---|---|
+  | **not on Etsy yet** | draft | deployed |
+  | **published on Etsy** | dirty | live |
+
+  ```
+  draft --(apply)--> deployed --(publish on Etsy)--> live
+  draft --(apply)--> deployed --(edit)--> draft --(apply)--> deployed
+  live  --(edit)--> dirty --(apply)--> live
+  ```
+
+  **published** was one state and is now two, because the two halves are
+  different news. A listing this tool has applied sits at Etsy as a draft
+  until a person presses publish (non-goal 1 — the tool never activates one),
+  and that wait is *deployed*: nothing is wrong, and nothing more will happen
+  without a human. *Live* is the settled end of the line.
+
+  The asymmetry between **draft** and **dirty** is the other half. Both mean
+  the workspace holds something Etsy does not; they differ in who is looking
+  at the stale copy. An edit to something never published goes back to draft,
+  because nobody is. An edit to a live listing is dirty, because a buyer is —
+  and that is worth a different colour on a dashboard rather than the same
+  one.
 - Drift indicators where live remote state diverges from the lockfile.
 - History of `plan` and `apply` runs with status, and live progress for anything
   currently running.
@@ -1235,3 +1261,4 @@ whether Norway is among them needs checking, not assuming).
 | 57 | Media sync mechanism | **Supersedes #12's mechanism, not its meaning.** Upload only what the per-file hash says changed, then `PATCH updateListing` with `image_ids` as **one comma-separated value**, which orders our images and detaches everything else — including Printify's first-publish mockups, of which an unknown number arrive at an unknown time. `overwrite: true` replaces in place at an occupied rank, so a re-rendered mockup that has not moved costs one call and no reorder. Sync is still full-replacement in meaning, still hash-driven, still an explicit ordered manifest. The premise #12 rested on — that reordering requires re-uploading — was measured false. The encoding is the sharp edge and gets its own test: sent as repeated form keys, `image_ids` answers `200` and reduces the listing to one image. |
 | 58 | Shipping ownership | The tool owns the Etsy-side shipping profile by **asserting it on every listing it manages**, and `shipping_template: false` is treated as a hint rather than a guarantee — measured, Printify creates and attaches its own US-origin profile on first publish regardless, publishing USD rates as NOK numerals (`$10.39` → `kr 10,39`, a ~90% shortfall). This closes risk 13 by design rather than by a flag: `read_live` reads the listing's actual `shipping_profile_id`, so a profile Printify re-attaches is **drift**, `plan` reports it, and `apply` re-asserts. No always-rewrite special case, and no dependence on a boolean Printify honours only sometimes. |
 | 59 | Referring to a return policy | By its **terms**, not its id: `return_policy: {accepts_returns, accepts_exchanges, within_days}`, resolved by exact match against `getShopReturnPolicies`. Etsy gives a return policy no title, but the three terms are its identity — `return_deadline` is constrained to `[7, 14, 21, 30, 45, 60, 90]`, and Etsy ships `consolidateShopReturnPolicies` precisely because duplicate term-sets are merged rather than kept. **Omitting it is the zero-config path**: a shop with exactly one policy needs no reference. Two or more with none named is an error listing them by their terms, because guessing which refund policy was meant is not a thing a tool should do. Same ladder as #52's partner, for the same reason: when Etsy offers exactly one, do not make anyone name it. |
+| 60 | Renaming a listing | A listing's identity is its directory name, and the editor's page head renames it in place (double-click the title). The rename moves `listings/{name}/` whole — document, lockfile and Phase 4's generated copy — and `.cache/renders/{name}/` with it, so the next `plan` reports no change; leaving the cache behind would cost a full re-render (the hash carries no listing name, so nothing would re-upload) and orphan a tree nothing deletes. The lockfile's `outputs` keys are left stale deliberately: nothing reads them, they become true again at the next apply, and rewriting them from the API layer would breach "only the lockfile merges a lockfile". Nothing remote is keyed by the name — both remote titles come from `etsy.title` and both ids from the lockfile — so a rename costs no remote write. A name already in use is refused, never merged into. |

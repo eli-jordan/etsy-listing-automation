@@ -20,7 +20,7 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 59 numbered product decisions in its appendix. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 60 numbered product decisions in its appendix. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
 
 Two subsidiary documents carry detail those two point at rather than repeat:
@@ -156,8 +156,12 @@ src/etsy_listings/
                 etsy/ and limiter Phase 3/6; retry.py done
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
-  ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
-                             (dashboard/setup wizard/run runner: Phase 5)
+  ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
+                frontend/ -- AppShell/DashboardPage/ListingsPage/
+                ListingEditorPage (design strip + Variants/Images/Details
+                tabs, and the create form too: it mounts at /listings/new on
+                an empty draft, where naming it is what writes it) done;
+                setup wizard and run runner remain, Phase 5
   prompts.py    which prompt backend can drive this terminal at all, and the
                 cancel-raising wrappers the wizards ask through              [done]
   credentials.py  one credential step — where it already lives, the blurb, the
@@ -335,7 +339,7 @@ plus a separate frontend unit layer:
 | Unit | slugification, `Money`, hash canonicalisation, path resolution, limiter maths, which prompt backend runs, what a terminal can print |
 | Golden | per-pass renders on a grid target; end-to-end composites per template |
 | Behaviour | in-memory fake clients: idempotency, drift, resume, polling, batch |
-| Browser | `-m browser`, playwright over the built SPA served by FastAPI: one full drag → render → save loop per template kind |
+| Browser | `-m browser`, playwright over the built SPA served by FastAPI: one full drag → render → save loop per template kind, plus a listings create → edit → autosave loop |
 | Contract | cassette replay through real httpx: payload shape, auth, error decoding |
 | E2E | `-m e2e`, skipped by default, env-gated at a throwaway shop |
 | Frontend unit (Vitest) | `ui/frontend/`, not part of `pytest` — component tests for the calibrator's editors, panels and API client; `npm run test` / `test:coverage` |
@@ -531,7 +535,9 @@ new [<design>]     interactive design/garment/provider picker; writes garment pr
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified   [done; render + printify]
 render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
-ui                     setup wizard, dashboard, calibrator, run runner    [calibrator done; rest Phase 5]
+ui                     setup wizard, dashboard, calibrator, listings, run runner
+                       [calibrator + dashboard + listings list/editor done;
+                       setup wizard and run runner remain, Phase 5]
 auth                   every credential: Printify, Etsy key pair + OAuth, Anthropic [Phase 3]
 catalog refresh        force-refresh the cached Printify catalog                  [Phase 6]
 unlock <listing>       clear a Printify product stuck publishing                  [Phase 2]

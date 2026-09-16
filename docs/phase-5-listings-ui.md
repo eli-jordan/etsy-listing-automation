@@ -33,7 +33,10 @@ before planning further:
   has endpoints that render the real photo (`GET /api/templates/{name}/thumbnail`,
   `POST /api/templates/{name}/preview`). A colour row therefore carries no
   swatch dot — it is name + light/dark badge, and the *photo* of that colour
-  is what the preview stage shows.
+  is what the preview stage shows. **Superseded, see the amendment below**: a
+  colour row now also carries a dot, sampled off the real photo rather than
+  invented, and the preview stage now overlays the listing's real artwork
+  instead of showing the bare photo.
 - **"+ New listing" is a simplified inline flow**, not a port of the `new` CLI
   wizard — pick a design, an *existing* garment profile, and colours; creating
   garment profiles/pricing plans from the UI is deferred to a later pass.
@@ -46,7 +49,12 @@ before planning further:
   media/colour cross-references, template-kind mismatches, colour-swatch
   coverage), reusing what already exists (`Listing`'s own pydantic
   validators, `gates.py`'s pure checks) rather than inventing a parallel rule
-  set, and built to grow — more checks are expected later.
+  set, and built to grow — more checks are expected later. Price-vs-cost is
+  still out of scope, unchanged; section is addressed a different way (see
+  the amendment below) — sourcing the Section field's *choices* from the live
+  shop rather than adding a live check to this validation module, so a value
+  picked from the dropdown is correct by construction and there is still
+  nothing here to keep in sync with Etsy.
 
 This phase explicitly does **not** cover: a Runner/plan-apply trigger from the
 UI, or garment-profile/pricing-plan creation from the UI.
@@ -72,13 +80,253 @@ left standing with the code disagreeing with them:
   `colour-matrix` template this listing's `media:` already references, and
   turning it on adds any missing colours — which is what makes the gate
   `EtsyMediaStage.desired()` enforces unreachable from the UI.
-- **The Dashboard is no longer a stub.** Its two counts (published, drafts)
-  are already carried by `GET /api/listings`, so the mockup's stat cards cost
-  nothing beyond the markup the `.stat-*` CSS was already ported for.
+- **The Dashboard is no longer a stub.** Its counts are already carried by
+  `GET /api/listings`, so the mockup's stat cards cost nothing beyond the
+  markup the `.stat-*` CSS was already ported for. (One card per lifecycle
+  state since the status amendment below — four, not two.)
 
 The `Listing` fields the editor reaches are otherwise unchanged: `etsy.materials`
 joins the Details tab because it is an ordinary `Listing` field the editor was
 simply missing, not a new capability.
+
+### Amendment: three deferrals that stopped being true
+
+A manual pass after the first ship found three of this section's original
+"deferred" calls resting on infrastructure that has since been built for
+other reasons, not on the underlying question still being unanswered:
+
+- **Colour swatches are no longer invented.** The original call rejected a
+  hex dot because nothing in the domain model carried one. `render/swatch.py`'s
+  `sample_swatch()` (median-pixel sampling off a mockup photo, used since
+  Phase 1 to colour `apply`'s log lines) answers the same question without a
+  new field: `GET /api/templates/{name}/swatch` samples the real garment
+  photo inside its own saved bounding box. The Variants tab's colour rows
+  carry a dot from it; the real-render preview panel (next point) is still
+  what answers "does this suit the design", unchanged.
+- **Section is a dropdown.** The original call needed a live `plan()` to
+  validate a section name. It does not need one to *list* the shop's
+  sections: `EtsyShopClient.shop_sections` (`clients/etsy/shops.py`) was
+  already unscoped for `setup`'s own use, so `GET /api/etsy/sections` costs
+  no OAuth sign-in, only the workspace's app key pair -- and is empty (not an
+  error) for a workspace short of either, falling back to the original text
+  field.
+- **Pricing plan is selectable, and a resolved price is editable.**
+  `GET /api/pricing-plans` already existed for "+ New listing"; it grew a
+  `ref` field so the Details tab can PATCH `pricing_plan:` with it directly.
+  Editing a resolved price writes a per-size entry into `Listing.prices`,
+  which `resolved_price()` already preferred over the plan -- no new
+  resolution rule, just a control for one that existed.
+
+Also built in the same pass, real bugs rather than deferred decisions:
+`thumbnails.py` was flattening a transparent PNG onto opaque black (`RGB`
+instead of `RGBA`) in every list/hover-card thumbnail, and the Variants/
+Listing-Images preview panes drew a bare, thumbnail-capped mockup photo
+instead of a full-resolution render with the listing's actual artwork on
+it -- the calibrator's compositor already existed
+(`render_scene`/`imagecache.py`), it just could not resolve a design outside
+its own test-design library; `GET /api/templates/{name}/design-preview`
+resolves a real `designs/*.png` through `Workspace.design_file` instead.
+
+### Amendment: the status field, and four things the first pass got wrong
+
+A second manual pass found one decision that was too coarse and four plain
+bugs. The decision first, since the rest of the UI hangs off it.
+
+**`draft`/`published` became `draft`/`deployed`/`live`/`dirty`** (PRD,
+"Dashboard"). `published` was doing two jobs: "this tool has applied it" and
+"a buyer can see it". Those are different pieces of news — the pipeline never
+activates a listing (non-goal 1), so an applied listing waits at Etsy as a
+draft until a person presses publish, and reporting that wait as *published*
+said the opposite of what was true. The rule is
+`engine/status.py`'s, not the API layer's, for the reason the
+"only `engine` computes a diff" invariant gives: Phase 6's `status` command
+answers the same question, and the two must not drift.
+
+Two facts feed it, and the interesting part is where each comes from.
+
+- **Applied, and edited since.** `stages_completed` on the lockfile records
+  the apply. "Edited since" is the *mtime* of `listing.yaml` against the
+  lockfile's — not a re-derived diff. The rule the product states is literally
+  "edited since the last apply", and a write is what an edit is; the
+  alternative is rebuilding every stage's desired document, half of which
+  (`etsy_media`'s image ids) is not knowable without the network, to paint a
+  badge. The cost is that an edit reverted before the next apply still reads
+  as an edit until one runs.
+- **Live on Etsy.** Nothing local can answer this, because nothing this tool
+  does causes it. `EtsyListingClient.listing_states` (new —
+  `getListingsByListingIds`, unscoped, 100 ids a request) answers for the
+  whole table in one round trip, and `ui/api/etsystate.py` memoises the answer
+  for 30 seconds — `GET /api/listings/{name}` is also what every autosave
+  PATCH returns, so without the memo a keystroke burst in the editor would be
+  a round trip apiece. A workspace with no Etsy credentials reports nothing
+  live and still opens the page.
+
+The four bugs:
+
+- **The open-on menu pointed at index pages.** "Open on Printify" went to
+  `/app/products` and "Open on Etsy" to Shop Manager's listing list — a menu
+  that lands you on "all products" has told you nothing you did not know, and
+  both ids were already on the row. They are
+  `printify.com/app/product-details/{id}` and
+  `etsy.com/your/shops/me/listing-editor/edit/{id}` now. The Etsy one is the
+  editor rather than the storefront URL because a listing the tool has just
+  applied is still an Etsy-side draft, which the public URL 404s for; the
+  editor works for every state, so the link is not conditional on one. The
+  menu's own visibility moved off `status` and onto "is there an id", since a
+  listing can carry a Printify product without an Etsy listing yet.
+- **Switching a colour off re-enabled it.** `colors:` was PATCHed alone, and
+  `config/listing.py` refuses a document whose `media[]`, `artwork{}` or
+  `price_overrides{}` names a colour the listing no longer sells. A refused
+  PATCH is answered with a **200** carrying `field_errors` and the listing
+  unchanged (which is what lets inline validation skip a status branch) — so
+  the tab re-rendered the switch as on, with the reason in a field it does not
+  display. `editor/colourSelection.ts` is now the one write path for
+  `colors:`, and it drops what depended on a dropped colour in the same patch.
+  That is a real edit rather than a workaround: a mockup of a colour the
+  listing does not sell is an image Etsy would be sent for a variant that does
+  not exist.
+- **Both preview panes were postage stamps.** `.preview-stage img` capped
+  every preview at 320px, which is a picture to *pick* rather than one to
+  judge — and judging ink on cloth is the only reason either tab has a preview
+  at all. They cap at 1024px now (the artwork's own resolution), bounded by
+  the viewport so the reel and the colour list stay on screen. Clicking the
+  Listing Images one opens the reel in the calibrator's `Lightbox`, arrow keys
+  and `1:1` included, which is the same reason that component exists there:
+  the fault worth catching is usually "this one colour is wrong", and finding
+  it means comparing neighbours. A shared `common-media/` asset needed
+  `GET /api/common-media/{name}/file` to have a full-size form at all.
+- **"+ New listing" was a second form.** Three fields, then the editor —
+  which meant two screens disagreeing about what creating a listing involves,
+  and all three fields to be found again in the editor to change any of them.
+  It is the editor now, opened on a draft the server built
+  (`GET /api/listing-draft`, the same stub `POST /api/listings` writes, handed
+  back unsaved) with the name inline in the page head. Naming it is the moment
+  of creation: POST, then a PATCH carrying whatever was edited before the name
+  existed, then the route replaces itself with the real editor. Until then
+  there is no autosave, because there is nothing to autosave *to*.
+
+Also in this pass: `etsy-listings ui` binds `0.0.0.0` rather than loopback, so
+the workspace is reachable from a phone or another machine. `page_url` already
+pointed the native window itself at `127.0.0.1`, so nothing about the desktop
+path changes.
+
+### Amendment: one editor, an empty draft, and renaming
+
+The bullet above ("+ New listing was a second form") fixed one screen too few.
+`NewListingPage` stopped being a *form* and became a second **route component**
+over the shared `ListingEditorShell`, and being a second place broke it in
+exactly the ways a second place does: it grew its own `update()`, which
+mishandled the design ref and corrupted the design strip to "45 artworks"; its
+own `create()`, which closed over a stale draft on blur and lost the click that
+blurred the name field; its own loading state, which never resolved in a
+workspace with no designs; and a single `.catch` in which a failed follow-up
+PATCH reported "already a listing by that name" for a listing that had just
+been created successfully.
+
+Worse, it could not open at all in the workspace that needs it most. The draft
+was server-built from a design *and* a garment profile (`GET
+/api/listing-draft?design=&garment_profile=`), and the stub behind it refused
+unless a compatible pricing plan already existed — so a fresh workspace's first
+listing was unreachable from the UI that exists to create it.
+
+**There is one route component now.** `/listings/new` and `/listings/:name`
+both render `ListingEditorPage`; `useParams` answering `undefined` is what
+selects the draft branch. The draft is **empty** — no design, no garment
+profile, no colours, no pricing plan, nothing invented — and the editor is
+where each of those gets chosen, the same way every other field already was.
+Nothing is pre-filled, which supersedes the "colours default client-side to
+every colour the chosen garment profile offers" note below; the spirit of it
+survives one step later, as *picking* a garment profile onto a listing with no
+colours yet enabling that profile's colours. That is a response to an action
+rather than a starting state, and it is the only defensible reading once the
+profile is no longer chosen before the editor opens.
+
+**Incompleteness is the issues banner's job, not a 400's.** Every refusal
+`_stub()` used to raise is a block issue instead: no design selected, no
+garment profile selected, no pricing plan and no prices. `_stub()` is gone.
+`newcmd.logic.build_listing_stub` stays untouched and un-deduplicated — the CLI
+`new` picker pre-fills because it asked the questions; the editor has not.
+
+**Naming it is what creates it**, as before, but the transition is one request
+rather than a POST and a PATCH that could disagree. `POST /api/listings` takes
+`{name, document}` and mirrors `PATCH` exactly: a document that fails
+`Listing.model_validate` comes back as a **200** carrying `field_errors` with
+nothing written, so the editor never branches on a status code to show inline
+validation. The two things a *name* can be wrong about keep their status codes:
+not a single path segment is a 400, already taken is a 409.
+
+That 409 tests the **directory**, not `listing.yaml`. A `listings/<name>/`
+holding a stale `state.lock.json` but no document would otherwise be adopted by
+the new listing, which would inherit another listing's `etsy_listing_id`.
+
+### The unsaved draft
+
+The editor needs to render, and report issues on, a document that is not a
+valid `Listing` yet. `Listing` stays strict — the point of it is that nothing
+incomplete reaches disk — so the draft is a `Listing` with exactly one rule
+waived: "set `pricing_plan` or `prices`". `Listing.draft()` and
+`Listing.empty_draft()` pass a private context key; `Listing.load()`, `PATCH`
+and `POST /api/listings` all go through plain `model_validate` and cannot.
+`tests/unit/test_draft_context_is_private.py` keeps the key private by grep,
+the technique `tests/unit/test_no_bare_cv2.py` already established.
+
+Rejected: `model_construct`, which skips coercion as well as validation — so
+`_coerce_design` would not run and the object's annotations would lie about
+`design`. Rejected: a `DraftListing(Listing)` subclass, because pydantic v2
+collects validators by attribute name across the MRO, so an override named
+`_validate` *shadows* the parent's and silently loses the other five rules in
+it. The context flag keeps every structural rule a half-filled document can
+still be judged by — `media[].colour ⊆ colors`, `price_overrides`/`artwork`
+keys ⊆ `colors`, the 140-character title, the currency check — which is
+precisely what the editor's inline `field_errors` need before there is a file.
+
+One consequence is worth stating plainly, because it is the price of keeping
+the model strict: **a named listing is written the moment it has a price
+source, and not before.** Every other field tolerates an empty value, so a
+listing can have a name, a design, a garment profile and colours and still not
+exist on disk. The page head's meta line says so in those words rather than a
+bland "Not saved", and names the price source as the one thing standing in the
+way when it is.
+
+The banner also has to stay true while the listing is unnamed, which a
+mount-time draft cannot do — it goes stale the moment a colour is toggled. So
+`POST /api/listing-draft` describes an arbitrary candidate without writing it,
+and the editor's debounce points there until there is a name. One hook owns all
+three transports (draft, create, patch) because only the place that holds the
+pending patch can know which is safe to send.
+
+### Renaming a listing
+
+A listing's identity is its directory name, and the page head's title is
+inline-editable — double-click to rename, Enter or blur to commit, Escape to
+revert. `POST /api/listings/{name}/rename` with `{new_name}`: POST rather than
+PUT because the body is neither the listing nor its new representation and a
+second call 404s, matching `POST /api/templates/{name}/kind`'s precedent for a
+named mutation. 404 comes free from the `target()` dependency, 400 from
+`workspace.listing_dir(new)` letting `_segment` refuse — calling the accessor
+is enough, so the note below about exporting `_segment` is wrong and stays only
+as the record of a thing that turned out not to be needed.
+
+`Path.rename` on the **directory** moves `listing.yaml`, `state.lock.json` and
+Phase 4's `generated.yaml` in one operation, and `.cache/renders/<name>/` moves
+with it — the render cache is keyed by listing name
+(`Workspace.render_file`), so a rename that ignored it would orphan a tree
+nothing ever deletes and force a full re-render. Traced rather than assumed,
+that re-render is all it would cost: `input_hash` carries no listing name, so
+the hash is unchanged, `read_live` simply reports every output missing, and the
+re-rendered bytes are identical, so nothing re-uploads. `Workspace.renders_dir`
+exists so the endpoint is not a second place that knows where renders live.
+
+The lockfile's `outputs` keys still carry the old path and go stale. Nothing
+reads them — `Lockfile.fold` merges them and `cli/render.py` reads
+`Change.outputs`, a different thing — and "only the lockfile merges a lockfile"
+puts a rewrite out of the API layer's reach, so they are left alone and become
+true again after the next apply. Pruning them would need a `Lockfile` method
+for one caller.
+
+Nothing remote is keyed by the name: both remote titles come from `etsy.title`
+and both ids from the lockfile, which moves with the directory. A rename
+therefore costs no remote write and produces no drift.
 
 ## Architecture decisions
 
@@ -214,38 +462,47 @@ PATCH /api/listings/{name}          -> partial update; the autosave endpoint
 ```
 
 - `ListingSummary`: name, garment profile name, colour count, status
-  (`draft`/`published`, derived — never persisted, same "derived on every
-  read" principle already stated for `TemplateSummary.status` —
-  `published` iff `Lockfile.read(workspace.lock_file(name))` is not `None`
-  and `.remote.get("etsy_listing_id")` is set), issue counts by severity (for
-  the row's badge, computed via the same validation module).
+  (`draft`/`deployed`/`live`/`dirty`, derived — never persisted, same
+  "derived on every read" principle already stated for
+  `TemplateSummary.status`; the rule itself is
+  `engine/status.py`'s, not this module's — see the status amendment below),
+  issue counts by severity (for the row's badge, computed via the same
+  validation module).
 - `ListingDetail`: the full `Listing`, plus `status`, `issues: list[Issue]`,
-  and (when published) `etsy_listing_id`/`printify_product_id` from
-  `lock.remote` for the "Open on Etsy/Printify" menu — reuse
-  `engine/stages/etsy_target.py`'s `etsy_listing_id()` and
-  `printify_product.py`'s `PRODUCT_ID_KEY` lookup rather than re-deriving.
+  and `etsy_listing_id`/`printify_product_id` from `lock.remote` for the
+  "Open on Etsy/Printify" menu — reuse `engine/stages/etsy_target.py`'s
+  `ETSY_LISTING_ID_KEY` and `printify_product.py`'s `PRODUCT_ID_KEY` lookup
+  rather than re-deriving.
 - `PATCH` merges the given fields into the on-disk `Listing`, runs it through
   the validation module, writes only if pydantic-valid, and always returns
   the fresh `ListingDetail` (issues included) — the frontend never
   re-implements validation, it only renders what the server returns.
-- `POST` (create): request carries `{name, design, garment_profile, colors}`
-  (colours default client-side to every colour the chosen garment profile
-  offers — a new listing starts with every colour the garment profile offers
-  enabled). Server also requires a compatible pricing plan to exist
-  (`Listing._validate` needs `pricing_plan` or `prices`) — reuse
+- `POST` (create) — **superseded by "one editor, an empty draft, and renaming"
+  above.** The request is `{name, document}`, the server builds no stub and
+  requires no pricing plan to exist, and a document it will not write comes
+  back as a 200 with `field_errors`. What follows is the original design,
+  kept for the record: the request carried `{name, design, garment_profile,
+  colors}` (colours defaulting client-side to every colour the chosen garment
+  profile offers), the server picked a compatible pricing plan via
   `newcmd/logic.py`'s `load_candidate_pricing_plans` +
-  `build_pricing_plan_choices(plans, garment_profile_slug)` to pick the
-  best/only compatible one automatically, or refuse creation with a clear
-  message ("no pricing plan exists for this garment profile — create one
-  with `etsy-listings new` or by hand") if none exists — matches the agreed
-  scope of deferring plan creation from the UI. Writes a minimal valid
-  `Listing` (empty `media: []`, `etsy` all defaults/`<generate>`) and returns
-  its `ListingDetail`; the frontend navigates to `/listings/{name}`.
+  `build_pricing_plan_choices(plans, garment_profile_slug)` or refused
+  creation outright when none existed, and it wrote a minimal valid `Listing`.
+  The refusal is what made a fresh workspace's first listing uncreatable.
+- The two draft endpoints, added by the same amendment:
+  `GET /api/listing-draft` (no parameters) hands back a `ListingDetail` over
+  an empty document, `name: ""`, `status: "draft"`, issues included; `POST
+  /api/listing-draft` does the same for an arbitrary candidate, so the banner
+  stays true while the listing is unnamed. Neither writes anything.
+- `POST /api/listings/{name}/rename` takes `{new_name}`: 404 unknown listing,
+  400 for a name that is not a single path segment, 409 for a name already in
+  use, otherwise the directory and its render cache move together.
 - Listing name validation for creation reuses `workspace.py`'s private
-  `_segment()` rule (single safe path segment) — this may need exporting, or
-  a thin public wrapper, since a listing's identity is its directory name
-  and there's no separate slugification for it (unlike colours/garment
-  profiles/pricing plans, which do get auto-slugified).
+  `_segment()` rule (single safe path segment), since a listing's identity is
+  its directory name and there's no separate slugification for it (unlike
+  colours/garment profiles/pricing plans, which do get auto-slugified). This
+  originally read "may need exporting, or a thin public wrapper" — it did not:
+  calling the layout accessor (`workspace.listing_file`/`listing_dir`) and
+  letting it refuse is both the check and the security boundary (A8).
 
 ### Supporting read-only endpoints
 
@@ -253,7 +510,11 @@ PATCH /api/listings/{name}          -> partial update; the autosave endpoint
   `workspace.garment_profile_names()` + `load_garment_profile` — feeds the
   Variants tab's garment dropdown and the new-listing picker.
 - `GET /api/pricing-plans?garment_profile=X` -> compatible plans, via the
-  same `newcmd/logic.py` pure functions used by creation.
+  same `newcmd/logic.py` pure functions used by creation. The parameter is
+  optional: a listing with no garment profile chosen yet has nothing to be
+  compatible *with*, and asking with an empty one is more honest than asking
+  with a name that cannot match and rendering every plan as "different
+  garment".
 - Real listing designs: `workspace.design_files()` under `designs/` — **not**
   the same thing as the existing `GET /api/designs`, which lists the
   calibrator's `test-designs/`. Name the new one distinctly, e.g.
@@ -306,32 +567,46 @@ shell/
   AppShell.tsx            sidebar nav (Dashboard/Listings/Mockup templates),
                            from the design mockup's app-shell markup
 pages/
-  DashboardPage.tsx        published/draft stat cards + "+ New listing"
+  DashboardPage.tsx        one stat card per lifecycle state + "+ New listing"
   ListingsPage.tsx         table + search + status filter pills, from the
                            mockup's listings section; backed by
                            GET /api/listings. A row carries its design
-                           thumbnail, a hover card, and (when published) the
-                           open-on-Etsy/Printify menu
+                           thumbnail, a hover card, and — once it has an id
+                           to open — the open-on-Etsy/Printify menu
   ListingEditorPage.tsx    tabs container + issues banner + page head
-                           (name/status/path/autosave indicator/open-menu)
+                           (name/status/path/autosave indicator/open-menu).
+                           Mounted at both /listings/new and /listings/:name
+  components/
+    EditableName.tsx       the page head's title: double-click to rename, or
+                           open in edit mode when there is no name yet
   editor/
     DesignSelect.tsx        the design-select strip above the tabs: current
                            design + picker + "Find a design…" modal
-    VariantsTab.tsx        garment dropdown, sizes, colour list (name +
-                           light/dark badge, no invented hex swatch) beside
-                           a preview stage showing the focused colour's photo
+    VariantsTab.tsx        garment dropdown, sizes, Dark/Light bulk buttons
+                           over a colour list (swatch dot + name + light/dark
+                           badge beside the switch) beside a large preview
+                           stage showing the focused colour's real render
     ImagesTab.tsx           locator (mockup templates | common-media/
-                           images) + preview pane (real renders) + reel
-                           (drag-reorder), plus the per-template Etsy
+                           images) + a large preview pane (real renders,
+                           opening the reel in the calibrator's Lightbox) +
+                           reel (drag-reorder), plus the per-template Etsy
                            colour-swatch toggle
+    colourSelection.ts      the one write path for `colors:` — and the three
+                           colour-keyed fields that have to move with it
+    listingDocument.ts      which `ListingDetail` fields are really
+                           `listing.yaml` — the document `POST
+                           /api/listing-draft` and `POST /api/listings` send
     DetailsTab.tsx          title/tags/description/section/materials, with
                            Etsy's own limits shown as counters; pricing display
 api/
   listings.ts              wrapper functions, mirrors api/calibrator.ts
 hooks/
   useAutosave.ts            debounced (~800ms after last change, also flushed
-                           on blur/tab switch/unmount) PATCH, returns latest
-                           ListingDetail including server-computed issues
+                           on blur/tab switch/unmount) save, returns latest
+                           ListingDetail including server-computed issues.
+                           Three transports — draft, create, patch — plus
+                           rename, because only the holder of the pending
+                           patch knows which one is safe to send
 ```
 
 - `main.tsx` changes to mount a router with `AppShell` as the layout route,
@@ -344,13 +619,19 @@ hooks/
 - Reusable pieces already in the codebase to lean on: `components/ViewTabs.tsx`
   for the Variants/Images/Details segmented control, `components/Lightbox.tsx`
   if a "view large" affordance is wanted on reel tiles.
-- New-listing flow, concretely: "+ New listing" opens a small inline
-  step (not the full editor) collecting name + design + garment profile,
-  since colours default from the garment profile and pricing plan is
-  resolved server-side. On submit, one `POST /api/listings`, then
-  `navigate("/listings/{name}")` — the editor page itself is *always*
-  backed by a real, already-created listing, so it never has to juggle a
-  "not yet saved anywhere" state or a POST-then-PATCH transition.
+- New-listing flow — **superseded twice**, most recently by "one editor, an
+  empty draft, and renaming" above. It was first a small inline step (name +
+  design + garment profile) on the promise that "the editor page is *always*
+  backed by a real, already-created listing, so it never has to juggle a 'not
+  yet saved anywhere' state"; that promise is what cost a fresh workspace the
+  ability to make its first listing. The editor does juggle that state now,
+  and one hook holds it: `useAutosave` takes a name that may be `null` and
+  switches transport on what exists — `POST /api/listing-draft` while
+  unnamed, `POST /api/listings` once named, `PATCH /api/listings/{name}` once
+  written — plus `rename()`, which drains the pending queue under the old name
+  before the directory moves so an in-flight autosave has two fates and no
+  third. `components/EditableName.tsx` is the head's title in both pages'
+  worth of states.
 
 ### Tests
 
