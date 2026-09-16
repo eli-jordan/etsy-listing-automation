@@ -7,6 +7,7 @@ job is the mistake that split exists to prevent.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any
 
 from etsy_listings.clients.etsy.models import (
@@ -113,6 +114,18 @@ class FakeEtsyListingClient:
             return None
         images = tuple(self._images.get(listing_id, [])) if include_images else ()
         return listing.model_copy(update={"images": images})
+
+    def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
+        """Only the ids this fake has actually been seeded with, and only
+        those carrying a state -- the real batch read omits both, and a caller
+        that treats "absent" as "draft" should fail here rather than in
+        production."""
+        states: dict[int, str] = {}
+        for listing_id in listing_ids:
+            listing = self._listings.get(listing_id)
+            if listing is not None and listing.state is not None:
+                states[listing_id] = listing.state
+        return states
 
     def get_listing_inventory(self, listing_id: int) -> Inventory:
         return self._inventory.get(listing_id, Inventory())
