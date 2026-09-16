@@ -13,7 +13,8 @@ from dataclasses import dataclass
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 from typing import Annotated, Any
 
-from pydantic import BeforeValidator, GetCoreSchemaHandler
+from pydantic import BeforeValidator, GetCoreSchemaHandler, GetJsonSchemaHandler
+from pydantic.json_schema import JsonSchemaValue
 from pydantic_core import core_schema
 
 _MONEY_RE = re.compile(r"^\s*(-?\d+(?:\.\d+)?)\s+([A-Z]{3})\s*$")
@@ -86,6 +87,17 @@ class Money:
             cls.parse,
             serialization=core_schema.plain_serializer_function_ser_schema(str),
         )
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls, schema: core_schema.CoreSchema, handler: GetJsonSchemaHandler
+    ) -> JsonSchemaValue:
+        # A plain-function core schema (needed so `Money.parse` runs on every
+        # untrusted input) carries no shape pydantic can derive a JSON Schema
+        # from on its own -- stated by hand instead, now that a `Listing`
+        # (which nests `Money` under `prices`/`price_overrides`) is exposed
+        # through the listings API's OpenAPI schema (phase-5-listings-ui.md).
+        return {"type": "string", "examples": ["349 NOK"]}
 
 
 def require_currency(money: Money, expected: str, field: str) -> None:

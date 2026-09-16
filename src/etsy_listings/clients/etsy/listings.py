@@ -31,6 +31,7 @@ over the same transport would be the wrong seam to add.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, Protocol
 
 from etsy_listings.clients.etsy.models import (
@@ -45,6 +46,11 @@ from etsy_listings.clients.etsy.models import (
 )
 from etsy_listings.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
 
+BATCH_LIMIT = 100
+"""Etsy's documented ceiling on `getListingsByListingIds`. Chunking is this
+module's job rather than the caller's -- a workspace with 150 listings is not
+a different question from one with five."""
+
 
 class EtsyListingClient(Protocol):
     """Everything Phase 3's stages need from a signed-in Etsy connection:
@@ -52,6 +58,8 @@ class EtsyListingClient(Protocol):
     shipping profile or production partner by name (decision 2)."""
 
     def get_listing(self, listing_id: int, *, include_images: bool = False) -> Listing | None: ...
+
+    def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]: ...
 
     def update_listing(self, shop_id: int, listing_id: int, patch: dict[str, Any]) -> Listing: ...
 
@@ -102,6 +110,34 @@ class HttpEtsyListingClient:
                 return None
             raise
         return Listing.model_validate(response.json())
+
+    def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]:
+        """Each of ``listing_ids``' Etsy-side ``state``, keyed by listing id.
+
+        One request per :data:`BATCH_LIMIT` ids rather than one per listing:
+        the caller is the listings UI asking about every listing in the
+        workspace at once, and a `getListing` apiece would make opening the
+        page cost a round trip per row.
+
+        Unscoped, like `getListing` beside it -- `getListingsByListingIds`
+        needs only the app key pair. An id Etsy does not answer for is
+        **absent** from the result rather than present with an invented state:
+        "we could not find out" and "it is still a draft" are different facts,
+        and only the caller knows which way to resolve the difference.
+        """
+        states: dict[int, str] = {}
+        ids = list(listing_ids)
+        for start in range(0, len(ids), BATCH_LIMIT):
+            chunk = ids[start : start + BATCH_LIMIT]
+            response = self._transport.get(
+                "/v3/application/listings/batch",
+                params={"listing_ids": ",".join(str(i) for i in chunk)},
+            )
+            for row in _results(response.json()):
+                listing = Listing.model_validate(row)
+                if listing.state is not None:
+                    states[listing.listing_id] = listing.state
+        return states
 
     def get_listing_inventory(self, listing_id: int) -> Inventory:
         response = self._transport.get(f"/v3/application/listings/{listing_id}/inventory")

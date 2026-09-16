@@ -19,10 +19,13 @@ which is byte-for-byte the shape ``apply`` writes. Both go through
 decoded design and the derived maps across the burst of requests one drag
 produces.
 
-:func:`create_app` is the interface; ``etsy-listings ui`` hands it a
-:class:`~etsy_listings.workspace.Workspace` and serves it with uvicorn.
+:func:`create_app` is the HTTP interface; :func:`run_calibrator` is what
+``etsy-listings ui`` calls. By default that opens a native pywebview window
+onto the same app uvicorn would serve; ``--browser`` is uvicorn in the
+foreground, as before.
 """
 
 from etsy_listings.ui.api.app import create_app
+from etsy_listings.ui.desktop import run_calibrator
 
-__all__ = ["create_app"]
+__all__ = ["create_app", "run_calibrator"]

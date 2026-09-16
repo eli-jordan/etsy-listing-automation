@@ -131,6 +131,29 @@ def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path
         root / ".cache" / "renders" / "take-a-hike" / "colour-chart-01" / "scene.png"
     )
     assert ws.catalog_cache_dir() == root / ".cache" / "catalog"
+    assert ws.common_media_file("size-guide") == root / "common-media" / "size-guide.png"
+
+
+def test_common_media_files_lists_the_shared_assets(workspace_root: Path) -> None:
+    """The other half of `media:` -- a bare path string to something shared
+    across listings, rather than a rendered mockup."""
+    shared = workspace_root / "common-media"
+    shared.mkdir(exist_ok=True)
+    (shared / "size-guide.png").write_bytes(b"")
+    (shared / "care-instructions.png").write_bytes(b"")
+    (shared / "notes.txt").write_text("not an image", encoding="utf-8")
+
+    ws = Workspace.discover(root_override=workspace_root)
+    assert [p.name for p in ws.common_media_files()] == [
+        "care-instructions.png",
+        "size-guide.png",
+    ]
+
+
+def test_common_media_files_is_empty_when_the_directory_is_absent(workspace_root: Path) -> None:
+    """A workspace that has never needed a shared asset still lists."""
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.common_media_files() == []
 
 
 def test_listing_names_finds_listings_with_a_listing_file(workspace_root: Path) -> None:
@@ -356,3 +379,19 @@ def test_load_pricing_plan_attaches_the_workspace_currency(workspace_root: Path)
 
     assert plan.garment_profile == "comfort-colors-1717"
     assert plan.prices["S"].currency == ws.defaults.etsy.currency
+
+
+def test_renders_dir_is_the_parent_of_every_render_for_that_listing(workspace_root: Path) -> None:
+    """Renaming a listing has to move this, so it is an accessor rather than a
+    path the rename endpoint spells for itself (A8)."""
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.renders_dir("take-a-hike") == workspace_root / ".cache" / "renders" / "take-a-hike"
+    assert ws.render_file("take-a-hike", "flat-lay-01", "black").parent.parent == ws.renders_dir(
+        "take-a-hike"
+    )
+
+
+def test_renders_dir_refuses_a_name_that_is_not_a_path_segment(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    with pytest.raises(InvalidNameError):
+        ws.renders_dir("../escape")

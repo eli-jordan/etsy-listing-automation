@@ -274,6 +274,7 @@ print_provider: Monster Digital     # authoritative; id resolved from cache
 placeholder: front
 print_area: { width: 4500, height: 5400 }   # px, from the catalog placeholders
 sizes: [S, M, L, XL, XXL, XXXL]
+preview_template: flat-lay-01   # colour-matrix; editor colour preview only
 ```
 
 **A blueprint is identified by brand and model, not by title.** This was a
@@ -307,7 +308,7 @@ the **largest** and says so. The print area is a resolution target — art sized
 for the 3XL panel still covers the S panel, and the reverse prints soft on the
 sizes with the most shirt to cover.
 
-Mockup templates are **not** listed here. Only fields Printify's product
+Listing mockups are **not** listed here. Only fields Printify's product
 creation actually needs live on the garment profile — `templates:` was tried and
 dropped (PRD 29): a template is a purely local, Etsy-facing rendering asset
 Printify never sees, so forcing it through a shared per-garment registry
@@ -315,6 +316,15 @@ didn't earn its keep the way `blueprint`/`sizes`/`print_area` do, and it got
 in the way of two listings on the same garment wanting different mockups. A
 listing's `media:` may reference any template that exists in
 `mockup-templates/` directly.
+
+The one exception is `preview_template:` — a single `colour-matrix` template
+the editor uses to judge colours on the Variants tab. It is not a default for
+`media:`, not a render input, and Printify never sees it. A listing that never
+mentions that template in `media:` still renders whatever `media:` does name
+(PRD 31). Optional, so a garment profile written before the field existed
+still loads; without it the Variants preview is empty until one is set. `new`
+does not prompt for it — it is hand-edited the same way `colors:` is
+classified.
 
 ### `pricing-plans/{name}.yaml` — optional, shared starting-price table
 
@@ -731,8 +741,34 @@ guided flow.
 
 ### Dashboard (read-only)
 - Connected shop identity and auth status.
-- Every listing grouped by state: **draft**, **published**, and **dirty** —
-  where the backing files have changed since the last apply.
+- Every listing grouped by state: **draft**, **deployed**, **live** and
+  **dirty**. Two independent facts decide which, and neither is a state on its
+  own: has the listing been applied (and edited since), and has a human
+  published it on Etsy.
+
+  | | never applied, or edited since | applied, unchanged since |
+  |---|---|---|
+  | **not on Etsy yet** | draft | deployed |
+  | **published on Etsy** | dirty | live |
+
+  ```
+  draft --(apply)--> deployed --(publish on Etsy)--> live
+  draft --(apply)--> deployed --(edit)--> draft --(apply)--> deployed
+  live  --(edit)--> dirty --(apply)--> live
+  ```
+
+  **published** was one state and is now two, because the two halves are
+  different news. A listing this tool has applied sits at Etsy as a draft
+  until a person presses publish (non-goal 1 — the tool never activates one),
+  and that wait is *deployed*: nothing is wrong, and nothing more will happen
+  without a human. *Live* is the settled end of the line.
+
+  The asymmetry between **draft** and **dirty** is the other half. Both mean
+  the workspace holds something Etsy does not; they differ in who is looking
+  at the stale copy. An edit to something never published goes back to draft,
+  because nobody is. An edit to a live listing is dirty, because a buyer is —
+  and that is worth a different colour on a dashboard rather than the same
+  one.
 - Drift indicators where live remote state diverges from the lockfile.
 - History of `plan` and `apply` runs with status, and live progress for anything
   currently running.
@@ -1204,7 +1240,7 @@ whether Norway is among them needs checking, not assuming).
 | 26 | First run | The `ui` opens a setup wizard when no shop is connected — Etsy and Printify auth, Anthropic credentials, and guided `shop.yaml` generation. |
 | 27 | Stage orchestration | `plan` determines whether render and generate need to run from input hashes; `apply` runs them. Both remain available as explicit commands. |
 | 28 | Template kinds | A template is exactly one of `colour-matrix` / `multiple` / `single`, never a mix — [docs/multi-placement-rendering.md](multi-placement-rendering.md). |
-| 29 | Multiple templates per listing | No garment-profile-level registry — a listing's `media:` may reference any template that exists in `mockup-templates/`, always naming it explicitly as `{template, colour?}`; no default, no shorthand. Superseded once from an earlier `profile.templates: list[str]` registry, dropped because a template is a purely local, Etsy-facing asset Printify never sees. |
+| 29 | Multiple templates per listing | No garment-profile-level registry of *listing* templates — a listing's `media:` may reference any template that exists in `mockup-templates/`, always naming it explicitly as `{template, colour?}`; no default, no shorthand. Superseded once from an earlier `profile.templates: list[str]` registry, dropped because a template is a purely local, Etsy-facing asset Printify never sees. **Amended:** the garment profile may name one `preview_template`, a `colour-matrix` template the editor uses to judge colours. That is not a `media:` default and does not decide what renders. |
 | 30 | Multi-artwork | `listing.design:` polymorphic (bare path or a map keyed by artwork tag); `garment_profile.colors` classified by hand-editing the generated garment profile file (`new` does not ask), not inferred from Printify. |
 | 31 | What renders | Driven purely by `media` references, not by `listing.colors` membership — a listing's colours drive which Printify variants sell, not which photos render. |
 | 32 | Frontend testing | Vitest + React Testing Library, v8 coverage provider, 80%-branch floor mirroring the Python gate, wired into `scripts/check.sh`. |
@@ -1235,3 +1271,4 @@ whether Norway is among them needs checking, not assuming).
 | 57 | Media sync mechanism | **Supersedes #12's mechanism, not its meaning.** Upload only what the per-file hash says changed, then `PATCH updateListing` with `image_ids` as **one comma-separated value**, which orders our images and detaches everything else — including Printify's first-publish mockups, of which an unknown number arrive at an unknown time. `overwrite: true` replaces in place at an occupied rank, so a re-rendered mockup that has not moved costs one call and no reorder. Sync is still full-replacement in meaning, still hash-driven, still an explicit ordered manifest. The premise #12 rested on — that reordering requires re-uploading — was measured false. The encoding is the sharp edge and gets its own test: sent as repeated form keys, `image_ids` answers `200` and reduces the listing to one image. |
 | 58 | Shipping ownership | The tool owns the Etsy-side shipping profile by **asserting it on every listing it manages**, and `shipping_template: false` is treated as a hint rather than a guarantee — measured, Printify creates and attaches its own US-origin profile on first publish regardless, publishing USD rates as NOK numerals (`$10.39` → `kr 10,39`, a ~90% shortfall). This closes risk 13 by design rather than by a flag: `read_live` reads the listing's actual `shipping_profile_id`, so a profile Printify re-attaches is **drift**, `plan` reports it, and `apply` re-asserts. No always-rewrite special case, and no dependence on a boolean Printify honours only sometimes. |
 | 59 | Referring to a return policy | By its **terms**, not its id: `return_policy: {accepts_returns, accepts_exchanges, within_days}`, resolved by exact match against `getShopReturnPolicies`. Etsy gives a return policy no title, but the three terms are its identity — `return_deadline` is constrained to `[7, 14, 21, 30, 45, 60, 90]`, and Etsy ships `consolidateShopReturnPolicies` precisely because duplicate term-sets are merged rather than kept. **Omitting it is the zero-config path**: a shop with exactly one policy needs no reference. Two or more with none named is an error listing them by their terms, because guessing which refund policy was meant is not a thing a tool should do. Same ladder as #52's partner, for the same reason: when Etsy offers exactly one, do not make anyone name it. |
+| 60 | Renaming a listing | A listing's identity is its directory name, and the editor's page head renames it in place (double-click the title). The rename moves `listings/{name}/` whole — document, lockfile and Phase 4's generated copy — and `.cache/renders/{name}/` with it, so the next `plan` reports no change; leaving the cache behind would cost a full re-render (the hash carries no listing name, so nothing would re-upload) and orphan a tree nothing deletes. The lockfile's `outputs` keys are left stale deliberately: nothing reads them, they become true again at the next apply, and rewriting them from the API layer would breach "only the lockfile merges a lockfile". Nothing remote is keyed by the name — both remote titles come from `etsy.title` and both ids from the lockfile — so a rename costs no remote write. A name already in use is refused, never merged into. |

@@ -1,7 +1,8 @@
-"""FastAPI app factory. Phase 1 carries only the calibrator's endpoints
-(PRD: "the calibration UI lands in phase 1 ... because templates must be
-calibrated before rendering is useful at all"); the dashboard, setup wizard
-and run endpoints in the plan's ``## UI`` section land in Phase 5.
+"""FastAPI app factory. Phase 1 carried only the calibrator's endpoints (PRD:
+"the calibration UI lands in phase 1 ... because templates must be calibrated
+before rendering is useful at all"); phase 5 adds the listings list and editor
+(``listings.py``). The dashboard's real content and a Runner/plan-apply
+trigger are still not here -- see ``docs/phase-5-listings-ui.md``.
 """
 
 from __future__ import annotations
@@ -15,6 +16,8 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings.ui.api.designs import router as designs_router
+from etsy_listings.ui.api.listings import router as listings_router
+from etsy_listings.ui.api.listings import support_router as listings_support_router
 from etsy_listings.ui.api.templates import router as templates_router
 from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
@@ -50,6 +53,8 @@ def create_app(workspace: Workspace) -> FastAPI:
 
     app.include_router(templates_router)
     app.include_router(designs_router)
+    app.include_router(listings_router)
+    app.include_router(listings_support_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

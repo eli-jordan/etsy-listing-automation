@@ -43,7 +43,10 @@ from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.stage import Blocked, StageApplyResult
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
-from etsy_listings.engine.stages.gates import check_copy_is_concrete
+from etsy_listings.engine.stages.gates import (
+    check_copy_is_concrete,
+    check_garment_profile_chosen,
+)
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY, resolve_variant_pricing
 from etsy_listings.engine.stages.product_document import AppliedVariant
 from etsy_listings.errors import UserFacingError
@@ -177,6 +180,12 @@ class PublishStage:
             return NO_SHOP_BLOCKED
 
         config = ctx.workspace.load_listing(listing)
+        # Before `resolve_variant_pricing` below, which loads the garment
+        # profile this names -- the same gate the product stage runs, for the
+        # same reason, since both reach that function.
+        blocked = check_garment_profile_chosen(config.garment_profile)
+        if blocked is not None:
+            return blocked
         blocked = check_copy_is_concrete(
             title=config.etsy.title, description=config.etsy.description
         )

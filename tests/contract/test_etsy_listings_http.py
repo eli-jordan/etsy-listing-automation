@@ -73,6 +73,74 @@ def test_a_listing_is_read_from_the_unscoped_path() -> None:
     assert listing.title == "OUR COPY - written by the tool, must survive republish"
 
 
+# ------------------------------------------------------------ listing_states
+
+
+def test_states_are_read_in_one_batch_request() -> None:
+    """The listings UI asks about every listing at once. One request with a
+    comma-separated `listing_ids`, not one per id -- which is the only reason
+    the status badge can be resolved on every page load."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.setdefault("calls", 0)
+        seen["calls"] += 1
+        seen["path"] = request.url.path
+        seen["ids"] = request.url.params.get("listing_ids")
+        return httpx.Response(
+            200,
+            json={
+                "count": 2,
+                "results": [
+                    {**LISTING_PAYLOAD, "listing_id": 111, "state": "active"},
+                    {**LISTING_PAYLOAD, "listing_id": 222, "state": "draft"},
+                ],
+            },
+        )
+
+    states = _client(handler).listing_states([111, 222])
+
+    assert seen["calls"] == 1
+    assert seen["path"] == "/v3/application/listings/batch"
+    assert seen["ids"] == "111,222"
+    assert states == {111: "active", 222: "draft"}
+
+
+def test_an_id_etsy_does_not_answer_for_is_absent_rather_than_guessed_at() -> None:
+    """ "We could not find out" and "it is still a draft" are different facts,
+    and only the caller knows which way to resolve the difference."""
+    handler = lambda _: httpx.Response(  # noqa: E731
+        200,
+        json={"count": 1, "results": [{**LISTING_PAYLOAD, "listing_id": 111, "state": "active"}]},
+    )
+
+    assert _client(handler).listing_states([111, 999]) == {111: "active"}
+
+
+def test_more_ids_than_the_batch_limit_are_chunked() -> None:
+    """Etsy caps `getListingsByListingIds` at 100. Chunking is the client's
+    job -- a workspace with 150 listings is not a different question from one
+    with five."""
+    seen: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request.url.params.get("listing_ids"))
+        return httpx.Response(200, json={"count": 0, "results": []})
+
+    _client(handler).listing_states(list(range(1, 151)))
+
+    assert len(seen) == 2
+    assert len(seen[0].split(",")) == 100
+    assert len(seen[1].split(",")) == 50
+
+
+def test_no_ids_asks_nothing() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:  # pragma: no cover - must not run
+        raise AssertionError("an empty id list must not reach the network")
+
+    assert _client(handler).listing_states([]) == {}
+
+
 def test_a_missing_listing_is_none_not_an_error() -> None:
     handler = lambda _: httpx.Response(404, json={"error": "Listing not found."})  # noqa: E731
 

@@ -20,7 +20,7 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 59 numbered product decisions in its appendix. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 60 numbered product decisions in its appendix. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
 
 Two subsidiary documents carry detail those two point at rather than repeat:
@@ -131,7 +131,14 @@ Per `A1`–`A23`. Full detail in the plan; the shape:
 src/etsy_listings/
   cli/          Typer app, one module per command  [setup/plan/apply/new/ui done]
   workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
+                facts.py — the garment profiles and template configs a listing
+                  check reads, gathered once per request instead of re-parsed
+                  inside every check of every row
   config/       pydantic models, Money type, slugification     [done]
+                listing_validation.py — every reason a listing cannot run, as
+                  far as its own files can tell. One module, two readers: the
+                  editor's issues banner and (through `engine/stages/gates.py`)
+                  every stage
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run, stages/
                    [done; STAGES = [Render(), PrintifyProduct(), Publish(),
                    EtsyListing(), EtsyMedia()], Generate() in Phase 4]
@@ -140,7 +147,8 @@ src/etsy_listings/
                   the garment gate) and product_diff (the comparison — pure,
                   and unit-tested without a workspace or a fake)
                 stages/ also holds what belongs to no single stage: gates (the
-                  pre-flight checks about a *listing*), etsy_target (which
+                  stage's adapter over `config/listing_validation.py` — same
+                  three names, a `Blocked` instead of an `Issue`), etsy_target (which
                   listing on which shop — the id key, the shop gate, one
                   not-minted error, shared by all three Etsy stages) and
                   colour_property (Etsy's inventory property matched onto this
@@ -156,8 +164,19 @@ src/etsy_listings/
                 etsy/ and limiter Phase 3/6; retry.py done
   ai/           prompts, generation, hard validation                      [Phase 4]
   runs/         SQLite recorder                                           [Phase 6]
-  ui/           FastAPI api/ (calibrator endpoints) + React frontend/      [done]
-                             (dashboard/setup wizard/run runner: Phase 5)
+  ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
+                frontend/ -- AppShell/DashboardPage/ListingsPage/
+                ListingEditorPage (design strip + Variants/Images/Details
+                tabs, and the create form too: it mounts at /listings/new on
+                an empty draft, where naming it is what writes it) done;
+                setup wizard and run runner remain, Phase 5
+                frontend/src/media.ts — what `media:` holds and what it looks
+                  like: every picture URL and every ref→name derivation, for
+                  both halves of the app
+                frontend/src/pages/editor/ — the Images tab is four modules:
+                  MediaLocator (browse and add), MediaReel (order, by drag),
+                  focus (what the preview points at) and mediaEdits (what a
+                  click *changes* — pure, PRD 56's swatch gate included)
   prompts.py    which prompt backend can drive this terminal at all, and the
                 cancel-raising wrappers the wizards ask through              [done]
   credentials.py  one credential step — where it already lives, the blurb, the
@@ -222,6 +241,21 @@ later. Each traces to a decision.
   `format_plan` prints a reason only for stages that *do* run — so a listing
   priced under cost skipped `publish` in silence, under a plan reading "No
   changes." The vocabulary exists to make exactly that impossible.
+- **One rule behind that vocabulary, not one per reader.** `config/listing_validation.py`
+  owns every local refusal about a listing — predicate, message and all — and
+  `engine/stages/gates.py` is the adapter that turns one into a `Blocked` for a
+  stage, exactly as `Issue`'s tab and severity turn one into a line in the
+  editor's banner. One vocabulary with two implementations behind it is not one
+  vocabulary: these were two modules, and the garment-profile rule had already
+  diverged — `.strip()` on the engine's side, a bare truth test on the editor's,
+  so a `garment_profile: " "` passed `plan` and failed the banner about the same
+  file. A new local refusal is a check function there and nothing else.
+- **A check reads the workspace through `WorkspaceFacts`, gathered once.**
+  `check_listing` is pure and takes no workspace, so somebody has to open the
+  files it checks against — and when that was each caller's own business,
+  `_describe` parsed one garment profile twice and every listings-table row
+  re-parsed the entire template catalogue. Build one where a request begins and
+  hand it down; never load a profile or a template config beside a check.
 - **`will_run` is derived from a reason, never computed beside one.** They were
   two expressions of one rule — `was is None or bool(changes) or live is None`
   standing next to a three-branch string — and two expressions of one rule are
@@ -294,13 +328,20 @@ later. Each traces to a decision.
   unknown shared prefix (the enumeration direction) isn't the same question as
   matching a known slug against one (the lookup direction). `multiple`- and `single`-kind templates use a
   fixed `scene.png` instead — no per-colour photo to name (PRD 28).
+  **The browser is never told this rule**; it is served the answer.
+  `TemplateSummary.photos` carries each scene's real workspace-relative path,
+  resolved through `Workspace.scene_photo`, because the editor's caption used
+  to compose one from the convention and so named a missing file for exactly
+  the pack `template_base_image`'s fallback exists for.
 - **A template is exactly one of three kinds — never a mix.** `kind:
   colour-matrix | multiple | single`, a discriminated union (`A11`). **No
-  garment-profile-level registry of templates** — `GarmentProfile` carries no
-  `templates` field; a template lives purely in `mockup-templates/{name}/`, and any
-  listing may reference any of them. A listing's `media:` always names
-  `{template, colour?}` explicitly — there is no default template and no
-  bare-colour shorthand (`A13`, PRD 29).
+  garment-profile-level registry of listing templates** — a template lives
+  purely in `mockup-templates/{name}/`, and any listing may reference any of
+  them. A listing's `media:` always names `{template, colour?}` explicitly —
+  there is no default template and no bare-colour shorthand (`A13`, PRD 29).
+  `GarmentProfile.preview_template` is the one exception: a single
+  `colour-matrix` template the editor uses to judge colours, not a `media:`
+  default.
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
   variants sell (Phase 2), not which photos get rendered (PRD 31).
@@ -335,7 +376,7 @@ plus a separate frontend unit layer:
 | Unit | slugification, `Money`, hash canonicalisation, path resolution, limiter maths, which prompt backend runs, what a terminal can print |
 | Golden | per-pass renders on a grid target; end-to-end composites per template |
 | Behaviour | in-memory fake clients: idempotency, drift, resume, polling, batch |
-| Browser | `-m browser`, playwright over the built SPA served by FastAPI: one full drag → render → save loop per template kind |
+| Browser | `-m browser`, playwright over the built SPA served by FastAPI: one full drag → render → save loop per template kind, plus a listings create → edit → autosave loop |
 | Contract | cassette replay through real httpx: payload shape, auth, error decoding |
 | E2E | `-m e2e`, skipped by default, env-gated at a throwaway shop |
 | Frontend unit (Vitest) | `ui/frontend/`, not part of `pytest` — component tests for the calibrator's editors, panels and API client; `npm run test` / `test:coverage` |
@@ -531,7 +572,9 @@ new [<design>]     interactive design/garment/provider picker; writes garment pr
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified   [done; render + printify]
 render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
-ui                     setup wizard, dashboard, calibrator, run runner    [calibrator done; rest Phase 5]
+ui                     setup wizard, dashboard, calibrator, listings, run runner
+                       [calibrator + dashboard + listings list/editor done;
+                       setup wizard and run runner remain, Phase 5]
 auth                   every credential: Printify, Etsy key pair + OAuth, Anthropic [Phase 3]
 catalog refresh        force-refresh the cached Printify catalog                  [Phase 6]
 unlock <listing>       clear a Printify product stuck publishing                  [Phase 2]

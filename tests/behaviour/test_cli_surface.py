@@ -68,6 +68,8 @@ def test_command_help_documents_the_command_specific_flags() -> None:
     ui_help = _help("ui")
     assert "--host" in ui_help
     assert "--port" in ui_help
+    assert "--browser" in ui_help
+    assert "--debug" in ui_help
 
 
 def test_root_can_be_given_through_the_environment(workspace_root: Path) -> None:

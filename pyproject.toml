@@ -24,6 +24,9 @@ dependencies = [
     "python-multipart>=0.0.9,<1",
     "uvicorn[standard]>=0.38,<1",
     "questionary>=2.0,<3",
+    # Native window around the calibrator SPA. Imported only when
+    # `etsy-listings ui` opens a window, not on `--browser` or at package import.
+    "pywebview>=6,<7",
 ]
 
 [project.scripts]
@@ -130,6 +133,14 @@ ignore_missing_imports = true
 
 [[tool.mypy.overrides]]
 module = "questionary.*"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "webview"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "webview.*"
 ignore_missing_imports = true
 
 [tool.pydantic-mypy]

@@ -13,6 +13,11 @@ A gate *returns* its refusal rather than raising it. That is what lets `plan`
 report the blocked stage alongside everything else the run would do, instead
 of dying on the first one -- so these tests read the refusal as a value, and
 the message is the whole of what they check.
+
+`gates.py` is now the stage's adapter over `config/listing_validation.py`,
+which owns the rules themselves. The last group here is what the seam is for:
+a gate and the editor's issues banner must refuse on exactly the same inputs,
+with exactly the same words.
 """
 
 from __future__ import annotations
@@ -22,11 +27,13 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
+from etsy_listings.config import listing_validation as rules
 from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
 from etsy_listings.engine.stage import Blocked
 from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
+    check_garment_profile_chosen,
 )
 
 PROFILE = GarmentProfile(
@@ -149,3 +156,61 @@ def test_a_refusal_leads_with_the_consequence_and_follows_with_the_remedy(
     assert "too small" in head
     assert rest, "a refusal a user can act on says what to do about it"
     assert not any(line.startswith(" ") for line in rest), "cli.render owns the indenting"
+
+
+# ------------------------------------------- a garment profile to print on
+
+
+def test_a_chosen_garment_profile_passes() -> None:
+    assert check_garment_profile_chosen("comfort-colors-1717") is None
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_no_garment_profile_is_refused_rather_than_raised(name: str) -> None:
+    """The listings editor writes a listing as soon as it has a name and a
+    price source, so an unfilled `garment_profile:` is an ordinary state on
+    disk. Loading one goes through `_segment`, which raises `InvalidNameError`
+    -- a plain ValueError that would unwind the stage walk and take a whole
+    `--all` batch down with it. Refused here instead, as a `Blocked` like any
+    other."""
+    assert "garment_profile" in _refusal(check_garment_profile_chosen(name))
+
+
+# ------------------------------------------- one rule, two readers (the seam)
+
+
+@pytest.mark.parametrize("name", ["", "   ", "comfort-colors-1717"])
+def test_a_gate_agrees_with_the_banner_about_a_garment_profile(name: str) -> None:
+    """The reason these are now one rule and one adapter, rather than two
+    modules with a copy of it each: the engine used to accept `"   "` while the
+    editor refused it, so one file on disk got two answers. This is the
+    assertion that would have caught it."""
+    gate = check_garment_profile_chosen(name)
+    banner = rules.check_garment_profile_chosen(name)
+
+    assert (gate is None) == (banner == [])
+    if gate is not None:
+        assert gate.message == banner[0].message
+
+
+@pytest.mark.parametrize("title", ["<generate>", "   ", "Take A Hike Tee"])
+def test_a_gate_agrees_with_the_banner_about_copy(title: str) -> None:
+    gate = check_copy_is_concrete(title=title, description="A retro sunset.")
+    banner = rules.check_copy_is_concrete(title=title, description="A retro sunset.")
+
+    assert (gate is None) == (banner == [])
+    if gate is not None:
+        assert gate.message == banner[0].message
+
+
+@pytest.mark.parametrize("size", [(120, 140), (4200, 4800)])
+def test_a_gate_agrees_with_the_banner_about_a_design(
+    tmp_path: Path, size: tuple[int, int]
+) -> None:
+    design = _design(tmp_path, size)
+    gate = check_design_resolution(design, PROFILE)
+    banner = rules.check_design_resolution(design, PROFILE)
+
+    assert (gate is None) == (banner == [])
+    if gate is not None:
+        assert gate.message == banner[0].message

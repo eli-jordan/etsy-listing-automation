@@ -51,6 +51,9 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
         "name": "not-calibrated-yet",
         "kind": None,
         "colours": [],
+        # No kind, so no way to say whether its photos are per-colour scenes or
+        # one fixed one -- and nothing to caption until there is.
+        "photos": [],
         "has_config": False,
         "status": "needs-calibration",
         "status_reason": "no kind set",
@@ -59,6 +62,48 @@ def test_list_templates_includes_a_directory_with_no_template_yaml(
         "width": None,
         "height": None,
     }
+
+
+class TestTemplatePhotos:
+    """Where each scene really is, so the listings editor can caption its
+    preview with a path that exists.
+
+    It used to compose that path client-side from PRD 7a's convention, which is
+    exactly the rule `template_base_image`'s fallback exists to bend -- so the
+    caption named a missing file for the one pack layout the renderer handles.
+    """
+
+    def photos(self, client: TestClient, name: str) -> list[dict[str, object]]:
+        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
+        return list(by_name[name]["photos"])
+
+    def test_a_colour_matrix_lists_one_photo_per_colour(self, client: TestClient) -> None:
+        assert self.photos(client, "flat-lay-01") == [
+            {"colour": "black", "file": "mockup-templates/flat-lay-01/black.png"},
+            {"colour": "blue-jean", "file": "mockup-templates/flat-lay-01/blue-jean.png"},
+            {"colour": "ivory", "file": "mockup-templates/flat-lay-01/ivory.png"},
+            {"colour": "moss", "file": "mockup-templates/flat-lay-01/moss.png"},
+        ]
+
+    def test_a_fixed_scene_carries_no_colour(self, client: TestClient) -> None:
+        """PRD 28: a `multiple`/`single` template has one photo and no
+        per-colour name to derive it from."""
+        assert self.photos(client, "colour-chart-01") == [
+            {"colour": None, "file": "mockup-templates/colour-chart-01/scene.png"}
+        ]
+
+    def test_a_prefixed_vendor_pack_reports_the_file_that_is_really_there(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """`{template}-{colour}.png`, which `template_base_image` resolves and
+        the old client-side derivation did not."""
+        directory = workspace_root / "mockup-templates" / "flat-lay-01"
+        (directory / "black.png").rename(directory / "flat-lay-01-black.png")
+
+        assert {
+            "colour": "flat-lay-01-black",
+            "file": "mockup-templates/flat-lay-01/flat-lay-01-black.png",
+        } in self.photos(client, "flat-lay-01")
 
 
 class TestCalibrationStatus:
@@ -146,6 +191,30 @@ class TestThumbnails:
         with Image.open(BytesIO(client.get("/api/templates/flat-lay-01/thumbnail").content)) as img:
             assert max(img.size) <= 160
 
+    def _mean_brightness(self, payload: bytes) -> float:
+        with Image.open(BytesIO(payload)) as img:
+            return float(np.asarray(img.convert("L"), dtype=np.float64).mean())
+
+    def test_thumbnail_serves_the_asked_for_colours_own_photo(self, client: TestClient) -> None:
+        """Without a colour the endpoint answers "any one of them"
+        (`template_preview_photo`), which made every colour of a set draw the
+        same tile. The fixture's ivory garment is far lighter than its black
+        one, so the two responses cannot be the same photo."""
+        ivory = client.get("/api/templates/flat-lay-01/thumbnail", params={"colour": "ivory"})
+        black = client.get("/api/templates/flat-lay-01/thumbnail", params={"colour": "black"})
+        assert ivory.status_code == 200
+        assert black.status_code == 200
+        assert self._mean_brightness(ivory.content) > self._mean_brightness(black.content) + 50
+
+    def test_thumbnail_404s_for_a_colour_the_template_has_no_photo_for(
+        self, client: TestClient
+    ) -> None:
+        """A colour is picked from a list this API handed out, so one that
+        resolves to nothing means the listing names a colour the template
+        never shipped -- reported, not served as some other colour's photo."""
+        response = client.get("/api/templates/flat-lay-01/thumbnail", params={"colour": "maroon"})
+        assert response.status_code == 404
+
     def test_thumbnail_404s_for_a_template_with_no_photo(
         self, client: TestClient, workspace_root: Path
     ) -> None:
@@ -163,6 +232,48 @@ class TestThumbnails:
         passed whether or not that refusal existed.
         """
         assert client.get("/api/templates/..%2F..%2Fetc/thumbnail").status_code == 404
+
+
+class TestPhoto:
+    """`GET .../photo`: the same bare scene photo as the thumbnail, at its own
+    resolution -- the listing editor's Variants/Listing Images preview stage
+    for a listing that has not picked a design yet, which must not be stuck
+    showing the rail's 160px tile."""
+
+    def test_photo_returns_a_png_for_a_colour_matrix_template(self, client: TestClient) -> None:
+        response = client.get("/api/templates/flat-lay-01/photo", params={"colour": "black"})
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+    def test_photo_returns_a_png_for_a_scene_template(self, client: TestClient) -> None:
+        response = client.get("/api/templates/colour-chart-01/photo")
+        assert response.status_code == 200
+        assert response.content.startswith(b"\x89PNG\r\n\x1a\n")
+
+    def test_is_full_resolution_not_the_capped_thumbnail(self, client: TestClient) -> None:
+        thumb = client.get("/api/templates/flat-lay-01/thumbnail", params={"colour": "black"})
+        with Image.open(BytesIO(thumb.content)) as img:
+            thumb_size = img.size
+        full = client.get("/api/templates/flat-lay-01/photo", params={"colour": "black"})
+        with Image.open(BytesIO(full.content)) as img:
+            full_size = img.size
+        assert full_size[0] > thumb_size[0]
+
+    def test_photo_404s_for_a_colour_the_template_has_no_photo_for(
+        self, client: TestClient
+    ) -> None:
+        response = client.get("/api/templates/flat-lay-01/photo", params={"colour": "maroon"})
+        assert response.status_code == 404
+
+    def test_photo_404s_for_a_template_with_no_photo(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        (workspace_root / "mockup-templates" / "photoless").mkdir()
+        assert client.get("/api/templates/photoless/photo").status_code == 404
+
+    def test_a_dot_dot_photo_url_reaches_no_template_at_all(self, client: TestClient) -> None:
+        assert client.get("/api/templates/..%2F..%2Fetc/photo").status_code == 404
 
 
 class TestDesignLibrary:
@@ -452,6 +563,82 @@ def test_preview_renders_the_full_composite_for_multiple_kind(client: TestClient
     assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+class TestDesignPreview:
+    """`GET .../design-preview`: the listing editor's real-render preview,
+    which -- unlike `preview()` above -- resolves a listing's real
+    `designs/*.png` artwork and reads geometry from the *saved*
+    template.yaml rather than the request body."""
+
+    def test_renders_a_real_png_for_a_colour_matrix_colour(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "take-a-hike", "colour": "black"},
+        )
+        assert response.status_code == 200
+        assert response.headers["content-type"] == "image/png"
+        assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_is_full_resolution_not_the_capped_thumbnail(self, client: TestClient) -> None:
+        thumb = client.get("/api/templates/flat-lay-01/thumbnail?colour=black")
+        with Image.open(BytesIO(thumb.content)) as img:
+            thumb_size = img.size
+        full = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "take-a-hike", "colour": "black"},
+        )
+        with Image.open(BytesIO(full.content)) as img:
+            full_size = img.size
+        assert full_size[0] > thumb_size[0]
+
+    def test_unknown_design_404s(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "no-such-design", "colour": "black"},
+        )
+        assert response.status_code == 404
+
+    def test_unknown_colour_404s(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "take-a-hike", "colour": "not-a-real-colour"},
+        )
+        assert response.status_code == 404
+
+    def test_colour_is_ignored_for_a_kind_with_no_per_colour_photo(
+        self, client: TestClient
+    ) -> None:
+        """`colour-chart-01` is `multiple`-kind -- one scene, no per-colour
+        photo -- so a stray `colour` param must not turn into a 404 the way
+        it would for a real colour-matrix miss."""
+        response = client.get(
+            "/api/templates/colour-chart-01/design-preview",
+            params={"design": "take-a-hike", "colour": "not-a-real-colour"},
+        )
+        assert response.status_code == 200
+
+
+class TestSwatch:
+    """`GET .../swatch`: a colour's real garment shade, sampled off its own
+    scene photo -- not an invented hex value."""
+
+    def test_returns_a_hex_colour_for_a_real_colour(self, client: TestClient) -> None:
+        response = client.get("/api/templates/flat-lay-01/swatch", params={"colour": "black"})
+        assert response.status_code == 200
+        hex_value = response.json()["hex"]
+        assert hex_value.startswith("#")
+        assert len(hex_value) == 7
+
+    def test_unknown_colour_404s(self, client: TestClient) -> None:
+        response = client.get(
+            "/api/templates/flat-lay-01/swatch", params={"colour": "not-a-real-colour"}
+        )
+        assert response.status_code == 404
+
+    def test_404s_for_a_non_colour_matrix_template(self, client: TestClient) -> None:
+        response = client.get("/api/templates/colour-chart-01/swatch", params={"colour": "black"})
+        assert response.status_code == 404
+
+
 class TestPreviewScale:
     """The editor's canvas and the Preview tab are the *same* render at two
     sizes -- and the smaller one is why dragging a box stopped taking seconds
@@ -658,6 +845,7 @@ bouncing off request validation before the name is ever looked at."""
     [
         ("GET", "/api/templates/bad%3Aname/config", None),
         ("GET", "/api/templates/bad%3Aname/thumbnail", None),
+        ("GET", "/api/templates/bad%3Aname/photo", None),
         ("GET", "/api/templates/bad%3Aname/colour-report", None),
         ("POST", "/api/templates/bad%3Aname/kind", {"kind": "single"}),
         ("PUT", "/api/templates/bad%3Aname/config", SINGLE_CONFIG),

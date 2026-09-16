@@ -233,6 +233,28 @@ class Workspace:
             return []
         return sorted(p for p in designs.glob("*.png") if p.is_file())
 
+    def common_media_dir(self) -> Path:
+        return self.root / layout.COMMON_MEDIA_DIR
+
+    def common_media_file(self, asset: str) -> Path:
+        return self.common_media_dir() / f"{_segment(asset)}.png"
+
+    def common_media_files(self) -> list[Path]:
+        """Every ``common-media/*.png``: the shared assets a listing can put in
+        ``media:`` as a bare path (a sizing chart, care instructions), as
+        opposed to a rendered mockup.
+
+        PNG only and flat, for the same reason :meth:`design_files` is:
+        :meth:`common_media_file` derives one fixed path per name, so anything
+        listed here that it could not resolve would be offered and then fail.
+        Sorted by name rather than mtime -- unlike a design, a shared asset is
+        written once and reused for years, so recency says nothing useful.
+        """
+        shared = self.common_media_dir()
+        if not shared.is_dir():
+            return []
+        return sorted((p for p in shared.glob("*.png") if p.is_file()), key=lambda p: p.name)
+
     def garment_profile_names(self) -> list[str]:
         garment_profiles = self.root / layout.GARMENT_PROFILES_DIR
         if not garment_profiles.is_dir():
@@ -419,6 +441,15 @@ class Workspace:
             return []
         return sorted(p.stem for p in directory.glob("*.png") if p.is_file())
 
+    def renders_dir(self, listing: str) -> Path:
+        """Every render this listing has cached.
+
+        Exists because the render cache is keyed by listing *name*, so renaming
+        a listing has to move it -- and the rename endpoint knowing how to spell
+        `.cache/renders/{listing}` itself would be the second place that knows
+        where renders live."""
+        return self.cache(layout.RENDERS_DIR, _segment(listing))
+
     def render_file(self, listing: str, template: str, colour: str | None = None) -> Path:
         """Namespaced by template: a listing can reference several templates
         (item 4), including more than one ``colour-matrix``-kind set, so a
@@ -428,7 +459,7 @@ class Workspace:
         ``colour``), ``scene.png`` for ``multiple``/``single`` kind (omit
         ``colour`` -- exactly one output, nothing to disambiguate)."""
         filename = f"{_segment(colour)}.png" if colour is not None else "scene.png"
-        return self.cache(layout.RENDERS_DIR, _segment(listing), _segment(template), filename)
+        return self.renders_dir(listing) / _segment(template) / filename
 
     def catalog_cache_dir(self) -> Path:
         return self.cache(layout.CATALOG_DIR)

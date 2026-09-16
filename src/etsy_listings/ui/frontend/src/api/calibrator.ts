@@ -98,9 +98,54 @@ export async function uploadDesign(file: File): Promise<DesignSummary> {
  * The rail's per-template photo. A plain URL rather than a fetch: the browser
  * loads, caches and evicts these itself, and there is no object URL for anyone
  * to leak by forgetting to revoke it.
+ *
+ * `colour` narrows a `colour-matrix` set to one of its photos. Omit it for the
+ * calibrator's rail, which is standing in for the whole template; pass it
+ * anywhere a *particular* variant is on screen (the listings editor's reel and
+ * its previews), or every colour of a set draws the same picture.
  */
-export function templateThumbnailUrl(name: string): string {
-  return `/api/templates/${encodeURIComponent(name)}/thumbnail`;
+export function templateThumbnailUrl(name: string, colour?: string | null): string {
+  const base = `/api/templates/${encodeURIComponent(name)}/thumbnail`;
+  return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
+}
+
+/**
+ * The same bare, inkless photo as {@link templateThumbnailUrl}, at its own
+ * resolution rather than downscaled to list size. For the large preview
+ * stages (the listing editor's Variants and Listing Images tabs) when there
+ * is no design yet to composite -- {@link templateThumbnailUrl}'s 160px cap
+ * is sized for a row of tiles, not a hero image.
+ */
+export function templatePhotoUrl(name: string, colour?: string | null): string {
+  const base = `/api/templates/${encodeURIComponent(name)}/photo`;
+  return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
+}
+
+/**
+ * A listing's real design, composited onto this template's *saved* geometry
+ * -- unlike {@link templateThumbnailUrl}/{@link templatePhotoUrl}, which are
+ * a bare, inkless photo, or {@link renderPreview}, which composites a
+ * calibrator test design against *unsaved* geometry. A plain URL for the
+ * same reason those are: the browser owns loading and caching it.
+ */
+export function templateDesignPreviewUrl(
+  name: string,
+  design: string,
+  colour?: string | null,
+): string {
+  const params = new URLSearchParams({ design });
+  if (colour) params.set("colour", colour);
+  return `/api/templates/${encodeURIComponent(name)}/design-preview?${params.toString()}`;
+}
+
+/** A colour-matrix colour's real garment shade, sampled off its own scene
+ * photo -- for a quick-glance swatch dot next to the colour's name. */
+export async function getTemplateSwatch(name: string, colour: string): Promise<string> {
+  const { data, error } = await api.GET("/api/templates/{name}/swatch", {
+    params: { path: { name }, query: { colour } },
+  });
+  if (error || !data) throw new CalibratorApiError(`no swatch for ${name} colour ${colour}`);
+  return data.hex;
 }
 
 type PreviewBody =

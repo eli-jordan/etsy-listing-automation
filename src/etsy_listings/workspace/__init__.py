@@ -16,9 +16,14 @@ So: ask for ``workspace.lock_file(name)``, never join
 ``load_garment_profile``, ``load_pricing_plan``, ``load_template_config`` and
 ``load_exceptions`` are how the tree's files are opened, so no caller writes
 its own ``yaml.safe_load`` against a path it assembled.
+
+:class:`WorkspaceFacts` is the same rule applied to *repeated* reading: the
+garment profiles and template configs a listing check needs, gathered once for
+a request rather than re-parsed inside every check of every row.
 """
 
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import (
     AmbiguousColourSuffixError,
@@ -32,6 +37,8 @@ from etsy_listings.workspace.workspace import (
 __all__ = [
     "Workspace",
     "ScenePhoto",
+    # What a listing check reads off the tree, gathered once per request.
+    "WorkspaceFacts",
     # The four refusals, each naming what it refused and why.
     "WorkspaceNotFoundError",
     "PathEscapesWorkspaceError",

@@ -292,6 +292,13 @@ input[type="checkbox"] {
   background: var(--color-neutral-100);
   color: var(--color-neutral-800);
 }
+/* `dirty` only: a live listing whose workspace copy has moved on. Louder than
+   the other three on purpose -- it is the one state where what buyers see is
+   known to be out of date. */
+.tag-dirty {
+  background: color-mix(in srgb, var(--color-danger) 16%, var(--color-bg));
+  color: var(--color-danger-700);
+}
 
 /* — segmented control — */
 .seg {
@@ -1356,4 +1363,1873 @@ fieldset label {
   min-height: 1.2em;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
   font-size: 13px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Shell layer -- the listings UI's own structure (phase 5), expressed in the
+   same tokens as everything above. Ported from the design mockup
+   ("Etsy Listings UI Shell", Main.dc.html + ListingEditor.dc.html) with the
+   already-shared primitives (.btn/.tag/.seg/.card/fieldset/.field/.input)
+   left alone -- only the sidebar/nav/table/editor-specific classes those two
+   files introduce are new here.
+   ═══════════════════════════════════════════════════════════════════════ */
+
+.shell {
+  display: flex;
+  min-height: 100vh;
+}
+
+/* — sidebar — */
+.sidebar {
+  width: 240px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-4) var(--space-3);
+  background: var(--color-surface);
+  border-right: 1px solid var(--color-divider);
+}
+
+.sidebar__brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2) var(--space-4);
+}
+
+.sidebar__mark {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidebar__wordmark {
+  font-family: var(--font-heading);
+  font-size: 17px;
+  line-height: 1.1;
+}
+
+.sidebar__shop {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 2px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.sidebar__dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 999px;
+  background: var(--color-accent-2);
+}
+
+.sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sidebar__bottom {
+  margin-top: auto;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+.nav-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 9px var(--space-2);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.nav-item svg {
+  flex: none;
+  width: 19px;
+  height: 19px;
+}
+
+.nav-item:hover {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+}
+
+.nav-item--active {
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+}
+
+.nav-item--active:hover {
+  background: var(--color-accent-100);
+}
+
+.nav-item--secondary {
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  cursor: default;
+}
+
+/* — main content, shared by every page under AppShell — */
+.shell__main {
+  flex: 1;
+  min-width: 0;
+  padding: var(--space-6) var(--space-8);
+}
+
+/* — page head: title/breadcrumb + meta + trailing actions, shared by the
+   listings list and the editor — */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.page-head__title {
+  font-size: 25px;
+}
+
+.page-head__crumb {
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+
+.page-head__crumb:hover {
+  color: var(--color-accent-700);
+}
+
+.page-head__sep {
+  color: color-mix(in srgb, var(--color-text) 35%, transparent);
+}
+
+.page-head__meta {
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.page-head__actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* — listings list: toolbar, filter pills, table — */
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.toolbar__search {
+  width: 260px;
+}
+
+.pill {
+  cursor: pointer;
+  border: 1px solid var(--color-divider);
+  background: transparent;
+  padding: 5px 13px;
+  font-size: 12px;
+  font-family: var(--font-body);
+  border-radius: 999px;
+  color: var(--color-text);
+}
+
+.pill:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.pill--on {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+table.listings {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+table.listings thead th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  padding: 0 var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+table.listings td {
+  padding: 12px var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: middle;
+  font-size: 13.5px;
+}
+
+table.listings tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.listing-cell {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.listing-row__link {
+  font-weight: 600;
+  cursor: pointer;
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--color-text);
+}
+
+.listing-row__link:hover {
+  color: var(--color-accent-700);
+}
+
+.listing-row__garment {
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  font-size: 12.5px;
+}
+
+/* — a row's artwork, and the card it reveals on hover —
+   CSS-only: the card shows what the row already has, so there is nothing to
+   fetch and no state worth re-rendering a whole table for. */
+.listing-hover {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+}
+
+.listing-thumb {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  object-fit: contain;
+  background: var(--color-neutral-200);
+  box-shadow: var(--shadow-sm);
+}
+
+/* No single design stands for this listing (on-light/on-dark), so the tile
+   stays an empty well rather than showing one of the two inks. */
+.listing-thumb--empty {
+  display: block;
+  background: linear-gradient(135deg, var(--color-neutral-200), var(--color-neutral-300));
+}
+
+.listing-hover:hover .listing-row__link {
+  color: var(--color-accent-700);
+}
+
+.listing-popup {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  z-index: 20;
+  display: flex;
+  flex-direction: column;
+  width: 220px;
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.12s ease,
+    transform 0.12s ease;
+  pointer-events: none;
+  cursor: default;
+}
+
+.listing-hover:hover .listing-popup,
+.listing-hover:focus-within .listing-popup {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Keyboard users reach the row by tabbing to its link, so the card has to
+   answer to focus as well as hover -- otherwise it is mouse-only. */
+
+.listing-popup__thumb {
+  width: 100%;
+  height: 100px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  margin-bottom: var(--space-2);
+  background: var(--color-neutral-200);
+}
+
+.listing-popup__name {
+  font-weight: 700;
+  font-size: 13.5px;
+  margin-bottom: 2px;
+}
+
+.listing-popup__garment {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  margin-bottom: 8px;
+}
+
+.listing-popup__meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* — the open-on-Etsy/Printify menu, on a listing row and the editor's page
+   head alike — */
+.row-menu {
+  position: relative;
+  display: inline-block;
+}
+
+.row-menu--inline {
+  align-self: center;
+}
+
+.row-menu__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 13px;
+  color: var(--color-text);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+  padding: 6px 13px;
+  cursor: pointer;
+}
+
+.row-menu__trigger:hover {
+  border-color: var(--color-accent);
+}
+
+.row-menu__trigger--caret {
+  padding: 4px 9px;
+}
+
+.row-menu__caret {
+  font-size: 9px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.row-menu__panel {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 25;
+  min-width: 175px;
+  padding: 5px;
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+  box-shadow: var(--shadow-md);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row-menu--inline .row-menu__panel {
+  right: auto;
+  left: 0;
+}
+
+.row-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  border: none;
+  font-family: var(--font-body);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  text-align: left;
+  text-decoration: none;
+}
+
+.row-menu__item:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.row-menu__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  font-size: 10.5px;
+  font-weight: 700;
+  color: #fff;
+  flex: none;
+  font-family: var(--font-body);
+}
+
+.row-menu__badge--etsy {
+  background: #f1641e;
+}
+
+.row-menu__badge--printify {
+  background: #1a1a1a;
+}
+
+/* — dashboard stat cards (reserved for a future pass; kept for parity with
+   the mockup's Dashboard section) — */
+.stat-row {
+  display: flex;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.stat-card {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-card__label {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.stat-card__value {
+  font-family: var(--font-heading);
+  font-size: 34px;
+}
+
+.stat-card__caption {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+/* ── Form layer ──────────────────────────────────────────────────────────
+   The mockup's form-field block, which the first pass skipped as an
+   "already-shared primitive" it is not: the calibrator's `.input` carries no
+   width (its fields sit in a fixed 240px rail, so they never needed one) and
+   nothing above styles `textarea` at all. Without these a 1115px card held
+   175px pills and a monospace UA textarea.
+
+   Scoped to `.field`, which only the listings UI uses -- the calibrator's own
+   controls are sized by their rail and must not start filling it. */
+.field {
+  margin: var(--space-2) 0;
+}
+
+.field > label {
+  display: block;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+  margin-bottom: 4px;
+}
+
+.field .input,
+.field select,
+.field textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+}
+
+.field .input,
+.field select {
+  min-height: 34px;
+  padding: 7px 13px;
+  border-radius: 999px;
+}
+
+.field textarea {
+  padding: 7px 13px;
+  border-radius: var(--radius-md);
+  resize: vertical;
+  min-height: 64px;
+}
+
+.field textarea:hover,
+.field textarea:focus-visible {
+  border-color: var(--color-accent);
+}
+
+/* — the design strip: which artwork this listing prints, above the tabs
+     because both Variants and Listing Images are about it — */
+.design-select {
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.design-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 4px;
+  border-radius: var(--radius-md);
+}
+
+.design-thumb {
+  width: 40px;
+  height: 40px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-neutral-200);
+  box-shadow: var(--shadow-sm);
+}
+
+.design-thumb--empty {
+  display: block;
+  background: linear-gradient(135deg, var(--color-neutral-200), var(--color-neutral-300));
+}
+
+.design-row__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.design-row__name {
+  font-weight: 700;
+  font-size: 13.5px;
+}
+
+.design-row__name--empty {
+  font-style: italic;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.design-row__file {
+  font-size: 11px;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.design-row__change {
+  margin-left: auto;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.design-row__change:hover {
+  text-decoration: underline;
+}
+
+/* The inline picker the strip drops open, and the card grid inside it --
+   also the shape the locator's non-matrix bodies use. */
+.add-panel {
+  margin-top: var(--space-1);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px dashed var(--color-divider);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  align-items: flex-start;
+}
+
+/* auto-*fill*, not auto-fit: a single design must occupy one track, not
+   stretch across the whole strip. */
+.template-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 6px;
+  width: 100%;
+}
+
+.template-card {
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--color-divider);
+  background: var(--color-neutral-100);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  /* The UA centres a button's contents on both axes; these are left-aligned
+     rows of text, like every other card in the app. */
+  align-items: flex-start;
+  gap: 2px;
+  text-align: left;
+}
+
+.template-card:hover {
+  border-color: var(--color-accent);
+}
+
+.template-card--active {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 8%, var(--color-neutral-100));
+}
+
+.template-card__name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.template-card__kind {
+  font-size: 10px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* — editor: tabs, layout, validation issues — */
+.editor {
+  max-width: 1400px;
+}
+
+/* A column of prose fields, not a dashboard: past ~640px a title input stops
+   being scannable and starts being a horizon. */
+.details-tab {
+  max-width: 640px;
+}
+
+.tag-paste {
+  margin-top: 6px;
+}
+
+.tabs {
+  margin-bottom: var(--space-4);
+}
+
+/* The name field on `/listings/new`, styled to sit where the `<h1>` does on a
+   saved listing -- the editor is the same screen either way, and a name that
+   moved when it was committed would say otherwise. */
+.page-head__name {
+  font-size: 25px;
+  font-weight: 700;
+  padding: 2px 10px;
+  min-width: 20ch;
+}
+
+/* The name and whatever the server said about it, as one unit in the head's
+   flex row -- so a refusal sits beside the field being corrected rather than
+   pushing the status pill along. */
+.page-head__name-edit {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.page-head__name-error {
+  font-size: 11px;
+  color: var(--color-danger-700);
+}
+
+.layout--variants {
+  display: grid;
+  grid-template-columns: 320px minmax(0, 1fr);
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.garment-card__sizes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.size-pill {
+  font-size: 10.5px;
+  padding: 2px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--color-divider);
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+
+.section-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+  margin: 0 0 4px;
+}
+
+/* The design-select strip's "Find a design…" button: `.btn-like` is
+   Caprasimo (a decorative display face) everywhere else, which reads fine at
+   heading sizes but not at this one -- scoped to `.add-panel`, the only
+   place this button lives, rather than every pill button in the app. */
+.add-panel .btn-like {
+  font-family: var(--font-body);
+  font-weight: 600;
+}
+
+/* — colours (Variants tab) — */
+.colors-panel__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 4px;
+}
+
+.colors-panel__count {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 6px;
+  border-radius: var(--radius-md);
+}
+
+.color-row--selected {
+  background: var(--color-accent-100);
+}
+
+/* `--selected` is the colour on the preview stage, not "enabled" -- the two
+   were conflated, so every enabled row wore the highlight and the panel read
+   as one solid block of accent. */
+.color-row__text {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  /* The UA centres a <button>'s contents, flex or not -- a colour list has to
+     read as a column of names, not a column of centred labels. */
+  justify-content: flex-start;
+  gap: 6px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+/* Switched off: still listed, so turning one back on doesn't need the user to
+   remember it existed. */
+.color-row--off .color-row__name,
+.color-row--off .tag {
+  opacity: 0.45;
+}
+
+.color-row__name {
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+/* The real garment shade (sampled off its own scene photo), not an invented
+   hex value -- see GET /api/templates/{name}/swatch. */
+.color-row__swatch {
+  flex: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--color-text) 20%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+
+.color-row--off .color-row__swatch {
+  opacity: 0.45;
+}
+
+/* A switch is a `<button role="switch">` here, not a styled checkbox --
+   simplest keyboard- and screen-reader-correct shape for a boolean toggle
+   with no native element of its own. */
+.switch {
+  flex: none;
+  width: 30px;
+  height: 17px;
+  padding: 0;
+  border: none;
+  border-radius: 999px;
+  background: var(--color-neutral-300);
+  position: relative;
+  cursor: pointer;
+}
+
+.switch__knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 13px;
+  height: 13px;
+  border-radius: 999px;
+  background: var(--color-bg);
+  transition: transform 0.12s ease;
+  box-shadow: var(--shadow-sm);
+}
+
+.switch--on {
+  background: var(--color-accent-2);
+}
+
+.switch--on .switch__knob {
+  transform: translateX(13px);
+}
+
+/* — a button-styled affordance that isn't quite `.btn` (the locator's "+
+   Add"/"Added" and the design picker's ghost row) — */
+.btn-like {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  cursor: pointer;
+  font-family: var(--font-heading);
+  font-weight: var(--font-heading-weight);
+  font-size: 13px;
+  padding: 7px 15px;
+  border-radius: 999px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-100);
+  color: var(--color-text);
+}
+
+.btn-like--primary {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-bg);
+}
+
+.btn-like--primary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.btn-like.btn-sm {
+  font-size: 12px;
+  padding: 5px 13px;
+}
+
+/* — validation issues banner (editor page head) — */
+.issues {
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  padding: var(--space-2) var(--space-3) var(--space-3);
+  margin-bottom: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.issues__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: 3px;
+}
+
+.issues__summary {
+  font-size: 11.5px;
+  font-weight: 700;
+}
+
+.issues__summary--block {
+  color: var(--color-accent-700);
+}
+
+.issues__summary--warn {
+  color: var(--color-accent-2-700);
+}
+
+.issue {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: 5px 7px;
+  border-radius: 4px;
+}
+
+.issue--block {
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+}
+
+.issue--warn {
+  background: color-mix(in srgb, var(--color-accent-2) 11%, transparent);
+}
+
+.issue__body {
+  flex: 1;
+  min-width: 0;
+}
+
+.issue__text {
+  display: block;
+  font-size: 12.5px;
+}
+
+.issues__when {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.issue__icon {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+
+.issue__icon svg {
+  width: 15px;
+  height: 15px;
+}
+
+.issue--block .issue__icon {
+  color: var(--color-accent-700);
+}
+
+.issue--warn .issue__icon {
+  color: var(--color-accent-2-700);
+}
+
+.issue__where {
+  display: block;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+/* "Fix →" jumps to the tab that owns the problem; an issue already on the
+   open tab says "Below" instead and is not a control at all. */
+.issue__fix {
+  flex: none;
+  padding: 1px 0 0;
+  border: none;
+  background: transparent;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--color-accent-700);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.issue__fix:hover {
+  text-decoration: underline;
+}
+
+.issue__fix--here {
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  cursor: default;
+}
+
+.issue__fix--here:hover {
+  text-decoration: none;
+}
+
+.page-head__path {
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+}
+
+/* — the tab strip's per-tab issue badge — */
+.tab-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  margin-left: 6px;
+  border-radius: 999px;
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.tab-badge--block {
+  background: var(--color-accent-700);
+  color: var(--color-bg);
+}
+
+.tab-badge--warn {
+  background: var(--color-accent-2-700);
+  color: var(--color-bg);
+}
+
+.seg-opt--on .tab-badge--block,
+.seg-opt--on .tab-badge--warn {
+  background: var(--color-bg);
+  color: var(--color-accent-700);
+}
+
+/* — inline field-level errors (a rejected PATCH's `field_errors`) — */
+.field--invalid .input,
+.field--invalid textarea,
+.field--invalid select {
+  border-color: var(--color-accent-600);
+  background: color-mix(in srgb, var(--color-accent) 6%, var(--color-neutral-100));
+}
+
+.field__error {
+  display: block;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  margin-top: 3px;
+}
+
+.field__hint {
+  display: block;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  margin-top: 3px;
+}
+
+/* — tag chips (Details tab) — */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  padding: 4px 11px;
+  border-radius: 999px;
+  background: var(--color-neutral-200);
+  color: var(--color-neutral-800);
+}
+
+.chip__x {
+  margin-left: 5px;
+  cursor: pointer;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.chip__x:hover {
+  color: var(--color-accent-700);
+}
+
+.chips__empty {
+  font-size: 11.5px;
+  font-style: italic;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+/* — pricing table (Details tab, display only) — */
+/* Auto-fit rather than the mockup's hardcoded five columns: a garment
+   profile declares its own sizes, and the fixture's six left XXXL alone on a
+   second row a fifth of the width. */
+.price-table {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(76px, 1fr));
+  gap: 5px;
+}
+
+.price-table__cell {
+  text-align: center;
+  padding: 6px 2px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+}
+
+.price-table__size {
+  display: block;
+  font-size: 10px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.price-table__amount {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-top: 2px;
+}
+
+.price-table__input {
+  width: 100%;
+  margin-top: 2px;
+  padding: 3px 4px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.price-table__currency {
+  display: block;
+  font-size: 9.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  margin-top: 2px;
+}
+
+/* — Listing Images tab: locator (left) + preview/reel (right) — */
+.images-tab {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: stretch;
+}
+
+.images-right {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.locator {
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.locator__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.locator__title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.locator__hint {
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 48%, transparent);
+}
+
+.locator__search {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.locator__search svg {
+  position: absolute;
+  left: 11px;
+  width: 13px;
+  height: 13px;
+  stroke: color-mix(in srgb, var(--color-text) 45%, transparent);
+  fill: none;
+  pointer-events: none;
+}
+
+.locator__search .input {
+  width: 100%;
+  padding-left: 31px;
+  background: var(--color-neutral-100);
+}
+
+.locator__list {
+  flex: 1;
+  min-height: 240px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.locator__empty {
+  font-size: 12px;
+  text-align: center;
+  padding: var(--space-4) 0;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.loc-tmpl {
+  border: 1px solid var(--color-divider);
+  border-radius: 4px;
+  background: var(--color-neutral-100);
+  overflow: hidden;
+}
+
+.loc-tmpl--open {
+  border-color: color-mix(in srgb, var(--color-accent) 45%, transparent);
+}
+
+.loc-tmpl__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 7px 9px;
+  cursor: pointer;
+}
+
+.loc-tmpl__head:hover {
+  background: color-mix(in srgb, var(--color-accent) 7%, transparent);
+}
+
+.loc-tmpl__mini {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  border-radius: 3px;
+  background: var(--color-neutral-200);
+  overflow: hidden;
+}
+
+.loc-tmpl__mini img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.loc-tmpl__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.loc-tmpl__name {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 700;
+}
+
+.loc-tmpl__kind {
+  display: block;
+  font-size: 10px;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
+.loc-tmpl__count {
+  font-size: 10px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: var(--color-accent-2-100);
+  color: var(--color-accent-2-800);
+  white-space: nowrap;
+}
+
+.loc-tmpl__caret {
+  font-size: 9px;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+
+.loc-tmpl__body {
+  padding: 0 9px 9px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  align-items: flex-start;
+}
+
+.loc-tmpl__note {
+  margin: 0;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
+/* — the Etsy colour-swatch source (PRD 56), on a colour-matrix template this
+     listing already uses — */
+.tmpl-swatch {
+  align-self: stretch;
+  border-top: 1px solid var(--color-divider);
+  padding-top: 7px;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.tmpl-swatch__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.tmpl-swatch__label {
+  flex: 1;
+  min-width: 0;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.tmpl-swatch__sub {
+  display: block;
+  font-size: 10px;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
+.swatch-status {
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.swatch-status--ok {
+  color: var(--color-accent-2-700);
+}
+
+.swatch-status--warn {
+  color: var(--color-accent-700);
+}
+
+.swatch-note {
+  margin: 0;
+  font-size: 10.5px;
+  color: var(--color-accent-700);
+}
+
+.cchips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+
+.cchip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  cursor: pointer;
+  font-size: 11px;
+  font-family: var(--font-body);
+  color: var(--color-text);
+}
+
+.cchip:hover {
+  border-color: var(--color-accent);
+}
+
+.cchip--in {
+  background: var(--color-accent-2-100);
+  border-color: var(--color-accent-2-400);
+  font-weight: 700;
+}
+
+.cchip__tick {
+  width: 10px;
+  height: 10px;
+  stroke: var(--color-accent-2-700);
+  fill: none;
+  flex: none;
+}
+
+.btn-like--ghost {
+  background: transparent;
+}
+
+/* — the locator's Images mode: common-media/'s shared assets, the bare-path
+   half of `media:` — */
+.loc-images {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.loc-img {
+  border: 1px solid var(--color-divider);
+  border-radius: 4px;
+  background: var(--color-neutral-100);
+  cursor: pointer;
+  padding: 5px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.loc-img:hover {
+  border-color: var(--color-accent);
+}
+
+.loc-img--in {
+  border-color: var(--color-accent-2-400);
+  background: var(--color-accent-2-100);
+}
+
+.loc-img__face {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 3px;
+  background: var(--color-neutral-200);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.loc-img__face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.loc-img__name {
+  font-size: 9.5px;
+  text-align: center;
+  line-height: 1.2;
+  word-break: break-all;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+
+/* — preview pane (right column) — */
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.preview-stage {
+  position: relative;
+  border-radius: var(--radius-lg);
+  background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.preview-stage img {
+  max-width: 100%;
+  max-height: 320px;
+  display: block;
+}
+
+/* The stage a picture is *judged* on, in both editor tabs: as large as the
+   column and the window allow, capped at the 1024px the artwork is drawn at.
+   A 320px tile answers "which one is this"; it cannot answer whether the ink
+   suits the cloth, which is the only reason either tab has a preview. The
+   viewport term is what keeps the reel and the colour list on screen beside
+   it on a laptop. */
+.preview-stage--large {
+  min-height: 420px;
+  padding: var(--space-2);
+}
+
+.preview-stage--large img {
+  max-width: 100%;
+  max-height: min(1024px, calc(100vh - 260px));
+}
+
+/* A button only so the keyboard can open the carousel -- it must look like
+   the image it wraps and nothing else. */
+.preview-stage__open {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: zoom-in;
+  max-width: 100%;
+  line-height: 0;
+}
+
+.preview-stage__open:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 3px;
+}
+
+.variants-preview {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+/* The two bulk shade buttons, above the colour switches they act on. */
+.shade-picker {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-2);
+}
+
+.shade-picker__hint {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.variants-preview__hint {
+  margin: 0;
+  font-size: 11px;
+  text-align: center;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.image-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--space-4);
+  text-align: center;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+  font-size: 12.5px;
+}
+
+/* — what the stage is showing, and what to do about it — */
+.preview-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.preview-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.preview-meta__title {
+  display: block;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.preview-meta__path {
+  display: block;
+  font-size: 10.5px;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.preview-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* — the reel: ordered listing images, Etsy's own presentation order — */
+.reel {
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  padding: var(--space-3);
+}
+
+.reel__head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  margin-bottom: var(--space-2);
+}
+
+.reel__title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.reel__count {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.reel__hint {
+  margin-left: auto;
+  font-size: 10.5px;
+  color: color-mix(in srgb, var(--color-text) 48%, transparent);
+}
+
+.reel__track {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.reel__empty {
+  margin: 0;
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 52%, transparent);
+}
+
+.rtile {
+  position: relative;
+  width: 104px;
+  cursor: grab;
+}
+
+.rtile:active {
+  cursor: grabbing;
+}
+
+.rtile__face {
+  position: relative;
+  width: 104px;
+  height: 104px;
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background: var(--color-neutral-200);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rtile__face img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.rtile--selected .rtile__face {
+  border-color: var(--color-accent);
+}
+
+.rtile--dragging {
+  opacity: 0.35;
+}
+
+/* Where the dragged tile would land. */
+.rtile--over .rtile__face {
+  border-color: var(--color-accent-2);
+  border-style: dashed;
+}
+
+/* This tile is what Etsy shows beside its colour option (PRD 56). */
+.rtile__swatch {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 19px;
+  height: 19px;
+  border-radius: 999px;
+  background: var(--color-accent-2);
+  color: var(--color-bg);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rtile__swatch svg {
+  width: 10px;
+  height: 10px;
+}
+
+.rtile__pos {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  min-width: 19px;
+  height: 19px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-neutral-900) 78%, transparent);
+  color: var(--color-bg);
+  font-size: 10.5px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rtile__first {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding: 3px 5px;
+  background: color-mix(in srgb, var(--color-accent) 88%, transparent);
+  color: var(--color-bg);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.rtile__x {
+  position: absolute;
+  bottom: 5px;
+  right: 5px;
+  width: 19px;
+  height: 19px;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--color-neutral-900) 78%, transparent);
+  color: var(--color-bg);
+  font-size: 12px;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.rtile__label {
+  display: block;
+  margin-top: 4px;
+  font-size: 10.5px;
+  line-height: 1.25;
+  text-align: center;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+
+/* — "find a design"-style modal shell (available for a future create/edit
+   flow that needs it; the current New listing page doesn't) — */
+.modal-root {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-backdrop {
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--color-neutral-900) 55%, transparent);
+}
+
+.modal-dialog {
+  position: relative;
+  z-index: 1;
+  width: 420px;
+  max-width: calc(100% - 32px);
+  max-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--color-bg);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-md);
+  padding: var(--space-4);
+  gap: var(--space-3);
+}
+
+.modal-dialog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.modal-dialog__title {
+  font-size: 18px;
+}
+
+.modal-dialog__close {
+  cursor: pointer;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  font-size: 16px;
+}
+
+.modal-dialog__close:hover {
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+}
+
+.modal-dialog__list {
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding-right: 2px;
+}
+
+.modal-design-row {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: 8px;
+  border: none;
+  border-radius: var(--radius-md);
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+}
+
+.modal-design-row:hover {
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.modal-design-row__thumb {
+  width: 34px;
+  height: 34px;
+  flex: none;
+  border-radius: var(--radius-sm);
+  object-fit: cover;
+  background: var(--color-neutral-200);
+}
+
+.modal-design-row__name {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.modal-design-row__file {
+  display: block;
+  font-size: 10.5px;
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.modal-empty {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  padding: var(--space-3) 0;
+  text-align: center;
 }

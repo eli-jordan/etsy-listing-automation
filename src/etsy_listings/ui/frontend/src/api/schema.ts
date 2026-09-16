@@ -4,6 +4,79 @@
  */
 
 export interface paths {
+  "/api/common-media": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Common Media
+     * @description The shared assets a listing can add to `media:` as a bare path.
+     *
+     *     Distinct from both design endpoints: ``designs/`` is the artwork that gets
+     *     printed, ``test-designs/`` is calibration targets, and these are finished
+     *     pictures (a sizing chart, care instructions) uploaded to Etsy as-is,
+     *     never rendered onto a garment.
+     */
+    get: operations["list_common_media_api_common_media_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/common-media/{name}/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Common Media File
+     * @description The shared asset at its own size, for the editor's preview pane and its
+     *     lightbox -- the two places a picture is *judged* rather than picked out of
+     *     a list.
+     *
+     *     The bytes as they sit on disk, not a re-encode: a mockup template's
+     *     counterpart (`GET .../design-preview`) has to run the real pipeline to
+     *     exist at all, but this file is already exactly what would be uploaded to
+     *     Etsy, and the one thing worth seeing full-size is what Etsy will get.
+     */
+    get: operations["common_media_file_api_common_media__name__file_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/common-media/{name}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Common Media Thumbnail
+     * @description An unusable *name* needs nothing here: ``InvalidNameError`` out of
+     *     ``common_media_file`` becomes a 400 through the app-wide handler.
+     */
+    get: operations["common_media_thumbnail_api_common_media__name__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/designs": {
     parameters: {
       query?: never;
@@ -22,6 +95,47 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/etsy/sections": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Etsy Sections
+     * @description The live shop's sections, for the Details tab's Section dropdown.
+     *     Empty (not a 500) for a workspace with no `shop_id` yet or no Etsy app
+     *     key pair -- both ordinary states short of `setup`/`auth etsy`, and the
+     *     frontend falls back to a plain text field exactly like it did before this
+     *     endpoint existed.
+     */
+    get: operations["list_etsy_sections_api_etsy_sections_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/garment-profiles": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Garment Profiles */
+    get: operations["list_garment_profiles_api_garment_profiles_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/health": {
     parameters: {
       query?: never;
@@ -31,6 +145,208 @@ export interface paths {
     };
     /** Health */
     get: operations["health_api_health_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-designs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** List Listing Designs */
+    get: operations["list_listing_designs_api_listing_designs_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-designs/{name}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Design Thumbnail
+     * @description The artwork itself, downscaled -- what the listings table, its hover
+     *     card and the editor's design strip all show.
+     *
+     *     Distinct from ``designs.py``'s calibrator library for the same reason
+     *     ``GET /api/listing-designs`` is: ``designs/`` holds artwork that ships,
+     *     ``test-designs/`` holds calibration targets, and a listing's design is
+     *     never one of the latter.
+     *
+     *     An unusable *name* needs nothing here: ``InvalidNameError`` out of
+     *     ``design_file`` becomes a 400 through the app-wide handler in ``app.py``.
+     */
+    get: operations["listing_design_thumbnail_api_listing_designs__name__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Draft
+     * @description The listing `+ New listing` opens the editor on, before it has a name.
+     *
+     *     There is no separate create *form* -- the editor itself is the form, and a
+     *     listing is written the moment it is named and priced. What the editor needs
+     *     first is a document to render, and inventing one in the browser would put
+     *     the starting shape of a listing in two places, so the server hands over
+     *     `EMPTY_DRAFT`: nothing chosen, nothing invented, and a block issue for each
+     *     thing still to pick.
+     *
+     *     ``name`` comes back empty, which is exactly the state the editor refuses to
+     *     save in.
+     */
+    get: operations["listing_draft_api_listing_draft_get"];
+    put?: never;
+    /**
+     * Describe Listing Draft
+     * @description The same, for a candidate the editor has since edited. Writes nothing.
+     *
+     *     The mount-time draft above answers once; this is what keeps the issues
+     *     banner true for every edit made before the listing has a name. Without it
+     *     the banner would still be saying "no colours enabled" about a listing whose
+     *     colours were picked a minute ago -- and the banner is the only way an
+     *     unsaved listing can be told what it is still missing.
+     */
+    post: operations["describe_listing_draft_api_listing_draft_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Listings
+     * @description Every listing, with its status resolved in **one** Etsy round trip for
+     *     the whole table rather than one per row -- which is why the live fact is
+     *     gathered here and handed down rather than looked up per listing.
+     */
+    get: operations["list_listings_api_listings_get"];
+    put?: never;
+    /**
+     * Create Listing
+     * @description Naming a listing is what creates it.
+     *
+     *     Mirrors PATCH exactly, one level up: a document that fails
+     *     ``Listing.model_validate`` is a **200** carrying ``field_errors`` with
+     *     nothing written, so the editor never has to branch on a status code to show
+     *     inline validation. The two things a *name* can be wrong about keep their
+     *     status codes instead -- not a single path segment is the 400 `_segment`
+     *     raises through `listing_file`, and already taken is a 409.
+     *
+     *     That 409 tests the **directory**, not ``listing.yaml``: a `listings/{name}/`
+     *     left behind with a `state.lock.json` and no document would otherwise be
+     *     written into, and the new listing would inherit another one's
+     *     ``etsy_listing_id``.
+     */
+    post: operations["create_listing_api_listings_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Listing */
+    get: operations["get_listing_api_listings__name__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /** Patch Listing */
+    patch: operations["patch_listing_api_listings__name__patch"];
+    trace?: never;
+  };
+  "/api/listings/{name}/rename": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Rename Listing
+     * @description Move a listing, whole, to a new name.
+     *
+     *     A listing's identity is its directory name (PRD 60), so the rename is a
+     *     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
+     *     generated copy travel together, and `.cache/renders/{name}/` moves with them
+     *     because the render cache is keyed by listing name too -- left behind it
+     *     would orphan a tree nothing deletes and cost a full re-render.
+     *
+     *     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
+     *     left that way deliberately: nothing reads them, they become true again at
+     *     the next apply, and rewriting them here would breach "only the lockfile
+     *     merges a lockfile".
+     *
+     *     POST rather than PUT: the body is neither the listing nor its new
+     *     representation, and a second call 404s. `POST /api/templates/{name}/kind` is
+     *     the same shape.
+     */
+    post: operations["rename_listing_api_listings__name__rename_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/pricing-plans": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Pricing Plans
+     * @description Every plan, each flagged for whether it was built for this garment.
+     *
+     *     ``garment_profile`` is optional because a listing that has not chosen one
+     *     yet has nothing to be compatible *with*: asking with an empty name says that
+     *     honestly, and the editor then drops the "different garment" note rather than
+     *     labelling every plan as differing from a garment nobody picked.
+     */
+    get: operations["list_pricing_plans_api_pricing_plans_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -100,6 +416,33 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/templates/{name}/design-preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Design Preview
+     * @description A listing's *real* artwork, composited onto this template's saved
+     *     geometry -- what the listing editor's Variants/Listing Images tabs show
+     *     so a colour can be judged against the actual design, not a bare photo.
+     *
+     *     ``design`` is a name from ``GET /api/listing-designs``, resolved through
+     *     ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
+     *     which is the calibrator's own test-design library and never sees a
+     *     listing's real artwork.
+     */
+    get: operations["design_preview_api_templates__name__design_preview_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/templates/{name}/kind": {
     parameters: {
       query?: never;
@@ -126,6 +469,34 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/templates/{name}/photo": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Photo
+     * @description The template's own photo, at its own resolution -- the bare-scene
+     *     counterpart of ``GET .../design-preview`` for a listing that has not
+     *     picked a design yet.
+     *
+     *     Same photo :func:`thumbnail` serves, same resolution rule
+     *     (:func:`_thumbnail_source`), just not downscaled to list size: the
+     *     listing editor's Variants and Listing Images previews are a large hero
+     *     stage, not a row of tiles, and serving them the 160px list thumbnail is
+     *     why that stage used to look tiny for a listing with no design picked yet.
+     */
+    get: operations["photo_api_templates__name__photo_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/templates/{name}/preview": {
     parameters: {
       query?: never;
@@ -137,6 +508,30 @@ export interface paths {
     put?: never;
     /** Preview */
     post: operations["preview_api_templates__name__preview_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/templates/{name}/swatch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Swatch
+     * @description This colour's real garment shade, for a quick-glance dot next to its
+     *     name -- the median pixel (`sample_swatch`) inside the saved bounding box
+     *     of the colour's own scene photo, not an invented hex value. Only a
+     *     ``colour-matrix`` template has one photo per colour to sample; any other
+     *     kind 404s the same way a photo-less colour does.
+     */
+    get: operations["swatch_api_templates__name__swatch_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -156,16 +551,41 @@ export interface paths {
      *
      *     Not a render: the rail shows every template in the workspace at once, and
      *     running the real pipeline once per row would make opening the calibrator
-     *     cost as much as calibrating. Which photo hardly matters -- a colour-matrix
-     *     set's colours are all the same garment -- so this takes ``scene.png`` when
-     *     there is one and the first colour otherwise, without reading the config.
+     *     cost as much as calibrating. Which photo is shown is
+     *     :meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s
+     *     question, not this endpoint's.
      *
-     *     Regenerated per request rather than cached on disk; the resize is cheap
-     *     next to the response, and a cache in the workspace would be one more
-     *     derived directory to invalidate. Repeat loads are handled by the
-     *     ``Cache-Control`` header instead.
+     *     ``colour`` narrows that to one photo of a ``colour-matrix`` set, for
+     *     callers that are showing a *particular* variant rather than standing in
+     *     for the template: the listings editor's reel draws one tile per
+     *     ``media`` entry, and without this every colour of a set drew the same
+     *     picture, since ``template_preview_photo`` deliberately answers "any one
+     *     of them". Resolution goes through
+     *     :meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,
+     *     which owns PRD 7a's filename convention and its trailing-segment
+     *     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
+     *
+     *     How it is downscaled and served is :mod:`etsy_listings.ui.api.thumbnails`'
+     *     question -- the listings table asks the same one of a design.
      */
     get: operations["thumbnail_api_templates__name__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/workspace": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Workspace */
+    get: operations["get_workspace_api_workspace_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -299,6 +719,36 @@ export interface components {
       filename: string;
     };
     /**
+     * CommonMediaSummary
+     * @description One shared asset under ``common-media/`` -- the other half of `media:`,
+     *     a bare path rather than a rendered mockup.
+     */
+    CommonMediaSummary: {
+      /** File */
+      file: string;
+      /** Name */
+      name: string;
+      /** Ref */
+      ref: string;
+    };
+    /**
+     * CreateListingRequest
+     * @description The whole document, not a handful of fields to build one from.
+     *
+     *     The editor is the create form, so by the time a name is typed the user may
+     *     have chosen a design, colours and images -- and the shape they edited is the
+     *     shape that should be written. A server-built stub here would be a second
+     *     opinion about what a new listing starts as.
+     */
+    CreateListingRequest: {
+      /** Document */
+      document: {
+        [key: string]: unknown;
+      };
+      /** Name */
+      name: string;
+    };
+    /**
      * DesignSummary
      * @description One entry in the calibrator's test-design library (A19).
      *
@@ -337,10 +787,216 @@ export interface components {
        */
       strength: number;
     };
+    /**
+     * DraftListingRequest
+     * @description A candidate ``listing.yaml``, as the editor holds it before the listing
+     *     exists.
+     *
+     *     ``dict`` rather than ``Listing``, deliberately: an incomplete candidate is
+     *     the *normal* case on this endpoint, and rejecting it at the FastAPI boundary
+     *     would answer with a 422 the editor cannot render. The point is to get it as
+     *     far as ``Listing.draft`` and report what is missing.
+     */
+    DraftListingRequest: {
+      /** Document */
+      document?: {
+        [key: string]: unknown;
+      };
+    };
+    /** EtsyListingConfig */
+    EtsyListingConfig: {
+      /**
+       * Description
+       * @default <generate>
+       */
+      description: string;
+      /**
+       * Materials
+       * @default []
+       */
+      materials: string[];
+      /** Renewal */
+      renewal?: ("manual" | "auto") | null;
+      /** Section */
+      section?: string | null;
+      /** Shipping Profile */
+      shipping_profile?: string | null;
+      /**
+       * Tags
+       * @default <generate>
+       */
+      tags: string[] | "<generate>";
+      /**
+       * Title
+       * @default <generate>
+       */
+      title: string;
+      /** Variation Images */
+      variation_images?: string | null;
+    };
+    /**
+     * EtsySectionSummary
+     * @description One row for the Details tab's Section dropdown, from
+     *     `EtsyShopClient.shop_sections` -- unscoped, so this needs only the
+     *     workspace's app key pair, never a signed-in Etsy session.
+     */
+    EtsySectionSummary: {
+      /** Id */
+      id: number;
+      /** Title */
+      title: string;
+    };
+    /** GarmentProfileSummary */
+    GarmentProfileSummary: {
+      /** Colors */
+      colors: {
+        [key: string]: "light" | "dark";
+      };
+      /** Name */
+      name: string;
+      /** Preview Template */
+      preview_template?: string | null;
+      /** Sizes */
+      sizes: string[];
+    };
     /** HTTPValidationError */
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /** Issue */
+    Issue: {
+      /** Message */
+      message: string;
+      /**
+       * Severity
+       * @enum {string}
+       */
+      severity: "block" | "warn";
+      /**
+       * Tab
+       * @enum {string}
+       */
+      tab: "variants" | "images" | "details";
+      /** Where */
+      where: string;
+    };
+    /** IssueCounts */
+    IssueCounts: {
+      /** Block */
+      block: number;
+      /** Warn */
+      warn: number;
+    };
+    /** ListingDesignSummary */
+    ListingDesignSummary: {
+      /** File */
+      file: string;
+      /** Name */
+      name: string;
+    };
+    /**
+     * ListingDetail
+     * @description The full `Listing`, plus what the editor needs and nothing a listing
+     *     itself would ever store: computed status, computed issues, and (only
+     *     meaningful right after a PATCH) which fields a rejected candidate failed
+     *     on.
+     */
+    ListingDetail: {
+      /**
+       * Artwork
+       * @default {}
+       */
+      artwork: {
+        [key: string]: string;
+      };
+      /** Brief */
+      brief: string;
+      /** Colors */
+      colors: string[];
+      /** Design */
+      design: {
+        [key: string]: string;
+      };
+      /**
+       * @default {
+       *       "description": "<generate>",
+       *       "materials": [],
+       *       "tags": "<generate>",
+       *       "title": "<generate>"
+       *     }
+       */
+      etsy: components["schemas"]["EtsyListingConfig"];
+      /** Etsy Listing Id */
+      etsy_listing_id?: number | null;
+      /**
+       * Field Errors
+       * @default {}
+       */
+      field_errors: {
+        [key: string]: string;
+      };
+      /** Garment Profile */
+      garment_profile: string;
+      /** Issues */
+      issues: components["schemas"]["Issue"][];
+      /** Media */
+      media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /** Name */
+      name: string;
+      /**
+       * Price Overrides
+       * @default {}
+       */
+      price_overrides: {
+        [key: string]: {
+          [key: string]: string;
+        };
+      };
+      /**
+       * Prices
+       * @default {}
+       */
+      prices: {
+        [key: string]: string;
+      };
+      /** Pricing Plan */
+      pricing_plan?: string | null;
+      /** Pricing Plan Name */
+      pricing_plan_name?: string | null;
+      /** Printify Product Id */
+      printify_product_id?: string | null;
+      /**
+       * Resolved Prices
+       * @default []
+       */
+      resolved_prices: components["schemas"]["ResolvedPrice"][];
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "draft" | "deployed" | "live" | "dirty";
+    };
+    /** ListingSummary */
+    ListingSummary: {
+      /** Colour Count */
+      colour_count: number;
+      /** Design */
+      design: string | null;
+      /** Etsy Listing Id */
+      etsy_listing_id?: number | null;
+      /** Garment Profile */
+      garment_profile: string;
+      issue_counts: components["schemas"]["IssueCounts"];
+      /** Name */
+      name: string;
+      /** Printify Product Id */
+      printify_product_id?: string | null;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "draft" | "deployed" | "live" | "dirty";
     };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
@@ -426,6 +1082,29 @@ export interface components {
       x: number;
       /** Y */
       y: number;
+    };
+    /** PricingPlanSummary */
+    PricingPlanSummary: {
+      /** Compatible */
+      compatible: boolean;
+      /** Garment Profile */
+      garment_profile: string;
+      /** Name */
+      name: string;
+      /** Ref */
+      ref: string;
+    };
+    /** RenameListingRequest */
+    RenameListingRequest: {
+      /** New Name */
+      new_name: string;
+    };
+    /** ResolvedPrice */
+    ResolvedPrice: {
+      /** Amount */
+      amount: string;
+      /** Size */
+      size: string;
     };
     /**
      * ShadeConfig
@@ -523,6 +1202,52 @@ export interface components {
        */
       shade: components["schemas"]["ShadeConfig"];
     };
+    /**
+     * SwatchResponse
+     * @description A colour-matrix colour's real garment shade, sampled off its own scene
+     *     photo (`render/swatch.py`'s `sample_swatch`) rather than an invented or
+     *     hand-typed hex value -- nothing in the domain model stores one.
+     */
+    SwatchResponse: {
+      /** Hex */
+      hex: string;
+    };
+    /**
+     * TemplateMediaEntry
+     * @description Always-explicit template reference -- there is no bare-colour
+     *     shorthand. ``colour`` is required when the referenced template is
+     *     ``colour-matrix`` kind (which colour's photo) and must be omitted for
+     *     ``multiple``/``single`` kind (exactly one output each, nothing to
+     *     disambiguate).
+     */
+    TemplateMediaEntry: {
+      /** Colour */
+      colour?: string | null;
+      /** Template */
+      template: string;
+    };
+    /**
+     * TemplatePhoto
+     * @description One scene photo in a template's directory: which colour it is, and where
+     *     it actually is.
+     *
+     *     ``file`` is workspace-relative and forward-slashed, resolved through
+     *     ``Workspace.scene_photo`` -- the same rule the renderer uses, including the
+     *     trailing-segment fallback for a vendor pack delivered as
+     *     ``{template}-{colour}.png``. The listings editor shows it under its preview
+     *     so the user knows which file to go and edit, and it used to *derive* that
+     *     caption from PRD 7a's convention in TypeScript, which named a file that was
+     *     not there for exactly the pack the fallback exists for.
+     *
+     *     ``colour`` is ``None`` for a ``multiple``/``single`` template's fixed
+     *     ``scene.png``: there is no per-colour name to derive one from (PRD 28).
+     */
+    TemplatePhoto: {
+      /** Colour */
+      colour: string | null;
+      /** File */
+      file: string;
+    };
     /** TemplateSummary */
     TemplateSummary: {
       /** Colours */
@@ -535,6 +1260,11 @@ export interface components {
       kind: ("colour-matrix" | "multiple" | "single") | null;
       /** Name */
       name: string;
+      /**
+       * Photos
+       * @default []
+       */
+      photos: components["schemas"]["TemplatePhoto"][];
       /**
        * Status
        * @enum {string}
@@ -558,6 +1288,16 @@ export interface components {
       /** Error Type */
       type: string;
     };
+    /**
+     * WorkspaceSummary
+     * @description Which workspace the UI is pointed at. One workspace is one shop, so the
+     *     sidebar names it -- the difference between a test shop and the real one is
+     *     worth seeing before an edit, not after an apply.
+     */
+    WorkspaceSummary: {
+      /** Shop Name */
+      shop_name: string | null;
+    };
   };
   responses: never;
   parameters: never;
@@ -567,6 +1307,88 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  list_common_media_api_common_media_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommonMediaSummary"][];
+        };
+      };
+    };
+  };
+  common_media_file_api_common_media__name__file_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  common_media_thumbnail_api_common_media__name__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   list_designs_api_designs_get: {
     parameters: {
       query?: never;
@@ -620,6 +1442,46 @@ export interface operations {
       };
     };
   };
+  list_etsy_sections_api_etsy_sections_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EtsySectionSummary"][];
+        };
+      };
+    };
+  };
+  list_garment_profiles_api_garment_profiles_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["GarmentProfileSummary"][];
+        };
+      };
+    };
+  };
   health_api_health_get: {
     parameters: {
       query?: never;
@@ -638,6 +1500,297 @@ export interface operations {
           "application/json": {
             [key: string]: string;
           };
+        };
+      };
+    };
+  };
+  list_listing_designs_api_listing_designs_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDesignSummary"][];
+        };
+      };
+    };
+  };
+  listing_design_thumbnail_api_listing_designs__name__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_draft_api_listing_draft_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+    };
+  };
+  describe_listing_draft_api_listing_draft_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DraftListingRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_listings_api_listings_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingSummary"][];
+        };
+      };
+    };
+  };
+  create_listing_api_listings_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateListingRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_listing_api_listings__name__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  patch_listing_api_listings__name__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  rename_listing_api_listings__name__rename_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RenameListingRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_pricing_plans_api_pricing_plans_get: {
+    parameters: {
+      query?: {
+        garment_profile?: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PricingPlanSummary"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };
@@ -768,6 +1921,41 @@ export interface operations {
       };
     };
   };
+  design_preview_api_templates__name__design_preview_get: {
+    parameters: {
+      query: {
+        design: string;
+        colour?: string | null;
+        scale?: "editor" | "full";
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   assign_kind_api_templates__name__kind_post: {
     parameters: {
       query?: never;
@@ -793,6 +1981,39 @@ export interface operations {
             | components["schemas"]["ColourMatrixTemplate"]
             | components["schemas"]["MultipleTemplate"]
             | components["schemas"]["SingleTemplate"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  photo_api_templates__name__photo_get: {
+    parameters: {
+      query?: {
+        colour?: string | null;
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */
@@ -846,9 +2067,44 @@ export interface operations {
       };
     };
   };
+  swatch_api_templates__name__swatch_get: {
+    parameters: {
+      query: {
+        colour: string;
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SwatchResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   thumbnail_api_templates__name__thumbnail_get: {
     parameters: {
-      query?: never;
+      query?: {
+        colour?: string | null;
+      };
       header?: never;
       path: {
         name: string;
@@ -873,6 +2129,26 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_workspace_api_workspace_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkspaceSummary"];
         };
       };
     };

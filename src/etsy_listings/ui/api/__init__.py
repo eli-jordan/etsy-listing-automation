@@ -21,6 +21,14 @@ since there is no wire-schema divergence to keep separate.
 
 from etsy_listings.ui.api.app import create_app
 from etsy_listings.ui.api.designs import router as designs_router
+from etsy_listings.ui.api.listings import router as listings_router
+from etsy_listings.ui.api.listings import support_router as listings_support_router
 from etsy_listings.ui.api.templates import router as templates_router
 
-__all__ = ["create_app", "designs_router", "templates_router"]
+__all__ = [
+    "create_app",
+    "designs_router",
+    "listings_router",
+    "listings_support_router",
+    "templates_router",
+]
