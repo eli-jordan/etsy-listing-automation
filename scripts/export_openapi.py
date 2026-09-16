@@ -23,17 +23,7 @@ REPO_ROOT = Path(__file__).parent.parent
 def main() -> None:
     # The schema only reflects route/model shapes, not runtime data, so a
     # placeholder workspace (never opened against real files) is enough.
-    dummy_defaults = Defaults(
-        etsy=EtsyDefaults(
-            shop_id=0,
-            who_made="i_did",
-            when_made="made_to_order",
-            is_supply=False,
-            shop_section_id=0,
-            return_policy_id=0,
-        ),
-        currency="NOK",
-    )
+    dummy_defaults = Defaults(etsy=EtsyDefaults(currency="NOK"))
     workspace = Workspace(root=REPO_ROOT, defaults=dummy_defaults)
     app = create_app(workspace)
 
