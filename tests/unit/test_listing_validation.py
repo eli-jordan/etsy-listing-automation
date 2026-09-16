@@ -300,7 +300,18 @@ class TestNothingChosenYet:
         issues = _check(_listing(garment_profile=""))
         blocking = [i for i in issues if i.severity == "block" and i.where.endswith("profile")]
         assert len(blocking) == 1
-        assert "No garment profile selected" in blocking[0].message
+        assert "no garment_profile set" in blocking[0].message
+
+    def test_a_whitespace_only_garment_profile_is_unchosen_not_missing(self) -> None:
+        """The divergence that put the two rule modules back together: a name of
+        one space passed the engine's pre-flight (`.strip()`) and failed the
+        banner's (`not listing.garment_profile`), so `apply` and the editor
+        disagreed about one file on disk."""
+        issues = _check(_listing(garment_profile=" "))
+        blocking = [i for i in issues if i.severity == "block" and i.where.endswith("profile")]
+        assert len(blocking) == 1
+        assert "no garment_profile set" in blocking[0].message
+        assert "' '" not in blocking[0].message
 
     def test_a_named_profile_that_does_not_exist_still_quotes_it(self) -> None:
         """A different mistake with a different remedy: one is unfinished, the

@@ -1,4 +1,4 @@
-"""The listings UI's local-only health check (phase-5-listings-ui.md).
+"""Every reason a listing cannot run, as far as its own files can tell.
 
 Answers one question: is this listing's *own* configuration complete and
 self-consistent? Not "would the live shop accept it" -- that needs a real
@@ -6,14 +6,24 @@ self-consistent? Not "would the live shop accept it" -- that needs a real
 is explicitly out of scope here; a static note in the issues banner points at
 `etsy-listings plan` for those instead.
 
+**One module, two readers.** The editor's issues banner asks for all of them
+(`check_listing`); a stage asks for the two or three it ships and turns each
+into a `Blocked` through the adapter in `engine/stages/gates.py`. They used to
+be two *modules*, and the same rule was spelled in both: a whitespace-only
+`garment_profile` passed the engine's pre-flight and failed the editor's, so
+the banner and `apply` disagreed about one file on disk. A rule stated twice
+is a rule that will diverge, so each is stated here once -- predicate, message
+and all -- and the two readers differ only in what they do with it.
+
+The three rules `gates.py` used to own (`check_design_resolution`,
+`check_garment_profile_chosen`, `check_copy_is_concrete`) are here for the same
+reason the other eleven are, and the dependency now points the way the rest of
+the codebase does: `engine` reads `config`, never the reverse.
+
 Reuses `Listing`'s own pydantic validators for everything structural (money
 parsing, cross-reference subsets, length limits) -- a `Listing.model_validate`
 failure blocks the write outright and is surfaced by the API layer as inline
-field errors, and never reaches this module. `gates.py`'s two pure checks
-(`check_copy_is_concrete`, `check_design_resolution`) are reused directly
-rather than re-implemented. Everything else here is new: cross-references
-between a listing's own fields and the garment profile / template catalog it
-names.
+field errors, and never reaches this module.
 
 Deliberately not a `Stage`: stages diff local vs. remote state, and this only
 ever looks at local config, callable synchronously on every autosave with no
@@ -27,13 +37,14 @@ phase-5-listings-ui.md).
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Literal
 
+from PIL import Image, UnidentifiedImageError
+
 from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import Listing, TemplateMediaEntry
-from etsy_listings.engine.stages.gates import check_copy_is_concrete, check_design_resolution
+from etsy_listings.config.listing import GENERATE, Listing, TemplateMediaEntry
 
 Severity = Literal["block", "warn"]
 Tab = Literal["variants", "images", "details"]
@@ -64,35 +75,155 @@ class TemplateInfo:
     colours: frozenset[str]
 
 
-_PLACEHOLDER_COPY = "placeholder -- passes check_copy_is_concrete's own test"
-"""Stands in for whichever of title/description isn't being asked about below,
-so a failure in one is never misreported against the other -- `Listing`'s
-model already guarantees neither is blank or the literal GENERATE sentinel by
-the time this only ever needs to isolate which one is."""
+_GARMENT_PROFILE_WHERE = "Variants › Garment profile"
+_DESIGN_WHERE = "Design"
+_COPY_WHERE = {"title": "Listing Details › Title", "description": "Listing Details › Description"}
+
+RESOLUTION_TOLERANCE = 0.9
+"""A design must reach 90% of the print area on each axis (PRD 38).
+
+Not slack for its own sake. The failure worth catching is the file that is a
+tenth of the size; a few percent short upscales invisibly, and a gate at
+exactly 100% rejects a 4000x4800 file for a 4200x4800 area -- a rule that
+fires on work nobody would call wrong is a rule that gets switched off.
+"""
+
+
+def _required_pixels(profile: GarmentProfile) -> tuple[int, int]:
+    return (
+        int(profile.print_area.width * RESOLUTION_TOLERANCE),
+        int(profile.print_area.height * RESOLUTION_TOLERANCE),
+    )
+
+
+def check_design_resolution(design: Path, profile: GarmentProfile) -> list[Issue]:
+    """Refuse a design that will print soft, or print its background.
+
+    Never auto-upscaled and never converted (PRD 17): a silently upscaled
+    design produces a blurry shirt discovered by customer complaint, which is
+    the one failure mode this whole gate exists to make impossible.
+
+    The `where` is the bare ``Design``; a multi-artwork listing's caller
+    narrows it to the key that failed.
+    """
+
+    def blocked(message: str) -> list[Issue]:
+        return [Issue("block", "variants", _DESIGN_WHERE, message)]
+
+    if not design.is_file():
+        return blocked(f"design file not found: {design}")
+
+    try:
+        with Image.open(design) as image:
+            width, height = image.size
+            mode = image.mode
+    except (UnidentifiedImageError, OSError) as exc:
+        return blocked(f"{design} is not readable as an image: {exc}")
+
+    if "A" not in mode:
+        return blocked(
+            f"{design.name} has no alpha channel (mode {mode!r}). A print file without "
+            f"transparency prints its background as a rectangle of ink on the shirt.\n"
+            f"Export it as RGBA."
+        )
+
+    need_width, need_height = _required_pixels(profile)
+    if width < need_width or height < need_height:
+        return blocked(
+            f"{design.name} is {width}x{height}, too small for this garment's "
+            f"{profile.print_area.width}x{profile.print_area.height} print area.\n"
+            f"It needs at least {need_width}x{need_height} "
+            f"({RESOLUTION_TOLERANCE:.0%} of the print area on each axis).\n"
+            f"Re-export the design at that size or larger -- it is never upscaled "
+            f"for you, because a blurry print is only ever discovered by a customer."
+        )
+    return []
+
+
+def check_garment_profile_chosen(garment_profile: str) -> list[Issue]:
+    """Refuse a listing that has not said which garment it prints on.
+
+    The listings editor writes a listing the moment it has a name and a price
+    source, so "no garment profile yet" is an ordinary state on disk rather than
+    a typo -- and every stage that wants one loads it through
+    ``workspace.load_garment_profile``, where an empty name reaches ``_segment``
+    and raises ``InvalidNameError``. That is a plain ``ValueError``, not a
+    ``UserFacingError``, so it would not merely fail this listing: it would
+    unwind the stage walk and end a whole ``--all`` batch on a listing somebody
+    is still filling in.
+
+    ``strip()`` rather than a bare truth test, and that is the whole point of
+    this living in one place: a name of one space is no more a garment than an
+    empty one, and the two copies of this rule used to answer differently.
+
+    A missing profile *file* is `ConfigLoadError`'s to report on the engine
+    side, and :func:`_check_garment_profile_exists`'s on the editor's. This
+    only catches the name that could never name a file.
+    """
+    if garment_profile.strip():
+        return []
+    return [
+        Issue(
+            "block",
+            "variants",
+            _GARMENT_PROFILE_WHERE,
+            "no garment_profile set, and every stage needs one to know what is being "
+            "printed.\n"
+            "Pick one in the listings editor's Variants tab, or write it in listing.yaml.",
+        )
+    ]
+
+
+def check_copy_is_concrete(*, title: str, description: str) -> list[Issue]:
+    """Refuse a `<generate>` sentinel or blank copy before a product is created.
+
+    The product carries the listing's own title and description (PRD 44) --
+    Printify's create call requires both, and they are the duplicate guard's
+    match key (PRD 48). Neither job survives the literal string
+    ``"<generate>"``.
+
+    One issue per offending field, so the banner can point at the field that is
+    actually wrong. That used to need a placeholder string passed in for
+    whichever field wasn't being asked about, because the rule answered with a
+    single refusal and the caller had to isolate the cause by calling it twice
+    -- a workaround for a shape, now that the shape is a list.
+    """
+    issues: list[Issue] = []
+    for field, value in (("title", title), ("description", description)):
+        where = _COPY_WHERE[field]
+        if value == GENERATE:
+            issues.append(
+                Issue(
+                    "block",
+                    "details",
+                    where,
+                    f"etsy.{field} is still <generate>, and Printify needs a real one to "
+                    f"create the product with (it is also how a re-run recognises the "
+                    f"product as this listing's).\n"
+                    f"Write it in listing.yaml. Copy generation arrives in Phase 4.",
+                )
+            )
+        elif not value.strip():
+            issues.append(
+                Issue(
+                    "block",
+                    "details",
+                    where,
+                    f"etsy.{field} is empty, and Printify requires it to create a product.",
+                )
+            )
+    return issues
 
 
 def _check_copy(listing: Listing) -> list[Issue]:
-    issues: list[Issue] = []
-    title_blocked = check_copy_is_concrete(title=listing.etsy.title, description=_PLACEHOLDER_COPY)
-    if title_blocked is not None:
-        issues.append(Issue("block", "details", "Listing Details › Title", title_blocked.message))
-    description_blocked = check_copy_is_concrete(
-        title=_PLACEHOLDER_COPY, description=listing.etsy.description
-    )
-    if description_blocked is not None:
-        issues.append(
-            Issue("block", "details", "Listing Details › Description", description_blocked.message)
-        )
-    return issues
+    return check_copy_is_concrete(title=listing.etsy.title, description=listing.etsy.description)
 
 
 def _check_design(design_paths: Mapping[str, Path], profile: GarmentProfile) -> list[Issue]:
     issues: list[Issue] = []
     for key, path in design_paths.items():
-        blocked = check_design_resolution(path, profile)
-        if blocked is not None:
-            where = "Design" if key == "default" else f"Design ({key})"
-            issues.append(Issue("block", "variants", where, blocked.message))
+        where = _DESIGN_WHERE if key == "default" else f"{_DESIGN_WHERE} ({key})"
+        issues += [replace(i, where=where) for i in check_design_resolution(path, profile)]
     return issues
 
 
@@ -125,25 +256,20 @@ def _check_colours_enabled(listing: Listing) -> list[Issue]:
 def _check_garment_profile_exists(
     listing: Listing, garment_profile_names: Iterable[str]
 ) -> list[Issue]:
-    if not listing.garment_profile:
-        # A new listing starts here: the editor opens on a document with nothing
-        # chosen, so "not chosen yet" is the ordinary case and reporting it as
-        # `'' does not exist` would describe a mistake nobody made.
-        return [
-            Issue(
-                "block",
-                "variants",
-                "Variants › Garment profile",
-                "No garment profile selected -- pick the garment this listing prints on.",
-            )
-        ]
+    # A new listing starts unchosen: the editor opens on a document with nothing
+    # picked, so "not chosen yet" is the ordinary case and reporting it as
+    # `'' does not exist` would describe a mistake nobody made. That half of the
+    # rule is `check_garment_profile_chosen`'s, shared with every stage.
+    unchosen = check_garment_profile_chosen(listing.garment_profile)
+    if unchosen:
+        return unchosen
     if listing.garment_profile in set(garment_profile_names):
         return []
     return [
         Issue(
             "block",
             "variants",
-            "Variants › Garment profile",
+            _GARMENT_PROFILE_WHERE,
             f"Garment profile {listing.garment_profile!r} does not exist in this workspace.",
         )
     ]

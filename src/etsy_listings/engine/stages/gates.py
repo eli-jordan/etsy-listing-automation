@@ -1,15 +1,20 @@
-"""The checks `plan` runs before any remote write, and refuses on.
+"""The stage's view of the checks `plan` runs before any remote write.
 
-Both exist for the same reason: **nothing downstream catches the mistake.**
-Printify accepted a 120x140 PNG onto a 4200x4800 print area without a warning,
-and it requires a title, so an unresolved ``<generate>`` would be sent as the
-literal string and published as one.
+The rules themselves live in `config/listing_validation.py`, which is the one
+module that knows every reason a listing cannot run. This is the adapter a
+stage reads them through: same three names, same signatures, an
+:class:`~etsy_listings.engine.stage.Blocked` instead of an ``Issue``.
 
-They live here rather than inside a stage because they are checks about a
-*listing* -- its copy, its artwork -- that any stage shipping either will want,
-and because `plan` has to be able to run them before it builds a desired
-document: a refusal is more useful than a well-formed payload nobody wants
-sent.
+There used to be two modules, each with its own copy of some of the rules, and
+they had already diverged -- ``check_garment_profile_chosen`` accepted a
+whitespace-only name here while the editor's banner refused it, so one listing
+on disk got two answers about whether it could run. One vocabulary for "this
+cannot run" is only one vocabulary if there is also one *rule* behind it.
+
+They live outside any single stage because they are checks about a *listing* --
+its copy, its artwork -- that any stage shipping either will want, and because
+`plan` has to be able to run them before it builds a desired document: a
+refusal is more useful than a well-formed payload nobody wants sent.
 
 ``check_garment_unchanged`` used to be here and is not, for the same rule read
 the other way: it is entirely about the product stage's own applied document,
@@ -28,108 +33,34 @@ stage, which is the half that has to stay hard.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from pathlib import Path
 
-from PIL import Image, UnidentifiedImageError
-
+from etsy_listings.config import listing_validation as rules
 from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import GENERATE
+from etsy_listings.config.listing_validation import Issue
 from etsy_listings.engine.stage import Blocked
 
-RESOLUTION_TOLERANCE = 0.9
-"""A design must reach 90% of the print area on each axis (PRD 38).
 
-Not slack for its own sake. The failure worth catching is the file that is a
-tenth of the size; a few percent short upscales invisibly, and a gate at
-exactly 100% rejects a 4000x4800 file for a 4200x4800 area -- a rule that
-fires on work nobody would call wrong is a rule that gets switched off.
-"""
+def _refuse(issues: Sequence[Issue]) -> Blocked | None:
+    """The first issue, as a refusal.
 
-
-def _required_pixels(profile: GarmentProfile) -> tuple[int, int]:
-    return (
-        int(profile.print_area.width * RESOLUTION_TOLERANCE),
-        int(profile.print_area.height * RESOLUTION_TOLERANCE),
-    )
+    A stage refuses or it does not, so only the first message can be shown --
+    the banner is what wants the whole list. ``where`` and ``tab`` are dropped
+    here rather than folded into the text: a stage's refusal is already
+    attributed to the stage that returned it, and "Variants › Garment profile"
+    names a tab a CLI user is not looking at.
+    """
+    return Blocked(issues[0].message) if issues else None
 
 
 def check_design_resolution(design: Path, profile: GarmentProfile) -> Blocked | None:
-    """Refuse a design that will print soft, or print its background.
-
-    Never auto-upscaled and never converted (PRD 17): a silently upscaled
-    design produces a blurry shirt discovered by customer complaint, which is
-    the one failure mode this whole gate exists to make impossible.
-    """
-    if not design.is_file():
-        return Blocked(f"design file not found: {design}")
-
-    try:
-        with Image.open(design) as image:
-            width, height = image.size
-            mode = image.mode
-    except (UnidentifiedImageError, OSError) as exc:
-        return Blocked(f"{design} is not readable as an image: {exc}")
-
-    if "A" not in mode:
-        return Blocked(
-            f"{design.name} has no alpha channel (mode {mode!r}). A print file without "
-            f"transparency prints its background as a rectangle of ink on the shirt.\n"
-            f"Export it as RGBA."
-        )
-
-    need_width, need_height = _required_pixels(profile)
-    if width < need_width or height < need_height:
-        return Blocked(
-            f"{design.name} is {width}x{height}, too small for this garment's "
-            f"{profile.print_area.width}x{profile.print_area.height} print area.\n"
-            f"It needs at least {need_width}x{need_height} "
-            f"({RESOLUTION_TOLERANCE:.0%} of the print area on each axis).\n"
-            f"Re-export the design at that size or larger -- it is never upscaled "
-            f"for you, because a blurry print is only ever discovered by a customer."
-        )
-    return None
+    return _refuse(rules.check_design_resolution(design, profile))
 
 
 def check_garment_profile_chosen(garment_profile: str) -> Blocked | None:
-    """Refuse a listing that has not said which garment it prints on.
-
-    The listings editor writes a listing the moment it has a name and a price
-    source, so "no garment profile yet" is an ordinary state on disk rather than
-    a typo -- and every stage that wants one loads it through
-    ``workspace.load_garment_profile``, where an empty name reaches ``_segment``
-    and raises ``InvalidNameError``. That is a plain ``ValueError``, not a
-    ``UserFacingError``, so it would not merely fail this listing: it would
-    unwind the stage walk and end a whole ``--all`` batch on a listing somebody
-    is still filling in.
-
-    A missing profile *file* is `ConfigLoadError`'s to report, with the path it
-    looked for. This only catches the name that could never name a file.
-    """
-    if garment_profile.strip():
-        return None
-    return Blocked(
-        "no garment_profile set, and every stage needs one to know what is being "
-        "printed.\n"
-        "Pick one in the listings editor's Variants tab, or write it in listing.yaml."
-    )
+    return _refuse(rules.check_garment_profile_chosen(garment_profile))
 
 
 def check_copy_is_concrete(*, title: str, description: str) -> Blocked | None:
-    """Refuse a `<generate>` sentinel or blank copy before a product is created.
-
-    The product carries the listing's own title and description (PRD 44) --
-    Printify's create call requires both, and they are the duplicate guard's
-    match key (PRD 48). Neither job survives the literal string
-    ``"<generate>"``.
-    """
-    for field, value in (("title", title), ("description", description)):
-        if value == GENERATE:
-            return Blocked(
-                f"etsy.{field} is still <generate>, and Printify needs a real one to "
-                f"create the product with (it is also how a re-run recognises the "
-                f"product as this listing's).\n"
-                f"Write it in listing.yaml. Copy generation arrives in Phase 4."
-            )
-        if not value.strip():
-            return Blocked(f"etsy.{field} is empty, and Printify requires it to create a product.")
-    return None
+    return _refuse(rules.check_copy_is_concrete(title=title, description=description))
