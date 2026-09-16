@@ -177,7 +177,7 @@ button {
   background: transparent;
   border: 1px solid transparent;
   padding: var(--space-2) calc(var(--space-3) * 1.2);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 .btn:disabled,
 button:disabled {
@@ -230,7 +230,7 @@ select {
   caret-color: var(--color-accent);
   background: var(--color-surface);
   border: 1px solid var(--color-divider);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 .input:hover,
 input[type="text"]:hover,
@@ -258,7 +258,7 @@ input[type="checkbox"] {
   flex-direction: column;
   gap: var(--space-2);
   padding: var(--space-3);
-  border-radius: calc(var(--radius-lg) * 1.15);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
 }
 .elev-sm {
@@ -305,7 +305,7 @@ input[type="checkbox"] {
   display: inline-flex;
   overflow: hidden;
   border: 1px solid var(--color-divider);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 .seg-opt {
   display: inline-flex;
@@ -334,11 +334,19 @@ input[type="checkbox"] {
    of the boxes on screen is the one state worth interrupting for -- so it is
    defined here rather than invented inside the copied block, which is
    replaced wholesale on a re-sync. Kept warm and muted so it reads as part of
-   the same palette and not as a browser default. */
+   the same palette and not as a browser default.
+
+   Radii too: Organic's 8/16/28 is a three-step scale this UI never used as a
+   scale. The listing-images template list settled on 4px corners, and that
+   is the one radius on boxes, inputs and buttons now. Tags, chips, switches
+   and true circles stay pills. */
 :root {
   --color-danger: #b23a2d;
   --color-danger-600: #99301f;
   --color-danger-700: #7d2617;
+  --radius-sm: 4px;
+  --radius-md: 4px;
+  --radius-lg: 4px;
 }
 
 .btn-danger {
@@ -1064,7 +1072,7 @@ button:not([class]):active:not(:disabled) {
   gap: var(--space-3);
   padding: var(--space-6);
   border: 1px solid var(--color-divider);
-  border-radius: calc(var(--radius-lg) * 1.15);
+  border-radius: var(--radius-lg);
   background: var(--color-surface);
   box-shadow: var(--shadow-sm);
 }
@@ -1567,7 +1575,7 @@ fieldset label {
   padding: 5px 13px;
   font-size: 12px;
   font-family: var(--font-body);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   color: var(--color-text);
 }
 
@@ -1844,7 +1852,7 @@ table.listings tbody tr:last-child td {
   color: var(--color-text);
   background: var(--color-neutral-100);
   border: 1px solid var(--color-divider);
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   padding: 6px 13px;
   cursor: pointer;
 }
@@ -1995,7 +2003,7 @@ table.listings tbody tr:last-child td {
 .field select {
   min-height: 34px;
   padding: 7px 13px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
 }
 
 .field textarea {
@@ -2340,7 +2348,7 @@ table.listings tbody tr:last-child td {
   font-weight: var(--font-heading-weight);
   font-size: 13px;
   padding: 7px 15px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-divider);
   background: var(--color-neutral-100);
   color: var(--color-text);
@@ -2400,7 +2408,7 @@ table.listings tbody tr:last-child td {
   align-items: flex-start;
   gap: var(--space-2);
   padding: 5px 7px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
 }
 
 .issue--block {
@@ -2706,7 +2714,7 @@ table.listings tbody tr:last-child td {
 
 .loc-tmpl {
   border: 1px solid var(--color-divider);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--color-neutral-100);
   overflow: hidden;
 }
@@ -2731,7 +2739,7 @@ table.listings tbody tr:last-child td {
   width: 30px;
   height: 30px;
   flex: none;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--color-neutral-200);
   overflow: hidden;
 }
@@ -2850,7 +2858,7 @@ table.listings tbody tr:last-child td {
   align-items: center;
   gap: 5px;
   padding: 3px 9px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   border: 1px solid var(--color-divider);
   background: var(--color-bg);
   cursor: pointer;
@@ -2891,7 +2899,7 @@ table.listings tbody tr:last-child td {
 
 .loc-img {
   border: 1px solid var(--color-divider);
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: var(--color-neutral-100);
   cursor: pointer;
   padding: 5px;
@@ -2913,7 +2921,7 @@ table.listings tbody tr:last-child td {
 .loc-img__face {
   width: 100%;
   aspect-ratio: 1 / 1;
-  border-radius: 3px;
+  border-radius: var(--radius-sm);
   background: var(--color-neutral-200);
   display: flex;
   align-items: center;
@@ -3125,7 +3133,7 @@ table.listings tbody tr:last-child td {
   position: relative;
   width: 104px;
   height: 104px;
-  border-radius: 5px;
+  border-radius: var(--radius-sm);
   border: 2px solid transparent;
   background: var(--color-neutral-200);
   overflow: hidden;
@@ -3181,7 +3189,7 @@ table.listings tbody tr:last-child td {
   min-width: 19px;
   height: 19px;
   padding: 0 5px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-neutral-900) 78%, transparent);
   color: var(--color-bg);
   font-size: 10.5px;
@@ -3212,7 +3220,7 @@ table.listings tbody tr:last-child td {
   right: 5px;
   width: 19px;
   height: 19px;
-  border-radius: 4px;
+  border-radius: var(--radius-sm);
   background: color-mix(in srgb, var(--color-neutral-900) 78%, transparent);
   color: var(--color-bg);
   font-size: 12px;
@@ -3278,7 +3286,7 @@ table.listings tbody tr:last-child td {
   cursor: pointer;
   width: 28px;
   height: 28px;
-  border-radius: 999px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
