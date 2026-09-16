@@ -24,7 +24,7 @@ from etsy_listings.ui.api import etsystate
 from etsy_listings.ui.api.app import create_app
 from etsy_listings.workspace.workspace import Workspace
 
-from tests.support.builders import set_etsy_shop_id
+from tests.support.builders import edit_garment_profile, set_etsy_shop_id
 
 
 @pytest.fixture
@@ -670,6 +670,21 @@ class TestSupportingEndpoints:
         assert response.status_code == 200
         by_name = {row["name"]: row for row in response.json()}
         assert by_name["comfort-colors-1717"]["sizes"] == ["S", "M", "L", "XL", "XXL", "XXXL"]
+        # The Variants tab's colour preview is this template, not the first
+        # colour-matrix in media: (A13). The fixture names the workspace's
+        # colour-matrix set.
+        assert by_name["comfort-colors-1717"]["preview_template"] == "flat-lay-01"
+
+    def test_a_garment_profile_without_preview_template_reports_null(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """Existing files omit the field; the editor treats null as 'no preview'
+        rather than guessing a template from media:."""
+        edit_garment_profile(workspace_root, "comfort-colors-1717", preview_template=None)
+        response = client.get("/api/garment-profiles")
+        assert response.status_code == 200
+        by_name = {row["name"]: row for row in response.json()}
+        assert by_name["comfort-colors-1717"]["preview_template"] is None
 
     def test_lists_pricing_plans_marking_the_compatible_one(
         self, client: TestClient, workspace_root: Path

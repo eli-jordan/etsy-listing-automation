@@ -520,7 +520,14 @@ def list_garment_profiles(request: Request) -> list[GarmentProfileSummary]:
         profile = _garment_profile(workspace, name)
         if profile is None:
             continue
-        result.append(GarmentProfileSummary(name=name, sizes=profile.sizes, colors=profile.colors))
+        result.append(
+            GarmentProfileSummary(
+                name=name,
+                sizes=profile.sizes,
+                colors=profile.colors,
+                preview_template=profile.preview_template,
+            )
+        )
     return result
 
 

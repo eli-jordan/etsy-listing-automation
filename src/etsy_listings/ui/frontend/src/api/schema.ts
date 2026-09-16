@@ -826,6 +826,8 @@ export interface components {
       };
       /** Name */
       name: string;
+      /** Preview Template */
+      preview_template?: string | null;
       /** Sizes */
       sizes: string[];
     };

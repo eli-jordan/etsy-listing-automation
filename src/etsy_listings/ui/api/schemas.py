@@ -230,6 +230,10 @@ class GarmentProfileSummary(BaseModel):
     name: str
     sizes: list[str]
     colors: dict[str, Literal["light", "dark"]]
+    preview_template: str | None = None
+    """A ``colour-matrix`` template the Variants tab uses to judge colours
+    (A13). Null when the garment profile does not name one -- the editor
+    does not fall back to ``media:``."""
 
 
 class PricingPlanSummary(BaseModel):
