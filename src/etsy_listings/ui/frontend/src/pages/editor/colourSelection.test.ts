@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ListingDetail } from "../../types";
-import { mediaLostBy, selectColours } from "./colourSelection";
+import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelection";
 
 /** Pure, so the cascade is tested here rather than through a rendered tab --
  * what the Variants tab's own tests check is that it goes through this. */
@@ -99,5 +99,34 @@ describe("selectColours", () => {
     });
     expect(mediaLostBy(listing, ["black"])).toBe(1);
     expect(mediaLostBy(listing, ["black", "white"])).toBe(0);
+  });
+});
+
+describe("selectGarmentProfile", () => {
+  it("enables every colour the profile classifies", () => {
+    /* Picking a garment on a new listing (empty colors:) is the ordinary
+       case; the action is the same when switching garments. */
+    expect(selectGarmentProfile(detail({ colors: [] }), "gildan-5000", ["black", "ivory"])).toEqual(
+      {
+        garment_profile: "gildan-5000",
+        colors: ["black", "ivory"],
+      },
+    );
+  });
+
+  it("drops mockups for colours the new profile does not sell", () => {
+    const listing = detail({
+      garment_profile: "comfort-colors-1717",
+      colors: ["black", "white"],
+      media: [
+        { template: "flat-lay-01", colour: "black" },
+        { template: "flat-lay-01", colour: "white" },
+      ],
+    });
+    expect(selectGarmentProfile(listing, "gildan-5000", ["black"])).toEqual({
+      garment_profile: "gildan-5000",
+      colors: ["black"],
+      media: [{ template: "flat-lay-01", colour: "black" }],
+    });
   });
 });

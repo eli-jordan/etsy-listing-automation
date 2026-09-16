@@ -333,13 +333,15 @@ describe("VariantsTab", () => {
     });
   });
 
-  it("changing the garment profile dropdown updates garment_profile", async () => {
+  it("picking a garment profile enables every colour it classifies", async () => {
     vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
-      { name: "comfort-colors-1717", sizes: ["S"], colors: {} },
-      { name: "gildan-5000", sizes: ["S"], colors: {} },
+      { name: "comfort-colors-1717", sizes: ["S"], colors: { black: "dark" } },
+      { name: "gildan-5000", sizes: ["S"], colors: { black: "dark", white: "light" } },
     ]);
     const onUpdate = vi.fn();
-    render(<VariantsTab detail={detail()} onUpdate={onUpdate} />);
+    render(
+      <VariantsTab detail={detail({ garment_profile: "", colors: [] })} onUpdate={onUpdate} />,
+    );
 
     await waitFor(() =>
       expect(screen.getByRole("option", { name: "gildan-5000" })).toBeInTheDocument(),
@@ -347,7 +349,10 @@ describe("VariantsTab", () => {
     fireEvent.change(screen.getByLabelText("Garment profile"), {
       target: { value: "gildan-5000" },
     });
-    expect(onUpdate).toHaveBeenCalledWith({ garment_profile: "gildan-5000" });
+    expect(onUpdate).toHaveBeenCalledWith({
+      garment_profile: "gildan-5000",
+      colors: ["black", "white"],
+    });
   });
 });
 

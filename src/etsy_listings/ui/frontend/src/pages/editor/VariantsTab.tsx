@@ -7,7 +7,7 @@ import {
 } from "../../api/calibrator";
 import { listGarmentProfiles } from "../../api/listings";
 import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
-import { mediaLostBy, selectColours } from "./colourSelection";
+import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelection";
 import { singleDesignName } from "./designName";
 
 /**
@@ -136,6 +136,21 @@ export function VariantsTab({ detail, onUpdate }: Props) {
     setColours(enabled ? [...detail.colors, colour] : detail.colors.filter((c) => c !== colour));
   }
 
+  /** Every colour the newly chosen profile classifies, replacing whatever
+   * was selected -- a new listing has none yet, and a switch between
+   * garments would otherwise keep colours the new one does not sell. */
+  function pickProfile(name: string) {
+    const chosen = profiles.find((p) => p.name === name);
+    const colours = chosen === undefined ? [] : Object.keys(chosen.colors).sort();
+    const lost = mediaLostBy(detail, colours);
+    onUpdate(selectGarmentProfile(detail, name, colours));
+    setStatus(
+      lost === 0
+        ? ""
+        : `Removed ${lost} listing ${lost === 1 ? "image" : "images"} for colours no longer sold.`,
+    );
+  }
+
   /** Every colour the garment profile classifies as ``shade``, and nothing
    * else -- the two bulk buttons are exact opposites, so "Dark" turning the
    * light ones *off* is the half that makes them worth having. Driven by the
@@ -160,7 +175,7 @@ export function VariantsTab({ detail, onUpdate }: Props) {
           <select
             id="variants-garment"
             value={detail.garment_profile}
-            onChange={(event) => onUpdate({ garment_profile: event.target.value })}
+            onChange={(event) => pickProfile(event.target.value)}
           >
             {/* A new listing starts with none chosen, so the unselected case
                 needs words rather than the blank, unlabelled option an empty

@@ -44,6 +44,20 @@ export function selectColours(detail: ListingDetail, next: string[]): Record<str
   return patch;
 }
 
+/** Picking a garment profile, and enabling every colour it classifies.
+
+ * The Variants tab passes `Object.keys(profile.colors)`. Going through
+ * `selectColours` is what drops mockups of colours the new garment does
+ * not sell, the same cascade a Dark/Light switch already uses.
+ */
+export function selectGarmentProfile(
+  detail: ListingDetail,
+  name: string,
+  colours: string[],
+): Record<string, unknown> {
+  return { garment_profile: name, ...selectColours(detail, colours) };
+}
+
 /** ``record`` without the dropped colours, or ``null`` when it had none of
  * them -- so the caller can leave the field out of the patch entirely rather
  * than rewriting it to itself. */
