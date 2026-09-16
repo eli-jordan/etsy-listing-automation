@@ -47,15 +47,19 @@ interface Props {
 }
 
 /** The garment profile's colour-matrix, used to judge colours before the
- * listing has picked its Etsy images. Not a `media:` default (A13) -- a
- * template that is missing, or not colour-matrix, is no preview. */
+ * listing has picked its Etsy images. Not a `media:` default (A13). The
+ * templates list is only consulted to refuse a name we *know* is not
+ * colour-matrix -- a new listing must not wait on GET /api/templates
+ * (or on a colour-matrix entry in `media:`) before the stage can render. */
 function previewTemplate(
   profile: GarmentProfileSummary | undefined,
   templates: TemplateSummary[],
 ): string | null {
   const name = profile?.preview_template;
   if (!name) return null;
-  return templates.find((t) => t.name === name)?.kind === "colour-matrix" ? name : null;
+  const known = templates.find((t) => t.name === name);
+  if (known !== undefined && known.kind !== "colour-matrix") return null;
+  return name;
 }
 
 export function VariantsTab({ detail, onUpdate }: Props) {

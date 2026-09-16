@@ -90,6 +90,19 @@ describe("VariantsTab's preview", () => {
     expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
   });
 
+  it("does not wait for the templates list before using preview_template", async () => {
+    /* A new listing has no media:, and GET /api/templates can lag (it
+       measures every photo). Preview is the garment profile's field; the
+       list is only consulted to refuse a non-colour-matrix name. */
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue(profiles);
+    vi.spyOn(calibrator, "listTemplates").mockReturnValue(new Promise(() => undefined));
+    render(
+      <VariantsTab detail={detail({ colors: ["black", "ivory"], media: [] })} onUpdate={vi.fn()} />,
+    );
+    const preview = await screen.findByAltText("black on flat-lay-01");
+    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/thumbnail?colour=black");
+  });
+
   it("does not label the stage or overlay the colour name on it", async () => {
     /* The left column's fieldset already starts at the top of the grid; a
        "Preview" heading above the photo pushed the stage down, and the
