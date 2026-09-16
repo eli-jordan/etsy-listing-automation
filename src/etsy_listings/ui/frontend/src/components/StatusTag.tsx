@@ -54,10 +54,14 @@ const EXPLANATIONS: Record<ListingStatus, string> = {
 
 export function StatusTag({ status }: { status: ListingStatus }) {
   return (
-    <span className={CLASSES[status]} title={EXPLANATIONS[status]}>
-      {LABELS[status]}
+    <span className="status-tag">
+      <span className={CLASSES[status]}>{LABELS[status]}</span>
+      <span className="status-tag__hint" role="tooltip">
+        {EXPLANATIONS[status]}
+      </span>
     </span>
   );
 }
 
 export const STATUS_LABELS = LABELS;
+export const STATUS_EXPLANATIONS = EXPLANATIONS;
