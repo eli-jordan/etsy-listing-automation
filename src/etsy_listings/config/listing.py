@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Annotated, Any, Final, Literal
+from typing import Annotated, Any, Final, Literal, Self
 
 import yaml
 from pydantic import (
@@ -20,6 +21,38 @@ from etsy_listings.config.money import Money, PriceField, require_currency
 from etsy_listings.config.pricing_plan import PricingPlan
 
 GENERATE: Final = "<generate>"
+
+_DRAFT: Final = "unsaved_draft"
+"""Validation-context key set by :meth:`Listing.draft` and by nothing else.
+
+It waives exactly one rule -- "set ``pricing_plan`` or ``prices``" -- for a
+candidate the editor is still assembling, and it is private so that waiving it
+stays a decision made here. ``Listing.load``, the UI's autosave PATCH and its
+create POST all go through a plain ``model_validate``, so nothing incomplete can
+reach disk; ``tests/unit/test_draft_context_is_private.py`` keeps the key from
+being spelled anywhere else, the same way ``test_no_bare_cv2.py`` keeps a
+default-argument ``cv2`` call from creeping back in.
+"""
+
+EMPTY_DRAFT: Final[dict[str, Any]] = {
+    "garment_profile": "",
+    "design": {},
+    "colors": [],
+    "brief": "",
+    "prices": {},
+    "pricing_plan": None,
+    "price_overrides": {},
+    "artwork": {},
+    "etsy": {},
+    "media": [],
+}
+"""A new listing before anything has been chosen: nothing set, nothing invented.
+
+Deliberately *not* ``newcmd.logic.build_listing_stub``, which fills in a design,
+a garment profile and a pricing plan. The CLI's ``new`` picker can, because it
+asked the questions first; the editor opens before any of them have been asked,
+and inventing an answer there would show the user a value they never picked.
+"""
 
 MAX_MEDIA_ENTRIES = 20
 MAX_TAGS = 13
@@ -142,9 +175,6 @@ class Listing(BaseModel):
                 for size, price in overrides.items():
                     require_currency(price, expected_currency, f"price_overrides.{color}.{size}")
 
-        if self.pricing_plan is None and not self.prices:
-            raise ValueError("listing has no pricing_plan and no prices -- set at least one")
-
         if len(self.media) > MAX_MEDIA_ENTRIES:
             raise ValueError(
                 f"media has {len(self.media)} entries, over Etsy's {MAX_MEDIA_ENTRIES}-image limit"
@@ -171,6 +201,47 @@ class Listing(BaseModel):
                 )
 
         return self
+
+    @model_validator(mode="after")
+    def _require_a_price_source(self, info: ValidationInfo) -> Listing:
+        """A listing has to be priced somehow -- unless it is a draft.
+
+        Its own rule rather than a clause in :meth:`_validate` because it is the
+        one rule an unsaved draft is allowed to fail: everything else in this
+        model is either satisfied by an empty value or is a statement about
+        fields that *are* filled in, so this is the only thing standing between
+        "nothing chosen yet" and a document that parses.
+        `config/listing_validation.py` reports the same gap as a block issue --
+        this model owns the refusal, that module owns the explanation.
+        """
+        if (info.context or {}).get(_DRAFT):
+            return self
+        if self.pricing_plan is None and not self.prices:
+            raise ValueError("listing has no pricing_plan and no prices -- set at least one")
+        return self
+
+    @classmethod
+    def draft(cls, raw: Mapping[str, Any], *, currency: str) -> Self:
+        """A candidate the listings editor is still assembling.
+
+        Structurally a real ``Listing`` -- ``media[].colour`` must still name a
+        colour the listing sells, ``price_overrides``/``artwork`` keys must
+        still be colours, a concrete title must still fit Etsy's limit, prices
+        must still carry the shop's currency -- because those are exactly the
+        failures the editor shows inline while the listing is unnamed. Only the
+        price-source rule is waived, and only here.
+
+        Answers ``Self`` rather than ``Listing`` because the UI's
+        ``ListingDetail`` *is* a ``Listing`` with display fields hung off it,
+        and re-deciding this rule while merely describing a listing would refuse
+        to render the one state the rule was waived for.
+        """
+        return cls.model_validate(dict(raw), context={"currency": currency, _DRAFT: True})
+
+    @classmethod
+    def empty_draft(cls, *, currency: str) -> Self:
+        """:data:`EMPTY_DRAFT` as a ``Listing``: what `+ New listing` opens on."""
+        return cls.draft(EMPTY_DRAFT, currency=currency)
 
     @classmethod
     def load(cls, path: Path, *, currency: str) -> Listing:

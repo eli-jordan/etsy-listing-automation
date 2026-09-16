@@ -7,6 +7,7 @@ import yaml
 from pydantic import ValidationError
 
 from etsy_listings.config.listing import (
+    EMPTY_DRAFT,
     MAX_MEDIA_ENTRIES,
     EtsyListingConfig,
     Listing,
@@ -251,3 +252,49 @@ def test_resolved_price_raises_without_a_plan_when_the_size_is_missing() -> None
     listing = Listing.model_validate(BASE, context={"currency": "NOK"})
     with pytest.raises(KeyError):
         listing.resolved_price("black", "XXXL")
+
+
+# ------------------------------------------------------- the unsaved draft
+
+
+def test_an_empty_draft_builds_with_nothing_chosen() -> None:
+    """What `+ New listing` opens on. Every field is empty rather than
+    invented, and the one rule that stands in the way of an empty document --
+    "set pricing_plan or prices" -- is the only one waived."""
+    draft = Listing.empty_draft(currency="NOK")
+    assert draft.garment_profile == ""
+    assert draft.design == {}
+    assert draft.colors == []
+    assert draft.media == []
+    assert draft.pricing_plan is None
+    assert draft.prices == {}
+
+
+def test_the_same_empty_document_is_still_refused_as_a_listing() -> None:
+    """The waiver is a property of `draft()`, not of the document. Nothing
+    incomplete reaches disk, which is the whole reason the editor has to hold
+    an unsaved one at all."""
+    with pytest.raises(ValidationError):
+        Listing.model_validate(EMPTY_DRAFT, context={"currency": "NOK"})
+
+
+@pytest.mark.parametrize(
+    ("over", "expected_in_message"),
+    [
+        ({"media": [{"template": "flat-lay-01", "colour": "ivory"}]}, "ivory"),
+        ({"price_overrides": {"ivory": {"S": "349 NOK"}}}, "ivory"),
+        ({"artwork": {"ivory": "on-light"}}, "ivory"),
+        ({"prices": {"S": "349 USD"}}, "NOK"),
+        ({"etsy": {"title": "x" * 141}}, "140"),
+    ],
+)
+def test_a_draft_still_enforces_every_other_rule(
+    over: dict[str, object], expected_in_message: str
+) -> None:
+    """Only the price-source rule is waived. These are the failures the editor
+    shows inline *before* the listing has a name, so a draft that skipped them
+    would leave a user typing into a form that never objects and then refuses
+    to save."""
+    with pytest.raises(ValidationError) as exc:
+        Listing.draft({**BASE, **over}, currency="NOK")
+    assert expected_in_message in str(exc.value)
