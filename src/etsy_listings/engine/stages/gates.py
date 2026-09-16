@@ -90,6 +90,30 @@ def check_design_resolution(design: Path, profile: GarmentProfile) -> Blocked | 
     return None
 
 
+def check_garment_profile_chosen(garment_profile: str) -> Blocked | None:
+    """Refuse a listing that has not said which garment it prints on.
+
+    The listings editor writes a listing the moment it has a name and a price
+    source, so "no garment profile yet" is an ordinary state on disk rather than
+    a typo -- and every stage that wants one loads it through
+    ``workspace.load_garment_profile``, where an empty name reaches ``_segment``
+    and raises ``InvalidNameError``. That is a plain ``ValueError``, not a
+    ``UserFacingError``, so it would not merely fail this listing: it would
+    unwind the stage walk and end a whole ``--all`` batch on a listing somebody
+    is still filling in.
+
+    A missing profile *file* is `ConfigLoadError`'s to report, with the path it
+    looked for. This only catches the name that could never name a file.
+    """
+    if garment_profile.strip():
+        return None
+    return Blocked(
+        "no garment_profile set, and every stage needs one to know what is being "
+        "printed.\n"
+        "Pick one in the listings editor's Variants tab, or write it in listing.yaml."
+    )
+
+
 def check_copy_is_concrete(*, title: str, description: str) -> Blocked | None:
     """Refuse a `<generate>` sentinel or blank copy before a product is created.
 

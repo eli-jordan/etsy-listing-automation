@@ -27,6 +27,7 @@ from etsy_listings.engine.stage import Blocked
 from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
+    check_garment_profile_chosen,
 )
 
 PROFILE = GarmentProfile(
@@ -149,3 +150,21 @@ def test_a_refusal_leads_with_the_consequence_and_follows_with_the_remedy(
     assert "too small" in head
     assert rest, "a refusal a user can act on says what to do about it"
     assert not any(line.startswith(" ") for line in rest), "cli.render owns the indenting"
+
+
+# ------------------------------------------- a garment profile to print on
+
+
+def test_a_chosen_garment_profile_passes() -> None:
+    assert check_garment_profile_chosen("comfort-colors-1717") is None
+
+
+@pytest.mark.parametrize("name", ["", "   "])
+def test_no_garment_profile_is_refused_rather_than_raised(name: str) -> None:
+    """The listings editor writes a listing as soon as it has a name and a
+    price source, so an unfilled `garment_profile:` is an ordinary state on
+    disk. Loading one goes through `_segment`, which raises `InvalidNameError`
+    -- a plain ValueError that would unwind the stage walk and take a whole
+    `--all` batch down with it. Refused here instead, as a `Blocked` like any
+    other."""
+    assert "garment_profile" in _refusal(check_garment_profile_chosen(name))

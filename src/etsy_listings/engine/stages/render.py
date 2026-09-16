@@ -47,7 +47,8 @@ from etsy_listings.engine.lock import (
     hash_file,
     to_workspace_relative_posix,
 )
-from etsy_listings.engine.stage import StageApplyResult
+from etsy_listings.engine.stage import Blocked, StageApplyResult
+from etsy_listings.engine.stages.gates import check_garment_profile_chosen
 from etsy_listings.engine.stages.placement import DesignPlacement
 from etsy_listings.render.config import (
     AnyTemplate,
@@ -310,13 +311,16 @@ class RenderStage:
 
     def desired(
         self, ctx: RunContext, listing: str, applied: RenderApplied | None
-    ) -> RenderDesired:
-        """``applied`` is unused: nothing about a previous render can make the
+    ) -> RenderDesired | Blocked:
+        """``applied`` is unused: nothing about a *previous* render can make the
         next one refusable. The parameter is the protocol's, not this stage's
         -- the product stage needs it to refuse a garment change (PRD 37)."""
         del applied
         workspace = ctx.workspace
         listing_cfg = workspace.load_listing(listing)
+        blocked = check_garment_profile_chosen(listing_cfg.garment_profile)
+        if blocked is not None:
+            return blocked
         profile = workspace.load_garment_profile(listing_cfg.garment_profile)
         placement = DesignPlacement.resolve(workspace, listing, listing_cfg, profile)
 

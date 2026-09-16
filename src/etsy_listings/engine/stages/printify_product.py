@@ -54,6 +54,7 @@ from etsy_listings.engine.stage import Blocked, StageApplyResult
 from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
+    check_garment_profile_chosen,
 )
 from etsy_listings.engine.stages.placement import DesignPlacement
 from etsy_listings.engine.stages.product_diff import compare
@@ -113,6 +114,9 @@ class PrintifyProductStage:
             return NO_SHOP_BLOCKED
 
         config = workspace.load_listing(listing)
+        blocked = check_garment_profile_chosen(config.garment_profile)
+        if blocked is not None:
+            return blocked
         profile = workspace.load_garment_profile(config.garment_profile)
 
         blocked = check_copy_is_concrete(
