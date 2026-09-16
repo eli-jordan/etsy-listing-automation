@@ -125,6 +125,18 @@ def _check_colours_enabled(listing: Listing) -> list[Issue]:
 def _check_garment_profile_exists(
     listing: Listing, garment_profile_names: Iterable[str]
 ) -> list[Issue]:
+    if not listing.garment_profile:
+        # A new listing starts here: the editor opens on a document with nothing
+        # chosen, so "not chosen yet" is the ordinary case and reporting it as
+        # `'' does not exist` would describe a mistake nobody made.
+        return [
+            Issue(
+                "block",
+                "variants",
+                "Variants › Garment profile",
+                "No garment profile selected -- pick the garment this listing prints on.",
+            )
+        ]
     if listing.garment_profile in set(garment_profile_names):
         return []
     return [
@@ -133,6 +145,42 @@ def _check_garment_profile_exists(
             "variants",
             "Variants › Garment profile",
             f"Garment profile {listing.garment_profile!r} does not exist in this workspace.",
+        )
+    ]
+
+
+def _check_design_selected(listing: Listing) -> list[Issue]:
+    if listing.design:
+        return []
+    return [
+        Issue(
+            "block",
+            "variants",
+            "Design",
+            "No design selected -- pick the artwork this listing prints.",
+        )
+    ]
+
+
+def _check_price_source(listing: Listing) -> list[Issue]:
+    """The one rule this module shares with `Listing` itself.
+
+    `Listing._require_a_price_source` refuses to *write* a listing with neither
+    a plan nor prices, and waives that only for an unsaved draft; this explains
+    the same gap in the banner, which is the only place a draft can be told
+    about it. Two expressions of one rule, deliberately -- the model owns the
+    refusal, this owns the sentence. Neither is redundant: delete this one and a
+    new listing silently refuses to save with nothing said about why.
+    """
+    if listing.pricing_plan is not None or listing.prices:
+        return []
+    return [
+        Issue(
+            "block",
+            "details",
+            "Listing Details › Pricing",
+            "No pricing plan and no prices -- pick a plan, or set a price for every size. "
+            "The listing cannot be written until one of them is set.",
         )
     ]
 
@@ -258,7 +306,9 @@ def check_listing(
     """
     issues: list[Issue] = []
     issues += _check_garment_profile_exists(listing, garment_profile_names)
+    issues += _check_design_selected(listing)
     issues += _check_colours_enabled(listing)
+    issues += _check_price_source(listing)
     issues += _check_media_present(listing)
     issues += _check_copy(listing)
     if garment_profile is not None:

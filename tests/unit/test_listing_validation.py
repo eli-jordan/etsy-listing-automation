@@ -288,3 +288,48 @@ class TestIndependentChecks:
         )
         tabs = {i.tab for i in issues}
         assert tabs == {"variants", "images", "details"}
+
+
+class TestNothingChosenYet:
+    """The state a listing starts in, now that the editor *is* the create form.
+    Each of these is a block, because each is something that has to be picked
+    before the listing can mean anything -- and the banner is where an unsaved
+    listing is told so."""
+
+    def test_no_garment_profile_says_so_rather_than_quoting_an_empty_name(self) -> None:
+        issues = _check(_listing(garment_profile=""))
+        blocking = [i for i in issues if i.severity == "block" and i.where.endswith("profile")]
+        assert len(blocking) == 1
+        assert "No garment profile selected" in blocking[0].message
+
+    def test_a_named_profile_that_does_not_exist_still_quotes_it(self) -> None:
+        """A different mistake with a different remedy: one is unfinished, the
+        other is wrong, and saying "not selected" about a typo would send the
+        user looking in the wrong place."""
+        issues = _check(_listing(garment_profile="no-such"), garment_profile_names=["other"])
+        blocking = [i for i in issues if i.severity == "block" and i.where.endswith("profile")]
+        assert len(blocking) == 1
+        assert "'no-such'" in blocking[0].message
+
+    def test_no_design_blocks(self) -> None:
+        listing = _listing().model_copy(update={"design": {}})
+        blocking = [i for i in _check(listing) if i.severity == "block" and i.where == "Design"]
+        assert len(blocking) == 1
+        assert "No design selected" in blocking[0].message
+
+    def test_a_design_that_is_set_does_not_block(self) -> None:
+        assert not [i for i in _check(_listing()) if i.where == "Design"]
+
+    def test_no_price_source_blocks_on_the_details_tab(self) -> None:
+        """The one rule shared with `Listing` itself, which refuses to *write*
+        a listing in this state and waives it only for an unsaved draft. This
+        is the sentence that explains the refusal."""
+        listing = _listing().model_copy(update={"prices": {}, "pricing_plan": None})
+        blocking = [i for i in _check(listing) if i.severity == "block" and i.tab == "details"]
+        assert [i for i in blocking if "Pricing" in i.where]
+
+    def test_a_pricing_plan_alone_satisfies_it(self) -> None:
+        listing = _listing().model_copy(
+            update={"prices": {}, "pricing_plan": "../../pricing-plans/tee.yaml"}
+        )
+        assert not [i for i in _check(listing) if "Pricing" in i.where]
