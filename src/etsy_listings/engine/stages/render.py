@@ -28,13 +28,26 @@ photo to composite over, the derived-map key, and the resolved layers.
 ``desired()`` hashes those; ``apply()`` renders them. Neither re-reads the
 config nor re-resolves an artwork, which is what keeps the hash and the pixels
 describing the same thing.
+
+A32: ``preview()`` renders full-size, ahead of ``apply()`` and through the
+same pipeline, to a content-addressed cache under ``.cache/previews/`` keyed
+by :func:`scene_hash` -- a *third*, narrower hash axis alongside
+``input_hash`` (whole-listing: would a re-render differ at all) and
+``outputs`` (per-file: does what is on disk match what was uploaded), scoped
+to one scene's own inputs so a UI plan run can preview only the scenes that
+actually changed rather than every scene the moment any one of them does.
+``apply()`` promotes a matching preview with ``os.replace`` instead of
+rendering again; ``snapshot()`` is what tells a caller which scenes need one.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable
-from dataclasses import dataclass
+import os
+import shutil
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field, replace
 from pathlib import Path
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -189,6 +202,13 @@ class RenderDesired:
     design_hash: dict[str, str]  # artwork key -> sha256, only keys actually used
     template_hash: dict[str, str]  # template name -> sha256 of its template.yaml
     base_hash: dict[str, str]  # scene key -> sha256 of that scene's photo
+    preview_exists: dict[str, bool] = field(default_factory=dict)
+    """Scene key -> whether ``Workspace.preview_file`` already holds a preview
+    matching that scene's current :func:`scene_hash`, checked once by
+    ``desired()`` (A32) -- the one place this stage already does I/O beyond
+    hashing. Feeds :meth:`RenderStage.snapshot`'s ``preview`` field. Defaults
+    to empty so a ``RenderDesired`` built by hand (a unit test exercising
+    :func:`scene_hash` in isolation) doesn't have to know this exists."""
 
     @property
     def scenes(self) -> tuple[str, ...]:
@@ -198,8 +218,108 @@ class RenderDesired:
         return to_workspace_relative_posix(self.root, path)
 
 
+def _scene_payload(
+    work: SceneWork,
+    *,
+    design_hash: Mapping[str, str],
+    template_hash: Mapping[str, str],
+    base_hash: Mapping[str, str],
+) -> dict[str, object]:
+    """The part of :func:`scene_hash`'s payload that is just a lookup --
+    shared between the pure ``desired``-based call and ``desired()``'s own
+    two-step construction, which has the same three dicts on hand before a
+    :class:`RenderDesired` exists to call the method on.
+
+    Restricted to this one scene: only the design hashes for *its own*
+    layers, only *its* template's hash, only *its* photo's hash. A scene that
+    shares nothing with another -- a different template, different artwork --
+    hashes independently of it, which is the entire point of asking per scene
+    rather than reading ``_input_hash``'s listing-wide answer (A32).
+    """
+    return {
+        "template": work.template,
+        "template_hash": template_hash[work.template],
+        "base_hash": base_hash[work.key],
+        "design_hash": {layer.artwork: design_hash[layer.artwork] for layer in work.layers},
+        "recipe": work.recipe(),
+    }
+
+
+def scene_hash(desired: RenderDesired, work: SceneWork) -> str:
+    """A32: one scene's own share of ``_input_hash``'s inputs, hashed alone.
+
+    Two uses. ``RenderStage.snapshot`` compares this against the hash
+    recorded for the scene at the last apply (:attr:`RenderApplied.scene_hashes`)
+    to say ``cached`` or ``stale`` *per scene* -- ``_input_hash`` alone cannot
+    answer that, because it changes the moment any scene's inputs change, which
+    would mark every scene stale over one design edit. ``RenderStage.preview``
+    and :meth:`Workspace.preview_file` use it as a content-addressed cache key:
+    a preview already sitting under that hash is reused rather than re-rendered,
+    and a preview under any other hash for this scene is stale and pruned.
+
+    Pure, like the payload it wraps -- no I/O, so a unit test builds a
+    :class:`RenderDesired` and two :class:`SceneWork` values by hand and
+    changes one scene's inputs without touching the other's hash.
+    """
+    return canonical_hash(
+        _scene_payload(
+            work,
+            design_hash=desired.design_hash,
+            template_hash=desired.template_hash,
+            base_hash=desired.base_hash,
+        )
+    )
+
+
+def _hash_token(digest: str) -> str:
+    """``scene_hash``'s value, stripped of its ``sha256:`` prefix.
+
+    A colon is not a valid filename character on Windows, and
+    ``Workspace.preview_file`` treats the hash as a single path segment the
+    same way it does a colour or a template name -- which already refuses one
+    (see its docstring). Every call site that turns a ``scene_hash`` into a
+    path goes through this first.
+    """
+    return digest.removeprefix("sha256:")
+
+
+RenderSceneState = Literal["cached", "stale", "missing"]
+
+
+class RenderSceneSnapshot(BaseModel):
+    """One scene's domain facts for the before/after review (A30, A32).
+
+    ``state`` answers "would this scene's rendered output change, and is it
+    even there" -- ``cached`` when neither is true, ``stale`` when the scene's
+    own hash has moved since the last apply, ``missing`` when the file itself
+    is absent (which wins over a hash comparison: a hash proves nothing about
+    a file that was deleted). ``preview`` answers a different question --
+    whether a full-size preview is already sitting in the cache for the
+    *current* state, which is what tells a caller whether ``preview()`` has
+    anything left to do for this scene.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    scene: str
+    template: str
+    colour: str | None
+    state: RenderSceneState
+    preview: bool
+
+
+class RenderSnapshot(BaseModel):
+    """Every referenced scene, in media order -- what the before/after review
+    needs and a ``Plan`` (changes only) cannot supply (A30)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    scenes: tuple[RenderSceneSnapshot, ...]
+
+
 class RenderApplied(BaseModel):
-    """The stage's lockfile subtree, as the two fields ``plan()`` compares.
+    """The stage's lockfile subtree, as the fields ``plan()`` and ``snapshot()``
+    compare.
 
     A model rather than a dataclass with a hand-written ``parse``, so that
     :meth:`~etsy_listings.engine.lock.Lockfile.parse_applied_for` can decode
@@ -218,6 +338,12 @@ class RenderApplied(BaseModel):
 
     input_hash: str
     scenes: tuple[str, ...]
+    scene_hashes: dict[str, str] = {}
+    """Scene key -> :func:`scene_hash` at the last apply (A32). Defaulted, not
+    required: a lockfile written before this field existed decodes as if every
+    scene's map were empty, which :meth:`RenderStage.snapshot` already reads
+    as "no record to compare against" -- the same answer a scene that has
+    never been applied gets."""
 
 
 @dataclass(frozen=True)
@@ -227,6 +353,11 @@ class RenderLive:
     ``plan()``'s job, per A2."""
 
     outputs_present: dict[str, bool]  # scene key -> its render file exists
+    scene_hashes: dict[str, str] = field(default_factory=dict)
+    """``applied.scene_hashes``, carried through unchanged (A32). ``read_live``
+    has ``applied`` and ``snapshot`` does not -- this is how the value one
+    decoded and the other needs to compare against reaches the second without
+    a second decode of the stage's own subtree."""
 
 
 def _scene_key(template: str, colour: str | None) -> str:
@@ -365,7 +496,7 @@ class RenderStage:
             for layer in work.layers:
                 design_hash[layer.artwork] = hash_file(layer.design)
 
-        return RenderDesired(
+        desired = RenderDesired(
             listing=listing,
             root=workspace.root,
             works=tuple(works),
@@ -373,6 +504,18 @@ class RenderStage:
             template_hash=template_hash,
             base_hash=base_hash,
         )
+        # A32: has a preview already been rendered for each scene's *current*
+        # state? Checked here, once, because this is the one place the stage
+        # already does I/O beyond hashing (this method's own docstring) --
+        # `snapshot()` has no workspace to ask, and by the time `preview()`
+        # runs this is exactly the question it needs answered too.
+        preview_exists = {
+            work.key: workspace.preview_file(
+                listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
+            ).is_file()
+            for work in desired.works
+        }
+        return replace(desired, preview_exists=preview_exists)
 
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: RenderApplied | None
@@ -395,7 +538,8 @@ class RenderStage:
             outputs_present={
                 scene: _render_path(ctx.workspace, listing, scene).is_file()
                 for scene in applied.scenes
-            }
+            },
+            scene_hashes=dict(applied.scene_hashes),
         )
 
     def plan(
@@ -438,6 +582,145 @@ class RenderStage:
             for work in desired.works
         )
 
+    def snapshot(self, desired: RenderDesired, live: RenderLive | None) -> RenderSnapshot:
+        """Per scene: is its current render output still correct, and is a
+        full-size preview already sitting in the cache for it (A30, A32).
+
+        ``cached``/``stale`` compares this scene's own :func:`scene_hash`
+        against what :attr:`RenderLive.scene_hashes` recorded for it at the
+        last apply -- not ``applied.input_hash``, which changes the moment
+        *any* scene's inputs change and would mark every scene stale over one
+        design edit. That would defeat the reason to ask per scene at all:
+        ``preview()`` reads this to decide which scenes are worth spending a
+        render on. ``missing`` wins over both when the render file itself is
+        not on disk, whatever its hash says -- a hash comparison proves
+        nothing about a file that was deleted.
+        """
+        scenes = []
+        for work in desired.works:
+            exists = live.outputs_present.get(work.key, False) if live is not None else False
+            previous = live.scene_hashes.get(work.key) if live is not None else None
+            state: RenderSceneState
+            if not exists:
+                state = "missing"
+            elif previous == scene_hash(desired, work):
+                state = "cached"
+            else:
+                state = "stale"
+            scenes.append(
+                RenderSceneSnapshot(
+                    scene=work.key,
+                    template=work.template,
+                    colour=work.colour,
+                    state=state,
+                    preview=desired.preview_exists.get(work.key, False),
+                )
+            )
+        return RenderSnapshot(scenes=tuple(scenes))
+
+    def preview(
+        self,
+        ctx: RunContext,
+        desired: RenderDesired,
+        live: RenderLive | None,
+        *,
+        should_stop: Callable[[], bool] = lambda: False,
+    ) -> tuple[SceneWork, ...]:
+        """Render a full-size preview for every scene :meth:`snapshot` calls
+        ``stale`` or ``missing`` (A32), through the same pipeline ``apply``
+        uses, to :meth:`~etsy_listings.workspace.workspace.Workspace.preview_file`;
+        prune every preview this listing holds whose hash no longer matches
+        any currently-referenced scene, in the same pass.
+
+        Called after a plan has resolved, never inside one -- a plan stays
+        read-only and fast, and a full-size render costs real time per scene.
+        ``apply`` later promotes whatever this wrote (its own docstring),
+        which is what makes calling this ahead of an ``apply`` free rather
+        than double work, and what keeps a promoted file identical to a fresh
+        render: both come from the same ``render_scene`` call over the same
+        resolved inputs (A7).
+
+        ``should_stop`` is checked before each scene that still needs
+        rendering, so a cancellable caller can stop between scenes without
+        leaving a half-written file -- ``save_png`` writes the whole image in
+        one call, so there is no partial file to clean up either way.
+
+        Returns the scenes that end this call with a ready preview file,
+        whether freshly rendered here or already current from an earlier
+        call -- a caller reports one event per entry, and an entry a caller
+        never sees (because ``should_stop`` cut the loop short) simply is not
+        ready yet.
+        """
+        workspace = ctx.workspace
+        snapshot = self.snapshot(desired, live)
+        needed = {s.scene for s in snapshot.scenes if s.state in ("stale", "missing")}
+
+        design_cache: dict[Path, RGBA] = {}
+        map_caches: dict[str, DerivedMapCache] = {}
+        ready: list[SceneWork] = []
+
+        for work in desired.works:
+            if work.key not in needed:
+                continue
+            if should_stop():
+                break
+            target = workspace.preview_file(
+                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
+            )
+            if not target.is_file():
+                base = load_template_base(work.base_image)
+                map_cache = map_caches.setdefault(
+                    work.template, DerivedMapCache(workspace.template_derived_dir(work.template))
+                )
+                height = map_cache.height(work.map_key, base) if work.wants_height else None
+                luminance = (
+                    map_cache.luminance(work.map_key, base) if work.wants_luminance else None
+                )
+
+                layers = []
+                for layer in work.layers:
+                    if layer.design not in design_cache:
+                        design_cache[layer.design] = load_design(layer.design)
+                    layers.append(Layer(design=design_cache[layer.design], cfg=layer.cfg))
+
+                image = render_scene(base, layers, height=height, luminance=luminance)
+                save_png(image, target)
+            ready.append(work)
+
+        self._prune_previews(workspace, desired)
+        return tuple(ready)
+
+    def _prune_previews(self, workspace: Workspace, desired: RenderDesired) -> None:
+        """Delete every preview file under this listing's preview directory
+        that does not match one of ``desired``'s scenes at its current hash
+        (A32) -- the input that made it stale is gone by the time this runs,
+        so "does the current hash still name this file" is the only test
+        available, and it is exactly the one a content-addressed cache is for.
+
+        A template subdirectory for a template no longer referenced at all
+        (dropped from ``media:`` this run) is removed outright rather than
+        left empty.
+        """
+        preview_root = workspace.preview_dir(desired.listing)
+        if not preview_root.is_dir():
+            return
+        valid: dict[str, set[str]] = {}
+        for work in desired.works:
+            name = workspace.preview_file(
+                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
+            ).name
+            valid.setdefault(work.template, set()).add(name)
+        for template_dir in preview_root.iterdir():
+            if not template_dir.is_dir():
+                continue
+            keep = valid.get(template_dir.name)
+            if keep is None:
+                shutil.rmtree(template_dir)
+                continue
+            for file in template_dir.glob("*.png"):
+                if file.name not in keep:
+                    file.unlink()
+
     def apply(
         self,
         ctx: RunContext,
@@ -453,6 +736,15 @@ class RenderStage:
         which is the same object that produced ``input_hash``. That is what
         makes "what was hashed is what was rendered" true by construction
         rather than by two branch sets agreeing.
+
+        A32: before rendering a scene, this looks for a preview
+        :meth:`preview` may already have left at
+        :meth:`~etsy_listings.workspace.workspace.Workspace.preview_file` for
+        its current hash. If one is there it is moved into place with
+        ``os.replace`` instead of rendered again -- a promoted file is exactly
+        the bytes a fresh render would produce, since both come from the same
+        pipeline over the same resolved inputs (A7), so the ``outputs`` hash
+        axis cannot tell the difference and nothing is uploaded twice.
         """
         workspace = ctx.workspace
         design_cache: dict[Path, RGBA] = {}
@@ -461,20 +753,33 @@ class RenderStage:
 
         for work in desired.works:
             base = load_template_base(work.base_image)
-            map_cache = map_caches.setdefault(
-                work.template, DerivedMapCache(workspace.template_derived_dir(work.template))
+            preview_path = workspace.preview_file(
+                desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
             )
-            height = map_cache.height(work.map_key, base) if work.wants_height else None
-            luminance = map_cache.luminance(work.map_key, base) if work.wants_luminance else None
+            if preview_path.is_file():
+                # Promotion (A32): the same bytes a fresh render would
+                # produce, already sitting there from an earlier `preview()`
+                # call. Moved, not copied -- a promoted preview is consumed,
+                # never left behind to be pruned as stale next time.
+                work.output.parent.mkdir(parents=True, exist_ok=True)
+                os.replace(preview_path, work.output)
+            else:
+                map_cache = map_caches.setdefault(
+                    work.template, DerivedMapCache(workspace.template_derived_dir(work.template))
+                )
+                height = map_cache.height(work.map_key, base) if work.wants_height else None
+                luminance = (
+                    map_cache.luminance(work.map_key, base) if work.wants_luminance else None
+                )
 
-            layers = []
-            for layer in work.layers:
-                if layer.design not in design_cache:
-                    design_cache[layer.design] = load_design(layer.design)
-                layers.append(Layer(design=design_cache[layer.design], cfg=layer.cfg))
+                layers = []
+                for layer in work.layers:
+                    if layer.design not in design_cache:
+                        design_cache[layer.design] = load_design(layer.design)
+                    layers.append(Layer(design=design_cache[layer.design], cfg=layer.cfg))
 
-            image = render_scene(base, layers, height=height, luminance=luminance)
-            save_png(image, work.output)
+                image = render_scene(base, layers, height=height, luminance=luminance)
+                save_png(image, work.output)
             outputs[desired.relative(work.output)] = hash_file(work.output)
 
             swatches: tuple[Swatch, ...] = tuple(
@@ -486,6 +791,7 @@ class RenderStage:
             "input_hash": self._input_hash(desired),
             "scene_config": {work.key: work.recipe() for work in desired.works},
             "scenes": list(desired.scenes),
+            "scene_hashes": {work.key: scene_hash(desired, work) for work in desired.works},
         }
         return StageApplyResult(applied=document, outputs=outputs)
 

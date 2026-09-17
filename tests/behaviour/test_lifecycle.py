@@ -132,6 +132,10 @@ class TestRetract:
         renders = root / ".cache" / "renders" / LISTING
         renders.mkdir(parents=True)
         (renders / "flat-lay-01-black.png").write_bytes(b"png")
+        # A32: a preview left behind by an earlier plan is wiped too.
+        previews = root / ".cache" / "previews" / LISTING / "flat-lay-01"
+        previews.mkdir(parents=True)
+        (previews / "black-deadbeef.png").write_bytes(b"png")
 
         report = apply_listings(a_context(root, etsy=_etsy(), printify=printify), [LISTING], STAGES)
 
@@ -140,6 +144,7 @@ class TestRetract:
         assert printify.updated == []
         assert not (root / "listings" / LISTING).exists()
         assert not renders.exists()
+        assert not previews.exists()
 
     def test_an_etsy_draft_that_survived_printify_delete_keeps_local_files(
         self, workspace_root: Path

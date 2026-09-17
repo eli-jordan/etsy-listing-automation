@@ -43,7 +43,8 @@ from etsy_listings.engine.change import Plan, StagePlan
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile, canonical_hash
 from etsy_listings.engine.plan import PlannedRun, build_plan
-from etsy_listings.engine.stage import AnyStage
+from etsy_listings.engine.stage import AnyStage, Blocked
+from etsy_listings.engine.stages.render import RenderStage
 from etsy_listings.errors import UserFacingError
 
 
@@ -111,6 +112,12 @@ StagePlannedSink = Callable[[str, StagePlan], None]
 moment that stage's own walk finishes, whether it ran, changed nothing, drifted
 or blocked."""
 
+PreviewRenderedSink = Callable[[str, str, str | None], None]
+"""Called with a listing's name, a template name and a colour (``None`` for a
+``multiple``/``single``-kind scene) each time :func:`preview_listing` learns a
+scene now has a ready preview file -- freshly rendered this call or already
+current from an earlier one either way (A32, decision 6)."""
+
 
 def _ignore_planned(listing: str, planned: PlannedRun) -> None:
     return None
@@ -126,6 +133,14 @@ def _ignore_stage_checking(listing: str, stage: str) -> None:
 
 def _ignore_stage_planned(listing: str, stage_plan: StagePlan) -> None:
     return None
+
+
+def _ignore_preview_rendered(listing: str, template: str, colour: str | None) -> None:
+    return None
+
+
+def _never_stop() -> bool:
+    return False
 
 
 @dataclass(frozen=True)
@@ -145,6 +160,11 @@ class RunObserver:
     :attr:`on_failure` when a listing is abandoned -- unchanged from the sink
     it already was.
 
+    **This PR also adds the one event between planning and applying.**
+    :attr:`on_preview_rendered` fires from :func:`preview_listing` (A32,
+    decision 6) once per scene that ends a preview call with a ready file --
+    a caller between the two, the UI's future plan run.
+
     **The apply-time half is not here yet, on purpose.** Decision 7's event
     table also names ``stage_applying``, ``progress``, ``stage_applied``,
     ``stage_failed`` and ``listing_failed``, and files them under the same
@@ -161,6 +181,7 @@ class RunObserver:
     on_stage_planned: StagePlannedSink = _ignore_stage_planned
     on_listing_planned: PlannedSink = _ignore_planned
     on_failure: FailureSink = _ignore_failure
+    on_preview_rendered: PreviewRenderedSink = _ignore_preview_rendered
 
 
 class StalePlanError(UserFacingError):
@@ -252,6 +273,53 @@ def plan_listings(
         return planned
 
     return _over(listings, work, watch.on_failure)
+
+
+def preview_listing(
+    ctx: RunContext,
+    planned: PlannedRun,
+    observer: RunObserver | None = None,
+    *,
+    should_stop: Callable[[], bool] | None = None,
+) -> None:
+    """Render full-size previews for one already-planned listing (A32,
+    decision 6), firing :attr:`RunObserver.on_preview_rendered` once per scene
+    that ends this call with a ready preview file.
+
+    Deliberately not part of :func:`plan_listings`: a plan stays read-only and
+    fast, and a full-size render costs real seconds per scene. The UI's future
+    plan run calls this once ``build_plan`` has already resolved -- there is
+    nothing to plan here, only to render ahead of an ``apply`` that has not
+    happened yet.
+
+    Finds the render stage's own :class:`~etsy_listings.engine.plan.StageState`
+    in ``planned.states`` and asks *it* for previews, rather than knowing
+    anything about scenes itself -- A30's rule that only the stage which
+    produced a type looks inside it applies here too, so this reaches
+    directly for :class:`~etsy_listings.engine.stages.render.RenderStage`
+    rather than dispatching on a generic, structurally-typed method the way
+    :func:`~etsy_listings.engine.plan.build_plan` does for ``snapshot()`` --
+    previewing is render-specific by design (`stage.py`'s note on why), not an
+    optional extension every stage might grow.
+
+    Does nothing, quietly, for a listing with no render state at all (a
+    ``deleted``/``retired`` listing's plan is retract-only) or whose render
+    stage is itself blocked (no garment profile chosen yet) -- there is no
+    :class:`~etsy_listings.engine.stages.render.RenderDesired` to preview in
+    either case.
+    """
+    watch = observer or RunObserver()
+    stop = should_stop or _never_stop
+    render_state = next((s for s in planned.states if s.stage.name == RenderStage.name), None)
+    if render_state is None or isinstance(render_state.desired, Blocked):
+        return
+    if not isinstance(render_state.stage, RenderStage):
+        return
+    ready = render_state.stage.preview(
+        ctx, render_state.desired, render_state.live, should_stop=stop
+    )
+    for work in ready:
+        watch.on_preview_rendered(planned.plan.listing, work.template, work.colour)
 
 
 def apply_listings(
