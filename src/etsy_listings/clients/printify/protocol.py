@@ -82,7 +82,9 @@ class PrintifyClient(Protocol):
         self, shop_id: int, product_id: str, spec: ProductSpec, *, live: Product
     ) -> Product: ...
 
-    def delete_product(self, shop_id: int, product_id: str) -> None: ...
+    def delete_product(self, shop_id: int, product_id: str) -> None:
+        """Remove the product. Idempotent: already gone is success, not an error."""
+        ...
 
     def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
         """Ask Printify to push this product to its connected sales channel.
