@@ -331,7 +331,7 @@ The editor tells you so. `ListingEditorPage`'s page head asks
 | Run state for this listing | Page-head control |
 |---|---|
 | none, or finished and seen | **Deploy changes →** |
-| queued / applying | **Applying… View progress →** |
+| queued / planning / previewing / applying / ready | **Deploying… View progress →** |
 | applied, not seen | **Deployed ✓ View result →** |
 | failed or stale, not seen | **Deploy failed — view** |
 
