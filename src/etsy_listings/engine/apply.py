@@ -5,11 +5,15 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from etsy_listings import __about__
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
+
+if TYPE_CHECKING:
+    from etsy_listings.engine.run import RunObserver
 
 RecordSink = Callable[[Lockfile], None]
 """Called with the stamped, folded lockfile after every stage `execute`
@@ -28,12 +32,18 @@ def _stamp(lock: Lockfile) -> Lockfile:
     return lock.stamped(tool_version=__about__.VERSION, applied_at=datetime.now(UTC).isoformat())
 
 
+def _never_stop() -> bool:
+    return False
+
+
 def execute(
     ctx: RunContext,
     planned: PlannedRun,
     lock: Lockfile,
     *,
+    observer: RunObserver | None = None,
     record: RecordSink = _ignore_record,
+    should_stop: Callable[[], bool] = _never_stop,
 ) -> Lockfile:
     """Run every stage the plan flagged, in pipeline order, folding each result
     into a new lockfile. Resumable: a stage that already appears in
@@ -80,15 +90,52 @@ def execute(
     to clear, which is also what makes a retry that turns out to need no
     stage at all (every ``StagePlan`` already satisfied) still clear it: the
     loop never runs, but the check after it does.
+
+    **A33: ``observer`` brackets each stage's own ``apply``.**
+    :attr:`~etsy_listings.engine.run.RunObserver.on_stage_applying` fires just
+    before it, :attr:`~etsy_listings.engine.run.RunObserver.on_stage_applied`
+    just after its result is folded in, and
+    :attr:`~etsy_listings.engine.run.RunObserver.on_stage_failed` once, with
+    the exception's own message, in the same branch that marks the lockfile
+    incomplete -- before the ``raise`` that branch already ended in. Defaults
+    to a silent :class:`~etsy_listings.engine.run.RunObserver` like every
+    other caller of one, so every ``execute`` call that existed before A33
+    is unaffected.
+
+    **``should_stop`` is a graceful pause, not a failure (A33, decision 7's
+    shutdown paragraph).** Checked before each stage that has not started yet
+    -- never inside one, so a stage already running always finishes and
+    records itself exactly as A29 already guarantees. Stopping early leaves
+    ``incomplete`` exactly as it was: unlike a raise, nothing here failed, so
+    no new marker is set; but the plan was not fully carried out either, so an
+    existing marker from an earlier failed run is not cleared -- that only
+    happens once every stage has had its turn. The next ``apply`` of this
+    listing, whenever it comes, simply finds the stages ``should_stop`` skipped
+    still pending, the same way it would after any other pause. Defaults to a
+    callable that never stops, so this is invisible to every caller that
+    predates it.
     """
+    from etsy_listings.engine.run import RunObserver  # noqa: PLC0415 - breaks the import cycle
+
+    watch = observer or RunObserver()
+    listing = planned.plan.listing
     result_lock = lock
     remote = dict(lock.remote)
+    stopped = False
 
     for state in planned.states:
+        if should_stop():
+            stopped = True
+            break
         stage_plan = state.stage_plan
         if not stage_plan.will_run and not stage_plan.changes:
             continue
         stage = state.stage
+        # `on_stage_applying` first: it is what a caller's own `on_event` sink
+        # uses to tag the progress message the very next line emits with this
+        # stage's name (A33, decision 7) -- the other order would emit
+        # "applying render" untagged, before anything knew it was render.
+        watch.on_stage_applying(listing, stage.name)
         ctx.emit(f"applying {stage.name}")
         # `lock.applied`, not `result_lock.applied`: a stage's own applied
         # document is still the one describing the world before this run
@@ -97,14 +144,16 @@ def execute(
         live_lock = lock.model_copy(update={"remote": remote})
         try:
             result = stage.apply(ctx, state.desired, state.applied, state.live, live_lock)
-        except Exception:
+        except Exception as exc:
             record(_stamp(result_lock.marked_incomplete(stage.name)))
+            watch.on_stage_failed(listing, stage.name, str(exc))
             raise
         result_lock = result_lock.fold(stage.name, result)
         remote = {**remote, **result.remote}
         record(_stamp(result_lock))
+        watch.on_stage_applied(listing, stage.name)
 
-    if result_lock.incomplete is not None:
+    if not stopped and result_lock.incomplete is not None:
         result_lock = result_lock.completed()
         record(_stamp(result_lock))
 

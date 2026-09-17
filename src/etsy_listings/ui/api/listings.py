@@ -49,9 +49,11 @@ from etsy_listings.config.listing_validation import (
 )
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.engine.lock import Lockfile
+from etsy_listings.engine.stage import Blocked
 from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.engine.stages.render import RenderApplied, RenderStage, scene_hash
 from etsy_listings.engine.status import (
     ListingLifecycle,
     ListingStatus,
@@ -84,6 +86,7 @@ from etsy_listings.ui.api.schemas import (
     WorkspaceSummary,
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
+from etsy_listings.ui.runs.executor import ContextFactory
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import (
@@ -578,6 +581,54 @@ def rename_listing(target: Existing, body: RenameListingRequest) -> ListingDetai
     if renders.is_dir():
         renders.rename(workspace.renders_dir(new))
     return _detail(workspace, new)
+
+
+def _preview_response(
+    request: Request, target: Target, template: str, colour: str | None
+) -> Response:
+    """A32/A33: the preview a plan run already rendered for this scene, at its
+    *current* hash -- never a path built from ``template``/``colour``
+    directly. Both arrive from the URL, so ``Workspace.preview_file`` (the
+    layout's own security boundary, CLAUDE.md's invariant on this is explicit)
+    is what turns them into a real path, and only once this recomputes the
+    same :func:`~etsy_listings.engine.stages.render.scene_hash` a plan run
+    would right now -- a stale preview from before the last edit must not be
+    served as if it still matched.
+    """
+    workspace = target.workspace
+    factory: ContextFactory = request.app.state.context_factory
+    ctx = factory(workspace, None)
+    lock = Lockfile.read(workspace.lock_file(target.name))
+    applied = lock.parse_applied_for("render", RenderApplied) if lock is not None else None
+    desired = RenderStage().desired(ctx, target.name, applied)
+    if isinstance(desired, Blocked):
+        raise HTTPException(status_code=404, detail="this listing has no render state yet")
+    work = next((w for w in desired.works if w.template == template and w.colour == colour), None)
+    if work is None:
+        where = f"template {template!r}" + (f", colour {colour!r}" if colour is not None else "")
+        raise HTTPException(status_code=404, detail=f"no scene for {where}")
+    digest = scene_hash(desired, work).removeprefix("sha256:")
+    path = workspace.preview_file(target.name, template, colour, digest)
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="no preview rendered yet for this scene")
+    return Response(
+        content=path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-cache"}
+    )
+
+
+@router.get("/{name}/previews/{template}")
+def listing_preview(target: Existing, template: str, request: Request) -> Response:
+    """A ``multiple``/``single``-kind scene: no per-colour photo, so no
+    colour segment (PRD 28's rule, mirrored from ``render_file``)."""
+    return _preview_response(request, target, template, None)
+
+
+@router.get("/{name}/previews/{template}/{colour}")
+def listing_preview_coloured(
+    target: Existing, template: str, colour: str, request: Request
+) -> Response:
+    """A ``colour-matrix``-kind scene: one preview per colour."""
+    return _preview_response(request, target, template, colour)
 
 
 @support_router.get("/api/listing-draft", response_model=ListingDetail)

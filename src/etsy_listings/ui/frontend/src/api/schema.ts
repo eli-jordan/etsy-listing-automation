@@ -302,6 +302,47 @@ export interface paths {
     patch: operations["patch_listing_api_listings__name__patch"];
     trace?: never;
   };
+  "/api/listings/{name}/previews/{template}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Preview
+     * @description A ``multiple``/``single``-kind scene: no per-colour photo, so no
+     *     colour segment (PRD 28's rule, mirrored from ``render_file``).
+     */
+    get: operations["listing_preview_api_listings__name__previews__template__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/previews/{template}/{colour}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Preview Coloured
+     * @description A ``colour-matrix``-kind scene: one preview per colour.
+     */
+    get: operations["listing_preview_coloured_api_listings__name__previews__template___colour__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/listings/{name}/rename": {
     parameters: {
       query?: never;
@@ -356,6 +397,96 @@ export interface paths {
     get: operations["list_pricing_plans_api_pricing_plans_get"];
     put?: never;
     post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Runs
+     * @description ``listing`` narrows to that listing's current run (active, or finished
+     *     and not yet superseded -- decision 7's retention). Omitted, every run this
+     *     process still remembers, for a future workspace-wide view.
+     */
+    get: operations["list_runs_api_runs_get"];
+    put?: never;
+    /**
+     * Create Run
+     * @description A ``409`` names the run already holding one of these listings, so the
+     *     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
+     *     retrying into the same refusal.
+     */
+    post: operations["create_run_api_runs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/runs/{run_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Run */
+    get: operations["get_run_api_runs__run_id__get"];
+    put?: never;
+    post?: never;
+    /**
+     * Cancel Run
+     * @description Cancel a queued or running **plan**. An ``apply`` is refused
+     *     unconditionally (decision 8: Back leaves, it never cancels one), and so is
+     *     a run that has already finished.
+     */
+    delete: operations["cancel_run_api_runs__run_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/runs/{run_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Stream Events
+     * @description ``text/event-stream`` over this run's own event buffer -- every event
+     *     already recorded past ``Last-Event-ID``, then whatever the worker thread
+     *     appends next, until the run reaches a terminal phase.
+     */
+    get: operations["stream_events_api_runs__run_id__events_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/runs/{run_id}/seen": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /** Mark Seen */
+    post: operations["mark_seen_api_runs__run_id__seen_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -622,6 +753,17 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    /** ActionDTO */
+    ActionDTO: {
+      /** Description */
+      description: string;
+      /** Inputs */
+      inputs: string[];
+      /** Missing Outputs */
+      missing_outputs: string[];
+      /** Outputs */
+      outputs: string[];
+    };
     /** AssignKindRequest */
     AssignKindRequest: {
       /**
@@ -755,6 +897,20 @@ export interface components {
       /** Name */
       name: string;
     };
+    /** CreateRunRequest */
+    CreateRunRequest: {
+      /** Expect */
+      expect?: {
+        [key: string]: string;
+      } | null;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "plan" | "apply";
+      /** Listings */
+      listings: string[];
+    };
     /**
      * DesignSummary
      * @description One entry in the calibrator's test-design library (A19).
@@ -810,6 +966,19 @@ export interface components {
         [key: string]: unknown;
       };
     };
+    /** DriftDTO */
+    DriftDTO: {
+      /** Last Applied */
+      last_applied: unknown;
+      /** Last Applied Label */
+      last_applied_label?: string | null;
+      /** Live */
+      live: unknown;
+      /** Live Label */
+      live_label?: string | null;
+      /** Path */
+      path: string;
+    };
     /** EtsyListingConfig */
     EtsyListingConfig: {
       /**
@@ -853,6 +1022,20 @@ export interface components {
       /** Title */
       title: string;
     };
+    /** FieldChangeDTO */
+    FieldChangeDTO: {
+      /** After */
+      after: unknown;
+      /** Before */
+      before: unknown;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "field";
+      /** Path */
+      path: string;
+    };
     /** GarmentProfileSummary */
     GarmentProfileSummary: {
       /** Colors */
@@ -894,6 +1077,22 @@ export interface components {
       block: number;
       /** Warn */
       warn: number;
+    };
+    /** ListChangeDTO */
+    ListChangeDTO: {
+      /** Added */
+      added: unknown[];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "list";
+      /** Path */
+      path: string;
+      /** Removed */
+      removed: unknown[];
+      /** Reordered */
+      reordered: boolean;
     };
     /** ListingDesignSummary */
     ListingDesignSummary: {
@@ -994,6 +1193,44 @@ export interface components {
         | "inactive"
         | "expired";
     };
+    /**
+     * ListingFailedEvent
+     * @description The run's ``RunObserver.on_failure`` twin. ``message`` is the
+     *     :class:`~etsy_listings.errors.UserFacingError`'s own text, word for word
+     *     (decision 5) -- never the generic internal-error text, which belongs to a
+     *     :class:`PhaseEvent` naming the whole run ``failed`` instead, since a
+     *     defect is not about any one listing. ``stale_plan`` is set only when the
+     *     error was a :class:`~etsy_listings.engine.run.StalePlanError`.
+     */
+    ListingFailedEvent: {
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      /** Message */
+      message: string;
+      stale_plan?: components["schemas"]["PlanDTO"] | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "listing_failed";
+    };
+    /** ListingPlannedEvent */
+    ListingPlannedEvent: {
+      /** Fingerprint */
+      fingerprint: string;
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      plan: components["schemas"]["PlanDTO"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "listing_planned";
+    };
     /** ListingSummary */
     ListingSummary: {
       /** Colour Count */
@@ -1027,6 +1264,20 @@ export interface components {
         | "pending-retire"
         | "inactive"
         | "expired";
+    };
+    /** MediaChangeDTO */
+    MediaChangeDTO: {
+      /** After */
+      after: string | null;
+      /** Before */
+      before: string | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "media";
+      /** Rank */
+      rank: number;
     };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
@@ -1090,6 +1341,36 @@ export interface components {
       shade: components["schemas"]["ShadeConfig"];
     };
     /**
+     * PhaseEvent
+     * @description The run (or one of the two run kinds) moved to a new phase. Always the
+     *     first event of a run and always its last, whichever phase that turns out
+     *     to be (A33, decision 7).
+     */
+    PhaseEvent: {
+      /** Id */
+      id: number;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase:
+        | "queued"
+        | "planning"
+        | "planned"
+        | "previewing"
+        | "ready"
+        | "applying"
+        | "applied"
+        | "failed"
+        | "stale"
+        | "cancelled";
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "phase";
+    };
+    /**
      * Placement
      * @description One garment within a ``multiple``-kind scene.
      */
@@ -1106,12 +1387,55 @@ export interface components {
       /** Colour */
       colour: string;
     };
+    /** PlanDTO */
+    PlanDTO: {
+      /** Etsy Listing Id */
+      etsy_listing_id: number | null;
+      /** Is Live */
+      is_live: boolean;
+      /** Listing */
+      listing: string;
+      /** Stage Plans */
+      stage_plans: components["schemas"]["StagePlanDTO"][];
+    };
     /** Point */
     Point: {
       /** X */
       x: number;
       /** Y */
       y: number;
+    };
+    /** PreviewRenderedEvent */
+    PreviewRenderedEvent: {
+      /** Colour */
+      colour: string | null;
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      /** Template */
+      template: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "preview_rendered";
+    };
+    /** PriceChangeDTO */
+    PriceChangeDTO: {
+      /** After */
+      after: string;
+      /** Before */
+      before: string;
+      /** Color */
+      color?: string | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "price";
+      /** Size */
+      size: string;
     };
     /** PricingPlanSummary */
     PricingPlanSummary: {
@@ -1124,6 +1448,32 @@ export interface components {
       /** Ref */
       ref: string;
     };
+    /**
+     * ProgressEvent
+     * @description ``ctx.emit``'s ``Event``, tagged with whatever stage
+     *     :class:`StageApplyingEvent` last named for this listing -- no stage
+     *     changes how it reports progress (A33, decision 7).
+     */
+    ProgressEvent: {
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      /** Message */
+      message: string;
+      /** Stage */
+      stage: string | null;
+      /**
+       * Swatches
+       * @default []
+       */
+      swatches: [number, number, number][];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "progress";
+    };
     /** RenameListingRequest */
     RenameListingRequest: {
       /** New Name */
@@ -1135,6 +1485,81 @@ export interface components {
       amount: string;
       /** Size */
       size: string;
+    };
+    /** RunDetail */
+    RunDetail: {
+      /** Events */
+      events: (
+        | components["schemas"]["PhaseEvent"]
+        | components["schemas"]["StageCheckingEvent"]
+        | components["schemas"]["StagePlannedEvent"]
+        | components["schemas"]["ListingPlannedEvent"]
+        | components["schemas"]["PreviewRenderedEvent"]
+        | components["schemas"]["StageApplyingEvent"]
+        | components["schemas"]["ProgressEvent"]
+        | components["schemas"]["StageAppliedEvent"]
+        | components["schemas"]["StageFailedEvent"]
+        | components["schemas"]["ListingFailedEvent"]
+      )[];
+      /** Id */
+      id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "plan" | "apply";
+      /** Listings */
+      listings: string[];
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase:
+        | "queued"
+        | "planning"
+        | "planned"
+        | "previewing"
+        | "ready"
+        | "applying"
+        | "applied"
+        | "failed"
+        | "stale"
+        | "cancelled";
+      /** Seen */
+      seen: boolean;
+    };
+    /**
+     * RunSummary
+     * @description Enough to show a page-head control (decision 8's table) or a row in a
+     *     future batch view -- everything except the event log itself.
+     */
+    RunSummary: {
+      /** Id */
+      id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "plan" | "apply";
+      /** Listings */
+      listings: string[];
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase:
+        | "queued"
+        | "planning"
+        | "planned"
+        | "previewing"
+        | "ready"
+        | "applying"
+        | "applied"
+        | "failed"
+        | "stale"
+        | "cancelled";
+      /** Seen */
+      seen: boolean;
     };
     /**
      * ShadeConfig
@@ -1231,6 +1656,112 @@ export interface components {
        *     }
        */
       shade: components["schemas"]["ShadeConfig"];
+    };
+    /** StageAppliedEvent */
+    StageAppliedEvent: {
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      /** Stage */
+      stage: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "stage_applied";
+    };
+    /** StageApplyingEvent */
+    StageApplyingEvent: {
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      /** Stage */
+      stage: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "stage_applying";
+    };
+    /** StageCheckingEvent */
+    StageCheckingEvent: {
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      /** Stage */
+      stage: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "stage_checking";
+    };
+    /** StageFailedEvent */
+    StageFailedEvent: {
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      /** Message */
+      message: string;
+      /** Stage */
+      stage: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "stage_failed";
+    };
+    /** StagePlanDTO */
+    StagePlanDTO: {
+      /**
+       * Actions
+       * @default []
+       */
+      actions: components["schemas"]["ActionDTO"][];
+      /** Blocked */
+      blocked?: string | null;
+      /**
+       * Changes
+       * @default []
+       */
+      changes: (
+        | components["schemas"]["FieldChangeDTO"]
+        | components["schemas"]["ListChangeDTO"]
+        | components["schemas"]["PriceChangeDTO"]
+        | components["schemas"]["MediaChangeDTO"]
+      )[];
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Reason */
+      reason?: string | null;
+      /** Snapshot */
+      snapshot?: {
+        [key: string]: unknown;
+      } | null;
+      /** Stage */
+      stage: string;
+      /** Will Run */
+      will_run: boolean;
+    };
+    /** StagePlannedEvent */
+    StagePlannedEvent: {
+      /** Id */
+      id: number;
+      /** Listing */
+      listing: string;
+      stage_plan: components["schemas"]["StagePlanDTO"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "stage_planned";
     };
     /**
      * SwatchResponse
@@ -1790,6 +2321,71 @@ export interface operations {
       };
     };
   };
+  listing_preview_api_listings__name__previews__template__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template: string;
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_preview_coloured_api_listings__name__previews__template___colour__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template: string;
+        colour: string;
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   rename_listing_api_listings__name__rename_post: {
     parameters: {
       query?: never;
@@ -1843,6 +2439,194 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["PricingPlanSummary"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_runs_api_runs_get: {
+    parameters: {
+      query?: {
+        listing?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunSummary"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_run_api_runs_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateRunRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunSummary"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_run_api_runs__run_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cancel_run_api_runs__run_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunSummary"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stream_events_api_runs__run_id__events_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  mark_seen_api_runs__run_id__seen_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["RunSummary"];
         };
       };
       /** @description Validation Error */
