@@ -75,7 +75,7 @@ describe("App", () => {
 
     render(<App />);
     await waitFor(() => expect(header().getByText("flat-lay-01")).toBeInTheDocument());
-    expect(screen.getByRole("heading", { name: "Mockup calibrator" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mockup Templates" })).toBeInTheDocument();
   });
 
   it("shows the open template's calibration state and contents in the header", async () => {

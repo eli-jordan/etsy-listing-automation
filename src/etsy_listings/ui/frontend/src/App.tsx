@@ -153,7 +153,7 @@ export function App() {
   return (
     <div className="app">
       <header className="app__header">
-        <h1 className="app__title">Mockup calibrator</h1>
+        <h1 className="app__title">Mockup Templates</h1>
         {selected && (
           <>
             <span className="app__crumb-sep">/</span>

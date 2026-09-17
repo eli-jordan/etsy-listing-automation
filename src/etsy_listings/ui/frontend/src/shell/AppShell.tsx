@@ -5,7 +5,7 @@ import { getWorkspace } from "../api/listings";
 /**
  * The app shell (phase 5): a fixed sidebar (brand, nav, a placeholder Setup
  * entry) around whatever page the router picks, from the design mockup's
- * app-shell markup (`Main.dc.html`). The Dashboard/Listings/Mockup templates
+ * app-shell markup (`Main.dc.html`). The Dashboard/Listings/Mockup Templates
  * routes are declared by the caller (`main.tsx`) as child routes rendered
  * into `<Outlet/>` -- this component only ever draws the chrome around them.
  */
@@ -102,7 +102,7 @@ export function AppShell() {
               <rect x="7.5" y="7.5" width="13.5" height="13.5" rx="2" />
               <path d="M3.5 15.5v-10a2 2 0 0 1 2-2h10" />
             </svg>
-            Mockup templates
+            Mockup Templates
           </NavLink>
         </nav>
 

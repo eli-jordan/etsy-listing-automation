@@ -154,7 +154,7 @@ def _overlay_space(page) -> list[int]:  # noqa: ANN001
 
 def test_calibrator_loads_the_workspace_templates(page) -> None:  # noqa: ANN001
     page.wait_for_selector(PREVIEW_IMAGE)
-    assert page.locator("h1").inner_text() == "Mockup calibrator"
+    assert page.locator("h1").inner_text() == "Mockup Templates"
     listed = page.locator(".template-rail__item").evaluate_all(
         "rows => rows.map(r => r.dataset.template)"
     )
