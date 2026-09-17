@@ -279,3 +279,52 @@ def test_a_price_below_cost_blocks_with_no_run(root, catalog, printify) -> None:
     # check shipped invisible, under a plan reading "No changes."
     assert "below" in (stage_plan.blocked or "").lower()
     assert stage_plan.reason is None
+
+
+def test_the_snapshot_names_every_below_cost_variant(root, catalog, printify) -> None:
+    """A30: the price table's red marker reads this, not a second copy of
+    `_below_cost`'s own rule."""
+    ctx = _ctx(root, catalog, printify)
+    lock = _apply(ctx, a_lock())
+    edit_listing(
+        root,
+        prices={
+            "S": "1 NOK",
+            "M": "1 NOK",
+            "L": "1 NOK",
+            "XL": "1 NOK",
+            "XXL": "1 NOK",
+            "XXXL": "1 NOK",
+        },
+    )
+
+    stage_plan = _publish_plan(ctx, lock)
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert len(snapshot.below_cost) == len(COLOURS) * len(SIZES)
+    row = next(r for r in snapshot.below_cost if r.colour == "black" and r.size == "S")
+    assert str(row.price) == "1 NOK"
+    assert str(row.cost) == "13.04 USD"
+
+
+def test_a_stage_that_will_run_has_no_below_cost_rows(root, catalog, printify) -> None:
+    ctx = _ctx(root, catalog, printify)
+    lock = _apply(ctx, a_lock())
+
+    edit_listing(
+        root,
+        prices={
+            "S": "399 NOK",
+            "M": "399 NOK",
+            "L": "399 NOK",
+            "XL": "409 NOK",
+            "XXL": "419 NOK",
+            "XXXL": "429 NOK",
+        },
+    )
+
+    stage_plan = _publish_plan(ctx, lock)
+
+    assert stage_plan.snapshot is not None
+    assert stage_plan.snapshot.below_cost == ()

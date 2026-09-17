@@ -44,6 +44,12 @@ class AppliedVariant(BaseModel):
 
     id: int
     price: int
+    colour_slug: str
+    """Which colour this variant id sold as, at the time it was applied
+    (A30). Carried on the variant itself, rather than looked up from this
+    run's catalog resolution, because a colour Printify has since discontinued
+    (PRD 46) would otherwise have no name to be reported *removed* by --
+    exactly the run a removal needs to be visible on."""
 
 
 class AppliedPrintArea(BaseModel):
@@ -173,7 +179,7 @@ class PrintifyProductDesired:
             print_provider_id=self.print_provider_id,
             position=self.position,
             variants=[
-                AppliedVariant(id=variant.id, price=variant.price)
+                AppliedVariant(id=variant.id, price=variant.price, colour_slug=variant.colour_slug)
                 for variant in sorted(self.variants, key=lambda v: v.id)
             ],
             print_areas=sorted(

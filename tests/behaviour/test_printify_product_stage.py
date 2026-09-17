@@ -178,6 +178,70 @@ def test_prices_reach_printify_as_minor_units_of_the_shop_currency(root, catalog
     }
 
 
+# ------------------------------------------------------------------ snapshot
+
+
+def test_the_snapshot_names_every_desired_variant(root, catalog, printify) -> None:
+    """A30: the before/after review needs the whole matrix, colour and size
+    named, not the raw variant ids `apply` sends."""
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert len(snapshot.desired) == 4 * len(SIZES), "the listing's own four colours, every size"
+    assert snapshot.live == (), "nothing has been created yet"
+    row = next(r for r in snapshot.desired if r.colour == "black" and r.size == "S")
+    assert str(row.price) == "349 NOK"
+
+
+def test_the_snapshot_names_every_live_variant_once_the_product_exists(
+    root, catalog, printify
+) -> None:
+    ctx = _ctx(root, catalog, printify)
+    lock = _apply(ctx, a_lock())
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert len(snapshot.live) == 4 * len(SIZES)
+    row = next(r for r in snapshot.live if r.colour == "black" and r.size == "S")
+    assert str(row.price) == "349 NOK"
+
+
+def test_the_snapshot_skips_a_live_variant_the_current_resolution_dropped(
+    root, catalog, printify
+) -> None:
+    """A garment change is blocked (PRD 37), but dropping a *colour* is not
+    -- so a live variant the current resolution no longer names is real, and
+    the only thing to do with it is leave it off rather than guess a name."""
+    ctx = _ctx(root, catalog, printify)
+    lock = _apply(ctx, a_lock())
+
+    edit_listing(
+        root,
+        colors=["black", "blue-jean", "ivory"],
+        media=[{"template": "flat-lay-01", "colour": c} for c in ("black", "blue-jean", "ivory")],
+    )
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert len(snapshot.desired) == 3 * len(SIZES)
+    assert len(snapshot.live) == 3 * len(SIZES), "moss is still live but no longer named here"
+    assert all(row.colour != "moss" for row in snapshot.live)
+
+
+def test_a_blocked_stage_has_no_snapshot(workspace_root: Path, catalog, printify) -> None:
+    """No desired document exists for a blocked stage to be a snapshot of --
+    it must not fabricate one from whatever it had before refusing."""
+    stage_plan = _stage_plan(_ctx(workspace_root, catalog, printify), a_lock())
+
+    assert stage_plan.blocked is not None
+    assert stage_plan.snapshot is None
+
+
 def test_the_design_is_uploaded_once_and_placed_centred(root, catalog, printify) -> None:
     _apply(_ctx(root, catalog, printify), a_lock())
 

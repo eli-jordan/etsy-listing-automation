@@ -35,6 +35,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from pydantic import BaseModel, ConfigDict
+
 from etsy_listings.clients.printify.models import (
     PlacedImage,
     Placeholder,
@@ -47,6 +49,7 @@ from etsy_listings.clients.printify.resolve import (
     resolve_print_provider,
     resolve_variants,
 )
+from etsy_listings.config.money import Money
 from etsy_listings.engine.change import Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
@@ -63,6 +66,7 @@ from etsy_listings.engine.stages.product_document import (
     PricedVariant,
     PrintifyProductDesired,
     check_garment_unchanged,
+    money,
 )
 
 PRODUCT_ID_KEY = "printify_product_id"
@@ -71,6 +75,27 @@ UPLOAD_IDS_KEY = "printify_upload_ids"
 maps a design's content hash to the upload id Printify gave it -- keyed on
 content, not on artwork name, because uploads are content-addressed and a
 renamed file is the same upload."""
+
+
+class ProductVariantSnapshot(BaseModel):
+    """One cell of the variant matrix, named rather than left as an id (A30)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    size: str
+    colour: str
+    price: Money
+
+
+class ProductSnapshot(BaseModel):
+    """Domain facts for the before/after review (A30): every variant on each
+    side, unchanged ones included -- a ``Plan`` carries only what changed, and
+    the comparison needs the whole matrix to draw a price table from."""
+
+    model_config = ConfigDict(frozen=True)
+
+    desired: tuple[ProductVariantSnapshot, ...]
+    live: tuple[ProductVariantSnapshot, ...]
 
 
 NO_SHOP_BLOCKED = Blocked(
@@ -185,6 +210,34 @@ class PrintifyProductStage:
             actions=comparison.actions,
         )
 
+    def snapshot(self, desired: PrintifyProductDesired, live: Product | None) -> ProductSnapshot:
+        """Every variant, both sides, named (A30).
+
+        The id -> (colour, size) lookup a live variant needs is
+        ``desired.variants``, this run's own resolved matrix -- the same one
+        ``apply`` sends -- since :class:`~etsy_listings.clients.printify.models.ProductVariant`
+        carries no colour or size of its own. A live variant whose id has
+        fallen out of that resolution (a garment change would have already
+        been blocked; a discontinued cell, PRD 46) has nothing to be named by
+        and is left off the live side rather than guessed at.
+        """
+        lookup = {variant.id: variant for variant in desired.variants}
+        desired_rows = tuple(
+            _variant_row(variant.colour_slug, variant.size, variant.price, desired.currency)
+            for variant in sorted(desired.variants, key=lambda v: (v.colour_slug, v.size))
+        )
+        live_rows: tuple[ProductVariantSnapshot, ...] = ()
+        if live is not None:
+            named = sorted(
+                (v for v in live.variants if v.is_enabled and v.id in lookup),
+                key=lambda v: (lookup[v.id].colour_slug, lookup[v.id].size),
+            )
+            live_rows = tuple(
+                _variant_row(lookup[v.id].colour_slug, lookup[v.id].size, v.price, desired.currency)
+                for v in named
+            )
+        return ProductSnapshot(desired=desired_rows, live=live_rows)
+
     def apply(
         self,
         ctx: RunContext,
@@ -244,6 +297,10 @@ class PrintifyProductStage:
 
 def _shop_id(ctx: RunContext) -> int:
     return ctx.workspace.defaults.printify.require_shop_id()
+
+
+def _variant_row(colour: str, size: str, minor_units: int, currency: str) -> ProductVariantSnapshot:
+    return ProductVariantSnapshot(colour=colour, size=size, price=money(minor_units, currency))
 
 
 @dataclass(frozen=True)

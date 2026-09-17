@@ -15,7 +15,7 @@ from pathlib import Path
 
 from etsy_listings.clients.printify.models import Product, ProductVariant
 from etsy_listings.config.money import Money
-from etsy_listings.engine.change import Drift, FieldChange, PriceChange
+from etsy_listings.engine.change import Drift, FieldChange, ListChange, PriceChange
 from etsy_listings.engine.stages.placement import ArtworkGroup
 from etsy_listings.engine.stages.product_diff import compare
 from etsy_listings.engine.stages.product_document import (
@@ -154,6 +154,51 @@ def test_adding_a_variant_reports_the_count_not_a_price() -> None:
 
     assert FieldChange(path="variants", before=1, after=2) in changes
     assert not any(isinstance(change, PriceChange) for change in changes)
+
+
+# ------------------------------------------------------------ colour changes
+
+
+NAVY_M = PricedVariant(id=3, colour_slug="navy", size="M", price=34900)
+
+
+def test_a_new_colour_is_reported_by_name() -> None:
+    """A30, decision 4: the diff names the colour rather than only a count,
+    so the UI does not have to diff two colour lists itself to ring it."""
+    was = _desired(BLACK_M).applied()
+    desired = _desired(BLACK_M, NAVY_M)
+
+    changes = compare(desired, was, _live(desired)).changes
+
+    assert ListChange(path="colors", added=("navy",), removed=()) in changes
+
+
+def test_a_removed_colour_is_reported_by_name() -> None:
+    was = _desired(BLACK_M, NAVY_M).applied()
+    desired = _desired(BLACK_M)
+
+    changes = compare(desired, was, _live(desired)).changes
+
+    assert ListChange(path="colors", added=(), removed=("navy",)) in changes
+
+
+def test_adding_a_size_in_an_existing_colour_is_not_a_colour_change() -> None:
+    """Two sizes, one colour: the variant count changes, the colour set does
+    not -- the two are genuinely different questions."""
+    was = _desired(BLACK_M).applied()
+    desired = _desired(BLACK_M, BLACK_S)
+
+    changes = compare(desired, was, _live(desired)).changes
+
+    assert not any(isinstance(change, ListChange) and change.path == "colors" for change in changes)
+
+
+def test_an_unchanged_colour_set_is_not_a_change() -> None:
+    desired = _desired(BLACK_M, BLACK_S)
+
+    changes = compare(desired, desired.applied(), _live(desired)).changes
+
+    assert not any(isinstance(change, ListChange) and change.path == "colors" for change in changes)
 
 
 # ------------------------------------------------------------- print areas
