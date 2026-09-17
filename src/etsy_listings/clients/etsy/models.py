@@ -109,6 +109,12 @@ class ListingImage(BaseModel):
     listing_image_id: int
     rank: int | None = None
     alt_text: str | None = None
+    url_570xN: str | None = None
+    """A thumbnail up to 570px wide, variable height -- Etsy's own field name
+    (the API's `ListingImage` schema). What the deploy review's "On Etsy now"
+    column shows (A30): the URL a draft or a hand-uploaded image already has,
+    with no local render to fall back on for either. Absent unless the read
+    asked for images (`include_images=True`), same as `rank`."""
 
 
 class VariationImageLink(BaseModel):

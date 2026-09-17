@@ -181,7 +181,12 @@ class FakeEtsyListingClient:
     ) -> ListingImage:
         self.uploads.append(contents)
         self._next_image_id += 1
-        image = ListingImage(listing_image_id=self._next_image_id, rank=rank, alt_text=alt_text)
+        image = ListingImage(
+            listing_image_id=self._next_image_id,
+            rank=rank,
+            alt_text=alt_text,
+            url_570xN=f"https://fake-etsy.test/{self._next_image_id}_570xN.jpg",
+        )
         images = self._images.setdefault(listing_id, [])
         if overwrite and listing_image_id is not None:
             for index, existing in enumerate(images):

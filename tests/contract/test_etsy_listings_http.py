@@ -169,7 +169,14 @@ def test_includes_images_asks_for_the_images_param() -> None:
             json={
                 **LISTING_PAYLOAD,
                 "images": [
-                    {"listing_image_id": 8503331196, "rank": 1, "alt_text": "Black, flat lay"},
+                    {
+                        "listing_image_id": 8503331196,
+                        "rank": 1,
+                        "alt_text": "Black, flat lay",
+                        "url_570xN": (
+                            "https://i.etsystatic.com/12345678/r/il/abcdef/1/il_570xN.8503331196.jpg"
+                        ),
+                    },
                     {"listing_image_id": 8503331086, "rank": 2, "alt_text": ""},
                 ],
             },
@@ -183,6 +190,11 @@ def test_includes_images_asks_for_the_images_param() -> None:
         (8503331196, 1),
         (8503331086, 2),
     ]
+    # A30: the deploy review's "On Etsy now" column reads this for a draft.
+    assert listing.images[0].url_570xN == (
+        "https://i.etsystatic.com/12345678/r/il/abcdef/1/il_570xN.8503331196.jpg"
+    )
+    assert listing.images[1].url_570xN is None, "absent on this image, same as any other field"
 
 
 def test_a_listing_with_no_images_requested_has_an_empty_tuple() -> None:
