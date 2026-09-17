@@ -14,6 +14,7 @@ from etsy_listings.clients.etsy.models import ReturnPolicy, ShippingProfile
 from etsy_listings.clients.printify.fakes import FakePrintifyClient
 from etsy_listings.config.listing_validation import DELETED_ON_PUBLISHED, RETIRED_ON_NEVER_LIVE
 from etsy_listings.engine.lock import Lockfile
+from etsy_listings.engine.plan import build_plan
 from etsy_listings.engine.run import apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.etsy_listing import EtsyListingStage
@@ -82,6 +83,36 @@ def _blocked_text(outcome) -> str:
     blocked = [sp.blocked for sp in outcome.planned.plan.stage_plans if sp.blocked]
     assert blocked
     return blocked[0]
+
+
+class TestPlanIsLive:
+    """``Plan.is_live`` is the GET ``published_on_etsy`` already paid for,
+    not a lockfile key no stage writes."""
+
+    def _planned(self, root: Path, *, state: str | None, etsy_id: int | None):
+        lock = _lock(etsy_listing_id=etsy_id, product_id=PRODUCT_ID)
+        etsy = _etsy()
+        if etsy_id is not None and state is not None:
+            etsy.seed_listing(etsy_id, shop_id=ETSY_SHOP_ID, state=state)
+        return build_plan(a_context(root, etsy=etsy), LISTING, lock, [])
+
+    def test_active_on_etsy_is_live(self, workspace_root: Path) -> None:
+        planned = self._planned(_ready(workspace_root), state="active", etsy_id=ETSY_LISTING_ID)
+        assert planned.plan.is_live
+        assert planned.plan.etsy_listing_id == ETSY_LISTING_ID
+
+    def test_inactive_on_etsy_is_still_live(self, workspace_root: Path) -> None:
+        """Left draft -- buyers have seen it. Same fact as ``is_live_etsy_state``."""
+        planned = self._planned(_ready(workspace_root), state="inactive", etsy_id=ETSY_LISTING_ID)
+        assert planned.plan.is_live
+
+    def test_a_draft_on_etsy_is_not_live(self, workspace_root: Path) -> None:
+        planned = self._planned(_ready(workspace_root), state="draft", etsy_id=ETSY_LISTING_ID)
+        assert not planned.plan.is_live
+
+    def test_no_etsy_id_is_not_live(self, workspace_root: Path) -> None:
+        planned = self._planned(_ready(workspace_root), state=None, etsy_id=None)
+        assert not planned.plan.is_live
 
 
 class TestWrongVerb:

@@ -36,6 +36,12 @@ blocked plan all happen in :func:`build_plan`. Each was written out once per
 stage until Phase 3, and each had already been written two different ways with
 only two stages in the pipeline -- which is what a wide protocol costs when
 the pipeline is about to double.
+
+Listing-level lifecycle (PRD 61–67) -- which pipeline to walk, the published
+fact :attr:`~etsy_listings.engine.change.Plan.is_live` is filled from, wipe
+after retract, consume ``renew`` -- lives in ``lifecycle``, not split across
+``plan`` and ``run``. Render previews (A32) live in ``preview``, so the
+executor and the listings GET do not each peek at a ``RenderSnapshot``.
 """
 
 from etsy_listings.engine.apply import execute
@@ -64,6 +70,7 @@ from etsy_listings.engine.lock import (
     to_workspace_relative_posix,
 )
 from etsy_listings.engine.plan import PlannedRun, StageState, build_plan
+from etsy_listings.engine.preview import PreviewLookup, lookup_preview, needs_preview
 from etsy_listings.engine.run import (
     FailureSink,
     ListingOutcome,
@@ -101,6 +108,9 @@ __all__ = [
     "plan_listings",
     "apply_listings",
     "preview_listing",
+    "needs_preview",
+    "lookup_preview",
+    "PreviewLookup",
     "RunReport",
     "ListingOutcome",
     "PlannedSink",

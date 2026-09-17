@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from etsy_listings.engine.change import Plan, StagePlan
 from etsy_listings.engine.context import Event, EventSink, RunContext
 from etsy_listings.engine.plan import PlannedRun
+from etsy_listings.engine.preview import needs_preview
 from etsy_listings.engine.run import (
     RunObserver,
     StalePlanError,
@@ -41,9 +42,8 @@ from etsy_listings.engine.run import (
     plan_listings,
     preview_listing,
 )
-from etsy_listings.engine.stage import AnyStage, Blocked
+from etsy_listings.engine.stage import AnyStage
 from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.render import RenderSnapshot, RenderStage
 from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 from etsy_listings.ui.runs.events import (
     TERMINAL_PHASES,
@@ -70,21 +70,6 @@ ContextFactory = Callable[[Workspace, EventSink | None], RunContext]
 default every real server uses; a test wires one to in-memory fakes instead,
 by swapping this one callable -- nothing else here knows how a client is
 assembled."""
-
-
-def _needs_preview(planned: PlannedRun) -> bool:
-    """Whether this listing's plan has a scene worth spending a preview
-    render on -- ``RenderStage.snapshot``'s own ``stale``/``missing`` states,
-    minus whatever already has one (A32's ``preview`` field)."""
-    render_state = next((s for s in planned.states if s.stage.name == RenderStage.name), None)
-    if render_state is None or isinstance(render_state.desired, Blocked):
-        return False
-    snapshot = render_state.stage_plan.snapshot
-    if not isinstance(snapshot, RenderSnapshot):
-        return False
-    return any(
-        scene.state in ("stale", "missing") and not scene.preview for scene in snapshot.scenes
-    )
 
 
 @dataclass
@@ -214,7 +199,7 @@ class RunExecutor:
         run.transition("planned")
 
         needing_preview = {
-            listing: result for listing, result in planned.items() if _needs_preview(result)
+            listing: result for listing, result in planned.items() if needs_preview(result)
         }
         if needing_preview:
             run.transition("previewing")

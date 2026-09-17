@@ -272,7 +272,7 @@ def test_a_retract_only_plan_run_never_enters_previewing(
 ) -> None:
     """A ``deleted`` listing's plan walks the retract stage only (PRD
     61-67) -- there is no render state to ask for a preview, so
-    ``_needs_preview`` must answer false rather than raising."""
+    ``needs_preview`` must answer false rather than raising."""
     from tests.support.builders import edit_listing
 
     edit_listing(workspace_root, LISTING, lifecycle="deleted")
