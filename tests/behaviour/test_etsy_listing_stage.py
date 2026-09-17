@@ -343,6 +343,8 @@ def test_the_snapshot_names_the_desired_side(root: Path, etsy) -> None:
     snapshot = stage_plan.snapshot
     assert snapshot is not None
     assert snapshot.desired.title == "Take A Hike Tee"
+    assert snapshot.desired.description == "A retro sunset."
+    assert snapshot.desired.materials == ("cotton",)
     assert snapshot.desired.shipping_profile == "NOK standard tee"
     assert snapshot.live is None, "no Etsy id at all yet -- not on Etsy"
 
@@ -357,6 +359,8 @@ def test_the_snapshot_names_the_live_side_once_a_listing_exists(root: Path, etsy
     assert snapshot is not None
     assert snapshot.live is not None
     assert snapshot.live.title == "Take A Hike Tee"
+    assert snapshot.live.description == "A retro sunset."
+    assert snapshot.live.materials == ("cotton",)
     assert snapshot.live.shipping_profile == "NOK standard tee"
 
 

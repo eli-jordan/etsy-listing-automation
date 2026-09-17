@@ -121,7 +121,9 @@ export interface PublishSnapshot {
 /** `engine/stages/etsy_listing.py`'s `EtsyListingSnapshot`/`EtsyListingFacts`. */
 export interface EtsyListingFacts {
   title: string | null;
+  description: string | null;
   tags: string[];
+  materials: string[];
   shop_section: string | null;
   shipping_profile: string | null;
 }

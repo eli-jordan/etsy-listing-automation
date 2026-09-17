@@ -3573,6 +3573,13 @@ table.listings tbody tr:last-child td {
   font-weight: 600;
   line-height: 1.35;
 }
+.dv-description {
+  font-size: 13.5px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  max-height: 8em;
+  overflow-y: auto;
+}
 .dv-price {
   font-size: 20px;
   font-weight: 700;

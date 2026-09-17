@@ -65,8 +65,22 @@ function detail(): ListingDetail {
 }
 
 const ETSY_LISTING_SNAPSHOT: EtsyListingSnapshot = {
-  live: { title: "Old Title", tags: ["a"], shop_section: null, shipping_profile: null },
-  desired: { title: "New Title", tags: ["a", "b"], shop_section: null, shipping_profile: null },
+  live: {
+    title: "Old Title",
+    description: "Old description.",
+    tags: ["a"],
+    materials: ["cotton"],
+    shop_section: null,
+    shipping_profile: null,
+  },
+  desired: {
+    title: "New Title",
+    description: "New description.",
+    tags: ["a", "b"],
+    materials: ["cotton"],
+    shop_section: null,
+    shipping_profile: null,
+  },
 };
 
 describe("ComparisonView", () => {

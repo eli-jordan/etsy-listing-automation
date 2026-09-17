@@ -126,7 +126,7 @@ desired document, has `None`.
 | `render` | per scene: `{scene, template, colour?, state: cached \| stale \| missing, preview: bool}` | Only it knows which scenes will re-render |
 | `printify_product` | `desired` and `live` variants: `{size, colour, price}` | Variant id → size/colour needs the resolved matrix, which only it holds |
 | `publish` | `below_cost: [{size, colour, price, cost}]` | Uses its own `_below_cost`, so the price table's red marker is not a second copy of the rule |
-| `etsy_listing` | `desired` and `live`: `title`, `tags`, `shop_section`, `shipping_profile` | Already holds both documents |
+| `etsy_listing` | `desired` and `live`: `title`, `description`, `tags`, `materials`, `shop_section`, `shipping_profile` | Already holds both documents |
 | `etsy_media` | `desired: [{rank, ref, file}]`, `live: [{rank, image_id, ref?, url}]` | `ref?` maps a live id back through `lock.remote`'s image ids, the way A27 already does |
 
 The frontend turns these facts into the two columns, the price table and the
@@ -162,7 +162,10 @@ place of the raw id when one is present, which improves `plan` in the
 terminal at no extra cost.
 
 The title's word-level marking still formats one `FieldChange`'s own before
-and after and compares nothing else, as the spec already argues.
+and after and compares nothing else, as the spec already argues. Description
+reuses the same word-level marking (added post-spec: the comparison originally
+had no block for it at all, so a pending description edit showed no
+before/after in the review despite genuinely changing what Apply would send).
 
 ### 5. Apply refuses a plan nobody reviewed — A31
 

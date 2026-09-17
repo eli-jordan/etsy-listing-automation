@@ -22,13 +22,17 @@ import type {
  * unchanged context alongside a change) comes from the snapshot; whether it
  * is *tinted* comes only from `stage_plan.changes`.
  *
- * Five blocks, following the mock and the spec's own reading order --
- * gallery first, down to tags -- because that is a buyer's reading order on
+ * Follows the mock and the spec's own reading order -- gallery first, down
+ * through tags and materials -- because that is a buyer's reading order on
  * an Etsy listing page, and matching it is what makes the comparison quick
  * to check by eye (decision 3's "the blocks follow a buyer's reading order").
+ * Description and materials were not in the original five (the mock never
+ * had a block for either); added once their absence let a pending edit reach
+ * Apply with no before/after shown for it at all.
  */
 
-export type ImpactTag = "Images" | "Title" | "Prices" | "Colours" | "Tags";
+export type ImpactTag =
+  "Images" | "Title" | "Description" | "Prices" | "Colours" | "Tags" | "Materials";
 
 export interface TitleBlock {
   before: string | null;
@@ -36,7 +40,25 @@ export interface TitleBlock {
   changed: boolean;
 }
 
+/** Same shape as `TitleBlock` -- kept as its own type because "description"
+ * reading as a `TitleBlock` at a call site would be confusing, not because
+ * the two ever need to diverge. */
+export interface DescriptionBlock {
+  before: string | null;
+  after: string;
+  changed: boolean;
+}
+
 export interface TagsBlock {
+  before: string[];
+  after: string[];
+  added: string[];
+  removed: string[];
+  changed: boolean;
+}
+
+/** Same shape as `TagsBlock`, same reasoning. */
+export interface MaterialsBlock {
   before: string[];
   after: string[];
   added: string[];
@@ -93,16 +115,18 @@ export interface PriceRow {
 }
 
 export interface Comparison {
-  /** Which of the five parts of the listing the plan touches, for the
-   * headline's tags -- in reading order, not the order `Change`s happened to
-   * be emitted in. */
+  /** Which of the parts of the listing the plan touches, for the headline's
+   * tags -- in reading order, not the order `Change`s happened to be emitted
+   * in. */
   impacts: ImpactTag[];
   /** Whether `plan.etsy_listing_id` names a real listing -- `false` gets a
    * single "After apply" column with a *Not on Etsy yet* note (decision 3),
    * never an empty "On Etsy now" one. */
   hasEtsyListing: boolean;
   title: TitleBlock | null;
+  description: DescriptionBlock | null;
   tags: TagsBlock | null;
+  materials: MaterialsBlock | null;
   colours: ColoursBlock | null;
   price: PriceBlock | null;
   images: ImagesBlock | null;
@@ -154,6 +178,17 @@ function buildTitle(stagePlan: StagePlanDTO | undefined): TitleBlock | null {
   };
 }
 
+function buildDescription(stagePlan: StagePlanDTO | undefined): DescriptionBlock | null {
+  const snapshot = stagePlan?.snapshot as EtsyListingSnapshot | null | undefined;
+  if (!snapshot) return null;
+  return {
+    before: snapshot.live?.description ?? null,
+    after: snapshot.desired.description ?? "",
+    changed:
+      findChange(stagePlan, (c) => c.kind === "field" && c.path === "description") !== undefined,
+  };
+}
+
 function buildTags(stagePlan: StagePlanDTO | undefined): TagsBlock | null {
   const snapshot = stagePlan?.snapshot as EtsyListingSnapshot | null | undefined;
   if (!snapshot) return null;
@@ -161,6 +196,19 @@ function buildTags(stagePlan: StagePlanDTO | undefined): TagsBlock | null {
   return {
     before: snapshot.live?.tags ?? [],
     after: snapshot.desired.tags,
+    added: change && change.kind === "list" ? asStrings(change.added) : [],
+    removed: change && change.kind === "list" ? asStrings(change.removed) : [],
+    changed: change !== undefined,
+  };
+}
+
+function buildMaterials(stagePlan: StagePlanDTO | undefined): MaterialsBlock | null {
+  const snapshot = stagePlan?.snapshot as EtsyListingSnapshot | null | undefined;
+  if (!snapshot) return null;
+  const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === "materials");
+  return {
+    before: snapshot.live?.materials ?? [],
+    after: snapshot.desired.materials,
     added: change && change.kind === "list" ? asStrings(change.added) : [],
     removed: change && change.kind === "list" ? asStrings(change.removed) : [],
     changed: change !== undefined,
@@ -249,17 +297,21 @@ function buildImages(stagePlan: StagePlanDTO | undefined): ImagesBlock | null {
 function impactsFor(
   colours: ColoursBlock | null,
   title: TitleBlock | null,
+  description: DescriptionBlock | null,
   price: PriceBlock | null,
   tags: TagsBlock | null,
+  materials: MaterialsBlock | null,
   images: ImagesBlock | null,
 ): ImpactTag[] {
   // Reading order (decision 3's gallery-first order), not emission order.
   const impacts: ImpactTag[] = [];
   if (images?.changed) impacts.push("Images");
   if (title?.changed) impacts.push("Title");
+  if (description?.changed) impacts.push("Description");
   if (price?.changed) impacts.push("Prices");
   if (colours?.changed) impacts.push("Colours");
   if (tags?.changed) impacts.push("Tags");
+  if (materials?.changed) impacts.push("Materials");
   return impacts;
 }
 
@@ -273,16 +325,20 @@ export function buildComparison(plan: PlanDTO): Comparison {
     []) as BelowCostRow[];
 
   const title = buildTitle(etsyListingPlan);
+  const description = buildDescription(etsyListingPlan);
   const tags = buildTags(etsyListingPlan);
+  const materials = buildMaterials(etsyListingPlan);
   const colours = buildColours(productPlan);
   const price = buildPrice(productPlan);
   const images = buildImages(etsyMediaPlan);
 
   return {
-    impacts: impactsFor(colours, title, price, tags, images),
+    impacts: impactsFor(colours, title, description, price, tags, materials, images),
     hasEtsyListing: plan.etsy_listing_id !== null,
     title,
+    description,
     tags,
+    materials,
     colours,
     price,
     images,

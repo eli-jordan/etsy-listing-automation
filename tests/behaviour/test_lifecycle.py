@@ -5,6 +5,8 @@ Wrong verb is `Blocked`. Delete is retract-only. Retire still syncs copy.
 
 from __future__ import annotations
 
+import itertools
+import time
 from pathlib import Path
 
 import yaml
@@ -178,8 +180,12 @@ class TestRetract:
         assert not previews.exists()
 
     def test_an_etsy_draft_that_survived_printify_delete_keeps_local_files(
-        self, workspace_root: Path
+        self, workspace_root: Path, monkeypatch
     ) -> None:
+        monkeypatch.setattr(time, "sleep", lambda seconds: None)
+        # Jumps straight past the 15s ceiling on the first deadline check --
+        # a real clock would make this test wait out the whole poll.
+        monkeypatch.setattr(time, "monotonic", itertools.count(0.0, 100.0).__next__)
         root = _ready(workspace_root)
         edit_listing(root, lifecycle="deleted")
         _write_lock(root, _lock(etsy_listing_id=ETSY_LISTING_ID, product_id=PRODUCT_ID))
@@ -195,12 +201,44 @@ class TestRetract:
         assert "Shop Manager" in str(report.outcomes[0].error)
         assert listing_file(root).is_file()
 
+    def test_a_delayed_etsy_404_is_not_reported_as_survived(
+        self, workspace_root: Path, monkeypatch
+    ) -> None:
+        """Read-after-write lag, not a failed cascade: the GET right after
+        DELETE still sees the draft, and a later one does not. One `GET` would
+        misreport this as survived; the poll must not."""
+        monkeypatch.setattr(time, "sleep", lambda seconds: None)
+        root = _ready(workspace_root)
+        edit_listing(root, lifecycle="deleted")
+        _write_lock(root, _lock(etsy_listing_id=ETSY_LISTING_ID, product_id=PRODUCT_ID))
+        etsy = _etsy()
+        etsy.seed_listing(ETSY_LISTING_ID, shop_id=ETSY_SHOP_ID, state="draft")
+        printify = FakePrintifyClient()
+        real_get_listing = etsy.get_listing
+        calls = {"count": 0}
+
+        def flaky_get_listing(listing_id: int, *, include_images: bool = False):
+            calls["count"] += 1
+            if calls["count"] < 3:
+                return real_get_listing(listing_id, include_images=include_images)
+            return None
+
+        monkeypatch.setattr(etsy, "get_listing", flaky_get_listing)
+
+        report = apply_listings(a_context(root, etsy=etsy, printify=printify), [LISTING], STAGES)
+
+        assert report.outcomes[0].ok
+        assert calls["count"] == 3
+        assert not (root / "listings" / LISTING).exists()
+
     def test_reapply_after_manual_etsy_removal_wipes_local_when_printify_is_already_gone(
-        self, workspace_root: Path
+        self, workspace_root: Path, monkeypatch
     ) -> None:
         """PRD 63: the survived-draft failure keeps the files so the handle is
         not lost, then asks the user to remove the listing in Shop Manager and
         re-apply. The Printify product is already gone from the first apply."""
+        monkeypatch.setattr(time, "sleep", lambda seconds: None)
+        monkeypatch.setattr(time, "monotonic", itertools.count(0.0, 100.0).__next__)
         root = _ready(workspace_root)
         edit_listing(root, lifecycle="deleted")
         _write_lock(root, _lock(etsy_listing_id=ETSY_LISTING_ID, product_id=PRODUCT_ID))
