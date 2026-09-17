@@ -47,3 +47,102 @@ export type TemplateMediaEntry = components["schemas"]["TemplateMediaEntry"];
 /** Either an explicit template reference, or a bare path string to a shared
  * asset under `common-media/` -- mirrors `config/listing.py`'s `MediaEntry`. */
 export type MediaEntry = TemplateMediaEntry | string;
+
+// ── Deploy changes (A29-A33, docs/deploy-changes.md) ────────────────────────
+
+export type RunKind = components["schemas"]["CreateRunRequest"]["kind"];
+export type RunPhase = components["schemas"]["RunSummary"]["phase"];
+export type RunSummary = components["schemas"]["RunSummary"];
+export type RunDetail = components["schemas"]["RunDetail"];
+export type CreateRunRequest = components["schemas"]["CreateRunRequest"];
+export type RunEvent = RunDetail["events"][number];
+
+export type ActionDTO = components["schemas"]["ActionDTO"];
+export type DriftDTO = components["schemas"]["DriftDTO"];
+export type FieldChangeDTO = components["schemas"]["FieldChangeDTO"];
+export type ListChangeDTO = components["schemas"]["ListChangeDTO"];
+export type PriceChangeDTO = components["schemas"]["PriceChangeDTO"];
+export type MediaChangeDTO = components["schemas"]["MediaChangeDTO"];
+export type ChangeDTO = FieldChangeDTO | ListChangeDTO | PriceChangeDTO | MediaChangeDTO;
+export type StagePlanDTO = components["schemas"]["StagePlanDTO"];
+export type PlanDTO = components["schemas"]["PlanDTO"];
+
+/** One planned pipeline stage's own name, as `engine/stages/__init__.py`'s
+ * `STAGES` orders them -- the order `PlanDTO.stage_plans` already arrives in,
+ * repeated here only for the display label lookup (`StepStrip.tsx`). */
+export const STAGE_LABELS: Record<string, string> = {
+  render: "Render mockups",
+  printify_product: "Printify product",
+  publish: "Publish to Etsy",
+  etsy_listing: "Etsy listing",
+  etsy_media: "Etsy images",
+  retract: "Remove from Etsy",
+};
+
+/** `engine/stages/render.py`'s `RenderSnapshot`, as it crosses the wire inside
+ * `StagePlanDTO.snapshot` (an untyped `dict` there -- `render`'s own stage is
+ * the only thing that knows this shape, same rule as the backend's DTO
+ * module: "the frontend already has to know one stage's snapshot shape from
+ * another"). */
+export interface RenderSceneSnapshot {
+  scene: string;
+  template: string;
+  colour: string | null;
+  state: "cached" | "stale" | "missing";
+  preview: boolean;
+}
+export interface RenderSnapshot {
+  scenes: RenderSceneSnapshot[];
+}
+
+/** `engine/stages/printify_product.py`'s `ProductSnapshot`. `price` is a
+ * `Money` rendered as `"349 NOK"` (see `ui/runs/events.py`'s `_jsonable`). */
+export interface ProductVariantSnapshot {
+  size: string;
+  colour: string;
+  price: string;
+}
+export interface ProductSnapshot {
+  desired: ProductVariantSnapshot[];
+  live: ProductVariantSnapshot[];
+}
+
+/** `engine/stages/publish.py`'s `PublishSnapshot`. */
+export interface BelowCostRow {
+  size: string;
+  colour: string;
+  price: string;
+  cost: string;
+}
+export interface PublishSnapshot {
+  below_cost: BelowCostRow[];
+}
+
+/** `engine/stages/etsy_listing.py`'s `EtsyListingSnapshot`/`EtsyListingFacts`. */
+export interface EtsyListingFacts {
+  title: string | null;
+  tags: string[];
+  shop_section: string | null;
+  shipping_profile: string | null;
+}
+export interface EtsyListingSnapshot {
+  desired: EtsyListingFacts;
+  live: EtsyListingFacts | null;
+}
+
+/** `engine/stages/etsy_media.py`'s `EtsyMediaSnapshot`. */
+export interface DesiredImageSnapshot {
+  rank: number;
+  ref: string;
+  file: string;
+}
+export interface LiveImageSnapshot {
+  rank: number | null;
+  ref: string | null;
+  image_id: number;
+  url: string | null;
+}
+export interface EtsyMediaSnapshot {
+  desired: DesiredImageSnapshot[];
+  live: LiveImageSnapshot[];
+}

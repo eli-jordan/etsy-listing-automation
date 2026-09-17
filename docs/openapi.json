@@ -1,6 +1,43 @@
 {
   "components": {
     "schemas": {
+      "ActionDTO": {
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "inputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Inputs",
+            "type": "array"
+          },
+          "missing_outputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Missing Outputs",
+            "type": "array"
+          },
+          "outputs": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Outputs",
+            "type": "array"
+          }
+        },
+        "required": [
+          "description",
+          "inputs",
+          "outputs",
+          "missing_outputs"
+        ],
+        "title": "ActionDTO",
+        "type": "object"
+      },
       "AssignKindRequest": {
         "properties": {
           "kind": {
@@ -207,6 +244,45 @@
         "title": "CreateListingRequest",
         "type": "object"
       },
+      "CreateRunRequest": {
+        "properties": {
+          "expect": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "string"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expect"
+          },
+          "kind": {
+            "enum": [
+              "plan",
+              "apply"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "kind",
+          "listings"
+        ],
+        "title": "CreateRunRequest",
+        "type": "object"
+      },
       "DesignSummary": {
         "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
         "properties": {
@@ -262,6 +338,49 @@
           }
         },
         "title": "DraftListingRequest",
+        "type": "object"
+      },
+      "DriftDTO": {
+        "properties": {
+          "last_applied": {
+            "title": "Last Applied"
+          },
+          "last_applied_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Applied Label"
+          },
+          "live": {
+            "title": "Live"
+          },
+          "live_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Live Label"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "last_applied",
+          "live"
+        ],
+        "title": "DriftDTO",
         "type": "object"
       },
       "EtsyListingConfig": {
@@ -370,6 +489,33 @@
           "title"
         ],
         "title": "EtsySectionSummary",
+        "type": "object"
+      },
+      "FieldChangeDTO": {
+        "properties": {
+          "after": {
+            "title": "After"
+          },
+          "before": {
+            "title": "Before"
+          },
+          "kind": {
+            "const": "field",
+            "default": "field",
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          }
+        },
+        "required": [
+          "path",
+          "before",
+          "after"
+        ],
+        "title": "FieldChangeDTO",
         "type": "object"
       },
       "GarmentProfileSummary": {
@@ -482,6 +628,42 @@
           "warn"
         ],
         "title": "IssueCounts",
+        "type": "object"
+      },
+      "ListChangeDTO": {
+        "properties": {
+          "added": {
+            "items": {},
+            "title": "Added",
+            "type": "array"
+          },
+          "kind": {
+            "const": "list",
+            "default": "list",
+            "title": "Kind",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "removed": {
+            "items": {},
+            "title": "Removed",
+            "type": "array"
+          },
+          "reordered": {
+            "title": "Reordered",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "path",
+          "added",
+          "removed",
+          "reordered"
+        ],
+        "title": "ListChangeDTO",
         "type": "object"
       },
       "ListingDesignSummary": {
@@ -699,6 +881,79 @@
         "title": "ListingDetail",
         "type": "object"
       },
+      "ListingFailedEvent": {
+        "description": "The run's ``RunObserver.on_failure`` twin. ``message`` is the\n:class:`~etsy_listings.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.engine.run.StalePlanError`.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "stale_plan": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PlanDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "type": {
+            "const": "listing_failed",
+            "default": "listing_failed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "message"
+        ],
+        "title": "ListingFailedEvent",
+        "type": "object"
+      },
+      "ListingPlannedEvent": {
+        "properties": {
+          "fingerprint": {
+            "title": "Fingerprint",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "plan": {
+            "$ref": "#/components/schemas/PlanDTO"
+          },
+          "type": {
+            "const": "listing_planned",
+            "default": "listing_planned",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "plan",
+          "fingerprint"
+        ],
+        "title": "ListingPlannedEvent",
+        "type": "object"
+      },
       "ListingSummary": {
         "properties": {
           "colour_count": {
@@ -790,6 +1045,49 @@
         "title": "ListingSummary",
         "type": "object"
       },
+      "MediaChangeDTO": {
+        "properties": {
+          "after": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After"
+          },
+          "before": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Before"
+          },
+          "kind": {
+            "const": "media",
+            "default": "media",
+            "title": "Kind",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "rank",
+          "before",
+          "after"
+        ],
+        "title": "MediaChangeDTO",
+        "type": "object"
+      },
       "MultiplePreviewRequest": {
         "properties": {
           "design": {
@@ -873,6 +1171,43 @@
         "title": "MultipleTemplate",
         "type": "object"
       },
+      "PhaseEvent": {
+        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be (A33, decision 7).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "planning",
+              "planned",
+              "previewing",
+              "ready",
+              "applying",
+              "applied",
+              "failed",
+              "stale",
+              "cancelled"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "type": {
+            "const": "phase",
+            "default": "phase",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "phase"
+        ],
+        "title": "PhaseEvent",
+        "type": "object"
+      },
       "Placement": {
         "description": "One garment within a ``multiple``-kind scene.",
         "properties": {
@@ -919,6 +1254,44 @@
         "title": "Placement",
         "type": "object"
       },
+      "PlanDTO": {
+        "properties": {
+          "etsy_listing_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Etsy Listing Id"
+          },
+          "is_live": {
+            "title": "Is Live",
+            "type": "boolean"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "stage_plans": {
+            "items": {
+              "$ref": "#/components/schemas/StagePlanDTO"
+            },
+            "title": "Stage Plans",
+            "type": "array"
+          }
+        },
+        "required": [
+          "listing",
+          "is_live",
+          "etsy_listing_id",
+          "stage_plans"
+        ],
+        "title": "PlanDTO",
+        "type": "object"
+      },
       "Point": {
         "properties": {
           "x": {
@@ -935,6 +1308,87 @@
           "y"
         ],
         "title": "Point",
+        "type": "object"
+      },
+      "PreviewRenderedEvent": {
+        "properties": {
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          },
+          "type": {
+            "const": "preview_rendered",
+            "default": "preview_rendered",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "template",
+          "colour"
+        ],
+        "title": "PreviewRenderedEvent",
+        "type": "object"
+      },
+      "PriceChangeDTO": {
+        "properties": {
+          "after": {
+            "title": "After",
+            "type": "string"
+          },
+          "before": {
+            "title": "Before",
+            "type": "string"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          },
+          "kind": {
+            "const": "price",
+            "default": "price",
+            "title": "Kind",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "string"
+          }
+        },
+        "required": [
+          "size",
+          "before",
+          "after"
+        ],
+        "title": "PriceChangeDTO",
         "type": "object"
       },
       "PricingPlanSummary": {
@@ -963,6 +1417,69 @@
           "ref"
         ],
         "title": "PricingPlanSummary",
+        "type": "object"
+      },
+      "ProgressEvent": {
+        "description": "``ctx.emit``'s ``Event``, tagged with whatever stage\n:class:`StageApplyingEvent` last named for this listing -- no stage\nchanges how it reports progress (A33, decision 7).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "stage": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stage"
+          },
+          "swatches": {
+            "default": [],
+            "items": {
+              "maxItems": 3,
+              "minItems": 3,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            "title": "Swatches",
+            "type": "array"
+          },
+          "type": {
+            "const": "progress",
+            "default": "progress",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "stage",
+          "message"
+        ],
+        "title": "ProgressEvent",
         "type": "object"
       },
       "RenameListingRequest": {
@@ -994,6 +1511,165 @@
           "amount"
         ],
         "title": "ResolvedPrice",
+        "type": "object"
+      },
+      "RunDetail": {
+        "properties": {
+          "events": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "listing_failed": "#/components/schemas/ListingFailedEvent",
+                  "listing_planned": "#/components/schemas/ListingPlannedEvent",
+                  "phase": "#/components/schemas/PhaseEvent",
+                  "preview_rendered": "#/components/schemas/PreviewRenderedEvent",
+                  "progress": "#/components/schemas/ProgressEvent",
+                  "stage_applied": "#/components/schemas/StageAppliedEvent",
+                  "stage_applying": "#/components/schemas/StageApplyingEvent",
+                  "stage_checking": "#/components/schemas/StageCheckingEvent",
+                  "stage_failed": "#/components/schemas/StageFailedEvent",
+                  "stage_planned": "#/components/schemas/StagePlannedEvent"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PhaseEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageCheckingEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StagePlannedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ListingPlannedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/PreviewRenderedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageApplyingEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ProgressEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageAppliedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageFailedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ListingFailedEvent"
+                }
+              ]
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "plan",
+              "apply"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "planning",
+              "planned",
+              "previewing",
+              "ready",
+              "applying",
+              "applied",
+              "failed",
+              "stale",
+              "cancelled"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "listings",
+          "phase",
+          "seen",
+          "events"
+        ],
+        "title": "RunDetail",
+        "type": "object"
+      },
+      "RunSummary": {
+        "description": "Enough to show a page-head control (decision 8's table) or a row in a\nfuture batch view -- everything except the event log itself.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "plan",
+              "apply"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "planning",
+              "planned",
+              "previewing",
+              "ready",
+              "applying",
+              "applied",
+              "failed",
+              "stale",
+              "cancelled"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "listings",
+          "phase",
+          "seen"
+        ],
+        "title": "RunSummary",
         "type": "object"
       },
       "ShadeConfig": {
@@ -1143,6 +1819,253 @@
           "bounding_box"
         ],
         "title": "SingleTemplate",
+        "type": "object"
+      },
+      "StageAppliedEvent": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "type": {
+            "const": "stage_applied",
+            "default": "stage_applied",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "stage"
+        ],
+        "title": "StageAppliedEvent",
+        "type": "object"
+      },
+      "StageApplyingEvent": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "type": {
+            "const": "stage_applying",
+            "default": "stage_applying",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "stage"
+        ],
+        "title": "StageApplyingEvent",
+        "type": "object"
+      },
+      "StageCheckingEvent": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "type": {
+            "const": "stage_checking",
+            "default": "stage_checking",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "stage"
+        ],
+        "title": "StageCheckingEvent",
+        "type": "object"
+      },
+      "StageFailedEvent": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "type": {
+            "const": "stage_failed",
+            "default": "stage_failed",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "stage",
+          "message"
+        ],
+        "title": "StageFailedEvent",
+        "type": "object"
+      },
+      "StagePlanDTO": {
+        "properties": {
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActionDTO"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "field": "#/components/schemas/FieldChangeDTO",
+                  "list": "#/components/schemas/ListChangeDTO",
+                  "media": "#/components/schemas/MediaChangeDTO",
+                  "price": "#/components/schemas/PriceChangeDTO"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FieldChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ListChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PriceChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/MediaChangeDTO"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Snapshot"
+          },
+          "stage": {
+            "title": "Stage",
+            "type": "string"
+          },
+          "will_run": {
+            "title": "Will Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "stage",
+          "will_run"
+        ],
+        "title": "StagePlanDTO",
+        "type": "object"
+      },
+      "StagePlannedEvent": {
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "stage_plan": {
+            "$ref": "#/components/schemas/StagePlanDTO"
+          },
+          "type": {
+            "const": "stage_planned",
+            "default": "stage_planned",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "stage_plan"
+        ],
+        "title": "StagePlannedEvent",
         "type": "object"
       },
       "SwatchResponse": {
@@ -1945,6 +2868,115 @@
         ]
       }
     },
+    "/api/listings/{name}/previews/{template}": {
+      "get": {
+        "description": "A ``multiple``/``single``-kind scene: no per-colour photo, so no\ncolour segment (PRD 28's rule, mirrored from ``render_file``).",
+        "operationId": "listing_preview_api_listings__name__previews__template__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Preview",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
+    "/api/listings/{name}/previews/{template}/{colour}": {
+      "get": {
+        "description": "A ``colour-matrix``-kind scene: one preview per colour.",
+        "operationId": "listing_preview_coloured_api_listings__name__previews__template___colour__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "colour",
+            "required": true,
+            "schema": {
+              "title": "Colour",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Preview Coloured",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
     "/api/listings/{name}/rename": {
       "post": {
         "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name (PRD 60), so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
@@ -2043,6 +3075,266 @@
         "summary": "List Pricing Plans",
         "tags": [
           "listings-support"
+        ]
+      }
+    },
+    "/api/runs": {
+      "get": {
+        "description": "``listing`` narrows to that listing's current run (active, or finished\nand not yet superseded -- decision 7's retention). Omitted, every run this\nprocess still remembers, for a future workspace-wide view.",
+        "operationId": "list_runs_api_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "listing",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Listing"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/RunSummary"
+                  },
+                  "title": "Response List Runs Api Runs Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Runs",
+        "tags": [
+          "runs"
+        ]
+      },
+      "post": {
+        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal.",
+        "operationId": "create_run_api_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/runs/{run_id}": {
+      "delete": {
+        "description": "Cancel a queued or running **plan**. An ``apply`` is refused\nunconditionally (decision 8: Back leaves, it never cancels one), and so is\na run that has already finished.",
+        "operationId": "cancel_run_api_runs__run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Run",
+        "tags": [
+          "runs"
+        ]
+      },
+      "get": {
+        "operationId": "get_run_api_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Run",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/events": {
+      "get": {
+        "description": "``text/event-stream`` over this run's own event buffer -- every event\nalready recorded past ``Last-Event-ID``, then whatever the worker thread\nappends next, until the run reaches a terminal phase.",
+        "operationId": "stream_events_api_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Events",
+        "tags": [
+          "runs"
+        ]
+      }
+    },
+    "/api/runs/{run_id}/seen": {
+      "post": {
+        "operationId": "mark_seen_api_runs__run_id__seen_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mark Seen",
+        "tags": [
+          "runs"
         ]
       }
     },

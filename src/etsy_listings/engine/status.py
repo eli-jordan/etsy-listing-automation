@@ -99,6 +99,7 @@ def listing_status(
     lifecycle: ListingLifecycle | None = None,
     etsy_state: str | None = None,
     last_applied_lifecycle: ListingLifecycle | None = None,
+    incomplete: bool = False,
 ) -> ListingStatus:
     """The badge. Pure -- see the module docstring for what each combination
     means and why.
@@ -107,6 +108,13 @@ def listing_status(
     so the original four-state table still answers from the two facts it
     always had. When they *are* passed, delete/retire (PRD 61–67) win over
     ``live``/``dirty``: calling a paused listing ``live`` would lie.
+
+    ``incomplete`` is A29's marker -- a stage raised mid-``apply`` and left
+    the lockfile recording only what ran before it. A per-stage write makes
+    ``state.lock.json`` newer than ``listing.yaml`` partway through that
+    failed run, so ``edited`` alone would read the listing as clean. The
+    marker is folded into the same branch ``edited`` already decides: it
+    invents no status of its own, and delete/retire still win over both.
     """
     if lifecycle == "deleted":
         return "pending-delete"
@@ -123,9 +131,10 @@ def listing_status(
         return "expired"
     if etsy_state in {"inactive", "removed"}:
         return "inactive"
+    dirty = edited or incomplete
     if live:
-        return "dirty" if edited else "live"
-    if not applied or edited:
+        return "dirty" if dirty else "live"
+    if not applied or dirty:
         return "draft"
     return "deployed"
 

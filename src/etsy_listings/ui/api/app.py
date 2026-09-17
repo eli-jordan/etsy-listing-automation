@@ -1,12 +1,21 @@
 """FastAPI app factory. Phase 1 carried only the calibrator's endpoints (PRD:
 "the calibration UI lands in phase 1 ... because templates must be calibrated
 before rendering is useful at all"); phase 5 adds the listings list and editor
-(``listings.py``). The dashboard's real content and a Runner/plan-apply
-trigger are still not here -- see ``docs/phase-5-listings-ui.md``.
+(``listings.py``); A33 adds the runs resource (``runs.py``) and the executor
+thread behind it.
+
+**Contexts are injected.** ``context_factory`` defaults to
+``connections.run_context`` -- the assembly every real server uses -- but the
+runs executor never calls ``connections`` directly (`connections.py`'s own
+rule: "a credential is resolved when it is used, never when a client is
+built"). A test passes a factory wired to in-memory fakes instead, and the
+executor is none the wiser.
 """
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -15,18 +24,47 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
+from etsy_listings import connections
 from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.listings import router as listings_router
 from etsy_listings.ui.api.listings import support_router as listings_support_router
+from etsy_listings.ui.api.runs import router as runs_router
 from etsy_listings.ui.api.templates import router as templates_router
+from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
+from etsy_listings.ui.runs.registry import RunRegistry
 from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 
 
-def create_app(workspace: Workspace) -> FastAPI:
-    app = FastAPI(title="etsy-listings", version="0.1.0")
+def create_app(
+    workspace: Workspace, *, context_factory: ContextFactory = connections.run_context
+) -> FastAPI:
+    registry = RunRegistry()
+    executor = RunExecutor(workspace=workspace, context_factory=context_factory, registry=registry)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        """Starts the runs executor's worker thread with the app, and waits
+        for it on the way out -- the same "finish what's in flight, start
+        nothing else" shutdown ``ui/desktop.py``'s close handler also needs
+        (decision 7), except this is the path every ASGI server already calls
+        (uvicorn's own shutdown, and ``TestClient``'s ``with`` block)."""
+        executor.start()
+        try:
+            yield
+        finally:
+            executor.stop()
+
+    app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
     app.state.workspace = workspace
+    app.state.run_registry = registry
+    app.state.run_executor = executor
+    # Shared with the preview endpoint (`listings.py`), which needs a
+    # `RunContext` to ask the render stage for a scene's current hash but has
+    # nothing to do with running a run -- reaching through `run_executor` for
+    # it would couple that endpoint to the executor's own shape for no reason.
+    app.state.context_factory = context_factory
 
     # Permissive CORS for local dev only -- the Vite dev server proxies /api in
     # production-shaped use, but running `uvicorn` and `vite` as two separate
@@ -55,6 +93,7 @@ def create_app(workspace: Workspace) -> FastAPI:
     app.include_router(designs_router)
     app.include_router(listings_router)
     app.include_router(listings_support_router)
+    app.include_router(runs_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

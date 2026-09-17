@@ -35,6 +35,7 @@ from etsy_listings.engine.change import (
     PriceChange,
     drift,
     scalar,
+    sequence,
 )
 from etsy_listings.engine.stages.product_document import (
     AppliedProduct,
@@ -114,6 +115,10 @@ def _changes(
         if change is not None:
             changes.append(change)
 
+    colour_change = _colour_change(wanted, was)
+    if colour_change is not None:
+        changes.append(colour_change)
+
     was_prices = was.prices
     for variant in sorted(desired.variants, key=lambda v: v.id):
         previous = was_prices.get(variant.id)
@@ -137,6 +142,25 @@ def _changes(
 
     changes.extend(_print_area_changes(wanted, was))
     return tuple(changes)
+
+
+def _colour_change(wanted: AppliedProduct, was: AppliedProduct) -> Change | None:
+    """A named colour added or removed (A30).
+
+    Read straight off each variant's own ``colour_slug`` -- carried on
+    :class:`~etsy_listings.engine.stages.product_document.AppliedVariant`
+    itself rather than looked up from this run's catalog resolution, which is
+    what lets a colour Printify has since discontinued (PRD 46) still be
+    named in ``removed``: it has no cell left to resolve, but it still has the
+    name it was applied under.
+
+    Replaces a UI that would otherwise have to diff two colour lists itself
+    to ring a newly added one (A2, decision 4) -- the ``FieldChange`` below
+    only ever carried a count.
+    """
+    wanted_colours = sorted({v.colour_slug for v in wanted.variants})
+    was_colours = sorted({v.colour_slug for v in was.variants})
+    return sequence("colors", wanted_colours, was_colours)
 
 
 def _print_area_changes(wanted: AppliedProduct, was: AppliedProduct) -> list[Change]:

@@ -342,6 +342,24 @@ class TestTheFullCycle:
         assert live is not None
         assert live.state == "draft"
 
+    def test_getting_the_listing_with_images_returns_a_570xn_url(
+        self, ctx: RunContext, workspace: Workspace
+    ) -> None:
+        """A30, read-only: `getListing?includes=Images` on the real shop
+        carries `url_570xN` for a real, already-uploaded image -- the deploy
+        review's "On Etsy now" column reads this for a draft. Reads the
+        listing an earlier test in this sequence already created; this test
+        itself performs no write of its own (see the e2e credentials note)."""
+        written = Lockfile.read(workspace.lock_file(LISTING))
+        assert written is not None
+        listing_id = int(written.remote[ETSY_LISTING_ID_KEY])
+
+        live = ctx.require_etsy().get_listing(listing_id, include_images=True)
+
+        assert live is not None
+        assert live.images, "the earlier apply in this sequence uploaded four"
+        assert all(image.url_570xN for image in live.images)
+
     def test_reordering_media_and_reapplying_only_touches_the_order(
         self, ctx: RunContext, workspace: Workspace
     ) -> None:

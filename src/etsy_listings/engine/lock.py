@@ -105,6 +105,27 @@ class StageApplyResult:
     remote: dict[str, Any] = field(default_factory=dict)
 
 
+class IncompleteApply(BaseModel):
+    """A29: which stage a failed ``apply`` stopped at, still on the lockfile.
+
+    ``execute`` folds each stage's result as it goes, so a crash after
+    ``printify_product`` created a product still leaves that id in
+    ``remote`` -- the fold already happened. What was missing was a record
+    that the *run* did not finish: without one, PRD 48's duplicate-create
+    guard is the only thing that still knows a later stage never ran, and
+    only for the one stage it happens to protect. This is the general marker,
+    set for whichever stage raised.
+
+    It lives outside ``applied`` on purpose, so it never enters
+    :meth:`Lockfile.input_hash` -- a failed run must not look like a change
+    to re-apply, only like a run that has not finished.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage: str
+
+
 class Lockfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -116,6 +137,12 @@ class Lockfile(BaseModel):
     remote: dict[str, Any] = {}
     outputs: dict[str, str] = {}
     stages_completed: list[str] = []
+    incomplete: IncompleteApply | None = None
+    """Set by :meth:`marked_incomplete`, cleared by :meth:`completed` -- never
+    by hand elsewhere. Omitted from the written JSON when ``None`` (see
+    :meth:`write`), so every lockfile a fully-succeeded run produces stays
+    byte-identical to one from before this field existed, and
+    :data:`SCHEMA_VERSION` does not need to move."""
 
     def input_hash(self) -> str:
         return canonical_hash(self.applied)
@@ -183,6 +210,27 @@ class Lockfile(BaseModel):
             }
         )
 
+    def marked_incomplete(self, stage: str) -> Lockfile:
+        """Record that ``stage`` raised mid-``apply`` (A29).
+
+        Called from exactly one place: ``execute``'s except-and-re-raise,
+        after everything before ``stage`` has already been folded in. Kept as
+        a method rather than a bare ``model_copy`` at the call site so the
+        marker has one setter to search for, the way :meth:`fold` is the one
+        place ``applied``/``outputs``/``remote`` change.
+        """
+        return self.model_copy(update={"incomplete": IncompleteApply(stage=stage)})
+
+    def completed(self) -> Lockfile:
+        """Clear the marker: this run reached the end without a stage raising.
+
+        Not the same as "nothing changed" -- a lockfile with no marker at all
+        answers ``completed()`` just as readily. It is the counterpart to
+        :meth:`marked_incomplete`, called once, after ``execute``'s loop over
+        every stage finishes.
+        """
+        return self.model_copy(update={"incomplete": None})
+
     def stamped(self, *, tool_version: str, applied_at: str) -> Lockfile:
         """The same content, marked with what wrote it and when.
 
@@ -206,5 +254,10 @@ class Lockfile(BaseModel):
     def write(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         tmp = path.with_suffix(path.suffix + ".tmp")
-        tmp.write_text(self.model_dump_json(indent=2), encoding="utf-8")
+        # `exclude_none`: the only field that can be `None` today is
+        # `incomplete`, and A29 needs it gone from the file entirely when
+        # unset -- not written as `"incomplete": null` -- so that a clean
+        # lockfile stays byte-identical to one written before this field
+        # existed.
+        tmp.write_text(self.model_dump_json(indent=2, exclude_none=True), encoding="utf-8")
         tmp.replace(path)

@@ -38,6 +38,7 @@ from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.clients.printify.models import Product
 from etsy_listings.clients.printify.protocol import PrintifyClient
+from etsy_listings.config.money import Money
 from etsy_listings.engine.change import Drift, Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
@@ -48,7 +49,7 @@ from etsy_listings.engine.stages.gates import (
     check_garment_profile_chosen,
 )
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY, resolve_variant_pricing
-from etsy_listings.engine.stages.product_document import AppliedVariant
+from etsy_listings.engine.stages.product_document import AppliedVariant, PricedVariant, money
 from etsy_listings.errors import UserFacingError
 
 ETSY_LISTING_HANDLE_KEY = "etsy_listing_handle"
@@ -134,17 +135,58 @@ class PublishApplied(BaseModel):
 @dataclass(frozen=True)
 class PublishDesired:
     sync_flags: dict[str, bool]
-    variants: dict[int, int]
+    priced_variants: tuple[PricedVariant, ...]
+    """The full resolved matrix, colour and size included -- carried rather
+    than collapsed straight to ``{id: price}`` because the below-cost
+    snapshot (A30) needs to *name* a variant, not just its id, and this is
+    the one place that resolution exists."""
     missing: tuple[tuple[str, str], ...] = ()
+    currency: str = ""
+
+    @property
+    def variants(self) -> dict[int, int]:
+        """``{variant_id: price}`` -- the shape every existing comparison
+        here wants, and the only one variant identity does not survive a JSON
+        round-trip as (see ``PrintifyProductDesired.prices`` for the same
+        reasoning)."""
+        return {variant.id: variant.price for variant in self.priced_variants}
 
     def applied(self) -> PublishApplied:
         return PublishApplied(
             sync_flags=self.sync_flags,
             variants=tuple(
-                AppliedVariant(id=variant_id, price=price)
-                for variant_id, price in sorted(self.variants.items())
+                AppliedVariant(id=variant.id, price=variant.price, colour_slug=variant.colour_slug)
+                for variant in sorted(self.priced_variants, key=lambda v: v.id)
             ),
         )
+
+
+class BelowCostRow(BaseModel):
+    """One variant priced under what Printify charges to make it -- the
+    row `plan()` already refuses over (:func:`_below_cost`), named for the
+    before/after review (A30) rather than left as a bare variant id."""
+
+    model_config = ConfigDict(frozen=True)
+
+    size: str
+    colour: str
+    price: Money
+    cost: Money
+    """USD, as Printify reports it -- not necessarily the listing's own
+    currency (see :attr:`ProductVariant.cost`'s docstring). Shown as its own
+    ``Money`` rather than coerced into ``price``'s currency, since the two
+    can genuinely differ and a snapshot states facts, it does not convert
+    them."""
+
+
+class PublishSnapshot(BaseModel):
+    """Domain facts for the review (A30): only the rows the stage's own
+    ``plan()`` would refuse over, so the price table's red marker is never a
+    second copy of the below-cost rule."""
+
+    model_config = ConfigDict(frozen=True)
+
+    below_cost: tuple[BelowCostRow, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -195,8 +237,9 @@ class PublishStage:
         resolved = resolve_variant_pricing(ctx, listing)
         return PublishDesired(
             sync_flags=SYNC_FLAGS,
-            variants={variant.id: variant.price for variant in resolved.variants},
+            priced_variants=resolved.variants,
             missing=resolved.missing,
+            currency=ctx.workspace.defaults.etsy.currency,
         )
 
     def read_live(
@@ -239,6 +282,27 @@ class PublishStage:
         if desired.variants != applied.prices:
             return Verdict.work("the variant matrix differs from what Etsy has", drift=drift)
         return Verdict(will_run=False, drift=drift)
+
+    def snapshot(self, desired: PublishDesired, live: PublishLive | None) -> PublishSnapshot:
+        """The below-cost rows only, named (A30) -- reuses ``_below_cost``
+        rather than re-deriving which variants are under cost, so the price
+        table's red marker cannot drift from the rule ``plan()`` refuses
+        with."""
+        if live is None or not live.variant_costs:
+            return PublishSnapshot()
+        shortfall = _below_cost(desired.variants, live.variant_costs)
+        by_id = {variant.id: variant for variant in desired.priced_variants}
+        rows = tuple(
+            BelowCostRow(
+                size=by_id[variant_id].size,
+                colour=by_id[variant_id].colour_slug,
+                price=money(by_id[variant_id].price, desired.currency),
+                cost=money(live.variant_costs[variant_id], "USD"),
+            )
+            for variant_id in shortfall
+            if variant_id in by_id
+        )
+        return PublishSnapshot(below_cost=rows)
 
     def apply(
         self,

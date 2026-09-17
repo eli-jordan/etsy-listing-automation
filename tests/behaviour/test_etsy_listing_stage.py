@@ -8,17 +8,23 @@ job -- what belongs here is this stage's own resolution, comparison and PATCH.
 
 from __future__ import annotations
 
+import dataclasses
 from pathlib import Path
 
 import pytest
 
 from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.clients.etsy.models import ProductionPartner, ReturnPolicy, ShippingProfile
+from etsy_listings.clients.etsy.models import (
+    ProductionPartner,
+    ReturnPolicy,
+    ShippingProfile,
+    ShopSection,
+)
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, build_plan
-from etsy_listings.engine.stages.etsy_listing import EtsyListingStage
+from etsy_listings.engine.stages.etsy_listing import EtsyListingStage, ReturnPolicyApplied
 from etsy_listings.engine.stages.etsy_target import EtsyListingNotMintedError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -227,3 +233,137 @@ def test_printify_reattaching_its_shipping_profile_is_drift_and_gets_reasserted(
     result = _apply(ctx, lock)
     patched = result.applied["etsy_listing"]["shipping_profile_id"]
     assert patched == SHIPPING_PROFILE.shipping_profile_id
+
+
+def test_a_policy_accepting_neither_describes_as_none() -> None:
+    policy = ReturnPolicyApplied(accepts_returns=False, accepts_exchanges=False)
+
+    assert policy.describe() == "no returns or exchanges"
+
+
+def test_the_drift_names_a_live_section_when_the_catalog_knows_it(root: Path) -> None:
+    """Mirrors the shipping-profile case, for `shop_section_id` -- the third
+    id whose live side only the catalog can name (A30)."""
+    edit_listing(
+        root,
+        etsy={
+            "title": "Take A Hike Tee",
+            "description": "A retro sunset.",
+            "materials": ["cotton"],
+            "section": "Retro Tees",
+        },
+    )
+    other_section = ShopSection(shop_section_id=99, title="Seasonal")
+    etsy = FakeEtsyListingClient(
+        shipping_profiles=[SHIPPING_PROFILE],
+        policies=[RETURN_POLICY],
+        sections=[ShopSection(shop_section_id=44, title="Retro Tees"), other_section],
+    )
+    etsy.seed_listing(ETSY_LISTING_ID, shop_id=12345678)
+    ctx = _ctx(root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+    etsy.update_listing(12345678, ETSY_LISTING_ID, {"shop_section_id": 99})
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    section_drift = next(d for d in stage_plan.drift if d.path == "shop_section_id")
+    assert section_drift.last_applied_label == "Retro Tees"
+    assert section_drift.live_label == "Seasonal"
+
+
+def test_the_drift_names_the_last_applied_profile(root: Path, etsy) -> None:
+    """A30: the last-applied side always has a name -- this stage stores it
+    beside the id it resolved -- with no catalog lookup needed for it."""
+    ctx = _ctx(root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+    etsy.update_listing(12345678, ETSY_LISTING_ID, {"shipping_profile_id": 999})
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    assert stage_plan.drift[0].last_applied_label == "NOK standard tee"
+
+
+def test_the_drift_names_the_live_profile_when_the_catalog_knows_it(root: Path) -> None:
+    """The live side has only an id -- naming it needs the shop catalog this
+    run already fetched resolving the *desired* shipping profile (A30)."""
+    other_profile = ShippingProfile(shipping_profile_id=999, title="US origin")
+    etsy = FakeEtsyListingClient(
+        shipping_profiles=[SHIPPING_PROFILE, other_profile], policies=[RETURN_POLICY]
+    )
+    etsy.seed_listing(ETSY_LISTING_ID, shop_id=12345678)
+    ctx = _ctx(root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+    etsy.update_listing(12345678, ETSY_LISTING_ID, {"shipping_profile_id": 999})
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    assert stage_plan.drift[0].live_label == "US origin"
+
+
+def test_no_catalog_degrades_to_no_live_label_or_live_names(root: Path, etsy) -> None:
+    """``catalog`` is only ``None`` for a hand-built ``EtsyListingDesired``
+    outside ``desired()`` -- real usage always supplies one. Exercised here
+    directly through the stage's own methods, to prove the degradation is a
+    missing label, never a crash."""
+    ctx = _ctx(root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+    etsy.update_listing(12345678, ETSY_LISTING_ID, {"shipping_profile_id": 999})
+    applied = lock.parse_applied_for("etsy_listing", STAGE.applied_model)
+    live = STAGE.read_live(ctx, LISTING, lock, applied)
+    desired = dataclasses.replace(STAGE.desired(ctx, LISTING, applied), catalog=None)
+
+    verdict = STAGE.plan(desired, applied, live)
+    assert verdict.drift[0].last_applied_label == "NOK standard tee"
+    assert verdict.drift[0].live_label is None
+
+    snapshot = STAGE.snapshot(desired, live)
+    assert snapshot.live is not None
+    assert snapshot.live.shop_section is None
+    assert snapshot.live.shipping_profile is None
+
+
+def test_an_unknown_live_profile_id_has_no_label(root: Path, etsy) -> None:
+    """Never guessed at: a live id the catalog does not recognise is left
+    unlabelled rather than shown as ``None``'s stringified nonsense."""
+    ctx = _ctx(root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+    etsy.update_listing(12345678, ETSY_LISTING_ID, {"shipping_profile_id": 999})
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    assert stage_plan.drift[0].live_label is None
+
+
+# ------------------------------------------------------------------ snapshot
+
+
+def test_the_snapshot_names_the_desired_side(root: Path, etsy) -> None:
+    stage_plan = _stage_plan(_ctx(root, etsy), a_lock())
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert snapshot.desired.title == "Take A Hike Tee"
+    assert snapshot.desired.shipping_profile == "NOK standard tee"
+    assert snapshot.live is None, "no Etsy id at all yet -- not on Etsy"
+
+
+def test_the_snapshot_names_the_live_side_once_a_listing_exists(root: Path, etsy) -> None:
+    ctx = _ctx(root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert snapshot.live is not None
+    assert snapshot.live.title == "Take A Hike Tee"
+    assert snapshot.live.shipping_profile == "NOK standard tee"
+
+
+def test_a_blocked_stage_has_no_snapshot(workspace_root: Path, etsy) -> None:
+    set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
+
+    stage_plan = _stage_plan(_ctx(workspace_root, etsy), a_lock())
+
+    assert stage_plan.blocked is not None
+    assert stage_plan.snapshot is None

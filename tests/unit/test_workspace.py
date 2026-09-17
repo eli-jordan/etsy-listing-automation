@@ -404,3 +404,40 @@ def test_renders_dir_refuses_a_name_that_is_not_a_path_segment(workspace_root: P
     ws = Workspace.discover(root_override=workspace_root)
     with pytest.raises(InvalidNameError):
         ws.renders_dir("../escape")
+
+
+# --- preview accessors (A32) --------------------------------------------
+
+
+def test_preview_dir_sits_beside_the_render_cache(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.preview_dir("take-a-hike") == workspace_root / ".cache" / "previews" / "take-a-hike"
+
+
+def test_preview_file_mirrors_render_files_colour_convention(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.preview_file("take-a-hike", "flat-lay-01", "black", "deadbeef") == (
+        ws.preview_dir("take-a-hike") / "flat-lay-01" / "black-deadbeef.png"
+    )
+    assert ws.preview_file("take-a-hike", "colour-chart-01", None, "deadbeef") == (
+        ws.preview_dir("take-a-hike") / "colour-chart-01" / "scene-deadbeef.png"
+    )
+
+
+def test_preview_file_refuses_a_hash_that_is_not_a_valid_segment(workspace_root: Path) -> None:
+    """A caller must strip a hash's `sha256:` prefix before handing it here --
+    a colon is refused the same way a `..` component in a name would be."""
+    ws = Workspace.discover(root_override=workspace_root)
+    with pytest.raises(InvalidNameError):
+        ws.preview_file("take-a-hike", "flat-lay-01", "black", "sha256:deadbeef")
+
+
+def test_remove_listing_wipes_its_previews_too(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    preview = ws.preview_file("take-a-hike", "flat-lay-01", "black", "deadbeef")
+    preview.parent.mkdir(parents=True)
+    preview.write_bytes(b"png")
+
+    ws.remove_listing("take-a-hike")
+
+    assert not ws.preview_dir("take-a-hike").exists()

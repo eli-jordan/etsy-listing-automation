@@ -42,6 +42,12 @@ DERIVED_DIR = "_derived"
 # Inside CACHE_DIR (gitignored, fully derivable -- PRD 22)
 CATALOG_DIR = "catalog"
 RENDERS_DIR = "renders"
+PREVIEWS_DIR = "previews"
+"""A32: full-size renders `plan` produces ahead of `apply`, content-addressed
+by `scene_hash` under `PREVIEWS_DIR/<listing>/<template>/`. Sibling to
+`RENDERS_DIR` rather than nested inside it -- a preview is not yet an applied
+render, and `Workspace.remove_listing` needs to be able to wipe one without
+the other."""
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 

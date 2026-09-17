@@ -64,6 +64,25 @@ class ReturnPolicyApplied(BaseModel):
     accepts_exchanges: bool
     within_days: int | None = None
 
+    def describe(self) -> str:
+        """Mirrors :meth:`~etsy_listings.clients.etsy.models.ReturnPolicy.describe`
+        -- a return policy has no title of its own (PRD 59), so this is the
+        same human sentence, built from the same three fields this stage
+        already carries, used as a drift label (A30) where the live side has
+        only an id to compare with."""
+        accepted = [
+            name
+            for name, allowed in (
+                ("returns", self.accepts_returns),
+                ("exchanges", self.accepts_exchanges),
+            )
+            if allowed
+        ]
+        if not accepted:
+            return "no returns or exchanges"
+        within = f" within {self.within_days} days" if self.within_days else ""
+        return f"{' and '.join(accepted)}{within}"
+
 
 class AppliedEtsyListing(BaseModel):
     """The verbatim last-applied document (A2). Names sit beside their ids
@@ -113,9 +132,17 @@ class EtsyListingDesired:
     production_partner_ids: tuple[int, ...]
     should_auto_renew: bool
     state: Literal["active", "inactive"] | None = None
+    catalog: EtsyShopCatalog | None = None
+    """This run's already-built :class:`EtsyShopCatalog` (A25), carried
+    only so :func:`_drift` can label a *live* id it did not itself resolve a
+    name for -- through lookups (``shop_section_title`` and its siblings)
+    that read whatever ``desired()`` already fetched and issue no request of
+    their own. ``plan()`` stays pure in effect: nothing here can reach the
+    network. ``None`` only for a dataclass built by hand outside ``desired()``
+    (as every current test does), where there is no drift to label."""
 
     def applied(self) -> AppliedEtsyListing:
-        return AppliedEtsyListing(**self.__dict__)
+        return AppliedEtsyListing(**{k: v for k, v in self.__dict__.items() if k != "catalog"})
 
     def patch_body(self) -> dict[str, object]:
         """The PATCH body -- every field this stage owns, always sent in
@@ -142,6 +169,30 @@ class EtsyListingDesired:
         if self.state is not None:
             body["state"] = self.state
         return body
+
+
+class EtsyListingFacts(BaseModel):
+    """One side of the review (A30): the fields the mock shows unchanged
+    context for, named rather than left as an id."""
+
+    model_config = ConfigDict(frozen=True)
+
+    title: str | None = None
+    tags: tuple[str, ...] = ()
+    shop_section: str | None = None
+    shipping_profile: str | None = None
+
+
+class EtsyListingSnapshot(BaseModel):
+    """Both sides, in full -- the ``Plan`` this stage also returns carries
+    only what changed."""
+
+    model_config = ConfigDict(frozen=True)
+
+    desired: EtsyListingFacts
+    live: EtsyListingFacts | None
+    """``None`` for a listing with no Etsy id at all -- the mock's single
+    "Not on Etsy yet" column (decision 3), not an empty one."""
 
 
 class EtsyListingStage:
@@ -222,6 +273,7 @@ class EtsyListingStage:
             production_partner_ids=partner_ids,
             should_auto_renew=renewal == "auto",
             state=_desired_state(config.lifecycle, applied),
+            catalog=catalog,
         )
 
     def read_live(
@@ -244,7 +296,7 @@ class EtsyListingStage:
         live: EtsyListing | None,
     ) -> Verdict:
         wanted = desired.applied()
-        drift_found = _drift(applied, live)
+        drift_found = _drift(applied, live, desired.catalog)
 
         if applied is None:
             return Verdict.work(
@@ -261,6 +313,32 @@ class EtsyListingStage:
                 "Etsy disagrees with what was last applied -- re-asserting", drift=drift_found
             )
         return Verdict(will_run=False, drift=drift_found)
+
+    def snapshot(
+        self, desired: EtsyListingDesired, live: EtsyListing | None
+    ) -> EtsyListingSnapshot:
+        """Both sides, named (A30). The desired side already has names for
+        its section and shipping profile -- resolving them is what
+        ``desired()`` does -- so only the live side needs the catalog's
+        reverse lookup, and only when this run built one."""
+        desired_facts = EtsyListingFacts(
+            title=desired.title,
+            tags=desired.tags,
+            shop_section=desired.shop_section,
+            shipping_profile=desired.shipping_profile,
+        )
+        live_facts = None
+        if live is not None:
+            catalog = desired.catalog
+            live_facts = EtsyListingFacts(
+                title=live.title,
+                tags=live.tags,
+                shop_section=catalog.shop_section_title(live.shop_section_id) if catalog else None,
+                shipping_profile=(
+                    catalog.shipping_profile_title(live.shipping_profile_id) if catalog else None
+                ),
+            )
+        return EtsyListingSnapshot(desired=desired_facts, live=live_facts)
 
     def apply(
         self,
@@ -343,26 +421,69 @@ def _changes(wanted: AppliedEtsyListing, was: AppliedEtsyListing) -> tuple[Chang
     return tuple(changes)
 
 
-def _drift(was: AppliedEtsyListing | None, live: EtsyListing | None) -> tuple[Drift, ...]:
+def _drift(
+    was: AppliedEtsyListing | None, live: EtsyListing | None, catalog: EtsyShopCatalog | None
+) -> tuple[Drift, ...]:
     """What changed on Etsy since the last apply -- includes Printify
     re-attaching its own shipping profile after a republish (risk 13,
-    decision 7)."""
+    decision 7).
+
+    ``catalog`` names a drifted id's *live* side (A30): the *last-applied*
+    side already has a name on ``was`` (``shop_section``, ``shipping_profile``,
+    or ``return_policy``'s own fields), since this stage stores the name
+    beside the id it resolved from. Only the id a fresh ``GET`` returned has
+    none, and naming it costs the lookup nothing the catalog had not already
+    fetched resolving ``desired()`` (see the three ``EtsyShopCatalog`` methods
+    this calls).
+    """
     if was is None or live is None:
         return ()
 
     found: list[Drift] = []
     for path, ours, theirs in (
         ("title", was.title, live.title),
-        ("description", was.description, live.description),
-        ("shop_section_id", was.shop_section_id, live.shop_section_id),
-        ("shipping_profile_id", was.shipping_profile_id, live.shipping_profile_id),
-        ("return_policy_id", was.return_policy_id, live.return_policy_id),
         ("who_made", was.who_made, live.who_made),
         ("when_made", was.when_made, live.when_made),
         ("is_supply", was.is_supply, live.is_supply),
         ("should_auto_renew", was.should_auto_renew, live.should_auto_renew),
     ):
         change = drift(path, ours, theirs)
+        if change is not None:
+            found.append(change)
+
+    # `description` kept out of the loop above only because it is long
+    # enough that a label would be redundant with the value itself -- unlike
+    # the three below, whose live side is otherwise a bare id.
+    description_drift = drift("description", was.description, live.description)
+    if description_drift is not None:
+        found.append(description_drift)
+
+    for id_path, our_id, their_id, last_label, live_label in (
+        (
+            "shop_section_id",
+            was.shop_section_id,
+            live.shop_section_id,
+            was.shop_section,
+            catalog.shop_section_title(live.shop_section_id) if catalog else None,
+        ),
+        (
+            "shipping_profile_id",
+            was.shipping_profile_id,
+            live.shipping_profile_id,
+            was.shipping_profile,
+            catalog.shipping_profile_title(live.shipping_profile_id) if catalog else None,
+        ),
+        (
+            "return_policy_id",
+            was.return_policy_id,
+            live.return_policy_id,
+            was.return_policy.describe(),
+            catalog.return_policy_label(live.return_policy_id) if catalog else None,
+        ),
+    ):
+        change = drift(
+            id_path, our_id, their_id, last_applied_label=last_label, live_label=live_label
+        )
         if change is not None:
             found.append(change)
 
@@ -377,6 +498,14 @@ def _drift(was: AppliedEtsyListing | None, live: EtsyListing | None) -> tuple[Dr
                 path="production_partner_ids",
                 last_applied=sorted(was.production_partner_ids),
                 live=sorted(live_partner_ids),
+                last_applied_label=", ".join(sorted(was.production_partners)) or None,
+                live_label=", ".join(
+                    sorted(
+                        partner.partner_name or str(partner.production_partner_id)
+                        for partner in live.production_partners
+                    )
+                )
+                or None,
             )
         )
 

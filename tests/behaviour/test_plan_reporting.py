@@ -26,7 +26,7 @@ from typer.testing import CliRunner
 from etsy_listings.cli.app import app
 from etsy_listings.cli.render import format_plan
 from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import Verdict
+from etsy_listings.engine.change import Drift, Plan, StagePlan, Verdict
 from etsy_listings.engine.plan import build_plan
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -272,6 +272,62 @@ def test_a_refusal_from_plan_reads_like_one_from_desired(workspace_root: Path) -
     # Counted as a refusal in the summary, not left to be inferred from a
     # stage that quietly did nothing.
     assert "1 blocked" in output
+
+
+# ------------------------------------------------------------ drift labels
+
+
+def test_a_drift_with_labels_shows_names_not_ids(workspace_root: Path) -> None:
+    """A30: a stage that could resolve a name for a drifted id shows it,
+    rather than only the id `format_plan` printed before this PR."""
+    plan = Plan(
+        listing="take-a-hike",
+        is_live=False,
+        etsy_listing_id=None,
+        stage_plans=(
+            StagePlan(
+                stage="etsy_listing",
+                will_run=False,
+                drift=(
+                    Drift(
+                        path="shipping_profile_id",
+                        last_applied=1,
+                        live=999,
+                        last_applied_label="NOK standard tee",
+                        live_label="US origin",
+                    ),
+                ),
+            ),
+        ),
+    )
+
+    output = format_plan(plan)
+
+    assert "was NOK standard tee, Etsy now says US origin" in output
+    assert "999" not in output, "the raw id has a name now, so it need not appear"
+
+
+def test_a_drift_with_no_label_still_shows_the_raw_values(workspace_root: Path) -> None:
+    """Every drift before this PR, and every one whose sides are plain text
+    already -- a title, a description -- has no label at all, and `plan`
+    must go on printing exactly what it printed before."""
+    plan = Plan(
+        listing="take-a-hike",
+        is_live=False,
+        etsy_listing_id=None,
+        stage_plans=(
+            StagePlan(
+                stage="etsy_listing",
+                will_run=False,
+                drift=(Drift(path="title", last_applied="Old Title", live="New Title"),),
+            ),
+        ),
+    )
+
+    output = format_plan(plan)
+
+    assert "etsy_listing.title was edited outside this tool" in output
+    assert "(was" not in output
 
 
 def test_a_refused_stage_is_not_executed(workspace_root: Path) -> None:

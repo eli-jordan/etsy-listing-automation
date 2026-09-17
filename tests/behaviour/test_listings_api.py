@@ -56,12 +56,16 @@ def write_lock(
     etsy_listing_id: int | None = None,
     product_id: str | None = None,
     applied: bool = True,
+    incomplete: bool = False,
 ) -> Path:
     """A lockfile for *name*, as an apply would have left it.
 
     ``applied`` is what separates "this listing has been through the pipeline"
     from "something wrote a lockfile carrying only ids" -- `stages_completed`
     is the record of the former, and it is what `draft` vs `deployed` turns on.
+
+    ``incomplete`` stands in for A29's marker, set the way `execute` sets it:
+    a stage raised, and this is what a failed `apply` left behind.
     """
     remote: dict[str, object] = {}
     if etsy_listing_id is not None:
@@ -71,6 +75,8 @@ def write_lock(
     lock = Lockfile.empty(tool_version="test", applied_at="2024-01-01T00:00:00").model_copy(
         update={"remote": remote, "stages_completed": ["render"] if applied else []}
     )
+    if incomplete:
+        lock = lock.marked_incomplete("etsy_listing")
     path = workspace_root / "listings" / name / "state.lock.json"
     lock.write(path)
     # The listing document has to look *older* than the lockfile that recorded
@@ -298,6 +304,18 @@ class TestListingStatus:
         write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
         etsy_says({555: "active"})
         client.patch("/api/listings/take-a-hike", json={"brief": "a new brief"})
+        assert self.status(client) == "dirty"
+
+    def test_a_partially_applied_live_listing_reads_dirty_not_live(
+        self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
+    ) -> None:
+        """A29: a failed `apply` leaves the marker set, and the per-stage
+        write already made the lockfile newer than the yaml -- so nothing
+        about mtimes tells the API this listing's Etsy copy might not match
+        what was reviewed. Without wiring the marker through, this would
+        read `live` and hide exactly the case the marker exists to catch."""
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555, incomplete=True)
+        etsy_says({555: "active"})
         assert self.status(client) == "dirty"
 
     def test_a_listing_etsy_still_calls_a_draft_is_deployed(

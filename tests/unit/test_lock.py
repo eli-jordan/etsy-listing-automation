@@ -5,6 +5,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.engine.lock import (
+    IncompleteApply,
     Lockfile,
     StageApplyResult,
     canonical_hash,
@@ -252,3 +253,81 @@ def test_each_stage_only_ever_sees_its_own_subtree() -> None:
 
     assert parsed is not None
     assert parsed.title == "mine"
+
+
+# --------------------------------------------------- A29: the incomplete marker
+
+
+def test_marked_incomplete_records_the_stage_that_raised() -> None:
+    lock = _lock()
+
+    marked = lock.marked_incomplete("etsy_listing")
+
+    assert marked.incomplete == IncompleteApply(stage="etsy_listing")
+
+
+def test_completed_clears_a_marker() -> None:
+    lock = _lock().marked_incomplete("etsy_listing")
+
+    assert lock.completed().incomplete is None
+
+
+def test_completed_on_an_already_clean_lockfile_is_a_no_op() -> None:
+    lock = _lock()
+
+    assert lock.completed().incomplete is None
+
+
+def test_marked_incomplete_leaves_the_original_untouched() -> None:
+    """Same rule as `fold`: a method on `Lockfile` returns a new one rather
+    than mutating, or a stage failing halfway through a batch would leave the
+    lockfile an earlier listing is still holding onto already marked."""
+    lock = _lock()
+
+    lock.marked_incomplete("render")
+
+    assert lock.incomplete is None
+
+
+def test_the_marker_never_enters_the_hash() -> None:
+    """It lives outside `applied` on purpose: a failed run must not look like
+    a change to re-apply, only like a run that has not finished."""
+    lock = _lock(applied=SAMPLE_APPLIED)
+
+    marked = lock.marked_incomplete("etsy_listing")
+
+    assert marked.input_hash() == lock.input_hash()
+
+
+def test_write_omits_incomplete_when_unset(tmp_path: Path) -> None:
+    path = tmp_path / "state.lock.json"
+    lock = _lock()
+
+    lock.write(path)
+
+    assert '"incomplete"' not in path.read_text(encoding="utf-8")
+
+
+def test_write_records_incomplete_when_set(tmp_path: Path) -> None:
+    path = tmp_path / "state.lock.json"
+    lock = _lock().marked_incomplete("printify_product")
+
+    lock.write(path)
+
+    loaded = Lockfile.read(path)
+    assert loaded is not None
+    assert loaded.incomplete == IncompleteApply(stage="printify_product")
+
+
+def test_a_clean_lockfile_writes_byte_identical_json_to_before_the_marker_existed(
+    tmp_path: Path,
+) -> None:
+    """A29 must not move `SCHEMA_VERSION` or disturb an unrelated listing's
+    lockfile -- the whole point of omitting the field rather than writing it
+    as `null`."""
+    path = tmp_path / "state.lock.json"
+    lock = Lockfile(tool_version="0.1.0", applied_at="2026-01-01T00:00:00Z", applied=SAMPLE_APPLIED)
+
+    lock.write(path)
+
+    assert "incomplete" not in path.read_text(encoding="utf-8")

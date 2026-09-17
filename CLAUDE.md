@@ -23,10 +23,11 @@ command or test exists.
 | [docs/prd.md](docs/prd.md) | *What* the tool does. 67 numbered product decisions in its appendix. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
 
-Three subsidiary documents carry detail those two point at rather than repeat:
+Four subsidiary documents carry detail those two point at rather than repeat:
 [docs/multi-placement-rendering.md](docs/multi-placement-rendering.md) (PRD 28),
-[docs/phase-3-etsy.md](docs/phase-3-etsy.md) (PRD 52–59, A24–A28), and
-[docs/listing-lifecycle.md](docs/listing-lifecycle.md) (PRD 61–67). They are
+[docs/phase-3-etsy.md](docs/phase-3-etsy.md) (PRD 52–59, A24–A28),
+[docs/listing-lifecycle.md](docs/listing-lifecycle.md) (PRD 61–67), and
+[docs/deploy-changes.md](docs/deploy-changes.md) (PRD 20's runner, A29–A33). They are
 not a third authority — where any disagrees with the PRD, the PRD wins.
 
 When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.

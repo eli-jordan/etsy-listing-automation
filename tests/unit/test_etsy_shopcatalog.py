@@ -244,3 +244,84 @@ def test_each_list_is_fetched_at_most_once_per_catalog() -> None:
 
     assert client.section_calls == 1
     assert client.shipping_profile_calls == 1
+
+
+# --------------------------------------------------------- drift labels (A30)
+
+
+def test_shop_section_title_reads_an_id_back_once_the_list_is_fetched() -> None:
+    catalog, _ = _catalog(
+        sections=[
+            ShopSection(shop_section_id=44, title="Tees"),
+            ShopSection(shop_section_id=45, title="Hoodies"),
+        ]
+    )
+    catalog.shop_section("Tees")  # fetches the list this instance now has cached
+
+    assert catalog.shop_section_title(45) == "Hoodies"
+    assert catalog.shop_section_title(999) is None, "an id the shop does not have"
+
+
+def test_shop_section_title_never_fetches_on_its_own() -> None:
+    """Naming a drifted id is a nicety, not a rule `plan()` must enforce --
+    it must never cost the request `desired()` did not already make."""
+    catalog, client = _catalog(sections=[ShopSection(shop_section_id=44, title="Tees")])
+
+    assert catalog.shop_section_title(44) is None
+    assert client.section_calls == 0
+
+
+def test_shop_section_title_of_none_is_none() -> None:
+    catalog, _ = _catalog(sections=[ShopSection(shop_section_id=44, title="Tees")])
+    catalog.shop_section("Tees")
+
+    assert catalog.shop_section_title(None) is None
+
+
+def test_shipping_profile_title_reads_an_id_back_once_the_list_is_fetched() -> None:
+    catalog, _ = _catalog(
+        shipping_profiles=[
+            ShippingProfile(shipping_profile_id=1, title="NOK standard tee"),
+            ShippingProfile(shipping_profile_id=2, title="US origin"),
+        ]
+    )
+    catalog.shipping_profile("NOK standard tee")
+
+    assert catalog.shipping_profile_title(2) == "US origin"
+    assert catalog.shipping_profile_title(999) is None
+
+
+def test_shipping_profile_title_never_fetches_on_its_own() -> None:
+    catalog, client = _catalog(
+        shipping_profiles=[ShippingProfile(shipping_profile_id=1, title="NOK standard tee")]
+    )
+
+    assert catalog.shipping_profile_title(1) is None
+    assert client.shipping_profile_calls == 0
+
+
+def test_return_policy_label_reads_an_id_back_as_its_terms() -> None:
+    catalog, _ = _catalog(
+        policies=[
+            ReturnPolicy(return_policy_id=1, accepts_returns=True, accepts_exchanges=True),
+            ReturnPolicy(
+                return_policy_id=2,
+                accepts_returns=False,
+                accepts_exchanges=False,
+                return_deadline=None,
+            ),
+        ]
+    )
+    catalog.return_policy(ReturnPolicyTerms(accepts_returns=True, accepts_exchanges=True))
+
+    assert catalog.return_policy_label(2) == "no returns or exchanges"
+    assert catalog.return_policy_label(999) is None
+
+
+def test_return_policy_label_never_fetches_on_its_own() -> None:
+    catalog, client = _catalog(
+        policies=[ReturnPolicy(return_policy_id=1, accepts_returns=True, accepts_exchanges=True)]
+    )
+
+    assert catalog.return_policy_label(1) is None
+    assert client.return_policy_calls == 0

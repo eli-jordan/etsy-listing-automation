@@ -44,9 +44,9 @@ from pydantic import BaseModel, ConfigDict
 from etsy_listings.clients.etsy.listings import EtsyListingClient
 from etsy_listings.clients.etsy.models import VariationImageLink
 from etsy_listings.config.listing import MAX_MEDIA_ENTRIES, TemplateMediaEntry
-from etsy_listings.engine.change import Action, Drift, Verdict
+from etsy_listings.engine.change import Action, Drift, MediaChange, Verdict
 from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile, hash_file
+from etsy_listings.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
 from etsy_listings.engine.stage import Blocked, StageApplyResult
 from etsy_listings.engine.stages.colour_property import resolve_colour_property
 from etsy_listings.engine.stages.etsy_target import (
@@ -65,6 +65,40 @@ yet. Never a real hash's value -- ``hash_file`` always returns a
 ``sha256:``-prefixed string -- so the two can never collide."""
 
 NO_SHOP_CONSEQUENCE = "this listing's images will not be uploaded to Etsy"
+
+
+class DesiredImageSnapshot(BaseModel):
+    """One manifest entry, as this run wants to send it (A30)."""
+
+    model_config = ConfigDict(frozen=True)
+
+    rank: int
+    ref: str
+    file: str
+
+
+class LiveImageSnapshot(BaseModel):
+    """One image Etsy actually has, projected back to a ref where possible
+    (A30) -- ``ref`` is ``None`` for an image this tool never uploaded."""
+
+    model_config = ConfigDict(frozen=True)
+
+    rank: int | None
+    ref: str | None = None
+    image_id: int
+    url: str | None = None
+
+
+class EtsyMediaSnapshot(BaseModel):
+    """Domain facts for the review (A30): both manifests in full, so the
+    frontend can lay out thumbnails and compute *New* / moved / *Removed*
+    badges from ``ref`` identity, guided by the per-rank ``MediaChange``s
+    ``plan()`` already emits."""
+
+    model_config = ConfigDict(frozen=True)
+
+    desired: tuple[DesiredImageSnapshot, ...]
+    live: tuple[LiveImageSnapshot, ...]
 
 
 class AppliedMediaEntry(BaseModel):
@@ -92,6 +126,12 @@ class ManifestEntry:
     source: Path
     content_hash: str
     """A real ``sha256:...`` hash, or :data:`PENDING`."""
+    file: str
+    """``source``, workspace-relative and forward-slashed (A30) -- what the
+    snapshot's ``desired`` side names, computed here rather than in
+    ``snapshot()`` because that method is handed no ``ctx`` (a stage's
+    ``snapshot`` is pure, like its ``plan``) and so has no workspace root to
+    make ``source`` relative to."""
     alt_text: str = ""
     colour: str | None = None
     """The colour this entry depicts, when it comes from a `colour-matrix`
@@ -121,12 +161,38 @@ class EtsyMediaDesired:
 
 
 @dataclass(frozen=True)
+class LiveImage:
+    """One image Etsy actually has on the listing right now (A30)."""
+
+    rank: int | None
+    image_id: int
+    url: str | None
+    """Etsy's ``url_570xN`` -- the "On Etsy now" column's source for a draft,
+    or for an image uploaded by hand in Shop Manager, either of which has no
+    local render to fall back on. ``None`` when Etsy has not generated one
+    yet, which the frontend falls back from rather than this stage guessing
+    at."""
+    ref: str | None = None
+    """This id projected back to a manifest ref, through ``lock.remote``'s
+    ref -> id map -- the same reversal A27 already does for variation-image
+    links. ``None`` for an image this tool never uploaded (a hand-added one
+    in Shop Manager), which is not a fact ``snapshot()`` can derive on its
+    own: it is handed no ``lock``, only what ``read_live`` already resolved."""
+
+
+@dataclass(frozen=True)
 class EtsyMediaLive:
     live_image_ids: frozenset[int]
     dangling_refs: tuple[str, ...]
     """Refs `lock.remote` says were uploaded, whose id is no longer among the
     listing's images -- a replacement or an outside deletion, either way not
     visible any other way (decision 6, measured)."""
+    images: tuple[LiveImage, ...] = ()
+    """Every image the listing actually carries right now, in Etsy's own
+    rank order (A30) -- what the snapshot's ``live`` side is built from.
+    Defaulted rather than always populated by every caller, since a stage
+    under test through `execute` alone often builds one by hand without a
+    real `read_live`."""
 
 
 def _ref(template: str, colour: str | None) -> str:
@@ -154,7 +220,10 @@ def _manifest_entry(
         colour = entry.colour if entry.template == variation_template else None
 
     content_hash = hash_file(source) if source.is_file() else PENDING
-    return ManifestEntry(ref=ref, source=source, content_hash=content_hash, colour=colour)
+    file = to_workspace_relative_posix(workspace.root, source)
+    return ManifestEntry(
+        ref=ref, source=source, content_hash=content_hash, file=file, colour=colour
+    )
 
 
 class EtsyMediaStage:
@@ -214,7 +283,17 @@ class EtsyMediaStage:
         live_ids = frozenset(image.listing_image_id for image in live.images)
         known_ids: dict[str, int] = dict(lock.remote.get(IMAGE_IDS_KEY) or {})
         dangling = tuple(ref for ref, image_id in known_ids.items() if image_id not in live_ids)
-        return EtsyMediaLive(live_image_ids=live_ids, dangling_refs=dangling)
+        ref_by_image_id = {image_id: ref for ref, image_id in known_ids.items()}
+        images = tuple(
+            LiveImage(
+                rank=image.rank,
+                image_id=image.listing_image_id,
+                url=image.url_570xN,
+                ref=ref_by_image_id.get(image.listing_image_id),
+            )
+            for image in live.images
+        )
+        return EtsyMediaLive(live_image_ids=live_ids, dangling_refs=dangling, images=images)
 
     def plan(
         self,
@@ -226,7 +305,10 @@ class EtsyMediaStage:
 
         if applied is None:
             return Verdict.work(
-                _first_run_reason(desired), actions=_actions(desired), drift=drift_found
+                _first_run_reason(desired),
+                actions=_actions(desired),
+                changes=_media_changes(desired, None),
+                drift=drift_found,
             )
 
         wanted = desired.applied()
@@ -240,7 +322,10 @@ class EtsyMediaStage:
 
         if order_changed or hash_changed or variation_changed:
             return Verdict.work(
-                "the media manifest changed", actions=_actions(desired), drift=drift_found
+                "the media manifest changed",
+                actions=_actions(desired),
+                changes=_media_changes(desired, applied),
+                drift=drift_found,
             )
         if drift_found:
             return Verdict.work(
@@ -249,6 +334,24 @@ class EtsyMediaStage:
                 drift=drift_found,
             )
         return Verdict(will_run=False, drift=drift_found)
+
+    def snapshot(self, desired: EtsyMediaDesired, live: EtsyMediaLive | None) -> EtsyMediaSnapshot:
+        """Both manifests in full (A30) -- the frontend's thumbnails and
+        badges are built from this plus the ``MediaChange``s ``plan()``
+        already emitted, never from diffing these two lists itself."""
+        desired_rows = tuple(
+            DesiredImageSnapshot(rank=rank, ref=entry.ref, file=entry.file)
+            for rank, entry in enumerate(desired.manifest, start=1)
+        )
+        live_rows: tuple[LiveImageSnapshot, ...] = ()
+        if live is not None:
+            live_rows = tuple(
+                LiveImageSnapshot(
+                    rank=image.rank, ref=image.ref, image_id=image.image_id, url=image.url
+                )
+                for image in live.images
+            )
+        return EtsyMediaSnapshot(desired=desired_rows, live=live_rows)
 
     def apply(
         self,
@@ -372,6 +475,32 @@ def _actions(desired: EtsyMediaDesired) -> tuple[Action, ...]:
             ),
         ),
     )
+
+
+def _media_changes(
+    desired: EtsyMediaDesired, applied: AppliedEtsyMedia | None
+) -> tuple[MediaChange, ...]:
+    """One :class:`~etsy_listings.engine.change.MediaChange` per rank whose
+    ref differs between what was last applied and what this run wants (A30).
+
+    Replaces the single "the media manifest changed" reason the plan already
+    carried: a reason cannot say *which* image is new, which moved or which
+    was dropped, so drawing *New* / *was 2* / *Removed* badges used to mean
+    the frontend diffing two ref lists itself (A2, decision 4). Matched by
+    **rank**, not by ref -- a ref appearing at a different rank is exactly a
+    reorder, and the frontend (which also has both full manifests, from the
+    snapshot) is what turns "before ref X, after ref Y" into a moved-from-N
+    badge, never this stage.
+    """
+    wanted_refs = [entry.ref for entry in desired.manifest]
+    applied_refs = [entry.ref for entry in applied.manifest] if applied is not None else []
+    changes: list[MediaChange] = []
+    for rank in range(1, max(len(wanted_refs), len(applied_refs), 0) + 1):
+        before = applied_refs[rank - 1] if rank <= len(applied_refs) else None
+        after = wanted_refs[rank - 1] if rank <= len(wanted_refs) else None
+        if before != after:
+            changes.append(MediaChange(rank=rank, before=before, after=after))
+    return tuple(changes)
 
 
 def _drift(applied: AppliedEtsyMedia | None, live: EtsyMediaLive | None) -> tuple[Drift, ...]:

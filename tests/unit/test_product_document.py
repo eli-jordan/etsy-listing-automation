@@ -105,6 +105,15 @@ def test_the_document_hashes_the_same_as_the_dict_it_replaced() -> None:
     Derived the way the code derives it, this test would pass for any shape at
     all -- including one that silently re-applies every product in every
     workspace on upgrade. So it is written out.
+
+    ``colour_slug`` joined ``variants`` for A30: naming a colour Printify has
+    since discontinued (PRD 46) in a `ListChange("colors", removed=...)`
+    needs the name recorded on the variant that carried it, since the id
+    alone no longer resolves in the catalog once it's gone. Adding it changes
+    every existing lockfile's `input_hash` once -- a conscious, one-time
+    re-adopt (PRD 48's guard adopts the existing product by title and
+    description rather than duplicating it), not a silent one, which is
+    exactly what pinning this literal is for.
     """
     document = _desired(BLACK_M, BLACK_S).applied().model_dump(mode="json")
 
@@ -114,7 +123,10 @@ def test_the_document_hashes_the_same_as_the_dict_it_replaced() -> None:
         "blueprint_id": 706,
         "print_provider_id": 29,
         "position": "front",
-        "variants": [{"id": 1, "price": 34900}, {"id": 2, "price": 34900}],
+        "variants": [
+            {"id": 1, "price": 34900, "colour_slug": "black"},
+            {"id": 2, "price": 34900, "colour_slug": "black"},
+        ],
         "print_areas": [{"artwork": "default", "design_hash": "sha256:abc", "variant_ids": [1, 2]}],
     }
 

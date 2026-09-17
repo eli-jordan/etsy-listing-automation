@@ -19,6 +19,7 @@ from etsy_listings.clients.etsy.models import (
     InventoryPropertyValue,
 )
 from etsy_listings.engine.apply import execute
+from etsy_listings.engine.change import MediaChange
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, build_plan
@@ -176,6 +177,70 @@ def test_reordering_media_sends_a_new_image_ids_order_without_reuploading(
     assert new_order[1] == first_image_ids[f"{TEMPLATE}:black"]
 
 
+def test_reordering_reports_a_media_change_per_rank_that_moved(workspace_root: Path, etsy) -> None:
+    """A30, decision 4: a rank whose ref differs from what was last applied,
+    not a single "manifest changed" reason a badge cannot be drawn from."""
+    _write_renders(workspace_root)
+    ctx = _ctx(workspace_root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+
+    edit_listing(
+        workspace_root,
+        media=[
+            {"template": TEMPLATE, "colour": "moss"},
+            {"template": TEMPLATE, "colour": "black"},
+            {"template": TEMPLATE, "colour": "blue-jean"},
+            {"template": TEMPLATE, "colour": "ivory"},
+        ],
+    )
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    # A one-step rotation: every position's occupant shifts, so all four
+    # ranks report a change even though nothing was added or removed.
+    assert MediaChange(rank=1, before=f"{TEMPLATE}:black", after=f"{TEMPLATE}:moss") in (
+        stage_plan.changes
+    )
+    assert MediaChange(rank=2, before=f"{TEMPLATE}:blue-jean", after=f"{TEMPLATE}:black") in (
+        stage_plan.changes
+    )
+    assert MediaChange(rank=3, before=f"{TEMPLATE}:ivory", after=f"{TEMPLATE}:blue-jean") in (
+        stage_plan.changes
+    )
+    assert MediaChange(rank=4, before=f"{TEMPLATE}:moss", after=f"{TEMPLATE}:ivory") in (
+        stage_plan.changes
+    )
+    assert len([c for c in stage_plan.changes if isinstance(c, MediaChange)]) == 4
+
+
+def test_dropping_the_last_entry_reports_it_removed(workspace_root: Path, etsy) -> None:
+    _write_renders(workspace_root)
+    ctx = _ctx(workspace_root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+
+    edit_listing(
+        workspace_root,
+        media=[
+            {"template": TEMPLATE, "colour": "black"},
+            {"template": TEMPLATE, "colour": "blue-jean"},
+            {"template": TEMPLATE, "colour": "ivory"},
+        ],
+    )
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    assert MediaChange(rank=4, before=f"{TEMPLATE}:moss", after=None) in stage_plan.changes
+
+
+def test_the_first_plan_reports_every_entry_as_new(workspace_root: Path, etsy) -> None:
+    edit_listing(workspace_root, media=[{"template": TEMPLATE, "colour": "black"}])
+    _write_renders(workspace_root, colours=["black"])
+
+    stage_plan = _stage_plan(_ctx(workspace_root, etsy), a_lock())
+
+    assert stage_plan.changes == (MediaChange(rank=1, before=None, after=f"{TEMPLATE}:black"),)
+
+
 def test_dropping_a_media_entry_detaches_it_from_image_ids(workspace_root: Path, etsy) -> None:
     _write_renders(workspace_root)
     ctx = _ctx(workspace_root, etsy)
@@ -237,6 +302,48 @@ def test_an_image_deleted_outside_the_tool_is_drift_and_gets_reuploaded(
 
     assert stage_plan.will_run
     assert stage_plan.drift
+
+
+# ------------------------------------------------------------------ snapshot
+
+
+def test_the_snapshot_names_every_desired_entry(workspace_root: Path, etsy) -> None:
+    edit_listing(workspace_root, media=[{"template": TEMPLATE, "colour": "black"}])
+    _write_renders(workspace_root, colours=["black"])
+
+    stage_plan = _stage_plan(_ctx(workspace_root, etsy), a_lock())
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert len(snapshot.desired) == 1
+    row = snapshot.desired[0]
+    assert row.rank == 1
+    assert row.ref == f"{TEMPLATE}:black"
+    assert row.file.endswith("black.png")
+    assert "\\" not in row.file, "workspace-relative paths are always forward-slashed"
+    assert snapshot.live == ()
+
+
+def test_the_snapshot_names_every_live_image_with_its_url_and_ref(
+    workspace_root: Path, etsy
+) -> None:
+    """A30: the "On Etsy now" column reads Etsy's own `url_570xN`, and a
+    live image this tool itself uploaded is matched back to its ref (A27's
+    reversal, reused)."""
+    edit_listing(workspace_root, media=[{"template": TEMPLATE, "colour": "black"}])
+    _write_renders(workspace_root, colours=["black"])
+    ctx = _ctx(workspace_root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+
+    stage_plan = _stage_plan(ctx, lock)
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert len(snapshot.live) == 1
+    row = snapshot.live[0]
+    assert row.ref == f"{TEMPLATE}:black"
+    assert row.url is not None and row.url.startswith("https://fake-etsy.test/")
+    assert row.image_id == lock.remote["etsy_image_ids"][f"{TEMPLATE}:black"]
 
 
 # -------------------------------------------------------------- variation images

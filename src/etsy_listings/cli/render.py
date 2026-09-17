@@ -11,7 +11,7 @@ output is shown as missing because the stage observed it missing.
 
 from __future__ import annotations
 
-from etsy_listings.engine.change import Plan, StagePlan
+from etsy_listings.engine.change import Drift, Plan, StagePlan
 
 
 def format_plan(plan: Plan) -> str:
@@ -40,7 +40,10 @@ def format_plan(plan: Plan) -> str:
     for stage_plan, change in changes:
         lines.append(f"  ~ {stage_plan.stage}: {change}")
     for stage_plan, drift in drifts:
-        lines.append(f"  ! drift  {stage_plan.stage}.{drift.path} was edited outside this tool")
+        lines.append(
+            f"  ! drift  {stage_plan.stage}.{drift.path} was edited outside this "
+            f"tool{_drift_detail(drift)}"
+        )
 
     if not plan.stage_plans:
         lines.append("  (no stages configured)")
@@ -75,6 +78,24 @@ def format_blocked(stage_plan: StagePlan) -> list[str]:
     lines.extend(f"      {line}" for line in rest)
     lines.append(f"      ({stage_plan.stage} will not run)")
     return lines
+
+
+def _drift_detail(drift: Drift) -> str:
+    """`` (was NOK standard tee, Etsy now says US origin)`` -- a name in
+    place of the raw id when the stage that found the drift could resolve
+    one (A30), on either side independently: the last-applied side almost
+    always can (this stage already stored the name beside the id it
+    resolved), the live side only when this run's catalog happened to fetch
+    the list a fresh id turned up in. Nothing is printed for a drift with no
+    label at all, which is every drift before this PR and every one whose
+    two sides are already plain text (a title, a description)."""
+    before = drift.last_applied_label
+    after = drift.live_label
+    if before is None and after is None:
+        return ""
+    shown_before = before if before is not None else drift.last_applied
+    shown_after = after if after is not None else drift.live
+    return f" (was {shown_before}, Etsy now says {shown_after})"
 
 
 def _blocked_suffix(count: int) -> str:

@@ -20,6 +20,7 @@ from etsy_listings.config.listing import Listing
 # the same principle `TemplateSummary.status` states below.
 from etsy_listings.engine.status import ListingGesture, ListingStatus
 from etsy_listings.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
+from etsy_listings.ui.runs.events import RunEvent, RunKind, RunPhase
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
@@ -341,3 +342,38 @@ class CreateListingRequest(BaseModel):
 
 class RenameListingRequest(BaseModel):
     new_name: str
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Runs (A33). ``RunEvent`` itself, and the ``Plan``/``StagePlan`` DTOs it
+# carries, live in ``ui/runs/events.py`` beside the engine types they mirror --
+# only the request/response envelope belongs here, next to every other
+# endpoint's shapes.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class CreateRunRequest(BaseModel):
+    kind: RunKind
+    listings: list[str]
+    expect: dict[str, str] | None = None
+    """A fingerprint per listing, from an earlier plan run's
+    ``listing_planned`` event -- ``apply_listings``'s own A31 check. Absent
+    for a plan run, and for an apply run with nothing to compare against."""
+
+
+class RunSummary(BaseModel):
+    """Enough to show a page-head control (decision 8's table) or a row in a
+    future batch view -- everything except the event log itself."""
+
+    id: str
+    kind: RunKind
+    listings: list[str]
+    phase: RunPhase
+    seen: bool
+
+
+class RunDetail(RunSummary):
+    events: list[RunEvent]
+    """Every event this run has produced so far, in order -- what a client
+    reattaching to an in-progress or just-finished run replays instead of
+    opening the SSE stream from nothing (decision 9)."""

@@ -216,11 +216,16 @@ class Workspace:
         return sorted(names)
 
     def remove_listing(self, listing: str) -> None:
-        """Wipe ``listings/{name}/`` and ``.cache/renders/{name}/`` (PRD 63).
+        """Wipe ``listings/{name}/``, ``.cache/renders/{name}/`` (PRD 63) and
+        ``.cache/previews/{name}/`` (A32).
 
         Designs, garment profiles and pricing plans stay -- they are reusable.
         """
-        for path in (self.listing_dir(listing), self.renders_dir(listing)):
+        for path in (
+            self.listing_dir(listing),
+            self.renders_dir(listing),
+            self.preview_dir(listing),
+        ):
             if path.is_dir():
                 shutil.rmtree(path)
 
@@ -483,6 +488,34 @@ class Workspace:
 
     def catalog_cache_dir(self) -> Path:
         return self.cache(layout.CATALOG_DIR)
+
+    def preview_dir(self, listing: str) -> Path:
+        """Every preview this listing currently holds, one subdirectory per
+        template -- the same split :meth:`renders_dir` uses, since a preview
+        is the same pixels :meth:`render_file` would produce, just rendered
+        ahead of ``apply`` (A32). Sibling to the render cache, not nested in
+        it, so :meth:`remove_listing` can wipe one independently of the other."""
+        return self.cache(layout.PREVIEWS_DIR, _segment(listing))
+
+    def preview_file(
+        self, listing: str, template: str, colour: str | None, scene_hash: str
+    ) -> Path:
+        """One scene's full-size preview, content-addressed by its own
+        ``scene_hash`` (A32): a plan that changes nothing finds the file
+        already there, and a stale one simply stops matching rather than
+        needing to be found and deleted by name. Filename mirrors
+        :meth:`render_file`'s own convention -- the colour for a
+        ``colour-matrix`` scene, ``scene`` otherwise -- with the hash appended
+        so two different states of the same scene never collide. ``scene_hash``
+        goes through :func:`_segment` like every other name here: it is a
+        security boundary (PRD 20's future preview endpoint resolves through
+        this accessor, never a path from the URL), not just a naming rule, so
+        it refuses anything that is not a single, filesystem-safe segment --
+        which is exactly why the caller strips the hash's ``sha256:`` prefix
+        before handing it here."""
+        stem = _segment(colour) if colour is not None else "scene"
+        filename = f"{stem}-{_segment(scene_hash)}.png"
+        return self.preview_dir(listing) / _segment(template) / filename
 
     # ------------------------------------------------------------------
     # Reading the tree's config files. The workspace already owns

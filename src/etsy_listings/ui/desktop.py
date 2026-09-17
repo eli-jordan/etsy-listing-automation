@@ -39,6 +39,13 @@ WINDOW_MIN_SIZE = (1024, 700)
 WINDOW_BACKGROUND = "#f5ead8"
 
 _SERVER_START_TIMEOUT_SECONDS = 30
+_SHUTDOWN_TIMEOUT_SECONDS = 10
+"""How long ``stop`` waits when nothing is running. Not applied when a run is
+active (A33): an apply mid-stage can legitimately outlast this, and cutting
+the wait short would kill the server thread out from under the executor
+that A29 already made durable through exactly this kind of interruption --
+except a durable partial apply is still worse than the finish it was one
+stage away from."""
 
 
 @dataclass
@@ -47,12 +54,29 @@ class RunningServer:
 
     host: str
     port: int
+    app: FastAPI
     _server: uvicorn.Server
     _thread: threading.Thread
 
     def stop(self) -> None:
+        """Ask the server to stop and wait for it -- which, through the ASGI
+        lifespan ``ui/api/app.py`` wires up, already includes the runs
+        executor's own shutdown (A33): a queued run cancelled, a plan run
+        stopped at its next boundary, an apply run finishing the stage it is
+        in. A fixed timeout is fine when nothing is running; a run in flight
+        gets an unbounded wait and a status line instead, because a plan
+        run's window disappearing mid-preview is a cosmetic annoyance and an
+        apply's window disappearing mid-stage is the thing A29 exists to make
+        recoverable, not something to also make routine.
+        """
         self._server.should_exit = True
-        self._thread.join(timeout=10)
+        registry = getattr(self.app.state, "run_registry", None)
+        if registry is not None and registry.has_active_run():
+            sys.stdout.write("Finishing Etsy listing...\n")
+            sys.stdout.flush()
+            self._thread.join()
+        else:
+            self._thread.join(timeout=_SHUTDOWN_TIMEOUT_SECONDS)
 
 
 def page_url(host: str, port: int) -> str:
@@ -80,7 +104,7 @@ def start_server(app: FastAPI, host: str, port: int) -> RunningServer:
     deadline = time.monotonic() + _SERVER_START_TIMEOUT_SECONDS
     while time.monotonic() < deadline:
         if server.started:
-            return RunningServer(host=host, port=port, _server=server, _thread=thread)
+            return RunningServer(host=host, port=port, app=app, _server=server, _thread=thread)
         if not thread.is_alive():
             raise UserFacingError(f"the calibrator server failed to start on {host}:{port}")
         time.sleep(0.05)
