@@ -82,6 +82,7 @@ export function DeployPage() {
   const [deletedAfterApply, setDeletedAfterApply] = useState(false);
   const streamRef = useRef<RunStreamHandle | null>(null);
   const seenRef = useRef<string | null>(null);
+  const applyStartRef = useRef<Promise<void> | null>(null);
 
   const openStream = useCallback((id: string, lastEventId?: number) => {
     streamRef.current?.close();
@@ -173,6 +174,11 @@ export function DeployPage() {
   }, [state.phase, name]);
 
   async function handleBack() {
+    // Applying begins with an async POST. A fast Back click can otherwise
+    // navigate before that POST has registered the apply run, letting the
+    // editor query the old (already-seen) plan and miss the new run forever.
+    // Wait only for registration, not for the apply itself to finish.
+    await applyStartRef.current;
     streamRef.current?.close();
     // Only a plan run still under review (queued/planning/planned/previewing)
     // is worth asking the registry to cancel. An `apply` in progress is
@@ -208,6 +214,14 @@ export function DeployPage() {
     setState(initialDeployState);
     setRunId(result.run.id);
     openStream(result.run.id);
+  }
+
+  function beginApply() {
+    const pending = handleApply();
+    applyStartRef.current = pending;
+    void pending.finally(() => {
+      if (applyStartRef.current === pending) applyStartRef.current = null;
+    });
   }
 
   const showPlanAgain = !["queued", "planning", "applying", "applied"].includes(phase);
@@ -299,7 +313,7 @@ export function DeployPage() {
           controlPhase={phase}
           previewsTotal={previewsTotal}
           previewsDone={previewsDone}
-          onApply={() => void handleApply()}
+          onApply={beginApply}
           appliedStepCount={appliedStepCount}
           backLabel={deletedAfterApply ? "← Back to listings" : "← Back to editor"}
           onBack={() => void handleBack()}
