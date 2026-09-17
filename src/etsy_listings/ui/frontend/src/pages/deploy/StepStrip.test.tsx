@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { act, render, screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
 import { StepStrip } from "./StepStrip";
 import type { StageRuntimeStatus } from "./deployState";
 import type { PlanDTO, StagePlanDTO } from "../../types";
@@ -54,9 +54,14 @@ describe("StepStrip", () => {
 
   it("overlays applying/applied/failed from stageRuntime over the static plan", () => {
     const runtime: Record<string, StageRuntimeStatus> = {
-      render: { kind: "applied" },
-      printify_product: { kind: "applying", log: "PUT product 123" },
-      publish: { kind: "failed", message: "Etsy rejected the request" },
+      render: { kind: "applied", startedAt: 1_000, finishedAt: 3_500 },
+      printify_product: { kind: "applying", log: "PUT product 123", startedAt: Date.now() },
+      publish: {
+        kind: "failed",
+        message: "Etsy rejected the request",
+        startedAt: 10_000,
+        finishedAt: 22_900,
+      },
     };
     render(
       <StepStrip
@@ -78,5 +83,36 @@ describe("StepStrip", () => {
     expect(screen.getByText("Etsy rejected the request")).toBeInTheDocument();
     // etsy_listing was never reached because publish failed before it.
     expect(screen.getByText("Not reached")).toBeInTheDocument();
+    expect(screen.getByLabelText("Elapsed 2s")).toBeInTheDocument();
+    expect(screen.getByLabelText("Elapsed 12s")).toBeInTheDocument();
+    expect(document.querySelector(".dv-step--running .dv-spinner")).toBeInTheDocument();
+  });
+
+  it("updates a running stage's elapsed time and stops at the recorded finish time", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-17T10:00:00Z"));
+    const startedAt = Date.now();
+    const { rerender } = render(
+      <StepStrip
+        plan={plan([stage({ stage: "publish", will_run: true, reason: "x" })])}
+        stageRuntime={{ publish: { kind: "applying", log: null, startedAt } }}
+        heading="What apply will do"
+      />,
+    );
+
+    expect(screen.getByLabelText("Elapsed 0s")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1_250));
+    expect(screen.getByLabelText("Elapsed 1s")).toBeInTheDocument();
+
+    rerender(
+      <StepStrip
+        plan={plan([stage({ stage: "publish", will_run: true, reason: "x" })])}
+        stageRuntime={{ publish: { kind: "applied", startedAt, finishedAt: startedAt + 1_250 } }}
+        heading="What apply did"
+      />,
+    );
+    act(() => vi.advanceTimersByTime(5_000));
+    expect(screen.getByLabelText("Elapsed 1s")).toBeInTheDocument();
+    vi.useRealTimers();
   });
 });

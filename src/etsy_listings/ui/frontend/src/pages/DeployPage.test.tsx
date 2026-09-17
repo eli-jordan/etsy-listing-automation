@@ -362,6 +362,53 @@ describe("DeployPage: Back", () => {
 });
 
 describe("DeployPage: Apply", () => {
+  it("moves stages above a collapsed approved comparison while apply is running", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const fullPlan = plan([stage({ stage: "publish", will_run: true, reason: "publish it" })]);
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
+      id: "run-applying",
+      kind: "apply",
+      listings: ["take-a-hike"],
+      phase: "applying",
+      seen: false,
+    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue({
+      id: "run-applying",
+      kind: "apply",
+      listings: ["take-a-hike"],
+      phase: "applying",
+      seen: false,
+      events: [
+        { type: "phase", id: 1, phase: "applying" },
+        {
+          type: "listing_planned",
+          id: 2,
+          listing: "take-a-hike",
+          plan: fullPlan,
+          fingerprint: "fp-applying",
+        },
+        {
+          type: "stage_applying",
+          id: 3,
+          listing: "take-a-hike",
+          stage: "publish",
+          occurred_at: "2026-09-17T10:00:00Z",
+        },
+      ],
+    });
+    stubStream();
+
+    renderPage();
+
+    const stages = await screen.findByText("What apply will do");
+    const disclosure = screen.getByText("View approved before-and-after comparison");
+    const details = disclosure.closest("details");
+    expect(details).not.toHaveAttribute("open");
+    expect(
+      stages.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("sends the reviewed plan's fingerprint", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
@@ -397,6 +444,8 @@ describe("DeployPage: Apply", () => {
     await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-7"));
 
     await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
+
+    expect(screen.getByText("View approved before-and-after comparison")).toBeInTheDocument();
 
     await waitFor(() =>
       expect(runsApi.createRun).toHaveBeenCalledWith({

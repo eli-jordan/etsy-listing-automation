@@ -1665,6 +1665,11 @@ export interface components {
       id: number;
       /** Listing */
       listing: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at?: string;
       /** Stage */
       stage: string;
       /**
@@ -1679,6 +1684,11 @@ export interface components {
       id: number;
       /** Listing */
       listing: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at?: string;
       /** Stage */
       stage: string;
       /**
@@ -1709,6 +1719,11 @@ export interface components {
       listing: string;
       /** Message */
       message: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at?: string;
       /** Stage */
       stage: string;
       /**

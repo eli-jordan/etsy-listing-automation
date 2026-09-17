@@ -305,8 +305,8 @@ describe("deployState: a stage fails mid-apply", () => {
     const state = deployState(events);
 
     expect(state.phase).toBe("failed");
-    expect(state.stageRuntime.render).toEqual({ kind: "applied" });
-    expect(state.stageRuntime.printify_product).toEqual({
+    expect(state.stageRuntime.render).toMatchObject({ kind: "applied" });
+    expect(state.stageRuntime.printify_product).toMatchObject({
       kind: "failed",
       message: "Printify rejected the request",
     });
@@ -344,7 +344,36 @@ describe("deployState: reattaching mid-apply", () => {
     const state = deployState(events);
 
     expect(state.phase).toBe("applying");
-    expect(state.stageRuntime.render).toEqual({ kind: "applying", log: "rendering 1 scene" });
+    expect(state.stageRuntime.render).toMatchObject({
+      kind: "applying",
+      log: "rendering 1 scene",
+    });
+  });
+
+  it("uses event timestamps so a reattached stage keeps its real elapsed time", () => {
+    reset();
+    const state = deployState([
+      {
+        type: "stage_applying",
+        id: id(),
+        listing: "mushroom-club-tee",
+        stage: "publish",
+        occurred_at: "2026-09-17T10:00:00Z",
+      },
+      {
+        type: "stage_applied",
+        id: id(),
+        listing: "mushroom-club-tee",
+        stage: "publish",
+        occurred_at: "2026-09-17T10:00:12.500Z",
+      },
+    ]);
+
+    expect(state.stageRuntime.publish).toEqual({
+      kind: "applied",
+      startedAt: Date.parse("2026-09-17T10:00:00Z"),
+      finishedAt: Date.parse("2026-09-17T10:00:12.500Z"),
+    });
   });
 });
 

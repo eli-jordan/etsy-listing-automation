@@ -33,6 +33,7 @@ module's docstring elsewhere warns about -- one shape, two owners.
 from __future__ import annotations
 
 from dataclasses import fields, is_dataclass
+from datetime import UTC, datetime
 from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, Literal
@@ -306,6 +307,7 @@ class StageApplyingEvent(BaseModel):
     id: int
     listing: str
     stage: str
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class ProgressEvent(BaseModel):
@@ -326,6 +328,7 @@ class StageAppliedEvent(BaseModel):
     id: int
     listing: str
     stage: str
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class StageFailedEvent(BaseModel):
@@ -334,6 +337,7 @@ class StageFailedEvent(BaseModel):
     listing: str
     stage: str
     message: str
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class ListingFailedEvent(BaseModel):

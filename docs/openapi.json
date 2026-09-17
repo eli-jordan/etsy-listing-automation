@@ -1844,6 +1844,11 @@
             "title": "Listing",
             "type": "string"
           },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
           "stage": {
             "title": "Stage",
             "type": "string"
@@ -1871,6 +1876,11 @@
           },
           "listing": {
             "title": "Listing",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
             "type": "string"
           },
           "stage": {
@@ -1933,6 +1943,11 @@
           },
           "message": {
             "title": "Message",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
             "type": "string"
           },
           "stage": {

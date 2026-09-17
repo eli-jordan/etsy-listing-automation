@@ -44,9 +44,9 @@ import type { PlanDTO, RunEvent, RunPhase } from "../../types";
  */
 
 export type StageRuntimeStatus =
-  | { kind: "applying"; log: string | null }
-  | { kind: "applied" }
-  | { kind: "failed"; message: string };
+  | { kind: "applying"; log: string | null; startedAt: number }
+  | { kind: "applied"; startedAt: number; finishedAt: number }
+  | { kind: "failed"; message: string; startedAt: number; finishedAt: number };
 
 export interface DeployState {
   phase: RunPhase;
@@ -104,6 +104,11 @@ function withRuntime(state: DeployState, stage: string, status: StageRuntimeStat
   return { ...state, stageRuntime: { ...state.stageRuntime, [stage]: status } };
 }
 
+function eventTime(event: { occurred_at?: string }): number {
+  const parsed = event.occurred_at === undefined ? Number.NaN : Date.parse(event.occurred_at);
+  return Number.isNaN(parsed) ? Date.now() : parsed;
+}
+
 /** Folds one event onto a state. Exported alongside {@link deployState}
  * (which folds a whole array from {@link initialDeployState}) because
  * `DeployPage` receives events one at a time from `runStream.ts` after the
@@ -145,21 +150,40 @@ export function applyRunEvent(state: DeployState, event: RunEvent): DeployState 
       };
 
     case "stage_applying":
-      return withRuntime(state, event.stage, { kind: "applying", log: null });
+      return withRuntime(state, event.stage, {
+        kind: "applying",
+        log: null,
+        startedAt: eventTime(event),
+      });
 
     case "progress":
       if (event.stage === null) return state;
       {
         const current = state.stageRuntime[event.stage];
         if (current === undefined || current.kind !== "applying") return state;
-        return withRuntime(state, event.stage, { kind: "applying", log: event.message });
+        return withRuntime(state, event.stage, { ...current, log: event.message });
       }
 
-    case "stage_applied":
-      return withRuntime(state, event.stage, { kind: "applied" });
+    case "stage_applied": {
+      const finishedAt = eventTime(event);
+      const current = state.stageRuntime[event.stage];
+      return withRuntime(state, event.stage, {
+        kind: "applied",
+        startedAt: current?.kind === "applying" ? current.startedAt : finishedAt,
+        finishedAt,
+      });
+    }
 
-    case "stage_failed":
-      return withRuntime(state, event.stage, { kind: "failed", message: event.message });
+    case "stage_failed": {
+      const finishedAt = eventTime(event);
+      const current = state.stageRuntime[event.stage];
+      return withRuntime(state, event.stage, {
+        kind: "failed",
+        message: event.message,
+        startedAt: current?.kind === "applying" ? current.startedAt : finishedAt,
+        finishedAt,
+      });
+    }
 
     case "listing_failed":
       return {
