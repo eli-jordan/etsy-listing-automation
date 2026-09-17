@@ -44,7 +44,7 @@ from etsy_listings.engine.run import (
 from etsy_listings.engine.stage import AnyStage, Blocked
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.render import RenderSnapshot, RenderStage
-from etsy_listings.errors import UserFacingError
+from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 from etsy_listings.ui.runs.events import (
     TERMINAL_PHASES,
     ListingFailedEvent,
@@ -70,11 +70,6 @@ ContextFactory = Callable[[Workspace, EventSink | None], RunContext]
 default every real server uses; a test wires one to in-memory fakes instead,
 by swapping this one callable -- nothing else here knows how a client is
 assembled."""
-
-INTERNAL_ERROR_MESSAGE = "Internal error, see the server log"
-"""Decision 5, word for word: what a defect (anything that is not a
-:class:`~etsy_listings.errors.UserFacingError`) shows the page. The real
-message is logged, not sent -- see :meth:`RunExecutor._execute`."""
 
 
 def _needs_preview(planned: PlannedRun) -> bool:

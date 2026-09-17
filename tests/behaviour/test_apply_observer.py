@@ -17,6 +17,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+import pytest
 from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.engine.apply import execute
@@ -26,7 +27,7 @@ from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, StageState
 from etsy_listings.engine.run import RunObserver, apply_listings
 from etsy_listings.engine.stage import StageApplyResult
-from etsy_listings.errors import UserFacingError
+from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock
@@ -45,6 +46,7 @@ class _Stage:
     applied_model: type[_AppliedDoc] = _AppliedDoc
     remote: dict[str, Any] = field(default_factory=dict)
     fails: bool = False
+    defect: bool = False
 
     def desired(self, ctx: RunContext, listing: str, applied: _AppliedDoc | None) -> dict[str, Any]:
         return {"stage": self.name}
@@ -62,6 +64,8 @@ class _Stage:
     ) -> StageApplyResult:
         if self.fails:
             raise UserFacingError(f"{self.name} refused")
+        if self.defect:
+            raise RuntimeError(f"connection to internal-db-host refused for {self.name}")
         return StageApplyResult(applied={"ok": True}, remote=self.remote)
 
 
@@ -124,6 +128,31 @@ def test_stage_failed_fires_with_the_exceptions_message_before_reraising(
 
     assert applied == ["render"], "the stage that failed must not also report applied"
     assert failed == [("etsy_listing", "etsy_listing refused")]
+
+
+def test_a_bare_defect_reaches_on_stage_failed_masked_not_verbatim(workspace_root: Path) -> None:
+    """A stage's own bug can say anything -- a connection string, a secret
+    interpolated into an f-string. `on_stage_failed` feeds a client-visible
+    event (the UI's runs resource), so only a `UserFacingError`'s message is
+    safe to forward; anything else must be masked here, the same rule `_over`
+    already applies to a listing-level failure. The exception `execute`
+    re-raises still carries the real text, for the server log."""
+    ctx = a_context(workspace_root)
+    failed: list[tuple[str, str]] = []
+
+    with pytest.raises(RuntimeError, match="internal-db-host") as excinfo:
+        execute(
+            ctx,
+            _planned(_Stage("etsy_listing", defect=True)),
+            a_lock(),
+            observer=RunObserver(
+                on_stage_failed=lambda listing, stage, message: failed.append((stage, message)),
+            ),
+        )
+
+    assert failed == [("etsy_listing", INTERNAL_ERROR_MESSAGE)]
+    assert "internal-db-host" not in failed[0][1]
+    assert "internal-db-host" in str(excinfo.value), "the real message must still reach the log"
 
 
 def test_a_stage_that_never_runs_fires_neither_callback(workspace_root: Path) -> None:

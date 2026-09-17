@@ -129,11 +129,16 @@ StageAppliedSink = Callable[[str, str], None]
 ``execute`` is building."""
 
 StageFailedSink = Callable[[str, str, str], None]
-"""Called with a listing's name, the stage whose ``apply`` raised, and the
-exception's own message -- right before ``execute`` re-raises it. Fired for
-*any* exception, not only a :class:`~etsy_listings.errors.UserFacingError`:
-which of the two it was, and what that means for the run as a whole, is the
-executor's decision (decision 5), not this callback's."""
+"""Called with a listing's name, the stage whose ``apply`` raised, and a
+message -- right before ``execute`` re-raises the exception itself. Fired for
+*any* exception, not only a :class:`~etsy_listings.errors.UserFacingError`,
+but the message is not always the exception's own: ``execute`` applies the
+same rule ``_over`` already applies to a listing-level failure, so a bare
+defect's message is replaced with
+:data:`~etsy_listings.errors.INTERNAL_ERROR_MESSAGE` before this fires. A
+defect's real text still reaches the log, via the exception ``execute``
+re-raises -- just never this callback, which is what a client ends up
+seeing."""
 
 
 def _ignore_planned(listing: str, planned: PlannedRun) -> None:
@@ -197,8 +202,10 @@ class RunObserver:
     **The apply-time half, added for the UI's runs resource (A33).**
     :attr:`on_stage_applying` and :attr:`on_stage_applied` bracket each
     stage's own ``apply`` inside :func:`~etsy_listings.engine.apply.execute`;
-    :attr:`on_stage_failed` fires once, with that stage's exception message,
-    right before ``execute`` re-raises it. ``listing_failed`` (decision 7's
+    :attr:`on_stage_failed` fires once, right before ``execute`` re-raises,
+    with that stage's own message only when it raised a
+    :class:`~etsy_listings.errors.UserFacingError` -- a bare defect's message
+    is masked before this fires (see :data:`StageFailedSink`). ``listing_failed`` (decision 7's
     event table) has no field of its own here -- :attr:`on_failure` already
     is that sink, unchanged from the plan-time meaning it already had; the
     executor is what turns whichever exception reached it into the right

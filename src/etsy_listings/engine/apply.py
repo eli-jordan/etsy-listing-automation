@@ -11,6 +11,7 @@ from etsy_listings import __about__
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
+from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 
 if TYPE_CHECKING:
     from etsy_listings.engine.run import RunObserver
@@ -146,7 +147,13 @@ def execute(
             result = stage.apply(ctx, state.desired, state.applied, state.live, live_lock)
         except Exception as exc:
             record(_stamp(result_lock.marked_incomplete(stage.name)))
-            watch.on_stage_failed(listing, stage.name, str(exc))
+            # A `UserFacingError`'s message is safe to show verbatim (the
+            # same rule `_over` already applies to a listing-level failure);
+            # anything else is a defect and may carry whatever its own text
+            # happens to say, so it is masked here, at the one place that
+            # decides, rather than trusting every future observer to guess.
+            reported = str(exc) if isinstance(exc, UserFacingError) else INTERNAL_ERROR_MESSAGE
+            watch.on_stage_failed(listing, stage.name, reported)
             raise
         result_lock = result_lock.fold(stage.name, result)
         remote = {**remote, **result.remote}
