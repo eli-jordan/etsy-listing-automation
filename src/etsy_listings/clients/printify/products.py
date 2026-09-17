@@ -147,7 +147,21 @@ class HttpPrintifyClient(PrintifyClient):
         return Product.model_validate(response.json())
 
     def delete_product(self, shop_id: int, product_id: str) -> None:
-        self._transport.request("DELETE", f"/v1/shops/{shop_id}/products/{product_id}.json")
+        """Remove the product, or do nothing if it is already gone.
+
+        A retract that deleted the product, then failed because the Etsy draft
+        survived (PRD 63), re-applies after the user removed the draft. The
+        product is gone; treating that 404 as a crash leaves the local files
+        stuck. Same two absences as :meth:`get_product`: `404` is unknown to
+        every shop, `400`/:data:`~etsy_listings.clients.printify.transport.WRONG_SHOP_CODE`
+        is a product another shop holds.
+        """
+        try:
+            self._transport.request("DELETE", f"/v1/shops/{shop_id}/products/{product_id}.json")
+        except PrintifyApiError as exc:
+            if exc.status_code == HTTP_NOT_FOUND or exc.code == WRONG_SHOP_CODE:
+                return
+            raise
 
     def publish(self, shop_id: int, product_id: str, sync_flags: dict[str, bool]) -> None:
         self._transport.request(

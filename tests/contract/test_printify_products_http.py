@@ -445,6 +445,48 @@ def test_delete_removes_the_product() -> None:
     }
 
 
+def test_delete_treats_a_gone_product_as_already_deleted() -> None:
+    """A retract that already deleted the product, then failed because the
+    Etsy draft survived, re-applies after the user removed the draft (PRD 63).
+    The product is gone; crashing on that 404 leaves the local files stuck."""
+    _client(lambda _: httpx.Response(404, json={"message": "Not Found"})).delete_product(
+        SHOP_ID, PRODUCT_ID
+    )
+
+
+def test_delete_treats_a_product_in_another_shop_as_already_deleted() -> None:
+    """Same two absences as get_product: 404 is unknown everywhere, 400/8104
+    is a product another shop holds. Catching only 404 turns a store reconnect
+    into a stuck retract."""
+    response = httpx.Response(
+        400,
+        json={
+            "status": "error",
+            "code": 8104,
+            "message": "Validation failed.",
+            "errors": {
+                "reason": f'Product "{PRODUCT_ID}" does not belongs to shop #{SHOP_ID}.',
+                "code": 8104,
+            },
+        },
+    )
+    _client(lambda _: response).delete_product(SHOP_ID, PRODUCT_ID)
+
+
+def test_delete_still_raises_for_a_validation_error_that_is_not_the_wrong_shop() -> None:
+    response = httpx.Response(
+        400,
+        json={
+            "status": "error",
+            "code": 8251,
+            "message": "Validation failed.",
+            "errors": {"reason": "something else entirely", "code": 8251},
+        },
+    )
+    with pytest.raises(PrintifyApiError):
+        _client(lambda _: response).delete_product(SHOP_ID, PRODUCT_ID)
+
+
 # --------------------------------------------------------------------- publish
 
 

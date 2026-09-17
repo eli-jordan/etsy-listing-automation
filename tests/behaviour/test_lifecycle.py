@@ -164,6 +164,28 @@ class TestRetract:
         assert "Shop Manager" in str(report.outcomes[0].error)
         assert listing_file(root).is_file()
 
+    def test_reapply_after_manual_etsy_removal_wipes_local_when_printify_is_already_gone(
+        self, workspace_root: Path
+    ) -> None:
+        """PRD 63: the survived-draft failure keeps the files so the handle is
+        not lost, then asks the user to remove the listing in Shop Manager and
+        re-apply. The Printify product is already gone from the first apply."""
+        root = _ready(workspace_root)
+        edit_listing(root, lifecycle="deleted")
+        _write_lock(root, _lock(etsy_listing_id=ETSY_LISTING_ID, product_id=PRODUCT_ID))
+        etsy = _etsy()
+        etsy.seed_listing(ETSY_LISTING_ID, shop_id=ETSY_SHOP_ID, state="draft")
+        printify = FakePrintifyClient()
+
+        first = apply_listings(a_context(root, etsy=etsy, printify=printify), [LISTING], STAGES)
+        assert not first.outcomes[0].ok
+        assert listing_file(root).is_file()
+
+        second = apply_listings(a_context(root, etsy=_etsy(), printify=printify), [LISTING], STAGES)
+
+        assert second.outcomes[0].ok
+        assert not (root / "listings" / LISTING).exists()
+
 
 class TestEtsyStateWrites:
     def _apply_etsy(self, root: Path, etsy: FakeEtsyListingClient, lock: Lockfile) -> Lockfile:
