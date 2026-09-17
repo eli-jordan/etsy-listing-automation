@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { SaveState } from "../../hooks/useAutosave";
 import type { ListingDetail } from "../../types";
+import { SavedAgo } from "./SavedAgo";
 
 /** What the editor's page head says about where this listing stands with the
  * disk.
@@ -36,7 +37,10 @@ export function metaFor(save: SaveState, detail: ListingDetail, name: string | n
               hand and runs the CLI against -- knowing which one is the point. */}
           <span className="page-head__path">listings/{name}/listing.yaml</span>
           {" · "}
-          Autosaved
+          <span className="page-head__saved">
+            <span className="page-head__dot" aria-hidden="true" />
+            <SavedAgo savedAt={save.savedAt} />
+          </span>
         </>
       );
   }
