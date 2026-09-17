@@ -133,7 +133,6 @@ jobs:
     # `needs` keeps this from burning ten minutes on a commit whose lint is
     # already broken.
     name: browser
-    if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/main'
     needs: [python, frontend]
     runs-on: ubuntu-latest
     steps:
