@@ -7,6 +7,7 @@ import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
 import type { Issue, IssueTab, ListingDetail } from "../types";
+import { DeployControl } from "./editor/DeployControl";
 import { DesignSelect } from "./editor/DesignSelect";
 import { DetailsTab } from "./editor/DetailsTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
@@ -138,6 +139,7 @@ function ListingEditorPageContent({
         <EditorHead
           detail={detail}
           onBack={onBack}
+          flush={flush}
           title={
             <EditableName
               value={name ?? ""}
@@ -158,17 +160,26 @@ function ListingEditorPageContent({
 }
 
 /** The page head both flows share: breadcrumb, a title node, the open menu
- * once there is something to open, the status pill, and a meta line. */
+ * once there is something to open, the status pill, and a meta line.
+ *
+ * `Deploy changes →` (docs/deploy-changes.md decision 8) sits here rather
+ * than in `ListingEditorPageContent`, because this is the one part of the
+ * editor that reads the same on every tab -- an action anchored to a spot
+ * that stayed empty in the mockup, not one that jumps around with the tab
+ * strip. It is withheld for a draft that has no name yet (`detail.name ===
+ * ""`): there is nothing on disk for `plan` to read until naming creates it. */
 export function EditorHead({
   detail,
   onBack,
   title,
   meta,
+  flush,
 }: {
   detail: ListingDetail;
   onBack: () => void;
   title: ReactNode;
   meta: ReactNode;
+  flush: () => Promise<void>;
 }) {
   // Not keyed off `status`: a listing can carry a Printify product without an
   // Etsy listing id, and an id it has is worth a link whatever state Etsy
@@ -192,6 +203,12 @@ export function EditorHead({
 
       <StatusTag status={detail.status} />
       <span className="page-head__meta">{meta}</span>
+
+      {detail.name !== "" && (
+        <div className="page-head__actions dv-head-actions">
+          <DeployControl name={detail.name} flush={flush} />
+        </div>
+      )}
     </div>
   );
 }

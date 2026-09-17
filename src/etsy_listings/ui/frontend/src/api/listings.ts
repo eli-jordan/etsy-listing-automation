@@ -33,6 +33,18 @@ export async function getListing(name: string): Promise<ListingDetail> {
   return data;
 }
 
+/** The same, but `null` on a 404 rather than a thrown error -- what the
+ * deploy view uses to tell "this listing no longer exists" (a retract just
+ * applied, decision 11) apart from a genuine failure it should surface. */
+export async function tryGetListing(name: string): Promise<ListingDetail | null> {
+  const { data, error, response } = await api.GET("/api/listings/{name}", {
+    params: { path: { name } },
+  });
+  if (response.status === 404) return null;
+  if (error || !data) throw new ListingsApiError(`could not load listing ${name}`);
+  return data;
+}
+
 /** A partial `listing.yaml` document -- merged server-side, one level deep on
  * `etsy:` (see `ui/api/listings.py`'s `_merge`). Always resolves: an invalid
  * candidate comes back as a 200 with `field_errors` populated and nothing

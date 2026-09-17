@@ -5,6 +5,7 @@ import { App } from "./App";
 import "./index.css";
 import { AppShell } from "./shell/AppShell";
 import { DashboardPage } from "./pages/DashboardPage";
+import { DeployPage } from "./pages/DeployPage";
 import { ListingEditorPage } from "./pages/ListingEditorPage";
 import { ListingsPage } from "./pages/ListingsPage";
 
@@ -25,6 +26,11 @@ createRoot(container).render(
               ranks the static segment above the dynamic one. */}
           <Route path="/listings/new" element={<ListingEditorPage />} />
           <Route path="/listings/:name" element={<ListingEditorPage />} />
+          {/* Its own route, not a mode of `ListingEditorPage` kept mounted
+              behind it (docs/deploy-changes.md decision 9) -- Back returns to
+              `/listings/:name`, which re-fetches `ListingDetail` fresh rather
+              than reusing state a deploy run may have changed server-side. */}
+          <Route path="/listings/:name/deploy" element={<DeployPage />} />
           {/* The calibrator, unmounted -- mounted here unchanged. */}
           <Route path="/templates" element={<App />} />
         </Route>
