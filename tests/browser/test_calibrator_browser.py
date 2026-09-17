@@ -2,7 +2,7 @@
 
 These cover the one thing no other layer can: that the React app, the FastAPI
 endpoints and the real render pipeline actually work *together* in a
-browser -- a drag reaching the server, a PNG coming back, and Save writing
+browser -- a drag reaching the server, a PNG coming back, and autosave writing
 the template.yaml that `apply` will later read.
 
 They run against the built SPA served by FastAPI (see conftest), and skip
@@ -441,9 +441,8 @@ class TestColourMatrixKind:
         page.mouse.up()
 
         save_log = TrafficLog(page, "/config")
-        page.get_by_role("button", name="Save template.yaml").click()
         save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
-        page.wait_for_selector("text=saved")
+        page.wait_for_selector("text=Saved")
 
         saved = _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)
         assert saved["kind"] == "colour-matrix"
@@ -514,7 +513,6 @@ class TestMultipleKind:
         page.keyboard.up("Shift")
 
         save_log = TrafficLog(page, "/config")
-        page.get_by_role("button", name="Save template.yaml").click()
         save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
 
         after = _template_config(workspace_root, MULTIPLE_TEMPLATE)["placements"][0]["bounding_box"]
@@ -594,9 +592,8 @@ class TestMultipleKind:
         page.get_by_label("Colour for box 3").fill("ivory")
 
         save_log = TrafficLog(page, "/config")
-        page.get_by_role("button", name="Save template.yaml").click()
         save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
-        page.wait_for_selector("text=saved")
+        page.wait_for_selector("text=Saved")
 
         saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)
         assert saved["kind"] == "multiple"
@@ -630,9 +627,8 @@ class TestMovingABox:
         page.mouse.up()
 
         save_log = TrafficLog(page, "/config")
-        page.get_by_role("button", name="Save template.yaml").click()
         save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
-        page.wait_for_selector("text=saved")
+        page.wait_for_selector("text=Saved")
 
         saved = _template_config(workspace_root, COLOUR_MATRIX_TEMPLATE)["bounding_box"]
         moved = {
@@ -656,9 +652,8 @@ class TestMovingABox:
         page.keyboard.press("Shift+ArrowDown")
 
         save_log = TrafficLog(page, "/config")
-        page.get_by_role("button", name="Save template.yaml").click()
         save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
-        page.wait_for_selector("text=saved")
+        page.wait_for_selector("text=Saved")
 
         saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)["placements"][0]
         deltas = {
@@ -711,9 +706,7 @@ class TestKindPickerCreatesEachKind:
 
         page.wait_for_selector(PREVIEW_IMAGE)
         page.wait_for_selector(HANDLE)
-        save_log = TrafficLog(page, "/config")
-        page.get_by_role("button", name="Save template.yaml").click()
-        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+        assert page.get_by_role("button", name="Save template.yaml").count() == 0
 
         saved = _template_config(workspace_root, "lifestyle-01")
         assert saved["kind"] == "single"

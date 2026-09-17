@@ -5,6 +5,8 @@ import { TemplateRail } from "./components/TemplateRail";
 import { ColourMatrixEditor } from "./editors/ColourMatrixEditor";
 import { MultipleEditor } from "./editors/MultipleEditor";
 import { SingleEditor } from "./editors/SingleEditor";
+import { AUTOSAVE_DEBOUNCE_MS } from "./hooks/useAutosave";
+import { SavedAgo } from "./pages/editor/SavedAgo";
 import type { TemplateConfigState, TemplateKind, TemplateSummary } from "./types";
 
 /** A thin router: loads the selected template's config and picks an editor
@@ -38,6 +40,7 @@ export function App() {
     config: TemplateConfigState;
   } | null>(null);
   const [status, setStatus] = useState("");
+  const [savedAt, setSavedAt] = useState<number | null>(null);
   // Which test artwork the previews render with (A19). A way of looking at a
   // template rather than a property of one, so it lives here and never enters
   // template.yaml -- and it deliberately survives switching template, since
@@ -53,6 +56,12 @@ export function App() {
   // "no kind set" on screen while the file on disk says otherwise. The
   // sequence number makes a late response a no-op instead.
   const refreshSeq = useRef(0);
+  const saveSeq = useRef(0);
+  const currentTemplate = useRef<string | null>(templateName);
+
+  useEffect(() => {
+    currentTemplate.current = templateName;
+  }, [templateName]);
 
   const refreshTemplates = useCallback((selectName?: string) => {
     const seq = ++refreshSeq.current;
@@ -82,9 +91,11 @@ export function App() {
     getTemplateConfig(templateName)
       .then((loaded) => {
         if (!current) return;
-        const entry = loaded ? { name: templateName, config: loaded } : null;
+        const entry = loaded ? { name: templateName, config: loaded.config } : null;
         setConfigEntry(entry);
         setSavedEntry(entry);
+        setSavedAt(loaded ? Date.parse(loaded.modifiedAt) : null);
+        setStatus(loaded ? "Saved" : "");
       })
       .catch(() => {
         if (current) setStatus("failed to load template config");
@@ -110,24 +121,52 @@ export function App() {
     [templateName],
   );
 
-  const handleSave = useCallback(() => {
+  const saveConfig = useCallback(
+    (name: string, next: TemplateConfigState) => {
+      const seq = ++saveSeq.current;
+      setStatus("Saving…");
+      return saveTemplateConfig(name, next)
+        .then(() => {
+          if (seq !== saveSeq.current || name !== currentTemplate.current) return;
+          setSavedEntry({ name, config: next });
+          setSavedAt(Date.now());
+          setStatus("Saved");
+          // The save may have changed whether this template still counts as
+          // needing calibration, and the rail is what shows that.
+          refreshTemplates(name);
+        })
+        .catch(() => {
+          if (seq === saveSeq.current && name === currentTemplate.current) setStatus("Save failed");
+        });
+    },
+    [refreshTemplates],
+  );
+
+  // Match the listing editor: wait until a run of edits settles, then write
+  // it as one request. Changing template or resetting clears the pending
+  // timer through the effect cleanup.
+  useEffect(() => {
+    if (!templateName || !config || !dirty) return;
+    const timer = setTimeout(() => void saveConfig(templateName, config), AUTOSAVE_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [config, dirty, saveConfig, templateName]);
+
+  const handleApprove = useCallback(() => {
     if (!templateName || !config) return;
-    saveTemplateConfig(templateName, config)
-      .then(() => {
-        setSavedEntry({ name: templateName, config });
-        setStatus("saved");
-        // The save may have changed whether this template still counts as
-        // needing calibration, and the rail is what shows that.
-        refreshTemplates(templateName);
-      })
-      .catch(() => setStatus("save failed"));
-  }, [templateName, config, refreshTemplates]);
+    void saveConfig(templateName, config);
+  }, [templateName, config, saveConfig]);
 
   const handleReset = useCallback(() => {
     if (!templateName || !saved) return;
     setConfigEntry({ name: templateName, config: saved });
     setStatus("reset");
   }, [templateName, saved]);
+
+  const selectTemplate = useCallback((name: string) => {
+    setStatus("");
+    setSavedAt(null);
+    setTemplateName(name);
+  }, []);
 
   const selected = templates.find((t) => t.name === templateName);
 
@@ -175,19 +214,23 @@ export function App() {
 
         <div className="app__actions">
           <p className="app__status" role="status">
-            {status}
+            {status === "Saved" && savedAt !== null ? (
+              <span className="page-head__saved">
+                <span className="page-head__dot" aria-hidden="true" />
+                <SavedAgo savedAt={savedAt} />
+              </span>
+            ) : (
+              status
+            )}
           </p>
           <button onClick={handleReset} disabled={!dirty}>
             Reset
-          </button>
-          <button className="btn btn-primary" onClick={handleSave} disabled={!config}>
-            Save template.yaml
           </button>
         </div>
       </header>
 
       <div className="app__workbench">
-        <TemplateRail templates={templates} selected={templateName} onSelect={setTemplateName} />
+        <TemplateRail templates={templates} selected={templateName} onSelect={selectTemplate} />
 
         <div className="app__workspace">
           {/* 2a: an uncalibrated template replaces the workspace with a single
@@ -214,7 +257,7 @@ export function App() {
                   onChange={setConfig}
                   design={design}
                   onDesignChange={setDesign}
-                  onApprove={handleSave}
+                  onApprove={handleApprove}
                 />
               )}
               {templateName && config?.kind === "multiple" && (

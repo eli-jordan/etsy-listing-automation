@@ -120,10 +120,9 @@ class TestOrganicComponents:
         radius = _computed(page, "button", "border-radius")
         assert radius == "4px", f"expected flat 4px, got {radius}"
 
-    def test_the_primary_action_is_a_solid_accent_fill(self, page) -> None:  # noqa: ANN001
+    def test_there_is_no_manual_save_action(self, page) -> None:  # noqa: ANN001
         page.wait_for_selector(PREVIEW_IMAGE)
-        save = page.get_by_role("button", name="Save template.yaml")
-        assert save.evaluate("el => getComputedStyle(el).backgroundColor") == _rgb(ORGANIC_ACCENT)
+        assert page.get_by_role("button", name="Save template.yaml").count() == 0
 
     def test_unclassed_actions_still_read_as_buttons(self, page) -> None:  # noqa: ANN001
         """`.btn` is deliberately transparent -- the design system expects a

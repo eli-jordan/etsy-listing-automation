@@ -332,9 +332,7 @@ def _detail(
         listing,
         name=name,
         listing_dir=workspace.listing_dir(name),
-        modified_at=datetime.fromtimestamp(
-            workspace.listing_file(name).stat().st_mtime, tz=UTC
-        ),
+        modified_at=datetime.fromtimestamp(workspace.listing_file(name).stat().st_mtime, tz=UTC),
         status=_status(
             workspace,
             name,

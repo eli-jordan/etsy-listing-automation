@@ -88,8 +88,8 @@ interface UseAutosave {
 }
 
 /**
- * Autosave (phase 5): the first autosave precedent in this codebase (the
- * calibrator uses explicit Save/Reset).
+ * Autosave for listings. The mockup-template calibrator shares the debounce
+ * interval but has a simpler full-document transport.
  *
  * It holds three transports, not one, because the editor is also the create
  * form and a listing therefore passes through three states in one sitting:
