@@ -102,6 +102,21 @@ class EtsyShopCatalog:
             f"no shop section named {name!r}. {_options(s.title for s in self._all_sections())}"
         )
 
+    def shop_section_title(self, section_id: int | None) -> str | None:
+        """A section id read back as its name, for drift labelling (A30).
+
+        Never fetches: unlike :meth:`shop_section`, a name miss here is not
+        a config mistake to report, it is "this run's catalog never had a
+        reason to ask" -- ``desired()`` only calls :meth:`shop_section` when
+        the listing itself names a section, so a live id from a *different*
+        section than the one configured (drift) may name a section this
+        catalog instance never fetched. Labelling that drift is a nicety, not
+        a rule ``plan()`` needs to enforce, so it costs no request of its own.
+        """
+        if section_id is None or self._sections is None:
+            return None
+        return next((s.title for s in self._sections if s.shop_section_id == section_id), None)
+
     # ------------------------------------------------------ shipping profile
 
     def shipping_profile(self, name: str) -> ShippingProfile:
@@ -111,6 +126,15 @@ class EtsyShopCatalog:
         raise ShopCatalogError(
             f"no shipping profile named {name!r}. "
             f"{_options(p.title for p in self._all_shipping_profiles())}"
+        )
+
+    def shipping_profile_title(self, profile_id: int | None) -> str | None:
+        """Mirrors :meth:`shop_section_title`, for shipping profiles."""
+        if profile_id is None or self._shipping_profiles is None:
+            return None
+        return next(
+            (p.title for p in self._shipping_profiles if p.shipping_profile_id == profile_id),
+            None,
         )
 
     # -------------------------------------------------------- return policy
@@ -137,6 +161,15 @@ class EtsyShopCatalog:
             "no return policy matches the terms given. "
             f"{_options((p.describe() for p in policies), empty=SHOP_MANAGER_HINT)}"
         )
+
+    def return_policy_label(self, policy_id: int | None) -> str | None:
+        """Mirrors :meth:`shop_section_title`: a return policy has no title
+        of its own (PRD 59), so this is ``describe()``'s terms rather than a
+        name."""
+        if policy_id is None or self._return_policies is None:
+            return None
+        policy = next((p for p in self._return_policies if p.return_policy_id == policy_id), None)
+        return policy.describe() if policy is not None else None
 
     # --------------------------------------------------- production partner
 
