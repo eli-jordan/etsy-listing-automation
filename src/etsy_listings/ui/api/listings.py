@@ -49,11 +49,10 @@ from etsy_listings.config.listing_validation import (
 )
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stage import Blocked
+from etsy_listings.engine.preview import lookup_preview
 from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.engine.stages.render import RenderApplied, RenderStage, scene_hash
 from etsy_listings.engine.status import (
     ListingLifecycle,
     ListingStatus,
@@ -587,32 +586,22 @@ def _preview_response(
     request: Request, target: Target, template: str, colour: str | None
 ) -> Response:
     """A32/A33: the preview a plan run already rendered for this scene, at its
-    *current* hash -- never a path built from ``template``/``colour``
-    directly. Both arrive from the URL, so ``Workspace.preview_file`` (the
-    layout's own security boundary, CLAUDE.md's invariant on this is explicit)
-    is what turns them into a real path, and only once this recomputes the
-    same :func:`~etsy_listings.engine.stages.render.scene_hash` a plan run
-    would right now -- a stale preview from before the last edit must not be
-    served as if it still matched.
+    *current* hash. :func:`~etsy_listings.engine.preview.lookup_preview` owns
+    the hash and the path; this is the HTTP adapter over it.
     """
-    workspace = target.workspace
     factory: ContextFactory = request.app.state.context_factory
-    ctx = factory(workspace, None)
-    lock = Lockfile.read(workspace.lock_file(target.name))
-    applied = lock.parse_applied_for("render", RenderApplied) if lock is not None else None
-    desired = RenderStage().desired(ctx, target.name, applied)
-    if isinstance(desired, Blocked):
+    found = lookup_preview(factory(target.workspace, None), target.name, template, colour)
+    if found.miss == "blocked":
         raise HTTPException(status_code=404, detail="this listing has no render state yet")
-    work = next((w for w in desired.works if w.template == template and w.colour == colour), None)
-    if work is None:
+    if found.miss == "no_scene":
         where = f"template {template!r}" + (f", colour {colour!r}" if colour is not None else "")
         raise HTTPException(status_code=404, detail=f"no scene for {where}")
-    digest = scene_hash(desired, work).removeprefix("sha256:")
-    path = workspace.preview_file(target.name, template, colour, digest)
-    if not path.is_file():
+    if found.path is None or not found.path.is_file():
         raise HTTPException(status_code=404, detail="no preview rendered yet for this scene")
     return Response(
-        content=path.read_bytes(), media_type="image/png", headers={"Cache-Control": "no-cache"}
+        content=found.path.read_bytes(),
+        media_type="image/png",
+        headers={"Cache-Control": "no-cache"},
     )
 
 

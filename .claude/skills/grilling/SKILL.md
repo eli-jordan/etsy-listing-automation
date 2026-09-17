@@ -7,16 +7,24 @@ Interview the user relentlessly until you reach a shared understanding. Map this
 
 Work the tree in **rounds**. The **frontier** is every decision whose prerequisites are already settled: the questions you can ask _now_ without guessing at answers you haven't heard yet. Ask the whole frontier in one round: number each question and give your recommended answer. Then wait for the user's answers before the next round.
 
-Format a round like so:
+Format a round like so, use a question card tool to present the questions if that is available.
 
 ```
-❓ **Q1** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+**Q1** - **<question title>**: 
+
+<detailed description of what the question is asking, to give the user enough information to decide>
+
+<several possible answers to the question>
 
 ➡️ <your recommended answer>
 
 ---
 
-❓ **Q2** - **<question title>**: <question body, might be multiple paragraphs, including multiple choices>
+**Q2** - **<question title>**: 
+
+<detailed description of what the question is asking, to give the user enough information to decide>
+
+<several possible answers to the question>
 
 ➡️ <your recommended answer>
 ```

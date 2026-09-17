@@ -34,17 +34,16 @@ from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
 from typing import Any
 
-import yaml
-
 from etsy_listings import __about__
 from etsy_listings.config.money import Money
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.change import Plan, StagePlan
 from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.lifecycle import after_apply
 from etsy_listings.engine.lock import Lockfile, canonical_hash
 from etsy_listings.engine.plan import PlannedRun, build_plan
-from etsy_listings.engine.stage import AnyStage, Blocked
-from etsy_listings.engine.stages.render import RenderStage
+from etsy_listings.engine.preview import render_pending
+from etsy_listings.engine.stage import AnyStage
 from etsy_listings.errors import UserFacingError
 
 
@@ -344,13 +343,10 @@ def preview_listing(
 
     Finds the render stage's own :class:`~etsy_listings.engine.plan.StageState`
     in ``planned.states`` and asks *it* for previews, rather than knowing
-    anything about scenes itself -- A30's rule that only the stage which
-    produced a type looks inside it applies here too, so this reaches
-    directly for :class:`~etsy_listings.engine.stages.render.RenderStage`
-    rather than dispatching on a generic, structurally-typed method the way
-    :func:`~etsy_listings.engine.plan.build_plan` does for ``snapshot()`` --
-    previewing is render-specific by design (`stage.py`'s note on why), not an
-    optional extension every stage might grow.
+    anything about scenes itself -- that type-peek lives in
+    :mod:`~etsy_listings.engine.preview`, so this module fires the observer
+    and nothing else. Previewing is render-specific by design (`stage.py`'s
+    note on why), not an optional extension every stage might grow.
 
     Does nothing, quietly, for a listing with no render state at all (a
     ``deleted``/``retired`` listing's plan is retract-only) or whose render
@@ -359,15 +355,7 @@ def preview_listing(
     either case.
     """
     watch = observer or RunObserver()
-    stop = should_stop or _never_stop
-    render_state = next((s for s in planned.states if s.stage.name == RenderStage.name), None)
-    if render_state is None or isinstance(render_state.desired, Blocked):
-        return
-    if not isinstance(render_state.stage, RenderStage):
-        return
-    ready = render_state.stage.preview(
-        ctx, render_state.desired, render_state.live, should_stop=stop
-    )
+    ready = render_pending(ctx, planned, should_stop=should_stop or _never_stop)
     for work in ready:
         watch.on_preview_rendered(planned.plan.listing, work.template, work.colour)
 
@@ -425,10 +413,7 @@ def apply_listings(
             record=lambda updated: updated.write(lock_file),
             should_stop=stop,
         )
-        if _retract_succeeded(planned):
-            ctx.workspace.remove_listing(listing)
-            return planned
-        _omit_consumed_renew(ctx, listing, planned)
+        after_apply(ctx, listing, planned)
         return planned
 
     return _over(listings, work, watch.on_failure, should_stop=stop)
@@ -465,31 +450,6 @@ def _over(
         else:
             outcomes.append(ListingOutcome(listing=listing, planned=planned))
     return RunReport(outcomes=tuple(outcomes))
-
-
-def _retract_succeeded(planned: PlannedRun) -> bool:
-    return any(
-        state.stage.name == "retract" and state.stage_plan.will_run for state in planned.states
-    )
-
-
-def _omit_consumed_renew(ctx: RunContext, listing: str, planned: PlannedRun) -> None:
-    """``lifecycle: renew`` is a one-shot mark (PRD 62). Apply sends
-    ``state=active``, then deletes the key. ``plan`` never writes the yaml."""
-    etsy_plan = next(
-        (sp for sp in planned.plan.stage_plans if sp.stage == "etsy_listing"),
-        None,
-    )
-    if etsy_plan is None or etsy_plan.blocked is not None:
-        return
-    path = ctx.workspace.listing_file(listing)
-    if not path.is_file():
-        return
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    if raw.get("lifecycle") != "renew":
-        return
-    del raw["lifecycle"]
-    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
 
 
 def _read_lock(ctx: RunContext, listing: str) -> Lockfile:

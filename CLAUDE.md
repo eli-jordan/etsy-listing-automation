@@ -141,7 +141,8 @@ src/etsy_listings/
                   far as its own files can tell. One module, two readers: the
                   editor's issues banner and (through `engine/stages/gates.py`)
                   every stage
-  engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run, stages/
+  engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run,
+                  lifecycle (PRD 61–67), preview (A32), stages/
                    [done; STAGES = [Render(), PrintifyProduct(), Publish(),
                    EtsyListing(), EtsyMedia()], Generate() in Phase 4]
                 stages/ splits the product stage three ways: the stage itself

@@ -1,11 +1,11 @@
 """Retract a never-live listing: Printify DELETE, confirm the Etsy draft
 went with it, then the run wipes local files (PRD 63).
 
-Not in :data:`STAGES`. ``build_plan`` walks this stage *instead* of the
-pipeline when ``lifecycle: deleted`` is the right verb, so a listing we
-are about to destroy is never rendered, PUT, or PATCHed -- updating it
-first is wasted writes and a way to recreate a product ``read_live`` just
-said was missing.
+Not in :data:`STAGES`. :func:`~etsy_listings.engine.lifecycle.walk` hands
+this stage to ``build_plan`` *instead* of the pipeline when
+``lifecycle: deleted`` is the right verb, so a listing we are about to
+destroy is never rendered, PUT, or PATCHed -- updating it first is wasted
+writes and a way to recreate a product ``read_live`` just said was missing.
 """
 
 from __future__ import annotations
