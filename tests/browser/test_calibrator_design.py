@@ -78,11 +78,12 @@ class TestOrganicTokens:
 
     def test_root_defines_the_scales(self, page) -> None:  # noqa: ANN001
         page.wait_for_selector(PREVIEW_IMAGE)
-        # Density 1.10x and radius 16px are baked into these by the generator;
-        # components must read them rather than raw px.
+        # Density 1.10x from the vendored Organic; radii are flattened to a
+        # single 4px by the app's :root override (index.css:347) for boxes,
+        # inputs and buttons.
         assert _token(page, "--space-3") == "13.2px"
-        assert _token(page, "--radius-md") == "16px"
-        assert _token(page, "--radius-lg") == "28px"
+        assert _token(page, "--radius-md") == "4px"
+        assert _token(page, "--radius-lg") == "4px"
         assert _token(page, "--shadow-md") != ""
 
     def test_tonal_ramps_are_present(self, page) -> None:  # noqa: ANN001
@@ -113,11 +114,11 @@ class TestOrganicGround:
 
 class TestOrganicComponents:
     def test_buttons_are_pills(self, page) -> None:  # noqa: ANN001
-        """`.btn, .tag, .seg, .input { border-radius: 999px }` -- the rounded
-        frame is the system's most recognisable move."""
+        """Buttons now use the flat 4px (via --radius-sm override); only tags,
+        chips, switches and circles retain the 999px pill radius."""
         page.wait_for_selector(PREVIEW_IMAGE)
         radius = _computed(page, "button", "border-radius")
-        assert radius == "999px", f"expected a pill, got {radius}"
+        assert radius == "4px", f"expected flat 4px, got {radius}"
 
     def test_the_primary_action_is_a_solid_accent_fill(self, page) -> None:  # noqa: ANN001
         page.wait_for_selector(PREVIEW_IMAGE)
