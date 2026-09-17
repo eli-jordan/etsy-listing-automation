@@ -783,6 +783,18 @@
             "title": "Media",
             "type": "array"
           },
+          "modified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified At"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -875,6 +887,7 @@
           "brief",
           "media",
           "name",
+          "modified_at",
           "status",
           "issues"
         ],

@@ -26,10 +26,11 @@ export type SaveState =
   | { kind: "unsaved" }
   | { kind: "name-taken"; name: string };
 
-/** A `{ kind: "saved" }` stamped with when -- `Date.now()`, since it only
- * ever needs to answer "how long ago", never "which instant". */
-function saved(): SaveState {
-  return { kind: "saved", savedAt: Date.now() };
+/** A `{ kind: "saved" }` stamped with when. Successful writes use the browser
+ * clock; the initial state can instead use `listing.yaml`'s mtime supplied by
+ * the server. */
+function saved(savedAt = Date.now()): SaveState {
+  return { kind: "saved", savedAt };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -111,7 +112,11 @@ export function useAutosave(
   options: { onNamed?: (name: string, fresh: ListingDetail) => void } = {},
 ): UseAutosave {
   const [detail, setDetail] = useState(initial);
-  const [save, setSave] = useState<SaveState>(name === null ? { kind: "unnamed" } : saved());
+  const [save, setSave] = useState<SaveState>(() =>
+    name === null
+      ? { kind: "unnamed" }
+      : saved(initial.modified_at === null ? Date.now() : Date.parse(initial.modified_at)),
+  );
   const pending = useRef<Patch | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The name this listing is on disk under, or `null` while it is not. */

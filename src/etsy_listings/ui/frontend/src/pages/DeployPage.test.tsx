@@ -39,6 +39,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     },
     media: [],
     name: "take-a-hike",
+    modified_at: "2026-09-17T10:00:00Z",
     status: "dirty",
     issues: [],
     field_errors: {},

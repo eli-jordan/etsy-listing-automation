@@ -1150,6 +1150,8 @@ export interface components {
       lifecycle?: ("retired" | "deleted" | "renew") | null;
       /** Media */
       media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /** Modified At */
+      modified_at: string | null;
       /** Name */
       name: string;
       /**

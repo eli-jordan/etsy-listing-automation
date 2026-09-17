@@ -7,6 +7,7 @@ add a ``design`` selector nothing in the engine's config needs).
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -217,6 +218,9 @@ class ListingDetail(Listing):
     on."""
 
     name: str
+    modified_at: datetime | None
+    """UTC modification time of ``listing.yaml``. ``None`` for an unsaved
+    draft, which has no file yet."""
     status: ListingStatus
     issues: list[Issue]
     field_errors: dict[str, str] = {}
