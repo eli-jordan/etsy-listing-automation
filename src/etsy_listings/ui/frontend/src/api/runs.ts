@@ -6,9 +6,10 @@ import type { CreateRunRequest, RunDetail, RunSummary } from "../types";
  * mirrored from `api/listings.ts`'s own shape: typed wrapper functions over
  * `openapi-fetch`, the only thing pages/components import. The sixth
  * endpoint, `GET /api/runs/{id}/events`, has no wrapper here -- it is
- * `text/event-stream`, not JSON, and `pages/deploy/runStream.ts` opens it
- * directly through `EventSource`, which needs a bare URL rather than a typed
- * client call.
+ * `text/event-stream`, not JSON, and `pages/deploy/runStream.ts` reads it
+ * itself through `fetch` (not `EventSource`, which cannot set `Last-Event-ID`
+ * on its first connection -- reattach needs one), so it wants a bare URL
+ * rather than a typed client call.
  */
 
 export class RunsApiError extends Error {}
@@ -67,7 +68,7 @@ export async function markRunSeen(id: string): Promise<void> {
 }
 
 /** The SSE route's own URL -- not fetched through `openapi-fetch`, which has
- * no streaming mode; `runStream.ts` hands this straight to `EventSource`. */
+ * no streaming mode; `runStream.ts` reads it itself through `fetch`. */
 export function runEventsUrl(id: string): string {
   return `/api/runs/${encodeURIComponent(id)}/events`;
 }
