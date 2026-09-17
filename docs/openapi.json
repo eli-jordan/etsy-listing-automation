@@ -387,7 +387,7 @@
         "additionalProperties": false,
         "properties": {
           "description": {
-            "default": "<generate>",
+            "default": "",
             "title": "Description",
             "type": "string"
           },
@@ -453,7 +453,7 @@
             "title": "Tags"
           },
           "title": {
-            "default": "<generate>",
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -717,10 +717,10 @@
           "etsy": {
             "$ref": "#/components/schemas/EtsyListingConfig",
             "default": {
-              "description": "<generate>",
+              "description": "",
               "materials": [],
               "tags": "<generate>",
-              "title": "<generate>"
+              "title": ""
             }
           },
           "etsy_listing_id": {

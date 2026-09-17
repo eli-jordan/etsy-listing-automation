@@ -246,7 +246,9 @@ def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() 
         {"template": "flat-lay-01", "colour": "black"},
         {"template": "flat-lay-01", "colour": "blue-jean"},
     ]
-    assert data["etsy"]["title"] == "<generate>"
+    assert data["etsy"]["title"] == ""
+    assert data["etsy"]["description"] == ""
+    assert data["etsy"]["tags"] == "<generate>"
 
 
 def test_validate_listing_stub_accepts_a_pricing_plan_reference_with_no_prices() -> None:

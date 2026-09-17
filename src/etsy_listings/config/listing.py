@@ -99,8 +99,8 @@ asset under ``common-media/``."""
 class EtsyListingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    title: str = GENERATE
-    description: str = GENERATE
+    title: str = ""
+    description: str = ""
     tags: list[str] | Literal["<generate>"] = GENERATE
     materials: list[str] = []
     renewal: Literal["manual", "auto"] | None = None

@@ -983,7 +983,7 @@ export interface components {
     EtsyListingConfig: {
       /**
        * Description
-       * @default <generate>
+       * @default
        */
       description: string;
       /**
@@ -1004,7 +1004,7 @@ export interface components {
       tags: string[] | "<generate>";
       /**
        * Title
-       * @default <generate>
+       * @default
        */
       title: string;
       /** Variation Images */
@@ -1126,10 +1126,10 @@ export interface components {
       };
       /**
        * @default {
-       *       "description": "<generate>",
+       *       "description": "",
        *       "materials": [],
        *       "tags": "<generate>",
-       *       "title": "<generate>"
+       *       "title": ""
        *     }
        */
       etsy: components["schemas"]["EtsyListingConfig"];

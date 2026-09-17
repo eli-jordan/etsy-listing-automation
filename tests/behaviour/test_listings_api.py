@@ -578,6 +578,8 @@ class TestListingDraft:
         assert body["colors"] == []
         assert body["pricing_plan"] is None
         assert body["media"] == []
+        assert body["etsy"]["title"] == ""
+        assert body["etsy"]["description"] == ""
 
     def test_the_draft_opens_in_a_workspace_with_no_pricing_plan(self, client: TestClient) -> None:
         """It used to 400 here, which showed "could not start a new listing"
