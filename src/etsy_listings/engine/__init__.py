@@ -68,8 +68,11 @@ from etsy_listings.engine.run import (
     FailureSink,
     ListingOutcome,
     PlannedSink,
+    RunObserver,
     RunReport,
+    StalePlanError,
     apply_listings,
+    plan_fingerprint,
     plan_listings,
 )
 from etsy_listings.engine.stage import (
@@ -99,6 +102,9 @@ __all__ = [
     "ListingOutcome",
     "PlannedSink",
     "FailureSink",
+    "RunObserver",
+    "StalePlanError",
+    "plan_fingerprint",
     # One listing at a time, for a caller that owns its own lockfile.
     "build_plan",
     "execute",

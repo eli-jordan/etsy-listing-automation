@@ -8,6 +8,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+from pydantic import BaseModel
+
 from etsy_listings.config.money import Money
 
 
@@ -52,6 +54,17 @@ class Drift:
     path: str
     last_applied: Any
     live: Any
+    last_applied_label: str | None = None
+    live_label: str | None = None
+    """A30: a human name in place of ``last_applied``/``live``'s raw id, when
+    the stage that found the drift can name one. ``None`` by default -- most
+    drift is already scalar text (a title, a boolean) with nothing to name,
+    and a stage with no catalog to ask (``product_diff``, ``publish``) simply
+    never sets these. Filled by `etsy_listing._drift` from the
+    :class:`~etsy_listings.clients.etsy.shopcatalog.EtsyShopCatalog` A25
+    already resolved this run, so naming an id costs no request `plan()`'s own
+    comparison was not already going to make -- `plan()` stays pure (no
+    client) by never asking one itself."""
 
 
 Change = FieldChange | ListChange | PriceChange | MediaChange
@@ -74,11 +87,24 @@ def sequence(path: str, desired: list[Any], applied: list[Any]) -> ListChange | 
     return ListChange(path=path, added=added, removed=removed, reordered=reordered)
 
 
-def drift(path: str, applied: Any, live: Any) -> Drift | None:  # noqa: ANN401
+def drift(
+    path: str,
+    applied: Any,  # noqa: ANN401
+    live: Any,  # noqa: ANN401
+    *,
+    last_applied_label: str | None = None,
+    live_label: str | None = None,
+) -> Drift | None:
     """Compare last-applied to live state; ``None`` if no drift."""
     if applied is None or live is None or applied == live:
         return None
-    return Drift(path=path, last_applied=applied, live=live)
+    return Drift(
+        path=path,
+        last_applied=applied,
+        live=live,
+        last_applied_label=last_applied_label,
+        live_label=live_label,
+    )
 
 
 @dataclass(frozen=True)
@@ -191,6 +217,18 @@ class StagePlan:
     shown, because the alternative is what shipped first: a workspace with an
     entire unrun stage reporting "No changes." and the user reasonably
     concluding the tool had nothing to do."""
+
+    snapshot: BaseModel | None = None
+    """A public pydantic model of this stage's domain facts, unchanged ones
+    included -- what the before/after review needs and a ``Plan`` (changes
+    only) cannot supply (A30). Optional: a stage without a ``snapshot()``
+    method, or one that never ran because it is blocked, has ``None``.
+    Never layout -- the frontend composes columns, price tables and
+    thumbnails from it; the engine only carries whatever the stage handed
+    back. **Excluded from the plan fingerprint** (A31): it carries things
+    that can change between two otherwise-identical plans, like an Etsy CDN
+    URL, and hashing it would make ``apply`` refuse a plan nobody actually
+    disagreed with."""
 
 
 @dataclass(frozen=True)

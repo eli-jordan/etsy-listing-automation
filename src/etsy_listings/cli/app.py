@@ -33,7 +33,7 @@ from etsy_listings.engine.change import Plan
 from etsy_listings.engine.context import Event
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
-from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
+from etsy_listings.engine.run import RunObserver, RunReport, apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.errors import UserFacingError
@@ -368,8 +368,7 @@ def plan(
             connections.run_context(workspace),
             _target_listings(workspace, listing, all),
             STAGES,
-            on_planned=show,
-            on_failure=_echo_failure,
+            observer=RunObserver(on_listing_planned=show, on_failure=_echo_failure),
         )
     )
 
@@ -401,8 +400,7 @@ def apply(
             connections.run_context(workspace, on_event=_echo_event),
             _target_listings(workspace, listing, all),
             STAGES,
-            on_planned=announce,
-            on_failure=_echo_failure,
+            observer=RunObserver(on_listing_planned=announce, on_failure=_echo_failure),
         )
     )
 

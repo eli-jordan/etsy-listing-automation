@@ -18,7 +18,9 @@ agreement by hand. :class:`PlannedRun` carries them across instead.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from pydantic import BaseModel
 
 from etsy_listings.engine.change import Plan, StagePlan
 from etsy_listings.engine.context import RunContext
@@ -28,6 +30,9 @@ from etsy_listings.engine.stages.etsy_target import etsy_listing_id
 from etsy_listings.engine.stages.gates import check_lifecycle_verb, check_listing_yaml_present
 from etsy_listings.engine.stages.retract import RetractStage
 from etsy_listings.engine.status import is_live_etsy_state
+
+if TYPE_CHECKING:
+    from etsy_listings.engine.run import RunObserver
 
 
 @dataclass(frozen=True)
@@ -68,6 +73,8 @@ def build_plan(
     listing: str,
     lock: Lockfile,
     stages: list[AnyStage],
+    *,
+    observer: RunObserver | None = None,
 ) -> PlannedRun:
     """Three-way compare desired/applied/live across every stage, in order.
 
@@ -80,11 +87,27 @@ def build_plan(
     does remote I/O), and that a difference is reported as work to redo rather
     than as drift. Each stage's own ``plan()`` computes the diff; this
     function only orchestrates the walk and assembles the result.
+
+    ``observer`` (A33) fires ``on_stage_checking`` before each stage's own
+    walk and ``on_stage_planned`` after it, with the resolved ``StagePlan``
+    -- snapshot included -- so a caller watching a plan run (the UI's, in a
+    later PR) can show one stage resolving after another, in pipeline order,
+    rather than pretending A3's fan-out exists (A21 stands). ``None`` -- the
+    default every existing caller gets -- is a plain walk with nothing
+    watching; a listing wrapped wholesale in ``_all_blocked`` still reports
+    each stage's block through the same two calls, since a blocked stage is
+    still a stage the strip has to show.
     """
+    from etsy_listings.engine.run import RunObserver  # noqa: PLC0415 - breaks the import cycle
+
+    watch = observer or RunObserver()
     walk = _stages_for_lifecycle(ctx, listing, lock, stages)
     if isinstance(walk, PlannedRun):
+        for state in walk.states:
+            watch.on_stage_checking(listing, state.stage.name)
+            watch.on_stage_planned(listing, state.stage_plan)
         return walk
-    states = [_walk(ctx, listing, lock, stage) for stage in walk]
+    states = [_walk(ctx, listing, lock, stage, observer=watch) for stage in walk]
 
     return _assemble(listing, lock, tuple(states))
 
@@ -161,13 +184,16 @@ def _all_blocked(listing: str, lock: Lockfile, stages: list[AnyStage], message: 
     return _assemble(listing, lock, states)
 
 
-def _walk(ctx: RunContext, listing: str, lock: Lockfile, stage: AnyStage) -> StageState:
+def _walk(
+    ctx: RunContext, listing: str, lock: Lockfile, stage: AnyStage, *, observer: RunObserver
+) -> StageState:
     """One stage's three states, and the plan comparing them.
 
     Every line of bookkeeping a stage used to do for itself lives here: the
     subtree lookup, the decode, the refusal, and the stage's own name. What
     the stage is left with is three questions about three states.
     """
+    observer.on_stage_checking(listing, stage.name)
     # The stage's own subtree, looked up and decoded here rather than by each
     # stage for itself -- a stage never needs to know which key in the
     # lockfile is its own, nor what a document it cannot read should mean.
@@ -177,36 +203,53 @@ def _walk(ctx: RunContext, listing: str, lock: Lockfile, stage: AnyStage) -> Sta
     if isinstance(desired, Blocked):
         # Refused: no live read, because there is nothing this run could do
         # with the answer, and a blocked remote stage should not spend a
-        # request finding that out.
-        return StageState(
+        # request finding that out. No snapshot either -- there is no desired
+        # document a snapshot could be a fact about (A30).
+        state = StageState(
             stage=stage,
             desired=desired,
             applied=applied,
             live=None,
             stage_plan=StagePlan(stage=stage.name, will_run=False, blocked=desired.message),
         )
+        observer.on_stage_planned(listing, state.stage_plan)
+        return state
 
     live = stage.read_live(ctx, listing, lock, applied)
     verdict = stage.plan(desired, applied, live)
-    return StageState(
-        stage=stage,
-        desired=desired,
-        applied=applied,
-        live=live,
-        stage_plan=StagePlan(
-            stage=stage.name,
-            will_run=verdict.will_run,
-            changes=verdict.changes,
-            drift=verdict.drift,
-            reason=verdict.reason,
-            actions=verdict.actions,
-            # A refusal is a refusal whichever question produced it: one the
-            # live state proved lands in the same field as one `desired()`
-            # raised, so `cli.render` and the UI's serialiser show it without
-            # knowing there were ever two routes to it.
-            blocked=verdict.refusal,
-        ),
+    stage_plan = StagePlan(
+        stage=stage.name,
+        will_run=verdict.will_run,
+        changes=verdict.changes,
+        drift=verdict.drift,
+        reason=verdict.reason,
+        actions=verdict.actions,
+        # A refusal is a refusal whichever question produced it: one the
+        # live state proved lands in the same field as one `desired()`
+        # raised, so `cli.render` and the UI's serialiser show it without
+        # knowing there were ever two routes to it.
+        blocked=verdict.refusal,
+        snapshot=_snapshot(stage, desired, live),
     )
+    state = StageState(
+        stage=stage, desired=desired, applied=applied, live=live, stage_plan=stage_plan
+    )
+    observer.on_stage_planned(listing, stage_plan)
+    return state
+
+
+def _snapshot(stage: AnyStage, desired: Any, live: Any) -> BaseModel | None:
+    """A stage's optional ``snapshot()`` (A30).
+
+    Not part of ``Stage``'s formal surface (see ``stage.py``'s note on why),
+    so looked up rather than called directly: a stage without one --
+    ``render`` and ``retract``, for now -- simply has nothing to ask.
+    """
+    method = getattr(stage, "snapshot", None)
+    if method is None:
+        return None
+    result: BaseModel | None = method(desired, live)
+    return result
 
 
 def _assemble(listing: str, lock: Lockfile, states: tuple[StageState, ...]) -> PlannedRun:

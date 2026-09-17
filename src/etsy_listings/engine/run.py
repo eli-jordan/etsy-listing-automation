@@ -15,14 +15,13 @@ the same seam, one level up. ``cli`` formats the :class:`RunReport`; the UI
 (Phase 5) will serialise it; neither re-derives what a run does, and PRD 16 is
 now testable without a terminal.
 
-**Two sinks, because a batch has two moments worth watching.** ``on_planned``
-fires the instant a listing's plan is ready -- before ``apply`` starts
-executing it -- which is where the CLI prints the plan, or the header and the
-blocked-stage warnings. ``on_failure`` fires when a listing is abandoned. Both
-exist so output stays interleaved with the work: a ``--all`` run over a real
-catalogue should print as it goes, not save everything for the end. The
-returned report is the same information for a caller that wants it in one
-piece rather than as it happens.
+**One ``RunObserver``, not a signature that grows.** ``on_planned`` and
+``on_failure`` used to be separate keywords, and every event worth watching
+after A30/A33 would have been a third. They are now two fields of one
+dataclass of no-op-by-default callbacks, alongside the plan-time ones
+``build_plan``'s walk fires (A33, decision 2) -- see :class:`RunObserver`'s
+own docstring for exactly which events belong to this PR and which are a
+later one's.
 
 Nothing here formats, and nothing here decides an exit code -- that is
 ``cli``'s to take from :attr:`RunReport.failed`.
@@ -30,16 +29,19 @@ Nothing here formats, and nothing here decides an exit code -- that is
 
 from __future__ import annotations
 
-from collections.abc import Callable, Sequence
-from dataclasses import dataclass
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, fields, is_dataclass
 from datetime import UTC, datetime
+from typing import Any
 
 import yaml
 
 from etsy_listings import __about__
+from etsy_listings.config.money import Money
 from etsy_listings.engine.apply import execute
+from etsy_listings.engine.change import Plan, StagePlan
 from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
+from etsy_listings.engine.lock import Lockfile, canonical_hash
 from etsy_listings.engine.plan import PlannedRun, build_plan
 from etsy_listings.engine.stage import AnyStage
 from etsy_listings.errors import UserFacingError
@@ -95,6 +97,20 @@ PlannedSink = Callable[[str, PlannedRun], None]
 FailureSink = Callable[[str, UserFacingError], None]
 """Called with a listing's name and the reason it was abandoned."""
 
+StageCheckingSink = Callable[[str, str], None]
+"""Called with a listing's name and a stage's name, the moment ``build_plan``
+starts asking that stage anything -- before its ``desired()``, before its
+``read_live()``. What lets a plan-time progress strip show which stage is
+being checked right now, in the pipeline's own order: A21 left A3's live-fetch
+thread pool unbuilt, so that order is genuinely the order stages resolve in,
+not a fiction the strip would otherwise have to perform (A33, decision 2)."""
+
+StagePlannedSink = Callable[[str, StagePlan], None]
+"""Called with a listing's name and one stage's resolved ``StagePlan`` --
+:attr:`~etsy_listings.engine.change.StagePlan.snapshot` included -- the
+moment that stage's own walk finishes, whether it ran, changed nothing, drifted
+or blocked."""
+
 
 def _ignore_planned(listing: str, planned: PlannedRun) -> None:
     return None
@@ -104,22 +120,138 @@ def _ignore_failure(listing: str, error: UserFacingError) -> None:
     return None
 
 
+def _ignore_stage_checking(listing: str, stage: str) -> None:
+    return None
+
+
+def _ignore_stage_planned(listing: str, stage_plan: StagePlan) -> None:
+    return None
+
+
+@dataclass(frozen=True)
+class RunObserver:
+    """No-op-by-default callbacks a caller can watch a run through.
+
+    One parameter that grows beats a signature that gains a keyword per event
+    (A33, decision 2): ``plan_listings``/``apply_listings`` used to carry
+    ``on_planned`` and ``on_failure`` as separate keywords, and every event
+    worth watching since would have been a third.
+
+    **This PR's scope is the plan-time half.** ``build_plan``'s walk calls
+    :attr:`on_stage_checking` before each stage and :attr:`on_stage_planned`
+    right after, snapshot included; ``plan_listings``/``apply_listings`` call
+    :attr:`on_listing_planned` once a listing's plan is whole (the old
+    ``on_planned``, renamed to match decision 7's event table) and
+    :attr:`on_failure` when a listing is abandoned -- unchanged from the sink
+    it already was.
+
+    **The apply-time half is not here yet, on purpose.** Decision 7's event
+    table also names ``stage_applying``, ``progress``, ``stage_applied``,
+    ``stage_failed`` and ``listing_failed``, and files them under the same
+    dataclass -- but that decision (`Runs live in the UI server`) is A33's
+    own PR, not this one: those events exist to feed the UI's run resource,
+    which does not exist yet, and ``execute``'s A29 ``record`` callback
+    already gives ``apply_listings`` everything *it* needs to write a
+    lockfile per stage. Adding fields nobody calls yet is exactly the
+    growing signature this dataclass exists to avoid, so they join this same
+    dataclass -- not a second one -- when that PR needs them.
+    """
+
+    on_stage_checking: StageCheckingSink = _ignore_stage_checking
+    on_stage_planned: StagePlannedSink = _ignore_stage_planned
+    on_listing_planned: PlannedSink = _ignore_planned
+    on_failure: FailureSink = _ignore_failure
+
+
+class StalePlanError(UserFacingError):
+    """``apply`` was asked to run a plan whose fingerprint no longer matches
+    what re-planning this listing produces right now (A31).
+
+    Carries the fresh :class:`~etsy_listings.engine.plan.PlannedRun`, so a
+    caller that reviewed a stale plan -- the editor, in a later PR -- can show
+    what changed rather than only that it did. Raised **before** ``execute``
+    runs a single stage: acting on a plan that may no longer describe the
+    live state (Etsy drifted, or a hand edit changed ``listing.yaml``) would
+    risk reverting something the reviewer never saw reverted. It is a
+    :class:`~etsy_listings.errors.UserFacingError`, so PRD 16 already covers
+    it -- one stale listing in a many-listing ``apply`` does not stop the rest.
+    """
+
+    def __init__(self, listing: str, planned: PlannedRun) -> None:
+        self.listing = listing
+        self.planned = planned
+        super().__init__(
+            f"{listing} changed since it was planned. Plan again to review the current version."
+        )
+
+
+def plan_fingerprint(plan: Plan) -> str:
+    """A stable digest of everything a plan reviewed (A31).
+
+    :func:`~etsy_listings.engine.lock.canonical_hash` over a canonical
+    rendering of ``plan``, with every
+    :attr:`~etsy_listings.engine.change.StagePlan.snapshot` left out and every
+    :class:`~etsy_listings.config.money.Money` rendered as the string a
+    listing would recognise (``"349 NOK"``) rather than a ``Decimal``
+    ``json.dumps`` cannot serialise.
+
+    Snapshots are excluded deliberately: they carry things that can change
+    between two otherwise-identical plans -- an Etsy CDN URL, whether a
+    preview has rendered yet -- and hashing one would make ``apply`` refuse a
+    plan nobody actually disagreed with. Everything else is hashed on
+    purpose, drift and ``actions`` included: if Etsy drifted between review
+    and apply, applying without a fresh review would revert something the
+    user never saw reverted.
+    """
+    canonical = _canonical(plan)
+    assert isinstance(canonical, dict)  # noqa: S101 - `Plan` is a dataclass; see `_canonical`
+    return canonical_hash(canonical)
+
+
+def _canonical(value: Any) -> Any:  # noqa: ANN401 - a generic tree walk, by construction
+    """``value``, rendered into the ``dict``/``list``/scalar tree
+    :func:`~etsy_listings.engine.lock.canonical_hash` can hash.
+
+    A stage's ``snapshot`` is dropped by name rather than by type, which is
+    safe because no other field on :class:`~etsy_listings.engine.change.Plan`,
+    :class:`~etsy_listings.engine.change.StagePlan` or a ``Change`` is ever
+    called ``snapshot``. ``Money`` is checked before the generic dataclass
+    branch below, since it is itself a (frozen) dataclass and would otherwise
+    be unrolled into its raw ``Decimal`` amount rather than the string form a
+    listing actually wrote -- ``Decimal`` and ``dict`` do not otherwise appear
+    anywhere in a ``Plan``, so there is no separate branch for either: every
+    other value is a dataclass, a ``list``/``tuple`` of one, or a plain scalar
+    ``json.dumps`` already handles.
+    """
+    if isinstance(value, Money):
+        return str(value)
+    if is_dataclass(value) and not isinstance(value, type):
+        return {
+            f.name: _canonical(getattr(value, f.name))
+            for f in fields(value)
+            if f.name != "snapshot"
+        }
+    if isinstance(value, list | tuple):
+        return [_canonical(item) for item in value]
+    return value
+
+
 def plan_listings(
     ctx: RunContext,
     listings: Sequence[str],
     stages: list[AnyStage],
     *,
-    on_planned: PlannedSink = _ignore_planned,
-    on_failure: FailureSink = _ignore_failure,
+    observer: RunObserver | None = None,
 ) -> RunReport:
     """Plan every listing. Reads only -- nothing is created or written."""
+    watch = observer or RunObserver()
 
     def work(listing: str) -> PlannedRun:
-        planned = build_plan(ctx, listing, _read_lock(ctx, listing), stages)
-        on_planned(listing, planned)
+        planned = build_plan(ctx, listing, _read_lock(ctx, listing), stages, observer=watch)
+        watch.on_listing_planned(listing, planned)
         return planned
 
-    return _over(listings, work, on_failure)
+    return _over(listings, work, watch.on_failure)
 
 
 def apply_listings(
@@ -127,8 +259,8 @@ def apply_listings(
     listings: Sequence[str],
     stages: list[AnyStage],
     *,
-    on_planned: PlannedSink = _ignore_planned,
-    on_failure: FailureSink = _ignore_failure,
+    observer: RunObserver | None = None,
+    expect: Mapping[str, str] | None = None,
 ) -> RunReport:
     """Plan and then execute every listing, writing the lockfile after every
     stage that succeeds, not just once at the end.
@@ -138,12 +270,26 @@ def apply_listings(
     disk on the way through -- passing it a stage's own ``write`` is the
     whole of what this function adds; a stage failing after a create (PRD 48)
     is ``execute``'s to record, not this loop's to notice and redo.
+
+    ``expect`` (A31) is the fingerprint a caller saw when it last planned this
+    listing, keyed by name. A listing named in ``expect`` is re-planned as it
+    always is, and if the fresh plan's fingerprint disagrees, ``execute`` is
+    never called for it -- :class:`StalePlanError` is raised instead, caught
+    by the same PRD 16 loop every other refusal already goes through. A
+    listing this run applies with no entry in ``expect`` (every CLI call
+    today) skips the check entirely, which is what keeps `apply` usable
+    without ever having planned through this same mapping first.
     """
+    watch = observer or RunObserver()
 
     def work(listing: str) -> PlannedRun:
         lock = _read_lock(ctx, listing)
-        planned = build_plan(ctx, listing, lock, stages)
-        on_planned(listing, planned)
+        planned = build_plan(ctx, listing, lock, stages, observer=watch)
+        if expect is not None and listing in expect:
+            fingerprint = plan_fingerprint(planned.plan)
+            if fingerprint != expect[listing]:
+                raise StalePlanError(listing, planned)
+        watch.on_listing_planned(listing, planned)
         lock_file = ctx.workspace.lock_file(listing)
         execute(ctx, planned, lock, record=lambda updated: updated.write(lock_file))
         if _retract_succeeded(planned):
@@ -152,7 +298,7 @@ def apply_listings(
         _omit_consumed_renew(ctx, listing, planned)
         return planned
 
-    return _over(listings, work, on_failure)
+    return _over(listings, work, watch.on_failure)
 
 
 def _over(

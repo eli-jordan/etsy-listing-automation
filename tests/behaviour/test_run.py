@@ -20,8 +20,15 @@ from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialEr
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
-from etsy_listings.engine.run import apply_listings, plan_listings
+from etsy_listings.engine.run import (
+    RunObserver,
+    StalePlanError,
+    apply_listings,
+    plan_fingerprint,
+    plan_listings,
+)
 from etsy_listings.engine.stages import STAGES
+from etsy_listings.engine.stages.render import RenderStage
 
 from tests.support.builders import (
     APPLIED_AT,
@@ -216,7 +223,7 @@ def test_planned_fires_per_listing_as_the_run_goes(workspace_root: Path) -> None
         _ctx(workspace_root),
         ["fine", LISTING],
         STAGES,
-        on_planned=lambda name, planned: seen.append(name),
+        observer=RunObserver(on_listing_planned=lambda name, planned: seen.append(name)),
     )
 
     assert seen == ["fine", LISTING]
@@ -231,8 +238,10 @@ def test_failure_sink_fires_only_for_the_listing_that_failed(workspace_root: Pat
         _ctx(workspace_root),
         ["broken", LISTING],
         STAGES,
-        on_planned=lambda name, run: planned.append(name),
-        on_failure=lambda name, error: failed.append(name),
+        observer=RunObserver(
+            on_listing_planned=lambda name, run: planned.append(name),
+            on_failure=lambda name, error: failed.append(name),
+        ),
     )
 
     assert failed == ["broken"]
@@ -248,7 +257,10 @@ def test_apply_announces_a_listing_before_it_does_the_work(workspace_root: Path)
     ctx = _ctx(workspace_root, on_event=lambda event: order.append(f"event:{event.message}"))
 
     apply_listings(
-        ctx, [LISTING], STAGES, on_planned=lambda name, run: order.append(f"planned:{name}")
+        ctx,
+        [LISTING],
+        STAGES,
+        observer=RunObserver(on_listing_planned=lambda name, run: order.append(f"planned:{name}")),
     )
 
     assert order[0] == f"planned:{LISTING}"
@@ -289,3 +301,105 @@ def test_a_second_apply_reads_the_lockfile_the_first_one_wrote(workspace_root: P
     planned: PlannedRun | None = report.outcomes[0].planned
     assert planned is not None
     assert not planned.plan.has_changes, "an unchanged listing re-plans as no work"
+
+
+# ------------------------------------------------------------ plan-time events
+
+
+def test_stage_checking_and_stage_planned_fire_once_per_stage_in_pipeline_order(
+    workspace_root: Path,
+) -> None:
+    """A33, decision 2: `build_plan`'s walk reports each stage as it goes,
+    in the pipeline's own order -- A21 left A3's fan-out unbuilt, so that
+    order is genuinely the order stages resolve in."""
+    checking: list[str] = []
+    resolved: list[str] = []
+
+    plan_listings(
+        _ctx(workspace_root),
+        [LISTING],
+        STAGES,
+        observer=RunObserver(
+            on_stage_checking=lambda listing, stage: checking.append(stage),
+            on_stage_planned=lambda listing, stage_plan: resolved.append(stage_plan.stage),
+        ),
+    )
+
+    expected = [stage.name for stage in STAGES]
+    assert checking == expected
+    assert resolved == expected
+
+
+def test_stage_planned_carries_the_resolved_stage_plan(workspace_root: Path) -> None:
+    seen: list[object] = []
+
+    plan_listings(
+        _ctx(workspace_root),
+        [LISTING],
+        [RenderStage()],
+        observer=RunObserver(on_stage_planned=lambda listing, stage_plan: seen.append(stage_plan)),
+    )
+
+    assert len(seen) == 1
+    assert seen[0].stage == "render"  # type: ignore[attr-defined]
+    assert seen[0].will_run  # type: ignore[attr-defined]
+
+
+# ---------------------------------------------------------- expect / stale plans
+
+
+def test_apply_with_a_matching_fingerprint_applies_normally(workspace_root: Path) -> None:
+    ctx = _ctx(workspace_root)
+    planned = plan_listings(ctx, [LISTING], [RenderStage()]).outcomes[0].planned
+    assert planned is not None
+    fingerprint = plan_fingerprint(planned.plan)
+
+    report = apply_listings(ctx, [LISTING], [RenderStage()], expect={LISTING: fingerprint})
+
+    assert not report.failed
+    assert (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
+
+
+def test_a_stale_fingerprint_refuses_before_any_write(workspace_root: Path) -> None:
+    """A31: acting on a plan that no longer describes the current state --
+    here, any fingerprint that is not the real one -- must not run a single
+    stage."""
+    ctx = _ctx(workspace_root)
+
+    report = apply_listings(ctx, [LISTING], [RenderStage()], expect={LISTING: "sha256:" + "0" * 64})
+
+    assert report.failed
+    error = report.outcomes[0].error
+    assert isinstance(error, StalePlanError)
+    assert error.listing == LISTING
+    assert error.planned is not None, "the fresh plan travels with the refusal"
+    assert not (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
+
+
+def test_a_stale_listing_does_not_stop_the_rest_of_the_batch(workspace_root: Path) -> None:
+    """PRD 16, still: a stale plan is a refusal like any other."""
+    copy_listing(workspace_root, "fine")
+    ctx = _ctx(workspace_root)
+
+    report = apply_listings(
+        ctx,
+        [LISTING, "fine"],
+        [RenderStage()],
+        expect={LISTING: "sha256:" + "0" * 64},
+    )
+
+    assert [outcome.listing for outcome in report.outcomes] == [LISTING, "fine"]
+    assert isinstance(report.outcomes[0].error, StalePlanError)
+    assert report.outcomes[1].ok
+    assert (workspace_root / "listings" / "fine" / "state.lock.json").is_file()
+
+
+def test_a_listing_with_no_entry_in_expect_is_never_checked(workspace_root: Path) -> None:
+    """Every CLI call today: `apply` with no prior `plan` to compare against.
+    `expect` only applies to listings it actually names."""
+    ctx = _ctx(workspace_root)
+
+    report = apply_listings(ctx, [LISTING], [RenderStage()], expect={})
+
+    assert not report.failed
+    assert (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
