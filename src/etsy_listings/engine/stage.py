@@ -178,8 +178,7 @@ class Stage(Protocol[D, A, L]):
     # a **public pydantic model of domain facts** for the before/after review
     # (A30) -- never layout, and never a second copy of what a `Change`
     # already decided (A2). Deliberately *not* a member of this Protocol:
-    # `render` and `retract` have none yet (the render snapshot is A32,
-    # deferred to a later PR), and a Protocol member has no optional form for
+    # `retract` has none, and a Protocol member has no optional form for
     # a class that reaches it structurally rather than by inheriting `Stage`
     # -- every stage here is exactly such a class. Declaring it anyway would
     # make every stage without one fail `list[AnyStage]`'s structural check,

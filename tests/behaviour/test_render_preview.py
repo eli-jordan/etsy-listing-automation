@@ -243,6 +243,47 @@ def test_preview_listing_stops_before_any_scene_when_asked_to(workspace_root: Pa
     assert not any(ctx.workspace.preview_dir(LISTING).glob("**/*.png"))
 
 
+def test_preview_listing_stops_partway_through_a_multi_scene_batch(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`should_stop` is checked *between* scenes, not just once up front.
+
+    `preview_listing` only reports `on_preview_rendered` once `preview()`
+    returns its whole `ready` tuple (its own docstring: one event per scene
+    that *ends this call* with a file), so a stub that reacts to those events
+    could never see one fire early enough to matter. What proves "checked
+    between scenes" is that the loop stops rendering before the last scene --
+    spying on the actual per-scene render call (the way
+    `test_apply_promotes_previews_without_rendering_again` already does)
+    shows that directly."""
+    ctx = a_context(workspace_root)
+    planned = build_plan(ctx, LISTING, a_lock(), STAGES)
+    assert len(COLOURS) > 1  # the batch must have more than one scene to prove "partway"
+
+    rendered = 0
+    original_render_scene = render_module.render_scene
+
+    def counting_render_scene(*args: object, **kwargs: object):
+        nonlocal rendered
+        rendered += 1
+        return original_render_scene(*args, **kwargs)
+
+    monkeypatch.setattr(render_module, "render_scene", counting_render_scene)
+
+    events: list[tuple[str, str, str | None]] = []
+    observer = RunObserver(
+        on_preview_rendered=lambda listing, template, colour: events.append(
+            (listing, template, colour)
+        )
+    )
+
+    preview_listing(ctx, planned, observer, should_stop=lambda: rendered >= 1)
+
+    assert rendered == 1
+    assert len(events) == 1
+    assert len(events) < len(COLOURS)
+
+
 def test_preview_listing_uses_the_default_observer_when_none_is_given(workspace_root: Path) -> None:
     """No caller cares yet in this PR -- the default `RunObserver`'s
     `on_preview_rendered` is a plain no-op -- but `preview_listing` must still
