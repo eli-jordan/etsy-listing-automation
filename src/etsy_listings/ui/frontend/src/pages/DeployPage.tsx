@@ -83,6 +83,7 @@ export function DeployPage() {
   const [deletedAfterApply, setDeletedAfterApply] = useState(false);
   const streamRef = useRef<RunStreamHandle | null>(null);
   const seenRef = useRef<string | null>(null);
+  const leavingRef = useRef(false);
   const applyStartRef = useRef<Promise<void> | null>(null);
 
   const openStream = useCallback((id: string, lastEventId?: number) => {
@@ -94,6 +95,7 @@ export function DeployPage() {
   }, []);
 
   const startFreshPlan = useCallback(async () => {
+    leavingRef.current = false;
     setApplyRequested(false);
     const result = await createRun({ kind: "plan", listings: [name] });
     if (result.kind === "conflict") {
@@ -155,8 +157,24 @@ export function DeployPage() {
   useEffect(() => {
     if (runId === null || seenRef.current === runId) return;
     if (!TERMINAL_PHASES.has(state.phase)) return;
-    seenRef.current = runId;
-    void markRunSeen(runId);
+
+    const markSeen = () => {
+      if (leavingRef.current) return;
+      seenRef.current = runId;
+      void markRunSeen(runId);
+    };
+
+    // A very small apply can finish between the user's Apply and immediate
+    // Back clicks. Give that exit intent a short window to land so the
+    // editor can still offer View result; a result the user stays on is
+    // marked seen normally. Plan reviews and other terminal outcomes keep
+    // their existing immediate behaviour.
+    if (state.phase !== "applied") {
+      markSeen();
+      return;
+    }
+    const timer = window.setTimeout(markSeen, 750);
+    return () => window.clearTimeout(timer);
   }, [runId, state.phase]);
 
   // Status after apply is re-derived from the server, never assumed
@@ -176,6 +194,7 @@ export function DeployPage() {
   }, [state.phase, name]);
 
   async function handleBack() {
+    leavingRef.current = true;
     // Applying begins with an async POST. A fast Back click can otherwise
     // navigate before that POST has registered the apply run, letting the
     // editor query the old (already-seen) plan and miss the new run forever.
