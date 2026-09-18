@@ -82,6 +82,7 @@ export function DeployPage() {
   const [deletedAfterApply, setDeletedAfterApply] = useState(false);
   const streamRef = useRef<RunStreamHandle | null>(null);
   const seenRef = useRef<string | null>(null);
+  const applyStartRef = useRef<Promise<void> | null>(null);
 
   const openStream = useCallback((id: string, lastEventId?: number) => {
     streamRef.current?.close();
@@ -173,6 +174,12 @@ export function DeployPage() {
   }, [state.phase, name]);
 
   async function handleBack() {
+    // Apply starts with an async POST. Back may be pressed before that request
+    // returns; navigating immediately would let the editor perform its one-time
+    // run lookup while the old, already-seen plan is still current. Wait only
+    // for the run to exist (never for apply itself), then leave as requested so
+    // the editor can reliably offer View progress/result.
+    await applyStartRef.current?.catch(() => undefined);
     streamRef.current?.close();
     // Only a plan run still under review (queued/planning/planned/previewing)
     // is worth asking the registry to cancel. An `apply` in progress is
@@ -190,7 +197,7 @@ export function DeployPage() {
     navigate(deletedAfterApply ? "/listings" : `/listings/${encodeURIComponent(name)}`);
   }
 
-  async function handleApply() {
+  async function startApply() {
     if (state.fingerprint === null) return;
     const result = await createRun({
       kind: "apply",
@@ -208,6 +215,20 @@ export function DeployPage() {
     setState(initialDeployState);
     setRunId(result.run.id);
     openStream(result.run.id);
+  }
+
+  function handleApply() {
+    if (applyStartRef.current !== null) return;
+    const starting = startApply();
+    applyStartRef.current = starting;
+    void starting.then(
+      () => {
+        if (applyStartRef.current === starting) applyStartRef.current = null;
+      },
+      () => {
+        if (applyStartRef.current === starting) applyStartRef.current = null;
+      },
+    );
   }
 
   const showPlanAgain = !["queued", "planning", "applying", "applied"].includes(phase);
@@ -299,7 +320,7 @@ export function DeployPage() {
           controlPhase={phase}
           previewsTotal={previewsTotal}
           previewsDone={previewsDone}
-          onApply={() => void handleApply()}
+          onApply={handleApply}
           appliedStepCount={appliedStepCount}
           backLabel={deletedAfterApply ? "← Back to listings" : "← Back to editor"}
           onBack={() => void handleBack()}

@@ -366,4 +366,46 @@ describe("DeployPage: Apply", () => {
       }),
     );
   });
+
+  it("waits for the apply run to exist before Back returns to the editor", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+
+    type CreateResult = Awaited<ReturnType<typeof runsApi.createRun>>;
+    let resolveApply!: (result: CreateResult) => void;
+    const applying = new Promise<CreateResult>((resolve) => {
+      resolveApply = resolve;
+    });
+    vi.spyOn(runsApi, "createRun")
+      .mockResolvedValueOnce({
+        kind: "created",
+        run: { id: "run-9", kind: "plan", listings: ["take-a-hike"], phase: "queued", seen: false },
+      })
+      .mockReturnValueOnce(applying);
+    const handles = stubStream();
+
+    renderPage();
+    await waitFor(() => expect(handles).toHaveLength(1));
+    streamAt(handles, 0).onEvent({
+      type: "listing_planned",
+      id: 1,
+      listing: "take-a-hike",
+      plan: plan([stage({ stage: "render", will_run: true, reason: "x" })]),
+      fingerprint: "fp-9",
+    });
+    streamAt(handles, 0).onEvent({ type: "phase", id: 2, phase: "ready" });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(runsApi.createRun).toHaveBeenCalledTimes(2));
+    await userEvent.click(screen.getByRole("button", { name: /Back/ }));
+
+    expect(screen.queryByText("editor page")).not.toBeInTheDocument();
+
+    resolveApply({
+      kind: "created",
+      run: { id: "run-10", kind: "apply", listings: ["take-a-hike"], phase: "queued", seen: false },
+    });
+
+    expect(await screen.findByText("editor page")).toBeInTheDocument();
+  });
 });
