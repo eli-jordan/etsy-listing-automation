@@ -5,8 +5,8 @@ import type { ListingDetail } from "../types";
 
 /** How long the editor waits after the last edit before saving -- long
  * enough that a run of keystrokes in a text field collapses into one
- * request, short enough that the "Autosaved just now" caption reads as
- * true. Also flushed immediately on blur, on a tab switch and on unmount
+ * request, short enough that "Saved a moment ago" reads as true. Also
+ * flushed immediately on blur, on a tab switch and on unmount
  * (see `flush` below), so a save is never waiting on this timer alone. */
 export const AUTOSAVE_DEBOUNCE_MS = 800;
 
@@ -22,9 +22,16 @@ type Patch = Record<string, unknown>;
 export type SaveState =
   | { kind: "unnamed" }
   | { kind: "saving" }
-  | { kind: "saved" }
+  | { kind: "saved"; savedAt: number }
   | { kind: "unsaved" }
   | { kind: "name-taken"; name: string };
+
+/** A `{ kind: "saved" }` stamped with when. Successful writes use the browser
+ * clock; the initial state can instead use `listing.yaml`'s mtime supplied by
+ * the server. */
+function saved(savedAt = Date.now()): SaveState {
+  return { kind: "saved", savedAt };
+}
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -81,8 +88,8 @@ interface UseAutosave {
 }
 
 /**
- * Autosave (phase 5): the first autosave precedent in this codebase (the
- * calibrator uses explicit Save/Reset).
+ * Autosave for listings. The mockup-template calibrator shares the debounce
+ * interval but has a simpler full-document transport.
  *
  * It holds three transports, not one, because the editor is also the create
  * form and a listing therefore passes through three states in one sitting:
@@ -105,13 +112,15 @@ export function useAutosave(
   options: { onNamed?: (name: string, fresh: ListingDetail) => void } = {},
 ): UseAutosave {
   const [detail, setDetail] = useState(initial);
-  const [save, setSave] = useState<SaveState>(
-    name === null ? { kind: "unnamed" } : { kind: "saved" },
+  const [save, setSave] = useState<SaveState>(() =>
+    name === null
+      ? { kind: "unnamed" }
+      : saved(initial.modified_at === null ? Date.now() : Date.parse(initial.modified_at)),
   );
   const pending = useRef<Patch | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The name this listing is on disk under, or `null` while it is not. */
-  const saved = useRef<string | null>(name);
+  const savedName = useRef<string | null>(name);
   /** A create or rename is in flight: edits keep accumulating in `pending`,
    * but nothing is sent, because the name they would be sent under is exactly
    * what is being decided. */
@@ -163,9 +172,9 @@ export function useAutosave(
         return;
       }
       pending.current = null;
-      saved.current = next;
+      savedName.current = next;
       setDetail(fresh);
-      setSave({ kind: "saved" });
+      setSave(saved());
       onNamed?.(next, fresh);
     },
     [applyResponse, candidate, onNamed],
@@ -175,14 +184,14 @@ export function useAutosave(
     clearTimer();
     if (naming.current) return;
 
-    if (saved.current !== null) {
+    if (savedName.current !== null) {
       const patch = pending.current;
       if (patch === null) return;
       pending.current = null;
       setSave({ kind: "saving" });
-      const fresh = await patchListing(saved.current, patch);
+      const fresh = await patchListing(savedName.current, patch);
       applyResponse(fresh);
-      setSave({ kind: "saved" });
+      setSave(saved());
       return;
     }
 
@@ -222,12 +231,12 @@ export function useAutosave(
 
   const commitName = useCallback(
     (next: string) => {
-      if (next === saved.current || naming.current) return;
+      if (next === savedName.current || naming.current) return;
       clearTimer();
       naming.current = true;
       setSave({ kind: "saving" });
       const run = async () => {
-        if (saved.current === null) {
+        if (savedName.current === null) {
           draftName.current = next;
           await create(next);
           return;
@@ -237,11 +246,11 @@ export function useAutosave(
         // sent under the new name -- two fates, and no third.
         const patch = pending.current;
         pending.current = null;
-        if (patch !== null) applyResponse(await patchListing(saved.current, patch));
-        const fresh = await renameListing(saved.current, next);
-        saved.current = next;
+        if (patch !== null) applyResponse(await patchListing(savedName.current, patch));
+        const fresh = await renameListing(savedName.current, next);
+        savedName.current = next;
         setDetail(fresh);
-        setSave({ kind: "saved" });
+        setSave(saved());
         onNamed?.(next, fresh);
       };
       run()

@@ -513,6 +513,7 @@ def test_get_config_returns_the_fixture_bounding_box(client: TestClient) -> None
     assert len(body["bounding_box"]) == 4
     assert set(body["bounding_box"][0]) == {"x", "y"}
     assert body["shade"]["enabled"] is True
+    assert "last-modified" in response.headers
 
 
 def test_get_config_404s_for_unknown_template(client: TestClient) -> None:

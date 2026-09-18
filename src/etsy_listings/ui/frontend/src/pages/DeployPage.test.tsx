@@ -39,6 +39,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     },
     media: [],
     name: "take-a-hike",
+    modified_at: "2026-09-17T10:00:00Z",
     status: "dirty",
     issues: [],
     field_errors: {},
@@ -268,7 +269,47 @@ describe("DeployPage: reattaching", () => {
 
     expect(await screen.findByText("Deployed.")).toBeInTheDocument();
     expect(handles).toHaveLength(0);
-    await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-4"));
+    await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-4"), {
+      timeout: 2_000,
+    });
+  });
+
+  it("keeps a just-finished apply unseen when Back is clicked immediately", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const fullPlan = plan([stage({ stage: "render", will_run: true, reason: "x" })]);
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
+      id: "run-fast-apply",
+      kind: "apply",
+      listings: ["take-a-hike"],
+      phase: "applied",
+      seen: false,
+    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue({
+      id: "run-fast-apply",
+      kind: "apply",
+      listings: ["take-a-hike"],
+      phase: "applied",
+      seen: false,
+      events: [
+        {
+          type: "listing_planned",
+          id: 1,
+          listing: "take-a-hike",
+          plan: fullPlan,
+          fingerprint: "fp-fast",
+        },
+        { type: "phase", id: 2, phase: "applied" },
+      ],
+    });
+    stubStream();
+
+    renderPage();
+    expect(await screen.findByText("Deployed.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /Back to editor/ }));
+    await new Promise((resolve) => window.setTimeout(resolve, 800));
+
+    expect(runsApi.markRunSeen).not.toHaveBeenCalledWith("run-fast-apply");
+    expect(screen.getByText("editor page")).toBeInTheDocument();
   });
 });
 
@@ -319,9 +360,95 @@ describe("DeployPage: Back", () => {
     expect(await screen.findByText("editor page")).toBeInTheDocument();
     expect(cancelSpy).not.toHaveBeenCalled();
   });
+
+  it("waits for an apply click to register its run before leaving", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
+    let resolveApply!: (result: runsApi.CreateRunResult) => void;
+    const applyStarted = new Promise<runsApi.CreateRunResult>((resolve) => {
+      resolveApply = resolve;
+    });
+    vi.spyOn(runsApi, "createRun")
+      .mockResolvedValueOnce({
+        kind: "created",
+        run: { id: "run-9", kind: "plan", listings: ["take-a-hike"], phase: "queued", seen: false },
+      })
+      .mockReturnValueOnce(applyStarted);
+    const cancelSpy = vi.spyOn(runsApi, "cancelRun").mockResolvedValue(true);
+    const handles = stubStream();
+
+    renderPage();
+    await waitFor(() => expect(handles).toHaveLength(1));
+    streamAt(handles, 0).onEvent({
+      type: "listing_planned",
+      id: 1,
+      listing: "take-a-hike",
+      plan: plan([stage({ stage: "render", will_run: true, reason: "x" })]),
+      fingerprint: "fp-9",
+    });
+    streamAt(handles, 0).onEvent({ type: "phase", id: 2, phase: "ready" });
+
+    await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
+    await userEvent.click(screen.getByRole("button", { name: /Back/ }));
+    expect(screen.queryByText("editor page")).not.toBeInTheDocument();
+
+    resolveApply({
+      kind: "created",
+      run: { id: "run-10", kind: "apply", listings: ["take-a-hike"], phase: "queued", seen: false },
+    });
+    expect(await screen.findByText("editor page")).toBeInTheDocument();
+    expect(cancelSpy).not.toHaveBeenCalled();
+  });
 });
 
 describe("DeployPage: Apply", () => {
+  it("moves stages above a collapsed approved comparison while apply is running", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const fullPlan = plan([stage({ stage: "publish", will_run: true, reason: "publish it" })]);
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
+      id: "run-applying",
+      kind: "apply",
+      listings: ["take-a-hike"],
+      phase: "applying",
+      seen: false,
+    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue({
+      id: "run-applying",
+      kind: "apply",
+      listings: ["take-a-hike"],
+      phase: "applying",
+      seen: false,
+      events: [
+        { type: "phase", id: 1, phase: "applying" },
+        {
+          type: "listing_planned",
+          id: 2,
+          listing: "take-a-hike",
+          plan: fullPlan,
+          fingerprint: "fp-applying",
+        },
+        {
+          type: "stage_applying",
+          id: 3,
+          listing: "take-a-hike",
+          stage: "publish",
+          occurred_at: "2026-09-17T10:00:00Z",
+        },
+      ],
+    });
+    stubStream();
+
+    renderPage();
+
+    const stages = await screen.findByText("What apply will do");
+    const disclosure = screen.getByText("View approved before-and-after comparison");
+    const details = disclosure.closest("details");
+    expect(details).not.toHaveAttribute("open");
+    expect(
+      stages.compareDocumentPosition(disclosure) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+  });
+
   it("sends the reviewed plan's fingerprint", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
@@ -357,6 +484,8 @@ describe("DeployPage: Apply", () => {
     await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("run-7"));
 
     await userEvent.click(await screen.findByRole("button", { name: "Apply" }));
+
+    expect(screen.getByText("View approved before-and-after comparison")).toBeInTheDocument();
 
     await waitFor(() =>
       expect(runsApi.createRun).toHaveBeenCalledWith({

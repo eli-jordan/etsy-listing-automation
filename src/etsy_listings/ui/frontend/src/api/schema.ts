@@ -983,7 +983,7 @@ export interface components {
     EtsyListingConfig: {
       /**
        * Description
-       * @default <generate>
+       * @default
        */
       description: string;
       /**
@@ -1004,7 +1004,7 @@ export interface components {
       tags: string[] | "<generate>";
       /**
        * Title
-       * @default <generate>
+       * @default
        */
       title: string;
       /** Variation Images */
@@ -1126,10 +1126,10 @@ export interface components {
       };
       /**
        * @default {
-       *       "description": "<generate>",
+       *       "description": "",
        *       "materials": [],
        *       "tags": "<generate>",
-       *       "title": "<generate>"
+       *       "title": ""
        *     }
        */
       etsy: components["schemas"]["EtsyListingConfig"];
@@ -1150,6 +1150,8 @@ export interface components {
       lifecycle?: ("retired" | "deleted" | "renew") | null;
       /** Media */
       media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /** Modified At */
+      modified_at: string | null;
       /** Name */
       name: string;
       /**
@@ -1663,6 +1665,11 @@ export interface components {
       id: number;
       /** Listing */
       listing: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at?: string;
       /** Stage */
       stage: string;
       /**
@@ -1677,6 +1684,11 @@ export interface components {
       id: number;
       /** Listing */
       listing: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at?: string;
       /** Stage */
       stage: string;
       /**
@@ -1707,6 +1719,11 @@ export interface components {
       listing: string;
       /** Message */
       message: string;
+      /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at?: string;
       /** Stage */
       stage: string;
       /**

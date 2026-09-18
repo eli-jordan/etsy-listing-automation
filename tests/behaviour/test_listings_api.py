@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import time
 from collections.abc import Callable, Iterator, Sequence
+from datetime import UTC, datetime
 from io import BytesIO
 from pathlib import Path
 
@@ -219,6 +220,17 @@ class TestGetListingDetail:
         assert body["colors"] == ["black", "blue-jean", "ivory", "moss"]
         assert body["status"] == "draft"
         assert body["field_errors"] == {}
+
+    def test_returns_listing_yaml_modified_time(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        path = workspace_root / "listings" / "take-a-hike" / "listing.yaml"
+        touch(path, offset=-3600)
+
+        body = client.get("/api/listings/take-a-hike").json()
+
+        expected = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+        assert datetime.fromisoformat(body["modified_at"]) == expected
 
     def test_reports_the_generate_title_as_a_details_block(self, client: TestClient) -> None:
         issues = client.get("/api/listings/take-a-hike").json()["issues"]
@@ -566,6 +578,8 @@ class TestListingDraft:
         assert body["colors"] == []
         assert body["pricing_plan"] is None
         assert body["media"] == []
+        assert body["etsy"]["title"] == ""
+        assert body["etsy"]["description"] == ""
 
     def test_the_draft_opens_in_a_workspace_with_no_pricing_plan(self, client: TestClient) -> None:
         """It used to 400 here, which showed "could not start a new listing"

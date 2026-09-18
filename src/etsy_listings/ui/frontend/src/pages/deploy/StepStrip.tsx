@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { StageRuntimeStatus } from "./deployState";
 import type { PlanDTO, StagePlanDTO } from "../../types";
 import { STAGE_LABELS } from "../../types";
@@ -89,6 +89,33 @@ function whyText(
   }
 }
 
+function formatElapsed(milliseconds: number): string {
+  const totalSeconds = Math.max(0, Math.floor(milliseconds / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return minutes > 0 ? `${minutes}:${seconds.toString().padStart(2, "0")}` : `${seconds}s`;
+}
+
+function StageTimer({ runtime }: { runtime: StageRuntimeStatus }) {
+  const [now, setNow] = useState(Date.now);
+
+  useEffect(() => {
+    if (runtime.kind !== "applying") return;
+    const timer = window.setInterval(() => setNow(Date.now()), 250);
+    return () => window.clearInterval(timer);
+  }, [runtime.kind, runtime.startedAt]);
+
+  const end = runtime.kind === "applying" ? now : runtime.finishedAt;
+  return (
+    <span
+      className="dv-step__timer"
+      aria-label={`Elapsed ${formatElapsed(end - runtime.startedAt)}`}
+    >
+      {formatElapsed(end - runtime.startedAt)}
+    </span>
+  );
+}
+
 function StepCell({
   stagePlan,
   runtime,
@@ -109,6 +136,7 @@ function StepCell({
       <div className="dv-step__top">
         <Icon state={state} />
         <span className="dv-step__name">{label}</span>
+        {runtime && <StageTimer runtime={runtime} />}
       </div>
       <div className={state === "running" ? "dv-step__why" : "dv-step__why"}>
         {whyText(state, stagePlan, runtime)}

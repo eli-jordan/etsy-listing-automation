@@ -25,6 +25,7 @@ from etsy_listings.engine.stages.product_document import (
 
 BLACK_M = PricedVariant(id=1, colour_slug="black", size="M", price=34900)
 BLACK_S = PricedVariant(id=2, colour_slug="black", size="S", price=34900)
+WHITE_M = PricedVariant(id=3, colour_slug="white", size="M", price=34900)
 
 
 def _group(artwork: str = "default", *, design_hash: str = "sha256:abc") -> ArtworkGroup:
@@ -266,6 +267,31 @@ def test_no_live_product_is_no_drift() -> None:
     desired = _desired()
 
     assert compare(desired, desired.applied(), None).drift == ()
+
+
+def test_a_pending_local_edit_is_not_drift() -> None:
+    """A description changed locally but not yet applied must show up as a
+    ``change`` (already covered by ``_changes``), never as drift -- drift
+    means something moved on Printify/Etsy since the last apply, and nothing
+    has here: ``live`` still matches what was last applied."""
+    was = _desired(description="Original.")
+    desired = _desired(description="Edited locally, not applied yet.")
+
+    comparison = compare(desired, was.applied(), _live(was))
+
+    assert comparison.drift == ()
+
+
+def test_a_pending_local_colour_addition_is_not_variant_drift() -> None:
+    """Same bug, the variant-matrix shape: adding a colour locally, not yet
+    applied, must not read as Printify disagreeing about what is enabled --
+    ``live`` still matches exactly what was last applied."""
+    was = _desired(BLACK_M, BLACK_S)
+    desired = _desired(BLACK_M, BLACK_S, WHITE_M)
+
+    comparison = compare(desired, was.applied(), _live(was))
+
+    assert comparison.drift == ()
 
 
 # ----------------------------------------------------------------- actions

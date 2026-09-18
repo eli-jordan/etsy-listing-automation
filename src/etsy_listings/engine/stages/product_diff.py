@@ -81,7 +81,7 @@ def compare(
         will_run=reason is not None,
         reason=reason,
         changes=changes,
-        drift=_drift(wanted, live),
+        drift=_drift(was, live),
         actions=_actions(desired, creating=was is None or live is None),
     )
 
@@ -200,26 +200,32 @@ def _print_area_changes(wanted: AppliedProduct, was: AppliedProduct) -> list[Cha
     return changes
 
 
-def _drift(wanted: AppliedProduct, live: Product | None) -> tuple[Drift, ...]:
+def _drift(was: AppliedProduct | None, live: Product | None) -> tuple[Drift, ...]:
     """What changed in Printify since we last applied.
 
-    Compared against *desired* rather than *applied* only where the two agree
-    in shape. The variant matrix is the enabled subset, never the raw list --
-    comparing 238 against 6 is a diff that never clears.
+    Every field here compares against *last-applied* (``was``), never
+    *desired* -- an edit made locally but not yet applied is a ``change``,
+    reported by ``_changes``, not drift. Comparing against desired made every
+    pending edit (a new colour included) read as if Printify or a human had
+    already reverted it on republish, before ``apply`` ever ran.
+
+    ``was.prices`` is already the enabled subset -- an applied document only
+    ever records what was actually sent -- so it is the same ``{id: price}``
+    shape as ``live.enabled_variants()``.
     """
-    if live is None:
+    if was is None or live is None:
         return ()
 
     found: list[Drift] = []
     for path, ours, theirs in (
-        ("title", wanted.title, live.title),
-        ("description", wanted.description, live.description),
+        ("title", was.title, live.title),
+        ("description", was.description, live.description),
     ):
         change = drift(path, ours, theirs)
         if change is not None:
             found.append(change)
 
-    ours_prices = wanted.prices
+    ours_prices = was.prices
     if live.enabled_variants() != ours_prices:
         found.append(
             Drift(
