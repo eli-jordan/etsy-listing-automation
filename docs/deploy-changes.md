@@ -199,16 +199,20 @@ hash over the inputs `input_hash` already folds (the artwork hashes that scene
 uses, its template's hash, its resolved `RenderConfig`), restricted to that
 scene. A preview that already exists for the current hash is not rendered
 again. Files for this listing whose hash is no longer current are pruned in
-the same pass. `should_stop` is checked between scenes, which is what makes a
-plan run cancellable (§7).
+the same pass. At most two full-size scenes render concurrently (bounded to
+avoid multiplying their substantial image-array memory), and `should_stop` is
+checked before each new submission. A cancelled plan drains only the small
+batch already in flight (§7).
 
 `RenderStage.apply` looks for the preview file for each scene it is about to
-render. If one exists it is moved into `render_file(...)` with `os.replace`;
-otherwise the scene renders as today. Render passes are pure and OpenCV and
-Pillow are pinned exactly (A7), so a promoted file is the same bytes a fresh
-render would have produced. The `outputs` hash axis cannot tell the difference,
-and nothing is uploaded twice. CLI `apply` gets promotion for free whenever a
-UI plan ran first. `Workspace.remove_listing` also removes
+render. If one exists its exact bytes are copied into `render_file(...)`;
+otherwise the scene renders as today. The content-addressed preview stays in
+place so a deploy page refreshed during later apply stages can still display
+the reviewed image. Render passes are pure and OpenCV and Pillow are pinned
+exactly (A7), so a promoted file is the same bytes a fresh render would have
+produced. The `outputs` hash axis cannot tell the difference, and nothing is
+uploaded twice. CLI `apply` gets promotion for free whenever a UI plan ran
+first. `Workspace.remove_listing` also removes
 `.cache/previews/{listing}/`.
 
 Previews are **not** part of `build_plan`. The UI's plan run calls

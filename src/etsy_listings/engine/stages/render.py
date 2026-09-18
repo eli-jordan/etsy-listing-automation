@@ -36,15 +36,19 @@ by :func:`scene_hash` -- a *third*, narrower hash axis alongside
 ``outputs`` (per-file: does what is on disk match what was uploaded), scoped
 to one scene's own inputs so a UI plan run can preview only the scenes that
 actually changed rather than every scene the moment any one of them does.
-``apply()`` promotes a matching preview with ``os.replace`` instead of
+``apply()`` promotes a matching preview by copying its exact bytes instead of
 rendering again; ``snapshot()`` is what tells a caller which scenes need one.
+The preview remains addressable while the rest of apply is running, so a UI
+that reconnects mid-run does not lose images already promoted to renders.
 """
 
 from __future__ import annotations
 
 import os
 import shutil
+import tempfile
 from collections.abc import Callable, Mapping
+from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Literal
@@ -75,6 +79,35 @@ from etsy_listings.render.pipeline import Layer, render_scene
 from etsy_listings.render.swatch import sample_swatch
 from etsy_listings.render.types import RGBA
 from etsy_listings.workspace.workspace import Workspace
+
+PREVIEW_WORKERS = 2
+"""Maximum full-size preview renders in flight.
+
+Rendering is CPU-heavy but each scene also holds several full-resolution image
+arrays. Two workers materially shortens a multi-image plan without multiplying
+peak memory by the size of a typical Etsy gallery.
+"""
+
+
+def _copy_preview(source: Path, target: Path) -> None:
+    """Copy ``source`` over ``target`` atomically while retaining ``source``.
+
+    A direct ``copyfile`` can leave a partial render if the process stops
+    mid-copy. The temporary file lives beside the render so ``os.replace`` is
+    an atomic same-filesystem operation, preserving the crash safety promotion
+    had when it consumed previews directly.
+    """
+    target.parent.mkdir(parents=True, exist_ok=True)
+    descriptor, temporary_name = tempfile.mkstemp(
+        dir=target.parent, prefix=f".{target.name}.", suffix=".tmp"
+    )
+    os.close(descriptor)
+    temporary = Path(temporary_name)
+    try:
+        shutil.copyfile(source, temporary)
+        os.replace(temporary, target)
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 class TemplateAssetError(FileNotFoundError):
@@ -625,6 +658,7 @@ class RenderStage:
         live: RenderLive | None,
         *,
         should_stop: Callable[[], bool] = lambda: False,
+        on_ready: Callable[[SceneWork], None] | None = None,
     ) -> tuple[SceneWork, ...]:
         """Render a full-size preview for every scene :meth:`snapshot` calls
         ``stale`` or ``missing`` (A32), through the same pipeline ``apply``
@@ -640,10 +674,12 @@ class RenderStage:
         render: both come from the same ``render_scene`` call over the same
         resolved inputs (A7).
 
-        ``should_stop`` is checked before each scene that still needs
-        rendering, so a cancellable caller can stop between scenes without
-        leaving a half-written file -- ``save_png`` writes the whole image in
-        one call, so there is no partial file to clean up either way.
+        Up to :data:`PREVIEW_WORKERS` scenes render concurrently. ``should_stop``
+        is checked before each submission, so cancellation starts no more work;
+        the small number already in flight is allowed to finish without leaving
+        a half-written file. ``on_ready`` fires on this calling thread as each
+        file becomes available, rather than making the UI wait for the entire
+        gallery before it can reveal the first image.
 
         Returns the scenes that end this call with a ready preview file,
         whether freshly rendered here or already current from an earlier
@@ -655,9 +691,8 @@ class RenderStage:
         snapshot = self.snapshot(desired, live)
         needed = {s.scene for s in snapshot.scenes if s.state in ("stale", "missing")}
 
-        design_cache: dict[Path, RGBA] = {}
-        map_caches: dict[str, DerivedMapCache] = {}
         ready: list[SceneWork] = []
+        pending: list[tuple[SceneWork, Path]] = []
 
         for work in desired.works:
             if work.key not in needed:
@@ -667,28 +702,64 @@ class RenderStage:
             target = workspace.preview_file(
                 desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
             )
-            if not target.is_file():
-                base = load_template_base(work.base_image)
-                map_cache = map_caches.setdefault(
-                    work.template, DerivedMapCache(workspace.template_derived_dir(work.template))
-                )
-                height = map_cache.height(work.map_key, base) if work.wants_height else None
-                luminance = (
-                    map_cache.luminance(work.map_key, base) if work.wants_luminance else None
-                )
+            if target.is_file():
+                ready.append(work)
+                if on_ready is not None:
+                    on_ready(work)
+            else:
+                pending.append((work, target))
 
-                layers = []
-                for layer in work.layers:
-                    if layer.design not in design_cache:
-                        design_cache[layer.design] = load_design(layer.design)
-                    layers.append(Layer(design=design_cache[layer.design], cfg=layer.cfg))
+        if pending:
+            workers = min(PREVIEW_WORKERS, len(pending))
+            jobs = iter(pending)
+            futures: dict[Future[None], SceneWork] = {}
 
-                image = render_scene(base, layers, height=height, luminance=luminance)
-                save_png(image, target)
-            ready.append(work)
+            def submit_one(pool: ThreadPoolExecutor) -> bool:
+                if should_stop():
+                    return False
+                try:
+                    work, target = next(jobs)
+                except StopIteration:
+                    return False
+                futures[pool.submit(self._render_preview, workspace, work, target)] = work
+                return True
+
+            with ThreadPoolExecutor(
+                max_workers=workers, thread_name_prefix="render-preview"
+            ) as pool:
+                for _ in range(workers):
+                    if not submit_one(pool):
+                        break
+                while futures:
+                    finished, _ = wait(futures, return_when=FIRST_COMPLETED)
+                    for future in finished:
+                        work = futures.pop(future)
+                        future.result()
+                        ready.append(work)
+                        if on_ready is not None:
+                            on_ready(work)
+                    for _ in finished:
+                        if not submit_one(pool):
+                            break
 
         self._prune_previews(workspace, desired)
         return tuple(ready)
+
+    @staticmethod
+    def _render_preview(workspace: Workspace, work: SceneWork, target: Path) -> None:
+        """Render one preview job with caches local to its worker."""
+        base = load_template_base(work.base_image)
+        map_cache = DerivedMapCache(workspace.template_derived_dir(work.template))
+        height = map_cache.height(work.map_key, base) if work.wants_height else None
+        luminance = map_cache.luminance(work.map_key, base) if work.wants_luminance else None
+        designs: dict[Path, RGBA] = {}
+        layers = []
+        for layer in work.layers:
+            if layer.design not in designs:
+                designs[layer.design] = load_design(layer.design)
+            layers.append(Layer(design=designs[layer.design], cfg=layer.cfg))
+        image = render_scene(base, layers, height=height, luminance=luminance)
+        save_png(image, target)
 
     def _prune_previews(self, workspace: Workspace, desired: RenderDesired) -> None:
         """Delete every preview file under this listing's preview directory
@@ -740,11 +811,16 @@ class RenderStage:
         A32: before rendering a scene, this looks for a preview
         :meth:`preview` may already have left at
         :meth:`~etsy_listings.workspace.workspace.Workspace.preview_file` for
-        its current hash. If one is there it is moved into place with
-        ``os.replace`` instead of rendered again -- a promoted file is exactly
-        the bytes a fresh render would produce, since both come from the same
-        pipeline over the same resolved inputs (A7), so the ``outputs`` hash
-        axis cannot tell the difference and nothing is uploaded twice.
+        its current hash. If one is there it is copied into place instead of
+        rendered again -- a promoted file is
+        exactly the bytes a fresh render would produce, since both come from
+        the same pipeline over the same resolved inputs (A7), so the ``outputs``
+        hash axis cannot tell the difference and nothing is uploaded twice.
+
+        The content-addressed preview is deliberately retained. The deploy UI
+        continues to show its reviewed images while later apply stages run and
+        after a browser refresh; a later preview pass prunes it when its scene
+        hash is no longer current.
         """
         workspace = ctx.workspace
         design_cache: dict[Path, RGBA] = {}
@@ -759,10 +835,9 @@ class RenderStage:
             if preview_path.is_file():
                 # Promotion (A32): the same bytes a fresh render would
                 # produce, already sitting there from an earlier `preview()`
-                # call. Moved, not copied -- a promoted preview is consumed,
-                # never left behind to be pruned as stale next time.
-                work.output.parent.mkdir(parents=True, exist_ok=True)
-                os.replace(preview_path, work.output)
+                # call. Keep the preview addressable while this apply is in
+                # progress: a refreshed deploy page still points at it.
+                _copy_preview(preview_path, work.output)
             else:
                 map_cache = map_caches.setdefault(
                     work.template, DerivedMapCache(workspace.template_derived_dir(work.template))

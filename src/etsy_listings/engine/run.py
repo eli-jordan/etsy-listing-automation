@@ -355,9 +355,13 @@ def preview_listing(
     either case.
     """
     watch = observer or RunObserver()
-    ready = render_pending(ctx, planned, should_stop=should_stop or _never_stop)
-    for work in ready:
-        watch.on_preview_rendered(planned.plan.listing, work.template, work.colour)
+    listing = planned.plan.listing
+    render_pending(
+        ctx,
+        planned,
+        should_stop=should_stop or _never_stop,
+        on_ready=lambda work: watch.on_preview_rendered(listing, work.template, work.colour),
+    )
 
 
 def apply_listings(
