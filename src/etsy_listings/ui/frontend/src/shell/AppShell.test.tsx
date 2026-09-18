@@ -45,7 +45,7 @@ describe("AppShell", () => {
     renderAt("/");
     expect(screen.getByRole("link", { name: /Dashboard/ })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: /Listings/ })).toBeInTheDocument();
-    expect(screen.getByRole("link", { name: /Mockup templates/ })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /Mockup Templates/ })).toBeInTheDocument();
   });
 
   it("renders the routed page content in the main area", () => {
@@ -65,8 +65,8 @@ describe("AppShell", () => {
     expect(screen.getByText("editor content")).toBeInTheDocument();
   });
 
-  it("marks Mockup templates active on /templates", () => {
+  it("marks Mockup Templates active on /templates", () => {
     renderAt("/templates");
-    expect(screen.getByRole("link", { name: /Mockup templates/ })).toHaveClass("nav-item--active");
+    expect(screen.getByRole("link", { name: /Mockup Templates/ })).toHaveClass("nav-item--active");
   });
 });

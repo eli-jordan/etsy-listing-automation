@@ -178,7 +178,9 @@ class EtsyListingFacts(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     title: str | None = None
+    description: str | None = None
     tags: tuple[str, ...] = ()
+    materials: tuple[str, ...] = ()
     shop_section: str | None = None
     shipping_profile: str | None = None
 
@@ -323,7 +325,9 @@ class EtsyListingStage:
         reverse lookup, and only when this run built one."""
         desired_facts = EtsyListingFacts(
             title=desired.title,
+            description=desired.description,
             tags=desired.tags,
+            materials=desired.materials,
             shop_section=desired.shop_section,
             shipping_profile=desired.shipping_profile,
         )
@@ -332,7 +336,9 @@ class EtsyListingStage:
             catalog = desired.catalog
             live_facts = EtsyListingFacts(
                 title=live.title,
+                description=live.description,
                 tags=live.tags,
+                materials=live.materials,
                 shop_section=catalog.shop_section_title(live.shop_section_id) if catalog else None,
                 shipping_profile=(
                     catalog.shipping_profile_title(live.shipping_profile_id) if catalog else None

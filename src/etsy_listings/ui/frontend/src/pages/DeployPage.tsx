@@ -79,9 +79,11 @@ export function DeployPage() {
   const [detail, setDetail] = useState<ListingDetail | null>(null);
   const [runId, setRunId] = useState<string | null>(null);
   const [state, setState] = useState<DeployState>(initialDeployState);
+  const [applyRequested, setApplyRequested] = useState(false);
   const [deletedAfterApply, setDeletedAfterApply] = useState(false);
   const streamRef = useRef<RunStreamHandle | null>(null);
   const seenRef = useRef<string | null>(null);
+  const leavingRef = useRef(false);
   const applyStartRef = useRef<Promise<void> | null>(null);
 
   const openStream = useCallback((id: string, lastEventId?: number) => {
@@ -93,6 +95,8 @@ export function DeployPage() {
   }, []);
 
   const startFreshPlan = useCallback(async () => {
+    leavingRef.current = false;
+    setApplyRequested(false);
     const result = await createRun({ kind: "plan", listings: [name] });
     if (result.kind === "conflict") {
       const detail = await getRun(result.activeRun);
@@ -153,8 +157,24 @@ export function DeployPage() {
   useEffect(() => {
     if (runId === null || seenRef.current === runId) return;
     if (!TERMINAL_PHASES.has(state.phase)) return;
-    seenRef.current = runId;
-    void markRunSeen(runId);
+
+    const markSeen = () => {
+      if (leavingRef.current) return;
+      seenRef.current = runId;
+      void markRunSeen(runId);
+    };
+
+    // A very small apply can finish between the user's Apply and immediate
+    // Back clicks. Give that exit intent a short window to land so the
+    // editor can still offer View result; a result the user stays on is
+    // marked seen normally. Plan reviews and other terminal outcomes keep
+    // their existing immediate behaviour.
+    if (state.phase !== "applied") {
+      markSeen();
+      return;
+    }
+    const timer = window.setTimeout(markSeen, 750);
+    return () => window.clearTimeout(timer);
   }, [runId, state.phase]);
 
   // Status after apply is re-derived from the server, never assumed
@@ -174,12 +194,12 @@ export function DeployPage() {
   }, [state.phase, name]);
 
   async function handleBack() {
-    // Apply starts with an async POST. Back may be pressed before that request
-    // returns; navigating immediately would let the editor perform its one-time
-    // run lookup while the old, already-seen plan is still current. Wait only
-    // for the run to exist (never for apply itself), then leave as requested so
-    // the editor can reliably offer View progress/result.
-    await applyStartRef.current?.catch(() => undefined);
+    leavingRef.current = true;
+    // Applying begins with an async POST. A fast Back click can otherwise
+    // navigate before that POST has registered the apply run, letting the
+    // editor query the old (already-seen) plan and miss the new run forever.
+    // Wait only for registration, not for the apply itself to finish.
+    await applyStartRef.current;
     streamRef.current?.close();
     // Only a plan run still under review (queued/planning/planned/previewing)
     // is worth asking the registry to cancel. An `apply` in progress is
@@ -197,7 +217,7 @@ export function DeployPage() {
     navigate(deletedAfterApply ? "/listings" : `/listings/${encodeURIComponent(name)}`);
   }
 
-  async function startApply() {
+  async function handleApply() {
     if (state.fingerprint === null) return;
     const result = await createRun({
       kind: "apply",
@@ -212,27 +232,33 @@ export function DeployPage() {
       openStream(detail.id, last?.id);
       return;
     }
-    setState(initialDeployState);
+    // Keep the reviewed plan on screen while the apply run performs its
+    // required re-plan. The fresh listing_planned event will replace it.
+    setState((current) => ({
+      ...initialDeployState,
+      plan: current.plan,
+      fingerprint: current.fingerprint,
+    }));
     setRunId(result.run.id);
     openStream(result.run.id);
   }
 
-  function handleApply() {
-    if (applyStartRef.current !== null) return;
-    const starting = startApply();
-    applyStartRef.current = starting;
-    void starting.then(
-      () => {
-        if (applyStartRef.current === starting) applyStartRef.current = null;
-      },
-      () => {
-        if (applyStartRef.current === starting) applyStartRef.current = null;
-      },
-    );
+  function beginApply() {
+    setApplyRequested(true);
+    const pending = handleApply();
+    applyStartRef.current = pending;
+    void pending.finally(() => {
+      if (applyStartRef.current === pending) applyStartRef.current = null;
+    });
   }
 
   const showPlanAgain = !["queued", "planning", "applying", "applied"].includes(phase);
   const comparison = state.plan ? buildComparison(state.plan) : null;
+  const applyFocused =
+    applyRequested ||
+    phase === "applying" ||
+    phase === "applied" ||
+    Object.keys(state.stageRuntime).length > 0;
   const { total: previewsTotal, done: previewsDone } = previewCounts(state);
   const appliedStepCount = state.plan?.stage_plans.filter((s) => s.will_run).length ?? 0;
 
@@ -293,26 +319,53 @@ export function DeployPage() {
 
         {comparison && state.plan && detail && (
           <>
+            {applyFocused && (
+              <StepStrip
+                plan={state.plan}
+                stageRuntime={state.stageRuntime}
+                heading={stepStripHeading(phase)}
+              />
+            )}
             <Callouts plan={state.plan} comparison={comparison} applied={phase === "applied"} />
-            <ComparisonView
-              comparison={comparison}
-              detail={detail}
-              renderSnapshot={
-                (state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot as never) ??
-                null
-              }
-              previewsRendered={state.previewsRendered}
-              collapsed={
-                phase === "applied" || (!comparison.impacts.length && comparison.hasEtsyListing)
-              }
-              etsyListingId={state.plan.etsy_listing_id}
-            />
-            {comparison.price?.changed && <PriceTable rows={comparison.priceRows} />}
-            <StepStrip
-              plan={state.plan}
-              stageRuntime={state.stageRuntime}
-              heading={stepStripHeading(phase)}
-            />
+            {applyFocused ? (
+              <details className="dv-approved-comparison">
+                <summary>View approved before-and-after comparison</summary>
+                <div className="dv-approved-comparison__body">
+                  <ComparisonView
+                    comparison={comparison}
+                    detail={detail}
+                    renderSnapshot={
+                      (state.plan.stage_plans.find((s) => s.stage === "render")
+                        ?.snapshot as never) ?? null
+                    }
+                    previewsRendered={state.previewsRendered}
+                    collapsed={false}
+                    etsyListingId={state.plan.etsy_listing_id}
+                  />
+                  {comparison.price?.changed && <PriceTable rows={comparison.priceRows} />}
+                </div>
+              </details>
+            ) : (
+              <>
+                <ComparisonView
+                  comparison={comparison}
+                  detail={detail}
+                  renderSnapshot={
+                    (state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot as never) ??
+                    null
+                  }
+                  previewsRendered={state.previewsRendered}
+                  collapsed={!comparison.impacts.length && comparison.hasEtsyListing}
+                  etsyListingId={state.plan.etsy_listing_id}
+                />
+                {comparison.price?.changed && <PriceTable rows={comparison.priceRows} />}
+                <StepStrip
+                  plan={state.plan}
+                  stageRuntime={state.stageRuntime}
+                  heading={stepStripHeading(phase)}
+                />
+              </>
+            )}
           </>
         )}
 
@@ -320,7 +373,7 @@ export function DeployPage() {
           controlPhase={phase}
           previewsTotal={previewsTotal}
           previewsDone={previewsDone}
-          onApply={handleApply}
+          onApply={beginApply}
           appliedStepCount={appliedStepCount}
           backLabel={deletedAfterApply ? "← Back to listings" : "← Back to editor"}
           onBack={() => void handleBack()}

@@ -1,6 +1,8 @@
+import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { ListingDetail } from "../../types";
 import { metaFor } from "./saveMeta";
+import { timeAgo } from "./timeAgo";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
@@ -24,6 +26,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     },
     media: [],
     name: "take-a-hike",
+    modified_at: "2026-09-17T10:00:00Z",
     status: "draft",
     issues: [],
     field_errors: {},
@@ -73,5 +76,34 @@ describe("metaFor", () => {
 
   it("says it is saving while a save is in flight", () => {
     expect(metaFor({ kind: "saving" }, detail(), "take-a-hike")).toBe("Saving…");
+  });
+
+  it("shows the path and a saved-ago caption once saved", () => {
+    const now = Date.now();
+    render(metaFor({ kind: "saved", savedAt: now - 2 * 60_000 }, detail(), "take-a-hike"));
+    expect(screen.getByText("listings/take-a-hike/listing.yaml")).toBeInTheDocument();
+    expect(screen.getByText(/Saved 2 mins ago/)).toBeInTheDocument();
+  });
+});
+
+describe("timeAgo", () => {
+  const now = Date.now();
+
+  it("reads as a moment ago under a minute", () => {
+    expect(timeAgo(now - 30_000, now)).toBe("a moment ago");
+  });
+
+  it("rounds to whole minutes", () => {
+    expect(timeAgo(now - 2 * 60_000, now)).toBe("2 mins ago");
+    expect(timeAgo(now - 60_000, now)).toBe("1 min ago");
+  });
+
+  it("switches to hours past 60 minutes", () => {
+    expect(timeAgo(now - 3 * 3_600_000, now)).toBe("3 hrs ago");
+    expect(timeAgo(now - 3_600_000, now)).toBe("1 hr ago");
+  });
+
+  it("switches to days past 24 hours", () => {
+    expect(timeAgo(now - 2 * 86_400_000, now)).toBe("2 days ago");
   });
 });

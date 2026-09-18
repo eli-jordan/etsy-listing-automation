@@ -95,6 +95,15 @@ went with the product; still there means apply **fails** and local files
 stay. After a confirmed 404 (or no Etsy id), wipe the listing directory and
 the render cache.
 
+The `GET` is polled, not a single shot: the cascade lands as an immediate 404
+in the measurement below, but a user hit one that did not — Shop Manager
+showed it gone seconds after this tool's single check still saw it, i.e.
+read-after-write lag on Etsy's side, not a failed cascade. `retract.py`'s
+`_wait_for_gone` retries with backoff over 15 seconds before failing, the same
+shape `publish`'s own poll uses for its own async wait. Short on purpose: this
+is waiting out lag on a delete that already happened, not an in-progress job,
+so a listing genuinely left behind should still fail promptly.
+
 Wiping local while an Etsy draft survived is how you lose the handle on an
 orphan. `listings_d` stays closed; the message names the listing id and says
 to remove it in Shop Manager, then re-apply.

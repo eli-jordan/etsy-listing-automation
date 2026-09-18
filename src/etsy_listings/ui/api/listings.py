@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -331,6 +332,7 @@ def _detail(
         listing,
         name=name,
         listing_dir=workspace.listing_dir(name),
+        modified_at=datetime.fromtimestamp(workspace.listing_file(name).stat().st_mtime, tz=UTC),
         status=_status(
             workspace,
             name,
@@ -352,6 +354,7 @@ def _describe(
     name: str,
     listing_dir: Path,
     status: ListingStatus,
+    modified_at: datetime | None = None,
     etsy_listing_id: int | None = None,
     printify_product_id: str | None = None,
     field_errors: dict[str, str] | None = None,
@@ -378,6 +381,7 @@ def _describe(
         {
             **listing.model_dump(mode="json"),
             "name": name,
+            "modified_at": modified_at,
             "status": status,
             "issues": [i.model_dump() for i in issues],
             "field_errors": field_errors or {},

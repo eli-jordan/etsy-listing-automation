@@ -504,8 +504,8 @@ def build_listing_stub(
 ) -> dict[str, Any]:
     """A starting ``listing.yaml`` document: prices come from the referenced
     pricing plan (per-size/per-colour adjustment is a manual edit, PRD step
-    2), the media entries :func:`build_media_entries` decided, and
-    ``<generate>`` sentinels for the fields AI copy generation owns."""
+    2), the media entries :func:`build_media_entries` decided, blank title and
+    description fields, and a ``<generate>`` sentinel for tags."""
     return {
         "garment_profile": garment_profile_slug,
         "design": design_ref,
@@ -513,7 +513,7 @@ def build_listing_stub(
         "brief": brief,
         "pricing_plan": pricing_plan_ref,
         "prices": {},
-        "etsy": {"title": GENERATE, "description": GENERATE, "tags": GENERATE, "materials": []},
+        "etsy": {"title": "", "description": "", "tags": GENERATE, "materials": []},
         "media": media,
     }
 

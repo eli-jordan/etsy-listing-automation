@@ -66,13 +66,17 @@ const PRODUCT_SNAPSHOT: ProductSnapshot = {
 const ETSY_LISTING_SNAPSHOT: EtsyListingSnapshot = {
   live: {
     title: "Mushroom Club T-Shirt, Cottagecore Mycology Tee, Unisex Soft Cotton",
+    description: "A cottagecore tee for the mushroom-obsessed.",
     tags: ["mushroom club", "cottagecore", "mushroom t shirt"],
+    materials: ["cotton"],
     shop_section: "Mushrooms",
     shipping_profile: "Norway standard",
   },
   desired: {
     title: "Mushroom Club Tee, Cottagecore Mushroom Shirt, Mycology Gift, Unisex",
+    description: "A cottagecore tee for the mushroom-obsessed mycology lover.",
     tags: ["mushroom club", "cottagecore", "mycology gift"],
+    materials: ["cotton", "polyester"],
     shop_section: "Mushrooms",
     shipping_profile: "Norway standard",
   },
@@ -124,10 +128,23 @@ function fullPlan(): PlanDTO {
           after: ETSY_LISTING_SNAPSHOT.desired.title,
         },
         {
+          kind: "field",
+          path: "description",
+          before: ETSY_LISTING_SNAPSHOT.live?.description ?? null,
+          after: ETSY_LISTING_SNAPSHOT.desired.description,
+        },
+        {
           kind: "list",
           path: "tags",
           added: ["mycology gift"],
           removed: ["mushroom t shirt"],
+          reordered: false,
+        },
+        {
+          kind: "list",
+          path: "materials",
+          added: ["polyester"],
+          removed: [],
           reordered: false,
         },
       ],
@@ -149,7 +166,15 @@ describe("buildComparison: impact tags", () => {
   it("names every part of the listing the plan touches, in reading order", () => {
     const comparison = buildComparison(fullPlan());
 
-    expect(comparison.impacts).toEqual(["Images", "Title", "Prices", "Colours", "Tags"]);
+    expect(comparison.impacts).toEqual([
+      "Images",
+      "Title",
+      "Description",
+      "Prices",
+      "Colours",
+      "Tags",
+      "Materials",
+    ]);
   });
 
   it("is empty when nothing will run", () => {
@@ -160,7 +185,14 @@ describe("buildComparison: impact tags", () => {
       stage({
         stage: "etsy_listing",
         snapshot: {
-          desired: { title: "x", tags: [], shop_section: null, shipping_profile: null },
+          desired: {
+            title: "x",
+            description: "",
+            tags: [],
+            materials: [],
+            shop_section: null,
+            shipping_profile: null,
+          },
           live: null,
         },
       }),
@@ -195,6 +227,41 @@ describe("buildComparison: title", () => {
   });
 });
 
+describe("buildComparison: description", () => {
+  it("carries both sides and the changed flag from the FieldChange", () => {
+    const { description } = buildComparison(fullPlan());
+
+    expect(description).toEqual({
+      before: ETSY_LISTING_SNAPSHOT.live?.description ?? null,
+      after: ETSY_LISTING_SNAPSHOT.desired.description,
+      changed: true,
+    });
+  });
+
+  it("is not flagged changed by a pending edit to some other field", () => {
+    const titleOnly = plan([
+      stage({ stage: "render" }),
+      stage({ stage: "printify_product", snapshot: { desired: [], live: [] } }),
+      stage({ stage: "publish" }),
+      stage({
+        stage: "etsy_listing",
+        snapshot: ETSY_LISTING_SNAPSHOT,
+        changes: [
+          {
+            kind: "field",
+            path: "title",
+            before: ETSY_LISTING_SNAPSHOT.live?.title ?? null,
+            after: ETSY_LISTING_SNAPSHOT.desired.title,
+          },
+        ],
+      }),
+      stage({ stage: "etsy_media", snapshot: { desired: [], live: [] } }),
+    ]);
+
+    expect(buildComparison(titleOnly).description?.changed).toBe(false);
+  });
+});
+
 describe("buildComparison: tags", () => {
   it("carries both sides plus what was added and removed", () => {
     const { tags } = buildComparison(fullPlan());
@@ -204,6 +271,20 @@ describe("buildComparison: tags", () => {
       after: ETSY_LISTING_SNAPSHOT.desired.tags,
       added: ["mycology gift"],
       removed: ["mushroom t shirt"],
+      changed: true,
+    });
+  });
+});
+
+describe("buildComparison: materials", () => {
+  it("carries both sides plus what was added and removed", () => {
+    const { materials } = buildComparison(fullPlan());
+
+    expect(materials).toEqual({
+      before: ETSY_LISTING_SNAPSHOT.live?.materials ?? [],
+      after: ETSY_LISTING_SNAPSHOT.desired.materials,
+      added: ["polyester"],
+      removed: [],
       changed: true,
     });
   });

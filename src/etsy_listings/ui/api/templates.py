@@ -19,6 +19,8 @@ tool uses, instead of a second, bespoke check living in the web layer.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import format_datetime
 from io import BytesIO
 from pathlib import Path
 from typing import Annotated, Literal
@@ -425,7 +427,12 @@ def photo(template: Existing, colour: str | None = None) -> Response:
 
 
 @router.get("/{name}/config", response_model=TemplateConfig)
-def get_config(template: Existing) -> AnyTemplate:
+def get_config(template: Existing, response: Response) -> AnyTemplate:
+    modified_at = datetime.fromtimestamp(
+        template.workspace.template_config_file(template.name).stat().st_mtime,
+        tz=UTC,
+    )
+    response.headers["Last-Modified"] = format_datetime(modified_at, usegmt=True)
     return _load_config(template.workspace, template.name)
 
 

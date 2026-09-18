@@ -169,7 +169,7 @@ function Column({
   etsyListingIdLabel: string;
 }) {
   const isAfter = side === "after";
-  const { title, tags, colours, price, images } = comparison;
+  const { title, description, tags, materials, colours, price, images } = comparison;
 
   return (
     <div className="dv-col">
@@ -215,6 +215,25 @@ function Column({
         </Block>
       )}
 
+      {description && (
+        <Block label="Description" changed={description.changed} side={side}>
+          <div className="dv-description">
+            {isAfter && description.changed
+              ? wordDiff(description.before ?? "", description.after).map((token, index) => (
+                  <span
+                    key={index}
+                    className={token.type === "same" ? undefined : `dv-${token.type}`}
+                  >
+                    {token.text}{" "}
+                  </span>
+                ))
+              : isAfter
+                ? description.after
+                : (description.before ?? "—")}
+          </div>
+        </Block>
+      )}
+
       {price && (
         <Block label="Price" changed={price.changed} side={side}>
           <div className="dv-price dv-tnum">
@@ -251,6 +270,25 @@ function Column({
                   className={`dv-chip${added ? " dv-chip--add" : ""}${removed ? " dv-chip--rm" : ""}`}
                 >
                   {tag}
+                </span>
+              );
+            })}
+          </div>
+        </Block>
+      )}
+
+      {materials && (
+        <Block label="Materials" changed={materials.changed} side={side}>
+          <div className="dv-chips">
+            {(isAfter ? materials.after : materials.before).map((material) => {
+              const added = isAfter && materials.added.includes(material);
+              const removed = !isAfter && materials.removed.includes(material);
+              return (
+                <span
+                  key={material}
+                  className={`dv-chip${added ? " dv-chip--add" : ""}${removed ? " dv-chip--rm" : ""}`}
+                >
+                  {material}
                 </span>
               );
             })}

@@ -49,9 +49,18 @@ describe("getTemplateConfig", () => {
 
   it("returns the config on success", async () => {
     const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({ data: CONFIG, error: undefined } as never);
+    vi.mocked(api.GET).mockResolvedValue({
+      data: CONFIG,
+      error: undefined,
+      response: new Response(null, {
+        headers: { "Last-Modified": "Wed, 17 Sep 2026 18:30:00 GMT" },
+      }),
+    } as never);
     const { getTemplateConfig } = await import("./calibrator");
-    expect(await getTemplateConfig("flat-lay-01")).toEqual(CONFIG);
+    expect(await getTemplateConfig("flat-lay-01")).toEqual({
+      config: CONFIG,
+      modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
+    });
   });
 });
 

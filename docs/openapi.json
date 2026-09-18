@@ -387,7 +387,7 @@
         "additionalProperties": false,
         "properties": {
           "description": {
-            "default": "<generate>",
+            "default": "",
             "title": "Description",
             "type": "string"
           },
@@ -453,7 +453,7 @@
             "title": "Tags"
           },
           "title": {
-            "default": "<generate>",
+            "default": "",
             "title": "Title",
             "type": "string"
           },
@@ -717,10 +717,10 @@
           "etsy": {
             "$ref": "#/components/schemas/EtsyListingConfig",
             "default": {
-              "description": "<generate>",
+              "description": "",
               "materials": [],
               "tags": "<generate>",
-              "title": "<generate>"
+              "title": ""
             }
           },
           "etsy_listing_id": {
@@ -782,6 +782,18 @@
             },
             "title": "Media",
             "type": "array"
+          },
+          "modified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified At"
           },
           "name": {
             "title": "Name",
@@ -875,6 +887,7 @@
           "brief",
           "media",
           "name",
+          "modified_at",
           "status",
           "issues"
         ],
@@ -1831,6 +1844,11 @@
             "title": "Listing",
             "type": "string"
           },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
           "stage": {
             "title": "Stage",
             "type": "string"
@@ -1858,6 +1876,11 @@
           },
           "listing": {
             "title": "Listing",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
             "type": "string"
           },
           "stage": {
@@ -1920,6 +1943,11 @@
           },
           "message": {
             "title": "Message",
+            "type": "string"
+          },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
             "type": "string"
           },
           "stage": {

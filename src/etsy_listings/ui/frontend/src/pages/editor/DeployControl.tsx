@@ -11,7 +11,7 @@ import type { RunSummary } from "../../types";
  * | Run state for this listing | Control |
  * |---|---|
  * | none, or finished and seen | Deploy changes → |
- * | queued / planning / previewing / applying (and a plan resting at "ready", not yet acted on) | Applying… View progress → |
+ * | queued / planning / previewing / applying (and a plan resting at "ready", not yet acted on) | Deploying… View progress → |
  * | an `apply` run that landed on `applied`, not seen | Deployed ✓ View result → |
  * | an `apply` run that landed on `failed`/`stale`, not seen | Deploy failed — view |
  *
@@ -72,7 +72,7 @@ export function DeployControl({
     case "progress":
       return (
         <button type="button" className="btn btn-secondary" onClick={() => navigate(deployUrl)}>
-          Applying&hellip; View progress &rarr;
+          Deploying&hellip; View progress &rarr;
         </button>
       );
     case "deployed":

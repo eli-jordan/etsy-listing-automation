@@ -70,7 +70,9 @@ describe("DeployControl", () => {
       vi.spyOn(runsApi, "currentRun").mockResolvedValue(summary({ kind: "plan", phase }));
       renderControl();
 
-      expect(await screen.findByRole("button", { name: /View progress/ })).toBeInTheDocument();
+      expect(
+        await screen.findByRole("button", { name: /Deploying… View progress →/ }),
+      ).toBeInTheDocument();
     },
   );
 

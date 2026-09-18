@@ -287,6 +287,8 @@ def test_an_empty_draft_builds_with_nothing_chosen() -> None:
     assert draft.media == []
     assert draft.pricing_plan is None
     assert draft.prices == {}
+    assert draft.etsy.title == ""
+    assert draft.etsy.description == ""
 
 
 def test_the_same_empty_document_is_still_refused_as_a_listing() -> None:

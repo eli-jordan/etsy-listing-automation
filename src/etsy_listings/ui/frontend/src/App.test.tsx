@@ -24,6 +24,12 @@ const MULTIPLE: MultipleTemplate = {
   shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
 };
 
+const MODIFIED_AT = "Wed, 17 Sep 2026 18:30:00 GMT";
+
+function configDocument(config: ColourMatrixTemplate | MultipleTemplate) {
+  return { config, modifiedAt: MODIFIED_AT };
+}
+
 function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSummary {
   return {
     kind: "colour-matrix",
@@ -60,7 +66,7 @@ beforeEach(() => {
 describe("App", () => {
   it("loads templates and renders the colour-matrix editor for the selected one", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
-    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
     render(<App />);
@@ -70,24 +76,35 @@ describe("App", () => {
 
   it("names the open template in the header, beside the title", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
-    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
     render(<App />);
     await waitFor(() => expect(header().getByText("flat-lay-01")).toBeInTheDocument());
-    expect(screen.getByRole("heading", { name: "Mockup calibrator" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Mockup Templates" })).toBeInTheDocument();
   });
 
   it("shows the open template's calibration state and contents in the header", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
       summary({ name: "tote", kind: "multiple", colours: [], status_reason: null }),
     ]);
-    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(MULTIPLE);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(MULTIPLE));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
     render(<App />);
     await waitFor(() => expect(header().getByText("calibrated")).toBeInTheDocument());
     expect(header().getByText("Multiple · 0 colours")).toBeInTheDocument();
+  });
+
+  it("shows the template file's saved time on initial load", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
+    vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
+
+    render(<App />);
+
+    await waitFor(() => expect(screen.getByText(/^Saved /)).toBeInTheDocument());
+    expect(document.querySelector(".page-head__saved .page-head__dot")).toBeInTheDocument();
   });
 
   it("shows why an unfinished template is unfinished, in the header", async () => {
@@ -100,7 +117,7 @@ describe("App", () => {
         status_reason: "no boxes",
       }),
     ]);
-    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(MULTIPLE);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(MULTIPLE));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
     render(<App />);
@@ -113,7 +130,7 @@ describe("App", () => {
       summary({ name: "colour-chart-01", kind: "multiple", colours: [] }),
     ]);
     vi.spyOn(calibrator, "getTemplateConfig").mockImplementation(async (name) =>
-      name === "colour-chart-01" ? MULTIPLE : COLOUR_MATRIX,
+      configDocument(name === "colour-chart-01" ? MULTIPLE : COLOUR_MATRIX),
     );
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
 
@@ -164,23 +181,29 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("failed to load templates")).toBeInTheDocument());
   });
 
-  it("save button writes the current config and reports success", async () => {
+  it("autosaves an edited config and reports success without a save button", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
-    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+    vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
     vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
     const saveSpy = vi.spyOn(calibrator, "saveTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
 
     render(<App />);
-    await waitFor(() => expect(screen.getByRole("button", { name: /Save/ })).toBeEnabled());
-    fireEvent.click(screen.getByRole("button", { name: /Save/ }));
+    const strength = await screen.findByLabelText("Wrinkle strength");
+    fireEvent.change(strength, { target: { value: "75" } });
 
-    await waitFor(() => expect(saveSpy).toHaveBeenCalledWith("flat-lay-01", COLOUR_MATRIX));
-    await waitFor(() => expect(screen.getByText("saved")).toBeInTheDocument());
+    await waitFor(() => expect(saveSpy).toHaveBeenCalledTimes(1), { timeout: 2_000 });
+    expect(saveSpy.mock.calls[0]?.[0]).toBe("flat-lay-01");
+    expect(saveSpy.mock.calls[0]?.[1]).toMatchObject({
+      displace: { enabled: false, strength: 0.75 },
+    });
+    await waitFor(() => expect(screen.getByText("Saved a moment ago")).toBeInTheDocument());
+    expect(document.querySelector(".page-head__saved .page-head__dot")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Save template/ })).not.toBeInTheDocument();
   });
 
   describe("racing refreshes", () => {
     it("ignores a template list that arrives after a newer one", async () => {
-      // Assigning a kind and then saving fires two listTemplates() calls in
+      // Two autosaves can fire listTemplates() calls in
       // quick succession. If the first resolves last -- entirely possible, they
       // are separate requests -- it puts the pre-assignment list back, and the
       // template silently reverts to "no kind set" in the UI while the file on
@@ -196,16 +219,20 @@ describe("App", () => {
         .mockResolvedValueOnce(initial) // mount
         .mockReturnValueOnce(pending) // first save: in flight, resolves last
         .mockResolvedValue(newest); // second save: lands first, and wins
-      vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+      vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
       vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
       vi.spyOn(calibrator, "saveTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
 
       render(<App />);
-      const save = await screen.findByRole("button", { name: "Save template.yaml" });
-      await waitFor(() => expect(save).toBeEnabled());
-
-      fireEvent.click(save); // refresh #2 -- hangs
-      fireEvent.click(save); // refresh #3 -- resolves now
+      const strength = await screen.findByLabelText("Wrinkle strength");
+      fireEvent.change(strength, { target: { value: "25" } });
+      await waitFor(() => expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(1), {
+        timeout: 2_000,
+      }); // refresh #2 -- hangs
+      fireEvent.change(strength, { target: { value: "50" } });
+      await waitFor(() => expect(calibrator.saveTemplateConfig).toHaveBeenCalledTimes(2), {
+        timeout: 2_000,
+      }); // refresh #3 -- resolves now
       await waitFor(() => expect(header().getByText(/3 colours/)).toBeInTheDocument());
 
       // The older refresh finally lands. It must be discarded, not applied.
@@ -225,7 +252,7 @@ describe("App", () => {
      * Print realism panel exposes as a 0-100 percentage over a 0..1 config. */
     async function mount() {
       vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
-      vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(COLOUR_MATRIX);
+      vi.spyOn(calibrator, "getTemplateConfig").mockResolvedValue(configDocument(COLOUR_MATRIX));
       vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:preview");
       render(<App />);
       return await screen.findByLabelText("Wrinkle strength");

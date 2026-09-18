@@ -32,12 +32,19 @@ export async function listTemplates(): Promise<TemplateSummary[]> {
  * plain array when inferring the response type of a 3-way discriminated
  * union -- the server still enforces exactly 4 points either way.
  */
-export async function getTemplateConfig(name: string): Promise<TemplateConfigState | null> {
-  const { data, error } = await api.GET("/api/templates/{name}/config", {
+export interface TemplateConfigDocument {
+  config: TemplateConfigState;
+  modifiedAt: string;
+}
+
+export async function getTemplateConfig(name: string): Promise<TemplateConfigDocument | null> {
+  const { data, error, response } = await api.GET("/api/templates/{name}/config", {
     params: { path: { name } },
   });
   if (error) return null;
-  return data as unknown as TemplateConfigState;
+  const modifiedAt = response.headers.get("Last-Modified");
+  if (modifiedAt === null) throw new CalibratorApiError("template config has no modification time");
+  return { config: data as unknown as TemplateConfigState, modifiedAt };
 }
 
 export async function saveTemplateConfig(

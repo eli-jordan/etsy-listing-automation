@@ -163,6 +163,12 @@ def test_deploy_plan_preview_apply_back_reattach_and_pill(
     page.get_by_text("Deployed.").wait_for(state="visible", timeout=DEFAULT_TIMEOUT_MS)
     page.get_by_role("button", name="← Back to editor").wait_for(state="visible")
 
+    # `main` deliberately gives a just-finished apply 750 ms before marking
+    # it seen, so an immediate first exit preserves View result. This is the
+    # reattached result visit: let that grace period complete before leaving
+    # and asserting the next editor view offers a fresh deploy.
+    page.wait_for_timeout(800)
+
     # Observable effect, not internal state (CLAUDE.md's testing rule): the
     # render stage's own output is what "applied" actually did.
     rendered = workspace_root / ".cache" / "renders" / "take-a-hike" / "flat-lay-01" / "black.png"

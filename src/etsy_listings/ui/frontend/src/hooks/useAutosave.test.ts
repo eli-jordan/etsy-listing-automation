@@ -26,6 +26,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     },
     media: [],
     name: "take-a-hike",
+    modified_at: "2026-09-17T10:00:00Z",
     status: "draft",
     issues: [],
     field_errors: {},
@@ -47,6 +48,18 @@ afterEach(() => {
 });
 
 describe("useAutosave", () => {
+  it("starts with listing.yaml's actual modification time", () => {
+    const modifiedAt = "2026-09-16T08:30:00Z";
+    const { result } = renderHook(() =>
+      useAutosave("take-a-hike", detail({ modified_at: modifiedAt })),
+    );
+
+    expect(result.current.save).toEqual({
+      kind: "saved",
+      savedAt: Date.parse(modifiedAt),
+    });
+  });
+
   it("applies a patch to local state immediately, before the network round-trip", () => {
     vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
     const { result, unmount } = renderHook(() => useAutosave("take-a-hike", detail()));
