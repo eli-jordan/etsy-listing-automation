@@ -53,6 +53,7 @@ def render_pending(
     planned: PlannedRun,
     *,
     should_stop: Callable[[], bool] = _never_stop,
+    on_ready: Callable[[SceneWork], None] | None = None,
 ) -> tuple[SceneWork, ...]:
     """Render full-size previews for one already-planned listing.
 
@@ -67,7 +68,11 @@ def render_pending(
     if not isinstance(render_state.stage, RenderStage):
         return ()
     return render_state.stage.preview(
-        ctx, render_state.desired, render_state.live, should_stop=should_stop
+        ctx,
+        render_state.desired,
+        render_state.live,
+        should_stop=should_stop,
+        on_ready=on_ready,
     )
 
 

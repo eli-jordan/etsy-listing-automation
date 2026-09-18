@@ -18,7 +18,12 @@ from etsy_listings.engine.apply import execute
 from etsy_listings.engine.plan import StageState, build_plan
 from etsy_listings.engine.run import RunObserver, preview_listing
 from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.render import RenderStage, _hash_token, scene_hash
+from etsy_listings.engine.stages.render import (
+    PREVIEW_WORKERS,
+    RenderStage,
+    _hash_token,
+    scene_hash,
+)
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, edit_listing
@@ -154,7 +159,7 @@ def test_prune_ignores_a_stray_file_in_the_preview_root(workspace_root: Path) ->
     assert stray.is_file()
 
 
-def test_apply_promotes_previews_without_rendering_again(
+def test_apply_promotes_previews_without_rendering_again_and_keeps_them_available(
     workspace_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     ctx = a_context(workspace_root)
@@ -177,7 +182,7 @@ def test_apply_promotes_previews_without_rendering_again(
     assert calls == [], "apply re-rendered a scene a valid preview already covered"
     assert lock.stages_completed == ["render"]
     for work in state.desired.works:
-        assert not preview_paths[work.key].is_file(), "a promoted preview must be moved, not copied"
+        assert preview_paths[work.key].is_file(), "a deploy refresh still serves this preview"
         rendered = ctx.workspace.render_file(LISTING, work.template, work.colour)
         assert rendered.read_bytes() == preview_bytes[work.key]
 
@@ -246,16 +251,12 @@ def test_preview_listing_stops_before_any_scene_when_asked_to(workspace_root: Pa
 def test_preview_listing_stops_partway_through_a_multi_scene_batch(
     workspace_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """`should_stop` is checked *between* scenes, not just once up front.
+    """Cancellation drains only the bounded batch already in flight.
 
-    `preview_listing` only reports `on_preview_rendered` once `preview()`
-    returns its whole `ready` tuple (its own docstring: one event per scene
-    that *ends this call* with a file), so a stub that reacts to those events
-    could never see one fire early enough to matter. What proves "checked
-    between scenes" is that the loop stops rendering before the last scene --
-    spying on the actual per-scene render call (the way
-    `test_apply_promotes_previews_without_rendering_again` already does)
-    shows that directly."""
+    Preview rendering is two-wide, so a stop observed after the first result
+    can still have its sibling in flight. It must not submit the rest of the
+    gallery, and every completed image must be reported immediately.
+    """
     ctx = a_context(workspace_root)
     planned = build_plan(ctx, LISTING, a_lock(), STAGES)
     assert len(COLOURS) > 1  # the batch must have more than one scene to prove "partway"
@@ -279,8 +280,8 @@ def test_preview_listing_stops_partway_through_a_multi_scene_batch(
 
     preview_listing(ctx, planned, observer, should_stop=lambda: rendered >= 1)
 
-    assert rendered == 1
-    assert len(events) == 1
+    assert 1 <= rendered <= PREVIEW_WORKERS
+    assert len(events) == rendered
     assert len(events) < len(COLOURS)
 
 
