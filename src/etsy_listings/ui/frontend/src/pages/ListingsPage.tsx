@@ -211,6 +211,12 @@ export function ListingsPage() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (workspaceRun === null || TERMINAL_PHASES.has(workspaceRun.phase)) return;
+    const interval = window.setInterval(refresh, 500);
+    return () => window.clearInterval(interval);
+  }, [refresh, workspaceRun]);
+
   const rows = useMemo(
     () =>
       listings

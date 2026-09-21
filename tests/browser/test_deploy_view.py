@@ -217,24 +217,21 @@ def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
         raise AssertionError("batch Apply never became enabled once previews finished")
 
     listing_file = second / "listing.yaml"
-    listing_file.write_text(
-        listing_file.read_text(encoding="utf-8").replace(
-            "Retro 70s sunset mountain scene.", "Changed after review."
-        ),
-        encoding="utf-8",
-    )
+    edited = listing_file.read_text(encoding="utf-8")
+    edited = edited.replace(
+        "colors: [black, blue-jean, ivory, moss]",
+        "colors: [black, blue-jean, ivory]",
+    ).replace("  - { template: flat-lay-01, colour: moss }\n", "")
+    listing_file.write_text(edited, encoding="utf-8")
 
     apply_button.click()
     page.get_by_role("button", name="← Back to listings").click()
     page.wait_for_url("**/listings")
 
-    reattach = page.locator(
-        "button:has-text('View batch progress'), button:has-text('View batch result')"
-    )
-    reattach.first.wait_for(state="visible")
-    reattach.first.click()
+    page.locator("button:has-text('View batch progress')").wait_for(state="visible")
+    page.locator("button:has-text('View batch result')").wait_for(state="visible")
+    page.locator("button:has-text('View batch result')").click()
     page.wait_for_url("**/listings/deploy/**")
-
     page.get_by_text("Batch partially applied.").wait_for(state="visible")
     page.get_by_text("1 listing succeeded · 1 listing stale").wait_for(state="visible")
     page.get_by_role("button", name="Plan again").wait_for(state="visible")
