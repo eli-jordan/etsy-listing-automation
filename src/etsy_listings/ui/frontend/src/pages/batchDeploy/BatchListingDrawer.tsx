@@ -1,4 +1,12 @@
-import { useEffect, useMemo, useRef, type KeyboardEvent, type MouseEvent } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+  type PointerEvent,
+} from "react";
 import type { ListingDetail, ListingSummary, RenderSnapshot } from "../../types";
 import { ComparisonView } from "../deploy/ComparisonView";
 import { buildComparison } from "../deploy/comparison";
@@ -23,6 +31,35 @@ function openNativeDialog(dialog: HTMLDialogElement) {
   if (dialogIsOpen(dialog)) return;
   if (typeof dialog.showModal === "function") dialog.showModal();
   else dialog.setAttribute("open", "");
+}
+
+const FALLBACK_COLLAPSED_GAP = 32;
+const FALLBACK_EXPANDED_GAP = 16;
+const MINIMUM_HEIGHT_RATIO = 0.3;
+
+function cssPixels(element: HTMLElement, property: string, fallback: number): number {
+  const value = Number.parseFloat(getComputedStyle(element).getPropertyValue(property));
+  return Number.isFinite(value) ? value : fallback;
+}
+
+function drawerBounds(panel: HTMLElement): {
+  minimum: number;
+  collapsed: number;
+  expanded: number;
+} {
+  const viewportHeight = window.innerHeight;
+  const collapsedGap = cssPixels(panel, "--space-8", FALLBACK_COLLAPSED_GAP);
+  const expandedGap = cssPixels(panel, "--space-4", FALLBACK_EXPANDED_GAP);
+  const collapsed = Math.min(viewportHeight * 0.74, viewportHeight - collapsedGap);
+  return {
+    minimum: Math.min(viewportHeight * MINIMUM_HEIGHT_RATIO, collapsed),
+    collapsed,
+    expanded: Math.min(viewportHeight * 0.92, viewportHeight - expandedGap),
+  };
+}
+
+function clamp(value: number, minimum: number, maximum: number): number {
+  return Math.min(Math.max(value, minimum), maximum);
 }
 
 function focusableElements(dialog: HTMLDialogElement): HTMLElement[] {
@@ -103,6 +140,13 @@ export function BatchListingDrawer({
   const dialogRef = useRef<HTMLDialogElement>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dragRef = useRef<{ startY: number; startHeight: number } | null>(null);
+  const suppressHandleClickRef = useRef(false);
+  const [entered, setEntered] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+  const [drawerHeight, setDrawerHeight] = useState<number | null>(null);
+  const [dragging, setDragging] = useState(false);
   const name = summary?.name ?? listing?.listing ?? "Listing";
   const plan = listing?.plan ?? listing?.reviewedPlan ?? null;
   const titleId = `batch-drawer-title-${name.replace(/[^a-z0-9]+/gi, "-")}`;
@@ -118,14 +162,19 @@ export function BatchListingDrawer({
       restoreFocusRef.current =
         document.activeElement instanceof HTMLElement ? document.activeElement : null;
       openNativeDialog(dialog);
-      closeRef.current?.focus();
-      return;
+      // showModal() focuses the first control and scrolls the translated panel into view.
+      dialog.scrollTop = 0;
+      closeRef.current?.focus({ preventScroll: true });
+      const frame = window.requestAnimationFrame(() => setEntered(true));
+      return () => window.cancelAnimationFrame(frame);
     }
 
     closeNativeDialog(dialog);
+    const frame = window.requestAnimationFrame(() => setEntered(false));
     const previous = restoreFocusRef.current;
     restoreFocusRef.current = null;
     previous?.focus();
+    return () => window.cancelAnimationFrame(frame);
   }, [open]);
 
   useEffect(() => {
@@ -167,10 +216,63 @@ export function BatchListingDrawer({
     if (event.target === event.currentTarget) onClose();
   }
 
+  function handleHandlePointerDown(event: PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) return;
+    const panel = panelRef.current;
+    if (panel === null) return;
+    const bounds = drawerBounds(panel);
+    const measuredHeight = panel.getBoundingClientRect().height;
+    dragRef.current = {
+      startY: event.clientY,
+      startHeight: clamp(
+        measuredHeight || drawerHeight || (expanded ? bounds.expanded : bounds.collapsed),
+        bounds.minimum,
+        bounds.expanded,
+      ),
+    };
+    suppressHandleClickRef.current = false;
+    setDragging(true);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+  }
+
+  function handleHandlePointerMove(event: PointerEvent<HTMLButtonElement>) {
+    const drag = dragRef.current;
+    const panel = panelRef.current;
+    if (drag === null || panel === null) return;
+    const bounds = drawerBounds(panel);
+    const height = clamp(
+      drag.startHeight - (event.clientY - drag.startY),
+      bounds.minimum,
+      bounds.expanded,
+    );
+    setDrawerHeight(height);
+    setExpanded(height > (bounds.collapsed + bounds.expanded) / 2);
+    if (Math.abs(event.clientY - drag.startY) >= 4) suppressHandleClickRef.current = true;
+  }
+
+  function handleHandlePointerEnd(event: PointerEvent<HTMLButtonElement>) {
+    dragRef.current = null;
+    setDragging(false);
+    event.currentTarget.releasePointerCapture?.(event.pointerId);
+  }
+
+  function handleHandleClick() {
+    if (suppressHandleClickRef.current) {
+      suppressHandleClickRef.current = false;
+      return;
+    }
+    const panel = panelRef.current;
+    if (panel === null) return;
+    const nextExpanded = !expanded;
+    setExpanded(nextExpanded);
+    const bounds = drawerBounds(panel);
+    setDrawerHeight(nextExpanded ? bounds.expanded : bounds.collapsed);
+  }
+
   return (
     <dialog
       ref={dialogRef}
-      className="batch-drawer-dialog"
+      className={`batch-drawer-dialog${entered ? " batch-drawer-dialog--entered" : ""}`}
       aria-modal="true"
       aria-labelledby={titleId}
       aria-hidden={!open}
@@ -181,8 +283,12 @@ export function BatchListingDrawer({
         onClose();
       }}
     >
-      <div className="batch-drawer-panel" onClick={(event) => event.stopPropagation()}>
-        <div className="batch-drawer__handle" aria-hidden="true" />
+      <div
+        ref={panelRef}
+        className={`batch-drawer-panel${expanded ? " batch-drawer-panel--expanded" : ""}${dragging ? " batch-drawer-panel--dragging" : ""}`}
+        style={drawerHeight === null ? undefined : { height: `${drawerHeight}px` }}
+        onClick={(event) => event.stopPropagation()}
+      >
         <header className="batch-drawer__head">
           <div>
             <span className="dv-eyebrow">{category}</span>
@@ -193,7 +299,21 @@ export function BatchListingDrawer({
             Close
           </button>
         </header>
-        <div className="batch-drawer__body">
+        <button
+          type="button"
+          className="batch-drawer__handle"
+          aria-label={expanded ? "Collapse drawer" : "Expand drawer"}
+          aria-expanded={expanded}
+          aria-controls={`${titleId}-panel`}
+          onClick={handleHandleClick}
+          onPointerDown={handleHandlePointerDown}
+          onPointerMove={handleHandlePointerMove}
+          onPointerUp={handleHandlePointerEnd}
+          onPointerCancel={handleHandlePointerEnd}
+        >
+          <span aria-hidden="true" />
+        </button>
+        <div id={`${titleId}-panel`} className="batch-drawer__body">
           {plan === null || comparison === null ? (
             <div className="batch-drawer__empty">
               <h3>{name}</h3>

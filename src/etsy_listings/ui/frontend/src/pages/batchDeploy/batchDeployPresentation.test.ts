@@ -78,6 +78,7 @@ describe("candidate listing projections", () => {
       summary({ name: "draft", status: "draft", etsy_listing_id: null }),
       summary({ name: "dirty", status: "dirty", etsy_listing_id: 1 }),
       summary({ name: "draft-existing", status: "draft", etsy_listing_id: 2 }),
+      summary({ name: "published", status: "live", etsy_listing_id: 3, gestures: ["retire"] }),
       summary({ name: "retire", status: "pending-retire", gestures: ["retire"] }),
       summary({ name: "remove", status: "pending-delete" }),
     ];

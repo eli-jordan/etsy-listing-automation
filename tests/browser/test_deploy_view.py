@@ -216,6 +216,83 @@ def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
     else:
         raise AssertionError("batch Apply never became enabled once previews finished")
 
+    # The listing drawer is a real modal detail surface: its handle expands
+    # the sheet, and the visual treatment is part of the public interaction.
+    animation_samples = page.evaluate(
+        """async () => {
+          const samples = [];
+          document.querySelector('.batch-listing-row')?.click();
+          for (let index = 0; index < 40; index += 1) {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            const panel = document.querySelector('.batch-drawer-panel');
+            if (panel !== null && panel.getBoundingClientRect().height > 0) {
+              samples.push({
+                top: panel.getBoundingClientRect().top,
+                dialogScrollTop: panel.parentElement?.scrollTop,
+              });
+            }
+          }
+          return samples;
+        }"""
+    )
+    drawer = page.get_by_role("dialog")
+    drawer.wait_for(state="visible")
+    assert animation_samples
+    assert all(sample["dialogScrollTop"] == 0 for sample in animation_samples), animation_samples
+    assert all(
+        later["top"] <= earlier["top"] + 1
+        for earlier, later in zip(animation_samples, animation_samples[1:], strict=False)
+    ), animation_samples
+
+    handle = drawer.get_by_role("button", name="Expand drawer")
+    handle_box = handle.bounding_box()
+    assert handle_box is not None
+    drag_x = handle_box["x"] + handle_box["width"] / 2
+    drag_y = handle_box["y"] + handle_box["height"] / 2
+    initial_height = page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+    page.mouse.move(drag_x, drag_y)
+    page.mouse.down()
+    page.mouse.move(drag_x, drag_y - 40)
+    middle_height = page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+    page.mouse.move(drag_x, drag_y - 100)
+    final_drag_height = page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+    page.mouse.up()
+    assert middle_height > initial_height
+    assert final_drag_height > middle_height
+
+    handle = drawer.get_by_role("button", name="Collapse drawer")
+    page.locator(".batch-drawer-panel--expanded").wait_for(state="visible")
+    assert (
+        page.evaluate(
+            """() => {
+          const panel = document.querySelector('.batch-drawer-panel');
+          return panel === null ? '' : getComputedStyle(panel).borderTopLeftRadius;
+        }"""
+        )
+        != "0px"
+    )
+
+    handle_box = handle.bounding_box()
+    assert handle_box is not None
+    drag_x = handle_box["x"] + handle_box["width"] / 2
+    drag_y = handle_box["y"] + handle_box["height"] / 2
+    page.mouse.move(drag_x, drag_y)
+    page.mouse.down()
+    page.mouse.move(drag_x, drag_y + (final_drag_height - initial_height) + 60)
+    reduced_height = page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+    page.mouse.up()
+    assert reduced_height < initial_height
+    drawer.get_by_role("button", name="Expand drawer").wait_for(state="visible")
+    drawer.get_by_role("button", name="Close").click()
+
     listing_file = second / "listing.yaml"
     edited = listing_file.read_text(encoding="utf-8")
     edited = edited.replace(

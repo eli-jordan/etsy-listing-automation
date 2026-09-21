@@ -29,8 +29,9 @@ export function candidateNames(summaries: readonly ListingSummary[]): CandidateN
     } else if (
       summary.status === "dirty" ||
       (summary.status === "draft" && hasEtsyListing) ||
-      summary.status === "pending-retire" ||
-      summary.gestures.length > 0
+      // Normal table gestures (delete, retire, renew) are lifecycle actions,
+      // not evidence that the deploy plan has local work to review.
+      summary.status === "pending-retire"
     ) {
       names.edit.push(summary.name);
     }

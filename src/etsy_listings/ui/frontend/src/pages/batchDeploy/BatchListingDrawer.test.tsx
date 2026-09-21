@@ -148,6 +148,36 @@ describe("BatchListingDrawer", () => {
     expect(close).toHaveFocus();
   });
 
+  it("resizes from the handle in both directions", () => {
+    render(<BatchListingDrawer open listing={listing} onClose={vi.fn()} />);
+
+    const dialog = screen.getByRole("dialog", { name: "mountain-shirt" });
+    const panel = dialog.querySelector<HTMLElement>(".batch-drawer-panel");
+    const handle = screen.getByRole("button", { name: "Expand drawer" });
+    expect(handle).toHaveAttribute("aria-expanded", "false");
+    if (panel === null) throw new Error("drawer panel is missing");
+
+    fireEvent.click(handle);
+    expect(handle).toHaveAttribute("aria-expanded", "true");
+    expect(panel).toHaveClass("batch-drawer-panel--expanded");
+
+    fireEvent.click(handle);
+    vi.spyOn(panel, "getBoundingClientRect").mockReturnValue({ height: 600 } as DOMRect);
+    fireEvent.pointerDown(handle, { button: 0, clientY: 400, pointerId: 1 });
+    fireEvent.pointerMove(handle, { clientY: 350, pointerId: 1 });
+    expect(panel).toHaveStyle({ height: "650px" });
+    fireEvent.pointerMove(handle, { clientY: 300, pointerId: 1 });
+    expect(panel).toHaveStyle({ height: "700px" });
+    expect(handle).toHaveAttribute("aria-expanded", "true");
+
+    fireEvent.pointerUp(handle, { clientY: 300, pointerId: 1 });
+    vi.mocked(panel.getBoundingClientRect).mockReturnValue({ height: 600 } as DOMRect);
+    fireEvent.pointerDown(handle, { button: 0, clientY: 400, pointerId: 2 });
+    fireEvent.pointerMove(handle, { clientY: 500, pointerId: 2 });
+    expect(panel).toHaveStyle({ height: "500px" });
+    expect(handle).toHaveAttribute("aria-expanded", "false");
+  });
+
   it("keeps a removed listing inspectable with a name-only fallback", () => {
     const removed: BatchListingState = {
       ...listing,
