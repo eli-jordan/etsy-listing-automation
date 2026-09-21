@@ -109,6 +109,47 @@ describe("ListingsPage", () => {
     expect(runsApi.getRun).toHaveBeenCalledWith("batch-2");
   });
 
+  it.each([
+    ["planning", "Planning… · View batch progress →"],
+    ["applying", "Deploying… · View batch progress →"],
+  ] as const)("offers to reattach to a workspace run in %s", async (phase, label) => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary({ name: "new-shirt" })]);
+    vi.spyOn(runsApi, "currentWorkspaceRun").mockResolvedValue({
+      id: "batch-3",
+      kind: phase === "applying" ? "apply" : "plan",
+      scope: "workspace",
+      listings: ["new-shirt"],
+      phase,
+      seen: false,
+      reviewed_run_id: phase === "applying" ? "batch-plan" : null,
+      created_at: "2026-09-21T10:00:00Z",
+    });
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: label })).toBeInTheDocument();
+  });
+
+  it.each([
+    ["applied", "Deployed ✓ · View batch result →"],
+    ["failed", "Deploy failed · View batch result →"],
+    ["stale", "Deploy failed · View batch result →"],
+  ] as const)("surfaces an unseen workspace %s result", async (phase, label) => {
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary({ name: "new-shirt" })]);
+    vi.spyOn(runsApi, "currentWorkspaceRun").mockResolvedValue({
+      id: "batch-4",
+      kind: "apply",
+      scope: "workspace",
+      listings: ["new-shirt"],
+      phase,
+      seen: false,
+      reviewed_run_id: "batch-plan",
+      created_at: "2026-09-21T10:00:00Z",
+    });
+    renderPage();
+
+    expect(await screen.findByRole("button", { name: label })).toBeInTheDocument();
+  });
+
   it("lists every listing with its garment and status", async () => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([
       summary({ name: "take-a-hike", status: "draft" }),

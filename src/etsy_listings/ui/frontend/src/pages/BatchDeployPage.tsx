@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { listListings } from "../api/listings";
-import { cancelRun, getRun, markRunSeen } from "../api/runs";
+import { cancelRun, createRun, getRun, markRunSeen } from "../api/runs";
 import type { ListingSummary, RenderSnapshot, RunDetail } from "../types";
 import { BatchAggregateStages } from "./batchDeploy/BatchAggregateStages";
 import { BatchListingDrawer } from "./batchDeploy/BatchListingDrawer";
@@ -9,11 +9,12 @@ import { BatchListingGroups } from "./batchDeploy/BatchListingGroups";
 import {
   batchDeployState,
   applyBatchRunEvent,
+  type BatchRunSource,
   initialBatchDeployState,
   type BatchDeployState,
   type BatchListingState,
 } from "./batchDeploy/batchDeployState";
-import { planGroup } from "./batchDeploy/batchDeployPresentation";
+import { batchResult, planGroup } from "./batchDeploy/batchDeployPresentation";
 import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
 import { TERMINAL_PHASES } from "./deploy/runPhases";
 
@@ -30,7 +31,9 @@ function planFor(listing: BatchListingState) {
 }
 
 function reviewedListings(state: BatchDeployState): BatchListingState[] {
-  return Object.values(state.listings).filter((listing) => listing.reviewedPlan !== null);
+  return state.reviewedListingOrder
+    .map((listing) => state.listings[listing])
+    .filter((listing): listing is BatchListingState => listing?.reviewedPlan !== null);
 }
 
 function requiredPreviewKeys(listings: readonly BatchListingState[]): string[] {
@@ -59,14 +62,23 @@ function planCounts(listings: readonly BatchListingState[]) {
 }
 
 function isPlanning(phase: BatchDeployState["phase"]): boolean {
-  return phase === "queued" || phase === "planning" || phase === "planned";
+  return (
+    phase === "queued" || phase === "planning" || phase === "planned" || phase === "previewing"
+  );
 }
 
-/** The stable workspace review route. It owns only run attachment and page
- * composition; event meaning remains in batchDeployState and all change
- * meaning remains in the engine-provided plans. PR5 will add the apply POST
- * and result overlay here, so this page deliberately keeps the authorization
- * control disabled for now. */
+function isTerminalApply(state: BatchDeployState): boolean {
+  return state.applyStarted && TERMINAL_PHASES.has(state.phase);
+}
+
+function countLabel(count: number, singular: string, plural = `${singular}s`): string {
+  return `${count} ${count === 1 ? singular : plural}`;
+}
+
+/** The stable workspace route. It owns only run attachment and page composition;
+ * event meaning remains in batchDeployState and all change meaning remains in
+ * the engine-provided plans. A workspace apply keeps its linked review as the
+ * approval surface and contributes only a live runtime overlay. */
 export function BatchDeployPage() {
   const { runId = "" } = useParams<{ runId: string }>();
   const navigate = useNavigate();
@@ -79,14 +91,16 @@ export function BatchDeployPage() {
   const attachRef = useRef<(id: string) => void>(() => {});
   const activeRunRef = useRef<string | null>(null);
   const seenRef = useRef<string | null>(null);
+  const applyStartRef = useRef<Promise<void> | null>(null);
+  const [applyPending, setApplyPending] = useState(false);
 
-  const openStream = useCallback((id: string, lastEventId: number) => {
+  const openStream = useCallback((id: string, lastEventId: number, source: BatchRunSource) => {
     streamRef.current?.close();
     streamRef.current = openRunStream(id, {
       lastEventId,
       onEvent: (event) => {
         if (activeRunRef.current !== id) return;
-        setState((current) => applyBatchRunEvent(current, event, "review"));
+        setState((current) => applyBatchRunEvent(current, event, source));
       },
       onError: () => {
         if (activeRunRef.current !== id) return;
@@ -101,11 +115,7 @@ export function BatchDeployPage() {
       try {
         const loaded = await getRun(id);
         if (activeRunRef.current !== id) return;
-        // PR4 is a workspace *plan* review. An apply run's event stream only
-        // contains the listings it has reached so far; treating it as the
-        // review source would turn partial replanning into seller-approved
-        // truth. PR5 will add the linked review-run overlay explicitly.
-        if (loaded.scope !== "workspace" || loaded.kind !== "plan") {
+        if (loaded.scope !== "workspace") {
           streamRef.current?.close();
           setRun(null);
           setState(initialBatchDeployState);
@@ -113,10 +123,27 @@ export function BatchDeployPage() {
           setStatus("This URL is not a workspace planning run. Return to Listings.");
           return;
         }
+        let reviewed = loaded;
+        if (loaded.kind === "apply") {
+          if (loaded.reviewed_run_id === null) throw new Error("apply run has no reviewed plan");
+          reviewed = await getRun(loaded.reviewed_run_id);
+          if (
+            reviewed.scope !== "workspace" ||
+            reviewed.kind !== "plan" ||
+            reviewed.phase !== "ready"
+          ) {
+            throw new Error("apply run has no ready workspace review");
+          }
+        }
         setRun(loaded);
-        setState(batchDeployState(loaded.events));
+        setState(
+          loaded.kind === "apply"
+            ? batchDeployState(reviewed.events, loaded.events)
+            : batchDeployState(loaded.events),
+        );
         const lastEventId = loaded.events.at(-1)?.id ?? 0;
-        if (!TERMINAL_PHASES.has(loaded.phase)) openStream(id, lastEventId);
+        if (!TERMINAL_PHASES.has(loaded.phase))
+          openStream(id, lastEventId, loaded.kind === "apply" ? "apply" : "review");
         else streamRef.current?.close();
         setStatus("");
       } catch {
@@ -165,6 +192,21 @@ export function BatchDeployPage() {
     void markRunSeen(run.id);
   }, [run, runId, state.phase]);
 
+  useEffect(() => {
+    if (!isTerminalApply(state)) return;
+    let current = true;
+    void listListings()
+      .then((loaded) => {
+        if (current) setSummaries(loaded);
+      })
+      .catch(() => {
+        if (current) setStatus("Could not refresh listing statuses after the batch result.");
+      });
+    return () => {
+      current = false;
+    };
+  }, [state]);
+
   // Until this URL's detail has arrived, keep a previous route's plan out of
   // the approval surface. The state itself is reset by the detail replay, so
   // this also avoids synchronous setState calls in the route effect.
@@ -190,10 +232,6 @@ export function BatchDeployPage() {
     ) &&
     (plans.length === 0 ||
       plans.every((plan) => plan.stage_plans.every((stage) => !stage.will_run)));
-  const showReview =
-    visibleState.phase === "previewing" ||
-    visibleState.phase === "ready" ||
-    visibleState.phase === "failed";
   const summaryByName = useMemo(
     () => new Map(summaries.map((summary) => [summary.name, summary])),
     [summaries],
@@ -204,7 +242,71 @@ export function BatchDeployPage() {
     selectedListing === null ? null : (summaryByName.get(selectedListing) ?? null);
   const selectedPlan = selected === null ? null : planFor(selected);
 
+  const result = batchResult(visibleState);
+  const terminalApply = isTerminalApply(visibleState);
+  const applying = visibleState.applyStarted && !terminalApply;
+
+  const startWorkspacePlan = useCallback(async () => {
+    try {
+      const created = await createRun({ kind: "plan", scope: "workspace" });
+      if (created.kind === "conflict") {
+        const conflict = await getRun(created.activeRun);
+        if (conflict.scope === "workspace") {
+          navigate(`/listings/deploy/${encodeURIComponent(conflict.id)}`, { replace: true });
+        } else {
+          setStatus("A listing deploy is already running. Return to Listings to follow it.");
+        }
+      } else {
+        navigate(`/listings/deploy/${encodeURIComponent(created.run.id)}`, { replace: true });
+      }
+    } catch {
+      setStatus("Could not start a fresh workspace plan.");
+    }
+  }, [navigate]);
+
+  async function handleApply() {
+    if (run?.kind !== "plan" || visibleState.phase !== "ready" || !previewsReady) return;
+    const reviewed = reviewedListings(visibleState);
+    const listingsToApply = reviewed.filter((listing) => listing.fingerprint !== null);
+    if (listingsToApply.length !== reviewed.length) return;
+    setSelectedListing(null);
+    const pending = (async () => {
+      try {
+        const created = await createRun({
+          kind: "apply",
+          scope: "workspace",
+          listings: listingsToApply.map((listing) => listing.listing),
+          expect: Object.fromEntries(
+            listingsToApply.map((listing) => [listing.listing, listing.fingerprint as string]),
+          ),
+          reviewed_run_id: run.id,
+        });
+        if (created.kind === "conflict") {
+          const conflict = await getRun(created.activeRun);
+          if (conflict.scope === "workspace") {
+            navigate(`/listings/deploy/${encodeURIComponent(conflict.id)}`, { replace: true });
+          } else {
+            setStatus("A listing deploy is already running. Return to Listings to follow it.");
+          }
+        } else {
+          navigate(`/listings/deploy/${encodeURIComponent(created.run.id)}`, { replace: true });
+        }
+      } catch {
+        setStatus("Could not start the reviewed workspace apply.");
+      }
+    })();
+    applyStartRef.current = pending;
+    setApplyPending(true);
+    try {
+      await pending;
+    } finally {
+      if (applyStartRef.current === pending) applyStartRef.current = null;
+      setApplyPending(false);
+    }
+  }
+
   async function handleBack() {
+    await applyStartRef.current;
     if (run?.id === runId && run.kind === "plan" && isPlanning(visibleState.phase)) {
       await cancelRun(run.id).catch(() => false);
     }
@@ -213,9 +315,22 @@ export function BatchDeployPage() {
   }
 
   const phase = visibleState.phase;
-  const planning = isPlanning(phase);
-  const headerTitle = planning ? "Planning all listings…" : "Review all changes";
+  const planning = !visibleState.applyStarted && isPlanning(phase);
+  const headerTitle = planning
+    ? "Planning all listings…"
+    : applying
+      ? "Applying all changes…"
+      : terminalApply
+        ? "Batch result"
+        : "Review all changes";
   const planTimestamp = formatGeneratedAt(visibleState.generatedAt);
+  const showReview =
+    planning ||
+    visibleState.phase === "previewing" ||
+    visibleState.phase === "ready" ||
+    applying ||
+    terminalApply;
+  const showPlanningFailure = visibleState.phase === "failed" && !visibleState.applyStarted;
 
   return (
     <div className="editor batch-deploy-page">
@@ -264,10 +379,41 @@ export function BatchDeployPage() {
         </div>
       )}
 
-      {phase === "failed" && (
+      {showPlanningFailure && (
         <div className="dv-callout dv-callout--blocked" role="alert">
           <strong>Planning could not finish.</strong>
-          <p>Return to Listings and try a fresh workspace plan.</p>
+          <p>Plan again to retry the workspace read, or return to Listings.</p>
+        </div>
+      )}
+
+      {applying && (
+        <div className="dv-callout dv-callout--drift" role="status">
+          <strong>Applying reviewed changes.</strong>
+          <p>Listings are updated one at a time and the run continues if one listing fails.</p>
+        </div>
+      )}
+
+      {terminalApply && (
+        <div
+          className={`dv-callout ${result.partial ? "dv-callout--drift" : result.failed.length || result.stale.length ? "dv-callout--blocked" : "dv-callout--ok"}`}
+          role={result.partial || result.failed.length || result.stale.length ? "alert" : "status"}
+        >
+          <strong>
+            {result.partial
+              ? "Batch partially applied."
+              : result.stale.length > 0
+                ? "Some listings became stale."
+                : result.failed.length > 0
+                  ? "Batch apply failed."
+                  : "All planned work finished."}
+          </strong>
+          <p>
+            {countLabel(result.succeeded.length, "listing")} succeeded
+            {result.failed.length > 0 && ` · ${countLabel(result.failed.length, "listing")} failed`}
+            {result.stale.length > 0 && ` · ${countLabel(result.stale.length, "listing")} stale`}
+            {result.blocked.length > 0 &&
+              ` · ${countLabel(result.blocked.length, "listing")} blocked`}
+          </p>
         </div>
       )}
 
@@ -280,7 +426,7 @@ export function BatchDeployPage() {
         </div>
       ) : (
         <>
-          {visibleState.phase === "ready" && (
+          {visibleState.phase === "ready" && !visibleState.applyStarted && (
             <section className="batch-review-summary" aria-labelledby="batch-review-heading">
               <div>
                 <span className="dv-eyebrow">Authoritative review</span>
@@ -315,33 +461,77 @@ export function BatchDeployPage() {
 
       <div className="dv-foot batch-deploy-footer">
         <p>
-          {phase === "ready" && runnableCount > 0
-            ? previewsReady
-              ? "Apply runs exactly this plan, one listing at a time."
-              : `Preview images before applying (${requiredPreviews.filter((key) => visibleState.previewsRendered.has(key)).length} of ${requiredPreviews.length})…`
-            : nothingToDo
-              ? "No remote changes were found."
-              : "Apply unlocks once the reviewed previews are ready."}
+          {applying
+            ? "Apply runs exactly this plan, one listing at a time."
+            : terminalApply
+              ? result.partial || result.failed.length > 0 || result.stale.length > 0
+                ? "Review the affected listings, then plan again for the remaining work."
+                : "All planned work finished."
+              : phase === "ready" && runnableCount > 0
+                ? previewsReady
+                  ? "Apply runs exactly this plan, one listing at a time."
+                  : `Preview images before applying (${requiredPreviews.filter((key) => visibleState.previewsRendered.has(key)).length} of ${requiredPreviews.length})…`
+                : nothingToDo
+                  ? "No remote changes were found."
+                  : "Apply unlocks once the reviewed previews are ready."}
         </p>
-        <button
-          type="button"
-          className="btn btn-primary dv-big"
-          disabled
-          aria-label={`Apply ${runnableCount} listing${runnableCount === 1 ? "" : "s"}`}
-          title={
-            previewsReady
-              ? "Applying reviewed plans is the next step"
-              : "Preview images before applying"
-          }
-        >
-          Apply {runnableCount} listing{runnableCount === 1 ? "" : "s"}
-        </button>
+        {applying ? (
+          <button type="button" className="btn btn-primary dv-big" disabled>
+            Applying…
+          </button>
+        ) : showPlanningFailure ? (
+          <button
+            type="button"
+            className="btn btn-primary dv-big"
+            onClick={() => void startWorkspacePlan()}
+          >
+            Try again
+          </button>
+        ) : nothingToDo ? (
+          <button
+            type="button"
+            className="btn btn-primary dv-big"
+            onClick={() => void startWorkspacePlan()}
+          >
+            Plan again
+          </button>
+        ) : terminalApply ? (
+          <button
+            type="button"
+            className="btn btn-primary dv-big"
+            onClick={() => void startWorkspacePlan()}
+          >
+            Plan again
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn-primary dv-big"
+            disabled={
+              applyPending ||
+              phase !== "ready" ||
+              runnableCount === 0 ||
+              !previewsReady ||
+              nothingToDo
+            }
+            onClick={() => void handleApply()}
+            aria-label={`Apply ${runnableCount} listing${runnableCount === 1 ? "" : "s"}`}
+            title={
+              previewsReady
+                ? "Applying reviewed plans is the next step"
+                : "Preview images before applying"
+            }
+          >
+            Apply {runnableCount} listing{runnableCount === 1 ? "" : "s"}
+          </button>
+        )}
       </div>
 
       <BatchListingDrawer
         open={selected !== null}
         listing={selected}
         summary={selectedSummary}
+        mode={applying ? "applying" : terminalApply ? "applied" : "review"}
         previewsRendered={visibleState.previewsRendered}
         renderSnapshot={
           (selectedPlan?.stage_plans.find((stage) => stage.stage === "render")

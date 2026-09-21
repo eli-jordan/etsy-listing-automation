@@ -26,6 +26,10 @@ export interface BatchDeployState {
   phaseTimes: Partial<Record<RunPhase, string>>;
   generatedAt: string | null;
   resultAt: string | null;
+  /** The event order the backend used for the reviewed apply set. A Record's
+   * property order is not enough here: integer-like listing names are sorted
+   * numerically by JavaScript, while the API validates the ordered set. */
+  reviewedListingOrder: string[];
   listings: Record<string, BatchListingState>;
   previewsRendered: Set<string>;
   currentListing: string | null;
@@ -38,6 +42,7 @@ export const initialBatchDeployState: BatchDeployState = {
   phaseTimes: {},
   generatedAt: null,
   resultAt: null,
+  reviewedListingOrder: [],
   listings: {},
   previewsRendered: new Set(),
   currentListing: null,
@@ -135,7 +140,11 @@ export function applyBatchRunEvent(
     case "listing_planned": {
       const current = listingState(state, event.listing);
       const shouldReview = source === "review";
-      return withListing(state, event.listing, {
+      const nextState =
+        shouldReview && current.reviewedPlan === null
+          ? { ...state, reviewedListingOrder: [...state.reviewedListingOrder, event.listing] }
+          : state;
+      return withListing(nextState, event.listing, {
         ...current,
         ...(shouldReview
           ? { reviewedPlan: event.plan, plan: event.plan, fingerprint: event.fingerprint }

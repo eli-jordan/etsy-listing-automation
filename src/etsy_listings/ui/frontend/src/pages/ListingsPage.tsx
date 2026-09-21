@@ -153,8 +153,21 @@ export function ListingsPage() {
 
   const workspaceAction = useMemo(() => {
     if (workspaceRun === null) return null;
+    if (workspaceRun.kind === "apply" && !TERMINAL_PHASES.has(workspaceRun.phase)) {
+      return { label: "View batch progress", prefix: "Deploying…" };
+    }
     if (!TERMINAL_PHASES.has(workspaceRun.phase)) {
       return { label: "View batch progress", prefix: "Planning…" };
+    }
+    if (workspaceRun.kind === "apply" && !workspaceRun.seen && workspaceRun.phase === "applied") {
+      return { label: "View batch result", prefix: "Deployed ✓" };
+    }
+    if (
+      workspaceRun.kind === "apply" &&
+      !workspaceRun.seen &&
+      (workspaceRun.phase === "failed" || workspaceRun.phase === "stale")
+    ) {
+      return { label: "View batch result", prefix: "Deploy failed" };
     }
     if (!workspaceRun.seen && workspaceRun.phase === "ready") {
       return { label: "View batch review", prefix: "Review ready" };

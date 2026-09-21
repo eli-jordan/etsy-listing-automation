@@ -20,6 +20,7 @@ first apply only ever leaves an Etsy draft (non-goal 1).
 
 from __future__ import annotations
 
+import shutil
 import socket
 import threading
 from collections.abc import Iterator
@@ -185,3 +186,55 @@ def test_deploy_plan_preview_apply_back_reattach_and_pill(
     # And the page head is back to offering a fresh deploy -- the run just
     # shown was marked seen the moment its result rendered (decision 9).
     page.get_by_role("button", name="Deploy changes →").wait_for(state="visible")
+
+
+def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
+    page,  # noqa: ANN001
+    workspace_root: Path,
+) -> None:
+    """The workspace route preserves review while one listing goes stale.
+
+    This deliberately changes one listing after its review and before Apply.
+    That exercises the public A31 fingerprint guard and the sequential
+    continue-on-error contract through the browser, rather than mocking either
+    the API response or the React event stream.
+    """
+    second = workspace_root / "listings" / "second-shirt"
+    shutil.copytree(workspace_root / "listings" / "take-a-hike", second)
+
+    page.goto(page.url.rsplit("/listings/", 1)[0] + "/listings")
+    page.get_by_role("button", name="Deploy changes: 2 to add").click()
+    page.wait_for_url("**/listings/deploy/**")
+    page.get_by_role("heading", name="Review all changes").wait_for(state="visible")
+
+    apply_button = page.get_by_role("button", name="Apply")
+    apply_button.wait_for(state="visible")
+    for _ in range(200):
+        if apply_button.is_enabled():
+            break
+        page.wait_for_timeout(100)
+    else:
+        raise AssertionError("batch Apply never became enabled once previews finished")
+
+    listing_file = second / "listing.yaml"
+    listing_file.write_text(
+        listing_file.read_text(encoding="utf-8").replace(
+            "Retro 70s sunset mountain scene.", "Changed after review."
+        ),
+        encoding="utf-8",
+    )
+
+    apply_button.click()
+    page.get_by_role("button", name="← Back to listings").click()
+    page.wait_for_url("**/listings")
+
+    reattach = page.locator(
+        "button:has-text('View batch progress'), button:has-text('View batch result')"
+    )
+    reattach.first.wait_for(state="visible")
+    reattach.first.click()
+    page.wait_for_url("**/listings/deploy/**")
+
+    page.get_by_text("Batch partially applied.").wait_for(state="visible")
+    page.get_by_text("1 listing succeeded · 1 listing stale").wait_for(state="visible")
+    page.get_by_role("button", name="Plan again").wait_for(state="visible")

@@ -106,6 +106,27 @@ describe("batchDeployState", () => {
     expect(state.currentStage).toBe("render");
   });
 
+  it("preserves reviewed listing event order for the apply request", () => {
+    const state = batchDeployState([
+      {
+        type: "listing_planned",
+        id: 1,
+        listing: "10",
+        plan: plan("10"),
+        fingerprint: "fp-10",
+      },
+      {
+        type: "listing_planned",
+        id: 2,
+        listing: "2",
+        plan: plan("2"),
+        fingerprint: "fp-2",
+      },
+    ]);
+
+    expect(state.reviewedListingOrder).toEqual(["10", "2"]);
+  });
+
   it("produces the same projection when events are replayed or folded live", () => {
     const events = reviewedEvents();
     const replayed = batchDeployState(events);
