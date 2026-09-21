@@ -95,10 +95,12 @@ turn. The spec's wording is corrected, because a strip that pretends to fan
 out would misrepresent the tool, which is the same thing the spec's own
 rationale objected to.
 
-The two existing sinks, `on_planned` and `on_failure`, become fields of one
-`RunObserver` dataclass of no-op-by-default callbacks, alongside the new
-plan-time ones and the apply-time ones in §7. The CLI passes the two it uses.
-One parameter that grows beats a signature that gains a keyword per event.
+Planning, preview, apply and progress report through one closed
+`EngineRunEvent` union delivered to one no-op-by-default sink. The first
+implementation used an eight-field `RunObserver`; that interface repeated one
+concept as callback names and made the UI reconstruct an event vocabulary from
+nested closures. The union makes adding or handling an event exhaustive, and
+the CLI filters the same stream for the two events it renders.
 
 ### 3. Stages expose snapshots; the frontend composes the comparison — A30
 
@@ -264,11 +266,17 @@ Serial execution keeps A3's strictly-sequential writes and sidesteps Etsy's
 refresh-token rotation racing itself. Raising the worker count later is the
 whole of parallelising, because the lock model is already per listing.
 
-**Run phases.** `queued → planning → planned → previewing → ready` for a plan
+**Run commands and phases.** The request is one of four structural variants:
+listing plan, workspace plan, listing apply or workspace apply. Required
+listings, fingerprints and reviewed-run identity live only on the variants
+that need them; a validator no longer repairs a bag of nullable fields after
+parsing. `queued → planning → planned → previewing → ready` for a plan
 run (`previewing` is skipped when no scene needs one), and
 `queued → applying → applied | failed` for an apply run. `stale` is an apply
 run refused by §5, and its event carries the new plan. `cancelled` is a plan
-run whose `DELETE` landed. Every run ends in exactly one terminal phase.
+run whose `DELETE` landed. Plan and apply runtime states carry separate phase
+types, so a plan in `applying` or an apply in `previewing` is not representable.
+Every run ends in exactly one terminal phase.
 
 **Events.** Each event is a pydantic model in one discriminated union,
 `RunEvent`, with a monotonically increasing `id` per run:
@@ -276,27 +284,32 @@ run whose `DELETE` landed. Every run ends in exactly one terminal phase.
 | Event | Carries | Emitted by |
 |---|---|---|
 | `phase` | run phase | registry |
-| `stage_checking` | listing, stage | `RunObserver`, plan walk |
-| `stage_planned` | listing, serialised `StagePlan` (snapshot included) | `RunObserver` |
-| `listing_planned` | listing, `Plan`, fingerprint | `RunObserver` |
-| `preview_rendered` | listing, template, colour | `RunObserver` via `preview_listing` |
-| `stage_applying` | listing, stage | `RunObserver`, from `execute` |
-| `progress` | listing, stage, message, swatches | `ctx.emit`, tagged with the running stage |
-| `stage_applied` | listing, stage | `RunObserver` |
-| `stage_failed` | listing, stage, message | `RunObserver` |
-| `listing_failed` | listing, message, `stale_plan?` | `RunObserver.on_failure` |
+| `stage_checking` | listing, stage | `EngineRunEvent`, plan walk |
+| `stage_planned` | listing, serialised `StagePlan` (snapshot included) | `EngineRunEvent` |
+| `listing_planned` | listing, `Plan`, fingerprint | `EngineRunEvent` |
+| `preview_rendered` | listing, template, colour | `EngineRunEvent` via `preview_listing` |
+| `stage_applying` | listing, stage | `EngineRunEvent`, from `execute` |
+| `progress` | listing, stage, message, swatches | `ctx.emit`, scoped by `execute` into `EngineRunEvent` |
+| `stage_applied` | listing, stage | `EngineRunEvent` |
+| `stage_failed` | listing, stage, message | `EngineRunEvent` |
+| `listing_failed` | listing, message, `stale_plan?` | `EngineRunEvent` |
 
-`ctx.emit`'s existing `Event(message, swatches)` stays as it is. The executor
-builds the run's `RunContext` with an `on_event` that tags each message with
-the stage the observer last reported, so no stage changes how it reports
-progress.
+`ctx.emit`'s existing `Event(message, swatches)` stays as it is. `execute`
+scopes the context passed to each stage so its progress becomes an
+`EngineProgress` already carrying listing and stage. The UI executor therefore
+does not remember a mutable “current stage”, and no stage changes how it
+reports progress.
 
 A `UserFacingError` reaches the page word for word, keeping one message for
 the CLI and the UI. Anything else ends the run `failed` with *Internal error,
 see the server log*, and the traceback is logged. That is still a defect, and
 it still gets a traceback.
 
-**Typing the stream (A5).** `RunDetail.events: list[RunEvent]` puts the union
+**Typing plans and the stream (A5).** `StagePlanDTO` is a discriminated union
+keyed by the finite stage name; that name determines the concrete snapshot
+model (or no snapshot for `retract`). A stage/snapshot mismatch is rejected by
+the schema and the generated frontend no longer redeclares or casts snapshot
+types. `RunDetail.events: list[RunEvent]` puts the event union
 into `openapi.json`, so `gen:api` generates every event type. The SSE route
 sends the same models serialised as JSON. The only hand-written client code is
 `runStream.ts`, a typed wrapper around `EventSource` that parses into those
@@ -394,8 +407,8 @@ deploys.
 | `engine/status.py` | `listing_status(..., incomplete=bool)`, where a set marker means dirty | A29 |
 | `engine/change.py` | `StagePlan.snapshot: BaseModel \| None`; `Drift.last_applied_label`, `live_label` | A30 |
 | `engine/stage.py` | Optional `snapshot()` documented on the protocol; `RenderStage.preview` stays specific to that stage, not part of the protocol | A30, A32 |
-| `engine/plan.py` | `build_plan(..., observer)`: `stage_checking` before each walk, `snapshot()` after `plan()`, `stage_planned` after | A30, A33 |
-| `engine/run.py` | `RunObserver`; `plan_fingerprint`; `apply_listings(..., expect)` and `StalePlanError`; `preview_listing`; the lockfile writer passed to `execute` | A29, A31–A33 |
+| `engine/plan.py` | `build_plan(..., on_event)`: `stage_checking` before each walk, `snapshot()` after `plan()`, `stage_planned` after | A30, A33 |
+| `engine/run.py` | `EngineRunEvent` and its sink; `plan_fingerprint`; `apply_listings(..., expect)` and `StalePlanError`; `preview_listing`; the lockfile writer passed to `execute` | A29, A31–A33 |
 | `engine/stages/product_diff.py` | `ListChange("colors")` | A30 |
 | `engine/stages/printify_product.py` | `snapshot()` | A30 |
 | `engine/stages/publish.py` | `snapshot()` with `below_cost` | A30 |
@@ -410,9 +423,9 @@ deploys.
 
 | Module | Holds |
 |---|---|
-| `ui/runs/registry.py` | `Run` (id, kind, listings, phase, event buffer, seen), per-listing locks, retention |
-| `ui/runs/executor.py` | the FIFO worker thread, stop flag, cancellation, `RunObserver` → events |
-| `ui/runs/events.py` | the `RunEvent` union and `StagePlan`/`Plan` serialisation |
+| `ui/runs/registry.py` | typed run commands and plan/apply runtime states, event buffer, per-listing locks, retention |
+| `ui/runs/executor.py` | the FIFO worker thread, stop flag, cancellation, `EngineRunEvent` → wire events |
+| `ui/runs/events.py` | the `RunEvent` union and stage-discriminated `StagePlan`/`Plan` serialisation |
 | `ui/api/runs.py` | the six endpoints above |
 | `ui/api/listings.py` | preview file endpoint |
 | `ui/api/app.py` | `context_factory`; executor start and join on lifespan |
@@ -429,7 +442,8 @@ registry rather than replacing it.
 |---|---|
 | `pages/DeployPage.tsx` | the route: reattach or start, composing the parts below |
 | `pages/deploy/runStream.ts` | typed `EventSource` wrapper with `Last-Event-ID` resume |
-| `pages/deploy/deployState.ts` | pure reducer: `RunEvent[]` → phase, per-stage state, plan, previews |
+| `pages/deploy/listingRunState.ts` | pure per-listing projection shared by individual and batch deploy |
+| `pages/deploy/deployState.ts` | thin individual projection: phase/previews plus one listing projection |
 | `pages/deploy/comparison.ts` | pure: snapshots + changes → before/after blocks, impact tags, price rows, image badges |
 | `pages/deploy/wordDiff.ts` | pure: formats one `FieldChange`'s before/after |
 | `pages/deploy/Comparison.tsx`, `PriceTable.tsx`, `StepStrip.tsx`, `Callouts.tsx`, `ApplyFooter.tsx` | presentation |

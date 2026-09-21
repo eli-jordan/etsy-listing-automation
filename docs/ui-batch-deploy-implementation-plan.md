@@ -43,10 +43,10 @@ Most of the hard behavior already exists and should be reused, not rebuilt.
 | Existing module | What batch deploy gets from it |
 |---|---|
 | `engine.run.plan_listings` / `apply_listings` | All-listing iteration, continue-on-user-error, sequential writes, lockfile ownership and A31 fingerprint checks. |
-| `engine.RunObserver` | Per-listing and per-stage planning/apply events. No batch-specific engine callbacks are needed. |
+| `engine.EngineRunEvent` | Per-listing and per-stage planning/apply events through one sink. No batch-specific engine events are needed. |
 | `ui.runs` | FIFO execution, listing locks, event buffers, SSE replay, cancellation and unseen results. |
 | `PlanDTO` / `StagePlanDTO` | The same plans, snapshots, changes, drift and blocked messages used by individual deploy. |
-| `deployState.ts` | The event vocabulary and per-stage runtime semantics. Batch needs a collection-level projection over it, not a second interpretation of events. |
+| `listingRunState.ts` | The event vocabulary and per-listing runtime semantics shared by individual and batch deploy. |
 | `comparison.ts`, `ComparisonView`, `PriceTable`, `StepStrip` | The established individual-listing explanation of a plan. The drawer composes these modules unchanged apart from narrowing `ComparisonView`'s listing context. |
 | preview rendering and promotion (A32) | Reviewable full-size images and byte-identical promotion during apply. Preview keys must become listing-scoped in batch state. |
 | `GET /api/listings` | Local candidate counts, display names/design context and the post-run status refresh. |
@@ -84,9 +84,12 @@ There are two important seams:
 
 1. The runs HTTP interface owns scope, conflicts, identity and replay. It does
    not plan or apply; the existing executor still calls the engine.
-2. The frontend batch-state interface accepts a reviewed plan event log and an
-   optional apply event log, and returns one renderable batch view. Pages and
-   visual modules do not fold events independently.
+2. The frontend per-listing state interface folds the shared event vocabulary
+   once. Individual deploy owns one projection; batch state accepts a reviewed
+   plan event log and an optional apply event log, owns an ordered map of the
+   same projection plus aggregate facts, and preserves the reviewed-plan/apply
+   distinction explicitly. Pages and visual modules do not fold events
+   independently.
 
 ### A34: workspace scope and a frozen apply set
 
@@ -94,7 +97,7 @@ The current `CreateRunRequest` requires `listings: string[]`. That is correct
 for the individual editor, but wrong for `plan --all`: the browser's table can
 be stale or filtered and must not define the workspace.
 
-Add a discriminated run scope:
+Use the workspace-plan request variant:
 
 ```json
 {
@@ -107,8 +110,8 @@ For this request the server calls `Workspace.listing_names()` as it accepts the
 run and stores the sorted resolved names on `Run.listings`. An empty workspace
 is a valid plan that reaches `ready` and renders **Everything is up to date**.
 
-Apply is also marked `scope: "workspace"` so it is discoverable as the current
-batch run, but it does not resolve the workspace again:
+The workspace-apply variant is discoverable as the current batch run, but it
+does not resolve the workspace again:
 
 ```json
 {
