@@ -142,6 +142,20 @@ def test_two_listings_run_one_after_the_other_on_the_single_worker_thread(
     assert second.phase == "ready"
 
 
+def test_a_workspace_run_executes_the_server_resolved_order(
+    workspace_root: Path, executor: RunExecutor
+) -> None:
+    copy_listing(workspace_root, "second")
+    run = executor.registry.create("plan", ["second", LISTING], scope="workspace")
+    assert isinstance(run, Run)
+
+    _wait_until(run)
+
+    assert run.phase == "ready"
+    planned = [event.listing for event in run.events if event.type == "listing_planned"]
+    assert planned == ["second", LISTING]
+
+
 # ------------------------------------------------------------------ apply runs
 
 

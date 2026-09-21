@@ -54,6 +54,7 @@ from etsy_listings.engine.change import (
 )
 
 RunKind = Literal["plan", "apply"]
+RunScope = Literal["listings", "workspace"]
 
 RunPhase = Literal[
     "queued",
@@ -270,6 +271,7 @@ class PhaseEvent(BaseModel):
     type: Literal["phase"] = "phase"
     id: int
     phase: RunPhase
+    occurred_at: datetime = Field(default_factory=lambda: datetime.now(UTC))
 
 
 class StageCheckingEvent(BaseModel):

@@ -6,7 +6,14 @@ import * as listingsApi from "../api/listings";
 import * as runsApi from "../api/runs";
 import { DeployPage } from "./DeployPage";
 import * as runStreamModule from "./deploy/runStream";
-import type { ListingDetail, PlanDTO, RunDetail, RunEvent, StagePlanDTO } from "../types";
+import type {
+  ListingDetail,
+  PlanDTO,
+  RunDetail,
+  RunEvent,
+  RunSummary,
+  StagePlanDTO,
+} from "../types";
 
 /**
  * The route: reattach or start, composing the reducer/comparison/presentation
@@ -73,6 +80,24 @@ function plan(stagePlans: StagePlanDTO[]): PlanDTO {
   };
 }
 
+function runSummary(over: Partial<RunSummary> = {}): RunSummary {
+  return {
+    id: "run",
+    kind: "plan",
+    scope: "listings",
+    listings: ["take-a-hike"],
+    phase: "queued",
+    seen: false,
+    reviewed_run_id: null,
+    created_at: "2026-09-17T10:00:00Z",
+    ...over,
+  };
+}
+
+function runDetail(over: Partial<RunDetail> = {}): RunDetail {
+  return { ...runSummary(), events: [], ...over };
+}
+
 function renderPage() {
   return render(
     <MemoryRouter initialEntries={["/listings/take-a-hike/deploy"]}>
@@ -127,7 +152,7 @@ describe("DeployPage: starting fresh", () => {
     vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
     vi.spyOn(runsApi, "createRun").mockResolvedValue({
       kind: "created",
-      run: { id: "run-1", kind: "plan", listings: ["take-a-hike"], phase: "queued", seen: false },
+      run: runSummary({ id: "run-1" }),
     });
     vi.spyOn(runsApi, "markRunSeen").mockResolvedValue(undefined);
     const handles = stubStream();
@@ -135,7 +160,11 @@ describe("DeployPage: starting fresh", () => {
     renderPage();
 
     await waitFor(() =>
-      expect(runsApi.createRun).toHaveBeenCalledWith({ kind: "plan", listings: ["take-a-hike"] }),
+      expect(runsApi.createRun).toHaveBeenCalledWith({
+        kind: "plan",
+        scope: "listings",
+        listings: ["take-a-hike"],
+      }),
     );
     await waitFor(() => expect(handles).toHaveLength(1));
 
@@ -165,7 +194,7 @@ describe("DeployPage: starting fresh", () => {
     vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
     vi.spyOn(runsApi, "createRun").mockResolvedValue({
       kind: "created",
-      run: { id: "run-2", kind: "plan", listings: ["take-a-hike"], phase: "queued", seen: false },
+      run: runSummary({ id: "run-2" }),
     });
     const handles = stubStream();
 
@@ -192,7 +221,7 @@ describe("DeployPage: reattaching", () => {
   it("rebuilds from RunDetail and keeps streaming for an active run", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const fullPlan = plan([stage({ stage: "render", will_run: true, reason: "x" })]);
-    const runDetail: RunDetail = {
+    const detailForRun: RunDetail = runDetail({
       id: "run-3",
       kind: "plan",
       listings: ["take-a-hike"],
@@ -202,15 +231,12 @@ describe("DeployPage: reattaching", () => {
         { type: "phase", id: 1, phase: "queued" },
         { type: "phase", id: 2, phase: "planning" },
       ],
-    };
-    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
-      id: "run-3",
-      kind: "plan",
-      listings: ["take-a-hike"],
-      phase: "planning",
-      seen: false,
     });
-    vi.spyOn(runsApi, "getRun").mockResolvedValue(runDetail);
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
+      ...runSummary({ id: "run-3", kind: "plan" }),
+      phase: "planning",
+    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(detailForRun);
     const handles = stubStream();
 
     renderPage();
@@ -234,19 +260,16 @@ describe("DeployPage: reattaching", () => {
   it("shows a finished, unseen run's result without opening a stream", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const fullPlan = plan([stage({ stage: "render", will_run: true, reason: "x" })]);
-    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
-      id: "run-4",
-      kind: "apply",
-      listings: ["take-a-hike"],
-      phase: "applied",
-      seen: false,
-    });
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(
+      runSummary({
+        id: "run-4",
+        kind: "apply",
+        phase: "applied",
+      }),
+    );
     vi.spyOn(runsApi, "getRun").mockResolvedValue({
-      id: "run-4",
-      kind: "apply",
-      listings: ["take-a-hike"],
+      ...runDetail({ id: "run-4", kind: "apply" }),
       phase: "applied",
-      seen: false,
       events: [
         { type: "phase", id: 1, phase: "queued" },
         {
@@ -277,19 +300,16 @@ describe("DeployPage: reattaching", () => {
   it("keeps a just-finished apply unseen when Back is clicked immediately", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const fullPlan = plan([stage({ stage: "render", will_run: true, reason: "x" })]);
-    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
-      id: "run-fast-apply",
-      kind: "apply",
-      listings: ["take-a-hike"],
-      phase: "applied",
-      seen: false,
-    });
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(
+      runSummary({
+        id: "run-fast-apply",
+        kind: "apply",
+        phase: "applied",
+      }),
+    );
     vi.spyOn(runsApi, "getRun").mockResolvedValue({
-      id: "run-fast-apply",
-      kind: "apply",
-      listings: ["take-a-hike"],
+      ...runDetail({ id: "run-fast-apply", kind: "apply" }),
       phase: "applied",
-      seen: false,
       events: [
         {
           type: "listing_planned",
@@ -319,7 +339,7 @@ describe("DeployPage: Back", () => {
     vi.spyOn(runsApi, "currentRun").mockResolvedValue(null);
     vi.spyOn(runsApi, "createRun").mockResolvedValue({
       kind: "created",
-      run: { id: "run-5", kind: "plan", listings: ["take-a-hike"], phase: "queued", seen: false },
+      run: runSummary({ id: "run-5" }),
     });
     vi.spyOn(runsApi, "cancelRun").mockResolvedValue(true);
     stubStream();
@@ -333,19 +353,16 @@ describe("DeployPage: Back", () => {
 
   it("does not cancel an apply in progress, and still leaves", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
-    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
-      id: "run-6",
-      kind: "apply",
-      listings: ["take-a-hike"],
-      phase: "applying",
-      seen: false,
-    });
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(
+      runSummary({
+        id: "run-6",
+        kind: "apply",
+        phase: "applying",
+      }),
+    );
     vi.spyOn(runsApi, "getRun").mockResolvedValue({
-      id: "run-6",
-      kind: "apply",
-      listings: ["take-a-hike"],
+      ...runDetail({ id: "run-6", kind: "apply" }),
       phase: "applying",
-      seen: false,
       events: [
         { type: "phase", id: 1, phase: "queued" },
         { type: "phase", id: 2, phase: "applying" },
@@ -371,7 +388,7 @@ describe("DeployPage: Back", () => {
     vi.spyOn(runsApi, "createRun")
       .mockResolvedValueOnce({
         kind: "created",
-        run: { id: "run-9", kind: "plan", listings: ["take-a-hike"], phase: "queued", seen: false },
+        run: runSummary({ id: "run-9" }),
       })
       .mockReturnValueOnce(applyStarted);
     const cancelSpy = vi.spyOn(runsApi, "cancelRun").mockResolvedValue(true);
@@ -394,7 +411,7 @@ describe("DeployPage: Back", () => {
 
     resolveApply({
       kind: "created",
-      run: { id: "run-10", kind: "apply", listings: ["take-a-hike"], phase: "queued", seen: false },
+      run: runSummary({ id: "run-10", kind: "apply" }),
     });
     expect(await screen.findByText("editor page")).toBeInTheDocument();
     expect(cancelSpy).not.toHaveBeenCalled();
@@ -405,19 +422,16 @@ describe("DeployPage: Apply", () => {
   it("moves stages above a collapsed approved comparison while apply is running", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const fullPlan = plan([stage({ stage: "publish", will_run: true, reason: "publish it" })]);
-    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
-      id: "run-applying",
-      kind: "apply",
-      listings: ["take-a-hike"],
-      phase: "applying",
-      seen: false,
-    });
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(
+      runSummary({
+        id: "run-applying",
+        kind: "apply",
+        phase: "applying",
+      }),
+    );
     vi.spyOn(runsApi, "getRun").mockResolvedValue({
-      id: "run-applying",
-      kind: "apply",
-      listings: ["take-a-hike"],
+      ...runDetail({ id: "run-applying", kind: "apply" }),
       phase: "applying",
-      seen: false,
       events: [
         { type: "phase", id: 1, phase: "applying" },
         {
@@ -455,16 +469,13 @@ describe("DeployPage: Apply", () => {
     vi.spyOn(runsApi, "createRun")
       .mockResolvedValueOnce({
         kind: "created",
-        run: { id: "run-7", kind: "plan", listings: ["take-a-hike"], phase: "queued", seen: false },
+        run: runSummary({ id: "run-7" }),
       })
       .mockResolvedValueOnce({
         kind: "created",
         run: {
-          id: "run-8",
-          kind: "apply",
-          listings: ["take-a-hike"],
+          ...runSummary({ id: "run-8", kind: "apply" }),
           phase: "queued",
-          seen: false,
         },
       });
     const handles = stubStream();
@@ -490,6 +501,7 @@ describe("DeployPage: Apply", () => {
     await waitFor(() =>
       expect(runsApi.createRun).toHaveBeenCalledWith({
         kind: "apply",
+        scope: "listings",
         listings: ["take-a-hike"],
         expect: { "take-a-hike": "fp-7" },
       }),

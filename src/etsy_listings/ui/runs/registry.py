@@ -1,5 +1,5 @@
-"""``Run``, and the registry that owns which listings are locked to which run
-(A33, decision 7).
+"""``Run``, and the registry that owns which listings or workspace are held by
+which run (A33/A34, decision 7).
 
 A run is in-memory only -- "Runs are in memory only, so a restart forgets
 them, and history stays Phase 6's ``runs/`` SQLite recorder" -- so this module
@@ -34,14 +34,24 @@ import threading
 import uuid
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
+from datetime import UTC, datetime
 
-from etsy_listings.ui.runs.events import TERMINAL_PHASES, AnyRunEvent, RunKind, RunPhase
+from etsy_listings.ui.runs.events import (
+    TERMINAL_PHASES,
+    AnyRunEvent,
+    RunKind,
+    RunPhase,
+    RunScope,
+)
 
 
 @dataclass
 class Run:
-    """One plan or apply run: its identity, its listings, and the event log
-    a client replays through the SSE route.
+    """One plan or apply run: its scope, identity, listings, and event log.
+
+    A workspace apply keeps ``reviewed_run_id`` so a client can replay the
+    completed review alongside the apply events; the registry deliberately
+    retains that source run until a later workspace run supersedes it (A34).
 
     The :class:`threading.Condition` is what bridges the worker thread (which
     appends events) and the SSE route's async generator (which waits for
@@ -53,6 +63,9 @@ class Run:
     kind: RunKind
     listings: tuple[str, ...]
     expect: Mapping[str, str] | None = None
+    scope: RunScope = "listings"
+    reviewed_run_id: str | None = None
+    created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     phase: RunPhase = "queued"
     events: list[AnyRunEvent] = field(default_factory=list)
     seen: bool = False
@@ -130,12 +143,17 @@ class Conflict:
 
 @dataclass
 class RunRegistry:
-    """Every run this server process has seen, and which listing belongs to
-    which one."""
+    """Every run this server process has seen and its current scope holder.
+
+    Listing-scoped runs use ``_holder``. Workspace runs use the separate
+    ``_workspace_holder`` because a terminal workspace plan remains the
+    current review until its linked apply replaces it (A34).
+    """
 
     _lock: threading.Lock = field(default_factory=threading.Lock)
     _runs: dict[str, Run] = field(default_factory=dict)
     _holder: dict[str, str] = field(default_factory=dict)
+    _workspace_holder: str | None = None
     _queue: queue.Queue[str] = field(default_factory=queue.Queue)
     _id_source: Callable[[], str] = field(default=lambda: uuid.uuid4().hex)
 
@@ -145,19 +163,43 @@ class RunRegistry:
         listings: Sequence[str],
         *,
         expect: Mapping[str, str] | None = None,
+        scope: RunScope = "listings",
+        reviewed_run_id: str | None = None,
     ) -> Run | Conflict:
         """A new run for ``listings``, queued for the executor -- or the
         holder already busy with one of them, unmodified, for the caller to
         report as a ``409`` naming a run to reattach to instead."""
         with self._lock:
-            for name in listings:
-                holder = self._runs.get(self._holder.get(name, ""))
-                if holder is not None and holder.phase not in TERMINAL_PHASES:
-                    return Conflict(active_run=holder.id)
-            run = Run(id=self._id_source(), kind=kind, listings=tuple(listings), expect=expect)
+            if scope == "workspace":
+                workspace_holder = self._runs.get(self._workspace_holder or "")
+                if workspace_holder is not None and workspace_holder.phase not in TERMINAL_PHASES:
+                    return Conflict(active_run=workspace_holder.id)
+                for holder_id in self._holder.values():
+                    holder = self._runs.get(holder_id)
+                    if holder is not None and holder.phase not in TERMINAL_PHASES:
+                        return Conflict(active_run=holder.id)
+            else:
+                workspace_holder = self._runs.get(self._workspace_holder or "")
+                if workspace_holder is not None and workspace_holder.phase not in TERMINAL_PHASES:
+                    return Conflict(active_run=workspace_holder.id)
+                for name in listings:
+                    holder = self._runs.get(self._holder.get(name, ""))
+                    if holder is not None and holder.phase not in TERMINAL_PHASES:
+                        return Conflict(active_run=holder.id)
+            run = Run(
+                id=self._id_source(),
+                kind=kind,
+                listings=tuple(listings),
+                expect=expect,
+                scope=scope,
+                reviewed_run_id=reviewed_run_id,
+            )
             self._runs[run.id] = run
-            for name in listings:
-                self._holder[name] = run.id
+            if scope == "workspace":
+                self._workspace_holder = run.id
+            else:
+                for name in listings:
+                    self._holder[name] = run.id
             self._queue.put(run.id)
             return run
 
@@ -188,6 +230,18 @@ class RunRegistry:
         with self._lock:
             run = self._runs.get(self._holder.get(name, ""))
             return [run] if run is not None else []
+
+    def for_workspace(self) -> list[Run]:
+        """The latest workspace-scoped run, including a finished plan that
+        remains the review source until a later workspace run replaces it."""
+        with self._lock:
+            run = self._runs.get(self._workspace_holder or "")
+            return [run] if run is not None else []
+
+    def for_scope(self, scope: RunScope) -> list[Run]:
+        """Every retained run of one scope, for an explicit scope query."""
+        with self._lock:
+            return [run for run in self._runs.values() if run.scope == scope]
 
     def dequeue(self, *, timeout: float) -> str | None:
         """The next queued run id, for the executor's worker thread. ``None``

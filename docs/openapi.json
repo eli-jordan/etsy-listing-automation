@@ -269,16 +269,42 @@
             "type": "string"
           },
           "listings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Listings",
-            "type": "array"
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Listings"
+          },
+          "reviewed_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Run Id"
+          },
+          "scope": {
+            "default": "listings",
+            "enum": [
+              "listings",
+              "workspace"
+            ],
+            "title": "Scope",
+            "type": "string"
           }
         },
         "required": [
-          "kind",
-          "listings"
+          "kind"
         ],
         "title": "CreateRunRequest",
         "type": "object"
@@ -1191,6 +1217,11 @@
             "title": "Id",
             "type": "integer"
           },
+          "occurred_at": {
+            "format": "date-time",
+            "title": "Occurred At",
+            "type": "string"
+          },
           "phase": {
             "enum": [
               "queued",
@@ -1528,6 +1559,11 @@
       },
       "RunDetail": {
         "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
           "events": {
             "items": {
               "discriminator": {
@@ -1616,6 +1652,25 @@
             "title": "Phase",
             "type": "string"
           },
+          "reviewed_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Run Id"
+          },
+          "scope": {
+            "enum": [
+              "listings",
+              "workspace"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "seen": {
             "title": "Seen",
             "type": "boolean"
@@ -1624,9 +1679,12 @@
         "required": [
           "id",
           "kind",
+          "scope",
           "listings",
           "phase",
           "seen",
+          "reviewed_run_id",
+          "created_at",
           "events"
         ],
         "title": "RunDetail",
@@ -1635,6 +1693,11 @@
       "RunSummary": {
         "description": "Enough to show a page-head control (decision 8's table) or a row in a\nfuture batch view -- everything except the event log itself.",
         "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
           "id": {
             "title": "Id",
             "type": "string"
@@ -1670,6 +1733,25 @@
             "title": "Phase",
             "type": "string"
           },
+          "reviewed_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Run Id"
+          },
+          "scope": {
+            "enum": [
+              "listings",
+              "workspace"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
           "seen": {
             "title": "Seen",
             "type": "boolean"
@@ -1678,9 +1760,12 @@
         "required": [
           "id",
           "kind",
+          "scope",
           "listings",
           "phase",
-          "seen"
+          "seen",
+          "reviewed_run_id",
+          "created_at"
         ],
         "title": "RunSummary",
         "type": "object"
@@ -3125,6 +3210,26 @@
                 }
               ],
               "title": "Listing"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scope",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "enum": [
+                    "listings",
+                    "workspace"
+                  ],
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Scope"
             }
           }
         ],

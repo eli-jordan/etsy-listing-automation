@@ -97,7 +97,7 @@ export function DeployPage() {
   const startFreshPlan = useCallback(async () => {
     leavingRef.current = false;
     setApplyRequested(false);
-    const result = await createRun({ kind: "plan", listings: [name] });
+    const result = await createRun({ kind: "plan", scope: "listings", listings: [name] });
     if (result.kind === "conflict") {
       const detail = await getRun(result.activeRun);
       setRunId(detail.id);
@@ -221,6 +221,7 @@ export function DeployPage() {
     if (state.fingerprint === null) return;
     const result = await createRun({
       kind: "apply",
+      scope: "listings",
       listings: [name],
       expect: { [name]: state.fingerprint },
     });

@@ -909,7 +909,15 @@ export interface components {
        */
       kind: "plan" | "apply";
       /** Listings */
-      listings: string[];
+      listings?: string[] | null;
+      /** Reviewed Run Id */
+      reviewed_run_id?: string | null;
+      /**
+       * Scope
+       * @default listings
+       * @enum {string}
+       */
+      scope: "listings" | "workspace";
     };
     /**
      * DesignSummary
@@ -1352,6 +1360,11 @@ export interface components {
       /** Id */
       id: number;
       /**
+       * Occurred At
+       * Format: date-time
+       */
+      occurred_at?: string;
+      /**
        * Phase
        * @enum {string}
        */
@@ -1490,6 +1503,11 @@ export interface components {
     };
     /** RunDetail */
     RunDetail: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
       /** Events */
       events: (
         | components["schemas"]["PhaseEvent"]
@@ -1527,6 +1545,13 @@ export interface components {
         | "failed"
         | "stale"
         | "cancelled";
+      /** Reviewed Run Id */
+      reviewed_run_id: string | null;
+      /**
+       * Scope
+       * @enum {string}
+       */
+      scope: "listings" | "workspace";
       /** Seen */
       seen: boolean;
     };
@@ -1536,6 +1561,11 @@ export interface components {
      *     future batch view -- everything except the event log itself.
      */
     RunSummary: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
       /** Id */
       id: string;
       /**
@@ -1560,6 +1590,13 @@ export interface components {
         | "failed"
         | "stale"
         | "cancelled";
+      /** Reviewed Run Id */
+      reviewed_run_id: string | null;
+      /**
+       * Scope
+       * @enum {string}
+       */
+      scope: "listings" | "workspace";
       /** Seen */
       seen: boolean;
     };
@@ -2473,6 +2510,7 @@ export interface operations {
     parameters: {
       query?: {
         listing?: string | null;
+        scope?: ("listings" | "workspace") | null;
       };
       header?: never;
       path?: never;
