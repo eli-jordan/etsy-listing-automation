@@ -98,7 +98,7 @@ describe("ComparisonView", () => {
     render(
       <ComparisonView
         comparison={buildComparison(p)}
-        detail={detail()}
+        listing={{ name: detail().name, design: detail().design }}
         renderSnapshot={null}
         previewsRendered={new Set()}
         collapsed={false}
@@ -121,7 +121,7 @@ describe("ComparisonView", () => {
     render(
       <ComparisonView
         comparison={buildComparison(p)}
-        detail={detail()}
+        listing={{ name: detail().name, design: detail().design }}
         renderSnapshot={null}
         previewsRendered={new Set()}
         collapsed={false}
@@ -139,7 +139,7 @@ describe("ComparisonView", () => {
     render(
       <ComparisonView
         comparison={buildComparison(p)}
-        detail={detail()}
+        listing={{ name: detail().name, design: detail().design }}
         renderSnapshot={null}
         previewsRendered={new Set()}
         collapsed

@@ -33,6 +33,11 @@ import { wordDiff } from "./wordDiff";
  *   renders through `pictureFor` like the editor's own reel does.
  */
 
+export interface ListingMediaContext {
+  name: string;
+  design: ListingDetail["design"];
+}
+
 function parseRef(ref: string): { template: string; colour: string | null } | null {
   const colon = ref.indexOf(":");
   if (colon === -1) {
@@ -56,19 +61,19 @@ function sceneState(
 
 function AfterTile({
   tile,
-  detail,
+  listing,
   renderSnapshot,
   previewsRendered,
   imageUrlForRef,
 }: {
   tile: AfterImageTile;
-  detail: ListingDetail;
+  listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
   imageUrlForRef: ((ref: string) => string | null) | undefined;
 }) {
   const parsed = parseRef(tile.ref);
-  const design = singleDesignName(detail.design);
+  const design = singleDesignName(listing.design);
   let src: string | null = null;
   let pending = false;
 
@@ -84,7 +89,7 @@ function AfterTile({
     if (ready) {
       src =
         scene !== null && scene.state !== "cached"
-          ? previewUrl(detail.name, parsed.template, parsed.colour)
+          ? previewUrl(listing.name, parsed.template, parsed.colour)
           : pictureFor({ template: parsed.template, colour: parsed.colour }, design, "full");
     } else {
       pending = true;
@@ -160,7 +165,7 @@ function Block({
 function Column({
   side,
   comparison,
-  detail,
+  listing,
   renderSnapshot,
   previewsRendered,
   etsyListingIdLabel,
@@ -168,7 +173,7 @@ function Column({
 }: {
   side: "before" | "after";
   comparison: ComparisonData;
-  detail: ListingDetail;
+  listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
   etsyListingIdLabel: string;
@@ -192,7 +197,7 @@ function Column({
                   <AfterTile
                     key={tile.rank}
                     tile={tile}
-                    detail={detail}
+                    listing={listing}
                     renderSnapshot={renderSnapshot}
                     previewsRendered={previewsRendered}
                     imageUrlForRef={imageUrlForRef}
@@ -318,7 +323,7 @@ function formatRange(range: { min: string; max: string } | null): string {
 
 export function ComparisonView({
   comparison,
-  detail,
+  listing,
   renderSnapshot,
   previewsRendered,
   collapsed,
@@ -326,7 +331,7 @@ export function ComparisonView({
   imageUrlForRef,
 }: {
   comparison: ComparisonData;
-  detail: ListingDetail;
+  listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
   /** Collapse to one "On Etsy now" column -- once applied, or when the plan
@@ -345,7 +350,7 @@ export function ComparisonView({
         <Column
           side="after"
           comparison={comparison}
-          detail={detail}
+          listing={listing}
           renderSnapshot={renderSnapshot}
           previewsRendered={previewsRendered}
           etsyListingIdLabel={etsyListingIdLabel}
@@ -362,7 +367,7 @@ export function ComparisonView({
         <Column
           side="before"
           comparison={comparison}
-          detail={detail}
+          listing={listing}
           renderSnapshot={renderSnapshot}
           previewsRendered={previewsRendered}
           etsyListingIdLabel={etsyListingIdLabel}
@@ -377,7 +382,7 @@ export function ComparisonView({
       <Column
         side="before"
         comparison={comparison}
-        detail={detail}
+        listing={listing}
         renderSnapshot={renderSnapshot}
         previewsRendered={previewsRendered}
         etsyListingIdLabel={etsyListingIdLabel}
@@ -386,7 +391,7 @@ export function ComparisonView({
       <Column
         side="after"
         comparison={comparison}
-        detail={detail}
+        listing={listing}
         renderSnapshot={renderSnapshot}
         previewsRendered={previewsRendered}
         etsyListingIdLabel={etsyListingIdLabel}

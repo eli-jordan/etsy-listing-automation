@@ -334,7 +334,7 @@ export function DeployPage() {
                 <div className="dv-approved-comparison__body">
                   <ComparisonView
                     comparison={comparison}
-                    detail={detail}
+                    listing={{ name: detail.name, design: detail.design }}
                     renderSnapshot={
                       (state.plan.stage_plans.find((s) => s.stage === "render")
                         ?.snapshot as never) ?? null
@@ -350,7 +350,7 @@ export function DeployPage() {
               <>
                 <ComparisonView
                   comparison={comparison}
-                  detail={detail}
+                  listing={{ name: detail.name, design: detail.design }}
                   renderSnapshot={
                     (state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot as never) ??
                     null
