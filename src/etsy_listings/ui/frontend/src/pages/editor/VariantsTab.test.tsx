@@ -33,7 +33,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
       title: "<generate>",
       description: "<generate>",
       tags: "<generate>",
-      materials: [],
       variation_images: null,
       renewal: null,
       section: null,

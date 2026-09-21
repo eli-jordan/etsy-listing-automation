@@ -379,7 +379,6 @@ def test_variation_images_links_each_colour_to_its_uploaded_image(
         etsy={
             "title": "<generate>",
             "description": "<generate>",
-            "materials": ["cotton"],
             "variation_images": TEMPLATE,
         },
     )
@@ -405,7 +404,6 @@ def test_no_matching_colour_property_skips_the_feature_without_failing(
         etsy={
             "title": "<generate>",
             "description": "<generate>",
-            "materials": ["cotton"],
             "variation_images": TEMPLATE,
         },
     )

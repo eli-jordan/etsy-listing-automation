@@ -513,7 +513,7 @@ def build_listing_stub(
         "brief": brief,
         "pricing_plan": pricing_plan_ref,
         "prices": {},
-        "etsy": {"title": "", "description": "", "tags": GENERATE, "materials": []},
+        "etsy": {"title": "", "description": "", "tags": GENERATE},
         "media": media,
     }
 

@@ -15,7 +15,6 @@ etsy:
   title: <generate>
   description: <generate>
   tags: <generate>
-  materials: [cotton]
   renewal: manual
 media:
   - { template: flat-lay-01, colour: black }

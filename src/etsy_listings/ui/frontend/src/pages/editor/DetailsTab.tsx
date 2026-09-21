@@ -49,7 +49,7 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   const titleError = detail.field_errors["etsy.title"];
   const sectionError = detail.field_errors["etsy.section"];
   const title = detail.etsy.title;
-  const materials = detail.etsy.materials ?? [];
+  const materials = detail.garment_materials ?? [];
 
   useEffect(() => {
     listEtsySections().then(setSections);
@@ -175,29 +175,19 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
           {sectionError && <span className="field__error">{sectionError}</span>}
         </div>
 
-        {/* A list on disk, a comma-separated line here -- Etsy's own field is
-            a short list of fibre names, so a chip editor would be more
-            machinery than the content deserves. */}
+        {/* Materials belong to the chosen garment. The listing can show the
+            Etsy-facing value but must not let one listing contradict its
+            shared garment profile. */}
         <div className="field">
           <label htmlFor="details-materials">Materials</label>
           <input
             id="details-materials"
             className="input"
             type="text"
-            placeholder="cotton, polyester"
             value={materials.join(", ")}
-            onChange={(event) =>
-              onUpdate({
-                etsy: {
-                  materials: event.target.value
-                    .split(",")
-                    .map((m) => m.trim())
-                    .filter((m) => m !== ""),
-                },
-              })
-            }
-            onBlur={onFlush}
+            readOnly
           />
+          <span className="field__hint">Set by the selected garment profile.</span>
         </div>
       </fieldset>
 

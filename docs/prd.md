@@ -264,8 +264,8 @@ resolved.
 
 ### `garment-profiles/comfort-colors-1717.yaml` — generated, not hand-written
 
-A garment profile describes **the garment**: which blueprint, which printer, what print
-geometry. Nothing commercial lives here. It is created by `new` (below) and
+A garment profile describes **the garment**: which blueprint, which printer, print
+geometry and fibre materials. It is created by `new` (below) and
 reused by every subsequent listing for that shirt.
 
 ```yaml
@@ -277,6 +277,7 @@ print_provider: Monster Digital     # authoritative; id resolved from cache
 placeholder: front
 print_area: { width: 4500, height: 5400 }   # px, from the catalog placeholders
 sizes: [S, M, L, XL, XXL, XXXL]
+materials: [cotton]                 # Etsy-facing fibre materials, shared by this garment
 preview_template: flat-lay-01   # colour-matrix; editor colour preview only
 ```
 
@@ -383,7 +384,6 @@ etsy:
   title: <generate>
   description: <generate>
   tags: <generate>
-  materials: [cotton]
   renewal: manual          # overrides shop.yaml
   section: Retro Tees      # by name; listing-only, no shop default (#53)
   shipping_profile: NOK heavy tee     # optional — overrides shop.yaml (#54)

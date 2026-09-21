@@ -627,14 +627,6 @@
             "title": "Description",
             "type": "string"
           },
-          "materials": {
-            "default": [],
-            "items": {
-              "type": "string"
-            },
-            "title": "Materials",
-            "type": "array"
-          },
           "renewal": {
             "anyOf": [
               {
@@ -995,6 +987,20 @@
             "title": "Colors",
             "type": "object"
           },
+          "materials": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materials"
+          },
           "name": {
             "title": "Name",
             "type": "string"
@@ -1233,7 +1239,6 @@
             "$ref": "#/components/schemas/EtsyListingConfig",
             "default": {
               "description": "",
-              "materials": [],
               "tags": "<generate>",
               "title": ""
             }
@@ -1256,6 +1261,20 @@
             "default": {},
             "title": "Field Errors",
             "type": "object"
+          },
+          "garment_materials": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Materials"
           },
           "garment_profile": {
             "title": "Garment Profile",

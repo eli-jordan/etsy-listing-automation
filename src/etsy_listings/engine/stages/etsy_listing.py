@@ -52,7 +52,7 @@ from etsy_listings.engine.stages.etsy_target import (
     etsy_listing_id,
     require_etsy_listing_id,
 )
-from etsy_listings.engine.stages.gates import check_copy_is_concrete
+from etsy_listings.engine.stages.gates import check_copy_is_concrete, check_garment_profile_chosen
 
 NO_SHOP_CONSEQUENCE = "this listing's copy and settings cannot be patched on Etsy"
 
@@ -211,6 +211,10 @@ class EtsyListingStage:
             return blocked
 
         config = workspace.load_listing(listing)
+        blocked = check_garment_profile_chosen(config.garment_profile)
+        if blocked is not None:
+            return blocked
+        profile = workspace.load_garment_profile(config.garment_profile)
         blocked = check_copy_is_concrete(
             title=config.etsy.title, description=config.etsy.description
         )
@@ -257,7 +261,7 @@ class EtsyListingStage:
             title=config.etsy.title,
             description=config.etsy.description,
             tags=tags,
-            materials=tuple(config.etsy.materials),
+            materials=tuple(profile.materials),
             shop_section=section.title if section is not None else None,
             shop_section_id=section.shop_section_id if section is not None else None,
             shipping_profile=shipping_profile.title,

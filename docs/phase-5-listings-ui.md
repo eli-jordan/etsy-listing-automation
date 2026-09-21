@@ -85,9 +85,9 @@ left standing with the code disagreeing with them:
   markup the `.stat-*` CSS was already ported for. (One card per lifecycle
   state since the status amendment below — four, not two.)
 
-The `Listing` fields the editor reaches are otherwise unchanged: `etsy.materials`
-joins the Details tab because it is an ordinary `Listing` field the editor was
-simply missing, not a new capability.
+The Details tab shows the selected garment profile's materials read-only. A
+listing does not own composition, so it cannot override the shared garment
+definition from the editor.
 
 ### Amendment: three deferrals that stopped being true
 

@@ -22,7 +22,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
       title: "<generate>",
       description: "<generate>",
       tags: ["Botanical", "Gift"],
-      materials: [],
       variation_images: null,
       renewal: null,
       section: null,
@@ -128,30 +127,18 @@ describe("DetailsTab", () => {
     expect(screen.queryByText("10 / 140")).not.toBeInTheDocument();
   });
 
-  it("edits etsy.materials as comma-separated text", () => {
+  it("shows garment materials as read-only text", () => {
     const onUpdate = vi.fn();
     render(
       <DetailsTab
-        detail={detail({ etsy: { ...detail().etsy, materials: ["cotton", "水性インク"] } })}
+        detail={detail({ garment_materials: ["cotton", "水性インク"] })}
         onUpdate={onUpdate}
         onFlush={vi.fn()}
       />,
     );
     expect(screen.getByLabelText("Materials")).toHaveValue("cotton, 水性インク");
-
-    fireEvent.change(screen.getByLabelText("Materials"), {
-      target: { value: "combed ring-spun cotton, polyester" },
-    });
-    expect(onUpdate).toHaveBeenCalledWith({
-      etsy: { materials: ["combed ring-spun cotton", "polyester"] },
-    });
-  });
-
-  it("treats an emptied materials field as no materials, not one blank one", () => {
-    const onUpdate = vi.fn();
-    render(<DetailsTab detail={detail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText("Materials"), { target: { value: "  " } });
-    expect(onUpdate).toHaveBeenCalledWith({ etsy: { materials: [] } });
+    expect(screen.getByLabelText("Materials")).toHaveAttribute("readonly");
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 
   it("shows the resolved pricing plan and price table", async () => {

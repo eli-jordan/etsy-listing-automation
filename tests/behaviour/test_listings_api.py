@@ -416,16 +416,13 @@ class TestPatchListing:
             i["tab"] == "details" and "title" in i["message"].lower() for i in body["issues"]
         )
 
-    def test_updating_the_title_leaves_sibling_etsy_fields_untouched(
-        self, client: TestClient
-    ) -> None:
-        """The merge is one level deep on `etsy:` -- a PATCH touching only
-        `title` must not silently reset `materials` (already non-default in
-        the fixture) back to its schema default."""
+    def test_detail_reports_materials_from_the_garment_profile(self, client: TestClient) -> None:
+        """A listing does not own materials, but still tells the editor what
+        the selected garment will send to Etsy."""
         response = client.patch(
             "/api/listings/take-a-hike", json={"etsy": {"title": "Take A Hike Tee"}}
         )
-        assert response.json()["etsy"]["materials"] == ["cotton"]
+        assert response.json()["garment_materials"] == ["cotton"]
 
     def test_an_invalid_price_is_rejected_with_a_field_error_and_writes_nothing(
         self, client: TestClient, workspace_root: Path

@@ -60,6 +60,13 @@ def test_a_listing_can_override_section_shipping_profile_and_variation_images() 
     assert listing.etsy.variation_images == "flat-lay-01"
 
 
+def test_listing_materials_explains_the_garment_profile_migration() -> None:
+    with pytest.raises(ValidationError, match="moved to the garment profile"):
+        Listing.model_validate(
+            {**BASE, "etsy": {"materials": ["cotton"]}}, context={"currency": "NOK"}
+        )
+
+
 def test_bare_design_string_normalises_to_default_key() -> None:
     listing = Listing.model_validate(BASE, context={"currency": "NOK"})
     assert listing.design == {"default": "../../designs/take-a-hike.png"}
