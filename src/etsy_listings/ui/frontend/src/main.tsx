@@ -4,6 +4,7 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { App } from "./App";
 import "./index.css";
 import { AppShell } from "./shell/AppShell";
+import { BatchDeployPage } from "./pages/BatchDeployPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DeployPage } from "./pages/DeployPage";
 import { ListingEditorPage } from "./pages/ListingEditorPage";
@@ -21,6 +22,7 @@ createRoot(container).render(
         <Route element={<AppShell />}>
           <Route path="/" element={<DashboardPage />} />
           <Route path="/listings" element={<ListingsPage />} />
+          <Route path="/listings/deploy/:runId" element={<BatchDeployPage />} />
           {/* Both routes, one component: /listings/new is the editor opened on
               an empty draft, and naming it is what creates it. React Router
               ranks the static segment above the dynamic one. */}

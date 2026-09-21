@@ -1,0 +1,320 @@
+{
+  "project": {
+    "name": "frontend",
+    "description": "A calm control room for print-on-demand sellers to turn a t-shirt design into a reviewable Etsy listing."
+  },
+  "boards": [
+    {
+      "name": "batch-deploy",
+      "title": "Batch Deployment",
+      "description": "App-styled fake-data prototype for reviewing and applying one plan across all listings."
+    },
+    {
+      "name": "archive",
+      "title": "Archive",
+      "description": "Retired directions, grouped by feature - history, not options."
+    }
+  ],
+  "scenes": [
+    {
+      "name": "archive",
+      "frames": 3,
+      "brief": "design/scenes/archive/_brief.md",
+      "title": "Archive",
+      "description": "Retired directions, kept as history — never linked from a live flow."
+    },
+    {
+      "name": "batch-deploy-lofi",
+      "frames": 2,
+      "brief": "design/scenes/batch-deploy-lofi/_brief.md",
+      "title": "Batch Deployment — App-styled Prototype",
+      "description": "Batch deployment hi-fi — the agreed all-listings review path rendered with the app's real visual system and components."
+    },
+    {
+      "name": "batch-deploy-lofi-v1",
+      "frames": 10,
+      "brief": "design/scenes/batch-deploy-lofi-v1/_brief.md",
+      "title": "Batch Deployment — Wireframes · v1",
+      "description": "Batch deployment wireframes — snapshot before consolidating the comment explorations into one interactive flow."
+    },
+    {
+      "name": "batch-deploy-lofi-v2",
+      "frames": 2,
+      "brief": "design/scenes/batch-deploy-lofi-v2/_brief.md",
+      "title": "Batch Deployment — Wireframes · v2",
+      "description": "Batch deployment wireframes — the agreed all-listings review path, now as a clickable fake-data prototype."
+    },
+    {
+      "name": "batch-deploy-lofi-v3",
+      "frames": 2,
+      "brief": "design/scenes/batch-deploy-lofi-v3/_brief.md",
+      "title": "Batch Deployment — Wireframes · v3",
+      "description": "Batch deployment wireframes — the agreed all-listings review path, now as a clickable fake-data prototype."
+    },
+    {
+      "name": "batch-deploy-lofi-v4",
+      "frames": 3,
+      "brief": "design/scenes/batch-deploy-lofi-v4/_brief.md",
+      "title": "Batch Deployment — App-styled Prototype · v4",
+      "description": "Batch deployment hi-fi — the agreed all-listings review path rendered with the app's real visual system and components."
+    },
+    {
+      "name": "batch-deploy-specs",
+      "frames": 2,
+      "brief": "design/scenes/batch-deploy-specs/_brief.md",
+      "title": "Batch Deployment — Thinking",
+      "description": "Batch deployment thinking — the confirmed product story behind the review flow."
+    },
+    {
+      "name": "demo",
+      "frames": 3
+    }
+  ],
+  "frames": [
+    {
+      "id": "archive/batch-deploy-result",
+      "file": "design/scenes/archive/batch-deploy-result.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Batch deployment — result page",
+      "viewport": "laptop",
+      "description": "Retired: the outcome now lands inline on the review page - one screen fewer in the flow."
+    },
+    {
+      "id": "archive/batch-deploy-review-side-drawer",
+      "file": "design/scenes/archive/batch-deploy-review-side-drawer.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Batch deployment — review (side drawer)",
+      "viewport": "laptop",
+      "description": "Retired: the bottom drawer won - a right-hand drawer hid the list of changes it was explaining."
+    },
+    {
+      "id": "archive/batch-deploy-review-stage-matrix",
+      "file": "design/scenes/archive/batch-deploy-review-stage-matrix.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Batch deployment — review (stage matrix)",
+      "viewport": "laptop",
+      "description": "Retired: the stage matrix read as a spreadsheet - the plain listing list won, with stages per listing in the bottom sheet."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/listings",
+      "file": "design/scenes/batch-deploy-lofi-v1/listings.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "title": "Listings — batch entry · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: the Listings page carries pending batch work as colour-coded counts inside the Deploy changes button."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/result",
+      "file": "design/scenes/batch-deploy-lofi-v1/result.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "title": "Batch deployment — result (retired) · v1",
+      "viewport": "laptop",
+      "description": "Retired: moved to archive/batch-deploy-result. This leftover file is safe to delete."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/review",
+      "file": "design/scenes/batch-deploy-lofi-v1/review.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "title": "Batch deployment — review, side drawer (retired) · v1",
+      "viewport": "laptop",
+      "description": "Retired: the bottom sheet won. Full frame kept at archive/batch-deploy-review-side-drawer. This leftover file is safe to delete."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/review-applied",
+      "file": "design/scenes/batch-deploy-lofi-v1/review-applied.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "title": "Batch deployment — review (applied) · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: the outcome lands on the plan review page itself — a banner at the top, a success or failure marker on every item. No separate result page."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/review-applying",
+      "file": "design/scenes/batch-deploy-lofi-v1/review-applying.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "title": "Batch deployment — applying · v1",
+      "viewport": "laptop",
+      "description": "The run in progress: the checklist at the top ticks each listing off its stage as apply walks listing by listing, and the bottom sheet carries one listing's live step strip."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/review-bottom-sheet",
+      "file": "design/scenes/batch-deploy-lofi-v1/review-bottom-sheet.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "note": "# Two reads of the stages, one per question\n\nThe page answers \"what will this run do?\"; the sheet answers \"what will this listing do?\".\nSame five stages from `engine/stages/__init__.py`, shown twice because the questions differ.\n\n## Top of the page: the run checklist\n\nOne row per stage, and inside it every listing that stage covers, each with a checkbox.\nNothing is ticked before apply. During the run each listing is checked off its stage as that\nstage finishes for it, and the row counts \"3 of 4 done\" - so the checklist tracks real\nprogress even though `apply_listings` walks listing by listing rather than stage by stage.\nClick any listing chip to open its sheet.\n\n## The bottom sheet: one listing's step strip\n\nOpen a row and it carries that listing's step strip - stages filled if they run, hollow if\nskipped, each with its reason and actions - plus the before/after. The same experience\n`src/pages/deploy/StepStrip.tsx` gives an individual deployment, unchanged. On\n[the applying frame](goto:batch-deploy-lofi-v1/review-applying) the same strip wears live state:\ndone, running, not yet.\n\nA deletion walks `RetractStage()` alone (`lifecycle.walk`), so its sheet shows one stage, not\nfive, and it gets its own checklist row - \"Remove from Etsy · 1 listing\".\n\n## What we tried\n\n[The stage matrix](goto:archive/batch-deploy-review-stage-matrix) put six listings against\nfive stage columns - correct, and it read as a spreadsheet; retired.\n[A strip per listing](goto:batch-deploy-lofi-v1/review-stages-per-listing) repeated the stage\nnames six times; [one strip for the whole run](goto:batch-deploy-lofi-v1/review-stages-whole-run)\nnamed them once and hid which listing did what. The checklist above is that run-level read\nrebuilt to name its listings and carry per-listing progress.",
+      "title": "Batch deployment — review · v1",
+      "viewport": "laptop",
+      "description": "Two reads of the same stages: a run checklist at the top naming which listings each stage covers, and the individual page's step strip for one listing in the bottom sheet."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/review-loading",
+      "file": "design/scenes/batch-deploy-lofi-v1/review-loading.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "title": "Batch deployment — planning · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: the review's planning state makes clear that reading live state has no side effects, and opens the plan itself once it is ready."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/review-stages-per-listing",
+      "file": "design/scenes/batch-deploy-lofi-v1/review-stages-per-listing.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "title": "Batch deployment — review (stages per listing) · retired · v1",
+      "viewport": "laptop",
+      "description": "Retired read A: a full step strip per listing, all six at once. The live frame shows the same strip for one listing at a time, in the bottom sheet."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/review-stages-shared",
+      "file": "design/scenes/batch-deploy-lofi-v1/review-stages-shared.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "note": "# Retired\n\nThe read this frame settled — one shared stage set, a row per listing — is live on\n[the review page](goto:batch-deploy-lofi-v1/review-bottom-sheet). The original frame is kept on the\narchive board. This placard and its note can be deleted.",
+      "title": "Batch deployment — review, shared stages (retired) · v1",
+      "viewport": "laptop",
+      "description": "Retired: the read settled and moved into review-bottom-sheet. Full frame kept at archive/batch-deploy-review-stage-matrix. This leftover file is safe to delete."
+    },
+    {
+      "id": "batch-deploy-lofi-v1/review-stages-whole-run",
+      "file": "design/scenes/batch-deploy-lofi-v1/review-stages-whole-run.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v1",
+      "note": "# Retired as drawn - the idea came back\n\nThis read named the five stages once for the whole run and counted listings behind a \"Which\"\ndisclosure. Two things were wrong with it: the listings were hidden, and a rolled-up stage\ncarries no progress - \"Etsy images\" cannot read _done_ run-wide until the last listing\nfinishes, because `apply_listings` walks listing by listing.\n\nBoth are fixed on [the live review page](goto:batch-deploy-lofi-v1/review-bottom-sheet): the run\nchecklist names every listing inside its stage row and checks each one off as that stage\nfinishes for it, and [the applying frame](goto:batch-deploy-lofi-v1/review-applying) shows it\nmid-run. The per-listing answer moved to the bottom sheet, where it matches the individual\ndeploy page.\n\nThis frame is history; the shape it argued for is live.",
+      "title": "Batch deployment — review (stages for the whole run) · retired · v1",
+      "viewport": "laptop",
+      "description": "Retired read B: one run-level strip counting listings per stage. The engine applies listing by listing, so this loses the per-listing answer and carries no progress during apply."
+    },
+    {
+      "id": "batch-deploy-lofi-v2/listings",
+      "file": "design/scenes/batch-deploy-lofi-v2/listings.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v2",
+      "title": "Listings — batch entry · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: the Listings page carries pending batch work as colour-coded counts inside the Deploy changes button."
+    },
+    {
+      "id": "batch-deploy-lofi-v2/review-bottom-sheet",
+      "file": "design/scenes/batch-deploy-lofi-v2/review-bottom-sheet.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v2",
+      "title": "Batch deployment — review · v2",
+      "viewport": "laptop",
+      "description": "Two reads of the same stages: a run checklist at the top naming which listings each stage covers, and the individual page's step strip for one listing in the bottom sheet."
+    },
+    {
+      "id": "batch-deploy-lofi-v3/listings",
+      "file": "design/scenes/batch-deploy-lofi-v3/listings.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v3",
+      "title": "Listings — batch entry · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: the Listings page carries pending batch work as colour-coded counts inside the Deploy changes button."
+    },
+    {
+      "id": "batch-deploy-lofi-v3/review-bottom-sheet",
+      "file": "design/scenes/batch-deploy-lofi-v3/review-bottom-sheet.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v3",
+      "title": "Batch deployment — review · v3",
+      "viewport": "laptop",
+      "description": "Clickable batch flow: slow-plan loading state, compact overall stage strip with live counts, and the individual stage comparison in a bottom drawer."
+    },
+    {
+      "id": "batch-deploy-lofi-v4/_snapshot/ComparisonView",
+      "file": "design/scenes/batch-deploy-lofi-v4/_snapshot/ComparisonView.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v4"
+    },
+    {
+      "id": "batch-deploy-lofi-v4/listings",
+      "file": "design/scenes/batch-deploy-lofi-v4/listings.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v4",
+      "title": "Listings — batch deploy entry · v4",
+      "viewport": "laptop",
+      "description": "Hi-fi fixture of the real Listings page with the batch deploy entry and its hover summary."
+    },
+    {
+      "id": "batch-deploy-lofi-v4/review-bottom-sheet",
+      "file": "design/scenes/batch-deploy-lofi-v4/review-bottom-sheet.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi-v4",
+      "title": "Batch deployment — review all changes · v4",
+      "viewport": "laptop",
+      "description": "Hi-fi clickable batch plan using the app's deploy step strip, comparison view, shell and design tokens with fake data."
+    },
+    {
+      "id": "batch-deploy-lofi/listings",
+      "file": "design/scenes/batch-deploy-lofi/listings.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi",
+      "title": "Listings — batch deploy entry",
+      "viewport": "laptop",
+      "description": "Hi-fi fixture of the real Listings page with the batch deploy entry and its hover summary."
+    },
+    {
+      "id": "batch-deploy-lofi/review-bottom-sheet",
+      "file": "design/scenes/batch-deploy-lofi/review-bottom-sheet.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-lofi",
+      "note": "### Testing the drawer\n\nDouble-click the frame until its purple interaction ring appears. Then open a listing and scroll inside the drawer. In passive canvas mode, the mouse wheel pans the board instead of scrolling the app.",
+      "title": "Batch deployment — review all changes",
+      "viewport": "laptop",
+      "description": "Hi-fi clickable batch plan using the app's deploy step strip, comparison view, shell and design tokens with fake data."
+    },
+    {
+      "id": "batch-deploy-specs/flow",
+      "file": "design/scenes/batch-deploy-specs/flow.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-specs",
+      "title": "Batch deployment — first flow",
+      "viewport": "laptop",
+      "description": "A first-pass path from the Listings summary to an applied batch run.",
+      "intent": "diagram",
+      "contentWidth": 1280
+    },
+    {
+      "id": "batch-deploy-specs/intent",
+      "file": "design/scenes/batch-deploy-specs/intent.tsx",
+      "kind": "tsx",
+      "scene": "batch-deploy-specs",
+      "title": "Batch deployment — intent",
+      "viewport": "laptop",
+      "description": "The operator's single job and the guardrails for reviewing all listing changes.",
+      "intent": "spec",
+      "contentWidth": 760
+    },
+    {
+      "id": "demo/dark",
+      "file": "design/scenes/demo/dark.tsx",
+      "kind": "tsx",
+      "scene": "demo",
+      "title": "Demo - error state",
+      "viewport": "mobile"
+    },
+    {
+      "id": "demo/form",
+      "file": "design/scenes/demo/form.tsx",
+      "kind": "tsx",
+      "scene": "demo",
+      "title": "Demo - form",
+      "viewport": "laptop"
+    },
+    {
+      "id": "demo/welcome",
+      "file": "design/scenes/demo/welcome.tsx",
+      "kind": "tsx",
+      "scene": "demo",
+      "title": "Demo - welcome",
+      "viewport": "mobile"
+    }
+  ]
+}

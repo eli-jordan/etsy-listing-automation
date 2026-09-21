@@ -6,11 +6,15 @@ import {
   listListings,
   patchListing,
 } from "../api/listings";
+import { createRun, currentWorkspaceRun, getRun } from "../api/runs";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { OpenOnMenu } from "../components/OpenOnMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
 import type { ListingStatus, ListingSummary } from "../types";
+import { BatchCandidateControl } from "./batchDeploy/BatchCandidateControl";
+import { candidateNames } from "./batchDeploy/batchDeployPresentation";
+import { TERMINAL_PHASES } from "./deploy/runPhases";
 
 type Gesture = ListingSummary["gestures"][number];
 
@@ -108,6 +112,8 @@ function UndoMarkIcon() {
 
 export function ListingsPage() {
   const [listings, setListings] = useState<ListingSummary[]>([]);
+  const [workspaceRun, setWorkspaceRun] =
+    useState<Awaited<ReturnType<typeof currentWorkspaceRun>>>(null);
   const [status, setStatus] = useState("");
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState<Filter>("all");
@@ -121,7 +127,56 @@ export function ListingsPage() {
         setStatus("");
       })
       .catch(() => setStatus("failed to load listings"));
+    currentWorkspaceRun()
+      .then(setWorkspaceRun)
+      .catch(() => setWorkspaceRun(null));
   }, []);
+
+  const startBatchPlan = useCallback(async () => {
+    setStatus("");
+    try {
+      const result = await createRun({ kind: "plan", scope: "workspace" });
+      if (result.kind === "created") {
+        navigate(`/listings/deploy/${encodeURIComponent(result.run.id)}`);
+        return;
+      }
+      const conflict = await getRun(result.activeRun);
+      if (conflict.scope === "workspace") {
+        navigate(`/listings/deploy/${encodeURIComponent(conflict.id)}`);
+      } else {
+        setStatus("A listing deploy is already running. Open that listing to follow it.");
+      }
+    } catch {
+      setStatus("could not start a workspace plan");
+    }
+  }, [navigate]);
+
+  const workspaceAction = useMemo(() => {
+    if (workspaceRun === null) return null;
+    if (workspaceRun.kind === "apply" && !TERMINAL_PHASES.has(workspaceRun.phase)) {
+      return { label: "View batch progress", prefix: "Deploying…" };
+    }
+    if (!TERMINAL_PHASES.has(workspaceRun.phase)) {
+      return { label: "View batch progress", prefix: "Planning…" };
+    }
+    if (workspaceRun.kind === "apply" && !workspaceRun.seen && workspaceRun.phase === "applied") {
+      return { label: "View batch result", prefix: "Deployed ✓" };
+    }
+    if (
+      workspaceRun.kind === "apply" &&
+      !workspaceRun.seen &&
+      (workspaceRun.phase === "failed" || workspaceRun.phase === "stale")
+    ) {
+      return { label: "View batch result", prefix: "Deploy failed" };
+    }
+    if (!workspaceRun.seen && workspaceRun.phase === "ready") {
+      return { label: "View batch review", prefix: "Review ready" };
+    }
+    if (!workspaceRun.seen && workspaceRun.phase === "failed") {
+      return { label: "View batch result", prefix: "Deploy failed" };
+    }
+    return null;
+  }, [workspaceRun]);
 
   const runGesture = useCallback(
     async (row: ListingSummary, gesture: Gesture) => {
@@ -156,6 +211,12 @@ export function ListingsPage() {
     refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    if (workspaceRun === null || TERMINAL_PHASES.has(workspaceRun.phase)) return;
+    const interval = window.setInterval(refresh, 500);
+    return () => window.clearInterval(interval);
+  }, [refresh, workspaceRun]);
+
   const rows = useMemo(
     () =>
       listings
@@ -170,6 +231,19 @@ export function ListingsPage() {
         <h1 className="page-head__title">Listings</h1>
         <span className="page-head__meta">{rows.length} shown</span>
         <div className="page-head__actions">
+          {workspaceAction !== null && workspaceRun !== null && (
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => navigate(`/listings/deploy/${encodeURIComponent(workspaceRun.id)}`)}
+            >
+              {workspaceAction.prefix} · {workspaceAction.label} →
+            </button>
+          )}
+          <BatchCandidateControl
+            names={candidateNames(listings)}
+            onDeploy={() => void startBatchPlan()}
+          />
           <button
             type="button"
             className="btn btn-primary"

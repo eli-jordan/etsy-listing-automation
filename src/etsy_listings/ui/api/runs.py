@@ -39,8 +39,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from etsy_listings.ui.api.schemas import CreateRunRequest, RunDetail, RunSummary
-from etsy_listings.ui.runs.events import AnyRunEvent
+from etsy_listings.ui.runs.events import AnyRunEvent, ListingPlannedEvent, RunScope
 from etsy_listings.ui.runs.registry import Conflict, Run, RunRegistry
+from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -73,9 +74,44 @@ def target(request: Request, run_id: str) -> Target:
 Existing = Annotated[Target, Depends(target)]
 
 
+def _validate_reviewed_apply(
+    registry: RunRegistry,
+    reviewed_run_id: str,
+    listings: list[str],
+    expect: dict[str, str],
+) -> None:
+    """Reject an apply unless it names exactly the plans the seller reviewed."""
+    reviewed = registry.get(reviewed_run_id)
+    if reviewed is None or reviewed.scope != "workspace" or reviewed.kind != "plan":
+        raise HTTPException(status_code=409, detail="reviewed_run_id is not a workspace plan")
+    if reviewed.phase != "ready":
+        raise HTTPException(status_code=409, detail="reviewed workspace plan is not ready")
+
+    planned = [event for event in reviewed.events if isinstance(event, ListingPlannedEvent)]
+    expected_listings = [event.listing for event in planned]
+    expected_fingerprints = {event.listing: event.fingerprint for event in planned}
+    if listings != expected_listings:
+        raise HTTPException(
+            status_code=409,
+            detail="apply listings must exactly match the reviewed workspace plan",
+        )
+    if expect != expected_fingerprints:
+        raise HTTPException(
+            status_code=409,
+            detail="apply fingerprints must exactly match the reviewed workspace plan",
+        )
+
+
 def _summary(run: Run) -> RunSummary:
     return RunSummary(
-        id=run.id, kind=run.kind, listings=list(run.listings), phase=run.phase, seen=run.seen
+        id=run.id,
+        kind=run.kind,
+        scope=run.scope,
+        listings=list(run.listings),
+        phase=run.phase,
+        seen=run.seen,
+        reviewed_run_id=run.reviewed_run_id,
+        created_at=run.created_at,
     )
 
 
@@ -89,19 +125,44 @@ def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONRes
     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
     retrying into the same refusal."""
     registry = _registry(request)
-    result = registry.create(body.kind, body.listings, expect=body.expect)
+    workspace: Workspace = request.app.state.workspace
+    if body.scope == "workspace" and body.kind == "plan":
+        listings = workspace.listing_names()
+    else:
+        assert body.listings is not None  # The request model validates this shape.
+        listings = body.listings
+
+    if body.scope == "workspace" and body.kind == "apply":
+        assert body.reviewed_run_id is not None
+        assert body.expect is not None
+        _validate_reviewed_apply(registry, body.reviewed_run_id, listings, body.expect)
+
+    result = registry.create(
+        body.kind,
+        listings,
+        expect=body.expect,
+        scope=body.scope,
+        reviewed_run_id=body.reviewed_run_id,
+    )
     if isinstance(result, Conflict):
         return JSONResponse(status_code=409, content={"active_run": result.active_run})
     return _summary(result)
 
 
 @router.get("", response_model=list[RunSummary])
-def list_runs(request: Request, listing: str | None = None) -> list[RunSummary]:
+def list_runs(
+    request: Request, listing: str | None = None, scope: RunScope | None = None
+) -> list[RunSummary]:
     """``listing`` narrows to that listing's current run (active, or finished
     and not yet superseded -- decision 7's retention). Omitted, every run this
     process still remembers, for a future workspace-wide view."""
     registry = _registry(request)
-    runs = registry.for_listing(listing) if listing is not None else registry.all_runs()
+    if scope == "workspace":
+        runs = registry.for_workspace()
+    elif scope == "listings":
+        runs = registry.for_scope("listings")
+    else:
+        runs = registry.for_listing(listing) if listing is not None else registry.all_runs()
     return [_summary(run) for run in runs]
 
 

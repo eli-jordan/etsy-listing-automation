@@ -33,6 +33,11 @@ import { wordDiff } from "./wordDiff";
  *   renders through `pictureFor` like the editor's own reel does.
  */
 
+export interface ListingMediaContext {
+  name: string;
+  design: ListingDetail["design"];
+}
+
 function parseRef(ref: string): { template: string; colour: string | null } | null {
   const colon = ref.indexOf(":");
   if (colon === -1) {
@@ -56,21 +61,25 @@ function sceneState(
 
 function AfterTile({
   tile,
-  detail,
+  listing,
   renderSnapshot,
   previewsRendered,
+  imageUrlForRef,
 }: {
   tile: AfterImageTile;
-  detail: ListingDetail;
+  listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
+  imageUrlForRef: ((ref: string) => string | null) | undefined;
 }) {
   const parsed = parseRef(tile.ref);
-  const design = singleDesignName(detail.design);
+  const design = singleDesignName(listing.design);
   let src: string | null = null;
   let pending = false;
 
-  if (parsed === null) {
+  if (imageUrlForRef !== undefined) {
+    src = imageUrlForRef(tile.ref);
+  } else if (parsed === null) {
     src = pictureFor(tile.ref, design, "full");
   } else {
     const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
@@ -80,7 +89,7 @@ function AfterTile({
     if (ready) {
       src =
         scene !== null && scene.state !== "cached"
-          ? previewUrl(detail.name, parsed.template, parsed.colour)
+          ? previewUrl(listing.name, parsed.template, parsed.colour)
           : pictureFor({ template: parsed.template, colour: parsed.colour }, design, "full");
     } else {
       pending = true;
@@ -156,17 +165,19 @@ function Block({
 function Column({
   side,
   comparison,
-  detail,
+  listing,
   renderSnapshot,
   previewsRendered,
   etsyListingIdLabel,
+  imageUrlForRef,
 }: {
   side: "before" | "after";
   comparison: ComparisonData;
-  detail: ListingDetail;
+  listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
   etsyListingIdLabel: string;
+  imageUrlForRef: ((ref: string) => string | null) | undefined;
 }) {
   const isAfter = side === "after";
   const { title, description, tags, materials, colours, price, images } = comparison;
@@ -186,9 +197,10 @@ function Column({
                   <AfterTile
                     key={tile.rank}
                     tile={tile}
-                    detail={detail}
+                    listing={listing}
                     renderSnapshot={renderSnapshot}
                     previewsRendered={previewsRendered}
+                    imageUrlForRef={imageUrlForRef}
                   />
                 ))
               : images.before.map((tile) => <BeforeTile key={tile.rank} tile={tile} />)}
@@ -311,20 +323,24 @@ function formatRange(range: { min: string; max: string } | null): string {
 
 export function ComparisonView({
   comparison,
-  detail,
+  listing,
   renderSnapshot,
   previewsRendered,
   collapsed,
   etsyListingId,
+  imageUrlForRef,
 }: {
   comparison: ComparisonData;
-  detail: ListingDetail;
+  listing: ListingMediaContext;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
   /** Collapse to one "On Etsy now" column -- once applied, or when the plan
    * found nothing to compare. */
   collapsed: boolean;
   etsyListingId: number | null;
+  /** Optional fixture resolver for canvases and component galleries. The app
+   * normally derives these URLs from the listing's media refs. */
+  imageUrlForRef?: (ref: string) => string | null;
 }) {
   const etsyListingIdLabel = etsyListingId !== null ? `listing ${etsyListingId}` : "";
 
@@ -334,10 +350,11 @@ export function ComparisonView({
         <Column
           side="after"
           comparison={comparison}
-          detail={detail}
+          listing={listing}
           renderSnapshot={renderSnapshot}
           previewsRendered={previewsRendered}
           etsyListingIdLabel={etsyListingIdLabel}
+          imageUrlForRef={imageUrlForRef}
         />
         <p className="dv-note">Not on Etsy yet.</p>
       </div>
@@ -350,10 +367,11 @@ export function ComparisonView({
         <Column
           side="before"
           comparison={comparison}
-          detail={detail}
+          listing={listing}
           renderSnapshot={renderSnapshot}
           previewsRendered={previewsRendered}
           etsyListingIdLabel={etsyListingIdLabel}
+          imageUrlForRef={imageUrlForRef}
         />
       </div>
     );
@@ -364,18 +382,20 @@ export function ComparisonView({
       <Column
         side="before"
         comparison={comparison}
-        detail={detail}
+        listing={listing}
         renderSnapshot={renderSnapshot}
         previewsRendered={previewsRendered}
         etsyListingIdLabel={etsyListingIdLabel}
+        imageUrlForRef={imageUrlForRef}
       />
       <Column
         side="after"
         comparison={comparison}
-        detail={detail}
+        listing={listing}
         renderSnapshot={renderSnapshot}
         previewsRendered={previewsRendered}
         etsyListingIdLabel={etsyListingIdLabel}
+        imageUrlForRef={imageUrlForRef}
       />
     </div>
   );

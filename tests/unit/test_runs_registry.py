@@ -58,6 +58,42 @@ def test_a_run_naming_several_listings_locks_every_one() -> None:
     assert isinstance(conflict, Conflict)
 
 
+def test_a_workspace_run_conflicts_with_any_active_listing_run() -> None:
+    registry = _registry()
+    first = registry.create("plan", ["take-a-hike"])
+    assert isinstance(first, Run)
+
+    conflict = registry.create("plan", [], scope="workspace")
+
+    assert isinstance(conflict, Conflict)
+    assert conflict.active_run == first.id
+
+
+def test_a_listing_run_conflicts_with_an_active_workspace_run() -> None:
+    registry = _registry()
+    first = registry.create("plan", [], scope="workspace")
+
+    assert isinstance(first, Run)
+    conflict = registry.create("plan", ["take-a-hike"])
+
+    assert isinstance(conflict, Conflict)
+    assert conflict.active_run == first.id
+
+
+def test_the_current_workspace_run_is_retained_until_a_new_workspace_run() -> None:
+    registry = _registry()
+    first = registry.create("plan", [], scope="workspace")
+    assert isinstance(first, Run)
+    first.transition("ready")
+
+    assert registry.for_workspace() == [first]
+
+    second = registry.create("apply", [], scope="workspace", reviewed_run_id=first.id)
+    assert isinstance(second, Run)
+    assert registry.for_workspace() == [second]
+    assert registry.get(first.id) is first, "the reviewed plan remains addressable"
+
+
 def test_a_finished_run_does_not_block_a_new_one_for_the_same_listing() -> None:
     registry = _registry()
     first = registry.create("plan", ["take-a-hike"])

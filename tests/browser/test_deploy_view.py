@@ -20,6 +20,7 @@ first apply only ever leaves an Etsy draft (non-goal 1).
 
 from __future__ import annotations
 
+import shutil
 import socket
 import threading
 from collections.abc import Iterator
@@ -185,3 +186,129 @@ def test_deploy_plan_preview_apply_back_reattach_and_pill(
     # And the page head is back to offering a fresh deploy -- the run just
     # shown was marked seen the moment its result rendered (decision 9).
     page.get_by_role("button", name="Deploy changes →").wait_for(state="visible")
+
+
+def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
+    page,  # noqa: ANN001
+    workspace_root: Path,
+) -> None:
+    """The workspace route preserves review while one listing goes stale.
+
+    This deliberately changes one listing after its review and before Apply.
+    That exercises the public A31 fingerprint guard and the sequential
+    continue-on-error contract through the browser, rather than mocking either
+    the API response or the React event stream.
+    """
+    second = workspace_root / "listings" / "second-shirt"
+    shutil.copytree(workspace_root / "listings" / "take-a-hike", second)
+
+    page.goto(page.url.rsplit("/listings/", 1)[0] + "/listings")
+    page.get_by_role("button", name="Deploy changes: 2 to add").click()
+    page.wait_for_url("**/listings/deploy/**")
+    page.get_by_role("heading", name="Review all changes").wait_for(state="visible")
+
+    apply_button = page.get_by_role("button", name="Apply")
+    apply_button.wait_for(state="visible")
+    for _ in range(200):
+        if apply_button.is_enabled():
+            break
+        page.wait_for_timeout(100)
+    else:
+        raise AssertionError("batch Apply never became enabled once previews finished")
+
+    # The listing drawer is a real modal detail surface: its handle expands
+    # the sheet, and the visual treatment is part of the public interaction.
+    animation_samples = page.evaluate(
+        """async () => {
+          const samples = [];
+          document.querySelector('.batch-listing-row')?.click();
+          for (let index = 0; index < 40; index += 1) {
+            await new Promise((resolve) => requestAnimationFrame(resolve));
+            const panel = document.querySelector('.batch-drawer-panel');
+            if (panel !== null && panel.getBoundingClientRect().height > 0) {
+              samples.push({
+                top: panel.getBoundingClientRect().top,
+                dialogScrollTop: panel.parentElement?.scrollTop,
+              });
+            }
+          }
+          return samples;
+        }"""
+    )
+    drawer = page.get_by_role("dialog")
+    drawer.wait_for(state="visible")
+    assert animation_samples
+    assert all(sample["dialogScrollTop"] == 0 for sample in animation_samples), animation_samples
+    assert all(
+        later["top"] <= earlier["top"] + 1
+        for earlier, later in zip(animation_samples, animation_samples[1:], strict=False)
+    ), animation_samples
+
+    handle = drawer.get_by_role("button", name="Expand drawer")
+    handle_box = handle.bounding_box()
+    assert handle_box is not None
+    drag_x = handle_box["x"] + handle_box["width"] / 2
+    drag_y = handle_box["y"] + handle_box["height"] / 2
+    initial_height = page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+    page.mouse.move(drag_x, drag_y)
+    page.mouse.down()
+    page.mouse.move(drag_x, drag_y - 40)
+    middle_height = page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+    page.mouse.move(drag_x, drag_y - 100)
+    final_drag_height = page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+    page.mouse.up()
+    assert middle_height > initial_height
+    assert final_drag_height > middle_height
+
+    handle = drawer.get_by_role("button", name="Collapse drawer")
+    page.locator(".batch-drawer-panel--expanded").wait_for(state="visible")
+    assert (
+        page.evaluate(
+            """() => {
+          const panel = document.querySelector('.batch-drawer-panel');
+          return panel === null ? '' : getComputedStyle(panel).borderTopLeftRadius;
+        }"""
+        )
+        != "0px"
+    )
+
+    handle_box = handle.bounding_box()
+    assert handle_box is not None
+    drag_x = handle_box["x"] + handle_box["width"] / 2
+    drag_y = handle_box["y"] + handle_box["height"] / 2
+    page.mouse.move(drag_x, drag_y)
+    page.mouse.down()
+    page.mouse.move(drag_x, drag_y + (final_drag_height - initial_height) + 60)
+    reduced_height = page.locator(".batch-drawer-panel").evaluate(
+        "panel => panel.getBoundingClientRect().height"
+    )
+    page.mouse.up()
+    assert reduced_height < initial_height
+    drawer.get_by_role("button", name="Expand drawer").wait_for(state="visible")
+    drawer.get_by_role("button", name="Close").click()
+
+    listing_file = second / "listing.yaml"
+    edited = listing_file.read_text(encoding="utf-8")
+    edited = edited.replace(
+        "colors: [black, blue-jean, ivory, moss]",
+        "colors: [black, blue-jean, ivory]",
+    ).replace("  - { template: flat-lay-01, colour: moss }\n", "")
+    listing_file.write_text(edited, encoding="utf-8")
+
+    apply_button.click()
+    page.get_by_role("button", name="← Back to listings").click()
+    page.wait_for_url("**/listings")
+
+    page.locator("button:has-text('View batch progress')").wait_for(state="visible")
+    page.locator("button:has-text('View batch result')").wait_for(state="visible")
+    page.locator("button:has-text('View batch result')").click()
+    page.wait_for_url("**/listings/deploy/**")
+    page.get_by_text("Batch partially applied.").wait_for(state="visible")
+    page.get_by_text("1 listing succeeded · 1 listing stale").wait_for(state="visible")
+    page.get_by_role("button", name="Plan again").wait_for(state="visible")

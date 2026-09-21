@@ -21,6 +21,7 @@ from __future__ import annotations
 import json
 import time
 from collections.abc import Iterator
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -97,9 +98,145 @@ def test_create_a_plan_run_returns_202_and_a_summary(client: TestClient) -> None
     assert body["listings"] == [LISTING]
     assert body["phase"] == "queued"
     assert body["seen"] is False
+    assert body["scope"] == "listings"
+    assert body["reviewed_run_id"] is None
+    datetime.fromisoformat(body["created_at"])
     assert "id" in body
 
     _wait_until_terminal(client, body["id"])
+
+
+def test_a_workspace_plan_resolves_sorted_names_on_the_server(
+    workspace_root: Path, client: TestClient
+) -> None:
+    copy_listing(workspace_root, "second")
+
+    response = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"})
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["scope"] == "workspace"
+    assert body["listings"] == ["second", LISTING]
+    assert body["reviewed_run_id"] is None
+
+    _wait_until_terminal(client, body["id"])
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({"kind": "plan", "scope": "workspace", "listings": []}, "must omit listings"),
+        ({"kind": "plan", "scope": "workspace", "expect": {}}, "cannot include expect"),
+        (
+            {"kind": "apply", "scope": "workspace", "listings": [LISTING], "expect": {}},
+            "reviewed_run_id",
+        ),
+    ],
+)
+def test_workspace_request_shapes_are_validated(
+    client: TestClient, payload: dict[str, object], message: str
+) -> None:
+    response = client.post("/api/runs", json=payload)
+
+    assert response.status_code == 422
+    assert message in response.text
+
+
+def test_workspace_apply_reuses_exact_reviewed_targets_and_retains_the_plan(
+    client: TestClient,
+) -> None:
+    reviewed = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
+    reviewed_detail = _wait_until_terminal(client, reviewed["id"])
+    planned = [event for event in reviewed_detail["events"] if event["type"] == "listing_planned"]
+    listings = [event["listing"] for event in planned]
+    expect = {event["listing"]: event["fingerprint"] for event in planned}
+
+    applied = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "workspace",
+            "listings": listings,
+            "expect": expect,
+            "reviewed_run_id": reviewed["id"],
+        },
+    )
+
+    assert applied.status_code == 202
+    body = applied.json()
+    assert body["scope"] == "workspace"
+    assert body["reviewed_run_id"] == reviewed["id"]
+    assert client.get("/api/runs", params={"scope": "workspace"}).json()[0]["id"] == body["id"]
+    assert client.get(f"/api/runs/{reviewed['id']}").json()["phase"] == "ready"
+
+    _wait_until_terminal(client, body["id"])
+
+
+@pytest.mark.parametrize("change", ["omit", "extra", "fingerprint"])
+def test_workspace_apply_must_match_the_reviewed_names_and_fingerprints(
+    client: TestClient, change: str
+) -> None:
+    reviewed = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
+    detail = _wait_until_terminal(client, reviewed["id"])
+    planned = [event for event in detail["events"] if event["type"] == "listing_planned"]
+    listings = [event["listing"] for event in planned]
+    expect = {event["listing"]: event["fingerprint"] for event in planned}
+    if change == "omit":
+        listings = []
+    elif change == "extra":
+        listings = [*listings, "created-after-review"]
+        expect["created-after-review"] = "sha256:" + "0" * 64
+    else:
+        expect[listings[0]] = "sha256:" + "0" * 64
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "workspace",
+            "listings": listings,
+            "expect": expect,
+            "reviewed_run_id": reviewed["id"],
+        },
+    )
+
+    assert response.status_code == 409
+    assert "reviewed workspace plan" in response.text or "reviewed" in response.text
+
+
+def test_workspace_apply_requires_a_ready_workspace_plan(client: TestClient) -> None:
+    queued = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "workspace",
+            "listings": [],
+            "expect": {},
+            "reviewed_run_id": queued["id"],
+        },
+    )
+
+    assert response.status_code == 409
+    assert "not ready" in response.text
+    _wait_until_terminal(client, queued["id"])
+
+
+def test_workspace_apply_rejects_a_missing_review_source(client: TestClient) -> None:
+    response = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "workspace",
+            "listings": [],
+            "expect": {},
+            "reviewed_run_id": "missing-review",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "not a workspace plan" in response.text
 
 
 def test_create_is_refused_409_when_the_listing_is_already_active(client: TestClient) -> None:
@@ -146,6 +283,7 @@ def test_get_run_carries_its_events(client: TestClient) -> None:
 
     assert detail["events"][0]["type"] == "phase"
     assert detail["events"][0]["phase"] == "queued"
+    assert all("occurred_at" in event for event in detail["events"] if event["type"] == "phase")
     assert any(e["type"] == "listing_planned" for e in detail["events"])
 
 

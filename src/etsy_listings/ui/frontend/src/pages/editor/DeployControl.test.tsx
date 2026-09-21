@@ -14,9 +14,12 @@ function summary(over: Partial<RunSummary> = {}): RunSummary {
   return {
     id: "run-1",
     kind: "apply",
+    scope: "listings",
     listings: ["take-a-hike"],
     phase: "applied",
     seen: false,
+    reviewed_run_id: null,
+    created_at: "2026-09-17T10:00:00Z",
     ...over,
   };
 }
