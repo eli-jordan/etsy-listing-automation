@@ -377,6 +377,7 @@ def _describe(
         else False,
     )
     plan_name, resolved_prices = _pricing_summary(workspace, facts, listing_dir, listing)
+    profile = facts.garment_profile(listing.garment_profile)
     return ListingDetail.model_validate(
         {
             **listing.model_dump(mode="json"),
@@ -389,6 +390,7 @@ def _describe(
             "printify_product_id": printify_product_id,
             "pricing_plan_name": plan_name,
             "resolved_prices": [p.model_dump() for p in resolved_prices],
+            "garment_materials": profile.materials if profile is not None else [],
         },
         context={"currency": workspace.defaults.etsy.currency},
     )
@@ -666,6 +668,7 @@ def list_garment_profiles(request: Request) -> list[GarmentProfileSummary]:
             GarmentProfileSummary(
                 name=name,
                 sizes=profile.sizes,
+                materials=profile.materials,
                 colors=profile.colors,
                 preview_template=profile.preview_template,
             )

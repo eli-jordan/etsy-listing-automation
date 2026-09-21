@@ -1091,11 +1091,6 @@ export interface components {
        * @default
        */
       description: string;
-      /**
-       * Materials
-       * @default []
-       */
-      materials: string[];
       /** Renewal */
       renewal?: ("manual" | "auto") | null;
       /** Section */
@@ -1232,6 +1227,8 @@ export interface components {
       colors: {
         [key: string]: "light" | "dark";
       };
+      /** Materials */
+      materials?: string[] | null;
       /** Name */
       name: string;
       /** Preview Template */
@@ -1344,7 +1341,6 @@ export interface components {
       /**
        * @default {
        *       "description": "",
-       *       "materials": [],
        *       "tags": "<generate>",
        *       "title": ""
        *     }
@@ -1359,6 +1355,8 @@ export interface components {
       field_errors: {
         [key: string]: string;
       };
+      /** Garment Materials */
+      garment_materials?: string[] | null;
       /** Garment Profile */
       garment_profile: string;
       /** Issues */

@@ -31,6 +31,7 @@ from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (
     a_context,
     a_lock,
+    edit_garment_profile,
     edit_listing,
     set_copy,
     set_etsy_listing_defaults,
@@ -98,7 +99,7 @@ def test_no_etsy_shop_id_blocks(workspace_root: Path, etsy) -> None:
 
 
 def test_generate_sentinel_copy_blocks(root: Path, etsy) -> None:
-    edit_listing(root, etsy={"title": "<generate>", "description": "<generate>", "materials": []})
+    edit_listing(root, etsy={"title": "<generate>", "description": "<generate>"})
 
     stage_plan = _stage_plan(_ctx(root, etsy), a_lock())
 
@@ -156,7 +157,6 @@ def test_an_unresolvable_section_blocks(root: Path, etsy) -> None:
         etsy={
             "title": "Take A Hike Tee",
             "description": "A retro sunset.",
-            "materials": ["cotton"],
             "section": "Retro Tees",
         },
     )
@@ -249,7 +249,6 @@ def test_the_drift_names_a_live_section_when_the_catalog_knows_it(root: Path) ->
         etsy={
             "title": "Take A Hike Tee",
             "description": "A retro sunset.",
-            "materials": ["cotton"],
             "section": "Retro Tees",
         },
     )
@@ -347,6 +346,16 @@ def test_the_snapshot_names_the_desired_side(root: Path, etsy) -> None:
     assert snapshot.desired.materials == ("cotton",)
     assert snapshot.desired.shipping_profile == "NOK standard tee"
     assert snapshot.live is None, "no Etsy id at all yet -- not on Etsy"
+
+
+def test_materials_come_from_the_garment_profile(root: Path, etsy) -> None:
+    edit_garment_profile(root, "comfort-colors-1717", materials=["cotton", "polyester"])
+
+    stage_plan = _stage_plan(_ctx(root, etsy), a_lock())
+
+    snapshot = stage_plan.snapshot
+    assert snapshot is not None
+    assert snapshot.desired.materials == ("cotton", "polyester")
 
 
 def test_the_snapshot_names_the_live_side_once_a_listing_exists(root: Path, etsy) -> None:
