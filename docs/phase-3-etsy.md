@@ -63,7 +63,8 @@ section can be resolved by name in a workspace whose OAuth consent has lapsed.
 EtsyMedia()]`.
 
 Everything except images travels in a single `updateListing` PATCH, so a
-single `etsy_listing` stage owns it: copy, tags, materials, section, the
+single `etsy_listing` stage owns it: copy, tags, materials (from the garment
+profile), section, the
 `who_made` trio, production partners, shipping profile, return policy and
 renewal. The plan's implementation-plan sketch called this stage `etsy_copy`,
 which was accurate when copy was all it wrote and would now be a lie in the
@@ -494,7 +495,6 @@ etsy:
   title: <generate>
   description: <generate>
   tags: <generate>
-  materials: [cotton]
   renewal: manual                      # overrides shop.yaml
   section: Retro Tees                  # optional; listing-only, by name
   shipping_profile: NOK heavy tee      # optional; overrides shop.yaml

@@ -398,7 +398,6 @@ class TestTheFullCycle:
             etsy={
                 "title": "etsy-listings e2e -- safe to delete",
                 "description": "Created by an automated test.",
-                "materials": ["cotton"],
                 "variation_images": "flat-lay-01",
             },
         )

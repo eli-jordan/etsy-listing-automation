@@ -258,7 +258,7 @@ artwork resolves per colour, are in
 ## 6. Add a garment profile and a listing
 
 A **garment profile** (`garment-profiles/<name>.yaml`) is the garment definition — blueprint,
-print provider, print area, sizes — reused by every listing built on it. A
+print provider, print area, sizes and fibre materials — reused by every listing built on it. A
 **listing** (`listings/<name>/listing.yaml`) is everything commercial and
 creative for one product: prices, colours, which template(s) render as its
 photos, Etsy copy.
@@ -382,8 +382,14 @@ print_provider: Monster Digital
 placeholder: front
 print_area: { width: 4500, height: 5400 }
 sizes: [S, M, L, XL, XXL, XXXL]
+materials: [cotton]                 # Etsy-facing materials, shared by this garment
 preview_template: flat-lay-01   # colour-matrix; editor colour preview only
 ```
+
+If an existing `listing.yaml` has `etsy.materials`, move that list into the
+referenced garment profile's `materials:` field and remove it from the listing.
+One garment profile is shared, so resolve any differing legacy lists before
+choosing its single value.
 
 `blueprint` is matched on **brand and model** — the pair you'd quote to order
 blanks. `title` is there so the file reads as something rather than a part
@@ -411,7 +417,6 @@ etsy:
   title: <generate>
   description: <generate>
   tags: <generate>
-  materials: [cotton]
 media:
   - { template: flat-lay-01, colour: black }
   - { template: flat-lay-01, colour: blue-jean }

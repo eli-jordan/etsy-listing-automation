@@ -102,7 +102,6 @@ class EtsyListingConfig(BaseModel):
     title: str = ""
     description: str = ""
     tags: list[str] | Literal["<generate>"] = GENERATE
-    materials: list[str] = []
     renewal: Literal["manual", "auto"] | None = None
     section: str | None = None
     """Which shop section this listing files under, by name (PRD 53). Listing
@@ -118,6 +117,19 @@ class EtsyListingConfig(BaseModel):
     `true`, because media order would otherwise silently decide which
     template supplies them when a listing carries more than one. Absent
     means the feature is off for this listing."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _reject_listing_materials(cls, value: Any) -> Any:
+        """Composition is shared by a garment, not independently owned by
+        each listing. Name the migration rather than presenting the generic
+        ``extra_forbidden`` error to an existing workspace."""
+        if isinstance(value, Mapping) and "materials" in value:
+            raise ValueError(
+                "etsy.materials has moved to the garment profile; remove it from this "
+                "listing and set garment-profiles/<name>.yaml's materials instead"
+            )
+        return value
 
     @model_validator(mode="after")
     def _validate_concrete_values(self) -> EtsyListingConfig:

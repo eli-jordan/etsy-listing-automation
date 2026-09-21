@@ -235,6 +235,12 @@ class ListingDetail(Listing):
     """The resolved plan's filename stem, for display -- selecting a
     different plan from the UI is deferred (phase-5-listings-ui.md)."""
     resolved_prices: list[ResolvedPrice] = []
+    garment_materials: list[str] | None = None
+    """Read-only fibre materials from the selected garment profile.
+
+    They remain outside ``Listing`` because a listing never writes or owns
+    them; this derived field merely lets the editor show what Etsy will use.
+    """
 
     @model_validator(mode="after")
     def _require_a_price_source(self) -> ListingDetail:
@@ -260,6 +266,7 @@ class ListingDetail(Listing):
 class GarmentProfileSummary(BaseModel):
     name: str
     sizes: list[str]
+    materials: list[str] | None = None
     colors: dict[str, Literal["light", "dark"]]
     preview_template: str | None = None
     """A ``colour-matrix`` template the Variants tab uses to judge colours
