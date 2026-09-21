@@ -14,6 +14,13 @@ import type {
   RunSummary,
   StagePlanDTO,
 } from "../types";
+import {
+  runDetail as makeRunDetail,
+  runSummary as makeRunSummary,
+  stagePlan,
+  type RunSummaryOverrides,
+  type StagePlanOverrides,
+} from "../test/helpers";
 
 /**
  * The route: reattach or start, composing the reducer/comparison/presentation
@@ -58,17 +65,11 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   };
 }
 
-function stage(overrides: Partial<StagePlanDTO> & { stage: StagePlanDTO["stage"] }): StagePlanDTO {
-  return {
-    will_run: false,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-    ...overrides,
-  };
+function stage<Name extends StagePlanDTO["stage"]>(
+  overrides: StagePlanOverrides<Name> & { stage: Name },
+): Extract<StagePlanDTO, { stage: Name }> {
+  const { stage: stageName, ...fields } = overrides;
+  return stagePlan(stageName, fields as StagePlanOverrides<Name>);
 }
 
 function plan(stagePlans: StagePlanDTO[]): PlanDTO {
@@ -80,22 +81,12 @@ function plan(stagePlans: StagePlanDTO[]): PlanDTO {
   };
 }
 
-function runSummary(over: Partial<RunSummary> = {}): RunSummary {
-  return {
-    id: "run",
-    kind: "plan",
-    scope: "listings",
-    listings: ["take-a-hike"],
-    phase: "queued",
-    seen: false,
-    reviewed_run_id: null,
-    created_at: "2026-09-17T10:00:00Z",
-    ...over,
-  };
+function runSummary(over: RunSummaryOverrides = {}): RunSummary {
+  return makeRunSummary({ created_at: "2026-09-17T10:00:00Z", ...over });
 }
 
-function runDetail(over: Partial<RunDetail> = {}): RunDetail {
-  return { ...runSummary(), events: [], ...over };
+function runDetail(over: RunSummaryOverrides & { events?: RunEvent[] } = {}): RunDetail {
+  return makeRunDetail({ created_at: "2026-09-17T10:00:00Z", ...over });
 }
 
 function renderPage() {
@@ -232,10 +223,9 @@ describe("DeployPage: reattaching", () => {
         { type: "phase", id: 2, phase: "planning" },
       ],
     });
-    vi.spyOn(runsApi, "currentRun").mockResolvedValue({
-      ...runSummary({ id: "run-3", kind: "plan" }),
-      phase: "planning",
-    });
+    vi.spyOn(runsApi, "currentRun").mockResolvedValue(
+      runSummary({ id: "run-3", kind: "plan", phase: "planning" }),
+    );
     vi.spyOn(runsApi, "getRun").mockResolvedValue(detailForRun);
     const handles = stubStream();
 
@@ -267,24 +257,27 @@ describe("DeployPage: reattaching", () => {
         phase: "applied",
       }),
     );
-    vi.spyOn(runsApi, "getRun").mockResolvedValue({
-      ...runDetail({ id: "run-4", kind: "apply" }),
-      phase: "applied",
-      events: [
-        { type: "phase", id: 1, phase: "queued" },
-        {
-          type: "listing_planned",
-          id: 2,
-          listing: "take-a-hike",
-          plan: fullPlan,
-          fingerprint: "fp-4",
-        },
-        { type: "phase", id: 3, phase: "applying" },
-        { type: "stage_applying", id: 4, listing: "take-a-hike", stage: "render" },
-        { type: "stage_applied", id: 5, listing: "take-a-hike", stage: "render" },
-        { type: "phase", id: 6, phase: "applied" },
-      ],
-    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(
+      runDetail({
+        id: "run-4",
+        kind: "apply",
+        phase: "applied",
+        events: [
+          { type: "phase", id: 1, phase: "queued" },
+          {
+            type: "listing_planned",
+            id: 2,
+            listing: "take-a-hike",
+            plan: fullPlan,
+            fingerprint: "fp-4",
+          },
+          { type: "phase", id: 3, phase: "applying" },
+          { type: "stage_applying", id: 4, listing: "take-a-hike", stage: "render" },
+          { type: "stage_applied", id: 5, listing: "take-a-hike", stage: "render" },
+          { type: "phase", id: 6, phase: "applied" },
+        ],
+      }),
+    );
     vi.spyOn(runsApi, "markRunSeen").mockResolvedValue(undefined);
     const handles = stubStream();
 
@@ -307,20 +300,23 @@ describe("DeployPage: reattaching", () => {
         phase: "applied",
       }),
     );
-    vi.spyOn(runsApi, "getRun").mockResolvedValue({
-      ...runDetail({ id: "run-fast-apply", kind: "apply" }),
-      phase: "applied",
-      events: [
-        {
-          type: "listing_planned",
-          id: 1,
-          listing: "take-a-hike",
-          plan: fullPlan,
-          fingerprint: "fp-fast",
-        },
-        { type: "phase", id: 2, phase: "applied" },
-      ],
-    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(
+      runDetail({
+        id: "run-fast-apply",
+        kind: "apply",
+        phase: "applied",
+        events: [
+          {
+            type: "listing_planned",
+            id: 1,
+            listing: "take-a-hike",
+            plan: fullPlan,
+            fingerprint: "fp-fast",
+          },
+          { type: "phase", id: 2, phase: "applied" },
+        ],
+      }),
+    );
     stubStream();
 
     renderPage();
@@ -360,14 +356,17 @@ describe("DeployPage: Back", () => {
         phase: "applying",
       }),
     );
-    vi.spyOn(runsApi, "getRun").mockResolvedValue({
-      ...runDetail({ id: "run-6", kind: "apply" }),
-      phase: "applying",
-      events: [
-        { type: "phase", id: 1, phase: "queued" },
-        { type: "phase", id: 2, phase: "applying" },
-      ],
-    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(
+      runDetail({
+        id: "run-6",
+        kind: "apply",
+        phase: "applying",
+        events: [
+          { type: "phase", id: 1, phase: "queued" },
+          { type: "phase", id: 2, phase: "applying" },
+        ],
+      }),
+    );
     const cancelSpy = vi.spyOn(runsApi, "cancelRun").mockResolvedValue(true);
     stubStream();
 
@@ -429,27 +428,30 @@ describe("DeployPage: Apply", () => {
         phase: "applying",
       }),
     );
-    vi.spyOn(runsApi, "getRun").mockResolvedValue({
-      ...runDetail({ id: "run-applying", kind: "apply" }),
-      phase: "applying",
-      events: [
-        { type: "phase", id: 1, phase: "applying" },
-        {
-          type: "listing_planned",
-          id: 2,
-          listing: "take-a-hike",
-          plan: fullPlan,
-          fingerprint: "fp-applying",
-        },
-        {
-          type: "stage_applying",
-          id: 3,
-          listing: "take-a-hike",
-          stage: "publish",
-          occurred_at: "2026-09-17T10:00:00Z",
-        },
-      ],
-    });
+    vi.spyOn(runsApi, "getRun").mockResolvedValue(
+      runDetail({
+        id: "run-applying",
+        kind: "apply",
+        phase: "applying",
+        events: [
+          { type: "phase", id: 1, phase: "applying" },
+          {
+            type: "listing_planned",
+            id: 2,
+            listing: "take-a-hike",
+            plan: fullPlan,
+            fingerprint: "fp-applying",
+          },
+          {
+            type: "stage_applying",
+            id: 3,
+            listing: "take-a-hike",
+            stage: "publish",
+            occurred_at: "2026-09-17T10:00:00Z",
+          },
+        ],
+      }),
+    );
     stubStream();
 
     renderPage();

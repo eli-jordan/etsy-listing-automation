@@ -3,24 +3,20 @@ import { describe, expect, it } from "vitest";
 import { ComparisonView } from "./ComparisonView";
 import { buildComparison } from "./comparison";
 import type { EtsyListingSnapshot, ListingDetail, PlanDTO, StagePlanDTO } from "../../types";
+import { stagePlan } from "../../test/helpers";
 
-type StageOverrides = Omit<Partial<StagePlanDTO>, "snapshot" | "changes"> & {
+type StageOverrides = Omit<Partial<StagePlanDTO>, "snapshot" | "changes" | "outcome"> & {
   stage: StagePlanDTO["stage"];
+  will_run?: boolean;
+  reason?: string | null;
+  blocked?: string | null;
   snapshot?: unknown;
-  changes?: StagePlanDTO["changes"];
+  changes?: Extract<StagePlanDTO["outcome"], { type: "work" }>["changes"];
 };
 
 function stage(overrides: StageOverrides): StagePlanDTO {
-  return {
-    will_run: false,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-    ...overrides,
-  } as StagePlanDTO;
+  const { stage: stageName, ...fields } = overrides;
+  return stagePlan(stageName, fields as never) as StagePlanDTO;
 }
 
 function plan(stagePlans: StagePlanDTO[], etsyListingId: number | null = 1): PlanDTO {

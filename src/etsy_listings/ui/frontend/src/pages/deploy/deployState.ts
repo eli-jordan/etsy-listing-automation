@@ -1,4 +1,4 @@
-import type { RunEvent, RunPhase } from "../../types";
+import { stageBlocked, stageWillRun, type RunEvent, type RunPhase } from "../../types";
 import {
   applyListingRunEvent,
   initialListingRunState,
@@ -115,8 +115,8 @@ export type ControlPhase =
 export function controlPhase(state: DeployState): ControlPhase {
   if (state.phase === "ready") {
     const stagePlans = state.plan?.stage_plans ?? [];
-    if (stagePlans.some((s) => s.will_run)) return "ready-work";
-    if (stagePlans.some((s) => s.blocked !== null)) return "ready-blocked";
+    if (stagePlans.some(stageWillRun)) return "ready-work";
+    if (stagePlans.some((stage) => stageBlocked(stage) !== null)) return "ready-blocked";
     return "ready-clean";
   }
   // "planned" is the momentary hinge between the planning walk finishing and

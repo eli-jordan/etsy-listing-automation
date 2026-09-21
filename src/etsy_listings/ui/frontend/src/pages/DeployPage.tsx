@@ -3,7 +3,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { cancelRun, createRun, currentRun, getRun, markRunSeen } from "../api/runs";
 import { getListing, tryGetListing } from "../api/listings";
 import { StatusTag } from "../components/StatusTag";
-import type { ListingDetail } from "../types";
+import { stageWillRun, type ListingDetail } from "../types";
 import { buildComparison } from "./deploy/comparison";
 import { ComparisonView } from "./deploy/ComparisonView";
 import { Callouts } from "./deploy/Callouts";
@@ -258,7 +258,7 @@ export function DeployPage() {
     phase === "applied" ||
     Object.keys(state.stageRuntime).length > 0;
   const { total: previewsTotal, done: previewsDone } = previewCounts(state);
-  const appliedStepCount = state.plan?.stage_plans.filter((s) => s.will_run).length ?? 0;
+  const appliedStepCount = state.plan?.stage_plans.filter(stageWillRun).length ?? 0;
 
   return (
     <div className="editor">

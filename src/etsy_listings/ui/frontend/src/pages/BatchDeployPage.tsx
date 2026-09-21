@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { listListings } from "../api/listings";
 import { cancelRun, createRun, getRun, markRunSeen } from "../api/runs";
-import type { ListingSummary, RunDetail } from "../types";
+import { stageWillRun, type ListingSummary, type RunDetail } from "../types";
 import { BatchAggregateStages } from "./batchDeploy/BatchAggregateStages";
 import { BatchListingDrawer } from "./batchDeploy/BatchListingDrawer";
 import { BatchListingGroups } from "./batchDeploy/BatchListingGroups";
@@ -222,16 +222,14 @@ export function BatchDeployPage() {
   const counts = useMemo(() => planCounts(listings), [listings]);
   const requiredPreviews = useMemo(() => requiredPreviewKeys(listings), [listings]);
   const previewsReady = requiredPreviews.every((key) => visibleState.previewsRendered.has(key));
-  const runnableCount = plans.filter((plan) =>
-    plan.stage_plans.some((stage) => stage.will_run),
-  ).length;
+  const runnableCount = plans.filter((plan) => plan.stage_plans.some(stageWillRun)).length;
   const nothingToDo =
     visibleState.phase === "ready" &&
     !Object.values(visibleState.listings).some(
       (listing) => listing.planFailure !== null || listing.failureMessage !== null,
     ) &&
     (plans.length === 0 ||
-      plans.every((plan) => plan.stage_plans.every((stage) => !stage.will_run)));
+      plans.every((plan) => plan.stage_plans.every((stage) => !stageWillRun(stage))));
   const summaryByName = useMemo(
     () => new Map(summaries.map((summary) => [summary.name, summary])),
     [summaries],

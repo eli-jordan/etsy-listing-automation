@@ -1,24 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { PlanDTO, StagePlanDTO } from "../../types";
+import { stagePlan, type StagePlanOverrides } from "../../test/helpers";
 import { BatchListingDrawer } from "./BatchListingDrawer";
 import type { BatchListingState } from "./batchDeployState";
 
 function stage<Name extends StagePlanDTO["stage"]>(
   stageName: Name,
-  overrides: Partial<Extract<StagePlanDTO, { stage: Name }>> = {},
+  overrides: StagePlanOverrides<Name> = {},
 ): Extract<StagePlanDTO, { stage: Name }> {
-  return {
-    stage: stageName,
-    will_run: false,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-    ...overrides,
-  } as unknown as Extract<StagePlanDTO, { stage: Name }>;
+  return stagePlan(stageName, overrides);
 }
 
 const plan: PlanDTO = {

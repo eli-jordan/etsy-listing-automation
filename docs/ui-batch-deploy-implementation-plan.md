@@ -177,8 +177,7 @@ This avoids a race between “start fresh” and “reattach”, and avoids maki
 Extend the existing run models rather than adding a batch endpoint:
 
 - `RunScope = Literal["listings", "workspace"]`;
-- `CreateRunRequest.scope`, defaulting to `listings` only during the migration
-  of existing callers;
+- an explicit `scope` discriminant on every `CreateRunRequest` variant;
 - `Run.scope`, `Run.reviewed_run_id`, `Run.created_at`;
 - `RunSummary.scope`, `reviewed_run_id`, `created_at`;
 - a timestamp on phase events so “planned just now” and result times survive

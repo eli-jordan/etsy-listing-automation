@@ -1,18 +1,10 @@
 import { describe, expect, it } from "vitest";
-import type { PlanDTO, RunEvent, StagePlanDTO } from "../../types";
+import type { PlanDTO, RunEvent } from "../../types";
+import { stagePlan } from "../../test/helpers";
 import { batchDeployState } from "../batchDeploy/batchDeployState";
 import { deployState } from "./deployState";
 
-const renderStage: Extract<StagePlanDTO, { stage: "render" }> = {
-  stage: "render",
-  will_run: true,
-  changes: [],
-  drift: [],
-  reason: "render changed",
-  actions: [],
-  blocked: null,
-  snapshot: null,
-};
+const renderStage = stagePlan("render", { will_run: true, reason: "render changed" });
 
 const plan: PlanDTO = {
   listing: "alpha",

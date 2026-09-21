@@ -1,4 +1,4 @@
-import type { PlanDTO } from "../../types";
+import { stageBlocked, stageWillRun, type PlanDTO } from "../../types";
 import {
   buyerFacingImpacts,
   listingStageProgress,
@@ -24,9 +24,11 @@ function rowStatus(listing: BatchListingState, plan: PlanDTO | null): string {
   if (plan === null || listing.planFailure !== null)
     return listing.planFailure ?? "Needs attention";
 
-  const runnable = plan.stage_plans.filter((stage) => stage.will_run);
+  const runnable = plan.stage_plans.filter(stageWillRun);
   if (runnable.length === 0) {
-    return plan.stage_plans.some((stage) => stage.blocked !== null) ? "Blocked" : "No changes";
+    return plan.stage_plans.some((stage) => stageBlocked(stage) !== null)
+      ? "Blocked"
+      : "No changes";
   }
 
   let completed = 0;

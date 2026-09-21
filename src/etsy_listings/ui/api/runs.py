@@ -39,9 +39,13 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from etsy_listings.ui.api.schemas import (
+    ApplyRunDetail,
+    ApplyRunSummary,
     CreateRunRequest,
     ListingApplyRequest,
     ListingPlanRequest,
+    PlanRunDetail,
+    PlanRunSummary,
     RunDetail,
     RunSummary,
     WorkspaceApplyRequest,
@@ -120,12 +124,22 @@ def _validate_reviewed_apply(
 
 
 def _summary(run: Run) -> RunSummary:
-    return RunSummary(
+    if run.kind == "plan":
+        return PlanRunSummary(
+            id=run.id,
+            kind="plan",
+            scope=run.scope,
+            listings=list(run.listings),
+            phase=run.plan_phase,
+            seen=run.seen,
+            created_at=run.created_at,
+        )
+    return ApplyRunSummary(
         id=run.id,
-        kind=run.kind,
+        kind="apply",
         scope=run.scope,
         listings=list(run.listings),
-        phase=run.phase,
+        phase=run.apply_phase,
         seen=run.seen,
         reviewed_run_id=run.reviewed_run_id,
         created_at=run.created_at,
@@ -133,7 +147,10 @@ def _summary(run: Run) -> RunSummary:
 
 
 def _detail(run: Run) -> RunDetail:
-    return RunDetail(**_summary(run).model_dump(), events=list(run.events))
+    summary = _summary(run)
+    if isinstance(summary, PlanRunSummary):
+        return PlanRunDetail(**summary.model_dump(), events=list(run.events))
+    return ApplyRunDetail(**summary.model_dump(), events=list(run.events))
 
 
 @router.post("", status_code=202, response_model=RunSummary)

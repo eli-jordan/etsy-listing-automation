@@ -2,8 +2,12 @@
 
 from __future__ import annotations
 
-import pytest
+from datetime import UTC, datetime
 
+import pytest
+from pydantic import TypeAdapter, ValidationError
+
+from etsy_listings.ui.api.schemas import RunSummary
 from etsy_listings.ui.runs.registry import (
     ListingApply,
     ListingPlan,
@@ -53,3 +57,23 @@ def test_plan_and_apply_have_separate_phase_transitions() -> None:
         plan.transition_apply("applying")
     with pytest.raises(TypeError):
         apply.transition_plan("planning")
+
+
+@pytest.mark.parametrize(
+    ("kind", "phase"),
+    [("plan", "applying"), ("plan", "applied"), ("apply", "planning"), ("apply", "ready")],
+)
+def test_run_summary_rejects_a_phase_from_the_other_run_kind(kind: str, phase: str) -> None:
+    with pytest.raises(ValidationError):
+        TypeAdapter(RunSummary).validate_python(
+            {
+                "id": "run-1",
+                "kind": kind,
+                "scope": "listings",
+                "listings": ["one"],
+                "phase": phase,
+                "seen": False,
+                "reviewed_run_id": None,
+                "created_at": datetime.now(UTC),
+            }
+        )

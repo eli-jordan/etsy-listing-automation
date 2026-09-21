@@ -36,7 +36,7 @@ from enum import Enum
 from pathlib import Path
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from etsy_listings.config.money import Money
 from etsy_listings.engine.change import (
@@ -216,13 +216,37 @@ def _action_dto(action: Action) -> ActionDTO:
 # --------------------------------------------------------------- StagePlan/Plan
 
 
-class _StagePlanDTO(BaseModel):
-    will_run: bool
+class _StageOutcomeDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class IdleOutcomeDTO(_StageOutcomeDTO):
+    type: Literal["idle"] = "idle"
+
+
+class WorkOutcomeDTO(_StageOutcomeDTO):
+    type: Literal["work"] = "work"
+    reason: str
     changes: tuple[ChangeDTO, ...] = ()
-    drift: tuple[DriftDTO, ...] = ()
-    reason: str | None = None
     actions: tuple[ActionDTO, ...] = ()
-    blocked: str | None = None
+
+
+class BlockedOutcomeDTO(_StageOutcomeDTO):
+    type: Literal["blocked"] = "blocked"
+    message: str
+
+
+StageOutcomeDTO = Annotated[
+    IdleOutcomeDTO | WorkOutcomeDTO | BlockedOutcomeDTO,
+    Field(discriminator="type"),
+]
+
+
+class _StagePlanDTO(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    outcome: StageOutcomeDTO
+    drift: tuple[DriftDTO, ...] = ()
 
 
 class RenderStagePlanDTO(_StagePlanDTO):
@@ -267,13 +291,22 @@ StagePlanDTO = Annotated[
 
 
 def _stage_plan_fields(stage_plan: StagePlan) -> dict[str, Any]:
+    if stage_plan.will_run:
+        reason = stage_plan.reason
+        if reason is None:
+            raise TypeError("a runnable stage plan must have a reason")
+        outcome: StageOutcomeDTO = WorkOutcomeDTO(
+            reason=reason,
+            changes=tuple(_change_dto(c) for c in stage_plan.changes),
+            actions=tuple(_action_dto(a) for a in stage_plan.actions),
+        )
+    elif stage_plan.blocked is not None:
+        outcome = BlockedOutcomeDTO(message=stage_plan.blocked)
+    else:
+        outcome = IdleOutcomeDTO()
     return {
-        "will_run": stage_plan.will_run,
-        "changes": tuple(_change_dto(c) for c in stage_plan.changes),
+        "outcome": outcome,
         "drift": tuple(_drift_dto(d) for d in stage_plan.drift),
-        "reason": stage_plan.reason,
-        "actions": tuple(_action_dto(a) for a in stage_plan.actions),
-        "blocked": stage_plan.blocked,
     }
 
 

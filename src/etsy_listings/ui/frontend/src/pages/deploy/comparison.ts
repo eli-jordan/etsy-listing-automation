@@ -1,4 +1,10 @@
-import type { BelowCostRow, ChangeDTO, PlanDTO, StagePlanDTO } from "../../types";
+import {
+  stageChanges,
+  type BelowCostRow,
+  type ChangeDTO,
+  type PlanDTO,
+  type StagePlanDTO,
+} from "../../types";
 
 /**
  * Pure: `Plan` snapshots + `Change`s -> before/after blocks, impact tags,
@@ -11,7 +17,7 @@ import type { BelowCostRow, ChangeDTO, PlanDTO, StagePlanDTO } from "../../types
  * traces to a `Change` object the engine already emitted, never to this
  * module comparing two snapshot values itself. A block's *content* (the
  * unchanged context alongside a change) comes from the snapshot; whether it
- * is *tinted* comes only from `stage_plan.changes`.
+ * is *tinted* comes only from the work outcome's changes.
  *
  * Follows the mock and the spec's own reading order -- gallery first, down
  * through tags and materials -- because that is a buyer's reading order on
@@ -139,7 +145,7 @@ function findStage<Name extends StageName>(
 }
 
 function findChange(stagePlan: StagePlanDTO | undefined, predicate: (c: ChangeDTO) => boolean) {
-  return stagePlan?.changes.find(predicate);
+  return stagePlan === undefined ? undefined : stageChanges(stagePlan).find(predicate);
 }
 
 function asStrings(values: unknown[]): string[] {
@@ -236,7 +242,7 @@ function buildPrice(stagePlan: StagePlanFor<"printify_product"> | undefined): Pr
   return {
     before: priceRange(snapshot.live),
     after: priceRange(snapshot.desired),
-    changed: (stagePlan?.changes ?? []).some((c) => c.kind === "price"),
+    changed: stagePlan !== undefined && stageChanges(stagePlan).some((c) => c.kind === "price"),
   };
 }
 
@@ -245,7 +251,7 @@ function buildPriceRows(
   belowCost: BelowCostRow[],
 ): PriceRow[] {
   const rows = new Map<string, PriceRow>();
-  for (const change of stagePlan?.changes ?? []) {
+  for (const change of stagePlan === undefined ? [] : stageChanges(stagePlan)) {
     if (change.kind !== "price") continue;
     if (rows.has(change.size)) continue;
     const isBelowCost = belowCost.some(
@@ -293,7 +299,7 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
   return {
     before,
     after,
-    changed: (stagePlan?.changes ?? []).some((c) => c.kind === "media"),
+    changed: stagePlan !== undefined && stageChanges(stagePlan).some((c) => c.kind === "media"),
   };
 }
 

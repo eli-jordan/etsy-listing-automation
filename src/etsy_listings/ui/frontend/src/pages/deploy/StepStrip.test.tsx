@@ -3,18 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { StepStrip } from "./StepStrip";
 import type { StageRuntimeStatus } from "./deployState";
 import type { PlanDTO, StagePlanDTO } from "../../types";
+import { stagePlan, type StagePlanOverrides } from "../../test/helpers";
 
-function stage(overrides: Partial<StagePlanDTO> & { stage: StagePlanDTO["stage"] }): StagePlanDTO {
-  return {
-    will_run: false,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-    ...overrides,
-  };
+function stage<Name extends StagePlanDTO["stage"]>(
+  overrides: StagePlanOverrides<Name> & { stage: Name },
+): Extract<StagePlanDTO, { stage: Name }> {
+  const { stage: stageName, ...fields } = overrides;
+  return stagePlan(stageName, fields as StagePlanOverrides<Name>);
 }
 
 function plan(stagePlans: StagePlanDTO[]): PlanDTO {

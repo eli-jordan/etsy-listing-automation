@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { deployState, initialDeployState } from "./deployState";
-import type { PlanDTO, RunEvent, RunPhase, StagePlanDTO } from "../../types";
+import {
+  stageBlocked,
+  stageWillRun,
+  type PlanDTO,
+  type RunEvent,
+  type RunPhase,
+  type StagePlanDTO,
+} from "../../types";
+import { stagePlan as makeStagePlan, type StagePlanOverrides } from "../../test/helpers";
 
 /**
  * `RunEvent[] -> phase, per-stage runtime, plan, previews` (docs/deploy-changes.md,
@@ -22,19 +30,11 @@ function id(): number {
   return nextId++;
 }
 
-function stagePlan(
-  overrides: Partial<StagePlanDTO> & { stage: StagePlanDTO["stage"] },
-): StagePlanDTO {
-  return {
-    will_run: false,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-    ...overrides,
-  };
+function stagePlan<Name extends StagePlanDTO["stage"]>(
+  overrides: StagePlanOverrides<Name> & { stage: Name },
+): Extract<StagePlanDTO, { stage: Name }> {
+  const { stage: stageName, ...fields } = overrides;
+  return makeStagePlan(stageName, fields as StagePlanOverrides<Name>);
 }
 
 function plan(stagePlans: StagePlanDTO[], overrides: Partial<PlanDTO> = {}): PlanDTO {
@@ -188,7 +188,9 @@ describe("deployState: blocked", () => {
 
     expect(state.phase).toBe("ready");
     const publishPlan = state.plan?.stage_plans.find((s) => s.stage === "publish");
-    expect(publishPlan?.blocked).toContain("below Printify's cost");
+    expect(publishPlan === undefined ? null : stageBlocked(publishPlan)).toContain(
+      "below Printify's cost",
+    );
   });
 });
 
@@ -215,7 +217,7 @@ describe("deployState: nothing to do", () => {
     const state = deployState(events);
 
     expect(state.phase).toBe("ready");
-    expect(state.plan?.stage_plans.every((s) => !s.will_run)).toBe(true);
+    expect(state.plan?.stage_plans.every((stage) => !stageWillRun(stage))).toBe(true);
     expect(state.previewsRendered.size).toBe(0);
   });
 });

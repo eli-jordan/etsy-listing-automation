@@ -38,6 +38,202 @@
         "title": "ActionDTO",
         "type": "object"
       },
+      "ApplyRunDetail": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "listing_failed": "#/components/schemas/ListingFailedEvent",
+                  "listing_planned": "#/components/schemas/ListingPlannedEvent",
+                  "phase": "#/components/schemas/PhaseEvent",
+                  "preview_rendered": "#/components/schemas/PreviewRenderedEvent",
+                  "progress": "#/components/schemas/ProgressEvent",
+                  "stage_applied": "#/components/schemas/StageAppliedEvent",
+                  "stage_applying": "#/components/schemas/StageApplyingEvent",
+                  "stage_checking": "#/components/schemas/StageCheckingEvent",
+                  "stage_failed": "#/components/schemas/StageFailedEvent",
+                  "stage_planned": "#/components/schemas/StagePlannedEvent"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PhaseEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageCheckingEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StagePlannedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ListingPlannedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/PreviewRenderedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageApplyingEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ProgressEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageAppliedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageFailedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ListingFailedEvent"
+                }
+              ]
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "apply",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "applying",
+              "applied",
+              "failed",
+              "stale"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "reviewed_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Run Id"
+          },
+          "scope": {
+            "enum": [
+              "listings",
+              "workspace"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "listings",
+          "seen",
+          "reviewed_run_id",
+          "created_at",
+          "kind",
+          "phase",
+          "events"
+        ],
+        "title": "ApplyRunDetail",
+        "type": "object"
+      },
+      "ApplyRunSummary": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "apply",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "applying",
+              "applied",
+              "failed",
+              "stale"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "reviewed_run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reviewed Run Id"
+          },
+          "scope": {
+            "enum": [
+              "listings",
+              "workspace"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "listings",
+          "seen",
+          "reviewed_run_id",
+          "created_at",
+          "kind",
+          "phase"
+        ],
+        "title": "ApplyRunSummary",
+        "type": "object"
+      },
       "AssignKindRequest": {
         "properties": {
           "kind": {
@@ -89,6 +285,26 @@
           "cost"
         ],
         "title": "BelowCostRow",
+        "type": "object"
+      },
+      "BlockedOutcomeDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "const": "blocked",
+            "default": "blocked",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "BlockedOutcomeDTO",
         "type": "object"
       },
       "Body_upload_design_api_designs_post": {
@@ -584,56 +800,8 @@
         "type": "object"
       },
       "EtsyListingStagePlanDTO": {
+        "additionalProperties": false,
         "properties": {
-          "actions": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ActionDTO"
-            },
-            "title": "Actions",
-            "type": "array"
-          },
-          "blocked": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Blocked"
-          },
-          "changes": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "field": "#/components/schemas/FieldChangeDTO",
-                  "list": "#/components/schemas/ListChangeDTO",
-                  "media": "#/components/schemas/MediaChangeDTO",
-                  "price": "#/components/schemas/PriceChangeDTO"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/FieldChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/ListChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/PriceChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/MediaChangeDTO"
-                }
-              ]
-            },
-            "title": "Changes",
-            "type": "array"
-          },
           "drift": {
             "default": [],
             "items": {
@@ -642,16 +810,27 @@
             "title": "Drift",
             "type": "array"
           },
-          "reason": {
-            "anyOf": [
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
               }
             ],
-            "title": "Reason"
+            "title": "Outcome"
           },
           "snapshot": {
             "anyOf": [
@@ -668,14 +847,10 @@
             "default": "etsy_listing",
             "title": "Stage",
             "type": "string"
-          },
-          "will_run": {
-            "title": "Will Run",
-            "type": "boolean"
           }
         },
         "required": [
-          "will_run"
+          "outcome"
         ],
         "title": "EtsyListingStagePlanDTO",
         "type": "object"
@@ -706,56 +881,8 @@
         "type": "object"
       },
       "EtsyMediaStagePlanDTO": {
+        "additionalProperties": false,
         "properties": {
-          "actions": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ActionDTO"
-            },
-            "title": "Actions",
-            "type": "array"
-          },
-          "blocked": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Blocked"
-          },
-          "changes": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "field": "#/components/schemas/FieldChangeDTO",
-                  "list": "#/components/schemas/ListChangeDTO",
-                  "media": "#/components/schemas/MediaChangeDTO",
-                  "price": "#/components/schemas/PriceChangeDTO"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/FieldChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/ListChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/PriceChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/MediaChangeDTO"
-                }
-              ]
-            },
-            "title": "Changes",
-            "type": "array"
-          },
           "drift": {
             "default": [],
             "items": {
@@ -764,16 +891,27 @@
             "title": "Drift",
             "type": "array"
           },
-          "reason": {
-            "anyOf": [
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
               }
             ],
-            "title": "Reason"
+            "title": "Outcome"
           },
           "snapshot": {
             "anyOf": [
@@ -790,14 +928,10 @@
             "default": "etsy_media",
             "title": "Stage",
             "type": "string"
-          },
-          "will_run": {
-            "title": "Will Run",
-            "type": "boolean"
           }
         },
         "required": [
-          "will_run"
+          "outcome"
         ],
         "title": "EtsyMediaStagePlanDTO",
         "type": "object"
@@ -905,6 +1039,19 @@
         "title": "HTTPValidationError",
         "type": "object"
       },
+      "IdleOutcomeDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "type": {
+            "const": "idle",
+            "default": "idle",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "title": "IdleOutcomeDTO",
+        "type": "object"
+      },
       "Issue": {
         "properties": {
           "message": {
@@ -1008,7 +1155,6 @@
           },
           "kind": {
             "const": "apply",
-            "default": "apply",
             "title": "Kind",
             "type": "string"
           },
@@ -1022,12 +1168,13 @@
           },
           "scope": {
             "const": "listings",
-            "default": "listings",
             "title": "Scope",
             "type": "string"
           }
         },
         "required": [
+          "kind",
+          "scope",
           "listings",
           "expect"
         ],
@@ -1307,7 +1454,6 @@
         "properties": {
           "kind": {
             "const": "plan",
-            "default": "plan",
             "title": "Kind",
             "type": "string"
           },
@@ -1321,12 +1467,13 @@
           },
           "scope": {
             "const": "listings",
-            "default": "listings",
             "title": "Scope",
             "type": "string"
           }
         },
         "required": [
+          "kind",
+          "scope",
           "listings"
         ],
         "title": "ListingPlanRequest",
@@ -1797,6 +1944,190 @@
         "title": "PlanDTO",
         "type": "object"
       },
+      "PlanRunDetail": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "events": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "listing_failed": "#/components/schemas/ListingFailedEvent",
+                  "listing_planned": "#/components/schemas/ListingPlannedEvent",
+                  "phase": "#/components/schemas/PhaseEvent",
+                  "preview_rendered": "#/components/schemas/PreviewRenderedEvent",
+                  "progress": "#/components/schemas/ProgressEvent",
+                  "stage_applied": "#/components/schemas/StageAppliedEvent",
+                  "stage_applying": "#/components/schemas/StageApplyingEvent",
+                  "stage_checking": "#/components/schemas/StageCheckingEvent",
+                  "stage_failed": "#/components/schemas/StageFailedEvent",
+                  "stage_planned": "#/components/schemas/StagePlannedEvent"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/PhaseEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageCheckingEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StagePlannedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ListingPlannedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/PreviewRenderedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageApplyingEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ProgressEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageAppliedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/StageFailedEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/ListingFailedEvent"
+                }
+              ]
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "plan",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "planning",
+              "planned",
+              "previewing",
+              "ready",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "reviewed_run_id": {
+            "title": "Reviewed Run Id",
+            "type": "null"
+          },
+          "scope": {
+            "enum": [
+              "listings",
+              "workspace"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "listings",
+          "seen",
+          "created_at",
+          "kind",
+          "phase",
+          "events"
+        ],
+        "title": "PlanRunDetail",
+        "type": "object"
+      },
+      "PlanRunSummary": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "plan",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "phase": {
+            "enum": [
+              "queued",
+              "planning",
+              "planned",
+              "previewing",
+              "ready",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "reviewed_run_id": {
+            "title": "Reviewed Run Id",
+            "type": "null"
+          },
+          "scope": {
+            "enum": [
+              "listings",
+              "workspace"
+            ],
+            "title": "Scope",
+            "type": "string"
+          },
+          "seen": {
+            "title": "Seen",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "scope",
+          "listings",
+          "seen",
+          "created_at",
+          "kind",
+          "phase"
+        ],
+        "title": "PlanRunSummary",
+        "type": "object"
+      },
       "Point": {
         "properties": {
           "x": {
@@ -1950,56 +2281,8 @@
         "type": "object"
       },
       "ProductStagePlanDTO": {
+        "additionalProperties": false,
         "properties": {
-          "actions": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ActionDTO"
-            },
-            "title": "Actions",
-            "type": "array"
-          },
-          "blocked": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Blocked"
-          },
-          "changes": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "field": "#/components/schemas/FieldChangeDTO",
-                  "list": "#/components/schemas/ListChangeDTO",
-                  "media": "#/components/schemas/MediaChangeDTO",
-                  "price": "#/components/schemas/PriceChangeDTO"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/FieldChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/ListChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/PriceChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/MediaChangeDTO"
-                }
-              ]
-            },
-            "title": "Changes",
-            "type": "array"
-          },
           "drift": {
             "default": [],
             "items": {
@@ -2008,16 +2291,27 @@
             "title": "Drift",
             "type": "array"
           },
-          "reason": {
-            "anyOf": [
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
               }
             ],
-            "title": "Reason"
+            "title": "Outcome"
           },
           "snapshot": {
             "anyOf": [
@@ -2034,14 +2328,10 @@
             "default": "printify_product",
             "title": "Stage",
             "type": "string"
-          },
-          "will_run": {
-            "title": "Will Run",
-            "type": "boolean"
           }
         },
         "required": [
-          "will_run"
+          "outcome"
         ],
         "title": "ProductStagePlanDTO",
         "type": "object"
@@ -2145,56 +2435,8 @@
         "type": "object"
       },
       "PublishStagePlanDTO": {
+        "additionalProperties": false,
         "properties": {
-          "actions": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ActionDTO"
-            },
-            "title": "Actions",
-            "type": "array"
-          },
-          "blocked": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Blocked"
-          },
-          "changes": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "field": "#/components/schemas/FieldChangeDTO",
-                  "list": "#/components/schemas/ListChangeDTO",
-                  "media": "#/components/schemas/MediaChangeDTO",
-                  "price": "#/components/schemas/PriceChangeDTO"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/FieldChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/ListChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/PriceChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/MediaChangeDTO"
-                }
-              ]
-            },
-            "title": "Changes",
-            "type": "array"
-          },
           "drift": {
             "default": [],
             "items": {
@@ -2203,16 +2445,27 @@
             "title": "Drift",
             "type": "array"
           },
-          "reason": {
-            "anyOf": [
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
               }
             ],
-            "title": "Reason"
+            "title": "Outcome"
           },
           "snapshot": {
             "anyOf": [
@@ -2229,14 +2482,10 @@
             "default": "publish",
             "title": "Stage",
             "type": "string"
-          },
-          "will_run": {
-            "title": "Will Run",
-            "type": "boolean"
           }
         },
         "required": [
-          "will_run"
+          "outcome"
         ],
         "title": "PublishStagePlanDTO",
         "type": "object"
@@ -2318,56 +2567,8 @@
         "type": "object"
       },
       "RenderStagePlanDTO": {
+        "additionalProperties": false,
         "properties": {
-          "actions": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ActionDTO"
-            },
-            "title": "Actions",
-            "type": "array"
-          },
-          "blocked": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Blocked"
-          },
-          "changes": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "field": "#/components/schemas/FieldChangeDTO",
-                  "list": "#/components/schemas/ListChangeDTO",
-                  "media": "#/components/schemas/MediaChangeDTO",
-                  "price": "#/components/schemas/PriceChangeDTO"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/FieldChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/ListChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/PriceChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/MediaChangeDTO"
-                }
-              ]
-            },
-            "title": "Changes",
-            "type": "array"
-          },
           "drift": {
             "default": [],
             "items": {
@@ -2376,16 +2577,27 @@
             "title": "Drift",
             "type": "array"
           },
-          "reason": {
-            "anyOf": [
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
               }
             ],
-            "title": "Reason"
+            "title": "Outcome"
           },
           "snapshot": {
             "anyOf": [
@@ -2402,14 +2614,10 @@
             "default": "render",
             "title": "Stage",
             "type": "string"
-          },
-          "will_run": {
-            "title": "Will Run",
-            "type": "boolean"
           }
         },
         "required": [
-          "will_run"
+          "outcome"
         ],
         "title": "RenderStagePlanDTO",
         "type": "object"
@@ -2433,56 +2641,8 @@
         "type": "object"
       },
       "RetractStagePlanDTO": {
+        "additionalProperties": false,
         "properties": {
-          "actions": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ActionDTO"
-            },
-            "title": "Actions",
-            "type": "array"
-          },
-          "blocked": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Blocked"
-          },
-          "changes": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "field": "#/components/schemas/FieldChangeDTO",
-                  "list": "#/components/schemas/ListChangeDTO",
-                  "media": "#/components/schemas/MediaChangeDTO",
-                  "price": "#/components/schemas/PriceChangeDTO"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/FieldChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/ListChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/PriceChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/MediaChangeDTO"
-                }
-              ]
-            },
-            "title": "Changes",
-            "type": "array"
-          },
           "drift": {
             "default": [],
             "items": {
@@ -2491,16 +2651,27 @@
             "title": "Drift",
             "type": "array"
           },
-          "reason": {
-            "anyOf": [
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
               {
-                "type": "string"
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
               },
               {
-                "type": "null"
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
               }
             ],
-            "title": "Reason"
+            "title": "Outcome"
           },
           "snapshot": {
             "title": "Snapshot",
@@ -2511,251 +2682,12 @@
             "default": "retract",
             "title": "Stage",
             "type": "string"
-          },
-          "will_run": {
-            "title": "Will Run",
-            "type": "boolean"
           }
         },
         "required": [
-          "will_run"
+          "outcome"
         ],
         "title": "RetractStagePlanDTO",
-        "type": "object"
-      },
-      "RunDetail": {
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "events": {
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "listing_failed": "#/components/schemas/ListingFailedEvent",
-                  "listing_planned": "#/components/schemas/ListingPlannedEvent",
-                  "phase": "#/components/schemas/PhaseEvent",
-                  "preview_rendered": "#/components/schemas/PreviewRenderedEvent",
-                  "progress": "#/components/schemas/ProgressEvent",
-                  "stage_applied": "#/components/schemas/StageAppliedEvent",
-                  "stage_applying": "#/components/schemas/StageApplyingEvent",
-                  "stage_checking": "#/components/schemas/StageCheckingEvent",
-                  "stage_failed": "#/components/schemas/StageFailedEvent",
-                  "stage_planned": "#/components/schemas/StagePlannedEvent"
-                },
-                "propertyName": "type"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/PhaseEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/StageCheckingEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/StagePlannedEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/ListingPlannedEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/PreviewRenderedEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/StageApplyingEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/ProgressEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/StageAppliedEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/StageFailedEvent"
-                },
-                {
-                  "$ref": "#/components/schemas/ListingFailedEvent"
-                }
-              ]
-            },
-            "title": "Events",
-            "type": "array"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "kind": {
-            "enum": [
-              "plan",
-              "apply"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "listings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Listings",
-            "type": "array"
-          },
-          "phase": {
-            "anyOf": [
-              {
-                "enum": [
-                  "queued",
-                  "planning",
-                  "planned",
-                  "previewing",
-                  "ready",
-                  "failed",
-                  "cancelled"
-                ],
-                "type": "string"
-              },
-              {
-                "enum": [
-                  "queued",
-                  "applying",
-                  "applied",
-                  "failed",
-                  "stale"
-                ],
-                "type": "string"
-              }
-            ],
-            "title": "Phase"
-          },
-          "reviewed_run_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed Run Id"
-          },
-          "scope": {
-            "enum": [
-              "listings",
-              "workspace"
-            ],
-            "title": "Scope",
-            "type": "string"
-          },
-          "seen": {
-            "title": "Seen",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "scope",
-          "listings",
-          "phase",
-          "seen",
-          "reviewed_run_id",
-          "created_at",
-          "events"
-        ],
-        "title": "RunDetail",
-        "type": "object"
-      },
-      "RunSummary": {
-        "description": "Enough to show a page-head control (decision 8's table) or a row in a\nfuture batch view -- everything except the event log itself.",
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "title": "Created At",
-            "type": "string"
-          },
-          "id": {
-            "title": "Id",
-            "type": "string"
-          },
-          "kind": {
-            "enum": [
-              "plan",
-              "apply"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "listings": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Listings",
-            "type": "array"
-          },
-          "phase": {
-            "anyOf": [
-              {
-                "enum": [
-                  "queued",
-                  "planning",
-                  "planned",
-                  "previewing",
-                  "ready",
-                  "failed",
-                  "cancelled"
-                ],
-                "type": "string"
-              },
-              {
-                "enum": [
-                  "queued",
-                  "applying",
-                  "applied",
-                  "failed",
-                  "stale"
-                ],
-                "type": "string"
-              }
-            ],
-            "title": "Phase"
-          },
-          "reviewed_run_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed Run Id"
-          },
-          "scope": {
-            "enum": [
-              "listings",
-              "workspace"
-            ],
-            "title": "Scope",
-            "type": "string"
-          },
-          "seen": {
-            "title": "Seen",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "scope",
-          "listings",
-          "phase",
-          "seen",
-          "reviewed_run_id",
-          "created_at"
-        ],
-        "title": "RunSummary",
         "type": "object"
       },
       "ShadeConfig": {
@@ -3301,6 +3233,64 @@
         "title": "ValidationError",
         "type": "object"
       },
+      "WorkOutcomeDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActionDTO"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "field": "#/components/schemas/FieldChangeDTO",
+                  "list": "#/components/schemas/ListChangeDTO",
+                  "media": "#/components/schemas/MediaChangeDTO",
+                  "price": "#/components/schemas/PriceChangeDTO"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FieldChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ListChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PriceChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/MediaChangeDTO"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "type": {
+            "const": "work",
+            "default": "work",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "WorkOutcomeDTO",
+        "type": "object"
+      },
       "WorkspaceApplyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3313,7 +3303,6 @@
           },
           "kind": {
             "const": "apply",
-            "default": "apply",
             "title": "Kind",
             "type": "string"
           },
@@ -3330,12 +3319,13 @@
           },
           "scope": {
             "const": "workspace",
-            "default": "workspace",
             "title": "Scope",
             "type": "string"
           }
         },
         "required": [
+          "kind",
+          "scope",
           "listings",
           "expect",
           "reviewed_run_id"
@@ -3348,17 +3338,19 @@
         "properties": {
           "kind": {
             "const": "plan",
-            "default": "plan",
             "title": "Kind",
             "type": "string"
           },
           "scope": {
             "const": "workspace",
-            "default": "workspace",
             "title": "Scope",
             "type": "string"
           }
         },
+        "required": [
+          "kind",
+          "scope"
+        ],
         "title": "WorkspacePlanRequest",
         "type": "object"
       },
@@ -4221,7 +4213,21 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/RunSummary"
+                    "discriminator": {
+                      "mapping": {
+                        "apply": "#/components/schemas/ApplyRunSummary",
+                        "plan": "#/components/schemas/PlanRunSummary"
+                      },
+                      "propertyName": "kind"
+                    },
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/PlanRunSummary"
+                      },
+                      {
+                        "$ref": "#/components/schemas/ApplyRunSummary"
+                      }
+                    ]
                   },
                   "title": "Response List Runs Api Runs Get",
                   "type": "array"
@@ -4278,7 +4284,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunSummary"
+                  "discriminator": {
+                    "mapping": {
+                      "apply": "#/components/schemas/ApplyRunSummary",
+                      "plan": "#/components/schemas/PlanRunSummary"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/PlanRunSummary"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ApplyRunSummary"
+                    }
+                  ],
+                  "title": "Response Create Run Api Runs Post"
                 }
               }
             },
@@ -4321,7 +4342,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunSummary"
+                  "discriminator": {
+                    "mapping": {
+                      "apply": "#/components/schemas/ApplyRunSummary",
+                      "plan": "#/components/schemas/PlanRunSummary"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/PlanRunSummary"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ApplyRunSummary"
+                    }
+                  ],
+                  "title": "Response Cancel Run Api Runs  Run Id  Delete"
                 }
               }
             },
@@ -4361,7 +4397,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunDetail"
+                  "discriminator": {
+                    "mapping": {
+                      "apply": "#/components/schemas/ApplyRunDetail",
+                      "plan": "#/components/schemas/PlanRunDetail"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/PlanRunDetail"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ApplyRunDetail"
+                    }
+                  ],
+                  "title": "Response Get Run Api Runs  Run Id  Get"
                 }
               }
             },
@@ -4444,7 +4495,22 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/RunSummary"
+                  "discriminator": {
+                    "mapping": {
+                      "apply": "#/components/schemas/ApplyRunSummary",
+                      "plan": "#/components/schemas/PlanRunSummary"
+                    },
+                    "propertyName": "kind"
+                  },
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/PlanRunSummary"
+                    },
+                    {
+                      "$ref": "#/components/schemas/ApplyRunSummary"
+                    }
+                  ],
+                  "title": "Response Mark Seen Api Runs  Run Id  Seen Post"
                 }
               }
             },

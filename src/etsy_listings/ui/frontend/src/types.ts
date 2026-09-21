@@ -50,10 +50,12 @@ export type MediaEntry = TemplateMediaEntry | string;
 
 // ── Deploy changes (A29-A33, docs/deploy-changes.md) ────────────────────────
 
-export type RunKind = components["schemas"]["RunSummary"]["kind"];
-export type RunPhase = components["schemas"]["RunSummary"]["phase"];
-export type RunSummary = components["schemas"]["RunSummary"];
-export type RunDetail = components["schemas"]["RunDetail"];
+export type RunSummary =
+  components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];
+export type RunDetail =
+  components["schemas"]["PlanRunDetail"] | components["schemas"]["ApplyRunDetail"];
+export type RunKind = RunSummary["kind"];
+export type RunPhase = RunSummary["phase"];
 export type CreateRunRequest =
   | components["schemas"]["ListingPlanRequest"]
   | components["schemas"]["WorkspacePlanRequest"]
@@ -70,6 +72,26 @@ export type MediaChangeDTO = components["schemas"]["MediaChangeDTO"];
 export type ChangeDTO = FieldChangeDTO | ListChangeDTO | PriceChangeDTO | MediaChangeDTO;
 export type PlanDTO = components["schemas"]["PlanDTO"];
 export type StagePlanDTO = PlanDTO["stage_plans"][number];
+
+export function stageWillRun(stage: StagePlanDTO): boolean {
+  return stage.outcome.type === "work";
+}
+
+export function stageBlocked(stage: StagePlanDTO): string | null {
+  return stage.outcome.type === "blocked" ? stage.outcome.message : null;
+}
+
+export function stageReason(stage: StagePlanDTO): string | null {
+  return stage.outcome.type === "work" ? stage.outcome.reason : null;
+}
+
+export function stageChanges(stage: StagePlanDTO): ChangeDTO[] {
+  return stage.outcome.type === "work" ? stage.outcome.changes : [];
+}
+
+export function stageActions(stage: StagePlanDTO): ActionDTO[] {
+  return stage.outcome.type === "work" ? stage.outcome.actions : [];
+}
 
 /** One planned pipeline stage's own name, as `engine/stages/__init__.py`'s
  * `STAGES` orders them -- the order `PlanDTO.stage_plans` already arrives in,

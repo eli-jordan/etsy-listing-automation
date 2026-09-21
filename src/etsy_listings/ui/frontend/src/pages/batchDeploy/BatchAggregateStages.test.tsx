@@ -1,20 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { PlanDTO, StagePlanDTO } from "../../types";
+import { stagePlan } from "../../test/helpers";
 import { BatchAggregateStages } from "./BatchAggregateStages";
 import type { BatchListingState } from "./batchDeployState";
 
 function stage(stageName: StagePlanDTO["stage"], willRun = false): StagePlanDTO {
-  return {
-    stage: stageName,
-    will_run: willRun,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-  };
+  return stagePlan(stageName, { will_run: willRun }) as StagePlanDTO;
 }
 
 function plan(listing: string, stages: StagePlanDTO[]): PlanDTO {

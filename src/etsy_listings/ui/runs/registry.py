@@ -151,6 +151,18 @@ class Run:
         return self._state.phase
 
     @property
+    def plan_phase(self) -> PlanRunPhase:
+        if not isinstance(self._state, PlanRunState):
+            raise TypeError("an apply run has no plan phase")
+        return self._state.phase
+
+    @property
+    def apply_phase(self) -> ApplyRunPhase:
+        if not isinstance(self._state, ApplyRunState):
+            raise TypeError("a plan run has no apply phase")
+        return self._state.phase
+
+    @property
     def cancel_requested(self) -> bool:
         return self._state.cancel_requested if isinstance(self._state, PlanRunState) else False
 

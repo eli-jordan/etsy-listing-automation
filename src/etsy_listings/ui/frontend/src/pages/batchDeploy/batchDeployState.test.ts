@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlanDTO, RunEvent, StagePlanDTO } from "../../types";
+import { stagePlan } from "../../test/helpers";
 import {
   applyBatchRunEvent,
   batchDeployState,
@@ -15,16 +16,7 @@ function listing(state: BatchDeployState, name: string) {
 }
 
 function stage(stageName: StagePlanDTO["stage"], willRun = false): StagePlanDTO {
-  return {
-    stage: stageName,
-    will_run: willRun,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: willRun ? "changed" : null,
-    blocked: null,
-    snapshot: null,
-  };
+  return stagePlan(stageName, { will_run: willRun }) as StagePlanDTO;
 }
 
 function plan(listing: string): PlanDTO {

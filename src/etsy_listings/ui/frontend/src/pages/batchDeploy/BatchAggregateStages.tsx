@@ -1,4 +1,4 @@
-import { STAGE_LABELS } from "../../types";
+import { STAGE_LABELS, stageWillRun } from "../../types";
 import {
   aggregateStageOrder,
   aggregateStageProgress,
@@ -50,7 +50,9 @@ function exceptionListing(
     if (listing.stageRuntime[stage]?.kind === "failed") return true;
     if (!listing.stale) return false;
     const plan = listing.plan ?? listing.reviewedPlan;
-    return plan?.stage_plans.some((candidate) => candidate.stage === stage && candidate.will_run);
+    return plan?.stage_plans.some(
+      (candidate) => candidate.stage === stage && stageWillRun(candidate),
+    );
   });
 }
 

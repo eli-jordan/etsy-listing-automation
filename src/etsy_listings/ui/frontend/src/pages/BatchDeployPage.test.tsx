@@ -12,6 +12,13 @@ import type {
   RunSummary,
   StagePlanDTO,
 } from "../types";
+import {
+  runDetail as makeRunDetail,
+  runSummary as makeRunSummary,
+  stagePlan,
+  type RunSummaryOverrides,
+  type StagePlanOverrides,
+} from "../test/helpers";
 import * as runStreamModule from "./deploy/runStream";
 import { BatchDeployPage } from "./BatchDeployPage";
 
@@ -31,19 +38,9 @@ function summary(name: string): ListingSummary {
 
 function stage<Name extends StagePlanDTO["stage"]>(
   stageName: Name,
-  overrides: Partial<Extract<StagePlanDTO, { stage: Name }>> = {},
+  overrides: StagePlanOverrides<Name> = {},
 ): Extract<StagePlanDTO, { stage: Name }> {
-  return {
-    stage: stageName,
-    will_run: false,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-    ...overrides,
-  } as unknown as Extract<StagePlanDTO, { stage: Name }>;
+  return stagePlan(stageName, overrides);
 }
 
 function plan(overrides: Partial<PlanDTO> = {}): PlanDTO {
@@ -56,22 +53,12 @@ function plan(overrides: Partial<PlanDTO> = {}): PlanDTO {
   };
 }
 
-function runSummary(overrides: Partial<RunSummary> = {}): RunSummary {
-  return {
-    id: "batch-1",
-    kind: "plan",
-    scope: "workspace",
-    listings: ["take-a-hike"],
-    phase: "queued",
-    seen: false,
-    reviewed_run_id: null,
-    created_at: "2026-09-21T10:00:00Z",
-    ...overrides,
-  };
+function runSummary(overrides: RunSummaryOverrides = {}): RunSummary {
+  return makeRunSummary({ id: "batch-1", scope: "workspace", ...overrides });
 }
 
-function runDetail(overrides: Partial<RunDetail> = {}): RunDetail {
-  return { ...runSummary(), events: [], ...overrides };
+function runDetail(overrides: RunSummaryOverrides & { events?: RunEvent[] } = {}): RunDetail {
+  return makeRunDetail({ id: "batch-1", scope: "workspace", ...overrides });
 }
 
 function renderPage(path = "/listings/deploy/batch-1") {

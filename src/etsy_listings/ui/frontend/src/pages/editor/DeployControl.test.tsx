@@ -4,24 +4,21 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as runsApi from "../../api/runs";
 import type { RunSummary } from "../../types";
+import { runSummary, type RunSummaryOverrides } from "../../test/helpers";
 import { DeployControl } from "./DeployControl";
 
 /**
  * The page-head control's four states (docs/deploy-changes.md decision 8).
  */
 
-function summary(over: Partial<RunSummary> = {}): RunSummary {
-  return {
+function summary(over: RunSummaryOverrides = {}): RunSummary {
+  return runSummary({
     id: "run-1",
     kind: "apply",
-    scope: "listings",
-    listings: ["take-a-hike"],
     phase: "applied",
-    seen: false,
-    reviewed_run_id: null,
     created_at: "2026-09-17T10:00:00Z",
     ...over,
-  };
+  });
 }
 
 function renderControl(flush = vi.fn().mockResolvedValue(undefined)) {
@@ -70,7 +67,9 @@ describe("DeployControl", () => {
   it.each(["queued", "planning", "previewing", "applying", "ready"] as const)(
     "offers to view progress while a run is under way (%s)",
     async (phase) => {
-      vi.spyOn(runsApi, "currentRun").mockResolvedValue(summary({ kind: "plan", phase }));
+      vi.spyOn(runsApi, "currentRun").mockResolvedValue(
+        summary({ kind: phase === "applying" ? "apply" : "plan", phase }),
+      );
       renderControl();
 
       expect(

@@ -1,5 +1,5 @@
 import type { Comparison } from "./comparison";
-import type { PlanDTO } from "../../types";
+import { stageBlocked, stageWillRun, type PlanDTO } from "../../types";
 
 /**
  * The headline, impact tags, and the blocked/drift/ok callouts above the
@@ -73,8 +73,8 @@ export function Callouts({
    * single "Deployed" callout, per the spec's Applied element. */
   applied: boolean;
 }) {
-  const hasWork = plan.stage_plans.some((s) => s.will_run);
-  const blocked = plan.stage_plans.filter((s) => s.blocked !== null);
+  const hasWork = plan.stage_plans.some(stageWillRun);
+  const blocked = plan.stage_plans.filter((stage) => stageBlocked(stage) !== null);
   const drifts = plan.stage_plans.flatMap((s) => s.drift.map((d) => ({ ...d, stage: s.stage })));
 
   if (applied) {
@@ -121,7 +121,7 @@ export function Callouts({
       )}
 
       {blocked.map((stagePlan) => {
-        const lines = (stagePlan.blocked ?? "").split("\n");
+        const lines = (stageBlocked(stagePlan) ?? "").split("\n");
         return (
           <div key={stagePlan.stage} className="dv-callout dv-callout--blocked">
             <BlockedIcon />

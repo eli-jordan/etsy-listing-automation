@@ -4,6 +4,7 @@ import { MemoryRouter, Route, Routes, useParams } from "react-router-dom";
 import * as listingsApi from "../api/listings";
 import * as runsApi from "../api/runs";
 import type { ListingDetail, ListingSummary } from "../types";
+import { runSummary } from "../test/helpers";
 import { ListingsPage } from "./ListingsPage";
 
 function EditorStub() {
@@ -114,16 +115,16 @@ describe("ListingsPage", () => {
     ["applying", "Deploying… · View batch progress →"],
   ] as const)("offers to reattach to a workspace run in %s", async (phase, label) => {
     vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary({ name: "new-shirt" })]);
-    vi.spyOn(runsApi, "currentWorkspaceRun").mockResolvedValue({
-      id: "batch-3",
-      kind: phase === "applying" ? "apply" : "plan",
-      scope: "workspace",
-      listings: ["new-shirt"],
-      phase,
-      seen: false,
-      reviewed_run_id: phase === "applying" ? "batch-plan" : null,
-      created_at: "2026-09-21T10:00:00Z",
-    });
+    vi.spyOn(runsApi, "currentWorkspaceRun").mockResolvedValue(
+      runSummary({
+        id: "batch-3",
+        kind: phase === "applying" ? "apply" : "plan",
+        scope: "workspace",
+        listings: ["new-shirt"],
+        phase,
+        reviewed_run_id: phase === "applying" ? "batch-plan" : null,
+      }),
+    );
     renderPage();
 
     expect(await screen.findByRole("button", { name: label })).toBeInTheDocument();

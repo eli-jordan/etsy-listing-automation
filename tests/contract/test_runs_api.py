@@ -90,7 +90,9 @@ def _parse_sse(raw: str) -> list[dict[str, Any]]:
 
 
 def test_create_a_plan_run_returns_202_and_a_summary(client: TestClient) -> None:
-    response = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]})
+    response = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    )
 
     assert response.status_code == 202
     body = response.json()
@@ -125,6 +127,9 @@ def test_a_workspace_plan_resolves_sorted_names_on_the_server(
 @pytest.mark.parametrize(
     ("payload", "message"),
     [
+        ({}, "kind"),
+        ({"kind": "plan"}, "scope"),
+        ({"scope": "workspace"}, "kind"),
         ({"kind": "plan", "scope": "workspace", "listings": []}, "listings"),
         ({"kind": "plan", "scope": "workspace", "expect": {}}, "expect"),
         (
@@ -240,9 +245,14 @@ def test_workspace_apply_rejects_a_missing_review_source(client: TestClient) -> 
 
 
 def test_create_is_refused_409_when_the_listing_is_already_active(client: TestClient) -> None:
-    first = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
+    first = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
 
-    second = client.post("/api/runs", json={"kind": "apply", "listings": [LISTING], "expect": {}})
+    second = client.post(
+        "/api/runs",
+        json={"kind": "apply", "scope": "listings", "listings": [LISTING], "expect": {}},
+    )
 
     assert second.status_code == 409
     assert second.json() == {"active_run": first["id"]}
@@ -255,8 +265,12 @@ def test_create_is_refused_409_when_the_listing_is_already_active(client: TestCl
 
 def test_list_runs_filters_by_listing(workspace_root: Path, client: TestClient) -> None:
     copy_listing(workspace_root, "second")
-    a = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
-    b = client.post("/api/runs", json={"kind": "plan", "listings": ["second"]}).json()
+    a = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    b = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": ["second"]}
+    ).json()
 
     rows = client.get("/api/runs", params={"listing": "second"}).json()
 
@@ -277,7 +291,9 @@ def test_get_an_unknown_run_is_404(client: TestClient) -> None:
 
 
 def test_get_run_carries_its_events(client: TestClient) -> None:
-    created = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
 
     detail = _wait_until_terminal(client, created["id"])
 
@@ -292,7 +308,8 @@ def test_get_run_carries_its_events(client: TestClient) -> None:
 
 def test_cancel_an_apply_run_is_409(client: TestClient) -> None:
     created = client.post(
-        "/api/runs", json={"kind": "apply", "listings": [LISTING], "expect": {}}
+        "/api/runs",
+        json={"kind": "apply", "scope": "listings", "listings": [LISTING], "expect": {}},
     ).json()
 
     response = client.delete(f"/api/runs/{created['id']}")
@@ -307,8 +324,12 @@ def test_cancel_an_unknown_run_is_404(client: TestClient) -> None:
 
 def test_cancel_a_queued_plan_run(workspace_root: Path, client: TestClient) -> None:
     copy_listing(workspace_root, "second")
-    first = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
-    second = client.post("/api/runs", json={"kind": "plan", "listings": ["second"]}).json()
+    first = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    second = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": ["second"]}
+    ).json()
 
     response = client.delete(f"/api/runs/{second['id']}")
 
@@ -321,7 +342,9 @@ def test_cancel_a_queued_plan_run(workspace_root: Path, client: TestClient) -> N
 
 
 def test_mark_seen(client: TestClient) -> None:
-    created = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
     _wait_until_terminal(client, created["id"])
 
     response = client.post(f"/api/runs/{created['id']}/seen")
@@ -340,7 +363,9 @@ def test_seen_on_an_unknown_run_is_404(client: TestClient) -> None:
 def test_a_plan_run_streams_its_full_event_sequence(client: TestClient) -> None:
     """The root "done when" for this PR, half of it: every event a plan run
     produces, in order, through the real SSE route."""
-    created = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
 
     response = client.get(f"/api/runs/{created['id']}/events")
 
@@ -366,7 +391,8 @@ def test_a_plan_run_streams_its_full_event_sequence(client: TestClient) -> None:
 def test_an_apply_run_streams_its_full_event_sequence(client: TestClient) -> None:
     """The root "done when", the other half: an apply run's full sequence."""
     created = client.post(
-        "/api/runs", json={"kind": "apply", "listings": [LISTING], "expect": {}}
+        "/api/runs",
+        json={"kind": "apply", "scope": "listings", "listings": [LISTING], "expect": {}},
     ).json()
 
     response = client.get(f"/api/runs/{created['id']}/events")
@@ -384,7 +410,9 @@ def test_an_apply_run_streams_its_full_event_sequence(client: TestClient) -> Non
 
 
 def test_last_event_id_replays_only_what_came_after(client: TestClient) -> None:
-    created = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
     _wait_until_terminal(client, created["id"])
 
     full = _parse_sse(client.get(f"/api/runs/{created['id']}/events").text)
@@ -399,7 +427,9 @@ def test_last_event_id_replays_only_what_came_after(client: TestClient) -> None:
 
 
 def test_an_invalid_last_event_id_replays_everything(client: TestClient) -> None:
-    created = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
     _wait_until_terminal(client, created["id"])
 
     replayed = _parse_sse(
@@ -436,8 +466,8 @@ def test_run_event_appears_in_openapi_with_every_variant(client: TestClient) -> 
     }
     assert expected <= definitions.keys()
 
-    run_detail = definitions["RunDetail"]
-    events_schema = run_detail["properties"]["events"]
-    # A list of the discriminated union, however the schema nests it --
-    # openapi's `$ref`s point at `RunEvent` or straight at its `oneOf`.
-    assert "items" in events_schema
+    for detail_name in ("PlanRunDetail", "ApplyRunDetail"):
+        events_schema = definitions[detail_name]["properties"]["events"]
+        # A list of the discriminated union, however the schema nests it --
+        # openapi's `$ref`s point at `RunEvent` or straight at its `oneOf`.
+        assert "items" in events_schema

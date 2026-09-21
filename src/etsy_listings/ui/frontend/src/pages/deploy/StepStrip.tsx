@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { StageRuntimeStatus } from "./deployState";
 import type { PlanDTO, StagePlanDTO } from "../../types";
-import { STAGE_LABELS } from "../../types";
+import { STAGE_LABELS, stageActions, stageBlocked, stageReason, stageWillRun } from "../../types";
 
 /**
  * "What apply will do" / "What apply did" -- one cell per stage the plan
@@ -21,9 +21,9 @@ function cellState(
   if (runtime?.kind === "applying") return "running";
   if (runtime?.kind === "applied") return "done";
   if (runtime?.kind === "failed") return "failed";
-  if (stagePlan.will_run && failedEarlier) return "not-reached";
-  if (stagePlan.blocked !== null) return "blocked";
-  return stagePlan.will_run ? "run" : "skip";
+  if (stageWillRun(stagePlan) && failedEarlier) return "not-reached";
+  if (stageBlocked(stagePlan) !== null) return "blocked";
+  return stageWillRun(stagePlan) ? "run" : "skip";
 }
 
 function Icon({ state }: { state: CellState }) {
@@ -85,7 +85,7 @@ function whyText(
     case "not-reached":
       return "Not reached";
     default:
-      return stagePlan.reason ?? "";
+      return stageReason(stagePlan) ?? "";
   }
 }
 
@@ -129,7 +129,7 @@ function StepCell({
   const state = cellState(stagePlan, runtime, failedEarlier);
   const label = STAGE_LABELS[stagePlan.stage] ?? stagePlan.stage;
   const log = runtime?.kind === "applying" ? runtime.log : null;
-  const actions = stagePlan.actions;
+  const actions = stageActions(stagePlan);
 
   return (
     <div className={`dv-step dv-step--${state}`}>

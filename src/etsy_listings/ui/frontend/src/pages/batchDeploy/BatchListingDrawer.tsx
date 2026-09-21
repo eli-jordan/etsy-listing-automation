@@ -7,7 +7,12 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from "react";
-import type { ListingDetail, ListingSummary, RenderSnapshot } from "../../types";
+import {
+  stageBlocked,
+  type ListingDetail,
+  type ListingSummary,
+  type RenderSnapshot,
+} from "../../types";
 import { ComparisonView } from "../deploy/ComparisonView";
 import { buildComparison } from "../deploy/comparison";
 import { PriceTable } from "../deploy/PriceTable";
@@ -93,7 +98,8 @@ function drawerSummary(
   if (listing?.failureMessage !== null && listing?.failureMessage !== undefined) {
     return listing.failureMessage;
   }
-  const blocked = listing?.plan?.stage_plans.find((stage) => stage.blocked !== null)?.blocked;
+  const blockedStage = listing?.plan?.stage_plans.find((stage) => stageBlocked(stage) !== null);
+  const blocked = blockedStage === undefined ? null : stageBlocked(blockedStage);
   return blocked ?? (comparison?.impacts.join(" · ") || "No changes planned");
 }
 

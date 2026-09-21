@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ListingSummary, PlanDTO, StagePlanDTO } from "../../types";
+import { stagePlan, type StagePlanOverrides } from "../../test/helpers";
 import { buildComparison } from "../deploy/comparison";
 import { batchDeployState, type BatchListingState } from "./batchDeployState";
 import {
@@ -16,19 +17,9 @@ import {
 
 function stage<Name extends StagePlanDTO["stage"]>(
   stageName: Name,
-  overrides: Partial<Extract<StagePlanDTO, { stage: Name }>> = {},
+  overrides: StagePlanOverrides<Name> = {},
 ): Extract<StagePlanDTO, { stage: Name }> {
-  return {
-    stage: stageName,
-    will_run: false,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-    ...overrides,
-  } as unknown as Extract<StagePlanDTO, { stage: Name }>;
+  return stagePlan(stageName, overrides);
 }
 
 function plan(

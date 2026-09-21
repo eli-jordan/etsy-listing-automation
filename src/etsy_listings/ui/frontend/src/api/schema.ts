@@ -764,6 +764,81 @@ export interface components {
       /** Outputs */
       outputs: string[];
     };
+    /** ApplyRunDetail */
+    ApplyRunDetail: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Events */
+      events: (
+        | components["schemas"]["PhaseEvent"]
+        | components["schemas"]["StageCheckingEvent"]
+        | components["schemas"]["StagePlannedEvent"]
+        | components["schemas"]["ListingPlannedEvent"]
+        | components["schemas"]["PreviewRenderedEvent"]
+        | components["schemas"]["StageApplyingEvent"]
+        | components["schemas"]["ProgressEvent"]
+        | components["schemas"]["StageAppliedEvent"]
+        | components["schemas"]["StageFailedEvent"]
+        | components["schemas"]["ListingFailedEvent"]
+      )[];
+      /** Id */
+      id: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "apply";
+      /** Listings */
+      listings: string[];
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "queued" | "applying" | "applied" | "failed" | "stale";
+      /** Reviewed Run Id */
+      reviewed_run_id: string | null;
+      /**
+       * Scope
+       * @enum {string}
+       */
+      scope: "listings" | "workspace";
+      /** Seen */
+      seen: boolean;
+    };
+    /** ApplyRunSummary */
+    ApplyRunSummary: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Id */
+      id: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "apply";
+      /** Listings */
+      listings: string[];
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "queued" | "applying" | "applied" | "failed" | "stale";
+      /** Reviewed Run Id */
+      reviewed_run_id: string | null;
+      /**
+       * Scope
+       * @enum {string}
+       */
+      scope: "listings" | "workspace";
+      /** Seen */
+      seen: boolean;
+    };
     /** AssignKindRequest */
     AssignKindRequest: {
       /**
@@ -793,6 +868,16 @@ export interface components {
       price: string;
       /** Size */
       size: string;
+    };
+    /** BlockedOutcomeDTO */
+    BlockedOutcomeDTO: {
+      /** Message */
+      message: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "blocked";
     };
     /** Body_upload_design_api_designs_post */
     Body_upload_design_api_designs_post: {
@@ -1067,37 +1152,21 @@ export interface components {
     /** EtsyListingStagePlanDTO */
     EtsyListingStagePlanDTO: {
       /**
-       * Actions
-       * @default []
-       */
-      actions: components["schemas"]["ActionDTO"][];
-      /** Blocked */
-      blocked?: string | null;
-      /**
-       * Changes
-       * @default []
-       */
-      changes: (
-        | components["schemas"]["FieldChangeDTO"]
-        | components["schemas"]["ListChangeDTO"]
-        | components["schemas"]["PriceChangeDTO"]
-        | components["schemas"]["MediaChangeDTO"]
-      )[];
-      /**
        * Drift
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
-      /** Reason */
-      reason?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
       snapshot?: components["schemas"]["EtsyListingSnapshot"] | null;
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       stage: "etsy_listing";
-      /** Will Run */
-      will_run: boolean;
     };
     /**
      * EtsyMediaSnapshot
@@ -1115,37 +1184,21 @@ export interface components {
     /** EtsyMediaStagePlanDTO */
     EtsyMediaStagePlanDTO: {
       /**
-       * Actions
-       * @default []
-       */
-      actions: components["schemas"]["ActionDTO"][];
-      /** Blocked */
-      blocked?: string | null;
-      /**
-       * Changes
-       * @default []
-       */
-      changes: (
-        | components["schemas"]["FieldChangeDTO"]
-        | components["schemas"]["ListChangeDTO"]
-        | components["schemas"]["PriceChangeDTO"]
-        | components["schemas"]["MediaChangeDTO"]
-      )[];
-      /**
        * Drift
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
-      /** Reason */
-      reason?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
       snapshot?: components["schemas"]["EtsyMediaSnapshot"] | null;
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       stage: "etsy_media";
-      /** Will Run */
-      will_run: boolean;
     };
     /**
      * EtsySectionSummary
@@ -1190,6 +1243,14 @@ export interface components {
     HTTPValidationError: {
       /** Detail */
       detail?: components["schemas"]["ValidationError"][];
+    };
+    /** IdleOutcomeDTO */
+    IdleOutcomeDTO: {
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "idle";
     };
     /** Issue */
     Issue: {
@@ -1239,7 +1300,6 @@ export interface components {
       };
       /**
        * Kind
-       * @default apply
        * @constant
        */
       kind: "apply";
@@ -1247,7 +1307,6 @@ export interface components {
       listings: string[];
       /**
        * Scope
-       * @default listings
        * @constant
        */
       scope: "listings";
@@ -1380,7 +1439,6 @@ export interface components {
     ListingPlanRequest: {
       /**
        * Kind
-       * @default plan
        * @constant
        */
       kind: "plan";
@@ -1388,7 +1446,6 @@ export interface components {
       listings: string[];
       /**
        * Scope
-       * @default listings
        * @constant
        */
       scope: "listings";
@@ -1591,6 +1648,81 @@ export interface components {
         | components["schemas"]["RetractStagePlanDTO"]
       )[];
     };
+    /** PlanRunDetail */
+    PlanRunDetail: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Events */
+      events: (
+        | components["schemas"]["PhaseEvent"]
+        | components["schemas"]["StageCheckingEvent"]
+        | components["schemas"]["StagePlannedEvent"]
+        | components["schemas"]["ListingPlannedEvent"]
+        | components["schemas"]["PreviewRenderedEvent"]
+        | components["schemas"]["StageApplyingEvent"]
+        | components["schemas"]["ProgressEvent"]
+        | components["schemas"]["StageAppliedEvent"]
+        | components["schemas"]["StageFailedEvent"]
+        | components["schemas"]["ListingFailedEvent"]
+      )[];
+      /** Id */
+      id: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "plan";
+      /** Listings */
+      listings: string[];
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled";
+      /** Reviewed Run Id */
+      reviewed_run_id?: null;
+      /**
+       * Scope
+       * @enum {string}
+       */
+      scope: "listings" | "workspace";
+      /** Seen */
+      seen: boolean;
+    };
+    /** PlanRunSummary */
+    PlanRunSummary: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Id */
+      id: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      kind: "plan";
+      /** Listings */
+      listings: string[];
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled";
+      /** Reviewed Run Id */
+      reviewed_run_id?: null;
+      /**
+       * Scope
+       * @enum {string}
+       */
+      scope: "listings" | "workspace";
+      /** Seen */
+      seen: boolean;
+    };
     /** Point */
     Point: {
       /** X */
@@ -1656,37 +1788,21 @@ export interface components {
     /** ProductStagePlanDTO */
     ProductStagePlanDTO: {
       /**
-       * Actions
-       * @default []
-       */
-      actions: components["schemas"]["ActionDTO"][];
-      /** Blocked */
-      blocked?: string | null;
-      /**
-       * Changes
-       * @default []
-       */
-      changes: (
-        | components["schemas"]["FieldChangeDTO"]
-        | components["schemas"]["ListChangeDTO"]
-        | components["schemas"]["PriceChangeDTO"]
-        | components["schemas"]["MediaChangeDTO"]
-      )[];
-      /**
        * Drift
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
-      /** Reason */
-      reason?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
       snapshot?: components["schemas"]["ProductSnapshot"] | null;
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       stage: "printify_product";
-      /** Will Run */
-      will_run: boolean;
     };
     /**
      * ProductVariantSnapshot
@@ -1743,37 +1859,21 @@ export interface components {
     /** PublishStagePlanDTO */
     PublishStagePlanDTO: {
       /**
-       * Actions
-       * @default []
-       */
-      actions: components["schemas"]["ActionDTO"][];
-      /** Blocked */
-      blocked?: string | null;
-      /**
-       * Changes
-       * @default []
-       */
-      changes: (
-        | components["schemas"]["FieldChangeDTO"]
-        | components["schemas"]["ListChangeDTO"]
-        | components["schemas"]["PriceChangeDTO"]
-        | components["schemas"]["MediaChangeDTO"]
-      )[];
-      /**
        * Drift
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
-      /** Reason */
-      reason?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
       snapshot?: components["schemas"]["PublishSnapshot"] | null;
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       stage: "publish";
-      /** Will Run */
-      will_run: boolean;
     };
     /** RenameListingRequest */
     RenameListingRequest: {
@@ -1820,37 +1920,21 @@ export interface components {
     /** RenderStagePlanDTO */
     RenderStagePlanDTO: {
       /**
-       * Actions
-       * @default []
-       */
-      actions: components["schemas"]["ActionDTO"][];
-      /** Blocked */
-      blocked?: string | null;
-      /**
-       * Changes
-       * @default []
-       */
-      changes: (
-        | components["schemas"]["FieldChangeDTO"]
-        | components["schemas"]["ListChangeDTO"]
-        | components["schemas"]["PriceChangeDTO"]
-        | components["schemas"]["MediaChangeDTO"]
-      )[];
-      /**
        * Drift
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
-      /** Reason */
-      reason?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
       snapshot?: components["schemas"]["RenderSnapshot"] | null;
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       stage: "render";
-      /** Will Run */
-      will_run: boolean;
     };
     /** ResolvedPrice */
     ResolvedPrice: {
@@ -1862,29 +1946,15 @@ export interface components {
     /** RetractStagePlanDTO */
     RetractStagePlanDTO: {
       /**
-       * Actions
-       * @default []
-       */
-      actions: components["schemas"]["ActionDTO"][];
-      /** Blocked */
-      blocked?: string | null;
-      /**
-       * Changes
-       * @default []
-       */
-      changes: (
-        | components["schemas"]["FieldChangeDTO"]
-        | components["schemas"]["ListChangeDTO"]
-        | components["schemas"]["PriceChangeDTO"]
-        | components["schemas"]["MediaChangeDTO"]
-      )[];
-      /**
        * Drift
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
-      /** Reason */
-      reason?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
       /** Snapshot */
       snapshot?: null;
       /**
@@ -1892,85 +1962,6 @@ export interface components {
        * @enum {string}
        */
       stage: "retract";
-      /** Will Run */
-      will_run: boolean;
-    };
-    /** RunDetail */
-    RunDetail: {
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Events */
-      events: (
-        | components["schemas"]["PhaseEvent"]
-        | components["schemas"]["StageCheckingEvent"]
-        | components["schemas"]["StagePlannedEvent"]
-        | components["schemas"]["ListingPlannedEvent"]
-        | components["schemas"]["PreviewRenderedEvent"]
-        | components["schemas"]["StageApplyingEvent"]
-        | components["schemas"]["ProgressEvent"]
-        | components["schemas"]["StageAppliedEvent"]
-        | components["schemas"]["StageFailedEvent"]
-        | components["schemas"]["ListingFailedEvent"]
-      )[];
-      /** Id */
-      id: string;
-      /**
-       * Kind
-       * @enum {string}
-       */
-      kind: "plan" | "apply";
-      /** Listings */
-      listings: string[];
-      /** Phase */
-      phase:
-        | ("queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled")
-        | ("queued" | "applying" | "applied" | "failed" | "stale");
-      /** Reviewed Run Id */
-      reviewed_run_id: string | null;
-      /**
-       * Scope
-       * @enum {string}
-       */
-      scope: "listings" | "workspace";
-      /** Seen */
-      seen: boolean;
-    };
-    /**
-     * RunSummary
-     * @description Enough to show a page-head control (decision 8's table) or a row in a
-     *     future batch view -- everything except the event log itself.
-     */
-    RunSummary: {
-      /**
-       * Created At
-       * Format: date-time
-       */
-      created_at: string;
-      /** Id */
-      id: string;
-      /**
-       * Kind
-       * @enum {string}
-       */
-      kind: "plan" | "apply";
-      /** Listings */
-      listings: string[];
-      /** Phase */
-      phase:
-        | ("queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled")
-        | ("queued" | "applying" | "applied" | "failed" | "stale");
-      /** Reviewed Run Id */
-      reviewed_run_id: string | null;
-      /**
-       * Scope
-       * @enum {string}
-       */
-      scope: "listings" | "workspace";
-      /** Seen */
-      seen: boolean;
     };
     /**
      * ShadeConfig
@@ -2247,6 +2238,31 @@ export interface components {
       /** Error Type */
       type: string;
     };
+    /** WorkOutcomeDTO */
+    WorkOutcomeDTO: {
+      /**
+       * Actions
+       * @default []
+       */
+      actions: components["schemas"]["ActionDTO"][];
+      /**
+       * Changes
+       * @default []
+       */
+      changes: (
+        | components["schemas"]["FieldChangeDTO"]
+        | components["schemas"]["ListChangeDTO"]
+        | components["schemas"]["PriceChangeDTO"]
+        | components["schemas"]["MediaChangeDTO"]
+      )[];
+      /** Reason */
+      reason: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "work";
+    };
     /** WorkspaceApplyRequest */
     WorkspaceApplyRequest: {
       /** Expect */
@@ -2255,7 +2271,6 @@ export interface components {
       };
       /**
        * Kind
-       * @default apply
        * @constant
        */
       kind: "apply";
@@ -2265,7 +2280,6 @@ export interface components {
       reviewed_run_id: string;
       /**
        * Scope
-       * @default workspace
        * @constant
        */
       scope: "workspace";
@@ -2274,13 +2288,11 @@ export interface components {
     WorkspacePlanRequest: {
       /**
        * Kind
-       * @default plan
        * @constant
        */
       kind: "plan";
       /**
        * Scope
-       * @default workspace
        * @constant
        */
       scope: "workspace";
@@ -2906,7 +2918,9 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RunSummary"][];
+          "application/json": (
+            components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"]
+          )[];
         };
       };
       /** @description Validation Error */
@@ -2943,7 +2957,8 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RunSummary"];
+          "application/json":
+            components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];
         };
       };
       /** @description Validation Error */
@@ -2974,7 +2989,8 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RunDetail"];
+          "application/json":
+            components["schemas"]["PlanRunDetail"] | components["schemas"]["ApplyRunDetail"];
         };
       };
       /** @description Validation Error */
@@ -3005,7 +3021,8 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RunSummary"];
+          "application/json":
+            components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];
         };
       };
       /** @description Validation Error */
@@ -3067,7 +3084,8 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["RunSummary"];
+          "application/json":
+            components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];
         };
       };
       /** @description Validation Error */

@@ -1,4 +1,10 @@
-import type { ListingSummary, PlanDTO, StagePlanDTO } from "../../types";
+import {
+  stageBlocked,
+  stageWillRun,
+  type ListingSummary,
+  type PlanDTO,
+  type StagePlanDTO,
+} from "../../types";
 import { buildComparison, type ImpactTag } from "../deploy/comparison";
 import type { StageRuntimeStatus } from "../deploy/deployState";
 import type { BatchDeployState, BatchListingState } from "./batchDeployState";
@@ -45,11 +51,11 @@ export function candidateCounts(summaries: readonly ListingSummary[]): Candidate
 }
 
 function hasBlockedStage(plan: PlanDTO): boolean {
-  return plan.stage_plans.some((stage) => stage.blocked !== null && stage.blocked !== undefined);
+  return plan.stage_plans.some((stage) => stageBlocked(stage) !== null);
 }
 
 function hasRunnableStage(plan: PlanDTO): boolean {
-  return plan.stage_plans.some((stage) => stage.will_run);
+  return plan.stage_plans.some(stageWillRun);
 }
 
 export function planGroup(plan: PlanDTO | null, planFailure: string | null = null): BatchPlanGroup {
@@ -98,7 +104,9 @@ function runtimeProgress(
   stagePlan: StagePlanDTO | undefined,
   runtime: StageRuntimeStatus | undefined,
 ): StageProgress {
-  if (stagePlan?.will_run !== true) return { total: 0, completed: 0, running: 0, failed: 0 };
+  if (stagePlan === undefined || !stageWillRun(stagePlan)) {
+    return { total: 0, completed: 0, running: 0, failed: 0 };
+  }
   return {
     total: 1,
     completed: runtime?.kind === "applied" ? 1 : 0,
@@ -157,7 +165,7 @@ export interface BatchResult {
 const TERMINAL_PHASES = new Set(["applied", "failed", "stale", "cancelled"]);
 
 function planIsClean(plan: PlanDTO): boolean {
-  return plan.stage_plans.every((stage) => !stage.will_run && !stage.blocked);
+  return plan.stage_plans.every((stage) => !stageWillRun(stage) && stageBlocked(stage) === null);
 }
 
 function planIsBlocked(plan: PlanDTO): boolean {
@@ -168,7 +176,7 @@ function allRunnableStagesApplied(listing: BatchListingState): boolean {
   return (
     listing.plan !== null &&
     listing.plan.stage_plans
-      .filter((stage) => stage.will_run)
+      .filter(stageWillRun)
       .every((stage) => listing.stageRuntime[stage.stage]?.kind === "applied")
   );
 }

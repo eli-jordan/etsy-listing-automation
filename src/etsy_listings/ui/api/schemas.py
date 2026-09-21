@@ -8,7 +8,7 @@ add a ``design`` selector nothing in the engine's config needs).
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -21,7 +21,7 @@ from etsy_listings.config.listing import Listing
 # the same principle `TemplateSummary.status` states below.
 from etsy_listings.engine.status import ListingGesture, ListingStatus
 from etsy_listings.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
-from etsy_listings.ui.runs.events import RunEvent, RunKind, RunPhase, RunScope
+from etsy_listings.ui.runs.events import ApplyRunPhase, PlanRunPhase, RunEvent, RunScope
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
@@ -361,26 +361,26 @@ class _CreateRunRequest(BaseModel):
 
 
 class ListingPlanRequest(_CreateRunRequest):
-    kind: Literal["plan"] = "plan"
-    scope: Literal["listings"] = "listings"
+    kind: Literal["plan"]
+    scope: Literal["listings"]
     listings: list[str] = Field(min_length=1)
 
 
 class WorkspacePlanRequest(_CreateRunRequest):
-    kind: Literal["plan"] = "plan"
-    scope: Literal["workspace"] = "workspace"
+    kind: Literal["plan"]
+    scope: Literal["workspace"]
 
 
 class ListingApplyRequest(_CreateRunRequest):
-    kind: Literal["apply"] = "apply"
-    scope: Literal["listings"] = "listings"
+    kind: Literal["apply"]
+    scope: Literal["listings"]
     listings: list[str] = Field(min_length=1)
     expect: dict[str, str]
 
 
 class WorkspaceApplyRequest(_CreateRunRequest):
-    kind: Literal["apply"] = "apply"
-    scope: Literal["workspace"] = "workspace"
+    kind: Literal["apply"]
+    scope: Literal["workspace"]
     listings: list[str]
     expect: dict[str, str]
     reviewed_run_id: str
@@ -391,22 +391,41 @@ CreateRunRequest = (
 )
 
 
-class RunSummary(BaseModel):
+class _RunSummary(BaseModel):
     """Enough to show a page-head control (decision 8's table) or a row in a
     future batch view -- everything except the event log itself."""
 
     id: str
-    kind: RunKind
     scope: RunScope
     listings: list[str]
-    phase: RunPhase
     seen: bool
     reviewed_run_id: str | None
     created_at: datetime
 
 
-class RunDetail(RunSummary):
+class PlanRunSummary(_RunSummary):
+    kind: Literal["plan"]
+    phase: PlanRunPhase
+    reviewed_run_id: None = None
+
+
+class ApplyRunSummary(_RunSummary):
+    kind: Literal["apply"]
+    phase: ApplyRunPhase
+
+
+RunSummary = Annotated[PlanRunSummary | ApplyRunSummary, Field(discriminator="kind")]
+
+
+class PlanRunDetail(PlanRunSummary):
     events: list[RunEvent]
     """Every event this run has produced so far, in order -- what a client
     reattaching to an in-progress or just-finished run replays instead of
     opening the SSE stream from nothing (decision 9)."""
+
+
+class ApplyRunDetail(ApplyRunSummary):
+    events: list[RunEvent]
+
+
+RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind")]

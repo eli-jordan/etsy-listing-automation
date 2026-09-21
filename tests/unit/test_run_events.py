@@ -8,7 +8,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 import pytest
-from pydantic import BaseModel, TypeAdapter
+from pydantic import BaseModel, TypeAdapter, ValidationError
 
 from etsy_listings.config.money import Money
 from etsy_listings.engine.change import (
@@ -23,11 +23,16 @@ from etsy_listings.engine.change import (
 )
 from etsy_listings.engine.stages.publish import PublishSnapshot
 from etsy_listings.ui.runs.events import (
+    BlockedOutcomeDTO,
+    IdleOutcomeDTO,
     ListingFailedEvent,
     ListingPlannedEvent,
     PhaseEvent,
     ProgressEvent,
+    RenderStagePlanDTO,
     RunEvent,
+    StageOutcomeDTO,
+    WorkOutcomeDTO,
     plan_dto,
     stage_plan_dto,
 )
@@ -46,9 +51,10 @@ def test_field_change_round_trips_through_the_dto() -> None:
     )
 
     dto = stage_plan_dto(sp)
+    assert isinstance(dto.outcome, WorkOutcomeDTO)
 
-    assert dto.changes[0].kind == "field"
-    assert dto.changes[0].model_dump() == {
+    assert dto.outcome.changes[0].kind == "field"
+    assert dto.outcome.changes[0].model_dump() == {
         "kind": "field",
         "path": "title",
         "before": "Old",
@@ -71,10 +77,11 @@ def test_price_change_renders_money_as_its_display_string() -> None:
     )
 
     dto = stage_plan_dto(sp)
+    assert isinstance(dto.outcome, WorkOutcomeDTO)
 
-    assert dto.changes[0].kind == "price"
-    assert dto.changes[0].before == "349 NOK"
-    assert dto.changes[0].after == "399 NOK"
+    assert dto.outcome.changes[0].kind == "price"
+    assert dto.outcome.changes[0].before == "349 NOK"
+    assert dto.outcome.changes[0].after == "399 NOK"
 
 
 def test_list_change_and_media_change_keep_their_own_kind() -> None:
@@ -88,8 +95,9 @@ def test_list_change_and_media_change_keep_their_own_kind() -> None:
     )
 
     dto = stage_plan_dto(sp)
+    assert isinstance(dto.outcome, WorkOutcomeDTO)
 
-    assert [c.kind for c in dto.changes] == ["list", "media"]
+    assert [c.kind for c in dto.outcome.changes] == ["list", "media"]
 
 
 def test_drift_carries_its_labels() -> None:
@@ -120,9 +128,10 @@ def test_actions_carry_their_paths() -> None:
     )
 
     dto = stage_plan_dto(sp)
+    assert isinstance(dto.outcome, WorkOutcomeDTO)
 
-    assert dto.actions[0].description == "render scene"
-    assert dto.actions[0].inputs == ("a.png",)
+    assert dto.outcome.actions[0].description == "render scene"
+    assert dto.outcome.actions[0].inputs == ("a.png",)
 
 
 def test_snapshot_keeps_the_model_declared_by_its_stage() -> None:
@@ -162,7 +171,37 @@ def test_plan_dto_carries_every_stage_plan_in_order() -> None:
     dto = plan_dto(plan)
 
     assert [sp.stage for sp in dto.stage_plans] == ["render", "printify_product"]
-    assert dto.stage_plans[1].blocked == "no shop configured"
+    assert dto.stage_plans[1].outcome == BlockedOutcomeDTO(message="no shop configured")
+
+
+def test_stage_outcome_dto_accepts_only_complete_closed_variants() -> None:
+    adapter = TypeAdapter(StageOutcomeDTO)
+
+    assert adapter.validate_python({"type": "idle"}) == IdleOutcomeDTO()
+    assert adapter.validate_python({"type": "work", "reason": "changed"}) == WorkOutcomeDTO(
+        reason="changed"
+    )
+    assert adapter.validate_python(
+        {"type": "blocked", "message": "missing shop"}
+    ) == BlockedOutcomeDTO(message="missing shop")
+
+    with pytest.raises(ValidationError):
+        adapter.validate_python({"type": "work"})
+    with pytest.raises(ValidationError):
+        adapter.validate_python({"type": "blocked"})
+    with pytest.raises(ValidationError):
+        adapter.validate_python({"type": "idle", "reason": "contradiction"})
+
+
+def test_stage_plan_rejects_work_fields_outside_the_work_outcome() -> None:
+    with pytest.raises(ValidationError):
+        RenderStagePlanDTO.model_validate(
+            {
+                "stage": "render",
+                "outcome": {"type": "idle"},
+                "changes": [{"kind": "field", "path": "title", "before": "old", "after": "new"}],
+            }
+        )
 
 
 def test_run_event_union_discriminates_on_type() -> None:

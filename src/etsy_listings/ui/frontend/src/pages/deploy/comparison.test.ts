@@ -8,6 +8,7 @@ import type {
   PublishSnapshot,
   StagePlanDTO,
 } from "../../types";
+import { stagePlan } from "../../test/helpers";
 
 /**
  * Pure: snapshots + changes -> before/after blocks, impact tags, price rows,
@@ -18,24 +19,19 @@ import type {
  * passing test against the wire format, not an invented shorthand.
  */
 
-type StageOverrides = Omit<Partial<StagePlanDTO>, "snapshot" | "changes"> & {
+type StageOverrides = Omit<Partial<StagePlanDTO>, "snapshot" | "changes" | "outcome"> & {
   stage: StagePlanDTO["stage"];
+  will_run?: boolean;
+  reason?: string | null;
+  blocked?: string | null;
   /** Test fixtures supply the snapshot belonging to the selected stage. */
   snapshot?: unknown;
-  changes?: StagePlanDTO["changes"];
+  changes?: Extract<StagePlanDTO["outcome"], { type: "work" }>["changes"];
 };
 
 function stage(overrides: StageOverrides): StagePlanDTO {
-  return {
-    will_run: false,
-    changes: [],
-    drift: [],
-    actions: [],
-    reason: null,
-    blocked: null,
-    snapshot: null,
-    ...overrides,
-  } as StagePlanDTO;
+  const { stage: stageName, ...fields } = overrides;
+  return stagePlan(stageName, fields as never) as StagePlanDTO;
 }
 
 function plan(stagePlans: StagePlanDTO[], etsyListingId: number | null = 1698234512): PlanDTO {
