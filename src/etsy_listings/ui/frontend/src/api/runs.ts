@@ -39,6 +39,17 @@ export async function currentRun(listing: string): Promise<RunSummary | null> {
   return data[0] ?? null;
 }
 
+/** The current workspace-scoped batch run, if the server remembers one. The
+ * workspace holder is intentionally queried by scope rather than rebuilt from
+ * the Listings table: A34 makes the server the authority for batch scope. */
+export async function currentWorkspaceRun(): Promise<RunSummary | null> {
+  const { data, error } = await api.GET("/api/runs", {
+    params: { query: { scope: "workspace" } },
+  });
+  if (error || !data) throw new RunsApiError("could not check workspace runs");
+  return data[0] ?? null;
+}
+
 export async function getRun(id: string): Promise<RunDetail> {
   const { data, error } = await api.GET("/api/runs/{run_id}", { params: { path: { run_id: id } } });
   if (error || !data) throw new RunsApiError(`could not load run ${id}`);
