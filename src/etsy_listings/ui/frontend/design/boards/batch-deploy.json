@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "name": "batch-deploy",
+  "auto": false,
+  "layout": {
+    "rows": [
+      [
+        "batch-deploy-specs"
+      ],
+      {
+        "space": 2
+      },
+      [
+        "batch-deploy-lofi"
+      ]
+    ],
+    "scenes": {
+      "batch-deploy-specs": {
+        "rows": [
+          [
+            "intent",
+            "flow"
+          ]
+        ]
+      },
+      "batch-deploy-lofi": {
+        "rows": [
+          [
+            "listings",
+            "review-bottom-sheet"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "n_1o80xot1xep9f3",
+      "frame": "batch-deploy-specs/intent",
+      "x": 0,
+      "y": 0
+    },
+    {
+      "key": "n_dsqifnnausa9",
+      "frame": "batch-deploy-specs/flow",
+      "x": 1434,
+      "y": 0
+    },
+    {
+      "key": "n_132guiy1lvzqaw",
+      "frame": "batch-deploy-lofi/listings",
+      "x": 0,
+      "y": 896,
+      "w": 1920,
+      "h": 1080
+    },
+    {
+      "key": "n_rev8bottomsheet01",
+      "frame": "batch-deploy-lofi/review-bottom-sheet",
+      "x": 2434,
+      "y": 896,
+      "w": 1920,
+      "h": 1080
+    }
+  ],
+  "order": 1,
+  "title": "Batch Deployment",
+  "description": "App-styled fake-data prototype for reviewing and applying one plan across all listings."
+}

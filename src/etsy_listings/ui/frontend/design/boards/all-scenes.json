@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "name": "all-scenes",
+  "auto": true,
+  "nodes": [
+    {
+      "key": "n_i4ruh010wuwkm",
+      "frame": "demo/dark",
+      "x": 0,
+      "y": 1641,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "key": "n_m1z7m6xgko4s",
+      "frame": "demo/form",
+      "x": 544,
+      "y": 1641,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_d8gev61lpr1y8",
+      "frame": "demo/welcome",
+      "x": 1977,
+      "y": 1641,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "key": "n_1nubvaulkqfpw",
+      "frame": "batch-deploy-specs/intent",
+      "x": 0,
+      "y": 960
+    },
+    {
+      "key": "n_36i50oo6cjey",
+      "frame": "batch-deploy-specs/flow",
+      "x": 1434,
+      "y": 960
+    },
+    {
+      "key": "n_fv6hn51kkzwhf",
+      "frame": "batch-deploy-lofi/listings",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    }
+  ]
+}

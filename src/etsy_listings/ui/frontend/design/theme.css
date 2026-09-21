@@ -1,0 +1,2 @@
+/* marver theme wrapper - imports the app's real theme; the app's own build never sees design/. */
+@import "../src/index.css";
