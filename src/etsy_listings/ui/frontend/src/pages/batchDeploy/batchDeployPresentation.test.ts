@@ -14,7 +14,10 @@ import {
   type BatchPlanGroup,
 } from "./batchDeployPresentation";
 
-function stage(stageName: string, overrides: Partial<StagePlanDTO> = {}): StagePlanDTO {
+function stage<Name extends StagePlanDTO["stage"]>(
+  stageName: Name,
+  overrides: Partial<Extract<StagePlanDTO, { stage: Name }>> = {},
+): Extract<StagePlanDTO, { stage: Name }> {
   return {
     stage: stageName,
     will_run: false,
@@ -25,7 +28,7 @@ function stage(stageName: string, overrides: Partial<StagePlanDTO> = {}): StageP
     blocked: null,
     snapshot: null,
     ...overrides,
-  };
+  } as unknown as Extract<StagePlanDTO, { stage: Name }>;
 }
 
 function plan(
@@ -138,10 +141,10 @@ describe("stage projections", () => {
     expect(
       aggregateStageOrder([
         plan("a", [stage("render"), stage("publish"), stage("retract")]),
-        plan("b", [stage("render"), stage("future")]),
+        plan("b", [stage("render"), stage("etsy_media")]),
         plan("c", [stage("retract")]),
       ]),
-    ).toEqual(["render", "publish", "future", "retract"]);
+    ).toEqual(["render", "publish", "etsy_media", "retract"]);
   });
 
   it("counts only runnable listings in aggregate denominators", () => {

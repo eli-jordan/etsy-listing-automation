@@ -7,6 +7,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
 from pydantic import BaseModel, TypeAdapter
 
 from etsy_listings.config.money import Money
@@ -20,6 +21,7 @@ from etsy_listings.engine.change import (
     PriceChange,
     StagePlan,
 )
+from etsy_listings.engine.stages.publish import PublishSnapshot
 from etsy_listings.ui.runs.events import (
     ListingFailedEvent,
     ListingPlannedEvent,
@@ -31,15 +33,15 @@ from etsy_listings.ui.runs.events import (
 )
 
 
-class _Snapshot(BaseModel):
+class _WrongSnapshot(BaseModel):
     note: str
     price: Money
 
 
 def test_field_change_round_trips_through_the_dto() -> None:
-    sp = StagePlan(
-        stage="etsy_listing",
-        will_run=True,
+    sp = StagePlan.work(
+        "etsy_listing",
+        "copy changed",
         changes=(FieldChange(path="title", before="Old", after="New"),),
     )
 
@@ -55,9 +57,9 @@ def test_field_change_round_trips_through_the_dto() -> None:
 
 
 def test_price_change_renders_money_as_its_display_string() -> None:
-    sp = StagePlan(
-        stage="publish",
-        will_run=True,
+    sp = StagePlan.work(
+        "publish",
+        "price changed",
         changes=(
             PriceChange(
                 size="M",
@@ -76,9 +78,9 @@ def test_price_change_renders_money_as_its_display_string() -> None:
 
 
 def test_list_change_and_media_change_keep_their_own_kind() -> None:
-    sp = StagePlan(
-        stage="printify_product",
-        will_run=True,
+    sp = StagePlan.work(
+        "printify_product",
+        "product changed",
         changes=(
             ListChange(path="colors", added=("navy",), removed=()),
             MediaChange(rank=0, before="old.png", after="new.png"),
@@ -91,9 +93,8 @@ def test_list_change_and_media_change_keep_their_own_kind() -> None:
 
 
 def test_drift_carries_its_labels() -> None:
-    sp = StagePlan(
-        stage="etsy_listing",
-        will_run=False,
+    sp = StagePlan.no_work(
+        "etsy_listing",
         drift=(
             Drift(
                 path="shipping_profile_id",
@@ -112,9 +113,9 @@ def test_drift_carries_its_labels() -> None:
 
 
 def test_actions_carry_their_paths() -> None:
-    sp = StagePlan(
-        stage="render",
-        will_run=True,
+    sp = StagePlan.work(
+        "render",
+        "scene changed",
         actions=(Action(description="render scene", inputs=("a.png",), outputs=("b.png",)),),
     )
 
@@ -124,20 +125,25 @@ def test_actions_carry_their_paths() -> None:
     assert dto.actions[0].inputs == ("a.png",)
 
 
-def test_snapshot_is_dumped_generically_and_keeps_a_money_field() -> None:
-    sp = StagePlan(
-        stage="publish",
-        will_run=False,
-        snapshot=_Snapshot(note="ok", price=Money(Decimal("10"), "NOK")),
-    )
+def test_snapshot_keeps_the_model_declared_by_its_stage() -> None:
+    sp = StagePlan.no_work("publish", snapshot=PublishSnapshot())
 
     dto = stage_plan_dto(sp)
 
-    assert dto.snapshot == {"note": "ok", "price": "10 NOK"}
+    assert isinstance(dto.snapshot, PublishSnapshot)
+
+
+def test_a_snapshot_from_the_wrong_stage_is_rejected() -> None:
+    sp = StagePlan.no_work(
+        "publish", snapshot=_WrongSnapshot(note="no", price=Money(Decimal("10"), "NOK"))
+    )
+
+    with pytest.raises(TypeError, match="PublishSnapshot"):
+        stage_plan_dto(sp)
 
 
 def test_a_stage_plan_with_no_snapshot_carries_none() -> None:
-    dto = stage_plan_dto(StagePlan(stage="render", will_run=False))
+    dto = stage_plan_dto(StagePlan.no_work("render"))
 
     assert dto.snapshot is None
 
@@ -148,8 +154,8 @@ def test_plan_dto_carries_every_stage_plan_in_order() -> None:
         is_live=False,
         etsy_listing_id=None,
         stage_plans=(
-            StagePlan(stage="render", will_run=True),
-            StagePlan(stage="printify_product", will_run=False, blocked="no shop configured"),
+            StagePlan.work("render", "scene changed"),
+            StagePlan.block("printify_product", "no shop configured"),
         ),
     )
 

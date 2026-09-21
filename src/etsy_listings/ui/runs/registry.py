@@ -32,17 +32,56 @@ from __future__ import annotations
 import queue
 import threading
 import uuid
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
 from etsy_listings.ui.runs.events import (
     TERMINAL_PHASES,
     AnyRunEvent,
+    ApplyRunPhase,
+    PlanRunPhase,
     RunKind,
     RunPhase,
     RunScope,
 )
+
+
+@dataclass(frozen=True)
+class ListingPlan:
+    listings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class WorkspacePlan:
+    listings: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class ListingApply:
+    listings: tuple[str, ...]
+    expect: Mapping[str, str]
+
+
+@dataclass(frozen=True)
+class WorkspaceApply:
+    listings: tuple[str, ...]
+    expect: Mapping[str, str]
+    reviewed_run_id: str
+
+
+RunCommand = ListingPlan | WorkspacePlan | ListingApply | WorkspaceApply
+
+
+@dataclass
+class PlanRunState:
+    phase: PlanRunPhase = "queued"
+    cancel_requested: bool = False
+
+
+@dataclass
+class ApplyRunState:
+    phase: ApplyRunPhase = "queued"
 
 
 @dataclass
@@ -60,18 +99,13 @@ class Run:
     """
 
     id: str
-    kind: RunKind
-    listings: tuple[str, ...]
-    expect: Mapping[str, str] | None = None
-    scope: RunScope = "listings"
-    reviewed_run_id: str | None = None
+    command: RunCommand
     created_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-    phase: RunPhase = "queued"
     events: list[AnyRunEvent] = field(default_factory=list)
     seen: bool = False
-    cancel_requested: bool = False
     condition: threading.Condition = field(default_factory=threading.Condition, repr=False)
     _next_event_id: int = field(default=1, repr=False)
+    _state: PlanRunState | ApplyRunState = field(init=False, repr=False)
 
     def __post_init__(self) -> None:
         """The starting ``queued`` phase is itself the run's first event --
@@ -80,8 +114,45 @@ class Run:
         looked at this run."""
         from etsy_listings.ui.runs.events import PhaseEvent
 
-        self.events.append(PhaseEvent(id=self._next_event_id, phase=self.phase))
+        self._state = (
+            PlanRunState()
+            if isinstance(self.command, ListingPlan | WorkspacePlan)
+            else ApplyRunState()
+        )
+        self.events.append(PhaseEvent(id=self._next_event_id, phase="queued"))
         self._next_event_id += 1
+
+    @property
+    def kind(self) -> RunKind:
+        return "plan" if isinstance(self.command, ListingPlan | WorkspacePlan) else "apply"
+
+    @property
+    def scope(self) -> RunScope:
+        return (
+            "workspace" if isinstance(self.command, WorkspacePlan | WorkspaceApply) else "listings"
+        )
+
+    @property
+    def listings(self) -> tuple[str, ...]:
+        return self.command.listings
+
+    @property
+    def expect(self) -> Mapping[str, str] | None:
+        if isinstance(self.command, ListingApply | WorkspaceApply):
+            return self.command.expect
+        return None
+
+    @property
+    def reviewed_run_id(self) -> str | None:
+        return self.command.reviewed_run_id if isinstance(self.command, WorkspaceApply) else None
+
+    @property
+    def phase(self) -> RunPhase:
+        return self._state.phase
+
+    @property
+    def cancel_requested(self) -> bool:
+        return self._state.cancel_requested if isinstance(self._state, PlanRunState) else False
 
     def append(self, make_event: Callable[[int], AnyRunEvent]) -> AnyRunEvent:
         """Append one event, its ``id`` assigned under the same lock a waiter
@@ -95,18 +166,34 @@ class Run:
             self.condition.notify_all()
             return event
 
-    def transition(self, phase: RunPhase) -> None:
-        """Move to ``phase``, recording it as a :class:`~etsy_listings.ui.runs.events.PhaseEvent`
-        in the same stroke -- a phase change with no event a client could see
-        it happen through would be invisible to anyone already streaming."""
+    def transition_plan(self, phase: PlanRunPhase) -> None:
+        if not isinstance(self._state, PlanRunState):
+            raise TypeError("an apply run cannot enter a plan phase")
         from etsy_listings.ui.runs.events import PhaseEvent
 
         with self.condition:
             event = PhaseEvent(id=self._next_event_id, phase=phase)
             self._next_event_id += 1
             self.events.append(event)
-            self.phase = phase
+            self._state.phase = phase
             self.condition.notify_all()
+
+    def transition_apply(self, phase: ApplyRunPhase) -> None:
+        if not isinstance(self._state, ApplyRunState):
+            raise TypeError("a plan run cannot enter an apply phase")
+        from etsy_listings.ui.runs.events import PhaseEvent
+
+        with self.condition:
+            event = PhaseEvent(id=self._next_event_id, phase=phase)
+            self._next_event_id += 1
+            self.events.append(event)
+            self._state.phase = phase
+            self.condition.notify_all()
+
+    def request_cancel(self) -> None:
+        if not isinstance(self._state, PlanRunState):
+            raise TypeError("an apply run cannot be cancelled")
+        self._state.cancel_requested = True
 
     def mark_seen(self) -> None:
         with self.condition:
@@ -157,20 +244,12 @@ class RunRegistry:
     _queue: queue.Queue[str] = field(default_factory=queue.Queue)
     _id_source: Callable[[], str] = field(default=lambda: uuid.uuid4().hex)
 
-    def create(
-        self,
-        kind: RunKind,
-        listings: Sequence[str],
-        *,
-        expect: Mapping[str, str] | None = None,
-        scope: RunScope = "listings",
-        reviewed_run_id: str | None = None,
-    ) -> Run | Conflict:
+    def create(self, command: RunCommand) -> Run | Conflict:
         """A new run for ``listings``, queued for the executor -- or the
         holder already busy with one of them, unmodified, for the caller to
         report as a ``409`` naming a run to reattach to instead."""
         with self._lock:
-            if scope == "workspace":
+            if isinstance(command, WorkspacePlan | WorkspaceApply):
                 workspace_holder = self._runs.get(self._workspace_holder or "")
                 if workspace_holder is not None and workspace_holder.phase not in TERMINAL_PHASES:
                     return Conflict(active_run=workspace_holder.id)
@@ -182,23 +261,16 @@ class RunRegistry:
                 workspace_holder = self._runs.get(self._workspace_holder or "")
                 if workspace_holder is not None and workspace_holder.phase not in TERMINAL_PHASES:
                     return Conflict(active_run=workspace_holder.id)
-                for name in listings:
+                for name in command.listings:
                     holder = self._runs.get(self._holder.get(name, ""))
                     if holder is not None and holder.phase not in TERMINAL_PHASES:
                         return Conflict(active_run=holder.id)
-            run = Run(
-                id=self._id_source(),
-                kind=kind,
-                listings=tuple(listings),
-                expect=expect,
-                scope=scope,
-                reviewed_run_id=reviewed_run_id,
-            )
+            run = Run(id=self._id_source(), command=command)
             self._runs[run.id] = run
-            if scope == "workspace":
+            if run.scope == "workspace":
                 self._workspace_holder = run.id
             else:
-                for name in listings:
+                for name in run.listings:
                     self._holder[name] = run.id
             self._queue.put(run.id)
             return run
@@ -253,8 +325,8 @@ class RunRegistry:
             return None
 
     def drain_and_cancel(self) -> None:
-        """Every run still sitting in the queue, marked ``cancelled`` without
-        ever running -- shutdown's "a queued run is cancelled" (decision 7).
+        """Every run still sitting in the queue reaches a legal terminal state
+        without running: plan runs are cancelled and apply runs fail.
         Whichever of this and the worker thread's own ``dequeue`` reaches a
         given id first wins it outright (``queue.Queue`` hands each item to
         exactly one caller), so there is no run this could cancel out from
@@ -267,7 +339,10 @@ class RunRegistry:
                 return
             run = self.get(run_id)
             if run is not None and run.phase not in TERMINAL_PHASES:
-                run.transition("cancelled")
+                if run.kind == "plan":
+                    run.transition_plan("cancelled")
+                else:
+                    run.transition_apply("failed")
 
     def cancel(self, run_id: str) -> bool | None:
         """Cancel a queued or running **plan**.
@@ -286,7 +361,7 @@ class RunRegistry:
             return None
         if run.kind == "apply" or run.phase in TERMINAL_PHASES:
             return False
-        run.cancel_requested = True
+        run.request_cancel()
         if run.phase == "queued":
-            run.transition("cancelled")
+            run.transition_plan("cancelled")
         return True

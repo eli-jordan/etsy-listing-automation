@@ -33,6 +33,8 @@ from etsy_listings.engine.change import (
     Drift,
     FieldChange,
     PriceChange,
+    StageIdle,
+    StageWork,
     drift,
     scalar,
     sequence,
@@ -54,11 +56,24 @@ class ProductComparison:
     the stage returns, so the stage assembles rather than decides.
     """
 
-    will_run: bool
-    reason: str | None
-    changes: tuple[Change, ...]
+    outcome: StageIdle | StageWork
     drift: tuple[Drift, ...]
-    actions: tuple[Action, ...]
+
+    @property
+    def will_run(self) -> bool:
+        return isinstance(self.outcome, StageWork)
+
+    @property
+    def reason(self) -> str | None:
+        return self.outcome.reason if isinstance(self.outcome, StageWork) else None
+
+    @property
+    def changes(self) -> tuple[Change, ...]:
+        return self.outcome.changes if isinstance(self.outcome, StageWork) else ()
+
+    @property
+    def actions(self) -> tuple[Action, ...]:
+        return self.outcome.actions if isinstance(self.outcome, StageWork) else ()
 
 
 def compare(
@@ -77,13 +92,16 @@ def compare(
     wanted = desired.applied()
     changes = _changes(desired, wanted, was)
     reason = _reason(was, live, changes)
-    return ProductComparison(
-        will_run=reason is not None,
-        reason=reason,
-        changes=changes,
-        drift=_drift(was, live),
-        actions=_actions(desired, creating=was is None or live is None),
-    )
+    outcome: StageIdle | StageWork
+    if reason is None:
+        outcome = StageIdle()
+    else:
+        outcome = StageWork(
+            reason=reason,
+            changes=changes,
+            actions=_actions(desired, creating=was is None or live is None),
+        )
+    return ProductComparison(outcome=outcome, drift=_drift(was, live))
 
 
 def _reason(

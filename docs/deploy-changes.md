@@ -87,7 +87,7 @@ record, so it does not exist. We are not reopening A21 here: a pool buys
 little with one live read per stage, and it would pull thread-safety work
 into every client and the Etsy token refresh.
 
-`plan_listings` gains observer callbacks that fire as `build_plan` walks the
+`plan_listings` emits typed events as `build_plan` walks the
 pipeline: a stage starts being checked, a stage has resolved (its `StagePlan`,
 snapshot included), and the listing's plan is complete. The strip shows the
 spinner and read line on the stage being checked, and each stage resolves in
@@ -221,7 +221,7 @@ first. `Workspace.remove_listing` also removes
 `.cache/previews/{listing}/`.
 
 Previews are **not** part of `build_plan`. The UI's plan run calls
-`preview_listing(ctx, planned, observer, should_stop)` in `engine/run.py`
+`preview_listing(ctx, planned, on_event, should_stop)` in `engine/run.py`
 after the plan is complete. It finds the render stage's state and asks it,
 and the stage is still the only thing that understands its own types.
 
@@ -403,7 +403,7 @@ deploys.
 | Module | Change | Decision |
 |---|---|---|
 | `engine/lock.py` | `incomplete: IncompleteApply \| None`, omitted when `None`; `marked_incomplete(stage)`, `completed()` | A29 |
-| `engine/apply.py` | `execute(ctx, planned, lock, observer, record)`: record after each fold; on raise, record the marked lockfile, notify `stage_failed`, re-raise; `stage_applying`/`stage_applied` | A29, A33 |
+| `engine/apply.py` | `execute(ctx, planned, lock, on_event, record)`: record after each fold; on raise, record the marked lockfile, emit `stage_failed`, re-raise; `stage_applying`/`stage_applied` | A29, A33 |
 | `engine/status.py` | `listing_status(..., incomplete=bool)`, where a set marker means dirty | A29 |
 | `engine/change.py` | `StagePlan.snapshot: BaseModel \| None`; `Drift.last_applied_label`, `live_label` | A30 |
 | `engine/stage.py` | Optional `snapshot()` documented on the protocol; `RenderStage.preview` stays specific to that stage, not part of the protocol | A30, A32 |
@@ -493,7 +493,7 @@ Five stacked PRs, each green on its own, with CI's hermetic tier and
 | PR | Contents | Done when |
 |---|---|---|
 | ① Partial apply | A29: `execute` recording, `incomplete` marker, status reads it | A stage failing after a create leaves the product id recorded, the next plan does not re-create, and the listing reads dirty |
-| ② Engine for review | `RunObserver`; plan-time events; `snapshot()` on all five stages; `ListChange("colors")`, per-rank `MediaChange`, drift labels; `EtsyMediaLive` images and `url_570xN`; `plan_fingerprint`, `expect`, `StalePlanError`; CLI prints labels | `plan` output is unchanged except for names in place of ids, and every new emission has a behaviour test |
+| ② Engine for review | `EngineRunEvent`; plan-time events; `snapshot()` on all five stages; `ListChange("colors")`, per-rank `MediaChange`, drift labels; `EtsyMediaLive` images and `url_570xN`; `plan_fingerprint`, `expect`, `StalePlanError`; CLI prints labels | `plan` output is unchanged except for names in place of ids, and every new emission has a behaviour test |
 | ③ Previews | `scene_hash`, `preview_file`, `RenderStage.preview`, promotion, pruning, `preview_listing` | A preview followed by `apply` renders nothing and yields byte-identical `outputs` |
 | ④ Runs | `ui/runs/`, `ui/api/runs.py`, preview endpoint, `context_factory`, lifespan and desktop shutdown, `openapi.json` and `gen:api` | A plan run and an apply run stream their full event sequence through `TestClient` |
 | ⑤ Deploy view | route, reducer, comparison, components, `DeployControl`, browser test | The browser loop in Testing passes against fakes |

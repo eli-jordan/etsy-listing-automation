@@ -50,11 +50,15 @@ export type MediaEntry = TemplateMediaEntry | string;
 
 // ── Deploy changes (A29-A33, docs/deploy-changes.md) ────────────────────────
 
-export type RunKind = components["schemas"]["CreateRunRequest"]["kind"];
+export type RunKind = components["schemas"]["RunSummary"]["kind"];
 export type RunPhase = components["schemas"]["RunSummary"]["phase"];
 export type RunSummary = components["schemas"]["RunSummary"];
 export type RunDetail = components["schemas"]["RunDetail"];
-export type CreateRunRequest = components["schemas"]["CreateRunRequest"];
+export type CreateRunRequest =
+  | components["schemas"]["ListingPlanRequest"]
+  | components["schemas"]["WorkspacePlanRequest"]
+  | components["schemas"]["ListingApplyRequest"]
+  | components["schemas"]["WorkspaceApplyRequest"];
 export type RunEvent = RunDetail["events"][number];
 
 export type ActionDTO = components["schemas"]["ActionDTO"];
@@ -64,8 +68,8 @@ export type ListChangeDTO = components["schemas"]["ListChangeDTO"];
 export type PriceChangeDTO = components["schemas"]["PriceChangeDTO"];
 export type MediaChangeDTO = components["schemas"]["MediaChangeDTO"];
 export type ChangeDTO = FieldChangeDTO | ListChangeDTO | PriceChangeDTO | MediaChangeDTO;
-export type StagePlanDTO = components["schemas"]["StagePlanDTO"];
 export type PlanDTO = components["schemas"]["PlanDTO"];
+export type StagePlanDTO = PlanDTO["stage_plans"][number];
 
 /** One planned pipeline stage's own name, as `engine/stages/__init__.py`'s
  * `STAGES` orders them -- the order `PlanDTO.stage_plans` already arrives in,
@@ -79,72 +83,25 @@ export const STAGE_LABELS: Record<string, string> = {
   retract: "Remove from Etsy",
 };
 
-/** `engine/stages/render.py`'s `RenderSnapshot`, as it crosses the wire inside
- * `StagePlanDTO.snapshot` (an untyped `dict` there -- `render`'s own stage is
- * the only thing that knows this shape, same rule as the backend's DTO
- * module: "the frontend already has to know one stage's snapshot shape from
- * another"). */
-export interface RenderSceneSnapshot {
-  scene: string;
-  template: string;
-  colour: string | null;
-  state: "cached" | "stale" | "missing";
-  preview: boolean;
-}
-export interface RenderSnapshot {
-  scenes: RenderSceneSnapshot[];
-}
+/** Snapshot types generated from the stage-discriminated wire union. Narrow a
+ * `StagePlanDTO` by `stage` and TypeScript narrows `snapshot` with it. */
+export type RenderSceneSnapshot = components["schemas"]["RenderSceneSnapshot"];
+export type RenderSnapshot = components["schemas"]["RenderSnapshot"];
 
 /** `engine/stages/printify_product.py`'s `ProductSnapshot`. `price` is a
  * `Money` rendered as `"349 NOK"` (see `ui/runs/events.py`'s `_jsonable`). */
-export interface ProductVariantSnapshot {
-  size: string;
-  colour: string;
-  price: string;
-}
-export interface ProductSnapshot {
-  desired: ProductVariantSnapshot[];
-  live: ProductVariantSnapshot[];
-}
+export type ProductVariantSnapshot = components["schemas"]["ProductVariantSnapshot"];
+export type ProductSnapshot = components["schemas"]["ProductSnapshot"];
 
 /** `engine/stages/publish.py`'s `PublishSnapshot`. */
-export interface BelowCostRow {
-  size: string;
-  colour: string;
-  price: string;
-  cost: string;
-}
-export interface PublishSnapshot {
-  below_cost: BelowCostRow[];
-}
+export type BelowCostRow = components["schemas"]["BelowCostRow"];
+export type PublishSnapshot = components["schemas"]["PublishSnapshot"];
 
 /** `engine/stages/etsy_listing.py`'s `EtsyListingSnapshot`/`EtsyListingFacts`. */
-export interface EtsyListingFacts {
-  title: string | null;
-  description: string | null;
-  tags: string[];
-  materials: string[];
-  shop_section: string | null;
-  shipping_profile: string | null;
-}
-export interface EtsyListingSnapshot {
-  desired: EtsyListingFacts;
-  live: EtsyListingFacts | null;
-}
+export type EtsyListingFacts = components["schemas"]["EtsyListingFacts"];
+export type EtsyListingSnapshot = components["schemas"]["EtsyListingSnapshot"];
 
 /** `engine/stages/etsy_media.py`'s `EtsyMediaSnapshot`. */
-export interface DesiredImageSnapshot {
-  rank: number;
-  ref: string;
-  file: string;
-}
-export interface LiveImageSnapshot {
-  rank: number | null;
-  ref: string | null;
-  image_id: number;
-  url: string | null;
-}
-export interface EtsyMediaSnapshot {
-  desired: DesiredImageSnapshot[];
-  live: LiveImageSnapshot[];
-}
+export type DesiredImageSnapshot = components["schemas"]["DesiredImageSnapshot"];
+export type LiveImageSnapshot = components["schemas"]["LiveImageSnapshot"];
+export type EtsyMediaSnapshot = components["schemas"]["EtsyMediaSnapshot"];

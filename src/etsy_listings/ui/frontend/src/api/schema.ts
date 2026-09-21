@@ -772,6 +772,28 @@ export interface components {
        */
       kind: "colour-matrix" | "multiple" | "single";
     };
+    /**
+     * BelowCostRow
+     * @description One variant priced under what Printify charges to make it -- the
+     *     row `plan()` already refuses over (:func:`_below_cost`), named for the
+     *     before/after review (A30) rather than left as a bare variant id.
+     */
+    BelowCostRow: {
+      /** Colour */
+      colour: string;
+      /**
+       * Cost
+       * @example 349 NOK
+       */
+      cost: string;
+      /**
+       * Price
+       * @example 349 NOK
+       */
+      price: string;
+      /** Size */
+      size: string;
+    };
     /** Body_upload_design_api_designs_post */
     Body_upload_design_api_designs_post: {
       /** File */
@@ -897,28 +919,6 @@ export interface components {
       /** Name */
       name: string;
     };
-    /** CreateRunRequest */
-    CreateRunRequest: {
-      /** Expect */
-      expect?: {
-        [key: string]: string;
-      } | null;
-      /**
-       * Kind
-       * @enum {string}
-       */
-      kind: "plan" | "apply";
-      /** Listings */
-      listings?: string[] | null;
-      /** Reviewed Run Id */
-      reviewed_run_id?: string | null;
-      /**
-       * Scope
-       * @default listings
-       * @enum {string}
-       */
-      scope: "listings" | "workspace";
-    };
     /**
      * DesignSummary
      * @description One entry in the calibrator's test-design library (A19).
@@ -940,6 +940,18 @@ export interface components {
        * @enum {string}
        */
       source: "bundled" | "upload";
+    };
+    /**
+     * DesiredImageSnapshot
+     * @description One manifest entry, as this run wants to send it (A30).
+     */
+    DesiredImageSnapshot: {
+      /** File */
+      file: string;
+      /** Rank */
+      rank: number;
+      /** Ref */
+      ref: string;
     };
     /**
      * DisplaceConfig
@@ -1017,6 +1029,123 @@ export interface components {
       title: string;
       /** Variation Images */
       variation_images?: string | null;
+    };
+    /**
+     * EtsyListingFacts
+     * @description One side of the review (A30): the fields the mock shows unchanged
+     *     context for, named rather than left as an id.
+     */
+    EtsyListingFacts: {
+      /** Description */
+      description?: string | null;
+      /**
+       * Materials
+       * @default []
+       */
+      materials: string[];
+      /** Shipping Profile */
+      shipping_profile?: string | null;
+      /** Shop Section */
+      shop_section?: string | null;
+      /**
+       * Tags
+       * @default []
+       */
+      tags: string[];
+      /** Title */
+      title?: string | null;
+    };
+    /**
+     * EtsyListingSnapshot
+     * @description Both sides, in full -- the ``Plan`` this stage also returns carries
+     *     only what changed.
+     */
+    EtsyListingSnapshot: {
+      desired: components["schemas"]["EtsyListingFacts"];
+      live: components["schemas"]["EtsyListingFacts"] | null;
+    };
+    /** EtsyListingStagePlanDTO */
+    EtsyListingStagePlanDTO: {
+      /**
+       * Actions
+       * @default []
+       */
+      actions: components["schemas"]["ActionDTO"][];
+      /** Blocked */
+      blocked?: string | null;
+      /**
+       * Changes
+       * @default []
+       */
+      changes: (
+        | components["schemas"]["FieldChangeDTO"]
+        | components["schemas"]["ListChangeDTO"]
+        | components["schemas"]["PriceChangeDTO"]
+        | components["schemas"]["MediaChangeDTO"]
+      )[];
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Reason */
+      reason?: string | null;
+      snapshot?: components["schemas"]["EtsyListingSnapshot"] | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "etsy_listing";
+      /** Will Run */
+      will_run: boolean;
+    };
+    /**
+     * EtsyMediaSnapshot
+     * @description Domain facts for the review (A30): both manifests in full, so the
+     *     frontend can lay out thumbnails and compute *New* / moved / *Removed*
+     *     badges from ``ref`` identity, guided by the per-rank ``MediaChange``s
+     *     ``plan()`` already emits.
+     */
+    EtsyMediaSnapshot: {
+      /** Desired */
+      desired: components["schemas"]["DesiredImageSnapshot"][];
+      /** Live */
+      live: components["schemas"]["LiveImageSnapshot"][];
+    };
+    /** EtsyMediaStagePlanDTO */
+    EtsyMediaStagePlanDTO: {
+      /**
+       * Actions
+       * @default []
+       */
+      actions: components["schemas"]["ActionDTO"][];
+      /** Blocked */
+      blocked?: string | null;
+      /**
+       * Changes
+       * @default []
+       */
+      changes: (
+        | components["schemas"]["FieldChangeDTO"]
+        | components["schemas"]["ListChangeDTO"]
+        | components["schemas"]["PriceChangeDTO"]
+        | components["schemas"]["MediaChangeDTO"]
+      )[];
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Reason */
+      reason?: string | null;
+      snapshot?: components["schemas"]["EtsyMediaSnapshot"] | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "etsy_media";
+      /** Will Run */
+      will_run: boolean;
     };
     /**
      * EtsySectionSummary
@@ -1101,6 +1230,27 @@ export interface components {
       removed: unknown[];
       /** Reordered */
       reordered: boolean;
+    };
+    /** ListingApplyRequest */
+    ListingApplyRequest: {
+      /** Expect */
+      expect: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @default apply
+       * @constant
+       */
+      kind: "apply";
+      /** Listings */
+      listings: string[];
+      /**
+       * Scope
+       * @default listings
+       * @constant
+       */
+      scope: "listings";
     };
     /** ListingDesignSummary */
     ListingDesignSummary: {
@@ -1205,7 +1355,7 @@ export interface components {
     };
     /**
      * ListingFailedEvent
-     * @description The run's ``RunObserver.on_failure`` twin. ``message`` is the
+     * @description The engine's ``EngineListingFailed`` wire twin. ``message`` is the
      *     :class:`~etsy_listings.errors.UserFacingError`'s own text, word for word
      *     (decision 5) -- never the generic internal-error text, which belongs to a
      *     :class:`PhaseEvent` naming the whole run ``failed`` instead, since a
@@ -1225,6 +1375,23 @@ export interface components {
        * @enum {string}
        */
       type: "listing_failed";
+    };
+    /** ListingPlanRequest */
+    ListingPlanRequest: {
+      /**
+       * Kind
+       * @default plan
+       * @constant
+       */
+      kind: "plan";
+      /** Listings */
+      listings: string[];
+      /**
+       * Scope
+       * @default listings
+       * @constant
+       */
+      scope: "listings";
     };
     /** ListingPlannedEvent */
     ListingPlannedEvent: {
@@ -1274,6 +1441,21 @@ export interface components {
         | "pending-retire"
         | "inactive"
         | "expired";
+    };
+    /**
+     * LiveImageSnapshot
+     * @description One image Etsy actually has, projected back to a ref where possible
+     *     (A30) -- ``ref`` is ``None`` for an image this tool never uploaded.
+     */
+    LiveImageSnapshot: {
+      /** Image Id */
+      image_id: number;
+      /** Rank */
+      rank: number | null;
+      /** Ref */
+      ref?: string | null;
+      /** Url */
+      url?: string | null;
     };
     /** MediaChangeDTO */
     MediaChangeDTO: {
@@ -1364,21 +1546,10 @@ export interface components {
        * Format: date-time
        */
       occurred_at?: string;
-      /**
-       * Phase
-       * @enum {string}
-       */
+      /** Phase */
       phase:
-        | "queued"
-        | "planning"
-        | "planned"
-        | "previewing"
-        | "ready"
-        | "applying"
-        | "applied"
-        | "failed"
-        | "stale"
-        | "cancelled";
+        | ("queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled")
+        | ("queued" | "applying" | "applied" | "failed" | "stale");
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
@@ -1411,7 +1582,14 @@ export interface components {
       /** Listing */
       listing: string;
       /** Stage Plans */
-      stage_plans: components["schemas"]["StagePlanDTO"][];
+      stage_plans: (
+        | components["schemas"]["RenderStagePlanDTO"]
+        | components["schemas"]["ProductStagePlanDTO"]
+        | components["schemas"]["PublishStagePlanDTO"]
+        | components["schemas"]["EtsyListingStagePlanDTO"]
+        | components["schemas"]["EtsyMediaStagePlanDTO"]
+        | components["schemas"]["RetractStagePlanDTO"]
+      )[];
     };
     /** Point */
     Point: {
@@ -1464,10 +1642,70 @@ export interface components {
       ref: string;
     };
     /**
+     * ProductSnapshot
+     * @description Domain facts for the before/after review (A30): every variant on each
+     *     side, unchanged ones included -- a ``Plan`` carries only what changed, and
+     *     the comparison needs the whole matrix to draw a price table from.
+     */
+    ProductSnapshot: {
+      /** Desired */
+      desired: components["schemas"]["ProductVariantSnapshot"][];
+      /** Live */
+      live: components["schemas"]["ProductVariantSnapshot"][];
+    };
+    /** ProductStagePlanDTO */
+    ProductStagePlanDTO: {
+      /**
+       * Actions
+       * @default []
+       */
+      actions: components["schemas"]["ActionDTO"][];
+      /** Blocked */
+      blocked?: string | null;
+      /**
+       * Changes
+       * @default []
+       */
+      changes: (
+        | components["schemas"]["FieldChangeDTO"]
+        | components["schemas"]["ListChangeDTO"]
+        | components["schemas"]["PriceChangeDTO"]
+        | components["schemas"]["MediaChangeDTO"]
+      )[];
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Reason */
+      reason?: string | null;
+      snapshot?: components["schemas"]["ProductSnapshot"] | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "printify_product";
+      /** Will Run */
+      will_run: boolean;
+    };
+    /**
+     * ProductVariantSnapshot
+     * @description One cell of the variant matrix, named rather than left as an id (A30).
+     */
+    ProductVariantSnapshot: {
+      /** Colour */
+      colour: string;
+      /**
+       * Price
+       * @example 349 NOK
+       */
+      price: string;
+      /** Size */
+      size: string;
+    };
+    /**
      * ProgressEvent
-     * @description ``ctx.emit``'s ``Event``, tagged with whatever stage
-     *     :class:`StageApplyingEvent` last named for this listing -- no stage
-     *     changes how it reports progress (A33, decision 7).
+     * @description Stage progress after the engine has attached its run identity.
      */
     ProgressEvent: {
       /** Id */
@@ -1477,7 +1715,7 @@ export interface components {
       /** Message */
       message: string;
       /** Stage */
-      stage: string | null;
+      stage: string;
       /**
        * Swatches
        * @default []
@@ -1489,10 +1727,130 @@ export interface components {
        */
       type: "progress";
     };
+    /**
+     * PublishSnapshot
+     * @description Domain facts for the review (A30): only the rows the stage's own
+     *     ``plan()`` would refuse over, so the price table's red marker is never a
+     *     second copy of the below-cost rule.
+     */
+    PublishSnapshot: {
+      /**
+       * Below Cost
+       * @default []
+       */
+      below_cost: components["schemas"]["BelowCostRow"][];
+    };
+    /** PublishStagePlanDTO */
+    PublishStagePlanDTO: {
+      /**
+       * Actions
+       * @default []
+       */
+      actions: components["schemas"]["ActionDTO"][];
+      /** Blocked */
+      blocked?: string | null;
+      /**
+       * Changes
+       * @default []
+       */
+      changes: (
+        | components["schemas"]["FieldChangeDTO"]
+        | components["schemas"]["ListChangeDTO"]
+        | components["schemas"]["PriceChangeDTO"]
+        | components["schemas"]["MediaChangeDTO"]
+      )[];
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Reason */
+      reason?: string | null;
+      snapshot?: components["schemas"]["PublishSnapshot"] | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "publish";
+      /** Will Run */
+      will_run: boolean;
+    };
     /** RenameListingRequest */
     RenameListingRequest: {
       /** New Name */
       new_name: string;
+    };
+    /**
+     * RenderSceneSnapshot
+     * @description One scene's domain facts for the before/after review (A30, A32).
+     *
+     *     ``state`` answers "would this scene's rendered output change, and is it
+     *     even there" -- ``cached`` when neither is true, ``stale`` when the scene's
+     *     own hash has moved since the last apply, ``missing`` when the file itself
+     *     is absent (which wins over a hash comparison: a hash proves nothing about
+     *     a file that was deleted). ``preview`` answers a different question --
+     *     whether a full-size preview is already sitting in the cache for the
+     *     *current* state, which is what tells a caller whether ``preview()`` has
+     *     anything left to do for this scene.
+     */
+    RenderSceneSnapshot: {
+      /** Colour */
+      colour: string | null;
+      /** Preview */
+      preview: boolean;
+      /** Scene */
+      scene: string;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "cached" | "stale" | "missing";
+      /** Template */
+      template: string;
+    };
+    /**
+     * RenderSnapshot
+     * @description Every referenced scene, in media order -- what the before/after review
+     *     needs and a ``Plan`` (changes only) cannot supply (A30).
+     */
+    RenderSnapshot: {
+      /** Scenes */
+      scenes: components["schemas"]["RenderSceneSnapshot"][];
+    };
+    /** RenderStagePlanDTO */
+    RenderStagePlanDTO: {
+      /**
+       * Actions
+       * @default []
+       */
+      actions: components["schemas"]["ActionDTO"][];
+      /** Blocked */
+      blocked?: string | null;
+      /**
+       * Changes
+       * @default []
+       */
+      changes: (
+        | components["schemas"]["FieldChangeDTO"]
+        | components["schemas"]["ListChangeDTO"]
+        | components["schemas"]["PriceChangeDTO"]
+        | components["schemas"]["MediaChangeDTO"]
+      )[];
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Reason */
+      reason?: string | null;
+      snapshot?: components["schemas"]["RenderSnapshot"] | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "render";
+      /** Will Run */
+      will_run: boolean;
     };
     /** ResolvedPrice */
     ResolvedPrice: {
@@ -1500,6 +1858,42 @@ export interface components {
       amount: string;
       /** Size */
       size: string;
+    };
+    /** RetractStagePlanDTO */
+    RetractStagePlanDTO: {
+      /**
+       * Actions
+       * @default []
+       */
+      actions: components["schemas"]["ActionDTO"][];
+      /** Blocked */
+      blocked?: string | null;
+      /**
+       * Changes
+       * @default []
+       */
+      changes: (
+        | components["schemas"]["FieldChangeDTO"]
+        | components["schemas"]["ListChangeDTO"]
+        | components["schemas"]["PriceChangeDTO"]
+        | components["schemas"]["MediaChangeDTO"]
+      )[];
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Reason */
+      reason?: string | null;
+      /** Snapshot */
+      snapshot?: null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "retract";
+      /** Will Run */
+      will_run: boolean;
     };
     /** RunDetail */
     RunDetail: {
@@ -1530,21 +1924,10 @@ export interface components {
       kind: "plan" | "apply";
       /** Listings */
       listings: string[];
-      /**
-       * Phase
-       * @enum {string}
-       */
+      /** Phase */
       phase:
-        | "queued"
-        | "planning"
-        | "planned"
-        | "previewing"
-        | "ready"
-        | "applying"
-        | "applied"
-        | "failed"
-        | "stale"
-        | "cancelled";
+        | ("queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled")
+        | ("queued" | "applying" | "applied" | "failed" | "stale");
       /** Reviewed Run Id */
       reviewed_run_id: string | null;
       /**
@@ -1575,21 +1958,10 @@ export interface components {
       kind: "plan" | "apply";
       /** Listings */
       listings: string[];
-      /**
-       * Phase
-       * @enum {string}
-       */
+      /** Phase */
       phase:
-        | "queued"
-        | "planning"
-        | "planned"
-        | "previewing"
-        | "ready"
-        | "applying"
-        | "applied"
-        | "failed"
-        | "stale"
-        | "cancelled";
+        | ("queued" | "planning" | "planned" | "previewing" | "ready" | "failed" | "cancelled")
+        | ("queued" | "applying" | "applied" | "failed" | "stale");
       /** Reviewed Run Id */
       reviewed_run_id: string | null;
       /**
@@ -1769,48 +2141,20 @@ export interface components {
        */
       type: "stage_failed";
     };
-    /** StagePlanDTO */
-    StagePlanDTO: {
-      /**
-       * Actions
-       * @default []
-       */
-      actions: components["schemas"]["ActionDTO"][];
-      /** Blocked */
-      blocked?: string | null;
-      /**
-       * Changes
-       * @default []
-       */
-      changes: (
-        | components["schemas"]["FieldChangeDTO"]
-        | components["schemas"]["ListChangeDTO"]
-        | components["schemas"]["PriceChangeDTO"]
-        | components["schemas"]["MediaChangeDTO"]
-      )[];
-      /**
-       * Drift
-       * @default []
-       */
-      drift: components["schemas"]["DriftDTO"][];
-      /** Reason */
-      reason?: string | null;
-      /** Snapshot */
-      snapshot?: {
-        [key: string]: unknown;
-      } | null;
-      /** Stage */
-      stage: string;
-      /** Will Run */
-      will_run: boolean;
-    };
     /** StagePlannedEvent */
     StagePlannedEvent: {
       /** Id */
       id: number;
       /** Listing */
       listing: string;
-      stage_plan: components["schemas"]["StagePlanDTO"];
+      /** Stage Plan */
+      stage_plan:
+        | components["schemas"]["RenderStagePlanDTO"]
+        | components["schemas"]["ProductStagePlanDTO"]
+        | components["schemas"]["PublishStagePlanDTO"]
+        | components["schemas"]["EtsyListingStagePlanDTO"]
+        | components["schemas"]["EtsyMediaStagePlanDTO"]
+        | components["schemas"]["RetractStagePlanDTO"];
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
@@ -1902,6 +2246,44 @@ export interface components {
       msg: string;
       /** Error Type */
       type: string;
+    };
+    /** WorkspaceApplyRequest */
+    WorkspaceApplyRequest: {
+      /** Expect */
+      expect: {
+        [key: string]: string;
+      };
+      /**
+       * Kind
+       * @default apply
+       * @constant
+       */
+      kind: "apply";
+      /** Listings */
+      listings: string[];
+      /** Reviewed Run Id */
+      reviewed_run_id: string;
+      /**
+       * Scope
+       * @default workspace
+       * @constant
+       */
+      scope: "workspace";
+    };
+    /** WorkspacePlanRequest */
+    WorkspacePlanRequest: {
+      /**
+       * Kind
+       * @default plan
+       * @constant
+       */
+      kind: "plan";
+      /**
+       * Scope
+       * @default workspace
+       * @constant
+       */
+      scope: "workspace";
     };
     /**
      * WorkspaceSummary
@@ -2547,7 +2929,11 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["CreateRunRequest"];
+        "application/json":
+          | components["schemas"]["ListingPlanRequest"]
+          | components["schemas"]["WorkspacePlanRequest"]
+          | components["schemas"]["ListingApplyRequest"]
+          | components["schemas"]["WorkspaceApplyRequest"];
       };
     };
     responses: {

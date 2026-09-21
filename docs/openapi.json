@@ -56,6 +56,41 @@
         "title": "AssignKindRequest",
         "type": "object"
       },
+      "BelowCostRow": {
+        "description": "One variant priced under what Printify charges to make it -- the\nrow `plan()` already refuses over (:func:`_below_cost`), named for the\nbefore/after review (A30) rather than left as a bare variant id.",
+        "properties": {
+          "colour": {
+            "title": "Colour",
+            "type": "string"
+          },
+          "cost": {
+            "examples": [
+              "349 NOK"
+            ],
+            "title": "Cost",
+            "type": "string"
+          },
+          "price": {
+            "examples": [
+              "349 NOK"
+            ],
+            "title": "Price",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "string"
+          }
+        },
+        "required": [
+          "size",
+          "colour",
+          "price",
+          "cost"
+        ],
+        "title": "BelowCostRow",
+        "type": "object"
+      },
       "Body_upload_design_api_designs_post": {
         "properties": {
           "file": {
@@ -244,71 +279,6 @@
         "title": "CreateListingRequest",
         "type": "object"
       },
-      "CreateRunRequest": {
-        "properties": {
-          "expect": {
-            "anyOf": [
-              {
-                "additionalProperties": {
-                  "type": "string"
-                },
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Expect"
-          },
-          "kind": {
-            "enum": [
-              "plan",
-              "apply"
-            ],
-            "title": "Kind",
-            "type": "string"
-          },
-          "listings": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Listings"
-          },
-          "reviewed_run_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reviewed Run Id"
-          },
-          "scope": {
-            "default": "listings",
-            "enum": [
-              "listings",
-              "workspace"
-            ],
-            "title": "Scope",
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind"
-        ],
-        "title": "CreateRunRequest",
-        "type": "object"
-      },
       "DesignSummary": {
         "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
         "properties": {
@@ -335,6 +305,30 @@
           "source"
         ],
         "title": "DesignSummary",
+        "type": "object"
+      },
+      "DesiredImageSnapshot": {
+        "description": "One manifest entry, as this run wants to send it (A30).",
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "rank",
+          "ref",
+          "file"
+        ],
+        "title": "DesiredImageSnapshot",
         "type": "object"
       },
       "DisplaceConfig": {
@@ -496,6 +490,316 @@
           }
         },
         "title": "EtsyListingConfig",
+        "type": "object"
+      },
+      "EtsyListingFacts": {
+        "description": "One side of the review (A30): the fields the mock shows unchanged\ncontext for, named rather than left as an id.",
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "materials": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "shipping_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipping Profile"
+          },
+          "shop_section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Section"
+          },
+          "tags": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "title": "EtsyListingFacts",
+        "type": "object"
+      },
+      "EtsyListingSnapshot": {
+        "description": "Both sides, in full -- the ``Plan`` this stage also returns carries\nonly what changed.",
+        "properties": {
+          "desired": {
+            "$ref": "#/components/schemas/EtsyListingFacts"
+          },
+          "live": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EtsyListingFacts"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "desired",
+          "live"
+        ],
+        "title": "EtsyListingSnapshot",
+        "type": "object"
+      },
+      "EtsyListingStagePlanDTO": {
+        "properties": {
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActionDTO"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "field": "#/components/schemas/FieldChangeDTO",
+                  "list": "#/components/schemas/ListChangeDTO",
+                  "media": "#/components/schemas/MediaChangeDTO",
+                  "price": "#/components/schemas/PriceChangeDTO"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FieldChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ListChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PriceChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/MediaChangeDTO"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EtsyListingSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "const": "etsy_listing",
+            "default": "etsy_listing",
+            "title": "Stage",
+            "type": "string"
+          },
+          "will_run": {
+            "title": "Will Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "will_run"
+        ],
+        "title": "EtsyListingStagePlanDTO",
+        "type": "object"
+      },
+      "EtsyMediaSnapshot": {
+        "description": "Domain facts for the review (A30): both manifests in full, so the\nfrontend can lay out thumbnails and compute *New* / moved / *Removed*\nbadges from ``ref`` identity, guided by the per-rank ``MediaChange``s\n``plan()`` already emits.",
+        "properties": {
+          "desired": {
+            "items": {
+              "$ref": "#/components/schemas/DesiredImageSnapshot"
+            },
+            "title": "Desired",
+            "type": "array"
+          },
+          "live": {
+            "items": {
+              "$ref": "#/components/schemas/LiveImageSnapshot"
+            },
+            "title": "Live",
+            "type": "array"
+          }
+        },
+        "required": [
+          "desired",
+          "live"
+        ],
+        "title": "EtsyMediaSnapshot",
+        "type": "object"
+      },
+      "EtsyMediaStagePlanDTO": {
+        "properties": {
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActionDTO"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "field": "#/components/schemas/FieldChangeDTO",
+                  "list": "#/components/schemas/ListChangeDTO",
+                  "media": "#/components/schemas/MediaChangeDTO",
+                  "price": "#/components/schemas/PriceChangeDTO"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FieldChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ListChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PriceChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/MediaChangeDTO"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EtsyMediaSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "const": "etsy_media",
+            "default": "etsy_media",
+            "title": "Stage",
+            "type": "string"
+          },
+          "will_run": {
+            "title": "Will Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "will_run"
+        ],
+        "title": "EtsyMediaStagePlanDTO",
         "type": "object"
       },
       "EtsySectionSummary": {
@@ -690,6 +994,44 @@
           "reordered"
         ],
         "title": "ListChangeDTO",
+        "type": "object"
+      },
+      "ListingApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expect": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Expect",
+            "type": "object"
+          },
+          "kind": {
+            "const": "apply",
+            "default": "apply",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Listings",
+            "type": "array"
+          },
+          "scope": {
+            "const": "listings",
+            "default": "listings",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "listings",
+          "expect"
+        ],
+        "title": "ListingApplyRequest",
         "type": "object"
       },
       "ListingDesignSummary": {
@@ -921,7 +1263,7 @@
         "type": "object"
       },
       "ListingFailedEvent": {
-        "description": "The run's ``RunObserver.on_failure`` twin. ``message`` is the\n:class:`~etsy_listings.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.engine.run.StalePlanError`.",
+        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.engine.run.StalePlanError`.",
         "properties": {
           "id": {
             "title": "Id",
@@ -958,6 +1300,36 @@
           "message"
         ],
         "title": "ListingFailedEvent",
+        "type": "object"
+      },
+      "ListingPlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "plan",
+            "default": "plan",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1,
+            "title": "Listings",
+            "type": "array"
+          },
+          "scope": {
+            "const": "listings",
+            "default": "listings",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "listings"
+        ],
+        "title": "ListingPlanRequest",
         "type": "object"
       },
       "ListingPlannedEvent": {
@@ -1082,6 +1454,54 @@
           "issue_counts"
         ],
         "title": "ListingSummary",
+        "type": "object"
+      },
+      "LiveImageSnapshot": {
+        "description": "One image Etsy actually has, projected back to a ref where possible\n(A30) -- ``ref`` is ``None`` for an image this tool never uploaded.",
+        "properties": {
+          "image_id": {
+            "title": "Image Id",
+            "type": "integer"
+          },
+          "rank": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rank"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          }
+        },
+        "required": [
+          "rank",
+          "image_id"
+        ],
+        "title": "LiveImageSnapshot",
         "type": "object"
       },
       "MediaChangeDTO": {
@@ -1223,20 +1643,31 @@
             "type": "string"
           },
           "phase": {
-            "enum": [
-              "queued",
-              "planning",
-              "planned",
-              "previewing",
-              "ready",
-              "applying",
-              "applied",
-              "failed",
-              "stale",
-              "cancelled"
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "planning",
+                  "planned",
+                  "previewing",
+                  "ready",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "queued",
+                  "applying",
+                  "applied",
+                  "failed",
+                  "stale"
+                ],
+                "type": "string"
+              }
             ],
-            "title": "Phase",
-            "type": "string"
+            "title": "Phase"
           },
           "type": {
             "const": "phase",
@@ -1321,7 +1752,37 @@
           },
           "stage_plans": {
             "items": {
-              "$ref": "#/components/schemas/StagePlanDTO"
+              "discriminator": {
+                "mapping": {
+                  "etsy_listing": "#/components/schemas/EtsyListingStagePlanDTO",
+                  "etsy_media": "#/components/schemas/EtsyMediaStagePlanDTO",
+                  "printify_product": "#/components/schemas/ProductStagePlanDTO",
+                  "publish": "#/components/schemas/PublishStagePlanDTO",
+                  "render": "#/components/schemas/RenderStagePlanDTO",
+                  "retract": "#/components/schemas/RetractStagePlanDTO"
+                },
+                "propertyName": "stage"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/RenderStagePlanDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ProductStagePlanDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PublishStagePlanDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/EtsyListingStagePlanDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/EtsyMediaStagePlanDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/RetractStagePlanDTO"
+                }
+              ]
             },
             "title": "Stage Plans",
             "type": "array"
@@ -1463,8 +1924,157 @@
         "title": "PricingPlanSummary",
         "type": "object"
       },
+      "ProductSnapshot": {
+        "description": "Domain facts for the before/after review (A30): every variant on each\nside, unchanged ones included -- a ``Plan`` carries only what changed, and\nthe comparison needs the whole matrix to draw a price table from.",
+        "properties": {
+          "desired": {
+            "items": {
+              "$ref": "#/components/schemas/ProductVariantSnapshot"
+            },
+            "title": "Desired",
+            "type": "array"
+          },
+          "live": {
+            "items": {
+              "$ref": "#/components/schemas/ProductVariantSnapshot"
+            },
+            "title": "Live",
+            "type": "array"
+          }
+        },
+        "required": [
+          "desired",
+          "live"
+        ],
+        "title": "ProductSnapshot",
+        "type": "object"
+      },
+      "ProductStagePlanDTO": {
+        "properties": {
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActionDTO"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "field": "#/components/schemas/FieldChangeDTO",
+                  "list": "#/components/schemas/ListChangeDTO",
+                  "media": "#/components/schemas/MediaChangeDTO",
+                  "price": "#/components/schemas/PriceChangeDTO"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FieldChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ListChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PriceChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/MediaChangeDTO"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ProductSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "const": "printify_product",
+            "default": "printify_product",
+            "title": "Stage",
+            "type": "string"
+          },
+          "will_run": {
+            "title": "Will Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "will_run"
+        ],
+        "title": "ProductStagePlanDTO",
+        "type": "object"
+      },
+      "ProductVariantSnapshot": {
+        "description": "One cell of the variant matrix, named rather than left as an id (A30).",
+        "properties": {
+          "colour": {
+            "title": "Colour",
+            "type": "string"
+          },
+          "price": {
+            "examples": [
+              "349 NOK"
+            ],
+            "title": "Price",
+            "type": "string"
+          },
+          "size": {
+            "title": "Size",
+            "type": "string"
+          }
+        },
+        "required": [
+          "size",
+          "colour",
+          "price"
+        ],
+        "title": "ProductVariantSnapshot",
+        "type": "object"
+      },
       "ProgressEvent": {
-        "description": "``ctx.emit``'s ``Event``, tagged with whatever stage\n:class:`StageApplyingEvent` last named for this listing -- no stage\nchanges how it reports progress (A33, decision 7).",
+        "description": "Stage progress after the engine has attached its run identity.",
         "properties": {
           "id": {
             "title": "Id",
@@ -1479,15 +2089,8 @@
             "type": "string"
           },
           "stage": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Stage"
+            "title": "Stage",
+            "type": "string"
           },
           "swatches": {
             "default": [],
@@ -1526,6 +2129,118 @@
         "title": "ProgressEvent",
         "type": "object"
       },
+      "PublishSnapshot": {
+        "description": "Domain facts for the review (A30): only the rows the stage's own\n``plan()`` would refuse over, so the price table's red marker is never a\nsecond copy of the below-cost rule.",
+        "properties": {
+          "below_cost": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/BelowCostRow"
+            },
+            "title": "Below Cost",
+            "type": "array"
+          }
+        },
+        "title": "PublishSnapshot",
+        "type": "object"
+      },
+      "PublishStagePlanDTO": {
+        "properties": {
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActionDTO"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "field": "#/components/schemas/FieldChangeDTO",
+                  "list": "#/components/schemas/ListChangeDTO",
+                  "media": "#/components/schemas/MediaChangeDTO",
+                  "price": "#/components/schemas/PriceChangeDTO"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FieldChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ListChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PriceChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/MediaChangeDTO"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PublishSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "const": "publish",
+            "default": "publish",
+            "title": "Stage",
+            "type": "string"
+          },
+          "will_run": {
+            "title": "Will Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "will_run"
+        ],
+        "title": "PublishStagePlanDTO",
+        "type": "object"
+      },
       "RenameListingRequest": {
         "properties": {
           "new_name": {
@@ -1537,6 +2252,166 @@
           "new_name"
         ],
         "title": "RenameListingRequest",
+        "type": "object"
+      },
+      "RenderSceneSnapshot": {
+        "description": "One scene's domain facts for the before/after review (A30, A32).\n\n``state`` answers \"would this scene's rendered output change, and is it\neven there\" -- ``cached`` when neither is true, ``stale`` when the scene's\nown hash has moved since the last apply, ``missing`` when the file itself\nis absent (which wins over a hash comparison: a hash proves nothing about\na file that was deleted). ``preview`` answers a different question --\nwhether a full-size preview is already sitting in the cache for the\n*current* state, which is what tells a caller whether ``preview()`` has\nanything left to do for this scene.",
+        "properties": {
+          "colour": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Colour"
+          },
+          "preview": {
+            "title": "Preview",
+            "type": "boolean"
+          },
+          "scene": {
+            "title": "Scene",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "cached",
+              "stale",
+              "missing"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "template": {
+            "title": "Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "scene",
+          "template",
+          "colour",
+          "state",
+          "preview"
+        ],
+        "title": "RenderSceneSnapshot",
+        "type": "object"
+      },
+      "RenderSnapshot": {
+        "description": "Every referenced scene, in media order -- what the before/after review\nneeds and a ``Plan`` (changes only) cannot supply (A30).",
+        "properties": {
+          "scenes": {
+            "items": {
+              "$ref": "#/components/schemas/RenderSceneSnapshot"
+            },
+            "title": "Scenes",
+            "type": "array"
+          }
+        },
+        "required": [
+          "scenes"
+        ],
+        "title": "RenderSnapshot",
+        "type": "object"
+      },
+      "RenderStagePlanDTO": {
+        "properties": {
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActionDTO"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "field": "#/components/schemas/FieldChangeDTO",
+                  "list": "#/components/schemas/ListChangeDTO",
+                  "media": "#/components/schemas/MediaChangeDTO",
+                  "price": "#/components/schemas/PriceChangeDTO"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FieldChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ListChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PriceChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/MediaChangeDTO"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/RenderSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "const": "render",
+            "default": "render",
+            "title": "Stage",
+            "type": "string"
+          },
+          "will_run": {
+            "title": "Will Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "will_run"
+        ],
+        "title": "RenderStagePlanDTO",
         "type": "object"
       },
       "ResolvedPrice": {
@@ -1555,6 +2430,97 @@
           "amount"
         ],
         "title": "ResolvedPrice",
+        "type": "object"
+      },
+      "RetractStagePlanDTO": {
+        "properties": {
+          "actions": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ActionDTO"
+            },
+            "title": "Actions",
+            "type": "array"
+          },
+          "blocked": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Blocked"
+          },
+          "changes": {
+            "default": [],
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "field": "#/components/schemas/FieldChangeDTO",
+                  "list": "#/components/schemas/ListChangeDTO",
+                  "media": "#/components/schemas/MediaChangeDTO",
+                  "price": "#/components/schemas/PriceChangeDTO"
+                },
+                "propertyName": "kind"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/FieldChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/ListChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/PriceChangeDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/MediaChangeDTO"
+                }
+              ]
+            },
+            "title": "Changes",
+            "type": "array"
+          },
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "snapshot": {
+            "title": "Snapshot",
+            "type": "null"
+          },
+          "stage": {
+            "const": "retract",
+            "default": "retract",
+            "title": "Stage",
+            "type": "string"
+          },
+          "will_run": {
+            "title": "Will Run",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "will_run"
+        ],
+        "title": "RetractStagePlanDTO",
         "type": "object"
       },
       "RunDetail": {
@@ -1637,20 +2603,31 @@
             "type": "array"
           },
           "phase": {
-            "enum": [
-              "queued",
-              "planning",
-              "planned",
-              "previewing",
-              "ready",
-              "applying",
-              "applied",
-              "failed",
-              "stale",
-              "cancelled"
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "planning",
+                  "planned",
+                  "previewing",
+                  "ready",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "queued",
+                  "applying",
+                  "applied",
+                  "failed",
+                  "stale"
+                ],
+                "type": "string"
+              }
             ],
-            "title": "Phase",
-            "type": "string"
+            "title": "Phase"
           },
           "reviewed_run_id": {
             "anyOf": [
@@ -1718,20 +2695,31 @@
             "type": "array"
           },
           "phase": {
-            "enum": [
-              "queued",
-              "planning",
-              "planned",
-              "previewing",
-              "ready",
-              "applying",
-              "applied",
-              "failed",
-              "stale",
-              "cancelled"
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "planning",
+                  "planned",
+                  "previewing",
+                  "ready",
+                  "failed",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "enum": [
+                  "queued",
+                  "applying",
+                  "applied",
+                  "failed",
+                  "stale"
+                ],
+                "type": "string"
+              }
             ],
-            "title": "Phase",
-            "type": "string"
+            "title": "Phase"
           },
           "reviewed_run_id": {
             "anyOf": [
@@ -2055,104 +3043,6 @@
         "title": "StageFailedEvent",
         "type": "object"
       },
-      "StagePlanDTO": {
-        "properties": {
-          "actions": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/ActionDTO"
-            },
-            "title": "Actions",
-            "type": "array"
-          },
-          "blocked": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Blocked"
-          },
-          "changes": {
-            "default": [],
-            "items": {
-              "discriminator": {
-                "mapping": {
-                  "field": "#/components/schemas/FieldChangeDTO",
-                  "list": "#/components/schemas/ListChangeDTO",
-                  "media": "#/components/schemas/MediaChangeDTO",
-                  "price": "#/components/schemas/PriceChangeDTO"
-                },
-                "propertyName": "kind"
-              },
-              "oneOf": [
-                {
-                  "$ref": "#/components/schemas/FieldChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/ListChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/PriceChangeDTO"
-                },
-                {
-                  "$ref": "#/components/schemas/MediaChangeDTO"
-                }
-              ]
-            },
-            "title": "Changes",
-            "type": "array"
-          },
-          "drift": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/DriftDTO"
-            },
-            "title": "Drift",
-            "type": "array"
-          },
-          "reason": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Reason"
-          },
-          "snapshot": {
-            "anyOf": [
-              {
-                "additionalProperties": true,
-                "type": "object"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Snapshot"
-          },
-          "stage": {
-            "title": "Stage",
-            "type": "string"
-          },
-          "will_run": {
-            "title": "Will Run",
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "stage",
-          "will_run"
-        ],
-        "title": "StagePlanDTO",
-        "type": "object"
-      },
       "StagePlannedEvent": {
         "properties": {
           "id": {
@@ -2164,7 +3054,38 @@
             "type": "string"
           },
           "stage_plan": {
-            "$ref": "#/components/schemas/StagePlanDTO"
+            "discriminator": {
+              "mapping": {
+                "etsy_listing": "#/components/schemas/EtsyListingStagePlanDTO",
+                "etsy_media": "#/components/schemas/EtsyMediaStagePlanDTO",
+                "printify_product": "#/components/schemas/ProductStagePlanDTO",
+                "publish": "#/components/schemas/PublishStagePlanDTO",
+                "render": "#/components/schemas/RenderStagePlanDTO",
+                "retract": "#/components/schemas/RetractStagePlanDTO"
+              },
+              "propertyName": "stage"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RenderStagePlanDTO"
+              },
+              {
+                "$ref": "#/components/schemas/ProductStagePlanDTO"
+              },
+              {
+                "$ref": "#/components/schemas/PublishStagePlanDTO"
+              },
+              {
+                "$ref": "#/components/schemas/EtsyListingStagePlanDTO"
+              },
+              {
+                "$ref": "#/components/schemas/EtsyMediaStagePlanDTO"
+              },
+              {
+                "$ref": "#/components/schemas/RetractStagePlanDTO"
+              }
+            ],
+            "title": "Stage Plan"
           },
           "type": {
             "const": "stage_planned",
@@ -2378,6 +3299,67 @@
           "type"
         ],
         "title": "ValidationError",
+        "type": "object"
+      },
+      "WorkspaceApplyRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "expect": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Expect",
+            "type": "object"
+          },
+          "kind": {
+            "const": "apply",
+            "default": "apply",
+            "title": "Kind",
+            "type": "string"
+          },
+          "listings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "reviewed_run_id": {
+            "title": "Reviewed Run Id",
+            "type": "string"
+          },
+          "scope": {
+            "const": "workspace",
+            "default": "workspace",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "required": [
+          "listings",
+          "expect",
+          "reviewed_run_id"
+        ],
+        "title": "WorkspaceApplyRequest",
+        "type": "object"
+      },
+      "WorkspacePlanRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "const": "plan",
+            "default": "plan",
+            "title": "Kind",
+            "type": "string"
+          },
+          "scope": {
+            "const": "workspace",
+            "default": "workspace",
+            "title": "Scope",
+            "type": "string"
+          }
+        },
+        "title": "WorkspacePlanRequest",
         "type": "object"
       },
       "WorkspaceSummary": {
@@ -3271,7 +4253,21 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateRunRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/ListingPlanRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WorkspacePlanRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/ListingApplyRequest"
+                  },
+                  {
+                    "$ref": "#/components/schemas/WorkspaceApplyRequest"
+                  }
+                ],
+                "title": "Body"
               }
             }
           },

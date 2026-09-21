@@ -54,13 +54,30 @@ from etsy_listings.engine.change import (
     MediaChange,
     Plan,
     PriceChange,
+    StageBlocked,
+    StageIdle,
+    StageOutcome,
     StagePlan,
+    StageWork,
     Verdict,
     drift,
     scalar,
     sequence,
 )
 from etsy_listings.engine.context import Event, EventSink, RunContext, Swatch
+from etsy_listings.engine.events import (
+    EngineEventSink,
+    EngineListingFailed,
+    EngineListingPlanned,
+    EnginePreviewRendered,
+    EngineProgress,
+    EngineRunEvent,
+    EngineStageApplied,
+    EngineStageApplying,
+    EngineStageChecking,
+    EngineStageFailed,
+    EngineStagePlanned,
+)
 from etsy_listings.engine.lock import (
     SCHEMA_VERSION,
     Lockfile,
@@ -72,11 +89,7 @@ from etsy_listings.engine.lock import (
 from etsy_listings.engine.plan import PlannedRun, StageState, build_plan
 from etsy_listings.engine.preview import PreviewLookup, lookup_preview, needs_preview
 from etsy_listings.engine.run import (
-    FailureSink,
     ListingOutcome,
-    PlannedSink,
-    PreviewRenderedSink,
-    RunObserver,
     RunReport,
     StalePlanError,
     apply_listings,
@@ -113,10 +126,17 @@ __all__ = [
     "PreviewLookup",
     "RunReport",
     "ListingOutcome",
-    "PlannedSink",
-    "FailureSink",
-    "PreviewRenderedSink",
-    "RunObserver",
+    "EngineEventSink",
+    "EngineRunEvent",
+    "EngineStageChecking",
+    "EngineStagePlanned",
+    "EngineListingPlanned",
+    "EngineListingFailed",
+    "EnginePreviewRendered",
+    "EngineStageApplying",
+    "EngineProgress",
+    "EngineStageApplied",
+    "EngineStageFailed",
     "StalePlanError",
     "plan_fingerprint",
     # One listing at a time, for a caller that owns its own lockfile.
@@ -135,6 +155,10 @@ __all__ = [
     # What a stage's plan() answers with: a decision, not a plan. The engine
     # supplies the stage's name and the refusal; a stage supplies neither.
     "Verdict",
+    "StageOutcome",
+    "StageIdle",
+    "StageWork",
+    "StageBlocked",
     # What plan produces and cli/ui consume -- never comparing state themselves.
     "Plan",
     "StagePlan",

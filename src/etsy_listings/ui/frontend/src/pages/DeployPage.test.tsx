@@ -58,7 +58,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   };
 }
 
-function stage(overrides: Partial<StagePlanDTO> & { stage: string }): StagePlanDTO {
+function stage(overrides: Partial<StagePlanDTO> & { stage: StagePlanDTO["stage"] }): StagePlanDTO {
   return {
     will_run: false,
     changes: [],

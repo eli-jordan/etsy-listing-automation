@@ -15,13 +15,10 @@ the same seam, one level up. ``cli`` formats the :class:`RunReport`; the UI
 (Phase 5) will serialise it; neither re-derives what a run does, and PRD 16 is
 now testable without a terminal.
 
-**One ``RunObserver``, not a signature that grows.** ``on_planned`` and
-``on_failure`` used to be separate keywords, and every event worth watching
-after A30/A33 would have been a third. They are now two fields of one
-dataclass of no-op-by-default callbacks, alongside the plan-time ones
-``build_plan``'s walk fires (A33, decision 2) -- see :class:`RunObserver`'s
-own docstring for exactly which events belong to this PR and which are a
-later one's.
+**One event sink, not a callback bundle that grows.** Planning, previewing and
+applying emit values from the closed :data:`EngineRunEvent` union through one
+ordered sink. Adapters may ignore events they do not render; adding an event
+does not change the orchestration signatures.
 
 Nothing here formats, and nothing here decides an exit code -- that is
 ``cli``'s to take from :attr:`RunReport.failed`.
@@ -37,8 +34,15 @@ from typing import Any
 from etsy_listings import __about__
 from etsy_listings.config.money import Money
 from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import Plan, StagePlan
+from etsy_listings.engine.change import Plan
 from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.events import (
+    EngineEventSink,
+    EngineListingFailed,
+    EngineListingPlanned,
+    EnginePreviewRendered,
+    ignore_engine_event,
+)
 from etsy_listings.engine.lifecycle import after_apply
 from etsy_listings.engine.lock import Lockfile, canonical_hash
 from etsy_listings.engine.plan import PlannedRun, build_plan
@@ -91,138 +95,8 @@ class RunReport:
         return tuple(outcome for outcome in self.outcomes if not outcome.ok)
 
 
-PlannedSink = Callable[[str, PlannedRun], None]
-"""Called with a listing's name and its plan, the moment the plan is ready."""
-
-FailureSink = Callable[[str, UserFacingError], None]
-"""Called with a listing's name and the reason it was abandoned."""
-
-StageCheckingSink = Callable[[str, str], None]
-"""Called with a listing's name and a stage's name, the moment ``build_plan``
-starts asking that stage anything -- before its ``desired()``, before its
-``read_live()``. What lets a plan-time progress strip show which stage is
-being checked right now, in the pipeline's own order: A21 left A3's live-fetch
-thread pool unbuilt, so that order is genuinely the order stages resolve in,
-not a fiction the strip would otherwise have to perform (A33, decision 2)."""
-
-StagePlannedSink = Callable[[str, StagePlan], None]
-"""Called with a listing's name and one stage's resolved ``StagePlan`` --
-:attr:`~etsy_listings.engine.change.StagePlan.snapshot` included -- the
-moment that stage's own walk finishes, whether it ran, changed nothing, drifted
-or blocked."""
-
-PreviewRenderedSink = Callable[[str, str, str | None], None]
-"""Called with a listing's name, a template name and a colour (``None`` for a
-``multiple``/``single``-kind scene) each time :func:`preview_listing` learns a
-scene now has a ready preview file -- freshly rendered this call or already
-current from an earlier one either way (A32, decision 6)."""
-
-StageApplyingSink = Callable[[str, str], None]
-"""Called with a listing's name and a stage's name, the moment ``execute`` is
-about to call that stage's own ``apply`` -- the apply-time twin of
-:data:`StageCheckingSink` (A33, decision 7's UI runs resource)."""
-
-StageAppliedSink = Callable[[str, str], None]
-"""Called with a listing's name and a stage's name, the moment that stage's
-``apply`` has returned and its result has been folded into the lockfile
-``execute`` is building."""
-
-StageFailedSink = Callable[[str, str, str], None]
-"""Called with a listing's name, the stage whose ``apply`` raised, and a
-message -- right before ``execute`` re-raises the exception itself. Fired for
-*any* exception, not only a :class:`~etsy_listings.errors.UserFacingError`,
-but the message is not always the exception's own: ``execute`` applies the
-same rule ``_over`` already applies to a listing-level failure, so a bare
-defect's message is replaced with
-:data:`~etsy_listings.errors.INTERNAL_ERROR_MESSAGE` before this fires. A
-defect's real text still reaches the log, via the exception ``execute``
-re-raises -- just never this callback, which is what a client ends up
-seeing."""
-
-
-def _ignore_planned(listing: str, planned: PlannedRun) -> None:
-    return None
-
-
-def _ignore_failure(listing: str, error: UserFacingError) -> None:
-    return None
-
-
-def _ignore_stage_checking(listing: str, stage: str) -> None:
-    return None
-
-
-def _ignore_stage_planned(listing: str, stage_plan: StagePlan) -> None:
-    return None
-
-
-def _ignore_preview_rendered(listing: str, template: str, colour: str | None) -> None:
-    return None
-
-
-def _ignore_stage_applying(listing: str, stage: str) -> None:
-    return None
-
-
-def _ignore_stage_applied(listing: str, stage: str) -> None:
-    return None
-
-
-def _ignore_stage_failed(listing: str, stage: str, message: str) -> None:
-    return None
-
-
 def _never_stop() -> bool:
     return False
-
-
-@dataclass(frozen=True)
-class RunObserver:
-    """No-op-by-default callbacks a caller can watch a run through.
-
-    One parameter that grows beats a signature that gains a keyword per event
-    (A33, decision 2): ``plan_listings``/``apply_listings`` used to carry
-    ``on_planned`` and ``on_failure`` as separate keywords, and every event
-    worth watching since would have been a third.
-
-    **This PR's scope is the plan-time half.** ``build_plan``'s walk calls
-    :attr:`on_stage_checking` before each stage and :attr:`on_stage_planned`
-    right after, snapshot included; ``plan_listings``/``apply_listings`` call
-    :attr:`on_listing_planned` once a listing's plan is whole (the old
-    ``on_planned``, renamed to match decision 7's event table) and
-    :attr:`on_failure` when a listing is abandoned -- unchanged from the sink
-    it already was.
-
-    **This PR also adds the one event between planning and applying.**
-    :attr:`on_preview_rendered` fires from :func:`preview_listing` (A32,
-    decision 6) once per scene that ends a preview call with a ready file --
-    a caller between the two, the UI's future plan run.
-
-    **The apply-time half, added for the UI's runs resource (A33).**
-    :attr:`on_stage_applying` and :attr:`on_stage_applied` bracket each
-    stage's own ``apply`` inside :func:`~etsy_listings.engine.apply.execute`;
-    :attr:`on_stage_failed` fires once, right before ``execute`` re-raises,
-    with that stage's own message only when it raised a
-    :class:`~etsy_listings.errors.UserFacingError` -- a bare defect's message
-    is masked before this fires (see :data:`StageFailedSink`). ``listing_failed`` (decision 7's
-    event table) has no field of its own here -- :attr:`on_failure` already
-    is that sink, unchanged from the plan-time meaning it already had; the
-    executor is what turns whichever exception reached it into the right
-    event, :class:`StalePlanError` included. ``progress`` has no field
-    either: it is ``ctx.emit``'s existing :class:`~etsy_listings.engine.context.Event`,
-    which the executor tags with whatever stage :attr:`on_stage_applying` last
-    named -- adding a second progress channel here would be a second way to
-    report the same message.
-    """
-
-    on_stage_checking: StageCheckingSink = _ignore_stage_checking
-    on_stage_planned: StagePlannedSink = _ignore_stage_planned
-    on_listing_planned: PlannedSink = _ignore_planned
-    on_failure: FailureSink = _ignore_failure
-    on_preview_rendered: PreviewRenderedSink = _ignore_preview_rendered
-    on_stage_applying: StageApplyingSink = _ignore_stage_applying
-    on_stage_applied: StageAppliedSink = _ignore_stage_applied
-    on_stage_failed: StageFailedSink = _ignore_stage_failed
 
 
 class StalePlanError(UserFacingError):
@@ -303,7 +177,7 @@ def plan_listings(
     listings: Sequence[str],
     stages: list[AnyStage],
     *,
-    observer: RunObserver | None = None,
+    on_event: EngineEventSink = ignore_engine_event,
     should_stop: Callable[[], bool] | None = None,
 ) -> RunReport:
     """Plan every listing. Reads only -- nothing is created or written.
@@ -314,25 +188,24 @@ def plan_listings(
     than only after the last one. ``None``, every existing caller's default,
     behaves exactly as before.
     """
-    watch = observer or RunObserver()
 
     def work(listing: str) -> PlannedRun:
-        planned = build_plan(ctx, listing, _read_lock(ctx, listing), stages, observer=watch)
-        watch.on_listing_planned(listing, planned)
+        planned = build_plan(ctx, listing, _read_lock(ctx, listing), stages, on_event=on_event)
+        on_event(EngineListingPlanned(listing, planned.plan))
         return planned
 
-    return _over(listings, work, watch.on_failure, should_stop=should_stop or _never_stop)
+    return _over(listings, work, on_event, should_stop=should_stop or _never_stop)
 
 
 def preview_listing(
     ctx: RunContext,
     planned: PlannedRun,
-    observer: RunObserver | None = None,
+    on_event: EngineEventSink = ignore_engine_event,
     *,
     should_stop: Callable[[], bool] | None = None,
 ) -> None:
     """Render full-size previews for one already-planned listing (A32,
-    decision 6), firing :attr:`RunObserver.on_preview_rendered` once per scene
+    decision 6), emitting :class:`EnginePreviewRendered` once per scene
     that ends this call with a ready preview file.
 
     Deliberately not part of :func:`plan_listings`: a plan stays read-only and
@@ -344,7 +217,7 @@ def preview_listing(
     Finds the render stage's own :class:`~etsy_listings.engine.plan.StageState`
     in ``planned.states`` and asks *it* for previews, rather than knowing
     anything about scenes itself -- that type-peek lives in
-    :mod:`~etsy_listings.engine.preview`, so this module fires the observer
+    :mod:`~etsy_listings.engine.preview`, so this module emits the ready event
     and nothing else. Previewing is render-specific by design (`stage.py`'s
     note on why), not an optional extension every stage might grow.
 
@@ -354,13 +227,12 @@ def preview_listing(
     :class:`~etsy_listings.engine.stages.render.RenderDesired` to preview in
     either case.
     """
-    watch = observer or RunObserver()
     listing = planned.plan.listing
     render_pending(
         ctx,
         planned,
         should_stop=should_stop or _never_stop,
-        on_ready=lambda work: watch.on_preview_rendered(listing, work.template, work.colour),
+        on_ready=lambda work: on_event(EnginePreviewRendered(listing, work.template, work.colour)),
     )
 
 
@@ -369,7 +241,7 @@ def apply_listings(
     listings: Sequence[str],
     stages: list[AnyStage],
     *,
-    observer: RunObserver | None = None,
+    on_event: EngineEventSink = ignore_engine_event,
     expect: Mapping[str, str] | None = None,
     should_stop: Callable[[], bool] | None = None,
 ) -> RunReport:
@@ -397,36 +269,35 @@ def apply_listings(
     which is the shutdown guarantee decision 7 makes (finish the stage in
     progress, start no other). ``None`` behaves exactly as before.
     """
-    watch = observer or RunObserver()
     stop = should_stop or _never_stop
 
     def work(listing: str) -> PlannedRun:
         lock = _read_lock(ctx, listing)
-        planned = build_plan(ctx, listing, lock, stages, observer=watch)
+        planned = build_plan(ctx, listing, lock, stages, on_event=on_event)
         if expect is not None and listing in expect:
             fingerprint = plan_fingerprint(planned.plan)
             if fingerprint != expect[listing]:
                 raise StalePlanError(listing, planned)
-        watch.on_listing_planned(listing, planned)
+        on_event(EngineListingPlanned(listing, planned.plan))
         lock_file = ctx.workspace.lock_file(listing)
         execute(
             ctx,
             planned,
             lock,
-            observer=watch,
+            on_event=on_event,
             record=lambda updated: updated.write(lock_file),
             should_stop=stop,
         )
         after_apply(ctx, listing, planned)
         return planned
 
-    return _over(listings, work, watch.on_failure, should_stop=stop)
+    return _over(listings, work, on_event, should_stop=stop)
 
 
 def _over(
     listings: Sequence[str],
     work: Callable[[str], PlannedRun],
-    on_failure: FailureSink,
+    on_event: EngineEventSink,
     *,
     should_stop: Callable[[], bool] = _never_stop,
 ) -> RunReport:
@@ -449,7 +320,7 @@ def _over(
         try:
             planned = work(listing)
         except UserFacingError as exc:
-            on_failure(listing, exc)
+            on_event(EngineListingFailed(listing, exc))
             outcomes.append(ListingOutcome(listing=listing, error=exc))
         else:
             outcomes.append(ListingOutcome(listing=listing, planned=planned))

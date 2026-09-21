@@ -29,11 +29,9 @@ class _Snapshot(BaseModel):
 
 
 def _plan(**stage_plan_overrides: object) -> Plan:
-    fields: dict[str, object] = {
-        "stage": "printify_product",
-        "will_run": True,
-        "reason": "no Printify product yet -- it will be created",
-        "changes": (
+    changes = stage_plan_overrides.pop(
+        "changes",
+        (
             FieldChange(path="title", before="Old", after="New"),
             PriceChange(
                 size="M",
@@ -43,15 +41,29 @@ def _plan(**stage_plan_overrides: object) -> Plan:
             ),
             ListChange(path="colors", added=("navy",), removed=()),
         ),
-        "drift": (Drift(path="visible", last_applied=False, live=True),),
-        "actions": (Action(description="create a Printify product", inputs=("d.png",)),),
-    }
-    fields.update(stage_plan_overrides)
+    )
+    drift = stage_plan_overrides.pop(
+        "drift", (Drift(path="visible", last_applied=False, live=True),)
+    )
+    actions = stage_plan_overrides.pop(
+        "actions", (Action(description="create a Printify product", inputs=("d.png",)),)
+    )
+    snapshot = stage_plan_overrides.pop("snapshot", None)
+    assert stage_plan_overrides == {}
     return Plan(
         listing="take-a-hike",
         is_live=False,
         etsy_listing_id=None,
-        stage_plans=(StagePlan(**fields),),  # type: ignore[arg-type]
+        stage_plans=(
+            StagePlan.work(
+                "printify_product",
+                "no Printify product yet -- it will be created",
+                changes=changes,  # type: ignore[arg-type]
+                drift=drift,  # type: ignore[arg-type]
+                actions=actions,  # type: ignore[arg-type]
+                snapshot=snapshot,  # type: ignore[arg-type]
+            ),
+        ),
     )
 
 

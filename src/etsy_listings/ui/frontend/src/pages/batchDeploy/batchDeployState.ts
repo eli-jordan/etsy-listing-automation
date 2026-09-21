@@ -1,21 +1,14 @@
-import type { PlanDTO, RunEvent, RunPhase } from "../../types";
-import type { StageRuntimeStatus } from "../deploy/deployState";
+import type { RunEvent, RunPhase } from "../../types";
+import {
+  applyListingRunEvent,
+  initialListingRunState,
+  type ListingRunState,
+} from "../deploy/listingRunState";
 
 export type BatchRunSource = "review" | "apply";
 
-export interface BatchListingState {
+export interface BatchListingState extends ListingRunState {
   listing: string;
-  /** The plan the seller reviewed. */
-  reviewedPlan: PlanDTO | null;
-  /** The effective plan to show for this row. A stale outcome may replace it
-   * with the fresh plan returned by the engine. */
-  plan: PlanDTO | null;
-  fingerprint: string | null;
-  planFailure: string | null;
-  failureMessage: string | null;
-  stale: boolean;
-  checkingStage: string | null;
-  stageRuntime: Record<string, StageRuntimeStatus>;
 }
 
 export interface BatchDeployState {
@@ -55,15 +48,8 @@ export function batchPreviewKey(listing: string, template: string, colour: strin
 
 function emptyListing(listing: string): BatchListingState {
   return {
+    ...initialListingRunState(),
     listing,
-    reviewedPlan: null,
-    plan: null,
-    fingerprint: null,
-    planFailure: null,
-    failureMessage: null,
-    stale: false,
-    checkingStage: null,
-    stageRuntime: {},
   };
 }
 
@@ -90,17 +76,15 @@ function withPhase(state: BatchDeployState, phase: RunPhase, at: string | null) 
   return { ...state, phase, phaseTimes, generatedAt, resultAt };
 }
 
-function withRuntime(
+function project(
   value: BatchListingState,
-  stage: string,
-  runtime: StageRuntimeStatus,
+  event: RunEvent,
+  source: BatchRunSource,
 ): BatchListingState {
-  return { ...value, stageRuntime: { ...value.stageRuntime, [stage]: runtime } };
-}
-
-function runtimeTime(event: RunEvent): number {
-  const at = eventTime(event);
-  return at === null ? 0 : Date.parse(at);
+  return {
+    ...value,
+    ...applyListingRunEvent(value, event, source === "review" ? "review" : "runtime-only"),
+  };
 }
 
 /** Fold one recorded event. `source` distinguishes the reviewed plan from the
@@ -124,17 +108,13 @@ export function applyBatchRunEvent(
       return withListing(
         { ...state, currentListing: event.listing, currentStage: event.stage },
         event.listing,
-        { ...current, checkingStage: event.stage },
+        project(current, event, source),
       );
     }
 
     case "stage_planned": {
       const current = listingState(state, event.listing);
-      return withListing(state, event.listing, {
-        ...current,
-        checkingStage:
-          current.checkingStage === event.stage_plan.stage ? null : current.checkingStage,
-      });
+      return withListing(state, event.listing, project(current, event, source));
     }
 
     case "listing_planned": {
@@ -144,14 +124,7 @@ export function applyBatchRunEvent(
         shouldReview && current.reviewedPlan === null
           ? { ...state, reviewedListingOrder: [...state.reviewedListingOrder, event.listing] }
           : state;
-      return withListing(nextState, event.listing, {
-        ...current,
-        ...(shouldReview
-          ? { reviewedPlan: event.plan, plan: event.plan, fingerprint: event.fingerprint }
-          : {}),
-        planFailure: null,
-        checkingStage: null,
-      });
+      return withListing(nextState, event.listing, project(current, event, source));
     }
 
     case "preview_rendered":
@@ -167,68 +140,46 @@ export function applyBatchRunEvent(
       return withListing(
         { ...state, currentListing: event.listing, currentStage: event.stage },
         event.listing,
-        withRuntime(current, event.stage, {
-          kind: "applying",
-          log: null,
-          startedAt: runtimeTime(event),
-        }),
+        project(current, event, source),
       );
     }
 
     case "progress": {
-      if (event.stage === null) return state;
       const current = listingState(state, event.listing);
-      const runtime = current.stageRuntime[event.stage];
-      if (runtime === undefined || runtime.kind !== "applying") return state;
+      const projected = project(current, event, source);
+      if (projected === current) return state;
       return withListing(
         { ...state, currentListing: event.listing, currentStage: event.stage },
         event.listing,
-        withRuntime(current, event.stage, { ...runtime, log: event.message }),
+        projected,
       );
     }
 
     case "stage_applied": {
       const current = listingState(state, event.listing);
-      const previous = current.stageRuntime[event.stage];
-      const finishedAt = runtimeTime(event);
       return withListing(
         { ...state, currentListing: event.listing, currentStage: event.stage },
         event.listing,
-        withRuntime(current, event.stage, {
-          kind: "applied",
-          startedAt: previous?.kind === "applying" ? previous.startedAt : finishedAt,
-          finishedAt,
-        }),
+        project(current, event, source),
       );
     }
 
     case "stage_failed": {
       const current = listingState(state, event.listing);
-      const previous = current.stageRuntime[event.stage];
-      const finishedAt = runtimeTime(event);
       return withListing(
         { ...state, currentListing: event.listing, currentStage: event.stage },
         event.listing,
-        withRuntime(current, event.stage, {
-          kind: "failed",
-          message: event.message,
-          startedAt: previous?.kind === "applying" ? previous.startedAt : finishedAt,
-          finishedAt,
-        }),
+        project(current, event, source),
       );
     }
 
     case "listing_failed": {
       const current = listingState(state, event.listing);
-      const next = {
-        ...current,
-        failureMessage: event.message,
-        planFailure: current.plan === null ? event.message : current.planFailure,
-        ...(event.stale_plan
-          ? { plan: event.stale_plan, stale: true, fingerprint: null, checkingStage: null }
-          : {}),
-      };
-      return withListing({ ...state, currentListing: event.listing }, event.listing, next);
+      return withListing(
+        { ...state, currentListing: event.listing },
+        event.listing,
+        project(current, event, source),
+      );
     }
 
     default:

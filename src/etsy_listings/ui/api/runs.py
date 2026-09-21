@@ -38,9 +38,26 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from etsy_listings.ui.api.schemas import CreateRunRequest, RunDetail, RunSummary
+from etsy_listings.ui.api.schemas import (
+    CreateRunRequest,
+    ListingApplyRequest,
+    ListingPlanRequest,
+    RunDetail,
+    RunSummary,
+    WorkspaceApplyRequest,
+    WorkspacePlanRequest,
+)
 from etsy_listings.ui.runs.events import AnyRunEvent, ListingPlannedEvent, RunScope
-from etsy_listings.ui.runs.registry import Conflict, Run, RunRegistry
+from etsy_listings.ui.runs.registry import (
+    Conflict,
+    ListingApply,
+    ListingPlan,
+    Run,
+    RunCommand,
+    RunRegistry,
+    WorkspaceApply,
+    WorkspacePlan,
+)
 from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
@@ -126,24 +143,19 @@ def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONRes
     retrying into the same refusal."""
     registry = _registry(request)
     workspace: Workspace = request.app.state.workspace
-    if body.scope == "workspace" and body.kind == "plan":
-        listings = workspace.listing_names()
+    command: RunCommand
+    if isinstance(body, ListingPlanRequest):
+        command = ListingPlan(tuple(body.listings))
+    elif isinstance(body, WorkspacePlanRequest):
+        command = WorkspacePlan(tuple(workspace.listing_names()))
+    elif isinstance(body, ListingApplyRequest):
+        command = ListingApply(tuple(body.listings), body.expect)
     else:
-        assert body.listings is not None  # The request model validates this shape.
-        listings = body.listings
+        assert isinstance(body, WorkspaceApplyRequest)  # noqa: S101 - closed request union
+        _validate_reviewed_apply(registry, body.reviewed_run_id, body.listings, body.expect)
+        command = WorkspaceApply(tuple(body.listings), body.expect, body.reviewed_run_id)
 
-    if body.scope == "workspace" and body.kind == "apply":
-        assert body.reviewed_run_id is not None
-        assert body.expect is not None
-        _validate_reviewed_apply(registry, body.reviewed_run_id, listings, body.expect)
-
-    result = registry.create(
-        body.kind,
-        listings,
-        expect=body.expect,
-        scope=body.scope,
-        reviewed_run_id=body.reviewed_run_id,
-    )
+    result = registry.create(command)
     if isinstance(result, Conflict):
         return JSONResponse(status_code=409, content={"active_run": result.active_run})
     return _summary(result)

@@ -50,7 +50,7 @@ class RecordingStage:
         return None
 
     def plan(self, desired: Any, applied: Any, live: Any) -> StagePlan:
-        return StagePlan(stage=self.name, will_run=True)
+        return StagePlan.work(self.name, "test work")
 
     def apply(
         self,
@@ -71,7 +71,7 @@ class RecordingStage:
 
 def _run(*stages: RecordingStage, lock: Lockfile, root: Path) -> Lockfile:
     ctx = a_context(root)
-    stage_plans = tuple(StagePlan(stage=stage.name, will_run=True) for stage in stages)
+    stage_plans = tuple(StagePlan.work(stage.name, "test work") for stage in stages)
     planned = PlannedRun(
         plan=Plan(
             listing="take-a-hike",

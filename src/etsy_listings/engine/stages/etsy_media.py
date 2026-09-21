@@ -333,7 +333,7 @@ class EtsyMediaStage:
                 actions=_actions(desired),
                 drift=drift_found,
             )
-        return Verdict(will_run=False, drift=drift_found)
+        return Verdict.no_work(drift=drift_found)
 
     def snapshot(self, desired: EtsyMediaDesired, live: EtsyMediaLive | None) -> EtsyMediaSnapshot:
         """Both manifests in full (A30) -- the frontend's thumbnails and

@@ -1,13 +1,4 @@
-import type {
-  BelowCostRow,
-  ChangeDTO,
-  EtsyListingSnapshot,
-  EtsyMediaSnapshot,
-  PlanDTO,
-  ProductSnapshot,
-  PublishSnapshot,
-  StagePlanDTO,
-} from "../../types";
+import type { BelowCostRow, ChangeDTO, PlanDTO, StagePlanDTO } from "../../types";
 
 /**
  * Pure: `Plan` snapshots + `Change`s -> before/after blocks, impact tags,
@@ -137,8 +128,14 @@ export interface Comparison {
   belowCost: BelowCostRow[];
 }
 
-function findStage(plan: PlanDTO, name: string): StagePlanDTO | undefined {
-  return plan.stage_plans.find((s) => s.stage === name);
+type StageName = StagePlanDTO["stage"];
+type StagePlanFor<Name extends StageName> = Extract<StagePlanDTO, { stage: Name }>;
+
+function findStage<Name extends StageName>(
+  plan: PlanDTO,
+  name: Name,
+): StagePlanFor<Name> | undefined {
+  return plan.stage_plans.find((stage): stage is StagePlanFor<Name> => stage.stage === name);
 }
 
 function findChange(stagePlan: StagePlanDTO | undefined, predicate: (c: ChangeDTO) => boolean) {
@@ -168,8 +165,8 @@ function priceRange(rows: readonly { price: string }[]): PriceRange | null {
   return { min: min.price, max: max.price };
 }
 
-function buildTitle(stagePlan: StagePlanDTO | undefined): TitleBlock | null {
-  const snapshot = stagePlan?.snapshot as EtsyListingSnapshot | null | undefined;
+function buildTitle(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TitleBlock | null {
+  const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   return {
     before: snapshot.live?.title ?? null,
@@ -178,8 +175,10 @@ function buildTitle(stagePlan: StagePlanDTO | undefined): TitleBlock | null {
   };
 }
 
-function buildDescription(stagePlan: StagePlanDTO | undefined): DescriptionBlock | null {
-  const snapshot = stagePlan?.snapshot as EtsyListingSnapshot | null | undefined;
+function buildDescription(
+  stagePlan: StagePlanFor<"etsy_listing"> | undefined,
+): DescriptionBlock | null {
+  const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   return {
     before: snapshot.live?.description ?? null,
@@ -189,8 +188,8 @@ function buildDescription(stagePlan: StagePlanDTO | undefined): DescriptionBlock
   };
 }
 
-function buildTags(stagePlan: StagePlanDTO | undefined): TagsBlock | null {
-  const snapshot = stagePlan?.snapshot as EtsyListingSnapshot | null | undefined;
+function buildTags(stagePlan: StagePlanFor<"etsy_listing"> | undefined): TagsBlock | null {
+  const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === "tags");
   return {
@@ -202,8 +201,10 @@ function buildTags(stagePlan: StagePlanDTO | undefined): TagsBlock | null {
   };
 }
 
-function buildMaterials(stagePlan: StagePlanDTO | undefined): MaterialsBlock | null {
-  const snapshot = stagePlan?.snapshot as EtsyListingSnapshot | null | undefined;
+function buildMaterials(
+  stagePlan: StagePlanFor<"etsy_listing"> | undefined,
+): MaterialsBlock | null {
+  const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === "materials");
   return {
@@ -215,8 +216,10 @@ function buildMaterials(stagePlan: StagePlanDTO | undefined): MaterialsBlock | n
   };
 }
 
-function buildColours(stagePlan: StagePlanDTO | undefined): ColoursBlock | null {
-  const snapshot = stagePlan?.snapshot as ProductSnapshot | null | undefined;
+function buildColours(
+  stagePlan: StagePlanFor<"printify_product"> | undefined,
+): ColoursBlock | null {
+  const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   const change = findChange(stagePlan, (c) => c.kind === "list" && c.path === "colors");
   return {
@@ -227,8 +230,8 @@ function buildColours(stagePlan: StagePlanDTO | undefined): ColoursBlock | null 
   };
 }
 
-function buildPrice(stagePlan: StagePlanDTO | undefined): PriceBlock | null {
-  const snapshot = stagePlan?.snapshot as ProductSnapshot | null | undefined;
+function buildPrice(stagePlan: StagePlanFor<"printify_product"> | undefined): PriceBlock | null {
+  const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
   return {
     before: priceRange(snapshot.live),
@@ -238,7 +241,7 @@ function buildPrice(stagePlan: StagePlanDTO | undefined): PriceBlock | null {
 }
 
 function buildPriceRows(
-  stagePlan: StagePlanDTO | undefined,
+  stagePlan: StagePlanFor<"printify_product"> | undefined,
   belowCost: BelowCostRow[],
 ): PriceRow[] {
   const rows = new Map<string, PriceRow>();
@@ -259,13 +262,13 @@ function buildPriceRows(
   return [...rows.values()];
 }
 
-function buildImages(stagePlan: StagePlanDTO | undefined): ImagesBlock | null {
-  const snapshot = stagePlan?.snapshot as EtsyMediaSnapshot | null | undefined;
+function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesBlock | null {
+  const snapshot = stagePlan?.snapshot;
   if (!snapshot) return null;
 
   const wasRankByRef = new Map<string, number>();
   for (const image of snapshot.live) {
-    if (image.ref !== null) wasRankByRef.set(image.ref, image.rank ?? 0);
+    if (image.ref != null) wasRankByRef.set(image.ref, image.rank ?? 0);
   }
   const willBeUsed = new Set(snapshot.desired.map((entry) => entry.ref));
 
@@ -282,9 +285,9 @@ function buildImages(stagePlan: StagePlanDTO | undefined): ImagesBlock | null {
 
   const before: BeforeImageTile[] = snapshot.live.map((image) => ({
     rank: image.rank ?? 0,
-    ref: image.ref,
-    url: image.url,
-    badge: image.ref !== null && !willBeUsed.has(image.ref) ? "removed" : null,
+    ref: image.ref ?? null,
+    url: image.url ?? null,
+    badge: image.ref != null && !willBeUsed.has(image.ref) ? "removed" : null,
   }));
 
   return {
@@ -321,8 +324,7 @@ export function buildComparison(plan: PlanDTO): Comparison {
   const etsyListingPlan = findStage(plan, "etsy_listing");
   const etsyMediaPlan = findStage(plan, "etsy_media");
 
-  const belowCost = ((publishPlan?.snapshot as PublishSnapshot | null | undefined)?.below_cost ??
-    []) as BelowCostRow[];
+  const belowCost: BelowCostRow[] = publishPlan?.snapshot?.below_cost ?? [];
 
   const title = buildTitle(etsyListingPlan);
   const description = buildDescription(etsyListingPlan);

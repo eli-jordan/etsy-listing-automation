@@ -29,7 +29,10 @@ function summary(name: string): ListingSummary {
   };
 }
 
-function stage(stageName: string, overrides: Partial<StagePlanDTO> = {}): StagePlanDTO {
+function stage<Name extends StagePlanDTO["stage"]>(
+  stageName: Name,
+  overrides: Partial<Extract<StagePlanDTO, { stage: Name }>> = {},
+): Extract<StagePlanDTO, { stage: Name }> {
   return {
     stage: stageName,
     will_run: false,
@@ -40,7 +43,7 @@ function stage(stageName: string, overrides: Partial<StagePlanDTO> = {}): StageP
     blocked: null,
     snapshot: null,
     ...overrides,
-  };
+  } as unknown as Extract<StagePlanDTO, { stage: Name }>;
 }
 
 function plan(overrides: Partial<PlanDTO> = {}): PlanDTO {

@@ -61,10 +61,7 @@ function stepStripHeading(phase: ReturnType<typeof controlPhase>): string {
 
 function previewCounts(state: DeployState): { total: number; done: number } {
   const renderPlan = state.plan?.stage_plans.find((s) => s.stage === "render");
-  const snapshot = renderPlan?.snapshot as
-    | { scenes?: { template: string; colour: string | null; state: string; preview: boolean }[] }
-    | null
-    | undefined;
+  const snapshot = renderPlan?.snapshot;
   const needed = (snapshot?.scenes ?? []).filter((s) => s.state !== "cached" && !s.preview);
   const done = needed.filter((s) =>
     state.previewsRendered.has(`${s.template}|${s.colour ?? ""}`),
@@ -336,8 +333,7 @@ export function DeployPage() {
                     comparison={comparison}
                     listing={{ name: detail.name, design: detail.design }}
                     renderSnapshot={
-                      (state.plan.stage_plans.find((s) => s.stage === "render")
-                        ?.snapshot as never) ?? null
+                      state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot ?? null
                     }
                     previewsRendered={state.previewsRendered}
                     collapsed={false}
@@ -352,8 +348,7 @@ export function DeployPage() {
                   comparison={comparison}
                   listing={{ name: detail.name, design: detail.design }}
                   renderSnapshot={
-                    (state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot as never) ??
-                    null
+                    state.plan.stage_plans.find((s) => s.stage === "render")?.snapshot ?? null
                   }
                   previewsRendered={state.previewsRendered}
                   collapsed={!comparison.impacts.length && comparison.hasEtsyListing}

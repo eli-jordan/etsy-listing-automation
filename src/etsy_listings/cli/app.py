@@ -31,9 +31,9 @@ from etsy_listings.config.secrets import (
 )
 from etsy_listings.engine.change import Plan
 from etsy_listings.engine.context import Event
+from etsy_listings.engine.events import EngineListingFailed, EngineListingPlanned, EngineRunEvent
 from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun
-from etsy_listings.engine.run import RunObserver, RunReport, apply_listings, plan_listings
+from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.errors import UserFacingError
@@ -359,16 +359,19 @@ def plan(
     """
     workspace = _open_workspace(root)
 
-    def show(name: str, planned: PlannedRun) -> None:
-        typer.echo(format_plan(planned.plan))
-        typer.echo("")
+    def show(event: EngineRunEvent) -> None:
+        if isinstance(event, EngineListingPlanned):
+            typer.echo(format_plan(event.plan))
+            typer.echo("")
+        elif isinstance(event, EngineListingFailed):
+            _echo_failure(event.listing, event.error)
 
     _exit_for(
         plan_listings(
             connections.run_context(workspace),
             _target_listings(workspace, listing, all),
             STAGES,
-            observer=RunObserver(on_listing_planned=show, on_failure=_echo_failure),
+            on_event=show,
         )
     )
 
@@ -385,22 +388,25 @@ def apply(
     Etsy shop id) reports itself blocked rather than running."""
     workspace = _open_workspace(root)
 
-    def announce(name: str, planned: PlannedRun) -> None:
+    def announce(event: EngineRunEvent) -> None:
         """The header and the refusals, before the work they frame.
 
         ``on_planned`` fires between planning and executing, which is the only
         point at which both are true: the plan is known, and none of its
         progress events have been printed yet.
         """
-        typer.echo(f"applying {name}")
-        _echo_blocked(planned.plan)
+        if isinstance(event, EngineListingPlanned):
+            typer.echo(f"applying {event.listing}")
+            _echo_blocked(event.plan)
+        elif isinstance(event, EngineListingFailed):
+            _echo_failure(event.listing, event.error)
 
     _exit_for(
         apply_listings(
             connections.run_context(workspace, on_event=_echo_event),
             _target_listings(workspace, listing, all),
             STAGES,
-            observer=RunObserver(on_listing_planned=announce, on_failure=_echo_failure),
+            on_event=announce,
         )
     )
 

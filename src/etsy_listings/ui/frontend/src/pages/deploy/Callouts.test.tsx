@@ -4,7 +4,7 @@ import { Callouts } from "./Callouts";
 import { buildComparison } from "./comparison";
 import type { PlanDTO, StagePlanDTO } from "../../types";
 
-function stage(overrides: Partial<StagePlanDTO> & { stage: string }): StagePlanDTO {
+function stage(overrides: Partial<StagePlanDTO> & { stage: StagePlanDTO["stage"] }): StagePlanDTO {
   return {
     will_run: false,
     changes: [],

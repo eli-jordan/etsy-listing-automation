@@ -285,9 +285,8 @@ def test_a_drift_with_labels_shows_names_not_ids(workspace_root: Path) -> None:
         is_live=False,
         etsy_listing_id=None,
         stage_plans=(
-            StagePlan(
-                stage="etsy_listing",
-                will_run=False,
+            StagePlan.no_work(
+                "etsy_listing",
                 drift=(
                     Drift(
                         path="shipping_profile_id",
@@ -316,9 +315,8 @@ def test_a_drift_with_no_label_still_shows_the_raw_values(workspace_root: Path) 
         is_live=False,
         etsy_listing_id=None,
         stage_plans=(
-            StagePlan(
-                stage="etsy_listing",
-                will_run=False,
+            StagePlan.no_work(
+                "etsy_listing",
                 drift=(Drift(path="title", last_applied="Old Title", live="New Title"),),
             ),
         ),

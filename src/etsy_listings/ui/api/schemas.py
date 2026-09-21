@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from etsy_listings.config.listing import Listing
 
@@ -356,41 +356,39 @@ class RenameListingRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────────
 
 
-class CreateRunRequest(BaseModel):
-    kind: RunKind
-    scope: RunScope = "listings"
-    listings: list[str] | None = None
-    expect: dict[str, str] | None = None
-    reviewed_run_id: str | None = None
-    """A fingerprint per listing, from an earlier plan run's
-    ``listing_planned`` event -- ``apply_listings``'s own A31 check. Absent
-    for a plan run, and for an apply run with nothing to compare against."""
+class _CreateRunRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
 
-    @model_validator(mode="after")
-    def validate_shape(self) -> CreateRunRequest:
-        if self.scope == "listings" and not self.listings:
-            raise ValueError("listings scope requires at least one listing")
-        if (
-            self.scope == "listings"
-            and self.kind == "plan"
-            and (self.expect is not None or self.reviewed_run_id is not None)
-        ):
-            raise ValueError("a listing plan cannot include expect or reviewed_run_id")
-        if self.scope == "workspace" and self.kind == "plan":
-            if self.listings is not None:
-                raise ValueError("a workspace plan must omit listings")
-            if self.expect is not None or self.reviewed_run_id is not None:
-                raise ValueError("a workspace plan cannot include expect or reviewed_run_id")
-        if self.scope == "workspace" and self.kind == "apply":
-            if self.listings is None:
-                raise ValueError("a workspace apply requires listings")
-            if self.expect is None:
-                raise ValueError("a workspace apply requires expect")
-            if self.reviewed_run_id is None:
-                raise ValueError("a workspace apply requires reviewed_run_id")
-        if self.scope == "listings" and self.kind == "apply" and self.reviewed_run_id is not None:
-            raise ValueError("reviewed_run_id is only valid for a workspace apply")
-        return self
+
+class ListingPlanRequest(_CreateRunRequest):
+    kind: Literal["plan"] = "plan"
+    scope: Literal["listings"] = "listings"
+    listings: list[str] = Field(min_length=1)
+
+
+class WorkspacePlanRequest(_CreateRunRequest):
+    kind: Literal["plan"] = "plan"
+    scope: Literal["workspace"] = "workspace"
+
+
+class ListingApplyRequest(_CreateRunRequest):
+    kind: Literal["apply"] = "apply"
+    scope: Literal["listings"] = "listings"
+    listings: list[str] = Field(min_length=1)
+    expect: dict[str, str]
+
+
+class WorkspaceApplyRequest(_CreateRunRequest):
+    kind: Literal["apply"] = "apply"
+    scope: Literal["workspace"] = "workspace"
+    listings: list[str]
+    expect: dict[str, str]
+    reviewed_run_id: str
+
+
+CreateRunRequest = (
+    ListingPlanRequest | WorkspacePlanRequest | ListingApplyRequest | WorkspaceApplyRequest
+)
 
 
 class RunSummary(BaseModel):

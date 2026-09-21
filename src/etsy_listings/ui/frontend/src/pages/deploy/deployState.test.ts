@@ -22,7 +22,9 @@ function id(): number {
   return nextId++;
 }
 
-function stagePlan(overrides: Partial<StagePlanDTO> & { stage: string }): StagePlanDTO {
+function stagePlan(
+  overrides: Partial<StagePlanDTO> & { stage: StagePlanDTO["stage"] },
+): StagePlanDTO {
   return {
     will_run: false,
     changes: [],

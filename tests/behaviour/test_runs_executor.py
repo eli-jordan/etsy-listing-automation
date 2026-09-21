@@ -15,7 +15,14 @@ from etsy_listings.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.engine.context import EventSink, RunContext
 from etsy_listings.ui.runs.events import TERMINAL_PHASES
 from etsy_listings.ui.runs.executor import INTERNAL_ERROR_MESSAGE, RunExecutor
-from etsy_listings.ui.runs.registry import Conflict, Run, RunRegistry
+from etsy_listings.ui.runs.registry import (
+    Conflict,
+    ListingApply,
+    ListingPlan,
+    Run,
+    RunRegistry,
+    WorkspacePlan,
+)
 from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -61,7 +68,8 @@ def executor(workspace_root: Path) -> RunExecutor:
 
 
 def _create(executor: RunExecutor, kind: str, listings: list[str]) -> Run:
-    result = executor.registry.create(kind, listings)  # type: ignore[arg-type]
+    command = ListingPlan(tuple(listings)) if kind == "plan" else ListingApply(tuple(listings), {})
+    result = executor.registry.create(command)
     assert isinstance(result, Run)
     return result
 
@@ -117,10 +125,10 @@ def test_a_plan_run_skips_previewing_once_everything_is_cached(executor: RunExec
 def test_a_second_run_for_the_same_listing_is_refused_while_the_first_is_active(
     executor: RunExecutor,
 ) -> None:
-    first = executor.registry.create("plan", [LISTING])
+    first = executor.registry.create(ListingPlan((LISTING,)))
     assert isinstance(first, Run)
 
-    second = executor.registry.create("apply", [LISTING])
+    second = executor.registry.create(ListingApply((LISTING,), {}))
 
     assert isinstance(second, Conflict)
     assert second.active_run == first.id
@@ -146,7 +154,7 @@ def test_a_workspace_run_executes_the_server_resolved_order(
     workspace_root: Path, executor: RunExecutor
 ) -> None:
     copy_listing(workspace_root, "second")
-    run = executor.registry.create("plan", ["second", LISTING], scope="workspace")
+    run = executor.registry.create(WorkspacePlan(("second", LISTING)))
     assert isinstance(run, Run)
 
     _wait_until(run)
@@ -245,7 +253,7 @@ def test_a_defect_ends_the_run_failed_with_the_generic_message(
     executor = RunExecutor(workspace=workspace, context_factory=factory, registry=registry)
     executor.start()
     try:
-        run = executor.registry.create("plan", [LISTING])
+        run = executor.registry.create(ListingPlan((LISTING,)))
         assert isinstance(run, Run)
         _wait_until(run)
 
@@ -267,8 +275,8 @@ def test_stop_cancels_whatever_is_still_queued(workspace_root: Path) -> None:
     executor = RunExecutor(workspace=workspace, context_factory=_context_factory, registry=registry)
     executor.start()
 
-    first = executor.registry.create("plan", [LISTING])
-    second = executor.registry.create("plan", ["second"])
+    first = executor.registry.create(ListingPlan((LISTING,)))
+    second = executor.registry.create(ListingPlan(("second",)))
     assert isinstance(first, Run)
     assert isinstance(second, Run)
 
@@ -308,7 +316,7 @@ def test_an_apply_run_with_a_stale_expect_ends_stale(executor: RunExecutor) -> N
     """A31's ``StalePlanError``, reaching decision 7's dedicated terminal
     phase -- and the ``listing_failed`` event it produces carries the fresh
     plan, not just the refusal message."""
-    result = executor.registry.create("apply", [LISTING], expect={LISTING: "sha256:" + "0" * 64})
+    result = executor.registry.create(ListingApply((LISTING,), {LISTING: "sha256:" + "0" * 64}))
     assert isinstance(result, Run)
 
     _wait_until(result)

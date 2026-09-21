@@ -18,19 +18,22 @@ agreement by hand. :class:`PlannedRun` carries them across instead.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from pydantic import BaseModel
 
 from etsy_listings.engine.change import Plan, StagePlan
 from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.events import (
+    EngineEventSink,
+    EngineStageChecking,
+    EngineStagePlanned,
+    ignore_engine_event,
+)
 from etsy_listings.engine.lifecycle import walk as lifecycle_walk
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.stage import AnyStage, Blocked
 from etsy_listings.engine.stages.etsy_target import etsy_listing_id
-
-if TYPE_CHECKING:
-    from etsy_listings.engine.run import RunObserver
 
 
 @dataclass(frozen=True)
@@ -72,7 +75,7 @@ def build_plan(
     lock: Lockfile,
     stages: list[AnyStage],
     *,
-    observer: RunObserver | None = None,
+    on_event: EngineEventSink = ignore_engine_event,
 ) -> PlannedRun:
     """Three-way compare desired/applied/live across every stage, in order.
 
@@ -86,8 +89,8 @@ def build_plan(
     than as drift. Each stage's own ``plan()`` computes the diff; this
     function only orchestrates the walk and assembles the result.
 
-    ``observer`` (A33) fires ``on_stage_checking`` before each stage's own
-    walk and ``on_stage_planned`` after it, with the resolved ``StagePlan``
+    ``on_event`` (A33) emits ``EngineStageChecking`` before each stage's own
+    walk and ``EngineStagePlanned`` after it, with the resolved ``StagePlan``
     -- snapshot included -- so a caller watching a plan run (the UI's, in a
     later PR) can show one stage resolving after another, in pipeline order,
     rather than pretending A3's fan-out exists (A21 stands). ``None`` -- the
@@ -96,19 +99,16 @@ def build_plan(
     each stage's block through the same two calls, since a blocked stage is
     still a stage the strip has to show.
     """
-    from etsy_listings.engine.run import RunObserver  # noqa: PLC0415 - breaks the import cycle
-
-    watch = observer or RunObserver()
     decision = lifecycle_walk(ctx, listing, lock, stages)
     if decision.blocked is not None:
         planned = _all_blocked(
             listing, lock, decision.stages, decision.blocked, published=decision.published
         )
         for state in planned.states:
-            watch.on_stage_checking(listing, state.stage.name)
-            watch.on_stage_planned(listing, state.stage_plan)
+            on_event(EngineStageChecking(listing, state.stage.name))
+            on_event(EngineStagePlanned(listing, state.stage_plan))
         return planned
-    states = [_walk(ctx, listing, lock, stage, observer=watch) for stage in decision.stages]
+    states = [_walk(ctx, listing, lock, stage, on_event=on_event) for stage in decision.stages]
 
     return _assemble(listing, lock, tuple(states), published=decision.published)
 
@@ -127,7 +127,7 @@ def _all_blocked(
             desired=Blocked(message),
             applied=None,
             live=None,
-            stage_plan=StagePlan(stage=stage.name, will_run=False, blocked=message),
+            stage_plan=StagePlan.block(stage.name, message),
         )
         for stage in stages
     )
@@ -135,7 +135,7 @@ def _all_blocked(
 
 
 def _walk(
-    ctx: RunContext, listing: str, lock: Lockfile, stage: AnyStage, *, observer: RunObserver
+    ctx: RunContext, listing: str, lock: Lockfile, stage: AnyStage, *, on_event: EngineEventSink
 ) -> StageState:
     """One stage's three states, and the plan comparing them.
 
@@ -143,7 +143,7 @@ def _walk(
     subtree lookup, the decode, the refusal, and the stage's own name. What
     the stage is left with is three questions about three states.
     """
-    observer.on_stage_checking(listing, stage.name)
+    on_event(EngineStageChecking(listing, stage.name))
     # The stage's own subtree, looked up and decoded here rather than by each
     # stage for itself -- a stage never needs to know which key in the
     # lockfile is its own, nor what a document it cannot read should mean.
@@ -160,31 +160,23 @@ def _walk(
             desired=desired,
             applied=applied,
             live=None,
-            stage_plan=StagePlan(stage=stage.name, will_run=False, blocked=desired.message),
+            stage_plan=StagePlan.block(stage.name, desired.message),
         )
-        observer.on_stage_planned(listing, state.stage_plan)
+        on_event(EngineStagePlanned(listing, state.stage_plan))
         return state
 
     live = stage.read_live(ctx, listing, lock, applied)
     verdict = stage.plan(desired, applied, live)
     stage_plan = StagePlan(
         stage=stage.name,
-        will_run=verdict.will_run,
-        changes=verdict.changes,
+        outcome=verdict.outcome,
         drift=verdict.drift,
-        reason=verdict.reason,
-        actions=verdict.actions,
-        # A refusal is a refusal whichever question produced it: one the
-        # live state proved lands in the same field as one `desired()`
-        # raised, so `cli.render` and the UI's serialiser show it without
-        # knowing there were ever two routes to it.
-        blocked=verdict.refusal,
         snapshot=_snapshot(stage, desired, live),
     )
     state = StageState(
         stage=stage, desired=desired, applied=applied, live=live, stage_plan=stage_plan
     )
-    observer.on_stage_planned(listing, stage_plan)
+    on_event(EngineStagePlanned(listing, stage_plan))
     return state
 
 

@@ -19,10 +19,8 @@ import type {
  */
 
 type StageOverrides = Omit<Partial<StagePlanDTO>, "snapshot" | "changes"> & {
-  stage: string;
-  /** The stage's own typed snapshot model -- `StagePlanDTO.snapshot` is an
-   * untyped `dict` on the wire (only the producing stage knows its shape),
-   * so fixtures build the real type and this helper carries it across. */
+  stage: StagePlanDTO["stage"];
+  /** Test fixtures supply the snapshot belonging to the selected stage. */
   snapshot?: unknown;
   changes?: StagePlanDTO["changes"];
 };

@@ -18,10 +18,16 @@ from etsy_listings.clients.printify.models import Blueprint
 from etsy_listings.clients.printify.transport import PrintifyApiError, PrintifyAuthError
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError
 from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.events import (
+    EngineListingFailed,
+    EngineListingPlanned,
+    EngineRunEvent,
+    EngineStageChecking,
+    EngineStagePlanned,
+)
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun
 from etsy_listings.engine.run import (
-    RunObserver,
     StalePlanError,
     apply_listings,
     plan_fingerprint,
@@ -219,11 +225,15 @@ def test_planned_fires_per_listing_as_the_run_goes(workspace_root: Path) -> None
     copy_listing(workspace_root, "fine")
     seen: list[str] = []
 
+    def capture(event: EngineRunEvent) -> None:
+        if isinstance(event, EngineListingPlanned):
+            seen.append(event.listing)
+
     plan_listings(
         _ctx(workspace_root),
         ["fine", LISTING],
         STAGES,
-        observer=RunObserver(on_listing_planned=lambda name, planned: seen.append(name)),
+        on_event=capture,
     )
 
     assert seen == ["fine", LISTING]
@@ -234,14 +244,17 @@ def test_failure_sink_fires_only_for_the_listing_that_failed(workspace_root: Pat
     planned: list[str] = []
     failed: list[str] = []
 
+    def capture(event: EngineRunEvent) -> None:
+        if isinstance(event, EngineListingPlanned):
+            planned.append(event.listing)
+        elif isinstance(event, EngineListingFailed):
+            failed.append(event.listing)
+
     plan_listings(
         _ctx(workspace_root),
         ["broken", LISTING],
         STAGES,
-        observer=RunObserver(
-            on_listing_planned=lambda name, run: planned.append(name),
-            on_failure=lambda name, error: failed.append(name),
-        ),
+        on_event=capture,
     )
 
     assert failed == ["broken"]
@@ -256,11 +269,15 @@ def test_apply_announces_a_listing_before_it_does_the_work(workspace_root: Path)
     order: list[str] = []
     ctx = _ctx(workspace_root, on_event=lambda event: order.append(f"event:{event.message}"))
 
+    def capture(event: EngineRunEvent) -> None:
+        if isinstance(event, EngineListingPlanned):
+            order.append(f"planned:{event.listing}")
+
     apply_listings(
         ctx,
         [LISTING],
         STAGES,
-        observer=RunObserver(on_listing_planned=lambda name, run: order.append(f"planned:{name}")),
+        on_event=capture,
     )
 
     assert order[0] == f"planned:{LISTING}"
@@ -315,14 +332,17 @@ def test_stage_checking_and_stage_planned_fire_once_per_stage_in_pipeline_order(
     checking: list[str] = []
     resolved: list[str] = []
 
+    def capture(event: EngineRunEvent) -> None:
+        if isinstance(event, EngineStageChecking):
+            checking.append(event.stage)
+        elif isinstance(event, EngineStagePlanned):
+            resolved.append(event.stage_plan.stage)
+
     plan_listings(
         _ctx(workspace_root),
         [LISTING],
         STAGES,
-        observer=RunObserver(
-            on_stage_checking=lambda listing, stage: checking.append(stage),
-            on_stage_planned=lambda listing, stage_plan: resolved.append(stage_plan.stage),
-        ),
+        on_event=capture,
     )
 
     expected = [stage.name for stage in STAGES]
@@ -333,11 +353,15 @@ def test_stage_checking_and_stage_planned_fire_once_per_stage_in_pipeline_order(
 def test_stage_planned_carries_the_resolved_stage_plan(workspace_root: Path) -> None:
     seen: list[object] = []
 
+    def capture(event: EngineRunEvent) -> None:
+        if isinstance(event, EngineStagePlanned):
+            seen.append(event.stage_plan)
+
     plan_listings(
         _ctx(workspace_root),
         [LISTING],
         [RenderStage()],
-        observer=RunObserver(on_stage_planned=lambda listing, stage_plan: seen.append(stage_plan)),
+        on_event=capture,
     )
 
     assert len(seen) == 1

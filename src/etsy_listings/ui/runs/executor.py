@@ -15,12 +15,9 @@ rule).** :data:`ContextFactory` is `connections.run_context`'s shape --
 resolve or when; it only decides *when to call the factory* and *what to do
 with the ``RunContext`` it hands back*.
 
-**No stage changes how it reports progress.** ``ctx.emit``'s existing
-``Event`` reaches :func:`RunExecutor._run_apply`'s ``on_event`` unchanged; what
-turns it into a :class:`~etsy_listings.ui.runs.events.ProgressEvent` naming a
-stage is this module remembering which stage
-:attr:`~etsy_listings.engine.run.RunObserver.on_stage_applying` last named for
-this listing -- a piece of state no stage needs to know exists.
+**No stage changes how it reports progress.** ``ctx.emit`` still accepts the
+same stage-local event. The engine attaches listing and stage identity and
+emits one :data:`EngineRunEvent` stream; this module is only its wire adapter.
 """
 
 from __future__ import annotations
@@ -30,12 +27,21 @@ import threading
 from collections.abc import Callable
 from dataclasses import dataclass, field
 
-from etsy_listings.engine.change import Plan, StagePlan
-from etsy_listings.engine.context import Event, EventSink, RunContext
-from etsy_listings.engine.plan import PlannedRun
+from etsy_listings.engine.context import EventSink, RunContext
+from etsy_listings.engine.events import (
+    EngineListingFailed,
+    EngineListingPlanned,
+    EnginePreviewRendered,
+    EngineProgress,
+    EngineRunEvent,
+    EngineStageApplied,
+    EngineStageApplying,
+    EngineStageChecking,
+    EngineStageFailed,
+    EngineStagePlanned,
+)
 from etsy_listings.engine.preview import needs_preview
 from etsy_listings.engine.run import (
-    RunObserver,
     StalePlanError,
     apply_listings,
     plan_fingerprint,
@@ -44,7 +50,7 @@ from etsy_listings.engine.run import (
 )
 from etsy_listings.engine.stage import AnyStage
 from etsy_listings.engine.stages import STAGES
-from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
+from etsy_listings.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.ui.runs.events import (
     TERMINAL_PHASES,
     ListingFailedEvent,
@@ -139,144 +145,139 @@ class RunExecutor:
             run.append(
                 lambda i: ListingFailedEvent(id=i, listing=listing, message=INTERNAL_ERROR_MESSAGE)
             )
-            run.transition("failed")
+            if run.kind == "plan":
+                run.transition_plan("failed")
+            else:
+                run.transition_apply("failed")
 
     # -------------------------------------------------------------- plan runs
 
-    def _plan_observer(
-        self, run: Run, *, capture: dict[str, PlannedRun] | None = None
-    ) -> RunObserver:
-        def on_stage_checking(listing: str, stage: str) -> None:
-            run.append(lambda i: StageCheckingEvent(id=i, listing=listing, stage=stage))
-
-        def on_stage_planned(listing: str, stage_plan: StagePlan) -> None:
+    def _append_engine_event(self, run: Run, event: EngineRunEvent) -> None:
+        """Translate one engine-domain event into the public SSE vocabulary."""
+        if isinstance(event, EngineStageChecking):
+            run.append(lambda i: StageCheckingEvent(id=i, listing=event.listing, stage=event.stage))
+        elif isinstance(event, EngineStagePlanned):
             run.append(
                 lambda i: StagePlannedEvent(
-                    id=i, listing=listing, stage_plan=stage_plan_dto(stage_plan)
+                    id=i,
+                    listing=event.listing,
+                    stage_plan=stage_plan_dto(event.stage_plan),
                 )
             )
-
-        def on_listing_planned(listing: str, result: PlannedRun) -> None:
-            if capture is not None:
-                capture[listing] = result
-            fingerprint = plan_fingerprint(result.plan)
-            plan: Plan = result.plan
+        elif isinstance(event, EngineListingPlanned):
             run.append(
                 lambda i: ListingPlannedEvent(
-                    id=i, listing=listing, plan=plan_dto(plan), fingerprint=fingerprint
+                    id=i,
+                    listing=event.listing,
+                    plan=plan_dto(event.plan),
+                    fingerprint=plan_fingerprint(event.plan),
                 )
             )
-
-        def on_failure(listing: str, error: UserFacingError) -> None:
-            stale_plan = plan_dto(error.planned.plan) if isinstance(error, StalePlanError) else None
+        elif isinstance(event, EngineListingFailed):
+            stale_plan = (
+                plan_dto(event.error.planned.plan)
+                if isinstance(event.error, StalePlanError)
+                else None
+            )
             run.append(
                 lambda i: ListingFailedEvent(
-                    id=i, listing=listing, message=str(error), stale_plan=stale_plan
+                    id=i,
+                    listing=event.listing,
+                    message=str(event.error),
+                    stale_plan=stale_plan,
+                )
+            )
+        elif isinstance(event, EnginePreviewRendered):
+            run.append(
+                lambda i: PreviewRenderedEvent(
+                    id=i,
+                    listing=event.listing,
+                    template=event.template,
+                    colour=event.colour,
+                )
+            )
+        elif isinstance(event, EngineStageApplying):
+            run.append(lambda i: StageApplyingEvent(id=i, listing=event.listing, stage=event.stage))
+        elif isinstance(event, EngineProgress):
+            run.append(
+                lambda i: ProgressEvent(
+                    id=i,
+                    listing=event.listing,
+                    stage=event.stage,
+                    message=event.message,
+                    swatches=event.swatches,
+                )
+            )
+        elif isinstance(event, EngineStageApplied):
+            run.append(lambda i: StageAppliedEvent(id=i, listing=event.listing, stage=event.stage))
+        else:
+            assert isinstance(event, EngineStageFailed)  # noqa: S101 - closed union
+            run.append(
+                lambda i: StageFailedEvent(
+                    id=i,
+                    listing=event.listing,
+                    stage=event.stage,
+                    message=event.message,
                 )
             )
 
-        return RunObserver(
-            on_stage_checking=on_stage_checking,
-            on_stage_planned=on_stage_planned,
-            on_listing_planned=on_listing_planned,
-            on_failure=on_failure,
-        )
-
     def _run_plan(self, run: Run) -> None:
-        run.transition("planning")
+        run.transition_plan("planning")
         ctx = self.context_factory(self.workspace, None)
-        planned: dict[str, PlannedRun] = {}
-        observer = self._plan_observer(run, capture=planned)
+
+        def emit(event: EngineRunEvent) -> None:
+            self._append_engine_event(run, event)
 
         def stop() -> bool:
             return self._should_stop(run)
 
-        plan_listings(ctx, run.listings, self.stages, observer=observer, should_stop=stop)
+        report = plan_listings(ctx, run.listings, self.stages, on_event=emit, should_stop=stop)
 
         if self._should_stop(run):
-            run.transition("cancelled")
+            run.transition_plan("cancelled")
             return
-        run.transition("planned")
+        run.transition_plan("planned")
 
-        needing_preview = {
-            listing: result for listing, result in planned.items() if needs_preview(result)
-        }
+        needing_preview = tuple(
+            outcome.planned
+            for outcome in report.outcomes
+            if outcome.planned is not None and needs_preview(outcome.planned)
+        )
         if needing_preview:
-            run.transition("previewing")
+            run.transition_plan("previewing")
 
-            def on_preview_rendered(listing: str, template: str, colour: str | None) -> None:
-                run.append(
-                    lambda i: PreviewRenderedEvent(
-                        id=i, listing=listing, template=template, colour=colour
-                    )
-                )
-
-            preview_observer = RunObserver(on_preview_rendered=on_preview_rendered)
-            for result in needing_preview.values():
+            for result in needing_preview:
                 if self._should_stop(run):
                     break
-                preview_listing(ctx, result, preview_observer, should_stop=stop)
+                preview_listing(ctx, result, emit, should_stop=stop)
 
         if self._should_stop(run):
-            run.transition("cancelled")
+            run.transition_plan("cancelled")
             return
-        run.transition("ready")
+        run.transition_plan("ready")
 
     # ------------------------------------------------------------- apply runs
 
     def _run_apply(self, run: Run) -> None:
-        run.transition("applying")
-        current: dict[str, str | None] = {"listing": None, "stage": None}
+        run.transition_apply("applying")
 
-        def on_event(event: Event) -> None:
-            listing = current["listing"] or ""
-            stage = current["stage"]
-            swatches = tuple(event.swatches)
-            run.append(
-                lambda i: ProgressEvent(
-                    id=i, listing=listing, stage=stage, message=event.message, swatches=swatches
-                )
-            )
+        def emit(event: EngineRunEvent) -> None:
+            self._append_engine_event(run, event)
 
-        def on_stage_applying(listing: str, stage: str) -> None:
-            current["listing"] = listing
-            current["stage"] = stage
-            run.append(lambda i: StageApplyingEvent(id=i, listing=listing, stage=stage))
-
-        def on_stage_applied(listing: str, stage: str) -> None:
-            run.append(lambda i: StageAppliedEvent(id=i, listing=listing, stage=stage))
-            current["stage"] = None
-
-        def on_stage_failed(listing: str, stage: str, message: str) -> None:
-            run.append(
-                lambda i: StageFailedEvent(id=i, listing=listing, stage=stage, message=message)
-            )
-
-        base = self._plan_observer(run)
-        observer = RunObserver(
-            on_stage_checking=base.on_stage_checking,
-            on_stage_planned=base.on_stage_planned,
-            on_listing_planned=base.on_listing_planned,
-            on_failure=base.on_failure,
-            on_stage_applying=on_stage_applying,
-            on_stage_applied=on_stage_applied,
-            on_stage_failed=on_stage_failed,
-        )
-
-        ctx = self.context_factory(self.workspace, on_event)
+        ctx = self.context_factory(self.workspace, None)
         report = apply_listings(
             ctx,
             run.listings,
             self.stages,
-            observer=observer,
+            on_event=emit,
             expect=run.expect,
             should_stop=lambda: self._should_stop(run),
         )
 
         errors = [outcome.error for outcome in report.failures]
         if not errors:
-            run.transition("applied")
+            run.transition_apply("applied")
         elif all(isinstance(error, StalePlanError) for error in errors):
-            run.transition("stale")
+            run.transition_apply("stale")
         else:
-            run.transition("failed")
+            run.transition_apply("failed")

@@ -1,14 +1,4 @@
-"""A33: ``execute`` brackets each stage's own ``apply`` with
-``RunObserver.on_stage_applying``/``on_stage_applied``, and fires
-``on_stage_failed`` once with the exception's own message before re-raising.
-
-These three exist to feed the UI's runs resource (``ui/runs/executor.py``):
-a run needs to say *which* stage is currently applying, not just that the
-listing as a whole is "applying" -- and needs to know which stage failed
-without parsing the exception message. `test_partial_apply.py` covers what
-``execute`` writes to the lockfile through the same raise; this file is only
-about what it tells an observer.
-"""
+"""A33: the engine reports one typed event stream around stage application."""
 
 from __future__ import annotations
 
@@ -23,9 +13,16 @@ from pydantic import BaseModel, ConfigDict
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.change import Plan, StagePlan, Verdict
 from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.events import (
+    EngineProgress,
+    EngineRunEvent,
+    EngineStageApplied,
+    EngineStageApplying,
+    EngineStageFailed,
+)
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, StageState
-from etsy_listings.engine.run import RunObserver, apply_listings
+from etsy_listings.engine.run import apply_listings
 from etsy_listings.engine.stage import StageApplyResult
 from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 
@@ -70,7 +67,7 @@ class _Stage:
 
 
 def _planned(*stages: _Stage, listing: str = LISTING) -> PlannedRun:
-    stage_plans = tuple(StagePlan(stage=s.name, will_run=True) for s in stages)
+    stage_plans = tuple(StagePlan.work(s.name, f"{s.name} has work to do") for s in stages)
     return PlannedRun(
         plan=Plan(listing=listing, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(
@@ -86,82 +83,73 @@ def _planned(*stages: _Stage, listing: str = LISTING) -> PlannedRun:
     )
 
 
-def test_stage_applying_and_applied_fire_around_a_successful_stage(workspace_root: Path) -> None:
-    ctx = a_context(workspace_root)
-    order: list[str] = []
+def test_stage_events_and_progress_are_one_ordered_stream(workspace_root: Path) -> None:
+    events: list[EngineRunEvent] = []
 
     execute(
-        ctx,
+        a_context(workspace_root),
         _planned(_Stage("render"), _Stage("printify_product")),
         a_lock(),
-        observer=RunObserver(
-            on_stage_applying=lambda listing, stage: order.append(f"applying:{listing}:{stage}"),
-            on_stage_applied=lambda listing, stage: order.append(f"applied:{listing}:{stage}"),
-        ),
+        on_event=events.append,
     )
 
-    assert order == [
-        f"applying:{LISTING}:render",
-        f"applied:{LISTING}:render",
-        f"applying:{LISTING}:printify_product",
-        f"applied:{LISTING}:printify_product",
+    assert [
+        (type(event), event.listing, event.stage)
+        for event in events
+        if isinstance(event, EngineStageApplying | EngineStageApplied)
+    ] == [
+        (EngineStageApplying, LISTING, "render"),
+        (EngineStageApplied, LISTING, "render"),
+        (EngineStageApplying, LISTING, "printify_product"),
+        (EngineStageApplied, LISTING, "printify_product"),
+    ]
+    assert [
+        (event.stage, event.message) for event in events if isinstance(event, EngineProgress)
+    ] == [
+        ("render", "applying render"),
+        ("printify_product", "applying printify_product"),
     ]
 
 
-def test_stage_failed_fires_with_the_exceptions_message_before_reraising(
-    workspace_root: Path,
-) -> None:
-    ctx = a_context(workspace_root)
-    applied: list[str] = []
-    failed: list[tuple[str, str]] = []
+def test_stage_failed_carries_a_safe_message_before_reraising(workspace_root: Path) -> None:
+    events: list[EngineRunEvent] = []
 
     with contextlib.suppress(UserFacingError):
         execute(
-            ctx,
+            a_context(workspace_root),
             _planned(_Stage("render"), _Stage("etsy_listing", fails=True)),
             a_lock(),
-            observer=RunObserver(
-                on_stage_applied=lambda listing, stage: applied.append(stage),
-                on_stage_failed=lambda listing, stage, message: failed.append((stage, message)),
-            ),
+            on_event=events.append,
         )
 
-    assert applied == ["render"], "the stage that failed must not also report applied"
-    assert failed == [("etsy_listing", "etsy_listing refused")]
+    assert [event.stage for event in events if isinstance(event, EngineStageApplied)] == ["render"]
+    assert [
+        (event.stage, event.message) for event in events if isinstance(event, EngineStageFailed)
+    ] == [("etsy_listing", "etsy_listing refused")]
 
 
-def test_a_bare_defect_reaches_on_stage_failed_masked_not_verbatim(workspace_root: Path) -> None:
-    """A stage's own bug can say anything -- a connection string, a secret
-    interpolated into an f-string. `on_stage_failed` feeds a client-visible
-    event (the UI's runs resource), so only a `UserFacingError`'s message is
-    safe to forward; anything else must be masked here, the same rule `_over`
-    already applies to a listing-level failure. The exception `execute`
-    re-raises still carries the real text, for the server log."""
-    ctx = a_context(workspace_root)
-    failed: list[tuple[str, str]] = []
+def test_a_bare_defect_is_masked_on_the_event_stream(workspace_root: Path) -> None:
+    events: list[EngineRunEvent] = []
 
     with pytest.raises(RuntimeError, match="internal-db-host") as excinfo:
         execute(
-            ctx,
+            a_context(workspace_root),
             _planned(_Stage("etsy_listing", defect=True)),
             a_lock(),
-            observer=RunObserver(
-                on_stage_failed=lambda listing, stage, message: failed.append((stage, message)),
-            ),
+            on_event=events.append,
         )
 
-    assert failed == [("etsy_listing", INTERNAL_ERROR_MESSAGE)]
-    assert "internal-db-host" not in failed[0][1]
-    assert "internal-db-host" in str(excinfo.value), "the real message must still reach the log"
+    failed = [event for event in events if isinstance(event, EngineStageFailed)]
+    assert [(event.stage, event.message) for event in failed] == [
+        ("etsy_listing", INTERNAL_ERROR_MESSAGE)
+    ]
+    assert "internal-db-host" not in failed[0].message
+    assert "internal-db-host" in str(excinfo.value)
 
 
-def test_a_stage_that_never_runs_fires_neither_callback(workspace_root: Path) -> None:
-    """A ``StagePlan`` with no work and no drift is skipped by ``execute``
-    entirely -- the observer must not be told a stage is "applying" one that
-    was never asked to."""
-    ctx = a_context(workspace_root)
+def test_a_stage_that_never_runs_emits_no_apply_event(workspace_root: Path) -> None:
     stage = _Stage("render")
-    stage_plan = StagePlan(stage="render", will_run=False)
+    stage_plan = StagePlan.no_work("render")
     planned = PlannedRun(
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=(stage_plan,)),
         states=(
@@ -174,41 +162,28 @@ def test_a_stage_that_never_runs_fires_neither_callback(workspace_root: Path) ->
             ),
         ),
     )
-    seen: list[str] = []
+    events: list[EngineRunEvent] = []
 
-    execute(
-        ctx,
-        planned,
-        a_lock(),
-        observer=RunObserver(on_stage_applying=lambda listing, stage: seen.append(stage)),
-    )
+    execute(a_context(workspace_root), planned, a_lock(), on_event=events.append)
 
-    assert seen == []
+    assert events == []
 
 
-def test_execute_without_an_observer_still_runs(workspace_root: Path) -> None:
-    """Every existing direct caller of `execute` passes no `observer` at
-    all -- that has to keep working unmodified."""
-    ctx = a_context(workspace_root)
-
-    result = execute(ctx, _planned(_Stage("render")), a_lock())
+def test_execute_without_an_event_sink_still_runs(workspace_root: Path) -> None:
+    result = execute(a_context(workspace_root), _planned(_Stage("render")), a_lock())
 
     assert result.stages_completed == ["render"]
 
 
-def test_apply_listings_threads_its_own_observer_into_execute(workspace_root: Path) -> None:
-    """`apply_listings` is the CLI's and the UI's entry point -- the observer
-    it is handed has to reach `execute`, not just `build_plan`."""
-    ctx = a_context(workspace_root)
+def test_apply_listings_threads_the_event_sink_into_execute(workspace_root: Path) -> None:
     from etsy_listings.engine.stages.render import RenderStage
 
-    seen: list[str] = []
-
+    events: list[EngineRunEvent] = []
     apply_listings(
-        ctx,
+        a_context(workspace_root),
         [LISTING],
         [RenderStage()],
-        observer=RunObserver(on_stage_applying=lambda listing, stage: seen.append(stage)),
+        on_event=events.append,
     )
 
-    assert seen == ["render"]
+    assert [event.stage for event in events if isinstance(event, EngineStageApplying)] == ["render"]

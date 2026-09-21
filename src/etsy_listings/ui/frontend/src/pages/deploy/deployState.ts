@@ -1,4 +1,11 @@
-import type { PlanDTO, RunEvent, RunPhase } from "../../types";
+import type { RunEvent, RunPhase } from "../../types";
+import {
+  applyListingRunEvent,
+  initialListingRunState,
+  type ListingRunState,
+} from "./listingRunState";
+
+export type { StageRuntimeStatus } from "./listingRunState";
 
 /**
  * Pure reducer: `RunEvent[] -> phase, per-stage runtime, plan, previews`
@@ -43,70 +50,21 @@ import type { PlanDTO, RunEvent, RunPhase } from "../../types";
  * describes, not the run's current phase).
  */
 
-export type StageRuntimeStatus =
-  | { kind: "applying"; log: string | null; startedAt: number }
-  | { kind: "applied"; startedAt: number; finishedAt: number }
-  | { kind: "failed"; message: string; startedAt: number; finishedAt: number };
-
-export interface DeployState {
+export interface DeployState extends ListingRunState {
   phase: RunPhase;
-  /** The stage a plan walk is currently reading, before its own
-   * `stage_planned` resolves it. `null` once every stage this walk will
-   * touch has resolved, or before any `stage_checking` has arrived yet. */
-  checkingStage: string | null;
-  /** The latest whole plan this run has produced -- from `listing_planned`,
-   * or from a stale outcome's fresh replacement. `null` until the first one
-   * arrives. */
-  plan: PlanDTO | null;
-  /** `plan`'s fingerprint, for a caller that wants to `POST /api/runs` an
-   * apply with `expect`. `null` whenever `plan` came from `stale_plan`
-   * instead of `listing_planned` -- a plan nobody has fingerprinted yet is
-   * not one `apply` can be asked to match. */
-  fingerprint: string | null;
-  /** Whether `plan` is the fresh plan from a `StalePlanError`, not the one
-   * this run was asked to apply. */
-  stale: boolean;
-  /** The last `listing_failed` message, or `null` if none arrived. Reads
-   * true for both "the plan couldn't be built" and "apply stopped at a
-   * failed step" -- which one applies is `phase` (`"failed"` vs `"stale"`
-   * already separates the stale case out). */
-  failureMessage: string | null;
-  /** Per-stage overlay for what `apply` is doing or has done to it, keyed by
-   * stage name. A stage with no entry has not been touched by `apply` at
-   * all this run -- which reads as "no changes"/"blocked"/"not reached"
-   * depending on its own `StagePlanDTO`, a distinction `StepStrip` makes,
-   * not this reducer (it would otherwise have to know the run's outcome to
-   * label a stage it never heard from, which is exactly the "will_run
-   * derived from a reason, never computed beside one" trap CLAUDE.md warns
-   * about one level up). */
-  stageRuntime: Record<string, StageRuntimeStatus>;
   /** Keys `${template}|${colour ?? ""}` for every scene a `preview_rendered`
    * event has named so far this run. */
   previewsRendered: Set<string>;
 }
 
 export const initialDeployState: DeployState = {
+  ...initialListingRunState(),
   phase: "queued",
-  checkingStage: null,
-  plan: null,
-  fingerprint: null,
-  stale: false,
-  failureMessage: null,
-  stageRuntime: {},
   previewsRendered: new Set(),
 };
 
 function previewKey(template: string, colour: string | null): string {
   return `${template}|${colour ?? ""}`;
-}
-
-function withRuntime(state: DeployState, stage: string, status: StageRuntimeStatus): DeployState {
-  return { ...state, stageRuntime: { ...state.stageRuntime, [stage]: status } };
-}
-
-function eventTime(event: { occurred_at?: string }): number {
-  const parsed = event.occurred_at === undefined ? Number.NaN : Date.parse(event.occurred_at);
-  return Number.isNaN(parsed) ? Date.now() : parsed;
 }
 
 /** Folds one event onto a state. Exported alongside {@link deployState}
@@ -119,28 +77,6 @@ export function applyRunEvent(state: DeployState, event: RunEvent): DeployState 
     case "phase":
       return { ...state, phase: event.phase };
 
-    case "stage_checking":
-      return { ...state, checkingStage: event.stage };
-
-    case "stage_planned":
-      // A provisional resolution, ahead of `listing_planned`'s complete
-      // `Plan` -- kept only long enough to clear the checking spinner;
-      // `StepStrip` reads the definitive `plan.stage_plans` once it exists,
-      // which is why this does not also patch `state.plan` piecemeal.
-      return {
-        ...state,
-        checkingStage: state.checkingStage === event.stage_plan.stage ? null : state.checkingStage,
-      };
-
-    case "listing_planned":
-      return {
-        ...state,
-        checkingStage: null,
-        plan: event.plan,
-        fingerprint: event.fingerprint,
-        stale: false,
-      };
-
     case "preview_rendered":
       return {
         ...state,
@@ -149,53 +85,8 @@ export function applyRunEvent(state: DeployState, event: RunEvent): DeployState 
         ),
       };
 
-    case "stage_applying":
-      return withRuntime(state, event.stage, {
-        kind: "applying",
-        log: null,
-        startedAt: eventTime(event),
-      });
-
-    case "progress":
-      if (event.stage === null) return state;
-      {
-        const current = state.stageRuntime[event.stage];
-        if (current === undefined || current.kind !== "applying") return state;
-        return withRuntime(state, event.stage, { ...current, log: event.message });
-      }
-
-    case "stage_applied": {
-      const finishedAt = eventTime(event);
-      const current = state.stageRuntime[event.stage];
-      return withRuntime(state, event.stage, {
-        kind: "applied",
-        startedAt: current?.kind === "applying" ? current.startedAt : finishedAt,
-        finishedAt,
-      });
-    }
-
-    case "stage_failed": {
-      const finishedAt = eventTime(event);
-      const current = state.stageRuntime[event.stage];
-      return withRuntime(state, event.stage, {
-        kind: "failed",
-        message: event.message,
-        startedAt: current?.kind === "applying" ? current.startedAt : finishedAt,
-        finishedAt,
-      });
-    }
-
-    case "listing_failed":
-      return {
-        ...state,
-        failureMessage: event.message,
-        ...(event.stale_plan
-          ? { plan: event.stale_plan, stale: true, fingerprint: null, checkingStage: null }
-          : {}),
-      };
-
     default:
-      return state;
+      return { ...state, ...applyListingRunEvent(state, event, "replace") };
   }
 }
 

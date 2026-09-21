@@ -4,7 +4,7 @@ import type { PlanDTO, StagePlanDTO } from "../../types";
 import { BatchAggregateStages } from "./BatchAggregateStages";
 import type { BatchListingState } from "./batchDeployState";
 
-function stage(stageName: string, willRun = false): StagePlanDTO {
+function stage(stageName: StagePlanDTO["stage"], willRun = false): StagePlanDTO {
   return {
     stage: stageName,
     will_run: willRun,

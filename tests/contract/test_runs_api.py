@@ -125,8 +125,8 @@ def test_a_workspace_plan_resolves_sorted_names_on_the_server(
 @pytest.mark.parametrize(
     ("payload", "message"),
     [
-        ({"kind": "plan", "scope": "workspace", "listings": []}, "must omit listings"),
-        ({"kind": "plan", "scope": "workspace", "expect": {}}, "cannot include expect"),
+        ({"kind": "plan", "scope": "workspace", "listings": []}, "listings"),
+        ({"kind": "plan", "scope": "workspace", "expect": {}}, "expect"),
         (
             {"kind": "apply", "scope": "workspace", "listings": [LISTING], "expect": {}},
             "reviewed_run_id",
@@ -242,7 +242,7 @@ def test_workspace_apply_rejects_a_missing_review_source(client: TestClient) -> 
 def test_create_is_refused_409_when_the_listing_is_already_active(client: TestClient) -> None:
     first = client.post("/api/runs", json={"kind": "plan", "listings": [LISTING]}).json()
 
-    second = client.post("/api/runs", json={"kind": "apply", "listings": [LISTING]})
+    second = client.post("/api/runs", json={"kind": "apply", "listings": [LISTING], "expect": {}})
 
     assert second.status_code == 409
     assert second.json() == {"active_run": first["id"]}
@@ -291,7 +291,9 @@ def test_get_run_carries_its_events(client: TestClient) -> None:
 
 
 def test_cancel_an_apply_run_is_409(client: TestClient) -> None:
-    created = client.post("/api/runs", json={"kind": "apply", "listings": [LISTING]}).json()
+    created = client.post(
+        "/api/runs", json={"kind": "apply", "listings": [LISTING], "expect": {}}
+    ).json()
 
     response = client.delete(f"/api/runs/{created['id']}")
 
@@ -363,7 +365,9 @@ def test_a_plan_run_streams_its_full_event_sequence(client: TestClient) -> None:
 
 def test_an_apply_run_streams_its_full_event_sequence(client: TestClient) -> None:
     """The root "done when", the other half: an apply run's full sequence."""
-    created = client.post("/api/runs", json={"kind": "apply", "listings": [LISTING]}).json()
+    created = client.post(
+        "/api/runs", json={"kind": "apply", "listings": [LISTING], "expect": {}}
+    ).json()
 
     response = client.get(f"/api/runs/{created['id']}/events")
 

@@ -9,7 +9,7 @@ stages and tests are unaffected.
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 
 from etsy_listings.clients.etsy.listings import EtsyListingClient
 from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
@@ -70,6 +70,21 @@ class RunContext:
 
     def emit(self, message: str, *, swatches: Sequence[Swatch] = ()) -> None:
         self.on_event(Event(message=message, swatches=tuple(swatches)))
+
+    def with_event_sink(self, sink: EventSink) -> RunContext:
+        """A copy whose progress reaches both the existing and scoped sinks.
+
+        ``execute`` uses this to attach listing/stage identity to progress
+        without mutating the context or making a stage know about run events.
+        The existing sink remains first so CLI progress output is unchanged.
+        """
+        current = self.on_event
+
+        def emit(event: Event) -> None:
+            current(event)
+            sink(event)
+
+        return replace(self, on_event=emit)
 
     def require_printify(self) -> PrintifyClient:
         """The shop-scoped client, or a loud failure.

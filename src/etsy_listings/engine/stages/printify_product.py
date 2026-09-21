@@ -202,9 +202,10 @@ class PrintifyProductStage:
     ) -> Verdict:
         """Three states in, a verdict out. Everything else moved."""
         comparison = compare(desired, applied, live)
-        return Verdict(
-            will_run=comparison.will_run,
-            reason=comparison.reason,
+        if comparison.reason is None:
+            return Verdict.no_work(drift=comparison.drift)
+        return Verdict.work(
+            comparison.reason,
             changes=comparison.changes,
             drift=comparison.drift,
             actions=comparison.actions,

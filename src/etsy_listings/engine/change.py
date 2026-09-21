@@ -131,41 +131,47 @@ class Action:
 
 
 @dataclass(frozen=True)
-class Verdict:
-    """What a stage's ``plan()`` decided, before the engine says whose it is.
+class StageIdle:
+    """The stage has nothing to do."""
 
-    A :class:`StagePlan` minus two things a stage has no business supplying.
 
-    ``stage`` is gone because every stage wrote ``stage=self.name`` into every
-    plan it returned -- the engine already knows which stage it asked, and a
-    name a stage stamps for itself is a name it can stamp wrongly.
+@dataclass(frozen=True)
+class StageWork:
+    """The stage will run, with the reason and work inseparable."""
 
-    ``blocked`` is gone because a stage does not decide how a refusal is
-    *presented* -- it says one is warranted, and the engine turns it into
-    :attr:`StagePlan.blocked` beside the ones ``desired()`` raised. Which
-    leaves three answers a stage can give, and no fourth: nothing to do, work
-    to do and why, or a refusal.
-    """
-
-    will_run: bool
+    reason: str
     changes: tuple[Change, ...] = field(default_factory=tuple)
-    drift: tuple[Drift, ...] = field(default_factory=tuple)
-    reason: str | None = None
     actions: tuple[Action, ...] = field(default_factory=tuple)
-    refusal: str | None = None
-    """Why this stage cannot run, when only the live state could prove it.
 
-    A ``str`` and not a :class:`~etsy_listings.engine.stage.Blocked` because
-    ``stage`` imports *this* module, not the other way about -- but it carries
-    the same contract, and reaches the user through the same
-    :attr:`StagePlan.blocked` field: first line the consequence, any further
-    lines the remedy.
-    """
+
+@dataclass(frozen=True)
+class StageBlocked:
+    """The stage cannot run, with the user-facing refusal inseparable."""
+
+    message: str
+
+
+StageOutcome = StageIdle | StageWork | StageBlocked
+"""The only three answers a stage can give (A33).
+
+The former product of ``will_run``, ``reason``, ``blocked``, changes and
+actions admitted contradictions that the repository's invariants explicitly
+forbid. The union is the stored truth; compatibility properties on
+:class:`Verdict` and :class:`StagePlan` are derived views for renderers.
+"""
+
+
+@dataclass(frozen=True)
+class Verdict:
+    """What a stage's ``plan()`` decided, before the engine says whose it is."""
+
+    outcome: StageOutcome
+    drift: tuple[Drift, ...] = field(default_factory=tuple)
 
     @classmethod
-    def no_work(cls) -> Verdict:
+    def no_work(cls, *, drift: tuple[Drift, ...] = ()) -> Verdict:
         """Nothing to do. The common answer, and the one worth not spelling."""
-        return cls(will_run=False)
+        return cls(outcome=StageIdle(), drift=drift)
 
     @classmethod
     def refused(cls, message: str, *, drift: tuple[Drift, ...] = ()) -> Verdict:
@@ -187,10 +193,17 @@ class Verdict:
         ``drift`` still travels: what Etsy has drifted to is worth reporting
         whether or not this run is allowed to fix it.
         """
-        return cls(will_run=False, refusal=message, drift=drift)
+        return cls(outcome=StageBlocked(message=message), drift=drift)
 
     @classmethod
-    def work(cls, reason: str, *, actions: tuple[Action, ...] = (), **rest: Any) -> Verdict:  # noqa: ANN401
+    def work(
+        cls,
+        reason: str,
+        *,
+        changes: tuple[Change, ...] = (),
+        drift: tuple[Drift, ...] = (),
+        actions: tuple[Action, ...] = (),
+    ) -> Verdict:
         """Work to do, and why -- the two being inseparable is the point.
 
         ``will_run`` used to be an expression standing beside a ``reason``
@@ -198,37 +211,97 @@ class Verdict:
         reason, or report one while not running. Here a reason is required and
         ``will_run`` follows from it.
         """
-        return cls(will_run=True, reason=reason, actions=actions, **rest)
+        return cls(
+            outcome=StageWork(reason=reason, changes=changes, actions=actions),
+            drift=drift,
+        )
+
+    @property
+    def will_run(self) -> bool:
+        return isinstance(self.outcome, StageWork)
+
+    @property
+    def changes(self) -> tuple[Change, ...]:
+        return self.outcome.changes if isinstance(self.outcome, StageWork) else ()
+
+    @property
+    def reason(self) -> str | None:
+        return self.outcome.reason if isinstance(self.outcome, StageWork) else None
+
+    @property
+    def actions(self) -> tuple[Action, ...]:
+        return self.outcome.actions if isinstance(self.outcome, StageWork) else ()
+
+    @property
+    def refusal(self) -> str | None:
+        return self.outcome.message if isinstance(self.outcome, StageBlocked) else None
 
 
 @dataclass(frozen=True)
 class StagePlan:
+    """One stage's named outcome, drift evidence and optional review facts.
+
+    The outcome owns the mutually exclusive idle/work/blocked decision.
+    ``snapshot`` carries unchanged facts for review and remains excluded from
+    the A31 fingerprint.
+    """
+
     stage: str
-    will_run: bool
-    changes: tuple[Change, ...] = field(default_factory=tuple)
+    outcome: StageOutcome
     drift: tuple[Drift, ...] = field(default_factory=tuple)
-    reason: str | None = None
-    actions: tuple[Action, ...] = field(default_factory=tuple)
-    blocked: str | None = None
-    """Why this stage cannot run at all, if it cannot.
-
-    Distinct from ``reason``, which says why a stage *will* run. A blocked
-    stage does nothing and is not counted as work -- but it must still be
-    shown, because the alternative is what shipped first: a workspace with an
-    entire unrun stage reporting "No changes." and the user reasonably
-    concluding the tool had nothing to do."""
-
     snapshot: BaseModel | None = None
-    """A public pydantic model of this stage's domain facts, unchanged ones
-    included -- what the before/after review needs and a ``Plan`` (changes
-    only) cannot supply (A30). Optional: a stage without a ``snapshot()``
-    method, or one that never ran because it is blocked, has ``None``.
-    Never layout -- the frontend composes columns, price tables and
-    thumbnails from it; the engine only carries whatever the stage handed
-    back. **Excluded from the plan fingerprint** (A31): it carries things
-    that can change between two otherwise-identical plans, like an Etsy CDN
-    URL, and hashing it would make ``apply`` refuse a plan nobody actually
-    disagreed with."""
+
+    @classmethod
+    def no_work(
+        cls,
+        stage: str,
+        *,
+        drift: tuple[Drift, ...] = (),
+        snapshot: BaseModel | None = None,
+    ) -> StagePlan:
+        return cls(stage=stage, outcome=StageIdle(), drift=drift, snapshot=snapshot)
+
+    @classmethod
+    def work(
+        cls,
+        stage: str,
+        reason: str,
+        *,
+        changes: tuple[Change, ...] = (),
+        drift: tuple[Drift, ...] = (),
+        actions: tuple[Action, ...] = (),
+        snapshot: BaseModel | None = None,
+    ) -> StagePlan:
+        return cls(
+            stage=stage,
+            outcome=StageWork(reason=reason, changes=changes, actions=actions),
+            drift=drift,
+            snapshot=snapshot,
+        )
+
+    @classmethod
+    def block(cls, stage: str, message: str) -> StagePlan:
+        return cls(stage=stage, outcome=StageBlocked(message=message))
+
+    @property
+    def will_run(self) -> bool:
+        return isinstance(self.outcome, StageWork)
+
+    @property
+    def changes(self) -> tuple[Change, ...]:
+        return self.outcome.changes if isinstance(self.outcome, StageWork) else ()
+
+    @property
+    def reason(self) -> str | None:
+        return self.outcome.reason if isinstance(self.outcome, StageWork) else None
+
+    @property
+    def actions(self) -> tuple[Action, ...]:
+        return self.outcome.actions if isinstance(self.outcome, StageWork) else ()
+
+    @property
+    def blocked(self) -> str | None:
+        return self.outcome.message if isinstance(self.outcome, StageBlocked) else None
 
 
 @dataclass(frozen=True)
@@ -240,7 +313,7 @@ class Plan:
 
     @property
     def has_changes(self) -> bool:
-        return any(sp.will_run or sp.changes for sp in self.stage_plans)
+        return any(sp.will_run for sp in self.stage_plans)
 
     @property
     def has_drift(self) -> bool:

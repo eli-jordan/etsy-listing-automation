@@ -25,7 +25,7 @@ def _plan(*, snapshot: RenderSnapshot | None, desired: object | None = None) -> 
                 desired=object() if desired is None else desired,
                 applied=None,
                 live=None,
-                stage_plan=StagePlan(stage="render", will_run=False, snapshot=snapshot),
+                stage_plan=StagePlan.no_work("render", snapshot=snapshot),
             ),
         ),
     )

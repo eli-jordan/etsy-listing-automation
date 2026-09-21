@@ -281,7 +281,7 @@ class PublishStage:
             )
         if desired.variants != applied.prices:
             return Verdict.work("the variant matrix differs from what Etsy has", drift=drift)
-        return Verdict(will_run=False, drift=drift)
+        return Verdict.no_work(drift=drift)
 
     def snapshot(self, desired: PublishDesired, live: PublishLive | None) -> PublishSnapshot:
         """The below-cost rows only, named (A30) -- reuses ``_below_cost``

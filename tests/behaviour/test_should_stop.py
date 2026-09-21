@@ -20,6 +20,7 @@ from pydantic import BaseModel, ConfigDict
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.change import Plan, StagePlan, Verdict
 from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.events import EngineListingPlanned, EngineRunEvent
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, StageState
 from etsy_listings.engine.run import apply_listings, plan_listings
@@ -60,7 +61,7 @@ class _Stage:
 
 
 def _planned(*stages: _Stage) -> PlannedRun:
-    stage_plans = tuple(StagePlan(stage=s.name, will_run=True) for s in stages)
+    stage_plans = tuple(StagePlan.work(s.name, "test work") for s in stages)
     return PlannedRun(
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(
@@ -139,13 +140,15 @@ def test_plan_listings_should_stop_is_checked_between_listings(workspace_root: P
     def stop() -> bool:
         return len(seen) >= 1
 
-    from etsy_listings.engine.run import RunObserver
+    def capture(event: EngineRunEvent) -> None:
+        if isinstance(event, EngineListingPlanned):
+            seen.append(event.listing)
 
     plan_listings(
         ctx,
         [LISTING, "second"],
         [_Stage("render")],  # type: ignore[list-item]
-        observer=RunObserver(on_listing_planned=lambda name, planned: seen.append(name)),
+        on_event=capture,
         should_stop=stop,
     )
 

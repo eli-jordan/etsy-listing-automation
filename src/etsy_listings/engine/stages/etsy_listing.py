@@ -314,7 +314,7 @@ class EtsyListingStage:
             return Verdict.work(
                 "Etsy disagrees with what was last applied -- re-asserting", drift=drift_found
             )
-        return Verdict(will_run=False, drift=drift_found)
+        return Verdict.no_work(drift=drift_found)
 
     def snapshot(
         self, desired: EtsyListingDesired, live: EtsyListing | None

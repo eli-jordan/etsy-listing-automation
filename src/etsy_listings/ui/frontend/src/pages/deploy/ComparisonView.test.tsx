@@ -5,7 +5,7 @@ import { buildComparison } from "./comparison";
 import type { EtsyListingSnapshot, ListingDetail, PlanDTO, StagePlanDTO } from "../../types";
 
 type StageOverrides = Omit<Partial<StagePlanDTO>, "snapshot" | "changes"> & {
-  stage: string;
+  stage: StagePlanDTO["stage"];
   snapshot?: unknown;
   changes?: StagePlanDTO["changes"];
 };

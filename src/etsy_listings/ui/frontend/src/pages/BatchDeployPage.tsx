@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { listListings } from "../api/listings";
 import { cancelRun, createRun, getRun, markRunSeen } from "../api/runs";
-import type { ListingSummary, RenderSnapshot, RunDetail } from "../types";
+import type { ListingSummary, RunDetail } from "../types";
 import { BatchAggregateStages } from "./batchDeploy/BatchAggregateStages";
 import { BatchListingDrawer } from "./batchDeploy/BatchListingDrawer";
 import { BatchListingGroups } from "./batchDeploy/BatchListingGroups";
@@ -40,7 +40,7 @@ function requiredPreviewKeys(listings: readonly BatchListingState[]): string[] {
   const keys: string[] = [];
   for (const listing of listings) {
     const render = planFor(listing)?.stage_plans.find((stage) => stage.stage === "render");
-    const snapshot = render?.snapshot as RenderSnapshot | null | undefined;
+    const snapshot = render?.snapshot;
     for (const scene of snapshot?.scenes ?? []) {
       if (scene.state !== "cached" && !scene.preview) {
         keys.push(`${listing.listing}|${scene.template}|${scene.colour ?? ""}`);
@@ -534,8 +534,7 @@ export function BatchDeployPage() {
         mode={applying ? "applying" : terminalApply ? "applied" : "review"}
         previewsRendered={visibleState.previewsRendered}
         renderSnapshot={
-          (selectedPlan?.stage_plans.find((stage) => stage.stage === "render")
-            ?.snapshot as RenderSnapshot | null) ?? null
+          selectedPlan?.stage_plans.find((stage) => stage.stage === "render")?.snapshot ?? null
         }
         onClose={() => setSelectedListing(null)}
       />

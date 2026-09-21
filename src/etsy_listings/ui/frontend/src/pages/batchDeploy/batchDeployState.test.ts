@@ -14,7 +14,7 @@ function listing(state: BatchDeployState, name: string) {
   return value;
 }
 
-function stage(stageName: string, willRun = false): StagePlanDTO {
+function stage(stageName: StagePlanDTO["stage"], willRun = false): StagePlanDTO {
   return {
     stage: stageName,
     will_run: willRun,
@@ -273,31 +273,23 @@ describe("batchDeployState", () => {
           type: "progress",
           id: 1,
           listing: "alpha",
-          stage: null,
-          message: "ignored without a stage",
-          swatches: [],
-        },
-        {
-          type: "progress",
-          id: 2,
-          listing: "alpha",
           stage: "render",
           message: "ignored before applying",
           swatches: [],
         },
-        { type: "stage_applying", id: 3, listing: "alpha", stage: "render" },
+        { type: "stage_applying", id: 2, listing: "alpha", stage: "render" },
         {
           type: "progress",
-          id: 4,
+          id: 3,
           listing: "alpha",
           stage: "render",
           message: "rendering",
           swatches: [],
         },
-        { type: "stage_applied", id: 5, listing: "alpha", stage: "render" },
+        { type: "stage_applied", id: 4, listing: "alpha", stage: "render" },
         {
           type: "stage_failed",
-          id: 6,
+          id: 5,
           listing: "alpha",
           stage: "publish",
           message: "publish failed",

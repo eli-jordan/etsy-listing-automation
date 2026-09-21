@@ -15,8 +15,9 @@ import pytest
 
 import etsy_listings.engine.stages.render as render_module
 from etsy_listings.engine.apply import execute
+from etsy_listings.engine.events import EnginePreviewRendered, EngineRunEvent
 from etsy_listings.engine.plan import StageState, build_plan
-from etsy_listings.engine.run import RunObserver, preview_listing
+from etsy_listings.engine.run import preview_listing
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.render import (
     PREVIEW_WORKERS,
@@ -29,6 +30,14 @@ from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, edit_listing
 
 COLOURS = ("black", "blue-jean", "ivory", "moss")
+
+
+def _preview_sink(events: list[tuple[str, str, str | None]]):
+    def capture(event: EngineRunEvent) -> None:
+        if isinstance(event, EnginePreviewRendered):
+            events.append((event.listing, event.template, event.colour))
+
+    return capture
 
 
 def _render_state(ctx, lock=None) -> StageState:
@@ -220,13 +229,7 @@ def test_preview_listing_emits_one_event_per_scene(workspace_root: Path) -> None
     planned = build_plan(ctx, LISTING, a_lock(), STAGES)
 
     events: list[tuple[str, str, str | None]] = []
-    observer = RunObserver(
-        on_preview_rendered=lambda listing, template, colour: events.append(
-            (listing, template, colour)
-        )
-    )
-
-    preview_listing(ctx, planned, observer)
+    preview_listing(ctx, planned, _preview_sink(events))
 
     assert sorted(events) == sorted((LISTING, "flat-lay-01", colour) for colour in COLOURS)
 
@@ -236,13 +239,7 @@ def test_preview_listing_stops_before_any_scene_when_asked_to(workspace_root: Pa
     planned = build_plan(ctx, LISTING, a_lock(), STAGES)
 
     events: list[tuple[str, str, str | None]] = []
-    observer = RunObserver(
-        on_preview_rendered=lambda listing, template, colour: events.append(
-            (listing, template, colour)
-        )
-    )
-
-    preview_listing(ctx, planned, observer, should_stop=lambda: True)
+    preview_listing(ctx, planned, _preview_sink(events), should_stop=lambda: True)
 
     assert events == []
     assert not any(ctx.workspace.preview_dir(LISTING).glob("**/*.png"))
@@ -272,23 +269,15 @@ def test_preview_listing_stops_partway_through_a_multi_scene_batch(
     monkeypatch.setattr(render_module, "render_scene", counting_render_scene)
 
     events: list[tuple[str, str, str | None]] = []
-    observer = RunObserver(
-        on_preview_rendered=lambda listing, template, colour: events.append(
-            (listing, template, colour)
-        )
-    )
-
-    preview_listing(ctx, planned, observer, should_stop=lambda: rendered >= 1)
+    preview_listing(ctx, planned, _preview_sink(events), should_stop=lambda: rendered >= 1)
 
     assert 1 <= rendered <= PREVIEW_WORKERS
     assert len(events) == rendered
     assert len(events) < len(COLOURS)
 
 
-def test_preview_listing_uses_the_default_observer_when_none_is_given(workspace_root: Path) -> None:
-    """No caller cares yet in this PR -- the default `RunObserver`'s
-    `on_preview_rendered` is a plain no-op -- but `preview_listing` must still
-    render every scene when called bare, the way the CLI would."""
+def test_preview_listing_uses_the_default_sink_when_none_is_given(workspace_root: Path) -> None:
+    """A bare call still renders every scene when nobody consumes events."""
     ctx = a_context(workspace_root)
     planned = build_plan(ctx, LISTING, a_lock(), STAGES)
 
@@ -318,13 +307,7 @@ def test_preview_listing_ignores_a_stage_that_only_shares_the_render_name(
     faked_planned = replace(planned, states=faked_states)
 
     events: list[tuple[str, str, str | None]] = []
-    observer = RunObserver(
-        on_preview_rendered=lambda listing, template, colour: events.append(
-            (listing, template, colour)
-        )
-    )
-
-    preview_listing(ctx, faked_planned, observer)  # must not raise
+    preview_listing(ctx, faked_planned, _preview_sink(events))  # must not raise
 
     assert events == []
 
@@ -335,13 +318,7 @@ def test_preview_listing_does_nothing_when_render_is_blocked(workspace_root: Pat
     planned = build_plan(ctx, LISTING, a_lock(), STAGES)
 
     events: list[tuple[str, str, str | None]] = []
-    observer = RunObserver(
-        on_preview_rendered=lambda listing, template, colour: events.append(
-            (listing, template, colour)
-        )
-    )
-
-    preview_listing(ctx, planned, observer)  # must not raise
+    preview_listing(ctx, planned, _preview_sink(events))  # must not raise
 
     assert events == []
 
@@ -353,12 +330,6 @@ def test_preview_listing_does_nothing_for_a_retract_only_plan(workspace_root: Pa
     assert [s.stage.name for s in planned.states] == ["retract"]
 
     events: list[tuple[str, str, str | None]] = []
-    observer = RunObserver(
-        on_preview_rendered=lambda listing, template, colour: events.append(
-            (listing, template, colour)
-        )
-    )
-
-    preview_listing(ctx, planned, observer)  # must not raise
+    preview_listing(ctx, planned, _preview_sink(events))  # must not raise
 
     assert events == []

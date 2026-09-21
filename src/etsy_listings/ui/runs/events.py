@@ -3,10 +3,8 @@ turns into JSON (A33, decision 7).
 
 Two things are true about the engine's own ``Plan``/``StagePlan``/``Change``
 types that make them unfit to serialise directly. They are plain dataclasses,
-some of them carrying a :class:`~etsy_listings.config.money.Money` or a nested
-pydantic ``snapshot`` model -- neither JSON nor an untyped pydantic field
-converts on its own, so ``json.dumps`` would raise on the first price this run
-had ever compared. And the four ``Change`` shapes (``FieldChange``,
+and changes may carry a :class:`~etsy_listings.config.money.Money` that JSON
+does not convert on its own. And the four ``Change`` shapes (``FieldChange``,
 ``ListChange``, ``PriceChange``, ``MediaChange``) are a plain union with no
 field a frontend union type could discriminate on -- exactly the ambiguity
 ``StagePlan.blocked``/``Verdict.refused`` already solved once for "why didn't
@@ -52,30 +50,34 @@ from etsy_listings.engine.change import (
     PriceChange,
     StagePlan,
 )
+from etsy_listings.engine.stages.etsy_listing import EtsyListingSnapshot
+from etsy_listings.engine.stages.etsy_media import EtsyMediaSnapshot
+from etsy_listings.engine.stages.printify_product import ProductSnapshot
+from etsy_listings.engine.stages.publish import PublishSnapshot
+from etsy_listings.engine.stages.render import RenderSnapshot
 
 RunKind = Literal["plan", "apply"]
 RunScope = Literal["listings", "workspace"]
 
-RunPhase = Literal[
+PlanRunPhase = Literal[
     "queued",
     "planning",
     "planned",
     "previewing",
     "ready",
+    "failed",
+    "cancelled",
+]
+ApplyRunPhase = Literal[
+    "queued",
     "applying",
     "applied",
     "failed",
     "stale",
-    "cancelled",
 ]
-"""Every phase a run can be in, across both kinds (A33, decision 7). A plan
-run only ever reaches ``queued``/``planning``/``planned``/``previewing``/
-``ready``/``cancelled``; an apply run only ever reaches
-``queued``/``applying``/``applied``/``failed``/``stale``. One ``Literal``
-rather than two, because :class:`Run` (``registry.py``) is one class for both
-kinds and a single ``phase`` field is simpler than a kind-keyed union that
-buys nothing here -- nothing reads ``Run.phase`` without already knowing
-``Run.kind``."""
+RunPhase = PlanRunPhase | ApplyRunPhase
+"""The public union of two state machines. Registry state keeps the narrower
+phase beside its matching command, so cross-kind transitions are rejected."""
 
 TERMINAL_PHASES: frozenset[RunPhase] = frozenset(
     {"ready", "applied", "failed", "stale", "cancelled"}
@@ -214,34 +216,107 @@ def _action_dto(action: Action) -> ActionDTO:
 # --------------------------------------------------------------- StagePlan/Plan
 
 
-class StagePlanDTO(BaseModel):
-    stage: str
+class _StagePlanDTO(BaseModel):
     will_run: bool
     changes: tuple[ChangeDTO, ...] = ()
     drift: tuple[DriftDTO, ...] = ()
     reason: str | None = None
     actions: tuple[ActionDTO, ...] = ()
     blocked: str | None = None
-    snapshot: dict[str, Any] | None = None
-    """A stage's own ``snapshot()`` model, dumped generically (A30) --
-    ``RenderSnapshot``, ``PrintifyProductSnapshot`` and the rest are each the
-    producing stage's own type, and this module has no business importing
-    five stage modules to name them. A frontend already has to know one
-    stage's snapshot shape from another; this only spares it a sixth import
-    that gains nothing over reading the field names off the wire."""
 
 
-def stage_plan_dto(stage_plan: StagePlan) -> StagePlanDTO:
-    return StagePlanDTO(
-        stage=stage_plan.stage,
-        will_run=stage_plan.will_run,
-        changes=tuple(_change_dto(c) for c in stage_plan.changes),
-        drift=tuple(_drift_dto(d) for d in stage_plan.drift),
-        reason=stage_plan.reason,
-        actions=tuple(_action_dto(a) for a in stage_plan.actions),
-        blocked=stage_plan.blocked,
-        snapshot=_jsonable(stage_plan.snapshot) if stage_plan.snapshot is not None else None,
-    )
+class RenderStagePlanDTO(_StagePlanDTO):
+    stage: Literal["render"] = "render"
+    snapshot: RenderSnapshot | None = None
+
+
+class ProductStagePlanDTO(_StagePlanDTO):
+    stage: Literal["printify_product"] = "printify_product"
+    snapshot: ProductSnapshot | None = None
+
+
+class PublishStagePlanDTO(_StagePlanDTO):
+    stage: Literal["publish"] = "publish"
+    snapshot: PublishSnapshot | None = None
+
+
+class EtsyListingStagePlanDTO(_StagePlanDTO):
+    stage: Literal["etsy_listing"] = "etsy_listing"
+    snapshot: EtsyListingSnapshot | None = None
+
+
+class EtsyMediaStagePlanDTO(_StagePlanDTO):
+    stage: Literal["etsy_media"] = "etsy_media"
+    snapshot: EtsyMediaSnapshot | None = None
+
+
+class RetractStagePlanDTO(_StagePlanDTO):
+    stage: Literal["retract"] = "retract"
+    snapshot: None = None
+
+
+StagePlanDTO = Annotated[
+    RenderStagePlanDTO
+    | ProductStagePlanDTO
+    | PublishStagePlanDTO
+    | EtsyListingStagePlanDTO
+    | EtsyMediaStagePlanDTO
+    | RetractStagePlanDTO,
+    Field(discriminator="stage"),
+]
+
+
+def _stage_plan_fields(stage_plan: StagePlan) -> dict[str, Any]:
+    return {
+        "will_run": stage_plan.will_run,
+        "changes": tuple(_change_dto(c) for c in stage_plan.changes),
+        "drift": tuple(_drift_dto(d) for d in stage_plan.drift),
+        "reason": stage_plan.reason,
+        "actions": tuple(_action_dto(a) for a in stage_plan.actions),
+        "blocked": stage_plan.blocked,
+    }
+
+
+def _snapshot[SnapshotT: BaseModel](
+    stage_plan: StagePlan, expected: type[SnapshotT]
+) -> SnapshotT | None:
+    snapshot = stage_plan.snapshot
+    if snapshot is not None and not isinstance(snapshot, expected):
+        raise TypeError(
+            f"{stage_plan.stage} snapshot must be {expected.__name__}, "
+            f"not {type(snapshot).__name__}"
+        )
+    return snapshot
+
+
+def stage_plan_dto(
+    stage_plan: StagePlan,
+) -> (
+    RenderStagePlanDTO
+    | ProductStagePlanDTO
+    | PublishStagePlanDTO
+    | EtsyListingStagePlanDTO
+    | EtsyMediaStagePlanDTO
+    | RetractStagePlanDTO
+):
+    fields = _stage_plan_fields(stage_plan)
+    if stage_plan.stage == "render":
+        return RenderStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, RenderSnapshot))
+    if stage_plan.stage == "printify_product":
+        return ProductStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, ProductSnapshot))
+    if stage_plan.stage == "publish":
+        return PublishStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, PublishSnapshot))
+    if stage_plan.stage == "etsy_listing":
+        return EtsyListingStagePlanDTO(
+            **fields, snapshot=_snapshot(stage_plan, EtsyListingSnapshot)
+        )
+    if stage_plan.stage == "etsy_media":
+        return EtsyMediaStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, EtsyMediaSnapshot))
+    if stage_plan.stage == "retract":
+        if stage_plan.snapshot is not None:
+            raise TypeError("retract does not have a snapshot")
+        return RetractStagePlanDTO(**fields)
+    raise ValueError(f"unknown stage {stage_plan.stage!r}")
 
 
 class PlanDTO(BaseModel):
@@ -313,14 +388,12 @@ class StageApplyingEvent(BaseModel):
 
 
 class ProgressEvent(BaseModel):
-    """``ctx.emit``'s ``Event``, tagged with whatever stage
-    :class:`StageApplyingEvent` last named for this listing -- no stage
-    changes how it reports progress (A33, decision 7)."""
+    """Stage progress after the engine has attached its run identity."""
 
     type: Literal["progress"] = "progress"
     id: int
     listing: str
-    stage: str | None
+    stage: str
     message: str
     swatches: tuple[tuple[int, int, int], ...] = ()
 
@@ -343,7 +416,7 @@ class StageFailedEvent(BaseModel):
 
 
 class ListingFailedEvent(BaseModel):
-    """The run's ``RunObserver.on_failure`` twin. ``message`` is the
+    """The engine's ``EngineListingFailed`` wire twin. ``message`` is the
     :class:`~etsy_listings.errors.UserFacingError`'s own text, word for word
     (decision 5) -- never the generic internal-error text, which belongs to a
     :class:`PhaseEvent` naming the whole run ``failed`` instead, since a

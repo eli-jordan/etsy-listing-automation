@@ -90,7 +90,7 @@ def _planned(*stages: _Stage) -> PlannedRun:
     """A `PlannedRun` built by hand, the way `test_stage_remote_state.py`
     does -- `execute` never re-asks a stage anything, so a test of its
     recording behaviour does not need a real `build_plan` walk."""
-    stage_plans = tuple(StagePlan(stage=s.name, will_run=True) for s in stages)
+    stage_plans = tuple(StagePlan.work(s.name, "test work") for s in stages)
     return PlannedRun(
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=stage_plans),
         states=tuple(
@@ -186,7 +186,7 @@ def test_a_run_with_nothing_left_to_do_still_clears_a_stale_marker(workspace_roo
     ctx = a_context(workspace_root)
     lock = a_lock().marked_incomplete("etsy_listing")
     recorded: list[Lockfile] = []
-    stage_plan = StagePlan(stage="etsy_listing", will_run=False)
+    stage_plan = StagePlan.no_work("etsy_listing")
     planned = PlannedRun(
         plan=Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=(stage_plan,)),
         states=(
