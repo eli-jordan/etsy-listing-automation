@@ -7,13 +7,15 @@ and the order of work. Where the two disagree, the PRD wins and this file is wro
 Phase 3's detail lives in [phase-3-etsy.md](phase-3-etsy.md), subsidiary to
 both. Delete and retire (PRD 61–67) live in
 [listing-lifecycle.md](listing-lifecycle.md). Plan and apply from the listing
-editor (A29–A33) live in [deploy-changes.md](deploy-changes.md).
+editor (A29–A33) live in [deploy-changes.md](deploy-changes.md). Workspace-wide
+review and apply (A34) live in
+[ui-batch-deploy-implementation-plan.md](ui-batch-deploy-implementation-plan.md).
 
 ---
 
 ## Architecture decision log
 
-Thirty-three forks, resolved. Numbered `A#` so they can be cited from code
+Thirty-four forks, resolved. Numbered `A#` so they can be cited from code
 comments and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
@@ -51,6 +53,7 @@ comments and commit messages without colliding with the PRD's own decision log.
 | A31 | Apply refuses a plan nobody reviewed | `plan_fingerprint(plan)` is `canonical_hash` over the serialised `Plan` with every `snapshot` left out. `apply_listings(..., expect={listing: fingerprint})` re-plans each listing as it always has, and refuses **before executing anything** if the two fingerprints differ, returning the new plan. Rejected: executing a plan cached from review, which acts on live state that may have moved and cannot see a hand edit to `listing.yaml`; and hashing only the desired documents, which lets Etsy drift that appeared after review through unreviewed. The editor is not the only writer, because the CLI and hand edits change the same files, so a fingerprint beats any lock the UI could hold. |
 | A32 | Previews render during plan; apply promotes them | The render stage gains `preview()`. It renders, at full size and with two bounded workers, every scene it would (re)render to `Workspace.preview_file(listing, scene, scene_hash)`, where `scene_hash` covers the same inputs `input_hash` folds, restricted to one scene. `RenderStage.apply` copies in a preview whose hash matches rather than rendering again, retaining the preview so a mid-apply page refresh can still serve it; CLI `apply` benefits too. `build_plan` itself stays read-only: previews are a step the UI's plan run takes afterwards, a preview's existence never enters a `Plan`, and nothing is written under `.cache/renders/` or the lockfile. Promotion is safe because render passes are pure and the pins are exact (A7), so a promoted file is the bytes a render would have produced and the `outputs` axis cannot tell the difference. Rejected: downscaled previews, which cannot be promoted and so pay for every render twice. |
 | A33 | Runs in the UI server | A **run** is a server-side resource covering `listings: [...]` (PRD 16 continue-on-error inside it). The editor always sends one listing for now. Locks are per listing, so a second run naming a busy listing gets `409` with the holder's id. A single FIFO executor thread runs one run at a time across the workspace, so any other run is `queued`. Parallelising later means more workers, not a new model. Progress travels as SSE whose payloads are pydantic models exported into `openapi.json`, so their TypeScript types are generated (A5), and only the `EventSource` wrapper is hand-written. Plan progress is per stage and **in pipeline order**: A21's fan-out stays unbuilt, and the UI does not pretend otherwise. A plan run can be cancelled before the next stage or preview submission; at most its two already in-flight preview renders drain. An apply run cannot (A3). The executor thread is not a daemon: stopping the process lets the in-flight stage finish and record itself (A29) and starts no other. Runs are held in memory only, and history stays Phase 6's `runs/` recorder. |
+| A34 | Workspace-scoped reviewed runs | Batch planning is a first-class `workspace` scope on A33's existing run resource. The server resolves `Workspace.listing_names()` when it accepts the plan and records the resolved, ordered names on the run; the browser never submits its table rows as the meaning of `--all`. Batch apply remains workspace-scoped for discovery and reattachment, but executes the exact ordered names and A31 fingerprints from the reviewed plan, linked by `reviewed_run_id`; the server validates the submitted set against that plan run before queueing it, so a client omission or a listing created after review cannot become an unreviewed write. A workspace-scoped queued or active run conflicts with every listing-scoped run and vice versa; execution still uses the one A33 FIFO worker and stays sequential. Rejected: `listings: []` as an ambiguous all-listings sentinel; a separate batch resource duplicating locks, events and retention; and re-resolving `--all` at apply time, which could include work the seller never reviewed. |
 
 ### Toolchain
 

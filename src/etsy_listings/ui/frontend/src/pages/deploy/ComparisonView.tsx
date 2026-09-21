@@ -59,18 +59,22 @@ function AfterTile({
   detail,
   renderSnapshot,
   previewsRendered,
+  imageUrlForRef,
 }: {
   tile: AfterImageTile;
   detail: ListingDetail;
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
+  imageUrlForRef: ((ref: string) => string | null) | undefined;
 }) {
   const parsed = parseRef(tile.ref);
   const design = singleDesignName(detail.design);
   let src: string | null = null;
   let pending = false;
 
-  if (parsed === null) {
+  if (imageUrlForRef !== undefined) {
+    src = imageUrlForRef(tile.ref);
+  } else if (parsed === null) {
     src = pictureFor(tile.ref, design, "full");
   } else {
     const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
@@ -160,6 +164,7 @@ function Column({
   renderSnapshot,
   previewsRendered,
   etsyListingIdLabel,
+  imageUrlForRef,
 }: {
   side: "before" | "after";
   comparison: ComparisonData;
@@ -167,6 +172,7 @@ function Column({
   renderSnapshot: RenderSnapshot | null;
   previewsRendered: Set<string>;
   etsyListingIdLabel: string;
+  imageUrlForRef: ((ref: string) => string | null) | undefined;
 }) {
   const isAfter = side === "after";
   const { title, description, tags, materials, colours, price, images } = comparison;
@@ -189,6 +195,7 @@ function Column({
                     detail={detail}
                     renderSnapshot={renderSnapshot}
                     previewsRendered={previewsRendered}
+                    imageUrlForRef={imageUrlForRef}
                   />
                 ))
               : images.before.map((tile) => <BeforeTile key={tile.rank} tile={tile} />)}
@@ -316,6 +323,7 @@ export function ComparisonView({
   previewsRendered,
   collapsed,
   etsyListingId,
+  imageUrlForRef,
 }: {
   comparison: ComparisonData;
   detail: ListingDetail;
@@ -325,6 +333,9 @@ export function ComparisonView({
    * found nothing to compare. */
   collapsed: boolean;
   etsyListingId: number | null;
+  /** Optional fixture resolver for canvases and component galleries. The app
+   * normally derives these URLs from the listing's media refs. */
+  imageUrlForRef?: (ref: string) => string | null;
 }) {
   const etsyListingIdLabel = etsyListingId !== null ? `listing ${etsyListingId}` : "";
 
@@ -338,6 +349,7 @@ export function ComparisonView({
           renderSnapshot={renderSnapshot}
           previewsRendered={previewsRendered}
           etsyListingIdLabel={etsyListingIdLabel}
+          imageUrlForRef={imageUrlForRef}
         />
         <p className="dv-note">Not on Etsy yet.</p>
       </div>
@@ -354,6 +366,7 @@ export function ComparisonView({
           renderSnapshot={renderSnapshot}
           previewsRendered={previewsRendered}
           etsyListingIdLabel={etsyListingIdLabel}
+          imageUrlForRef={imageUrlForRef}
         />
       </div>
     );
@@ -368,6 +381,7 @@ export function ComparisonView({
         renderSnapshot={renderSnapshot}
         previewsRendered={previewsRendered}
         etsyListingIdLabel={etsyListingIdLabel}
+        imageUrlForRef={imageUrlForRef}
       />
       <Column
         side="after"
@@ -376,6 +390,7 @@ export function ComparisonView({
         renderSnapshot={renderSnapshot}
         previewsRendered={previewsRendered}
         etsyListingIdLabel={etsyListingIdLabel}
+        imageUrlForRef={imageUrlForRef}
       />
     </div>
   );
