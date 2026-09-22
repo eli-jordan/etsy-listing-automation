@@ -111,6 +111,7 @@ def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path
         == root / "garment-profiles" / "comfort-colors-1717.yaml"
     )
     assert ws.exceptions_file() == root / "exceptions.yaml"
+    assert ws.seo_prompt_file() == root / "prompts" / "seo.md"
     assert ws.template_dir("flat-lay-01") == root / "mockup-templates" / "flat-lay-01"
     assert (
         ws.template_config_file("flat-lay-01") == ws.template_dir("flat-lay-01") / "template.yaml"

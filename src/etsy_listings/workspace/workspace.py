@@ -286,6 +286,14 @@ class Workspace:
             return []
         return sorted((p for p in shared.glob("*.png") if p.is_file()), key=lambda p: p.name)
 
+    def seo_prompt_file(self) -> Path:
+        """``prompts/seo.md`` -- the seller-editable AI SEO prompt (AI SEO
+        implementation plan, PR3). Reading, seeding, and appending the
+        delimited JSON context around it are the ``ai`` package's job; this
+        accessor only names the file, the same split every other layout
+        accessor draws."""
+        return self.root / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE
+
     def common_copy_dir(self) -> Path:
         return self.root / layout.COMMON_COPY_DIR
 

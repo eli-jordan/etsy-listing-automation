@@ -170,7 +170,9 @@ src/etsy_listings/
                   reads, PrintifyClient writes), models, catalog, products,
                   cache, resolve, fakes                                      [done]
                 etsy/ and limiter Phase 3/6; retry.py done
-  ai/           prompts, generation, hard validation                      [Phase 4]
+  ai/           request/proposal contracts, the packaged default prompt,
+                delimited-context assembly, hard validation, fake providers
+                  [contracts done, PR3; real Codex/Claude adapters, PR4]
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
                 frontend/ -- AppShell/DashboardPage/ListingsPage/

@@ -18,6 +18,12 @@ written by this tool rather than pasted by the user, and rewritten on every
 refresh (PRD 49)."""
 CACHE_DIR = ".cache"
 PROMPTS_DIR = "prompts"
+SEO_PROMPT_FILE = "seo.md"
+"""Inside :data:`PROMPTS_DIR`. Plain seller-editable instruction text the AI
+SEO feature appends its delimited JSON context and response schema to
+(``ai/prompt.py``) -- `setup` seeds a packaged default only when this file is
+absent, and never overwrites seller content (AI SEO implementation plan,
+PR3)."""
 GARMENT_PROFILES_DIR = "garment-profiles"
 PRICING_PLANS_DIR = "pricing-plans"
 DESIGNS_DIR = "designs"
