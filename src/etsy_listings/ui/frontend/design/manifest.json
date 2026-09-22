@@ -10,6 +10,11 @@
       "description": "App-styled fake-data prototype for reviewing and applying one plan across all listings."
     },
     {
+      "name": "listing-seo",
+      "title": "Listing SEO Assistance",
+      "description": "One clickable Listing Details prototype: AI Mode loads inline, then reveals selectable title, lead, and ranked tag suggestions."
+    },
+    {
       "name": "archive",
       "title": "Archive",
       "description": "Retired directions, grouped by feature - history, not options."
@@ -68,6 +73,41 @@
     {
       "name": "demo",
       "frames": 3
+    },
+    {
+      "name": "listing-seo",
+      "frames": 1
+    },
+    {
+      "name": "listing-seo-lofi",
+      "frames": 5
+    },
+    {
+      "name": "listing-seo-lofi-v1",
+      "frames": 5
+    },
+    {
+      "name": "listing-seo-lofi-v2",
+      "frames": 5
+    },
+    {
+      "name": "listing-seo-specs",
+      "frames": 2,
+      "brief": "design/scenes/listing-seo-specs/_brief.md",
+      "title": "Listing SEO assistance — thinking",
+      "description": "Listing SEO assistance - a laptop-first review flow for seller-approved AI copy and description sources."
+    },
+    {
+      "name": "listing-seo-v1",
+      "frames": 5
+    },
+    {
+      "name": "listing-seo-v2",
+      "frames": 5
+    },
+    {
+      "name": "listing-seo-v3",
+      "frames": 5
     }
   ],
   "frames": [
@@ -315,6 +355,307 @@
       "scene": "demo",
       "title": "Demo - welcome",
       "viewport": "mobile"
+    },
+    {
+      "id": "listing-seo-lofi-v1/description-source",
+      "file": "design/scenes/listing-seo-lofi-v1/description-source.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v1",
+      "title": "Listing SEO — description source · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: choose an approved common-copy body or write listing-specific inline body copy."
+    },
+    {
+      "id": "listing-seo-lofi-v1/generating",
+      "file": "design/scenes/listing-seo-lofi-v1/generating.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v1",
+      "title": "Listing SEO — generating · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: a manual generation request is running from a snapshot of the listing’s current facts."
+    },
+    {
+      "id": "listing-seo-lofi-v1/proposal",
+      "file": "design/scenes/listing-seo-lofi-v1/proposal.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v1",
+      "title": "Listing SEO — proposal review · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: compare current and proposed copy, then accept one field or all remaining fields."
+    },
+    {
+      "id": "listing-seo-lofi-v1/readiness",
+      "file": "design/scenes/listing-seo-lofi-v1/readiness.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v1",
+      "title": "Listing SEO — readiness · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: the unavailable SEO action explains its missing inputs on hover."
+    },
+    {
+      "id": "listing-seo-lofi-v1/stale",
+      "file": "design/scenes/listing-seo-lofi-v1/stale.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v1",
+      "title": "Listing SEO — stale proposal · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: a pending proposal is retained but cannot be applied after relevant listing facts change."
+    },
+    {
+      "id": "listing-seo-lofi-v2/description-source",
+      "file": "design/scenes/listing-seo-lofi-v2/description-source.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v2",
+      "title": "Listing SEO — description source · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: choose an approved common-copy body or write listing-specific inline body copy."
+    },
+    {
+      "id": "listing-seo-lofi-v2/generating",
+      "file": "design/scenes/listing-seo-lofi-v2/generating.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v2",
+      "title": "Listing SEO — generating · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: the sparkle action and one quiet status line show generation without displacing the fields."
+    },
+    {
+      "id": "listing-seo-lofi-v2/proposal",
+      "file": "design/scenes/listing-seo-lofi-v2/proposal.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v2",
+      "title": "Listing SEO — attached suggestions · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: each generated value appears in a compact drawer attached to its destination field."
+    },
+    {
+      "id": "listing-seo-lofi-v2/readiness",
+      "file": "design/scenes/listing-seo-lofi-v2/readiness.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v2",
+      "title": "Listing SEO — readiness · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: a subtle disabled sparkle action explains its missing inputs on hover."
+    },
+    {
+      "id": "listing-seo-lofi-v2/stale",
+      "file": "design/scenes/listing-seo-lofi-v2/stale.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi-v2",
+      "title": "Listing SEO — stale suggestion · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: stale attached drawers can be rejected but require regeneration before acceptance."
+    },
+    {
+      "id": "listing-seo-lofi/description-source",
+      "file": "design/scenes/listing-seo-lofi/description-source.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi",
+      "title": "Listing SEO — description source",
+      "viewport": "laptop",
+      "description": "Wireframe: choose an approved common-copy body or write listing-specific inline body copy."
+    },
+    {
+      "id": "listing-seo-lofi/generating",
+      "file": "design/scenes/listing-seo-lofi/generating.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi",
+      "title": "Listing SEO — generating",
+      "viewport": "laptop",
+      "description": "Wireframe: the sparkle action and one quiet status line show generation without displacing the fields."
+    },
+    {
+      "id": "listing-seo-lofi/proposal",
+      "file": "design/scenes/listing-seo-lofi/proposal.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi",
+      "title": "Listing SEO — ranked choices",
+      "viewport": "laptop",
+      "description": "Wireframe: three one-click title and lead choices plus a ranked pool of 20 selectable tags."
+    },
+    {
+      "id": "listing-seo-lofi/readiness",
+      "file": "design/scenes/listing-seo-lofi/readiness.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi",
+      "title": "Listing SEO — readiness",
+      "viewport": "laptop",
+      "description": "Wireframe: a subtle disabled sparkle action explains its missing inputs on hover."
+    },
+    {
+      "id": "listing-seo-lofi/stale",
+      "file": "design/scenes/listing-seo-lofi/stale.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-lofi",
+      "title": "Listing SEO — stale choices",
+      "viewport": "laptop",
+      "description": "Wireframe: stale choices remain dismissible but cannot be selected until AI Mode runs again."
+    },
+    {
+      "id": "listing-seo-specs/decisions",
+      "file": "design/scenes/listing-seo-specs/decisions.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-specs",
+      "title": "Listing SEO — product decisions",
+      "viewport": "laptop",
+      "description": "The approved boundaries for AI-assisted SEO copy on a desktop listing-detail screen.",
+      "intent": "spec",
+      "contentWidth": 760
+    },
+    {
+      "id": "listing-seo-specs/flow",
+      "file": "design/scenes/listing-seo-specs/flow.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-specs",
+      "title": "Listing SEO — agreed flow",
+      "viewport": "laptop",
+      "description": "The seller’s manual generation and field-by-field approval flow before the wireframes.",
+      "intent": "diagram",
+      "contentWidth": 1280
+    },
+    {
+      "id": "listing-seo-v1/failed",
+      "file": "design/scenes/listing-seo-v1/failed.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v1",
+      "title": "Listing SEO — generation failed · v1",
+      "viewport": "laptop",
+      "description": "Hi-fi error state: no invalid proposal reaches the listing after repair and retry fail."
+    },
+    {
+      "id": "listing-seo-v1/loading",
+      "file": "design/scenes/listing-seo-v1/loading.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v1",
+      "title": "Listing SEO — generating · v1",
+      "viewport": "laptop",
+      "description": "Hi-fi loading state: the seller may continue editing while the manual SEO request runs."
+    },
+    {
+      "id": "listing-seo-v1/readiness",
+      "file": "design/scenes/listing-seo-v1/readiness.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v1",
+      "title": "Listing SEO — not ready · v1",
+      "viewport": "laptop",
+      "description": "Hi-fi empty state: the desktop SEO panel explains why generation is unavailable on hover."
+    },
+    {
+      "id": "listing-seo-v1/review",
+      "file": "design/scenes/listing-seo-v1/review.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v1",
+      "title": "Listing SEO — proposal review · v1",
+      "viewport": "laptop",
+      "description": "Working hi-fi frame: the approved desktop review surface for one listing’s AI SEO proposal."
+    },
+    {
+      "id": "listing-seo-v1/stale",
+      "file": "design/scenes/listing-seo-v1/stale.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v1",
+      "title": "Listing SEO — stale · v1",
+      "viewport": "laptop",
+      "description": "Hi-fi stale state: a pending proposal is retained but needs explicit regeneration after relevant facts change."
+    },
+    {
+      "id": "listing-seo-v2/failed",
+      "file": "design/scenes/listing-seo-v2/failed.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v2",
+      "title": "Listing SEO — generation failed · v2",
+      "viewport": "laptop",
+      "description": "Hi-fi error state: a small inline recovery note appears above unchanged listing fields."
+    },
+    {
+      "id": "listing-seo-v2/loading",
+      "file": "design/scenes/listing-seo-v2/loading.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v2",
+      "title": "Listing SEO — generating · v2",
+      "viewport": "laptop",
+      "description": "Hi-fi loading state: a quiet inline status leaves the listing fields available while generation runs."
+    },
+    {
+      "id": "listing-seo-v2/readiness",
+      "file": "design/scenes/listing-seo-v2/readiness.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v2",
+      "title": "Listing SEO — not ready · v2",
+      "viewport": "laptop",
+      "description": "Hi-fi empty state: a subtle disabled sparkle action explains its missing inputs on hover."
+    },
+    {
+      "id": "listing-seo-v2/review",
+      "file": "design/scenes/listing-seo-v2/review.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v2",
+      "title": "Listing SEO — proposal review · v2",
+      "viewport": "laptop",
+      "description": "Working hi-fi frame: compact AI suggestion drawers attach directly beneath the three affected fields."
+    },
+    {
+      "id": "listing-seo-v2/stale",
+      "file": "design/scenes/listing-seo-v2/stale.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v2",
+      "title": "Listing SEO — stale · v2",
+      "viewport": "laptop",
+      "description": "Hi-fi stale state: attached drawers remain dismissible but disable acceptance until regenerated."
+    },
+    {
+      "id": "listing-seo-v3/failed",
+      "file": "design/scenes/listing-seo-v3/failed.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v3",
+      "title": "Listing SEO — generation failed · v3",
+      "viewport": "laptop",
+      "description": "Hi-fi error state: a small inline recovery note appears above unchanged listing fields."
+    },
+    {
+      "id": "listing-seo-v3/loading",
+      "file": "design/scenes/listing-seo-v3/loading.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v3",
+      "title": "Listing SEO — generating · v3",
+      "viewport": "laptop",
+      "description": "Hi-fi loading state: AI Mode shows a quiet inline status while leaving listing fields available."
+    },
+    {
+      "id": "listing-seo-v3/readiness",
+      "file": "design/scenes/listing-seo-v3/readiness.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v3",
+      "title": "Listing SEO — not ready · v3",
+      "viewport": "laptop",
+      "description": "Hi-fi empty state: a subtle disabled sparkle action explains its missing inputs on hover."
+    },
+    {
+      "id": "listing-seo-v3/review",
+      "file": "design/scenes/listing-seo-v3/review.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v3",
+      "title": "Listing SEO — proposal review · v3",
+      "viewport": "laptop",
+      "description": "Working clickable frame: choose among three titles and leads or compose 13 tags from 20 ranked suggestions."
+    },
+    {
+      "id": "listing-seo-v3/stale",
+      "file": "design/scenes/listing-seo-v3/stale.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo-v3",
+      "title": "Listing SEO — stale · v3",
+      "viewport": "laptop",
+      "description": "Hi-fi stale state: attached drawers remain dismissible but disable acceptance until regenerated."
+    },
+    {
+      "id": "listing-seo/review",
+      "file": "design/scenes/listing-seo/review.tsx",
+      "kind": "tsx",
+      "scene": "listing-seo",
+      "title": "Listing SEO — AI Mode prototype",
+      "viewport": "laptop",
+      "description": "Single clickable prototype: AI Mode loads in place, then reveals title, lead, and ranked tag suggestions automatically."
     }
   ]
 }
