@@ -11,6 +11,7 @@ for this seam.
 
 from __future__ import annotations
 
+import threading
 import time
 from pathlib import Path
 
@@ -88,7 +89,7 @@ def test_unavailable_first_provider_falls_through_to_the_second() -> None:
 def _raise_unavailable(provider: str):  # noqa: ANN201 - test helper
     from etsy_listings.ai.errors import ProviderUnavailableError
 
-    def _generate(request, deadline, *, repair=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
         raise ProviderUnavailableError(provider, "not authenticated")
 
     return _generate
@@ -187,13 +188,43 @@ def test_deadline_exceeded_skips_repair_and_surfaces_try_again() -> None:
 def test_cancelled_error_propagates_without_becoming_try_again() -> None:
     codex = FakeSeoProvider(name="codex")
 
-    def _generate(request, deadline, *, repair=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
         raise ProviderCancelledError("codex")
 
     codex.generate = _generate  # type: ignore[method-assign]
 
     with pytest.raises(ProviderCancelledError):
         orchestrator.generate_proposal(_request(), [codex])
+
+
+def test_cancel_event_is_forwarded_to_the_provider() -> None:
+    """`generate_proposal` is the "SEO service" the runtime design says owns
+    cancellation -- it must actually pass the one `threading.Event` PR5's
+    disconnect/Cancel handling will set down to the provider, not merely
+    accept it and drop it on the floor."""
+    codex = FakeSeoProvider(name="codex", responses=[_valid_payload()])
+    cancel_event = threading.Event()
+
+    orchestrator.generate_proposal(_request(), [codex], cancel_event=cancel_event)
+
+    assert codex.cancel_events == [cancel_event]
+
+
+def test_cancel_event_is_forwarded_to_a_repair_call_too() -> None:
+    codex = FakeSeoProvider(name="codex", responses=["not json", _valid_payload()])
+    cancel_event = threading.Event()
+
+    orchestrator.generate_proposal(_request(), [codex], cancel_event=cancel_event)
+
+    assert codex.cancel_events == [cancel_event, cancel_event]
+
+
+def test_no_cancel_event_means_generation_proceeds_uncancelled() -> None:
+    codex = FakeSeoProvider(name="codex", responses=[_valid_payload()])
+
+    orchestrator.generate_proposal(_request(), [codex])
+
+    assert codex.cancel_events == [None]
 
 
 def test_no_providers_configured_raises_all_providers_unavailable() -> None:
@@ -217,11 +248,11 @@ def test_provider_becoming_unavailable_during_repair_surfaces_as_try_again() -> 
     calls = {"count": 0}
     original_generate = codex.generate
 
-    def _generate(request, deadline, *, repair=None):  # noqa: ANN001, ANN202
+    def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
         calls["count"] += 1
         if repair is not None:
             raise ProviderUnavailableError("codex", "quota exhausted mid-repair")
-        return original_generate(request, deadline, repair=repair)
+        return original_generate(request, deadline, repair=repair, cancel_event=cancel_event)
 
     codex.generate = _generate  # type: ignore[method-assign]
     claude = FakeSeoProvider(name="claude", responses=[_valid_payload()])

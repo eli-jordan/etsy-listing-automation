@@ -19,6 +19,7 @@ that to be true.
 
 from __future__ import annotations
 
+import re
 from collections.abc import Sequence
 
 
@@ -100,12 +101,10 @@ _AVAILABILITY_MARKERS: tuple[str, ...] = (
     "authentication failed",
     "unauthorized",
     "unauthenticated",
-    "please run",
+    "forbidden",
     "login required",
     "run `codex login`",
     "run 'codex login'",
-    "401",
-    "403",
     # quota / billing
     "quota",
     "insufficient_quota",
@@ -117,13 +116,25 @@ _AVAILABILITY_MARKERS: tuple[str, ...] = (
     "rate-limited",
     "rate_limit",
     "too many requests",
-    "429",
 )
 """Substrings (matched case-insensitively) that a CLI's own stdout/stderr is
 checked against. Deliberately conservative and stdlib-only: the classifier
 never guesses at an internal error message it does not recognise, per the
 settled plan -- an unrecognised failure is "Try again", not a silent
-fallback to the next provider."""
+fallback to the next provider.
+
+Deliberately excludes bare HTTP status numbers ("401", "403", "429") as
+plain substrings: SEO copy is free-form generated prose that can legitimately
+contain a three-digit number (a street address, a model number, a traceback
+line number), and the settled plan is explicit that an unrecognised failure
+must surface as "Try again", not be silently misread as availability because
+a number happened to appear. :data:`_HTTP_STATUS_PATTERN` below still
+recognises a status code when it is actually reported as one."""
+
+_HTTP_STATUS_PATTERN = re.compile(r"\bhttp\D{0,5}(401|403|429)\b", re.IGNORECASE)
+"""An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
+line -- the one place a bare status number is still trusted, because it is
+anchored to the word "http" rather than floating free in the output."""
 
 
 def classify_process_failure(
@@ -135,11 +146,14 @@ def classify_process_failure(
     again"). Never raises; the caller decides whether/when to raise the
     result.
     """
-    combined = f"{stdout}\n{stderr}".casefold()
+    combined = f"{stdout}\n{stderr}"
+    folded = combined.casefold()
     for marker in _AVAILABILITY_MARKERS:
-        if marker in combined:
+        if marker in folded:
             return ProviderUnavailableError(
                 provider, reason=stderr.strip() or stdout.strip() or marker
             )
+    if _HTTP_STATUS_PATTERN.search(combined):
+        return ProviderUnavailableError(provider, reason=stderr.strip() or stdout.strip())
     detail = stderr.strip() or stdout.strip()
     return ProviderGenerationError(provider, returncode, detail)

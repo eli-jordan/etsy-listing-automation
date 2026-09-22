@@ -14,10 +14,21 @@ job; nothing here launches a subprocess.
 expressed as a second, identical `generate(request, deadline)` call once a
 real CLI adapter is behind it. It defaults to `None`, so every PR3 call site
 that only ever wanted a first attempt is unaffected.
+
+`generate`'s ``cancel_event`` keyword is PR4's other addition: the runtime
+design's "SEO service" box is where the settled "Cancellation" decision says
+the backend terminates a request's subprocess tree once the browser aborts
+it. Both real adapters (`ai/codex.py`, `ai/claude.py`) already accept and
+forward it to `ai/process.py.run_managed`; it belongs on the protocol too so
+`ai/orchestrator.py.generate_proposal` -- the one place that drives a
+provider without knowing whether it is real or fake -- has somewhere to pass
+the one `threading.Event` PR5's disconnect/Cancel handling will set. Defaults
+to `None`, same as ``repair``, so it is additive for the same reason.
 """
 
 from __future__ import annotations
 
+import threading
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
@@ -48,6 +59,7 @@ class SeoProvider(Protocol):
         deadline: Deadline,
         *,
         repair: RepairContext | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> RawProviderResult: ...
 
 
@@ -66,7 +78,10 @@ class FakeSeoProvider:
     `SeoRequest` this provider was asked to handle, for a test to assert on
     what the orchestrator actually sent; ``repairs`` records the matching
     ``repair`` argument for each of those calls (``None`` for an ordinary
-    first attempt), same length and order as ``requests``.
+    first attempt), same length and order as ``requests``. ``cancel_events``
+    records the matching ``cancel_event`` argument the same way, so a test
+    can assert the orchestrator forwarded the one cancellation signal it was
+    given rather than silently dropping it.
     """
 
     name: str
@@ -74,6 +89,7 @@ class FakeSeoProvider:
     ready: ProviderReadiness = field(default_factory=lambda: ProviderReadiness(ready=True))
     requests: list[SeoRequest] = field(default_factory=list, init=False)
     repairs: list[RepairContext | None] = field(default_factory=list, init=False)
+    cancel_events: list[threading.Event | None] = field(default_factory=list, init=False)
 
     def readiness(self) -> ProviderReadiness:
         return self.ready
@@ -84,9 +100,11 @@ class FakeSeoProvider:
         deadline: Deadline,
         *,
         repair: RepairContext | None = None,
+        cancel_event: threading.Event | None = None,
     ) -> RawProviderResult:
         self.requests.append(request)
         self.repairs.append(repair)
+        self.cancel_events.append(cancel_event)
         if not self.responses:
             raise AssertionError(
                 f"FakeSeoProvider {self.name!r} was asked to generate with no queued "

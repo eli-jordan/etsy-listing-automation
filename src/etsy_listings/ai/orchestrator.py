@@ -35,6 +35,7 @@ Classification summary (implementation plan, "Timeout and retries"):
 from __future__ import annotations
 
 import json
+import threading
 from collections.abc import Mapping, Sequence
 
 from etsy_listings.ai.errors import (
@@ -84,6 +85,7 @@ def _resolve(
     deadline: Deadline,
     raw_output: str,
     provider_name: str,
+    cancel_event: threading.Event | None,
 ) -> SeoProposal:
     try:
         return _decode_and_validate(raw_output)
@@ -99,6 +101,7 @@ def _resolve(
                 request,
                 deadline,
                 repair=RepairContext(prior_raw_output=raw_output, reasons=first_error.reasons),
+                cancel_event=cancel_event,
             )
         except ProviderUnavailableError as repair_error:
             raise SeoTryAgainError(
@@ -119,10 +122,21 @@ def generate_proposal(
     *,
     deadline: Deadline | None = None,
     seconds: float = _DEFAULT_SECONDS,
+    cancel_event: threading.Event | None = None,
 ) -> SeoProposal:
     """Try ``providers`` in order -- Codex, then Claude, per the settled
     plan -- against ``request``, within one shared ``deadline`` (a fresh
     ``seconds``-second one is started if none is given).
+
+    ``cancel_event`` is the one `threading.Event` the settled "Cancellation"
+    decision describes: the browser leaving the editor or its connection
+    closing (PR5's job to detect) sets it, and this is the single place that
+    forwards it to whichever provider is currently running -- both real
+    adapters (`ai/codex.py`, `ai/claude.py`) already pass it straight through
+    to `ai/process.py.run_managed`, which is what actually kills the
+    subprocess tree. Left `None`, generation is simply not cancellable,
+    which is what every existing call site (and every `FakeSeoProvider` test)
+    wants.
 
     Returns a validated `SeoProposal`, or raises: `SeoAllProvidersUnavailableError`
     if every provider answered with a recognised availability failure,
@@ -140,10 +154,10 @@ def generate_proposal(
                 "the shared deadline expired before every configured provider could be tried"
             )
         try:
-            raw = provider.generate(request, deadline)
+            raw = provider.generate(request, deadline, cancel_event=cancel_event)
         except ProviderUnavailableError as exc:
             unavailable_reasons.append(str(exc))
             continue
-        return _resolve(provider, request, deadline, raw.raw_output, raw.provider)
+        return _resolve(provider, request, deadline, raw.raw_output, raw.provider, cancel_event)
 
     raise SeoAllProvidersUnavailableError(unavailable_reasons)
