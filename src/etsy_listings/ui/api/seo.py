@@ -58,6 +58,7 @@ from etsy_listings.ai.errors import (
 )
 from etsy_listings.ai.models import GarmentContext, SeoProposal, SeoRequest
 from etsy_listings.ai.orchestrator import generate_proposal
+from etsy_listings.ai.process import CliProcessError
 from etsy_listings.ai.providers import SeoProvider
 from etsy_listings.config.listing import Listing
 from etsy_listings.ui.api.listings import Existing
@@ -356,10 +357,15 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
     *different* listing's request is never refused). Every failure the
     orchestrator itself can raise maps onto the settled "Timeout and
     retries" outcomes: 503 when every provider was recognised-unavailable,
-    502 for everything else the plan calls "Try again". A cancellation
-    (browser disconnect) answers 499 -- there is usually nobody left to
-    receive it, but the request must still resolve to *something* so this
-    coroutine, and the process it was managing, both end cleanly.
+    502 for everything else the plan calls "Try again" -- including
+    `CliProcessError`, which is not a `SeoGenerationError` (it is
+    `ai/process.py.run_managed` reporting the child process could not even
+    be started, e.g. a binary readiness confirmed present and then removed
+    before this call) and would otherwise escape as an unmapped 500. A
+    cancellation (browser disconnect) answers 499 -- there is usually
+    nobody left to receive it, but the request must still resolve to
+    *something* so this coroutine, and the process it was managing, both
+    end cleanly.
 
     Returns only what item 4 permits: the validated proposal, the input
     snapshot, and expiry metadata. Nothing here is written to a workspace
@@ -388,7 +394,7 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
         raise HTTPException(status_code=499, detail=str(exc)) from exc
     except SeoAllProvidersUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except SeoTryAgainError as exc:
+    except (SeoTryAgainError, CliProcessError) as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         active.end(name)

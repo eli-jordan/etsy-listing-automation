@@ -298,6 +298,35 @@ def test_proposal_499s_when_generation_is_cancelled(workspace_root: Path) -> Non
     assert response.status_code == 499
 
 
+def test_proposal_502s_when_the_provider_process_cannot_even_start(
+    workspace_root: Path,
+) -> None:
+    """`CliProcessError` (`ai/process.py.run_managed`'s own report that
+    `subprocess.Popen` itself failed -- e.g. a binary readiness confirmed
+    present and then removed before this call) is not a `SeoGenerationError`
+    subclass. Without an explicit mapping this would escape as an unmapped
+    500 instead of the "Try again" outcome the settled "Timeout and
+    retries" decision promises for every failure that is not a recognised
+    availability or a cancellation."""
+    from etsy_listings.ai.process import CliProcessError
+
+    provider = _ready_provider()
+
+    def _raise_cli_process_error(
+        request: SeoRequest, deadline: Any, *, repair: Any = None, cancel_event: Any = None
+    ) -> RawProviderResult:
+        raise CliProcessError("could not start ['codex', 'exec']: [WinError 2]")
+
+    provider.generate = _raise_cli_process_error  # type: ignore[method-assign]
+    _seed_prompt(workspace_root)
+
+    with _client(workspace_root, providers=[provider]) as c:
+        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
+
+    assert response.status_code == 502
+    assert "could not start" in response.json()["detail"]
+
+
 def test_proposal_409s_for_a_listing_with_no_usable_garment_profile(
     workspace_root: Path,
 ) -> None:
