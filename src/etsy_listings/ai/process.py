@@ -53,6 +53,12 @@ ever *calls* it on the POSIX branch below. Resolved once, defensively, with
 `os.kill`'s own numeric fallback (9), so importing this module never depends
 on which platform it happens to run on."""
 
+_CREATE_NEW_PROCESS_GROUP = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x00000200)
+"""Mirrors `_SIGKILL`'s reasoning for the opposite platform:
+`subprocess.CREATE_NEW_PROCESS_GROUP` does not exist on POSIX. `0x00000200`
+is that flag's own documented numeric value on Windows, used only as a
+fallback that is never actually reached there."""
+
 
 class CliProcessError(RuntimeError):
     """The child process could not even be started -- the executable is
@@ -86,7 +92,7 @@ def _new_process_group_kwargs() -> dict[str, Any]:
     terminate it and everything it spawned without also touching this
     process's own group."""
     if sys.platform == "win32":
-        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+        return {"creationflags": _CREATE_NEW_PROCESS_GROUP}
     return {"start_new_session": True}
 
 

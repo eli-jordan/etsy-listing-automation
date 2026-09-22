@@ -11,7 +11,6 @@ on which platform) without depending on timing or an actual hung process.
 
 from __future__ import annotations
 
-import subprocess
 import threading
 import time
 from pathlib import Path
@@ -218,8 +217,13 @@ def test_new_process_group_kwargs_on_posix(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_new_process_group_kwargs_on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(process.sys, "platform", "win32")
+    # `subprocess.CREATE_NEW_PROCESS_GROUP` does not exist as a real
+    # attribute on a POSIX host at all, so this compares against the same
+    # defensively-resolved constant `_new_process_group_kwargs` itself uses
+    # (`process._CREATE_NEW_PROCESS_GROUP`), not the module attribute
+    # directly -- mirrors `process._SIGKILL` below for the opposite platform.
     assert process._new_process_group_kwargs() == {
-        "creationflags": subprocess.CREATE_NEW_PROCESS_GROUP
+        "creationflags": process._CREATE_NEW_PROCESS_GROUP
     }
 
 
