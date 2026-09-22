@@ -62,8 +62,8 @@ def check_garment_profile_chosen(garment_profile: str) -> Blocked | None:
     return _refuse(rules.check_garment_profile_chosen(garment_profile))
 
 
-def check_copy_is_concrete(*, title: str, description: str) -> Blocked | None:
-    return _refuse(rules.check_copy_is_concrete(title=title, description=description))
+def check_copy_is_concrete(*, title: str, lead: str) -> Blocked | None:
+    return _refuse(rules.check_copy_is_concrete(title=title, lead=lead))
 
 
 def check_lifecycle_verb(lifecycle: str | None, *, published: bool) -> Blocked | None:

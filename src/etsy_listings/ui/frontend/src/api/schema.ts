@@ -1004,6 +1004,18 @@ export interface components {
       /** Name */
       name: string;
     };
+    /** DescriptionConfig */
+    DescriptionConfig: {
+      /**
+       * Lead
+       * @default
+       */
+      lead: string;
+      /** Ref */
+      ref?: string | null;
+      /** Text */
+      text?: string | null;
+    };
     /**
      * DesignSummary
      * @description One entry in the calibrator's test-design library (A19).
@@ -1087,10 +1099,11 @@ export interface components {
     /** EtsyListingConfig */
     EtsyListingConfig: {
       /**
-       * Description
-       * @default
+       * @default {
+       *       "lead": ""
+       *     }
        */
-      description: string;
+      description: components["schemas"]["DescriptionConfig"];
       /** Renewal */
       renewal?: ("manual" | "auto") | null;
       /** Section */
@@ -1099,9 +1112,9 @@ export interface components {
       shipping_profile?: string | null;
       /**
        * Tags
-       * @default <generate>
+       * @default []
        */
-      tags: string[] | "<generate>";
+      tags: string[];
       /**
        * Title
        * @default
@@ -1340,8 +1353,10 @@ export interface components {
       };
       /**
        * @default {
-       *       "description": "",
-       *       "tags": "<generate>",
+       *       "description": {
+       *         "lead": ""
+       *       },
+       *       "tags": [],
        *       "title": ""
        *     }
        */

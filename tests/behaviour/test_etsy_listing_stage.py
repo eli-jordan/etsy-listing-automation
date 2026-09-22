@@ -98,13 +98,56 @@ def test_no_etsy_shop_id_blocks(workspace_root: Path, etsy) -> None:
     assert "setup" in stage_plan.blocked
 
 
-def test_generate_sentinel_copy_blocks(root: Path, etsy) -> None:
-    edit_listing(root, etsy={"title": "<generate>", "description": "<generate>"})
+def test_empty_copy_blocks(root: Path, etsy) -> None:
+    edit_listing(root, etsy={"title": "", "description": {"lead": ""}})
 
     stage_plan = _stage_plan(_ctx(root, etsy), a_lock())
 
     assert stage_plan.blocked is not None
-    assert "<generate>" in stage_plan.blocked
+    assert "empty" in stage_plan.blocked
+
+
+def test_a_common_copy_ref_composes_into_the_patched_description(root: Path, etsy) -> None:
+    """The one shared composition path (AI SEO implementation plan, PR2):
+    ``workspace.compose_description`` loads the ref and joins it with the
+    lead, and this stage sends exactly that string, never the raw struct."""
+    common_copy = root / "common-copy"
+    common_copy.mkdir()
+    (common_copy / "comfort-colors.md").write_text(
+        "---\ntitle: Comfort Colors\ntargets: [description]\n---\n"
+        "Printed to order on a heavyweight shirt.",
+        encoding="utf-8",
+    )
+    edit_listing(
+        root,
+        etsy={
+            "title": "Take A Hike Tee",
+            "description": {"lead": "A retro sunset.", "ref": "common-copy/comfort-colors.md"},
+        },
+    )
+
+    result = _apply(_ctx(root, etsy), _lock_with_listing_id())
+
+    patch = etsy.updated[-1]
+    assert patch["description"] == ("A retro sunset.\n\nPrinted to order on a heavyweight shirt.")
+    assert result.applied["etsy_listing"]["description"] == (
+        "A retro sunset.\n\nPrinted to order on a heavyweight shirt."
+    )
+
+
+def test_a_missing_common_copy_ref_blocks_the_stage(root: Path, etsy) -> None:
+    edit_listing(
+        root,
+        etsy={
+            "title": "Take A Hike Tee",
+            "description": {"lead": "A retro sunset.", "ref": "common-copy/missing.md"},
+        },
+    )
+
+    stage_plan = _stage_plan(_ctx(root, etsy), a_lock())
+
+    assert stage_plan.blocked is not None
+    assert "common-copy/missing.md" in stage_plan.blocked
 
 
 def test_no_shipping_profile_configured_blocks(workspace_root: Path, etsy) -> None:
@@ -156,7 +199,7 @@ def test_an_unresolvable_section_blocks(root: Path, etsy) -> None:
         root,
         etsy={
             "title": "Take A Hike Tee",
-            "description": "A retro sunset.",
+            "description": {"lead": "A retro sunset."},
             "section": "Retro Tees",
         },
     )
@@ -248,7 +291,7 @@ def test_the_drift_names_a_live_section_when_the_catalog_knows_it(root: Path) ->
         root,
         etsy={
             "title": "Take A Hike Tee",
-            "description": "A retro sunset.",
+            "description": {"lead": "A retro sunset."},
             "section": "Retro Tees",
         },
     )

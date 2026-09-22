@@ -19,6 +19,7 @@ import yaml
 from pydantic import ValidationError
 
 from etsy_listings.config.defaults import Defaults
+from etsy_listings.config.description import DescriptionConfig, compose_description
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile
@@ -34,6 +35,11 @@ from etsy_listings.config.slug import ColourExceptions
 from etsy_listings.render.config import AnyTemplate, dump_template_config
 from etsy_listings.render.config import load_template_config as parse_template_config
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.common_copy import (
+    CommonCopyDocument,
+    CommonCopyError,
+    parse_common_copy,
+)
 from etsy_listings.workspace.userpath import to_native_path
 
 
@@ -279,6 +285,67 @@ class Workspace:
         if not shared.is_dir():
             return []
         return sorted((p for p in shared.glob("*.png") if p.is_file()), key=lambda p: p.name)
+
+    def common_copy_dir(self) -> Path:
+        return self.root / layout.COMMON_COPY_DIR
+
+    def common_copy_file(self, ref: str) -> Path:
+        """Verify a `description.ref` and resolve it -- beneath
+        `common-copy/` only (PRD's description model).
+
+        Unlike `design:`/`pricing_plan:` refs, which are written relative to
+        the listing's own directory, a common-copy ref is portable: written
+        once, relative to the workspace root, the same wherever it is
+        referenced from (`common-copy/comfort-colors.md`, never
+        `../../common-copy/...`). It still goes through :meth:`resolve` for
+        the general escape checks (absolute paths, `..` past the root,
+        Windows drive forms), plus one more: the result must actually land
+        inside :meth:`common_copy_dir`, so `common-copy/../listings/x` -- inside
+        the workspace, but not common copy -- is refused exactly like an
+        escape, rather than quietly resolving to someone else's file.
+        """
+        prefix = f"{layout.COMMON_COPY_DIR}/"
+        if not ref.startswith(prefix):
+            raise PathEscapesWorkspaceError(ref, self.root)
+        candidate = self.resolve(ref, relative_to=self.root)
+        try:
+            candidate.relative_to(self.common_copy_dir())
+        except ValueError as exc:
+            raise PathEscapesWorkspaceError(ref, self.root) from exc
+        return candidate
+
+    def load_common_copy(self, ref: str) -> CommonCopyDocument:
+        """A `description.ref`'s parsed front matter and body.
+
+        The one place a common-copy file's bytes are read: `common_copy.py`'s
+        :func:`~etsy_listings.workspace.common_copy.parse_common_copy` owns the
+        parsing itself (pure, tested directly against string fixtures), and
+        this is the I/O around it -- the same split `load_template_config`
+        already draws between reading `template.yaml` and parsing it.
+        """
+        path = self.common_copy_file(ref)
+        if not path.is_file():
+            raise CommonCopyError(f"{ref!r}: file not found")
+        return parse_common_copy(ref, path.read_text(encoding="utf-8"))
+
+    def compose_description(self, description: DescriptionConfig) -> str:
+        """The final concrete `etsy.description` text -- the one shared
+        resolver every deployment reader (Printify, Etsy, snapshots, diffs,
+        local validation, the UI preview) is required to call, rather than
+        each re-deriving it (docs/ai-seo-implementation-plan.md,
+        "Description and common-copy boundaries").
+
+        Loads ``description.ref`` through :meth:`load_common_copy` when one is
+        set -- raising :class:`~etsy_listings.workspace.common_copy.CommonCopyError`
+        for a caller to turn into a `Blocked` stage or a banner issue -- then
+        hands the resolved lead/body pair to the pure
+        :func:`~etsy_listings.config.description.compose_description`, which
+        knows nothing about `ref` or the filesystem.
+        """
+        text = description.text
+        if description.ref is not None:
+            text = self.load_common_copy(description.ref).body
+        return compose_description(description.lead, text)
 
     def garment_profile_names(self) -> list[str]:
         garment_profiles = self.root / layout.GARMENT_PROFILES_DIR

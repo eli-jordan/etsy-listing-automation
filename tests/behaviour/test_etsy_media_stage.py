@@ -374,14 +374,7 @@ def test_variation_images_links_each_colour_to_its_uploaded_image(
 ) -> None:
     _write_renders(workspace_root)
     _seed_inventory(etsy)
-    edit_listing(
-        workspace_root,
-        etsy={
-            "title": "<generate>",
-            "description": "<generate>",
-            "variation_images": TEMPLATE,
-        },
-    )
+    edit_listing(workspace_root, etsy={"variation_images": TEMPLATE})
     ctx = _ctx(workspace_root, etsy)
 
     lock = _apply(ctx, _lock_with_listing_id())
@@ -399,14 +392,7 @@ def test_no_matching_colour_property_skips_the_feature_without_failing(
 ) -> None:
     """No inventory seeded at all -- decision 6's "reports and does nothing"."""
     _write_renders(workspace_root)
-    edit_listing(
-        workspace_root,
-        etsy={
-            "title": "<generate>",
-            "description": "<generate>",
-            "variation_images": TEMPLATE,
-        },
-    )
+    edit_listing(workspace_root, etsy={"variation_images": TEMPLATE})
     ctx = _ctx(workspace_root, etsy)
 
     _apply(ctx, _lock_with_listing_id())

@@ -135,7 +135,13 @@ src/etsy_listings/
                 facts.py — the garment profiles and template configs a listing
                   check reads, gathered once per request instead of re-parsed
                   inside every check of every row
+                common_copy.py — `common-copy/*.md` front-matter parsing, pure;
+                  `Workspace.load_common_copy`/`compose_description` are the
+                  I/O and the one shared resolver around it (AI SEO plan PR2)
   config/       pydantic models, Money type, slugification     [done]
+                description.py — `etsy.description`'s lead/text/ref model and
+                  the pure `compose_description(lead, text)` join rule every
+                  deployment reader shares (AI SEO plan PR2)
                 listing_validation.py — every reason a listing cannot run, as
                   far as its own files can tell. One module, two readers: the
                   editor's issues banner and (through `engine/stages/gates.py`)

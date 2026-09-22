@@ -13,6 +13,7 @@ from pathlib import Path
 
 from PIL import Image
 
+from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
 from etsy_listings.config.listing import EtsyListingConfig, Listing, TemplateMediaEntry
 from etsy_listings.config.listing_validation import (
@@ -65,7 +66,7 @@ def _listing(
         else [TemplateMediaEntry(template="flat-lay-01", colour="black")],
         etsy=EtsyListingConfig(
             title=title,
-            description=description,
+            description=DescriptionConfig(lead=description),
             tags=tags if tags is not None else ["hiking"],
             variation_images=variation_images,
         ),
@@ -81,6 +82,7 @@ def _check(
     design_paths: dict[str, Path] | None = None,
     templates: dict[str, TemplateInfo] | None = None,
     published: bool | None = None,
+    description_ref_error: str | None = None,
 ) -> list[Issue]:
     return check_listing(
         listing,
@@ -91,6 +93,7 @@ def _check(
         design_paths=design_paths if design_paths is not None else {},
         templates=templates if templates is not None else {"flat-lay-01": FLAT_LAY},
         published=published,
+        description_ref_error=description_ref_error,
     )
 
 
@@ -99,30 +102,71 @@ def _where(issues: list[Issue], tab: str) -> list[Issue]:
 
 
 class TestCopyIsConcrete:
-    def test_a_generate_title_blocks_and_names_the_title(self) -> None:
-        issues = _check(_listing(title="<generate>"))
+    def test_an_empty_title_blocks_and_names_the_title(self) -> None:
+        issues = _check(_listing(title=""))
         blocking = [i for i in issues if i.severity == "block" and i.tab == "details"]
         assert len(blocking) == 1
         assert blocking[0].where == "Listing Details › Title"
 
-    def test_a_generate_description_blocks_and_names_the_description_not_the_title(
+    def test_an_empty_lead_blocks_and_names_the_description_not_the_title(
         self,
     ) -> None:
         """A real regression: the description's own failure used to be
         reported under the Title field, so fixing the title never cleared an
         issue that was actually about the description."""
-        issues = _check(_listing(description="<generate>"))
+        issues = _check(_listing(description=""))
         blocking = [i for i in issues if i.severity == "block" and i.tab == "details"]
         assert len(blocking) == 1
         assert blocking[0].where == "Listing Details › Description"
 
-    def test_both_generate_blocks_on_both_independently(self) -> None:
-        issues = _check(_listing(title="<generate>", description="<generate>"))
+    def test_both_empty_blocks_on_both_independently(self) -> None:
+        issues = _check(_listing(title="", description=""))
         wheres = {i.where for i in issues if i.severity == "block" and i.tab == "details"}
         assert wheres == {"Listing Details › Title", "Listing Details › Description"}
 
     def test_real_copy_raises_no_issue(self) -> None:
         assert _check(_listing()) == []
+
+    def test_a_non_empty_body_does_not_excuse_an_empty_lead(self) -> None:
+        """The lead is required regardless of the body (PRD's description
+        model) -- a listing-specific `text` filled in must not quiet the
+        lead's own block."""
+        listing = _listing()
+        etsy = listing.etsy.model_copy(
+            update={"description": DescriptionConfig(lead="", text="Printed to order.")}
+        )
+        issues = _check(listing.model_copy(update={"etsy": etsy}))
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "details"]
+        assert any(i.where == "Listing Details › Description" for i in blocking)
+
+
+class TestDescriptionRef:
+    def _with_ref(self, ref: str) -> Listing:
+        listing = _listing()
+        etsy = listing.etsy.model_copy(
+            update={"description": DescriptionConfig(lead="A retro sunset scene.", ref=ref)}
+        )
+        return listing.model_copy(update={"etsy": etsy})
+
+    def test_a_ref_error_blocks_and_names_the_description(self) -> None:
+        listing = self._with_ref("common-copy/missing.md")
+        issues = _check(listing, description_ref_error="'common-copy/missing.md': file not found")
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "details"]
+        assert any(
+            i.where == "Listing Details › Description" and "file not found" in i.message
+            for i in blocking
+        )
+
+    def test_no_ref_error_raises_no_issue(self) -> None:
+        listing = self._with_ref("common-copy/comfort-colors.md")
+        issues = _check(listing, description_ref_error=None)
+        assert not any("file not found" in i.message for i in issues)
+
+    def test_a_ref_error_is_ignored_when_the_listing_has_no_ref(self) -> None:
+        """The caller only attempts the load when a ref is actually set; this
+        guards the shape even if it ever passed one anyway."""
+        issues = _check(_listing(), description_ref_error="should never be used")
+        assert not any("should never be used" in i.message for i in issues)
 
 
 class TestDesignResolution:
@@ -259,14 +303,6 @@ class TestTags:
     def test_some_tags_raises_no_issue(self) -> None:
         assert not any("no tags" in i.message.lower() for i in _check(_listing()))
 
-    def test_a_generate_tags_sentinel_is_not_treated_as_empty(self) -> None:
-        """`<generate>` is a Literal sentinel, not a list -- structural, and
-        never this module's to flag."""
-        listing = _listing()
-        generate_tags_etsy = listing.etsy.model_copy(update={"tags": "<generate>"})
-        listing = listing.model_copy(update={"etsy": generate_tags_etsy})
-        assert not any(i.tab == "details" and "tag" in i.message.lower() for i in _check(listing))
-
 
 class TestColourInGarmentProfile:
     def test_a_colour_the_profile_does_not_classify_warns(self) -> None:
@@ -293,7 +329,7 @@ class TestIndependentChecks:
 
     def test_multiple_problems_all_surface_together(self) -> None:
         issues = _check(
-            _listing(colors=[], media=[], tags=[], title="<generate>"),
+            _listing(colors=[], media=[], tags=[], title=""),
             garment_profile_names=[],
         )
         tabs = {i.tab for i in issues}

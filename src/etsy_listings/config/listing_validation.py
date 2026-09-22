@@ -44,7 +44,7 @@ from typing import Literal
 from PIL import Image, UnidentifiedImageError
 
 from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import GENERATE, Listing, TemplateMediaEntry
+from etsy_listings.config.listing import Listing, TemplateMediaEntry
 
 Severity = Literal["block", "warn"]
 Tab = Literal["variants", "images", "details"]
@@ -191,13 +191,16 @@ def check_garment_profile_chosen(garment_profile: str) -> list[Issue]:
     ]
 
 
-def check_copy_is_concrete(*, title: str, description: str) -> list[Issue]:
-    """Refuse a `<generate>` sentinel or blank copy before a product is created.
+def check_copy_is_concrete(*, title: str, lead: str) -> list[Issue]:
+    """Refuse blank copy before a product is created.
 
-    The product carries the listing's own title and description (PRD 44) --
-    Printify's create call requires both, and they are the duplicate guard's
-    match key (PRD 48). Neither job survives the literal string
-    ``"<generate>"``.
+    The product carries the listing's own title and composed description (PRD
+    44) -- Printify's create call requires both, and they are the duplicate
+    guard's match key (PRD 48). ``lead`` rather than the full composed
+    description: the description model's lead is required and its body is
+    optional (PRD's description model), so this is the same "deployment
+    blocked until it is non-empty" rule the lead itself carries, checked here
+    for the one reason nothing downstream would catch it.
 
     One issue per offending field, so the banner can point at the field that is
     actually wrong. That used to need a placeholder string passed in for
@@ -206,34 +209,41 @@ def check_copy_is_concrete(*, title: str, description: str) -> list[Issue]:
     -- a workaround for a shape, now that the shape is a list.
     """
     issues: list[Issue] = []
-    for field, value in (("title", title), ("description", description)):
+    for field, value in (("title", title), ("description", lead)):
+        if value.strip():
+            continue
         where = _COPY_WHERE[field]
-        if value == GENERATE:
-            issues.append(
-                Issue(
-                    "block",
-                    "details",
-                    where,
-                    f"etsy.{field} is still <generate>, and Printify needs a real one to "
-                    f"create the product with (it is also how a re-run recognises the "
-                    f"product as this listing's).\n"
-                    f"Write it in listing.yaml. Copy generation arrives in Phase 4.",
-                )
-            )
-        elif not value.strip():
-            issues.append(
-                Issue(
-                    "block",
-                    "details",
-                    where,
-                    f"etsy.{field} is empty, and Printify requires it to create a product.",
-                )
-            )
+        detail = (
+            "etsy.description.lead is empty. The lead is the opening paragraph a "
+            "shopper reads, and deployment is blocked until it is set."
+            if field == "description"
+            else "etsy.title is empty, and Printify requires it to create a product "
+            "(it is also how a re-run recognises the product as this listing's)."
+        )
+        issues.append(Issue("block", "details", where, detail))
     return issues
 
 
-def _check_copy(listing: Listing) -> list[Issue]:
-    return check_copy_is_concrete(title=listing.etsy.title, description=listing.etsy.description)
+def check_description_ref(ref: str | None, error: str | None) -> list[Issue]:
+    """Refuse a `description.ref` that does not resolve to usable common copy.
+
+    ``error`` is the message a caller's own
+    :meth:`~etsy_listings.workspace.workspace.Workspace.load_common_copy`
+    attempt raised, or ``None`` when it resolved fine -- this module never
+    touches the filesystem itself (see this file's own docstring), so the
+    caller has already done the one read that can fail and hands back only
+    the sentence, the same way `design_paths` arrives pre-resolved for
+    :func:`check_design_resolution`'s caller to have tried first.
+    """
+    if ref is None or error is None:
+        return []
+    return [Issue("block", "details", _COPY_WHERE["description"], error)]
+
+
+def _check_copy(listing: Listing, *, description_ref_error: str | None) -> list[Issue]:
+    issues = check_copy_is_concrete(title=listing.etsy.title, lead=listing.etsy.description.lead)
+    issues += check_description_ref(listing.etsy.description.ref, description_ref_error)
+    return issues
 
 
 def _check_design(design_paths: Mapping[str, Path], profile: GarmentProfile) -> list[Issue]:
@@ -467,6 +477,7 @@ def check_listing(
     design_paths: Mapping[str, Path],
     templates: Mapping[str, TemplateInfo],
     published: bool | None = None,
+    description_ref_error: str | None = None,
 ) -> list[Issue]:
     """Every business-level issue with ``listing``, assuming it already passed
     `Listing.model_validate` -- structural failures are the API layer's to
@@ -477,6 +488,11 @@ def check_listing(
     colour classification) have nothing to check against then and are
     skipped, leaving :func:`_check_garment_profile_exists`'s block as the one
     issue that matters.
+
+    ``description_ref_error`` is the caller's own
+    ``Workspace.load_common_copy(listing.etsy.description.ref)`` attempt,
+    pre-resolved the same way ``design_paths`` is -- ``None`` when there is no
+    ref to check, or when it resolved fine.
     """
     issues: list[Issue] = []
     issues += _check_garment_profile_exists(listing, garment_profile_names)
@@ -484,7 +500,7 @@ def check_listing(
     issues += _check_colours_enabled(listing)
     issues += _check_price_source(listing)
     issues += _check_media_present(listing)
-    issues += _check_copy(listing)
+    issues += _check_copy(listing, description_ref_error=description_ref_error)
     if garment_profile is not None:
         issues += _check_design(design_paths, garment_profile)
         issues += _check_colours_in_garment_profile(listing, garment_profile)

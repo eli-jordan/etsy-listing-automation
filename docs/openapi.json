@@ -495,6 +495,40 @@
         "title": "CreateListingRequest",
         "type": "object"
       },
+      "DescriptionConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "lead": {
+            "default": "",
+            "title": "Lead",
+            "type": "string"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "title": "DescriptionConfig",
+        "type": "object"
+      },
       "DesignSummary": {
         "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
         "properties": {
@@ -623,9 +657,10 @@
         "additionalProperties": false,
         "properties": {
           "description": {
-            "default": "",
-            "title": "Description",
-            "type": "string"
+            "$ref": "#/components/schemas/DescriptionConfig",
+            "default": {
+              "lead": ""
+            }
           },
           "renewal": {
             "anyOf": [
@@ -665,20 +700,12 @@
             "title": "Shipping Profile"
           },
           "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "const": "<generate>",
-                "type": "string"
-              }
-            ],
-            "default": "<generate>",
-            "title": "Tags"
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
           },
           "title": {
             "default": "",
@@ -1238,8 +1265,10 @@
           "etsy": {
             "$ref": "#/components/schemas/EtsyListingConfig",
             "default": {
-              "description": "",
-              "tags": "<generate>",
+              "description": {
+                "lead": ""
+              },
+              "tags": [],
               "title": ""
             }
           },

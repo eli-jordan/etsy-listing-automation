@@ -2,8 +2,7 @@
 
 Each exists because nothing downstream would catch the mistake. Printify
 accepted a 120x140 PNG onto a 4200x4800 print area without a warning, and it
-requires a title, so a `<generate>` sentinel would be published as the literal
-string.
+requires a title, so an empty one would be published as an empty string.
 
 The garment-change refusal used to live here too. It reads the product stage's
 own applied document, so it moved beside it -- see
@@ -118,29 +117,35 @@ def test_a_file_that_is_not_an_image_is_refused(tmp_path: Path) -> None:
 
 
 def test_real_copy_passes() -> None:
-    assert check_copy_is_concrete(title="Take A Hike Tee", description="A retro sunset.") is None
+    assert check_copy_is_concrete(title="Take A Hike Tee", lead="A retro sunset.") is None
 
 
-@pytest.mark.parametrize("title", ["<generate>", "", "   "])
-def test_an_unresolved_or_empty_title_is_refused(title: str) -> None:
-    assert "title" in _refusal(check_copy_is_concrete(title=title, description="A retro sunset."))
+@pytest.mark.parametrize("title", ["", "   "])
+def test_an_empty_title_is_refused(title: str) -> None:
+    assert "title" in _refusal(check_copy_is_concrete(title=title, lead="A retro sunset."))
 
 
-@pytest.mark.parametrize("description", ["<generate>", "", "   "])
-def test_an_unresolved_or_empty_description_is_refused(description: str) -> None:
-    assert "description" in _refusal(
-        check_copy_is_concrete(title="Take A Hike Tee", description=description)
-    )
+@pytest.mark.parametrize("lead", ["", "   "])
+def test_an_empty_lead_is_refused(lead: str) -> None:
+    assert "description" in _refusal(check_copy_is_concrete(title="Take A Hike Tee", lead=lead))
 
 
-def test_the_refusal_says_why_a_product_needs_them() -> None:
+def test_the_refusal_says_why_a_product_needs_a_title() -> None:
     """Not obvious: PRD 41 says copy is ours and goes straight to Etsy. It is
     needed here because Printify's create call requires it and because it is
     the duplicate guard's match key (PRD 48)."""
-    message = _refusal(check_copy_is_concrete(title="<generate>", description="x"))
+    message = _refusal(check_copy_is_concrete(title="", lead="x"))
 
     assert "Printify" in message
-    assert "generate" in message.lower()
+
+
+def test_the_lead_refusal_names_the_lead() -> None:
+    """The description model's lead is required, its body optional (PRD's
+    description model) -- the refusal has to say *lead*, not *description*,
+    or a seller with a filled-in body would not know what is still missing."""
+    message = _refusal(check_copy_is_concrete(title="Take A Hike Tee", lead=""))
+
+    assert "lead" in message.lower()
 
 
 # ------------------------------------------- the refusal's shape (cli.render)
@@ -195,10 +200,10 @@ def test_a_gate_agrees_with_the_banner_about_a_garment_profile(name: str) -> Non
         assert gate.message == banner[0].message
 
 
-@pytest.mark.parametrize("title", ["<generate>", "   ", "Take A Hike Tee"])
+@pytest.mark.parametrize("title", ["   ", "Take A Hike Tee"])
 def test_a_gate_agrees_with_the_banner_about_copy(title: str) -> None:
-    gate = check_copy_is_concrete(title=title, description="A retro sunset.")
-    banner = rules.check_copy_is_concrete(title=title, description="A retro sunset.")
+    gate = check_copy_is_concrete(title=title, lead="A retro sunset.")
+    banner = rules.check_copy_is_concrete(title=title, lead="A retro sunset.")
 
     assert (gate is None) == (banner == [])
     if gate is not None:

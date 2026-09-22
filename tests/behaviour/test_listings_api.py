@@ -198,13 +198,12 @@ class TestListListings:
         assert row["etsy_listing_id"] is None
         assert row["printify_product_id"] is None
 
-    def test_a_generate_title_and_an_undersized_design_both_count_as_blocking(
+    def test_blank_copy_and_an_undersized_design_both_count_as_blocking(
         self, client: TestClient
     ) -> None:
         """The fixture design (360x432) is far short of the garment's
-        4500x5400 print area, and the copy is still the `<generate>`
-        sentinel -- both are structural non-issues (valid `Listing`) but
-        real business blockers."""
+        4500x5400 print area, and the copy is still blank -- both are
+        structural non-issues (valid `Listing`) but real business blockers."""
         row = {r["name"]: r for r in client.get("/api/listings").json()}["take-a-hike"]
         assert row["issue_counts"]["block"] >= 2
 
@@ -232,12 +231,54 @@ class TestGetListingDetail:
         expected = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
         assert datetime.fromisoformat(body["modified_at"]) == expected
 
-    def test_reports_the_generate_title_as_a_details_block(self, client: TestClient) -> None:
+    def test_reports_the_blank_title_as_a_details_block(self, client: TestClient) -> None:
         issues = client.get("/api/listings/take-a-hike").json()["issues"]
         assert any(
             i["tab"] == "details" and i["severity"] == "block" and "title" in i["message"].lower()
             for i in issues
         )
+
+    def test_reports_a_missing_common_copy_ref_as_a_details_block(self, client: TestClient) -> None:
+        client.patch(
+            "/api/listings/take-a-hike",
+            json={"etsy": {"description": {"lead": "A retro sunset.", "ref": "common-copy/x.md"}}},
+        )
+
+        issues = client.get("/api/listings/take-a-hike").json()["issues"]
+
+        matches = [
+            i
+            for i in issues
+            if i["tab"] == "details"
+            and i["severity"] == "block"
+            and "common-copy/x.md" in i["message"]
+        ]
+        assert matches
+
+    def test_a_valid_common_copy_ref_raises_no_description_issue(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        common_copy = workspace_root / "common-copy"
+        common_copy.mkdir()
+        (common_copy / "comfort-colors.md").write_text(
+            "---\ntitle: Comfort Colors\ntargets: [description]\n---\nPrinted to order.",
+            encoding="utf-8",
+        )
+        client.patch(
+            "/api/listings/take-a-hike",
+            json={
+                "etsy": {
+                    "description": {
+                        "lead": "A retro sunset.",
+                        "ref": "common-copy/comfort-colors.md",
+                    }
+                }
+            },
+        )
+
+        issues = client.get("/api/listings/take-a-hike").json()["issues"]
+
+        assert not any("common-copy" in i["message"] for i in issues)
 
     def test_reports_the_undersized_design_as_a_variants_block(self, client: TestClient) -> None:
         issues = client.get("/api/listings/take-a-hike").json()["issues"]
@@ -576,7 +617,7 @@ class TestListingDraft:
         assert body["pricing_plan"] is None
         assert body["media"] == []
         assert body["etsy"]["title"] == ""
-        assert body["etsy"]["description"] == ""
+        assert body["etsy"]["description"] == {"lead": "", "text": None, "ref": None}
 
     def test_the_draft_opens_in_a_workspace_with_no_pricing_plan(self, client: TestClient) -> None:
         """It used to 400 here, which showed "could not start a new listing"

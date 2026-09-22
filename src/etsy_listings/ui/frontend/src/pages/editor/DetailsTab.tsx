@@ -31,9 +31,17 @@ function splitAmount(raw: string): { amount: string; currency: string } {
 const MAX_TITLE_LENGTH = 140;
 const MAX_TAGS = 13;
 
-/** The sentinel `generate` fills in for copy nobody has written yet -- it is
- * not a title, so counting its characters would be counting the placeholder. */
-const GENERATE = "<generate>";
+type EtsyDescription = ListingDetail["etsy"]["description"];
+
+/** A one-line summary of the body source PR2's minimal control preserves but
+ * does not yet let you change (that selector is PR6's). `ref`/`text` are
+ * mutually exclusive on the server (`config/description.py`), so at most one
+ * of these ever applies. */
+function descriptionBodyHint(description: EtsyDescription): string {
+  if (description.ref) return `Body: ${description.ref}`;
+  if (description.text) return "Body: listing-specific text";
+  return "No body set";
+}
 
 interface Props {
   detail: ListingDetail;
@@ -93,11 +101,9 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
             onBlur={onFlush}
           />
           {titleError && <span className="field__error">{titleError}</span>}
-          {title !== GENERATE && (
-            <span className="field__hint">
-              {title.length} / {MAX_TITLE_LENGTH}
-            </span>
-          )}
+          <span className="field__hint">
+            {title.length} / {MAX_TITLE_LENGTH}
+          </span>
         </div>
 
         <div className="field">
@@ -134,13 +140,22 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
         </div>
 
         <div className="field">
-          <label htmlFor="details-description">Description</label>
+          <label htmlFor="details-description-lead">Description lead</label>
           <textarea
-            id="details-description"
-            value={detail.etsy.description}
-            onChange={(event) => onUpdate({ etsy: { description: event.target.value } })}
+            id="details-description-lead"
+            value={detail.etsy.description.lead}
+            onChange={(event) =>
+              onUpdate({
+                etsy: { description: { ...detail.etsy.description, lead: event.target.value } },
+              })
+            }
             onBlur={onFlush}
           />
+          {/* The full common-copy selector and inline-body editor are PR6's
+              (docs/ai-seo-implementation-plan.md) -- this keeps the structured
+              value intact through autosave and shows which body source, if
+              any, is set, without letting this control silently drop it. */}
+          <span className="field__hint">{descriptionBodyHint(detail.etsy.description)}</span>
         </div>
 
         <div className={sectionError ? "field field--invalid" : "field"}>

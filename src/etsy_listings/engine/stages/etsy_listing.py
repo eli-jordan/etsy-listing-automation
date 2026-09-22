@@ -34,7 +34,6 @@ from etsy_listings.clients.etsy.shopcatalog import (
     ShopCatalogError,
 )
 from etsy_listings.config.defaults import EtsyReturnPolicyDefaults
-from etsy_listings.config.listing import GENERATE
 from etsy_listings.engine.change import (
     Change,
     Drift,
@@ -53,6 +52,7 @@ from etsy_listings.engine.stages.etsy_target import (
     require_etsy_listing_id,
 )
 from etsy_listings.engine.stages.gates import check_copy_is_concrete, check_garment_profile_chosen
+from etsy_listings.workspace.common_copy import CommonCopyError
 
 NO_SHOP_CONSEQUENCE = "this listing's copy and settings cannot be patched on Etsy"
 
@@ -215,11 +215,13 @@ class EtsyListingStage:
         if blocked is not None:
             return blocked
         profile = workspace.load_garment_profile(config.garment_profile)
-        blocked = check_copy_is_concrete(
-            title=config.etsy.title, description=config.etsy.description
-        )
+        blocked = check_copy_is_concrete(title=config.etsy.title, lead=config.etsy.description.lead)
         if blocked is not None:
             return blocked
+        try:
+            description = workspace.compose_description(config.etsy.description)
+        except CommonCopyError as exc:
+            return Blocked(str(exc))
 
         shop_id = workspace.defaults.etsy.require_shop_id()
         catalog = EtsyShopCatalog(ctx.require_etsy(), shop_id)
@@ -255,11 +257,11 @@ class EtsyListingStage:
             return Blocked(str(exc))
 
         renewal = config.etsy.renewal or listing_defaults.renewal
-        tags = () if config.etsy.tags == GENERATE else tuple(config.etsy.tags)
+        tags = tuple(config.etsy.tags)
 
         return EtsyListingDesired(
             title=config.etsy.title,
-            description=config.etsy.description,
+            description=description,
             tags=tags,
             materials=tuple(profile.materials),
             shop_section=section.title if section is not None else None,

@@ -6,6 +6,7 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
+from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.listing import (
     EMPTY_DRAFT,
     MAX_MEDIA_ENTRIES,
@@ -143,6 +144,40 @@ def test_rejects_more_than_max_media_entries() -> None:
         "media": [f"common-media/asset-{i}.png" for i in range(MAX_MEDIA_ENTRIES + 1)],
     }
     with pytest.raises(ValidationError, match=f"{MAX_MEDIA_ENTRIES}-image limit"):
+        Listing.model_validate(data, context={"currency": "NOK"})
+
+
+def test_etsy_defaults_to_empty_ordinary_values_not_a_sentinel() -> None:
+    """`<generate>` is gone: an unset listing's title, tags and description
+    are ordinary empty values, not a literal the editor has to special-case."""
+    config = EtsyListingConfig()
+    assert config.title == ""
+    assert config.tags == []
+    assert config.description == DescriptionConfig()
+
+
+def test_a_listing_can_set_a_structured_description() -> None:
+    data = {
+        **BASE,
+        "etsy": {"description": {"lead": "A relaxed tee.", "text": "Printed to order."}},
+    }
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    assert listing.etsy.description.lead == "A relaxed tee."
+    assert listing.etsy.description.text == "Printed to order."
+
+
+def test_a_listing_can_set_a_common_copy_ref() -> None:
+    data = {**BASE, "etsy": {"description": {"lead": "", "ref": "common-copy/comfort-colors.md"}}}
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    assert listing.etsy.description.ref == "common-copy/comfort-colors.md"
+
+
+def test_a_listing_rejects_text_and_ref_together() -> None:
+    data = {
+        **BASE,
+        "etsy": {"description": {"lead": "x", "text": "inline", "ref": "common-copy/x.md"}},
+    }
+    with pytest.raises(ValidationError, match="text and ref"):
         Listing.model_validate(data, context={"currency": "NOK"})
 
 
@@ -295,7 +330,7 @@ def test_an_empty_draft_builds_with_nothing_chosen() -> None:
     assert draft.pricing_plan is None
     assert draft.prices == {}
     assert draft.etsy.title == ""
-    assert draft.etsy.description == ""
+    assert draft.etsy.description == DescriptionConfig()
 
 
 def test_the_same_empty_document_is_still_refused_as_a_listing() -> None:

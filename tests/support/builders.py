@@ -123,7 +123,12 @@ def set_copy(
     description: str,
     listing: str = FIXTURE_LISTING,
 ) -> None:
-    """Write real Etsy copy over the fixture's ``<generate>`` sentinels.
+    """Write real Etsy copy over the fixture's blank placeholders.
+
+    ``description`` becomes the structured description's ``lead`` -- with no
+    body, the composed description a stage sends is exactly this string, so
+    the many tests written against a plain ``description="..."`` string keep
+    reading the same way.
 
     Its own function rather than an ``edit_listing(etsy={...})`` call, because
     replacing the whole ``etsy:`` block would drop ``tags``, ``materials`` and
@@ -132,7 +137,11 @@ def set_copy(
     """
     path = listing_file(root, listing)
     document = _read_yaml(path)
-    document["etsy"] = {**document["etsy"], "title": title, "description": description}
+    document["etsy"] = {
+        **document["etsy"],
+        "title": title,
+        "description": {"lead": description},
+    }
     _write_yaml(path, document)
 
 

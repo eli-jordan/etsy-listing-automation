@@ -142,6 +142,8 @@ etsy-listings/
   common-media/
     comfort-colors-sizing-chart.png
     care-instructions.png
+  common-copy/                        # reusable description bodies
+    comfort-colors.md                 # title/targets front matter + body
   listings/
     {listing-name}/
       listing.yaml

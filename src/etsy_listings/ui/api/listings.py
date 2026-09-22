@@ -14,9 +14,9 @@ the second is a whole module (``config/listing_validation.py``):
 * **Structural** -- does the candidate even parse as a ``Listing``? A
   ``Listing.model_validate`` failure blocks the write and comes back as
   ``field_errors`` on the (unchanged) ``ListingDetail``.
-* **Business** -- pydantic-valid but incomplete (empty media, a `<generate>`
-  title, a colour-swatch template missing a colour). Reused via
-  ``check_listing``, surfaced as the ``issues`` list.
+* **Business** -- pydantic-valid but incomplete (empty media, a blank title,
+  a colour-swatch template missing a colour). Reused via ``check_listing``,
+  surfaced as the ``issues`` list.
 
 Assembling that function's inputs is `WorkspaceFacts`'s job, not this module's:
 every endpoint below builds one at the top and hands it down, so a request
@@ -88,6 +88,7 @@ from etsy_listings.ui.api.schemas import (
 from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.ui.runs.executor import ContextFactory
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.common_copy import CommonCopyError
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import (
     PathEscapesWorkspaceError,
@@ -123,6 +124,22 @@ def target(request: Request, name: str) -> Target:
 Existing = Annotated[Target, Depends(target)]
 
 
+def _description_ref_error(workspace: Workspace, listing: Listing) -> str | None:
+    """The one place the editor's banner attempts a `description.ref` load --
+    the check itself, and the message a bad one gets, both belong to
+    `config/listing_validation.py`'s :func:`check_description_ref`; this is
+    only the try/except around the one read that can fail, the same split
+    :func:`_resolve_design_paths` already draws for design refs."""
+    ref = listing.etsy.description.ref
+    if ref is None:
+        return None
+    try:
+        workspace.load_common_copy(ref)
+    except CommonCopyError as exc:
+        return str(exc)
+    return None
+
+
 def _resolve_design_paths(
     workspace: Workspace, listing: Listing, listing_dir: Path
 ) -> dict[str, Path]:
@@ -155,6 +172,7 @@ def _business_issues(
         design_paths=_resolve_design_paths(workspace, listing, listing_dir),
         templates=facts.templates,
         published=published,
+        description_ref_error=_description_ref_error(workspace, listing),
     )
     return [
         Issue(severity=i.severity, tab=i.tab, where=i.where, message=i.message) for i in raw_issues

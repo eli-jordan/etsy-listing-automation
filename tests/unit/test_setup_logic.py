@@ -49,9 +49,21 @@ def test_the_skeleton_covers_the_directories_the_layout_names(tmp_path: Path) ->
         layout.PRICING_PLANS_DIR,
         layout.MOCKUP_TEMPLATES_DIR,
         layout.COMMON_MEDIA_DIR,
+        layout.COMMON_COPY_DIR,
         layout.TEST_DESIGNS_DIR,
     ):
         assert name in logic.WORKSPACE_DIRS
+
+
+def test_setup_creates_an_empty_common_copy_directory(tmp_path: Path) -> None:
+    """AI SEO implementation plan, PR2: `description.ref` needs somewhere to
+    resolve into from a workspace's first run, exactly like `common-media/`
+    already does for shared images."""
+    logic.create_directories(tmp_path)
+
+    common_copy = tmp_path / layout.COMMON_COPY_DIR
+    assert common_copy.is_dir()
+    assert list(common_copy.iterdir()) == []
 
 
 def test_the_cache_directory_is_not_part_of_the_skeleton() -> None:

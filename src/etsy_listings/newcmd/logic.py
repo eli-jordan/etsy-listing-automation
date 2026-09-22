@@ -21,7 +21,7 @@ from etsy_listings.clients.printify.models import Blueprint, ShippingRates, Vari
 from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
-from etsy_listings.config.listing import GENERATE, MAX_MEDIA_ENTRIES, Listing
+from etsy_listings.config.listing import MAX_MEDIA_ENTRIES, Listing
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.slug import ColourExceptions, slug_map, slugify
@@ -504,8 +504,9 @@ def build_listing_stub(
 ) -> dict[str, Any]:
     """A starting ``listing.yaml`` document: prices come from the referenced
     pricing plan (per-size/per-colour adjustment is a manual edit, PRD step
-    2), the media entries :func:`build_media_entries` decided, blank title and
-    description fields, and a ``<generate>`` sentinel for tags."""
+    2), the media entries :func:`build_media_entries` decided, and blank
+    title, description and tags -- ordinary editable values, nothing
+    invented."""
     return {
         "garment_profile": garment_profile_slug,
         "design": design_ref,
@@ -513,7 +514,7 @@ def build_listing_stub(
         "brief": brief,
         "pricing_plan": pricing_plan_ref,
         "prices": {},
-        "etsy": {"title": "", "description": "", "tags": GENERATE},
+        "etsy": {"title": "", "description": {}, "tags": []},
         "media": media,
     }
 

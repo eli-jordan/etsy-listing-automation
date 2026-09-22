@@ -134,29 +134,29 @@ def test_a_configured_workspace_does_not_report_a_block(workspace_root: Path) ->
 def test_a_gate_refusal_is_an_actionable_message_not_a_traceback(
     workspace_root: Path,
 ) -> None:
-    """The fixture's copy is still `<generate>`, which PRD 44 refuses. The
-    user needs the sentence, not a stack."""
+    """The fixture's copy is still blank, which PRD 44 refuses. The user
+    needs the sentence, not a stack."""
     root = set_shop_id(workspace_root, SHOP_ID)
 
     result = _plan(root, "take-a-hike")
 
     assert "Traceback" not in result.output
-    assert "<generate>" in result.output
+    assert "etsy.title is empty" in result.output
 
 
 def test_a_gate_refusal_reads_as_a_blocked_stage(workspace_root: Path) -> None:
     """One vocabulary, not two. A refusal and an unconfigured shop are both
     reasons a stage cannot run, so `plan` renders them identically -- and
     counts them in the same place. Four block here: printify_product and
-    publish on the `<generate>` copy gate, etsy_listing and etsy_media on
-    the Etsy shop id this test never configures."""
+    publish on the empty-copy gate, etsy_listing and etsy_media on the Etsy
+    shop id this test never configures."""
     root = set_shop_id(workspace_root, SHOP_ID)
 
     result = _plan(root, "take-a-hike")
 
     assert result.exit_code == 0, result.output
     assert "4 blocked" in result.output
-    warning = next(line for line in result.output.splitlines() if "<generate>" in line)
+    warning = next(line for line in result.output.splitlines() if "etsy.title is empty" in line)
     assert warning.lstrip().startswith("!")
 
 

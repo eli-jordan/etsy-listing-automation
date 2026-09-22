@@ -42,9 +42,9 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     artwork: {},
     pricing_plan: null,
     etsy: {
-      title: "<generate>",
-      description: "<generate>",
-      tags: "<generate>",
+      title: "",
+      description: { lead: "", text: null, ref: null },
+      tags: [],
       variation_images: null,
       renewal: null,
       section: null,
