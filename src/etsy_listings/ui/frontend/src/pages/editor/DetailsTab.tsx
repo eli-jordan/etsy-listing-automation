@@ -53,7 +53,7 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
   const [plans, setPlans] = useState<PricingPlanSummary[]>([]);
-  const tags = Array.isArray(detail.etsy.tags) ? detail.etsy.tags : [];
+  const tags = detail.etsy.tags;
   const titleError = detail.field_errors["etsy.title"];
   const sectionError = detail.field_errors["etsy.section"];
   const title = detail.etsy.title;

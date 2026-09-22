@@ -407,7 +407,7 @@ def _check_variation_images(listing: Listing, templates: Mapping[str, TemplateIn
 
 
 def _check_tags(listing: Listing) -> list[Issue]:
-    if isinstance(listing.etsy.tags, list) and not listing.etsy.tags:
+    if not listing.etsy.tags:
         return [
             Issue(
                 "warn",
