@@ -58,7 +58,6 @@ from etsy_listings.ai.errors import (
 )
 from etsy_listings.ai.models import GarmentContext, SeoProposal, SeoRequest
 from etsy_listings.ai.orchestrator import generate_proposal
-from etsy_listings.ai.process import CliProcessError
 from etsy_listings.ai.providers import SeoProvider
 from etsy_listings.config.listing import Listing
 from etsy_listings.ui.api.listings import Existing
@@ -357,15 +356,27 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
     *different* listing's request is never refused). Every failure the
     orchestrator itself can raise maps onto the settled "Timeout and
     retries" outcomes: 503 when every provider was recognised-unavailable,
-    502 for everything else the plan calls "Try again" -- including
-    `CliProcessError`, which is not a `SeoGenerationError` (it is
-    `ai/process.py.run_managed` reporting the child process could not even
-    be started, e.g. a binary readiness confirmed present and then removed
-    before this call) and would otherwise escape as an unmapped 500. A
-    cancellation (browser disconnect) answers 499 -- there is usually
-    nobody left to receive it, but the request must still resolve to
-    *something* so this coroutine, and the process it was managing, both
-    end cleanly.
+    502 for everything else the plan calls "Try again". A cancellation
+    (browser disconnect) answers 499 -- there is usually nobody left to
+    receive it, but the request must still resolve to *something* so this
+    coroutine, and the process it was managing, both end cleanly.
+
+    The final ``except Exception`` is a deliberate catch-all, not a
+    swallow-and-hope: everything above it is a recognised
+    `~etsy_listings.ai.errors.SeoGenerationError` outcome the plan already
+    names, but `ai/process.py.run_managed` can also raise a plain
+    `CliProcessError` (`subprocess.Popen` itself failing to launch a
+    provider's CLI -- e.g. a binary readiness confirmed present and then
+    removed before this call), and any adapter bug is, by definition,
+    something this module cannot enumerate in advance. Neither may leave
+    FastAPI's own unhandled-exception path to answer: that path is a
+    plain-text "Internal Server Error", not this module's
+    ``{"detail": ...}`` JSON shape every other status code here uses, and a
+    future frontend (PR7) should not have to special-case one endpoint's
+    error body. ``HTTPException`` is re-raised untouched first, since
+    :func:`_build_request` raises one of those directly (the "no usable
+    garment profile" 409) and it must reach the client as itself, not get
+    folded into a 502.
 
     Returns only what item 4 permits: the validated proposal, the input
     snapshot, and expiry metadata. Nothing here is written to a workspace
@@ -394,7 +405,11 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
         raise HTTPException(status_code=499, detail=str(exc)) from exc
     except SeoAllProvidersUnavailableError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except (SeoTryAgainError, CliProcessError) as exc:
+    except SeoTryAgainError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
     finally:
         active.end(name)

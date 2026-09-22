@@ -304,10 +304,12 @@ def test_proposal_502s_when_the_provider_process_cannot_even_start(
     """`CliProcessError` (`ai/process.py.run_managed`'s own report that
     `subprocess.Popen` itself failed -- e.g. a binary readiness confirmed
     present and then removed before this call) is not a `SeoGenerationError`
-    subclass. Without an explicit mapping this would escape as an unmapped
-    500 instead of the "Try again" outcome the settled "Timeout and
-    retries" decision promises for every failure that is not a recognised
-    availability or a cancellation."""
+    subclass, so it falls to `request_seo_proposal`'s catch-all rather than
+    one of the named `except` clauses. Without that catch-all this would
+    escape as FastAPI's unmapped, plain-text 500 instead of the "Try again"
+    outcome the settled "Timeout and retries" decision promises for every
+    failure that is not a recognised availability failure or a
+    cancellation."""
     from etsy_listings.ai.process import CliProcessError
 
     provider = _ready_provider()
@@ -325,6 +327,65 @@ def test_proposal_502s_when_the_provider_process_cannot_even_start(
 
     assert response.status_code == 502
     assert "could not start" in response.json()["detail"]
+
+
+def test_proposal_502s_with_the_usual_json_shape_for_any_unrecognised_adapter_bug(
+    workspace_root: Path,
+) -> None:
+    """The catch-all in `request_seo_proposal` exists for exactly this case:
+    an adapter bug this module cannot enumerate in advance (not a
+    `SeoGenerationError` subclass at all, unlike every other error test in
+    this file). It must still come back as this module's own
+    ``{"detail": ...}`` JSON convention -- the same shape every other status
+    code here uses -- rather than FastAPI's plain-text "Internal Server
+    Error", which a future frontend (PR7) would have to special-case."""
+    provider = _ready_provider()
+
+    def _raise_unexpected(
+        request: SeoRequest, deadline: Any, *, repair: Any = None, cancel_event: Any = None
+    ) -> RawProviderResult:
+        raise ZeroDivisionError("division by zero")
+
+    provider.generate = _raise_unexpected  # type: ignore[method-assign]
+    _seed_prompt(workspace_root)
+
+    with _client(workspace_root, providers=[provider]) as c:
+        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
+
+    assert response.status_code == 502
+    assert response.json() == {"detail": "division by zero"}
+
+
+def test_proposal_frees_the_listing_after_an_unrecognised_adapter_bug(
+    workspace_root: Path,
+) -> None:
+    """The catch-all must not bypass the ``finally`` -- an adapter bug on one
+    request must not permanently strand the listing's
+    :class:`~etsy_listings.ui.api.seo.ActiveSeoRequests` claim, the same
+    property :func:`test_a_failed_request_still_frees_the_listing` proves
+    for the named `SeoGenerationError` outcomes."""
+    provider = _ready_provider(responses=[_valid_payload()])
+    original_generate = provider.generate
+    calls = {"count": 0}
+
+    def _flaky_once(
+        request: SeoRequest, deadline: Any, *, repair: Any = None, cancel_event: Any = None
+    ) -> RawProviderResult:
+        calls["count"] += 1
+        if calls["count"] == 1:
+            raise ZeroDivisionError("division by zero")
+        return original_generate(request, deadline, repair=repair, cancel_event=cancel_event)
+
+    provider.generate = _flaky_once  # type: ignore[method-assign]
+    _seed_prompt(workspace_root)
+
+    with _client(workspace_root, providers=[provider]) as c:
+        failed = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
+        assert failed.status_code == 502
+
+        retried = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
+
+    assert retried.status_code == 200
 
 
 def test_proposal_409s_for_a_listing_with_no_usable_garment_profile(
