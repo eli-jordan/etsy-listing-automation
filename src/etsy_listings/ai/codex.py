@@ -94,6 +94,21 @@ class CodexProvider:
     prompt_file: Path
     binary: str = "codex"
 
+    def _resolved_binary(self) -> str:
+        """The executable path `shutil.which` resolved, not the bare
+        ``self.binary`` name.
+
+        On Windows, an npm-installed CLI like `codex` is a `.CMD` shim
+        (confirmed live: `shutil.which("codex")` resolves to
+        ``...\\codex.CMD``). `subprocess.run(["codex", ...])` with the bare
+        name and no `shell=True` fails there with `WinError 2` -- Windows
+        `CreateProcess` does not search `PATHEXT` the way a shell or
+        `shutil.which` does. Every subprocess call below uses this resolved
+        path so the adapter works identically on Windows (this project's
+        primary development platform, per `AGENTS.md`) and POSIX.
+        """
+        return shutil.which(self.binary) or self.binary
+
     def readiness(self) -> ProviderReadiness:
         if shutil.which(self.binary) is None:
             return ProviderReadiness(ready=False, reason=f"{self.binary} was not found on PATH")
@@ -117,7 +132,7 @@ class CodexProvider:
     def _check_authenticated(self) -> ProviderReadiness | None:
         try:
             result = subprocess.run(
-                [self.binary, "login", "status"],
+                [self._resolved_binary(), "login", "status"],
                 capture_output=True,
                 text=True,
                 timeout=_READINESS_TIMEOUT_SECONDS,
@@ -139,7 +154,7 @@ class CodexProvider:
     def _check_read_only_capability(self) -> ProviderReadiness | None:
         try:
             result = subprocess.run(
-                [self.binary, "exec", "--help"],
+                [self._resolved_binary(), "exec", "--help"],
                 capture_output=True,
                 text=True,
                 timeout=_READINESS_TIMEOUT_SECONDS,
@@ -179,7 +194,7 @@ class CodexProvider:
             last_message_path = tmp_path / "last-message.json"
 
             argv = [
-                self.binary,
+                self._resolved_binary(),
                 "exec",
                 "-s",
                 "read-only",

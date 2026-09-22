@@ -121,7 +121,7 @@ def test_readiness_fails_when_not_authenticated(
 
     assert readiness.ready is False
     assert "login status" in (readiness.reason or "")
-    assert fake.calls == [["codex", "login", "status"]]
+    assert fake.calls == [["/usr/bin/codex", "login", "status"]]
 
 
 def test_readiness_fails_when_login_status_cannot_be_run(
@@ -230,6 +230,12 @@ def test_readiness_is_ready_when_every_check_passes(
 def _patch_run_managed(
     monkeypatch: pytest.MonkeyPatch, result: ProcessResult
 ) -> list[dict[str, Any]]:
+    # `generate()` resolves the binary through `shutil.which` (a Windows
+    # npm-installed CLI is a `.CMD` shim that bare-name `subprocess.run`
+    # cannot launch without `shell=True` -- see `CodexProvider._resolved_binary`),
+    # so it must be patched here too, deterministically, rather than left to
+    # whatever happens to be on the machine actually running this test suite.
+    monkeypatch.setattr(codex.shutil, "which", lambda name: f"/resolved/{name}")
     calls: list[dict[str, Any]] = []
 
     def fake_run_managed(argv: list[str], **kwargs: Any) -> ProcessResult:
@@ -268,7 +274,7 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     assert len(calls) == 1
     call = calls[0]
     argv = call["argv"]
-    assert argv[0] == "codex"
+    assert argv[0] == "/resolved/codex"  # the shutil.which-resolved path, not the bare name
     assert argv[1] == "exec"
     assert argv[-1] == "-", "the prompt is piped via stdin, not passed as an argv value"
     assert "-s" in argv and argv[argv.index("-s") + 1] == "read-only"

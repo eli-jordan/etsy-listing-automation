@@ -259,6 +259,12 @@ def _completed(payload: dict[str, Any]) -> str:
 def _patch_run_managed(
     monkeypatch: pytest.MonkeyPatch, result: ProcessResult
 ) -> list[dict[str, Any]]:
+    # See `CodexProvider._resolved_binary`'s docstring / this project's
+    # test_ai_codex.py: `generate()` resolves the binary through
+    # `shutil.which` rather than trusting the bare name is launchable, so
+    # this needs patching deterministically too, independent of whatever
+    # happens to be on the machine actually running this test suite.
+    monkeypatch.setattr(claude.shutil, "which", lambda name: f"/resolved/{name}")
     calls: list[dict[str, Any]] = []
 
     def fake_run_managed(argv: list[str], **kwargs: Any) -> ProcessResult:
@@ -288,7 +294,7 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     assert len(calls) == 1
     call = calls[0]
     argv = call["argv"]
-    assert argv[0] == "claude"
+    assert argv[0] == "/resolved/claude"  # the shutil.which-resolved path, not the bare name
     assert "-p" in argv
     assert "--output-format" in argv and argv[argv.index("--output-format") + 1] == "json"
     assert "--no-session-persistence" in argv

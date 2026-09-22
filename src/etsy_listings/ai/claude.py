@@ -103,6 +103,16 @@ class ClaudeProvider:
     prompt_file: Path
     binary: str = "claude"
 
+    def _resolved_binary(self) -> str:
+        """The executable path `shutil.which` resolved, not the bare
+        ``self.binary`` name -- see `ai/codex.py.CodexProvider._resolved_binary`
+        for why: an npm-installed CLI on Windows is a shim (`claude.EXE` here,
+        but a `.CMD` for other CLIs -- either way, `shutil.which`'s own
+        `PATHEXT` search is what finds it, and every subprocess call needs
+        that same resolved path rather than assuming the bare name is
+        directly launchable without `shell=True`."""
+        return shutil.which(self.binary) or self.binary
+
     def readiness(self) -> ProviderReadiness:
         if shutil.which(self.binary) is None:
             return ProviderReadiness(ready=False, reason=f"{self.binary} was not found on PATH")
@@ -126,7 +136,7 @@ class ClaudeProvider:
     def _check_authenticated(self) -> ProviderReadiness | None:
         try:
             result = subprocess.run(
-                [self.binary, "auth", "status"],
+                [self._resolved_binary(), "auth", "status"],
                 capture_output=True,
                 text=True,
                 timeout=_READINESS_TIMEOUT_SECONDS,
@@ -157,7 +167,7 @@ class ClaudeProvider:
     def _check_read_only_capability(self) -> ProviderReadiness | None:
         try:
             result = subprocess.run(
-                [self.binary, "-p", "--help"],
+                [self._resolved_binary(), "-p", "--help"],
                 capture_output=True,
                 text=True,
                 timeout=_READINESS_TIMEOUT_SECONDS,
@@ -191,7 +201,7 @@ class ClaudeProvider:
     ) -> RawProviderResult:
         prompt_text = self._build_prompt_text(request, repair)
         argv = [
-            self.binary,
+            self._resolved_binary(),
             "-p",
             "--output-format",
             "json",
