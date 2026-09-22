@@ -307,9 +307,9 @@ named mutation. 404 comes free from the `target()` dependency, 400 from
 is enough, so the note below about exporting `_segment` is wrong and stays only
 as the record of a thing that turned out not to be needed.
 
-`Path.rename` on the **directory** moves `listing.yaml`, `state.lock.json` and
-Phase 4's `generated.yaml` in one operation, and `.cache/renders/<name>/` moves
-with it — the render cache is keyed by listing name
+`Path.rename` on the **directory** moves `listing.yaml` and `state.lock.json`
+in one operation, and `.cache/renders/<name>/` moves with it — the render cache
+is keyed by listing name
 (`Workspace.render_file`), so a rename that ignored it would orphan a tree
 nothing ever deletes and force a full re-render. Traced rather than assumed,
 that re-render is all it would cost: `input_hash` carries no listing name, so
@@ -357,23 +357,23 @@ therefore costs no remote write and produces no drift.
   wrapper functions in an `api/*.ts` module). A new `api/listings.ts` mirrors
   `api/calibrator.ts`'s shape exactly: typed wrapper functions over
   `openapi-fetch`, the only thing components import.
-- **Validation ownership**: a new pure module reuses `Listing`'s own pydantic
-  validators (attempt `Listing.model_validate` on the candidate document —
-  structural rules for free, no duplication) plus the two existing pure gates
-  in `engine/stages/gates.py` (`check_copy_is_concrete`,
-  `check_design_resolution`) plus new pure cross-reference checks (media vs.
-  colours, template kind vs. colour, `variation_images` coverage, garment
-  profile existence). It is deliberately **not** a `Stage` — stages diff local
-  vs. remote; this only ever looks at local config, callable synchronously on
-  every autosave with no network I/O.
+- **Validation ownership**: the pure listing-validation module reuses
+  `Listing`'s pydantic validators (attempt `Listing.model_validate` on the
+  candidate document — structural rules for free, no duplication) and owns
+  the local copy, description-source, design, and cross-reference checks
+  (media vs. colours, template kind vs. colour, `variation_images` coverage,
+  garment-profile existence). The stage adapter consumes those same checks;
+  no UI-specific copy gate exists. It is deliberately **not** a `Stage` —
+  stages diff local vs. remote; this only ever looks at local config, callable
+  synchronously on every autosave with no network I/O.
 - **Autosave / create split**: pydantic-**invalid** states (bad money, a
   `price_overrides` colour not in `colors:`, >20 media entries, a tag over 20
   chars) block the write and surface as inline field errors — the same shape
   the mockup already uses for Title/Section. Pydantic-**valid** but
-  business-incomplete states (empty media, `<generate>` title, an enabled
-  colour missing from the swatch template) get written to disk and surface in
-  the issues banner. This means `listing.yaml` is always a structurally valid
-  `Listing` the moment it exists, even mid-edit.
+  business-incomplete states (empty media, blank concrete deployment copy, an
+  enabled colour missing from the swatch template) get written to disk and
+  surface in the issues banner. This means `listing.yaml` is always a
+  structurally valid `Listing` the moment it exists, even mid-edit.
 - **No file locking / conflict handling** for autosave racing a concurrent CLI
   `apply` — last-write-wins is an accepted simplification given this is a
   single-operator tool (per the PRD's own framing).
@@ -405,14 +405,14 @@ shown as inline field errors, not the issues list):
 - `price_overrides`/`artwork` colour keys not a subset of `colors:`
 - `media[].colour` not a subset of `colors:`
 - `media` longer than `MAX_MEDIA_ENTRIES` (20)
-- `etsy.title` over 140 chars when concrete; `etsy.tags` over 13 entries or
-  any tag over 20 chars
+- `etsy.title` over 140 chars; `etsy.tags` over 13 entries or any tag over 20
+  chars
 - neither `pricing_plan` nor `prices` set
 
 **Business** (pydantic-valid but incomplete → issues banner, block or warn):
 
-- `check_copy_is_concrete` (title/description still `<generate>` or blank) —
-  reused directly from `gates.py`, block
+- concrete deployment copy (blank title or description lead, or an invalid
+  common-copy source) — block
 - `check_design_resolution` (design file missing/unreadable, no alpha
   channel, resolution <90% of the garment's print area) — reused directly
   from `gates.py`, block

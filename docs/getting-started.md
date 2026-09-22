@@ -414,9 +414,11 @@ prices:
   XXL: 369 NOK
   XXXL: 379 NOK
 etsy:
-  title: <generate>
-  description: <generate>
-  tags: <generate>
+  title: ""
+  tags: []
+  description:
+    lead: ""
+    ref: common-copy/comfort-colors.md
 media:
   - { template: flat-lay-01, colour: black }
   - { template: flat-lay-01, colour: blue-jean }
@@ -436,9 +438,10 @@ A few things worth knowing about `listing.yaml`:
   light-ink/dark-ink artwork — `{on-light: ..., on-dark: ...}` — with an
   optional per-colour `artwork:` override on the listing. Full resolution
   order is in [docs/multi-placement-rendering.md](multi-placement-rendering.md).
-- **`<generate>`** on `etsy.title`/`description`/`tags` marks them for the
-  (not-yet-built) AI copy stage. Write real values now if you want to skip
-  that later, or leave the placeholder.
+- **SEO values are ordinary listing fields.** Give `etsy.description` a
+  required `lead` plus at most one body source: inline `text` or a `ref` under
+  `common-copy/`. AI Mode can suggest title, tags, and a lead in the saved
+  listing editor, but only values the seller accepts are written here.
 - **Every price needs an explicit currency** matching `shop.yaml`'s
   `currency` — `349 NOK`, never a bare `349`.
 
@@ -494,11 +497,12 @@ you're planning around where this is going — but none of it runs yet:
 
 | Command | Will do |
 |---|---|
-| `auth` | Etsy OAuth (PKCE) and Anthropic credential setup |
+| `auth` | Etsy OAuth (PKCE) and deployment credential setup |
 | `catalog refresh` | Force-refresh the cached Printify catalog |
 | `unlock <listing>` | Clear a Printify product stuck mid-publish |
 | `status [<listing>]` | Run history from the SQLite recorder |
-| `render` / `generate` | Force a single stage in isolation (today, `render` only runs as part of `apply`) |
+| `render` | Force the local render stage in isolation (today, it runs as part of `apply`) |
+| AI Mode | Local Codex/Claude SEO suggestions in the saved-listing editor |
 
 `ui` itself will grow a dashboard, setup wizard and run runner in Phase 5 —
 today it serves only the calibrator.

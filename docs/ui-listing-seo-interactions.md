@@ -2,12 +2,9 @@
 
 **Status:** approved interaction design; implementation has not started.
 
-This document is the implementation companion to the
-[Listing SEO review prototype](../src/etsy_listings/ui/frontend/design/scenes/listing-seo/review.tsx)
-and the drafting [SEO prompt source](../seo_prompt.md). It describes what
-each interaction does and why it matters. The prototype demonstrates the main
-happy path in one frame; this document also specifies loading, stale, invalid,
-and unavailable states that do not need separate design frames.
+This document is the implementation companion to the drafting
+[SEO prompt source](../seo_prompt.md). It describes what each interaction does
+and why it matters, including loading, stale, invalid, and unavailable states.
 
 The [PRD](prd.md) remains the product authority. Its AI Mode and structured
 description decisions are settled here; this document records the interaction
@@ -100,9 +97,8 @@ malformed response receives one repair attempt from the same provider. Every
 other error exposes **Try again**. The whole request, repair, and allowed
 fallback share one 60-second deadline.
 
-The prototype uses a short fixed delay to demonstrate this transition. That
-delay is not a product requirement; the implementation reveals results when
-the real request completes.
+A short fixed delay is not a product requirement; the implementation reveals
+results when the real request completes.
 
 ## 3. Title suggestions
 
@@ -215,10 +211,9 @@ without changing any listing field. If repair fails, use Claude only for a
 recognised fall-through condition; otherwise show an inline failure and offer
 **Try again**. Do not reveal a partial proposal as though it were safe to use.
 
-Non-blocking quality warnings remain informational. Search phrases or rationale
-returned by the generator may be available through an optional disclosure in
-the relevant drawer, but must not add a confirmation step to choosing a value.
-The streamlined prototype omits this disclosure from its default view.
+Non-blocking quality warnings, returned search phrases and rationale, and
+observed OCR are available through optional disclosures in the relevant drawer,
+but must not add a confirmation step to choosing a value.
 
 ## 9. Persistence and autosave
 

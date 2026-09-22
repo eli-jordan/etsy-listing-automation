@@ -492,9 +492,11 @@ right for the first listing and wrong from the second onwards.
 ```yaml
 # listings/take-a-hike/listing.yaml   (the etsy: block only)
 etsy:
-  title: <generate>
-  description: <generate>
-  tags: <generate>
+  title: ""
+  tags: []
+  description:
+    lead: ""
+    ref: common-copy/comfort-colors.md
   renewal: manual                      # overrides shop.yaml
   section: Retro Tees                  # optional; listing-only, by name
   shipping_profile: NOK heavy tee      # optional; overrides shop.yaml
@@ -575,10 +577,10 @@ one cannot be manufactured on demand.
 | `plan` | field-by-field against `applied`; anything `live` disagrees with `applied` is drift, which includes Printify re-attaching its own shipping profile |
 | `apply` | one `PATCH updateListing` carrying only what changed |
 
-Blocked when: the workspace has no `etsy.shop_id`; copy is still `<generate>`
-(PRD 44's gate, reused); a section, shipping profile or production partner
-name does not resolve; `who_made` is `someone_else` and no partner resolved,
-which Etsy refuses outright.
+Blocked when: the workspace has no `etsy.shop_id`; title or the final composed
+description is not concrete and non-empty (PRD 44's gate, reused); a section,
+shipping profile or production partner name does not resolve; `who_made` is
+`someone_else` and no partner resolved, which Etsy refuses outright.
 
 Read back with `GET /v3/application/listings/{id}` — the *unscoped* single
 listing read. The shop-scoped path exists for `PATCH` and `DELETE` and

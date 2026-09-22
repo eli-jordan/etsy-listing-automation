@@ -156,7 +156,7 @@ Historical feedback may influence selection:
 - If several garment colors are offered, do not describe the product as one
   particular garment color.
 - A design palette may be described when it is visibly stable across variants.
-- If the garment brand is a marketable attribute of the product, include it. 
+- If the garment brand is a marketable attribute of the product, include it.
   Ensure all acceptable use guidelines are followed for the brand. For example
   ComfortColors requires the trademark symbol.
 - Treat the supplied design and listing facts as already approved for sale.
