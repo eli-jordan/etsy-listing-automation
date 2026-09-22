@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "name": "listing-seo",
+  "auto": false,
+  "layout": {
+    "rows": [["listing-seo"]],
+    "scenes": {
+      "listing-seo": {
+        "rows": [["review"]]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "n_8a9acgi8me0y",
+      "frame": "listing-seo/review",
+      "x": 0,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    }
+  ],
+  "order": 2,
+  "title": "Listing SEO Assistance",
+  "description": "One clickable Listing Details prototype: AI Mode loads inline, then reveals selectable title, lead, and ranked tag suggestions."
+}
