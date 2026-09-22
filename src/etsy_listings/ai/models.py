@@ -154,6 +154,30 @@ class RawProviderResult:
 
 
 @dataclass(frozen=True)
+class RepairContext:
+    """What the orchestration service hands a provider for its one allowed
+    same-provider repair call (AI SEO implementation plan, PR4, item 3: "one
+    same-provider output repair").
+
+    This is the genuine gap PR3's `SeoProvider.generate(request, deadline)`
+    left open: a real Codex/Claude adapter runs one CLI invocation per call
+    with no durable session (implementation plan: "no durable provider
+    session"), so the repair turn has to carry everything the first call did
+    *plus* what went wrong -- there is no prior turn for the CLI to remember.
+    ``reasons`` is `ai/validation.py.ProposalValidationError.reasons` (or the
+    orchestrator's own "not valid JSON"/"not a JSON object" reason when the
+    first response could not even be decoded -- every malformed-response case
+    is repaired identically, per the settled decision that any validation
+    failure counts as malformed). ``prior_raw_output`` is the first call's
+    unparsed text, so a repair prompt can show the model exactly what it
+    produced rather than only describing the problem in the abstract.
+    """
+
+    prior_raw_output: str
+    reasons: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class Deadline:
     """A fixed point in time, expressed as a remaining budget.
 

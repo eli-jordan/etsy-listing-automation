@@ -1,0 +1,232 @@
+"""``ai/orchestrator.py``: the Codex-then-Claude chain, one same-provider
+repair attempt, and the shared 60-second deadline (AI SEO implementation
+plan, PR4, item 3).
+
+Exercised entirely against `FakeSeoProvider` (PR3) -- never a real Codex or
+Claude adapter -- exactly as that double's own docstring says it exists for:
+"fallback ordering, one same-provider repair, and deadline handling can all
+be exercised entirely offline". This is also what keeps CI fake-provider-only
+for this seam.
+"""
+
+from __future__ import annotations
+
+import time
+from pathlib import Path
+
+import pytest
+
+from etsy_listings.ai import orchestrator
+from etsy_listings.ai.errors import (
+    ProviderCancelledError,
+    SeoAllProvidersUnavailableError,
+    SeoDeadlineExceededError,
+    SeoTryAgainError,
+)
+from etsy_listings.ai.models import Deadline, GarmentContext, ProviderReadiness, SeoRequest
+from etsy_listings.ai.providers import FakeSeoProvider
+
+
+def _request() -> SeoRequest:
+    return SeoRequest(
+        brief="A retro sunset tee.",
+        product_type="t-shirt",
+        etsy_category="Clothing",
+        materials=("Comfort Colors 1717",),
+        colors=("navy",),
+        garment=GarmentContext(brand="Comfort Colors", model="1717"),
+        design_image=Path("designs/front.png"),
+    )
+
+
+def _valid_payload() -> str:
+    import json
+
+    return json.dumps(
+        {
+            "titles": ["a" * 10, "b" * 10, "c" * 10],
+            "tags": [f"tag{i}" for i in range(20)],
+            "description_leads": ["lead one", "lead two", "lead three"],
+            "rationale": [
+                {
+                    "phrase": f"phrase {i}",
+                    "intent": "core_product",
+                    "reason": "because",
+                    "used_in": ["title"],
+                }
+                for i in range(7)
+            ],
+            "warnings": [],
+            "observed_text": "",
+        }
+    )
+
+
+def test_first_provider_success_returns_its_proposal_without_touching_the_second() -> None:
+    codex = FakeSeoProvider(name="codex", responses=[_valid_payload()])
+    fallback = FakeSeoProvider(name="claude", responses=[])
+
+    proposal = orchestrator.generate_proposal(_request(), [codex, fallback])
+
+    assert proposal.titles[0] == "a" * 10
+    assert fallback.requests == []
+
+
+def test_unavailable_first_provider_falls_through_to_the_second() -> None:
+    codex = FakeSeoProvider(
+        name="codex", ready=ProviderReadiness(ready=False, reason="not authenticated")
+    )
+    codex.generate = _raise_unavailable("codex")  # type: ignore[method-assign]
+    claude = FakeSeoProvider(name="claude", responses=[_valid_payload()])
+
+    proposal = orchestrator.generate_proposal(_request(), [codex, claude])
+
+    assert proposal.titles[0] == "a" * 10
+    assert claude.requests == [_request()]
+
+
+def _raise_unavailable(provider: str):  # noqa: ANN201 - test helper
+    from etsy_listings.ai.errors import ProviderUnavailableError
+
+    def _generate(request, deadline, *, repair=None):  # noqa: ANN001, ANN202
+        raise ProviderUnavailableError(provider, "not authenticated")
+
+    return _generate
+
+
+def test_all_providers_unavailable_raises_all_providers_unavailable() -> None:
+    codex = FakeSeoProvider(name="codex")
+    codex.generate = _raise_unavailable("codex")  # type: ignore[method-assign]
+    claude = FakeSeoProvider(name="claude")
+    claude.generate = _raise_unavailable("claude")  # type: ignore[method-assign]
+
+    with pytest.raises(SeoAllProvidersUnavailableError) as excinfo:
+        orchestrator.generate_proposal(_request(), [codex, claude])
+
+    assert "codex" in str(excinfo.value)
+    assert "claude" in str(excinfo.value)
+
+
+def test_malformed_first_response_triggers_one_same_provider_repair() -> None:
+    codex = FakeSeoProvider(name="codex", responses=["not json", _valid_payload()])
+
+    proposal = orchestrator.generate_proposal(_request(), [codex])
+
+    assert proposal.titles[0] == "a" * 10
+    assert len(codex.requests) == 2
+    assert codex.repairs[0] is None
+    assert codex.repairs[1] is not None
+    assert "not valid JSON" in " ".join(codex.repairs[1].reasons) or codex.repairs[1].reasons
+
+
+def test_repair_prompt_carries_the_prior_output_and_reasons() -> None:
+    codex = FakeSeoProvider(name="codex", responses=['{"titles": []}', _valid_payload()])
+
+    orchestrator.generate_proposal(_request(), [codex])
+
+    repair = codex.repairs[1]
+    assert repair is not None
+    assert repair.prior_raw_output == '{"titles": []}'
+    assert any("titles" in reason for reason in repair.reasons)
+
+
+def test_repair_still_malformed_surfaces_as_try_again_not_fallback() -> None:
+    codex = FakeSeoProvider(name="codex", responses=["not json", "still not json"])
+    claude = FakeSeoProvider(name="claude", responses=[_valid_payload()])
+
+    with pytest.raises(SeoTryAgainError):
+        orchestrator.generate_proposal(_request(), [codex, claude])
+
+    assert claude.requests == []  # no fallback after a failed repair
+
+
+def test_valid_first_response_never_requests_a_repair() -> None:
+    codex = FakeSeoProvider(name="codex", responses=[_valid_payload()])
+
+    orchestrator.generate_proposal(_request(), [codex])
+
+    assert codex.repairs == [None]
+
+
+def test_deadline_exceeded_before_any_provider_is_tried() -> None:
+    codex = FakeSeoProvider(name="codex", responses=[_valid_payload()])
+    already_expired = Deadline(deadline_at=time.monotonic() - 1)
+
+    with pytest.raises(SeoDeadlineExceededError):
+        orchestrator.generate_proposal(_request(), [codex], deadline=already_expired)
+
+    assert codex.requests == []
+
+
+def test_deadline_exceeded_skips_repair_and_surfaces_try_again() -> None:
+    codex = FakeSeoProvider(name="codex", responses=["not json"])
+
+    class _ExpiringDeadline:
+        """A deadline that reports not-expired for the first check (letting
+        the initial `generate` call happen) and expired from then on -- the
+        shape a real 60-second budget takes once the first call alone
+        consumed it."""
+
+        def __init__(self) -> None:
+            self.calls = 0
+
+        @property
+        def expired(self) -> bool:
+            self.calls += 1
+            return self.calls > 1
+
+        def remaining_seconds(self) -> float:
+            return 0.0 if self.expired else 60.0
+
+    with pytest.raises(SeoDeadlineExceededError):
+        orchestrator.generate_proposal(_request(), [codex], deadline=_ExpiringDeadline())  # type: ignore[arg-type]
+
+    assert len(codex.requests) == 1  # the repair call never happened
+
+
+def test_cancelled_error_propagates_without_becoming_try_again() -> None:
+    codex = FakeSeoProvider(name="codex")
+
+    def _generate(request, deadline, *, repair=None):  # noqa: ANN001, ANN202
+        raise ProviderCancelledError("codex")
+
+    codex.generate = _generate  # type: ignore[method-assign]
+
+    with pytest.raises(ProviderCancelledError):
+        orchestrator.generate_proposal(_request(), [codex])
+
+
+def test_no_providers_configured_raises_all_providers_unavailable() -> None:
+    with pytest.raises(SeoAllProvidersUnavailableError):
+        orchestrator.generate_proposal(_request(), [])
+
+
+def test_valid_json_that_is_not_an_object_is_treated_as_malformed() -> None:
+    codex = FakeSeoProvider(name="codex", responses=["[1, 2, 3]", _valid_payload()])
+
+    proposal = orchestrator.generate_proposal(_request(), [codex])
+
+    assert proposal.titles[0] == "a" * 10
+    assert any("expected a JSON object" in reason for reason in codex.repairs[1].reasons)  # type: ignore[union-attr]
+
+
+def test_provider_becoming_unavailable_during_repair_surfaces_as_try_again() -> None:
+    from etsy_listings.ai.errors import ProviderUnavailableError
+
+    codex = FakeSeoProvider(name="codex", responses=["not json"])
+    calls = {"count": 0}
+    original_generate = codex.generate
+
+    def _generate(request, deadline, *, repair=None):  # noqa: ANN001, ANN202
+        calls["count"] += 1
+        if repair is not None:
+            raise ProviderUnavailableError("codex", "quota exhausted mid-repair")
+        return original_generate(request, deadline, repair=repair)
+
+    codex.generate = _generate  # type: ignore[method-assign]
+    claude = FakeSeoProvider(name="claude", responses=[_valid_payload()])
+
+    with pytest.raises(SeoTryAgainError):
+        orchestrator.generate_proposal(_request(), [codex, claude])
+
+    assert claude.requests == []  # still no fallback -- the chain already committed to codex
