@@ -1,6 +1,11 @@
 import { useEffect, useState } from "react";
-import { listEtsySections, listPricingPlans } from "../../api/listings";
-import type { EtsySectionSummary, ListingDetail, PricingPlanSummary } from "../../types";
+import { listCommonCopy, listEtsySections, listPricingPlans } from "../../api/listings";
+import type {
+  CommonCopySummary,
+  EtsySectionSummary,
+  ListingDetail,
+  PricingPlanSummary,
+} from "../../types";
 
 /** Title/tags/description/section/pricing (phase 5).
  *
@@ -33,14 +38,24 @@ const MAX_TAGS = 13;
 
 type EtsyDescription = ListingDetail["etsy"]["description"];
 
-/** A one-line summary of the body source PR2's minimal control preserves but
- * does not yet let you change (that selector is PR6's). `ref`/`text` are
- * mutually exclusive on the server (`config/description.py`), so at most one
- * of these ever applies. */
-function descriptionBodyHint(description: EtsyDescription): string {
-  if (description.ref) return `Body: ${description.ref}`;
-  if (description.text) return "Body: listing-specific text";
-  return "No body set";
+/** The sentinel the body-source `<select>` uses for "write it here" --
+ * distinct from every real value that field can hold, since a `ref` is
+ * always a `common-copy/...` path (`Workspace.common_copy_file`). */
+const INLINE_BODY = "inline";
+
+/** `check_copy_is_concrete`/`check_description_ref`
+ * (`config/listing_validation.py`) file every description issue -- the empty
+ * lead that blocks deployment, and a `ref` that will not resolve -- under
+ * this one `where`, matching `_COPY_WHERE["description"]` exactly. Both are
+ * shown together beneath the description fields, the same block issues the
+ * page-level banner surfaces, but visible without leaving the tab. */
+const DESCRIPTION_ISSUE_WHERE = "Listing Details › Description";
+
+/** The current body source as the `<select>` reads it: the stored `ref`, or
+ * the inline sentinel when neither `ref` nor `text` is set (a fresh draft
+ * defaults to writing it here, matching PR2's prior default). */
+function bodySourceValue(description: EtsyDescription): string {
+  return description.ref ?? INLINE_BODY;
 }
 
 interface Props {
@@ -53,11 +68,15 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
   const [plans, setPlans] = useState<PricingPlanSummary[]>([]);
+  const [commonCopy, setCommonCopy] = useState<CommonCopySummary[]>([]);
   const tags = detail.etsy.tags;
   const titleError = detail.field_errors["etsy.title"];
   const sectionError = detail.field_errors["etsy.section"];
   const title = detail.etsy.title;
   const materials = detail.garment_materials ?? [];
+  const description = detail.etsy.description;
+  const descriptionIssues = detail.issues.filter((i) => i.where === DESCRIPTION_ISSUE_WHERE);
+  const selectedCommonCopy = commonCopy.find((c) => c.ref === description.ref);
 
   useEffect(() => {
     listEtsySections().then(setSections);
@@ -68,6 +87,20 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
       .then(setPlans)
       .catch(() => setPlans([]));
   }, [detail.garment_profile]);
+
+  useEffect(() => {
+    listCommonCopy().then(setCommonCopy);
+  }, []);
+
+  function setBodySource(source: string) {
+    if (source === INLINE_BODY) {
+      onUpdate({
+        etsy: { description: { ...description, text: description.text ?? "", ref: null } },
+      });
+      return;
+    }
+    onUpdate({ etsy: { description: { ...description, text: null, ref: source } } });
+  }
 
   function commitTags() {
     const additions = tagDraft
@@ -143,19 +176,86 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
           <label htmlFor="details-description-lead">Description lead</label>
           <textarea
             id="details-description-lead"
-            value={detail.etsy.description.lead}
+            value={description.lead}
             onChange={(event) =>
               onUpdate({
-                etsy: { description: { ...detail.etsy.description, lead: event.target.value } },
+                etsy: { description: { ...description, lead: event.target.value } },
               })
             }
             onBlur={onFlush}
           />
-          {/* The full common-copy selector and inline-body editor are PR6's
-              (docs/ai-seo-implementation-plan.md) -- this keeps the structured
-              value intact through autosave and shows which body source, if
-              any, is set, without letting this control silently drop it. */}
-          <span className="field__hint">{descriptionBodyHint(detail.etsy.description)}</span>
+        </div>
+
+        <div className={descriptionIssues.length > 0 ? "field field--invalid" : "field"}>
+          <label htmlFor="details-description-source">Description body source</label>
+          <select
+            id="details-description-source"
+            className="input"
+            value={bodySourceValue(description)}
+            onChange={(event) => {
+              setBodySource(event.target.value);
+              onFlush();
+            }}
+          >
+            <option value={INLINE_BODY}>Write inline body</option>
+            {commonCopy.map((file) => (
+              <option key={file.ref} value={file.ref}>
+                {file.title}
+              </option>
+            ))}
+            {/* A stored ref this workspace's common-copy listing does not
+                offer (removed, renamed, or broken) still has to appear
+                selected -- otherwise the select would silently show
+                "Write inline body" for a listing that has not actually
+                changed source. `descriptionIssues` is what tells the seller
+                why it will not resolve. */}
+            {description.ref !== null && selectedCommonCopy === undefined && (
+              <option value={description.ref}>{description.ref}</option>
+            )}
+          </select>
+
+          {description.ref === null ? (
+            <textarea
+              id="details-description-text"
+              aria-label="Description body"
+              value={description.text ?? ""}
+              onChange={(event) =>
+                onUpdate({
+                  etsy: { description: { ...description, text: event.target.value, ref: null } },
+                })
+              }
+              onBlur={onFlush}
+            />
+          ) : (
+            <div className="common-copy-meta">
+              {selectedCommonCopy && (
+                <p className="common-copy-meta__title">{selectedCommonCopy.title}</p>
+              )}
+              {selectedCommonCopy?.summary && (
+                <p className="common-copy-meta__summary">{selectedCommonCopy.summary}</p>
+              )}
+              <p className="field__hint">{description.ref}</p>
+            </div>
+          )}
+
+          {descriptionIssues.map((issue, index) => (
+            <span key={index} className="field__error">
+              {issue.message}
+            </span>
+          ))}
+        </div>
+
+        <div className="field">
+          <label htmlFor="details-description-preview">Description preview</label>
+          {/* The server's own join of lead + resolved body
+              (`Workspace.compose_description`) -- rendered as-is, never
+              rejoined here, so this can never disagree with what Printify,
+              Etsy, and the deploy comparison view will actually send
+              (AI SEO implementation plan, "Description and common-copy
+              boundaries"). */}
+          <p id="details-description-preview" className="description-preview">
+            {detail.description_composed}
+          </p>
         </div>
 
         <div className={sectionError ? "field field--invalid" : "field"}>

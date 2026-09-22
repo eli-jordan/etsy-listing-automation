@@ -1,5 +1,6 @@
 import { api } from "./client";
 import type {
+  CommonCopySummary,
   CommonMediaSummary,
   CreateListingRequest,
   EtsySectionSummary,
@@ -158,6 +159,22 @@ export function commonMediaThumbnailUrl(name: string): string {
  * picture to *pick* rather than one to judge. */
 export function commonMediaFileUrl(name: string): string {
   return `/api/common-media/${encodeURIComponent(name)}/file`;
+}
+
+/** The Description tab's common-copy selector (AI SEO implementation plan,
+ * PR6): every reusable description body, each with a ref ready to write
+ * straight into `description.ref`. Empty (never an error) for a workspace
+ * with no `common-copy/` yet, the same convention `listEtsySections` follows
+ * for an unconfigured shop -- an editor with nothing to pick from is an
+ * ordinary state, not a failure. */
+export async function listCommonCopy(): Promise<CommonCopySummary[]> {
+  try {
+    const { data, error } = await api.GET("/api/common-copy");
+    if (error || !data) return [];
+    return data;
+  } catch {
+    return [];
+  }
 }
 
 export async function getWorkspace(): Promise<WorkspaceSummary> {

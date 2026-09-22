@@ -41,6 +41,7 @@ export type PricingPlanSummary = components["schemas"]["PricingPlanSummary"];
 export type ListingDesignSummary = components["schemas"]["ListingDesignSummary"];
 export type WorkspaceSummary = components["schemas"]["WorkspaceSummary"];
 export type CommonMediaSummary = components["schemas"]["CommonMediaSummary"];
+export type CommonCopySummary = components["schemas"]["CommonCopySummary"];
 export type CreateListingRequest = components["schemas"]["CreateListingRequest"];
 export type EtsySectionSummary = components["schemas"]["EtsySectionSummary"];
 export type TemplateMediaEntry = components["schemas"]["TemplateMediaEntry"];

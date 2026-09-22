@@ -241,6 +241,13 @@ class ListingDetail(Listing):
     They remain outside ``Listing`` because a listing never writes or owns
     them; this derived field merely lets the editor show what Etsy will use.
     """
+    description_composed: str = ""
+    """The final `etsy.description` text, exactly as
+    `Workspace.compose_description` joins it -- the one value the Details
+    tab's preview may render, so it never re-implements the lead/body join
+    itself (AI SEO implementation plan, PR6). Falls back to the lead alone
+    when `ref` fails to resolve; `description_ref_error`-derived issues
+    already say why, so this field only avoids also raising."""
 
     @model_validator(mode="after")
     def _require_a_price_source(self) -> ListingDetail:
@@ -305,6 +312,24 @@ class CommonMediaSummary(BaseModel):
     entry resolves against the listing's own directory (PRD 8a), the same rule
     `design:` follows, so the picker hands back the stored form rather than
     leaving every caller to rebuild it."""
+
+
+class CommonCopySummary(BaseModel):
+    """One `common-copy/*.md` file, for the Description tab's body-source
+    selector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s
+    ref, a common-copy ref is portable -- workspace-relative, not
+    listing-relative -- so it is exactly what `description.ref` stores,
+    already usable as-is."""
+
+    ref: str
+    """Workspace-relative, e.g. ``common-copy/comfort-colors.md`` -- what
+    `description.ref` stores unchanged (unlike `CommonMediaSummary.ref`,
+    which is listing-relative)."""
+    title: str
+    """The file's front-matter title, for the picker's option label."""
+    summary: str | None = None
+    """The file's optional front-matter summary, for the metadata display
+    once one is selected."""
 
 
 class EtsySectionSummary(BaseModel):

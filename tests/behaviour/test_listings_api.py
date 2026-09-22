@@ -280,6 +280,52 @@ class TestGetListingDetail:
 
         assert not any("common-copy" in i["message"] for i in issues)
 
+    def test_composes_the_description_from_lead_and_ref_body(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """`description_composed` is the same string every deployment reader
+        gets from `Workspace.compose_description` -- the editor's own preview
+        of the final copy must read it here rather than re-joining lead and
+        body itself (AI SEO implementation plan, "Description and
+        common-copy boundaries")."""
+        common_copy = workspace_root / "common-copy"
+        common_copy.mkdir()
+        (common_copy / "comfort-colors.md").write_text(
+            "---\ntitle: Comfort Colors\ntargets: [description]\n---\nPrinted to order.",
+            encoding="utf-8",
+        )
+        client.patch(
+            "/api/listings/take-a-hike",
+            json={
+                "etsy": {
+                    "description": {
+                        "lead": "A retro sunset.",
+                        "ref": "common-copy/comfort-colors.md",
+                    }
+                }
+            },
+        )
+
+        body = client.get("/api/listings/take-a-hike").json()
+
+        assert body["description_composed"] == "A retro sunset.\n\nPrinted to order."
+
+    def test_composed_description_falls_back_to_the_lead_alone_for_a_bad_ref(
+        self, client: TestClient
+    ) -> None:
+        """A `ref` that will not resolve already surfaces as a block issue
+        (`test_reports_a_missing_common_copy_ref_as_a_details_block` above) --
+        the composed preview must not also raise, it just cannot include a
+        body it could not load."""
+        client.patch(
+            "/api/listings/take-a-hike",
+            json={"etsy": {"description": {"lead": "A retro sunset.", "ref": "common-copy/x.md"}}},
+        )
+
+        body = client.get("/api/listings/take-a-hike").json()
+
+        assert body["description_composed"] == "A retro sunset."
+
     def test_reports_the_undersized_design_as_a_variants_block(self, client: TestClient) -> None:
         issues = client.get("/api/listings/take-a-hike").json()["issues"]
         matches = [i for i in issues if i["tab"] == "variants" and i["severity"] == "block"]
@@ -884,6 +930,44 @@ class TestSupportingEndpoints:
 
     def test_a_common_media_file_404s_for_an_unknown_asset(self, client: TestClient) -> None:
         assert client.get("/api/common-media/no-such-asset/file").status_code == 404
+
+    def test_lists_common_copy_files_with_their_front_matter(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """The Description tab's common-copy selector (AI SEO implementation
+        plan, PR6) needs titles and summaries to show, not just filenames --
+        so the listing endpoint parses each file's front matter rather than
+        handing back a bare directory listing."""
+        shared = workspace_root / "common-copy"
+        shared.mkdir(exist_ok=True)
+        (shared / "comfort-colors.md").write_text(
+            "---\ntitle: Comfort Colors care and fit\ntargets: [description]\n"
+            "summary: Care and fit notes.\n---\nPrinted to order.",
+            encoding="utf-8",
+        )
+
+        response = client.get("/api/common-copy")
+        assert response.status_code == 200
+        [row] = response.json()
+        assert row["ref"] == "common-copy/comfort-colors.md"
+        assert row["title"] == "Comfort Colors care and fit"
+        assert row["summary"] == "Care and fit notes."
+
+    def test_common_copy_is_empty_on_a_workspace_that_has_none(self, client: TestClient) -> None:
+        assert client.get("/api/common-copy").json() == []
+
+    def test_common_copy_omits_a_file_whose_front_matter_will_not_parse(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """A malformed file cannot be selected -- offering it in the list
+        would only produce a pick that immediately fails, so it is left out
+        rather than shown broken. (The banner already tells a seller about a
+        *stored* ref that fails to resolve; this is the picker's own list.)"""
+        shared = workspace_root / "common-copy"
+        shared.mkdir(exist_ok=True)
+        (shared / "broken.md").write_text("not front matter at all", encoding="utf-8")
+
+        assert client.get("/api/common-copy").json() == []
 
     def test_names_the_shop_the_sidebar_says_you_are_working_on(self, client: TestClient) -> None:
         """One workspace per shop, so the sidebar says which -- the difference

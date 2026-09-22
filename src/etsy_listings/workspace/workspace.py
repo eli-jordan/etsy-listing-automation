@@ -322,6 +322,21 @@ class Workspace:
             raise PathEscapesWorkspaceError(ref, self.root) from exc
         return candidate
 
+    def common_copy_files(self) -> list[Path]:
+        """Every ``common-copy/*.md``: the reusable description bodies a
+        listing can point ``description.ref`` at (AI SEO implementation plan,
+        PR6's common-copy selector). Flat and Markdown-only, for the same
+        reason :meth:`common_media_files` is -- :meth:`common_copy_file`
+        derives one fixed path per name, so anything listed here that it
+        could not resolve would be offered and then fail. Sorted by name: a
+        common-copy file, like a shared image, is written once and reused for
+        years, so recency says nothing useful about it.
+        """
+        shared = self.common_copy_dir()
+        if not shared.is_dir():
+            return []
+        return sorted(p for p in shared.glob("*.md") if p.is_file())
+
     def load_common_copy(self, ref: str) -> CommonCopyDocument:
         """A `description.ref`'s parsed front matter and body.
 

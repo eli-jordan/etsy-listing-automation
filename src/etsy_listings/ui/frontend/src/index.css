@@ -2563,6 +2563,36 @@ table.listings tbody tr:last-child td {
   margin-top: 3px;
 }
 
+/* — Description body source: the selected common-copy file's front matter — */
+.common-copy-meta {
+  margin-top: var(--space-2);
+}
+
+.common-copy-meta__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  margin: 0;
+}
+
+.common-copy-meta__summary {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+  margin: 2px 0 0;
+}
+
+/* — the composed description preview: the server's own join, rendered as-is — */
+.description-preview {
+  margin: 0;
+  padding: 7px 13px;
+  font-size: 13.5px;
+  color: var(--color-text);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  white-space: pre-wrap;
+}
+
 /* — tag chips (Details tab) — */
 .chips {
   display: flex;

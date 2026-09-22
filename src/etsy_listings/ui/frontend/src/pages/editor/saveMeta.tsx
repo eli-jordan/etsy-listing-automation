@@ -19,6 +19,8 @@ export function metaFor(save: SaveState, detail: ListingDetail, name: string | n
       return "Not saved — double-click the name above to name this listing";
     case "name-taken":
       return `There is already a listing called “${save.name}” — pick another name`;
+    case "save-failed":
+      return "Couldn't save — the edit is kept locally and retries on your next change";
     case "unsaved": {
       const blocking = detail.issues.filter((i) => i.severity === "block");
       const pricing = blocking.find((i) => i.where.includes("Pricing"));

@@ -57,6 +57,7 @@ function detail(): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    description_composed: "",
   };
 }
 

@@ -451,6 +451,36 @@
         "title": "ColourReportRow",
         "type": "object"
       },
+      "CommonCopySummary": {
+        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s\nref, a common-copy ref is portable -- workspace-relative, not\nlisting-relative -- so it is exactly what `description.ref` stores,\nalready usable as-is.",
+        "properties": {
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "title"
+        ],
+        "title": "CommonCopySummary",
+        "type": "object"
+      },
       "CommonMediaSummary": {
         "description": "One shared asset under ``common-media/`` -- the other half of `media:`,\na bare path rather than a rendered mockup.",
         "properties": {
@@ -1254,6 +1284,11 @@
             },
             "title": "Colors",
             "type": "array"
+          },
+          "description_composed": {
+            "default": "",
+            "title": "Description Composed",
+            "type": "string"
           },
           "design": {
             "additionalProperties": {
@@ -3641,6 +3676,32 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/common-copy": {
+      "get": {
+        "description": "The Description tab's common-copy selector (AI SEO implementation\nplan, PR6): every reusable description body, with the title and summary\nits front matter carries, so the picker can show something readable\nrather than a bare filename.\n\nA file whose front matter will not parse is left out -- read-only, so\nthere is nowhere here to report the problem, and offering it would only\nproduce a pick that immediately fails to resolve. (A *stored* ref that\nfails to resolve still surfaces as a details-tab issue -- see\n`_description_ref_error` -- this is only the list of things one could\nnewly pick.)",
+        "operationId": "list_common_copy_api_common_copy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CommonCopySummary"
+                  },
+                  "title": "Response List Common Copy Api Common Copy Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Common Copy",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
     "/api/common-media": {
       "get": {
         "description": "The shared assets a listing can add to `media:` as a bare path.\n\nDistinct from both design endpoints: ``designs/`` is the artwork that gets\nprinted, ``test-designs/`` is calibration targets, and these are finished\npictures (a sizing chart, care instructions) uploaded to Etsy as-is,\nnever rendered onto a garment.",
@@ -4215,7 +4276,7 @@
     },
     "/api/listings/{name}/ai-seo/proposal": {
       "post": {
-        "description": "Run one complete AI Mode SEO request for this saved listing.\n\nRefuses with 409 for exactly two reasons: this listing does not meet\n:func:`_readiness`'s prerequisites (re-checked here independently of\nwhatever the client last saw from the readiness endpoint -- state can\nchange between the two calls), or another request for the same listing\nis already running (the settled \"Concurrent requests\" decision; a\n*different* listing's request is never refused). Every failure the\norchestrator itself can raise maps onto the settled \"Timeout and\nretries\" outcomes: 503 when every provider was recognised-unavailable,\n502 for everything else the plan calls \"Try again\". A cancellation\n(browser disconnect) answers 499 -- there is usually nobody left to\nreceive it, but the request must still resolve to *something* so this\ncoroutine, and the process it was managing, both end cleanly.\n\nReturns only what item 4 permits: the validated proposal, the input\nsnapshot, and expiry metadata. Nothing here is written to a workspace\nfile, a lockfile, or any server-side cache -- ``proposal`` and\n``seo_request`` fall out of scope the moment this function returns.",
+        "description": "Run one complete AI Mode SEO request for this saved listing.\n\nRefuses with 409 for exactly two reasons: this listing does not meet\n:func:`_readiness`'s prerequisites (re-checked here independently of\nwhatever the client last saw from the readiness endpoint -- state can\nchange between the two calls), or another request for the same listing\nis already running (the settled \"Concurrent requests\" decision; a\n*different* listing's request is never refused). Every failure the\norchestrator itself can raise maps onto the settled \"Timeout and\nretries\" outcomes: 503 when every provider was recognised-unavailable,\n502 for everything else the plan calls \"Try again\". A cancellation\n(browser disconnect) answers 499 -- there is usually nobody left to\nreceive it, but the request must still resolve to *something* so this\ncoroutine, and the process it was managing, both end cleanly.\n\nThe final ``except Exception`` is a deliberate catch-all, not a\nswallow-and-hope: everything above it is a recognised\n`~etsy_listings.ai.errors.SeoGenerationError` outcome the plan already\nnames, but `ai/process.py.run_managed` can also raise a plain\n`CliProcessError` (`subprocess.Popen` itself failing to launch a\nprovider's CLI -- e.g. a binary readiness confirmed present and then\nremoved before this call), and any adapter bug is, by definition,\nsomething this module cannot enumerate in advance. Neither may leave\nFastAPI's own unhandled-exception path to answer: that path is a\nplain-text \"Internal Server Error\", not this module's\n``{\"detail\": ...}`` JSON shape every other status code here uses, and a\nfuture frontend (PR7) should not have to special-case one endpoint's\nerror body. ``HTTPException`` is re-raised untouched first, since\n:func:`_build_request` raises one of those directly (the \"no usable\ngarment profile\" 409) and it must reach the client as itself, not get\nfolded into a 502.\n\nReturns only what item 4 permits: the validated proposal, the input\nsnapshot, and expiry metadata. Nothing here is written to a workspace\nfile, a lockfile, or any server-side cache -- ``proposal`` and\n``seo_request`` fall out of scope the moment this function returns.",
         "operationId": "request_seo_proposal_api_listings__name__ai_seo_proposal_post",
         "parameters": [
           {
