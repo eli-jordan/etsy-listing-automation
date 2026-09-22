@@ -4,15 +4,14 @@
 
 This document is the implementation companion to the
 [Listing SEO review prototype](../src/etsy_listings/ui/frontend/design/scenes/listing-seo/review.tsx)
-and the current [SEO generation prompt](../seo_prompt.md). It describes what
+and the drafting [SEO prompt source](../seo_prompt.md). It describes what
 each interaction does and why it matters. The prototype demonstrates the main
 happy path in one frame; this document also specifies loading, stale, invalid,
 and unavailable states that do not need separate design frames.
 
-The [PRD](prd.md) remains the product authority. This design deliberately
-changes parts of PRD decision 4 and the current listing description shape. The
-documentation changes in [Implementation prerequisites](#implementation-prerequisites)
-must therefore be settled before implementation.
+The [PRD](prd.md) remains the product authority. Its AI Mode and structured
+description decisions are settled here; this document records the interaction
+contract they require.
 
 ## Purpose
 
@@ -52,7 +51,7 @@ workspace.
 ## Flow at a glance
 
 1. The seller opens **Listing Details**.
-2. The seller activates the subtle **AI Mode** sparkle button.
+2. When AI Mode is available, the seller activates its subtle sparkle button.
 3. The button enters a loading state while the current listing facts are sent
    for generation.
 4. When generation finishes, the title, tags, and description-lead drawers
@@ -72,14 +71,15 @@ it is discoverable without competing with **Deploy changes**.
 
 | Interaction                      | What happens                                                                                                                                                  | Why it is important                                                                                                |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Hover or focus **AI Mode**       | The control receives the same visible hover/focus treatment as other secondary actions.                                                                       | The feature remains discoverable while still reading as optional assistance.                                       |
-| Activate **AI Mode**             | Capture the current generation inputs and begin one request for a complete proposal.                                                                          | A single explicit action keeps model usage predictable and ensures all suggestions share the same listing context. |
-| Activate it for an unnamed draft | Generation may proceed when the other required inputs are present. Accepted copy remains local until the draft has a name and normal autosave can persist it. | Naming should not block useful drafting, but incomplete drafts must not create ambiguous workspace files.          |
-| Required inputs are missing      | Disable the button. Its hover target explains which inputs are missing, such as a design or listing brief.                                                    | A specific explanation turns an unavailable feature into a fixable state.                                          |
+| Hover or focus **AI Mode** | The control receives the same visible hover/focus treatment as other secondary actions. | The feature remains discoverable while still reading as optional assistance. |
+| Activate **AI Mode** | Capture the current generation inputs and begin one request for a complete proposal. | A single explicit action keeps model usage predictable and ensures all suggestions share the same listing context. |
+| The listing is unsaved or a prerequisite is unavailable | Do not render the control. | A proposal has an unambiguous workspace/listing scope only after the listing is saved, and unavailable local tooling should not look like a broken editor action. |
 
-For v1, generation requires a selected design and a non-empty listing brief.
-Garment-profile and other existing listing facts are included when available as
-defined by the generation stage.
+For v1, AI Mode requires a saved listing with a selected design, a non-empty
+listing brief, `prompts/seo.md`, and at least one ready provider. Garment-profile
+and other existing listing facts are included in the submitted snapshot. The
+client learns availability from the saved-listing readiness endpoint; it never
+guesses from browser state.
 
 ## 2. Loading and automatic reveal
 
@@ -89,9 +89,16 @@ editing other fields while generation runs.
 
 | State      | UI response                                                                                                     | Why it is important                                                                                  |
 | ---------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Generating | Show a compact message such as **Generating title, tag, and description suggestions…** in a polite live region. | The request can take time, so the interface must acknowledge the action without blocking the editor. |
+| Generating | Show a compact message such as **Generating title, tag, and description suggestions…** in a polite live region, with **Cancel**. | The request can take time, so the interface must acknowledge the action without blocking the editor and must permit an intentional stop. |
 | Success    | Remove the loading message and reveal all three field-attached drawers automatically.                           | Requiring a second click to view results adds ceremony without adding safety.                        |
 | Failure    | Remove the loading state and show an inline user-facing error with **Try again**. Do not change listing fields. | A model or validation failure must never look like an empty successful result.                       |
+| Cancelled  | Remove the loading state and retain no proposal. Do not change listing fields.                                  | Leaving the editor, losing the connection, or pressing **Cancel** must not leave a result from an abandoned request. |
+
+The backend tries Codex first. Only recognised provider-unavailable,
+authentication/quota, or rate-limit failures fall through to Claude Code; a
+malformed response receives one repair attempt from the same provider. Every
+other error exposes **Try again**. The whole request, repair, and allowed
+fallback share one 60-second deadline.
 
 The prototype uses a short fixed delay to demonstrate this transition. That
 delay is not a product requirement; the implementation reveals results when
@@ -146,14 +153,16 @@ There is no description-lead **Accept** button and no default selection.
 
 ## 6. Description composition
 
-The listing model separates the description into two concepts:
+The listing model is `etsy.description`, with a required `lead` and exactly one
+optional sibling body source: reusable `ref` or inline `text`. `lead` may be
+empty while the seller edits, but deployment is blocked until it is non-empty.
+`text` and `ref` must never coexist.
 
-- `description_lead`: optional listing-specific opening copy; and
-- description body: exactly one of a reusable common-copy reference or inline
-  listing-specific text.
-
-When sent to Etsy, the non-empty lead and body are joined with one blank line.
-A lead without a body is valid. An empty lead preserves the body as-is.
+The shared server-side composer joins a non-empty lead and resolved body with
+one blank line. A lead without a body is valid. An empty lead preserves the
+body as-is while editing. Printify, Etsy, snapshots, diffs, validation, and UI
+preview all consume that one final concrete description; no UI handler joins it
+independently.
 
 | Interaction                                                                        | What happens                                                                    | Why it is important                                                              |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
@@ -165,23 +174,27 @@ A lead without a body is valid. An empty lead preserves the body as-is.
 A common-copy file has frontmatter fields `title` and `targets`; `summary` is
 optional. The initial supported target is `description`.
 
-Existing listings with one `description` value migrate that complete value to
-the inline body and start with an empty lead. Migration must not guess where a
-lead ends.
+Legacy conversion is direct and deliberately not a compatibility reader:
+`<generate>` becomes empty ordinary editable SEO values, and a legacy scalar
+description becomes `description.text` unchanged with an empty `lead`. It must
+not guess where an opening paragraph ends. Conversion targets are enumerated
+before writing: tracked repository fixtures and the explicitly identified
+desktop `try-workspace` only, never arbitrary discovered workspaces.
 
 ## 7. Proposal lifecycle and stale inputs
 
-The pending proposal is stored only in browser local storage so it can survive
-an accidental refresh. It is not written to listing YAML, a generated-copy
-file, or the backend until the seller chooses a value that belongs in a normal
-listing field.
+The pending proposal is stored only in browser local storage for one day, scoped
+to its workspace and saved listing, so it can survive an accidental refresh. It
+is not written to listing YAML, a generated-copy file, or the backend until the
+seller chooses a value that belongs in a normal listing field.
 
 Generation records a snapshot of the relevant inputs, including the design,
 brief, garment context, and other facts supplied to the model.
 
 | Event                                                                           | UI response                                                                                                             | Why it is important                                                                                                 |
 | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| A relevant input changes while generation is running or suggestions are pending | Keep the proposal visible, mark it stale, and disable selecting its pending values. Offer **Regenerate**.               | Hiding the result would be disorienting, while accepting copy based on obsolete facts could introduce inaccuracies. |
+| A relevant input changes while suggestions are pending | Keep the proposal visible, mark it stale, and disable selecting its pending values. Offer **Regenerate**. | Hiding the result would be disorienting, while accepting copy based on obsolete facts could introduce inaccuracies. |
+| The editor is left or its connection closes while generation runs | Abort the request and retain no proposal. | A request without its saved-listing editor has no useful owner. |
 | Activate **Regenerate**                                                         | Request a complete replacement proposal from the current inputs. Preserve all values already chosen into normal fields. | Regeneration repairs context without undoing seller decisions.                                                      |
 | Resolve or dismiss one drawer                                                   | Clear only that part of the pending proposal.                                                                           | Title, tags, and lead are independent decisions.                                                                    |
 | Resolve or dismiss all drawers                                                  | Remove the pending proposal from local storage.                                                                         | Temporary suggestions should not linger after they can no longer help.                                              |
@@ -194,13 +207,13 @@ no stale badge. It is ordinary listing content.
 
 Generated output is normalized for harmless formatting differences, then
 checked against the same hard limits the listing editor and Etsy stage enforce.
-This includes the title limit, tag count and length, uniqueness, banned-word
-checks, and trademark screening.
+This includes the title limit, tag count and length, uniqueness, and agreed
+affiliation/content checks. Trademark findings are warnings, not a hard refusal.
 
-If the first model response is invalid, retry generation once without changing
-any listing field. If the retry is also invalid, show an inline failure and
-offer **Try again**. Do not reveal a partial proposal as though it were safe to
-use.
+If the first model response is invalid, repair it once with the same provider
+without changing any listing field. If repair fails, use Claude only for a
+recognised fall-through condition; otherwise show an inline failure and offer
+**Try again**. Do not reveal a partial proposal as though it were safe to use.
 
 Non-blocking quality warnings remain informational. Search phrases or rationale
 returned by the generator may be available through an optional disclosure in
@@ -218,9 +231,8 @@ If autosave fails, keep the edited field value visible and use the editor's
 normal unsaved/error treatment. Reopening or regenerating AI suggestions must
 not be presented as a persistence recovery mechanism.
 
-For an unnamed draft, accepted values may remain in editor state until the
-listing receives a name. Naming the draft then persists the complete normal
-listing document through the existing create/autosave path.
+AI Mode is unavailable for an unnamed draft, so every accepted value has the
+ordinary saved-listing autosave destination from the start.
 
 ## 10. Accessibility and input behavior
 
@@ -236,42 +248,28 @@ listing document through the existing create/autosave path.
   the last drawer closes.
 - Suggestion rows and subtle actions have a visible focus indicator.
 - Color is never the only selected, stale, warning, disabled, or failure cue.
-- The disabled **AI Mode** explanation has a hover target as approved for this
-  design; it should also be exposed as an accessible description.
 - Motion honors `prefers-reduced-motion`; drawers do not require an animated
   transition.
 
-## 11. Implementation prerequisites
+## 11. Implementation boundary
 
-This companion records the approved interaction, but it cannot by itself
-change settled product decisions. Before implementation:
+The authority documents now establish the boundaries this interaction uses:
+the saved-listing readiness and request-scoped proposal endpoints are outside
+`ui/runs`; provider orchestration retains no server-side proposal, job record,
+or workspace output; and local storage scopes a one-day proposal by workspace
+and listing. The application appends delimited JSON context and a response
+schema to plain seller-editable `prompts/seo.md`; it does not support prompt
+placeholders or executable prompt code.
 
-1. Update PRD decision 4 and its AI-generation section. They currently define
-   `generated.yaml` as the durable AI cache and place review at the Etsy draft.
-   This design instead uses a temporary browser proposal and review inside the
-   listing editor.
-2. Update the PRD listing schema and the implementation plan for
-   `description_lead`, the single body-source union, final description
-   composition, and common-copy validation.
-3. Update the implementation plan's Generate stage, applied document, and
-   idempotency rules so selected human-owned fields remain stable without
-   `generated.yaml` acting as their source.
-4. Update [seo_prompt.md](../seo_prompt.md). It currently asks for one title,
-   one description lead, and exactly 13 tags; this interaction requires three
-   titles, three leads, and 20 ranked tag candidates whose first 13 are the
-   recommended set.
-5. Decide the backend endpoint and browser-local proposal versioning before
-   implementing restore and stale detection.
-
-These authority-document changes should be reviewed separately before the
-frontend or generation stage is treated as complete.
+The repository-root [seo_prompt.md](../seo_prompt.md) remains a drafting source
+for the packaged default prompt. It is not read as a runtime workspace file.
 
 ## 12. Implementation-facing acceptance criteria
 
 The interaction is complete when all of the following are true:
 
 1. **AI Mode** is a subtle sparkle action in the upper-right of Listing Details
-   and explains missing required inputs when unavailable.
+   for a saved listing with all prerequisites; it is absent when unavailable.
 2. Activating it begins one request and shows an inline loading state without
    blocking unrelated editing.
 3. Successful results appear automatically in drawers attached to Title, Tags,
