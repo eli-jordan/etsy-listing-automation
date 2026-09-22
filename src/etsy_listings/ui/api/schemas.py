@@ -436,3 +436,92 @@ class ApplyRunDetail(ApplyRunSummary):
 
 
 RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind")]
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# AI SEO (AI SEO implementation plan, PR5). Deliberately outside `ui/runs`:
+# there is no run, SQLite record, lockfile, or server-side proposal cache
+# behind these two shapes -- `ui/api/seo.py`'s own docstring says why. The
+# proposal's own field shapes mirror `ai/models.py.SeoProposal` field for
+# field, the same "wire shape *is* the domain shape" rule `ListingDetail`
+# follows for `Listing` above, rather than reusing those frozen dataclasses
+# directly -- pydantic, not a dataclass, is what FastAPI serialises a
+# response with.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class SeoReadinessResponse(BaseModel):
+    """Whether AI Mode may be offered for one saved listing right now
+    (implementation plan, "Entry point"). The frontend (PR7) uses this to
+    decide whether to render the control at all -- hidden, not disabled, so
+    ``reason`` is prose for a developer/support reader, never shown as a
+    disabled-button tooltip."""
+
+    ready: bool
+    reason: str | None = None
+
+
+SeoRationaleIntent = Literal["core_product", "bottom_of_funnel", "style"]
+SeoRationaleField = Literal["title", "tags", "description_lead"]
+SeoWarningKind = Literal["general", "trademark"]
+
+
+class SeoRationaleEntry(BaseModel):
+    """One of the proposal's seven priority-phrase rationales -- the wire
+    shape of `ai/models.py.PhraseRationale`."""
+
+    phrase: str
+    intent: SeoRationaleIntent
+    reason: str
+    used_in: list[SeoRationaleField]
+
+
+class SeoWarningEntry(BaseModel):
+    """The wire shape of `ai/models.py.ProposalWarning`."""
+
+    message: str
+    kind: SeoWarningKind = "general"
+
+
+class SeoProposalSnapshot(BaseModel):
+    """The submitted generation inputs, echoed back beside the proposal
+    (implementation plan, PR5 item 4: "input snapshot data").
+
+    This is what a future frontend (PR7) compares its own current editor
+    state against to decide a pending proposal has gone stale
+    (`docs/ui-listing-seo-interactions.md` section 7) -- everything
+    `ai/models.py.SeoRequest` sent to the provider except the design image
+    itself, which the browser already holds and can compare or hash on its
+    own (`SeoRequest`'s own docstring: design identity/content hashing is
+    deliberately the browser's bookkeeping, not a fact this API computes).
+    """
+
+    brief: str
+    product_type: str
+    etsy_category: str
+    materials: list[str]
+    colors: list[str]
+    garment_brand: str
+    garment_model: str
+
+
+class SeoProposalResponse(BaseModel):
+    """A complete, hard-validated proposal plus what PR5 item 4 promises
+    beside it: the input snapshot and expiry metadata. Never cached
+    server-side past this one response -- `ui/api/seo.py` builds this,
+    returns it, and keeps nothing."""
+
+    titles: list[str]
+    tags: list[str]
+    description_leads: list[str]
+    rationale: list[SeoRationaleEntry]
+    warnings: list[SeoWarningEntry]
+    observed_text: str
+    snapshot: SeoProposalSnapshot
+    generated_at: datetime
+    expires_at: datetime
+    """``generated_at`` plus the settled one-day local-storage retention
+    (implementation plan, "Proposal persistence") -- the browser's own
+    expiry clock (PR7's job to enforce) is seeded from the server's clock
+    rather than computed from a client-side timestamp that skew or a
+    suspended laptop could stretch past a day."""

@@ -302,6 +302,69 @@ export interface paths {
     patch: operations["patch_listing_api_listings__name__patch"];
     trace?: never;
   };
+  "/api/listings/{name}/ai-seo/proposal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request Seo Proposal
+     * @description Run one complete AI Mode SEO request for this saved listing.
+     *
+     *     Refuses with 409 for exactly two reasons: this listing does not meet
+     *     :func:`_readiness`'s prerequisites (re-checked here independently of
+     *     whatever the client last saw from the readiness endpoint -- state can
+     *     change between the two calls), or another request for the same listing
+     *     is already running (the settled "Concurrent requests" decision; a
+     *     *different* listing's request is never refused). Every failure the
+     *     orchestrator itself can raise maps onto the settled "Timeout and
+     *     retries" outcomes: 503 when every provider was recognised-unavailable,
+     *     502 for everything else the plan calls "Try again". A cancellation
+     *     (browser disconnect) answers 499 -- there is usually nobody left to
+     *     receive it, but the request must still resolve to *something* so this
+     *     coroutine, and the process it was managing, both end cleanly.
+     *
+     *     Returns only what item 4 permits: the validated proposal, the input
+     *     snapshot, and expiry metadata. Nothing here is written to a workspace
+     *     file, a lockfile, or any server-side cache -- ``proposal`` and
+     *     ``seo_request`` fall out of scope the moment this function returns.
+     */
+    post: operations["request_seo_proposal_api_listings__name__ai_seo_proposal_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/ai-seo/readiness": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Seo Readiness
+     * @description Whether **AI Mode** may be offered for this saved listing right now
+     *     -- the one call the future frontend (PR7) makes to decide whether to
+     *     render the control at all (hidden, not disabled, per the settled
+     *     "Entry point" decision). Read-only: every check here, including each
+     *     provider's own `readiness()`, is a local probe (a file's existence, a
+     *     fast `--help`/`login status` subprocess) that changes nothing.
+     */
+    get: operations["get_seo_readiness_api_listings__name__ai_seo_readiness_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/listings/{name}/previews/{template}": {
     parameters: {
       query?: never;
@@ -1977,6 +2040,113 @@ export interface components {
       stage: "retract";
     };
     /**
+     * SeoProposalResponse
+     * @description A complete, hard-validated proposal plus what PR5 item 4 promises
+     *     beside it: the input snapshot and expiry metadata. Never cached
+     *     server-side past this one response -- `ui/api/seo.py` builds this,
+     *     returns it, and keeps nothing.
+     */
+    SeoProposalResponse: {
+      /** Description Leads */
+      description_leads: string[];
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string;
+      /** Observed Text */
+      observed_text: string;
+      /** Rationale */
+      rationale: components["schemas"]["SeoRationaleEntry"][];
+      snapshot: components["schemas"]["SeoProposalSnapshot"];
+      /** Tags */
+      tags: string[];
+      /** Titles */
+      titles: string[];
+      /** Warnings */
+      warnings: components["schemas"]["SeoWarningEntry"][];
+    };
+    /**
+     * SeoProposalSnapshot
+     * @description The submitted generation inputs, echoed back beside the proposal
+     *     (implementation plan, PR5 item 4: "input snapshot data").
+     *
+     *     This is what a future frontend (PR7) compares its own current editor
+     *     state against to decide a pending proposal has gone stale
+     *     (`docs/ui-listing-seo-interactions.md` section 7) -- everything
+     *     `ai/models.py.SeoRequest` sent to the provider except the design image
+     *     itself, which the browser already holds and can compare or hash on its
+     *     own (`SeoRequest`'s own docstring: design identity/content hashing is
+     *     deliberately the browser's bookkeeping, not a fact this API computes).
+     */
+    SeoProposalSnapshot: {
+      /** Brief */
+      brief: string;
+      /** Colors */
+      colors: string[];
+      /** Etsy Category */
+      etsy_category: string;
+      /** Garment Brand */
+      garment_brand: string;
+      /** Garment Model */
+      garment_model: string;
+      /** Materials */
+      materials: string[];
+      /** Product Type */
+      product_type: string;
+    };
+    /**
+     * SeoRationaleEntry
+     * @description One of the proposal's seven priority-phrase rationales -- the wire
+     *     shape of `ai/models.py.PhraseRationale`.
+     */
+    SeoRationaleEntry: {
+      /**
+       * Intent
+       * @enum {string}
+       */
+      intent: "core_product" | "bottom_of_funnel" | "style";
+      /** Phrase */
+      phrase: string;
+      /** Reason */
+      reason: string;
+      /** Used In */
+      used_in: ("title" | "tags" | "description_lead")[];
+    };
+    /**
+     * SeoReadinessResponse
+     * @description Whether AI Mode may be offered for one saved listing right now
+     *     (implementation plan, "Entry point"). The frontend (PR7) uses this to
+     *     decide whether to render the control at all -- hidden, not disabled, so
+     *     ``reason`` is prose for a developer/support reader, never shown as a
+     *     disabled-button tooltip.
+     */
+    SeoReadinessResponse: {
+      /** Ready */
+      ready: boolean;
+      /** Reason */
+      reason?: string | null;
+    };
+    /**
+     * SeoWarningEntry
+     * @description The wire shape of `ai/models.py.ProposalWarning`.
+     */
+    SeoWarningEntry: {
+      /**
+       * Kind
+       * @default general
+       * @enum {string}
+       */
+      kind: "general" | "trademark";
+      /** Message */
+      message: string;
+    };
+    /**
      * ShadeConfig
      * @description Blends the base mockup photo's own greyscale lighting over the printed
      *     design, so a flat design picks up the garment's real fold shadows and
@@ -2769,6 +2939,68 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  request_seo_proposal_api_listings__name__ai_seo_proposal_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SeoProposalResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_seo_readiness_api_listings__name__ai_seo_readiness_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SeoReadinessResponse"];
         };
       };
       /** @description Validation Error */
