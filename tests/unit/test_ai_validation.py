@@ -240,6 +240,20 @@ def test_provider_supplied_warnings_are_kept_as_general_warnings() -> None:
     )
 
 
+def test_trademark_matching_ignores_a_word_that_merely_contains_a_watchlisted_term() -> None:
+    """`marvel` must not match inside `marvelous` -- a plain substring test
+    would flag ordinary descriptive copy as a trademark mention it never
+    made."""
+    raw = _valid_raw()
+    raw["description_leads"][0] = (
+        "A relaxed heavyweight tee with a marvelous retro hiking graphic for the trail."
+    )
+
+    proposal = validate_proposal(raw)
+
+    assert not any(w.kind == "trademark" for w in proposal.warnings)
+
+
 def test_trademark_and_general_warnings_can_both_be_present() -> None:
     raw = _valid_raw(warnings=["uncertain about garment weight"])
     raw["tags"][0] = "nike style tee"

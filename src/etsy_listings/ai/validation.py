@@ -308,9 +308,19 @@ def _hard_validation_reasons(normalized: Mapping[str, Any]) -> list[str]:
 # --------------------------------------------------------------- trademark
 
 
+_TRADEMARK_PATTERNS: dict[str, re.Pattern[str]] = {
+    term: re.compile(rf"\b{re.escape(term)}\b") for term in TRADEMARK_WATCHLIST
+}
+"""Compiled once at import time, keyed by watchlist term. `\\b` keeps a
+single-word entry (``nike``) from matching inside an unrelated word that
+happens to contain it as a substring (``marvel`` inside ``marvelous``) while
+still matching a multi-word entry (``star wars``) across its internal
+space."""
+
+
 def _trademark_hits(text: str) -> set[str]:
     lowered = text.casefold()
-    return {term for term in TRADEMARK_WATCHLIST if term in lowered}
+    return {term for term, pattern in _TRADEMARK_PATTERNS.items() if pattern.search(lowered)}
 
 
 def _trademark_warnings(
