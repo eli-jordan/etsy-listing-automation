@@ -110,6 +110,20 @@ describe("useAiSeoMode availability", () => {
     expect(readiness).not.toHaveBeenCalled();
   });
 
+  // Regression test for f21e864: `getWorkspace()` used to fire on every
+  // mount regardless of prerequisites, sending an unmocked network call from
+  // any editor test whose fixture had a design but no brief yet (most of
+  // them) and flaking unrelated tests under CI parallelism. It must stay
+  // gated behind the same prerequisites as the readiness call.
+  it("does not call getWorkspace when prerequisites are unmet", async () => {
+    const workspace = vi.spyOn(listingsApi, "getWorkspace");
+
+    const { result } = renderHook(() => useAiSeoMode(detail({ design: {} }), vi.fn(), vi.fn()));
+
+    await waitFor(() => expect(result.current.available).toBe(false));
+    expect(workspace).not.toHaveBeenCalled();
+  });
+
   it("is unavailable without calling the readiness endpoint when the brief is empty", async () => {
     mockWorkspace();
     const readiness = vi.spyOn(seoApi, "getSeoReadiness");

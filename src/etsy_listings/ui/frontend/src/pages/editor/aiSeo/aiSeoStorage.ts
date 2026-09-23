@@ -100,8 +100,17 @@ export function buildComparableSnapshot(detail: ListingDetail): {
   };
 }
 
+/** Order-independent content equality: `colors` can revisit the same set
+ * through a different order without any real change (`VariantsTab.setColours`
+ * appends a re-enabled colour to the end rather than restoring its old
+ * position), and the submitted generation input is a JSON list whose order
+ * carries no meaning to the model either. Mirrors `designIdentity`'s own
+ * sort-before-compare reasoning just below. */
 function sameStrings(a: string[], b: string[]): boolean {
-  return a.length === b.length && a.every((value, index) => value === b[index]);
+  if (a.length !== b.length) return false;
+  const sortedA = [...a].sort();
+  const sortedB = [...b].sort();
+  return sortedA.every((value, index) => value === sortedB[index]);
 }
 
 /** Builds a fresh `StoredAiSeoProposal` for a proposal the server just

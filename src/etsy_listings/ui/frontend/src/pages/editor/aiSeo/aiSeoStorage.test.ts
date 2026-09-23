@@ -144,6 +144,18 @@ describe("isStale", () => {
       false,
     );
   });
+
+  it("is false when colors revisit the same set in a different order", () => {
+    // `VariantsTab.setColours` appends a re-enabled colour to the end of the
+    // array rather than restoring its old position, so toggling a colour off
+    // and back on reorders `colors` without changing what is actually
+    // selected -- that must not read as a submitted-input change.
+    const stored = toStoredProposal(
+      proposal({ snapshot: { ...proposal().snapshot, colors: ["black", "white"] } }),
+      detail({ colors: ["black", "white"] }),
+    );
+    expect(isStale(stored, detail({ colors: ["white", "black"] }))).toBe(false);
+  });
 });
 
 describe("localStorage persistence", () => {
