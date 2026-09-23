@@ -81,7 +81,53 @@ async def _never_disconnected() -> bool:
 
 
 def _run(coro):  # noqa: ANN001, ANN202 - test helper, inference is exact
-    return asyncio.run(coro)
+    """Runs ``coro`` to completion, tolerating a running event loop already
+    left on *this* thread by something that ran earlier in the same pytest
+    process. A Playwright-driven browser test (anything under
+    `tests/browser/`) uses Playwright's sync API, which bridges to its own
+    asyncio driver loop via a greenlet that switches back to the test thread
+    without ever letting that loop's `run_forever()` frame return -- so
+    `asyncio.get_running_loop()` (what bare `asyncio.run()` checks
+    internally) keeps reporting a running loop on the main thread for the
+    rest of the process, even though nothing is actually concurrently using
+    it. A bare `asyncio.run(coro)` then raises `RuntimeError: asyncio.run()
+    cannot be called from a running event loop` for every later test in this
+    file, but only when a browser test file happened to run first in the
+    same `pytest --cov` process -- this file passes in isolation and CI
+    never reproduces it, since CI (and every other split invocation in this
+    repo) runs browser and non-browser tests as separate processes.
+
+    There is no existing sync-to-async bridge to reuse here:
+    `ui/api/seo.py`'s own `generate_with_cancellation` never needs one --
+    it runs as a coroutine already, inside the ASGI server's own loop -- and
+    nothing else in this suite calls `asyncio.run(`. So this helper solves
+    it directly: when this thread has no running loop, `asyncio.run` alone
+    is correct and cheap. When it does (the Playwright leftover-state case,
+    or true nested-loop misuse), run ``coro`` to completion on a *new*
+    OS thread instead, where `asyncio.get_running_loop()` starts empty --
+    sidestepping the ambient state entirely rather than trying to reuse or
+    detect-and-ignore it.
+    """
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        return asyncio.run(coro)
+
+    result: list[object] = []
+    error: list[BaseException] = []
+
+    def _target() -> None:
+        try:
+            result.append(asyncio.run(coro))
+        except BaseException as exc:  # noqa: BLE001 - re-raised on the caller's thread below
+            error.append(exc)
+
+    thread = threading.Thread(target=_target)
+    thread.start()
+    thread.join()
+    if error:
+        raise error[0]
+    return result[0]
 
 
 # --------------------------------------------------------- ActiveSeoRequests
