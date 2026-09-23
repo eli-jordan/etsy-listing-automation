@@ -152,6 +152,11 @@ class CodexProvider:
         return None
 
     def _check_read_only_capability(self) -> ProviderReadiness | None:
+        # Known limitation (docs/ai-seo-implementation-plan.md, PR4): this
+        # only confirms `--help` advertises the required flags, not that a
+        # live `exec` invocation actually honours them. Same "no speculative
+        # quota check" tradeoff as the auth check above -- readiness stays a
+        # local, static check rather than spending a real generation call.
         try:
             result = subprocess.run(
                 [self._resolved_binary(), "exec", "--help"],

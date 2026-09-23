@@ -241,6 +241,16 @@ provisioning tests.
 deadline budget tests, process cleanup tests, and a local manual smoke test with
 the logged-in Codex CLI. CI remains fake-provider-only.
 
+**Known limitation:** both adapters' readiness checks (`_check_read_only_capability`
+in `ai/codex.py` and `ai/claude.py`) only confirm that the installed CLI's own
+`--help` text advertises the read-only/sandbox flags this feature depends on --
+not that a live invocation actually honours them. This is the same "no
+speculative quota check" tradeoff item 2 above already accepts for
+authentication: readiness stays a local, fast, static check rather than one
+that spends a real generation call to verify behaviour. A CLI that advertises
+a flag in `--help` but silently ignores it at runtime would still be reported
+ready.
+
 ### PR 5 — `feat(ui-api): expose SEO readiness and proposals`
 
 **Target: about 2,600 lines.**

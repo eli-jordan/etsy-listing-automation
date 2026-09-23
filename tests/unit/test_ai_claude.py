@@ -304,12 +304,15 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     assert json.loads(schema_arg) == RESPONSE_SCHEMA
     assert call["cwd"] == tmp_path
     assert call["deadline"] is deadline
-    # Claude has no documented direct image flag -- the design image is
-    # named in the prompt text for the Read tool to open instead.
-    assert str(request.design_image) in argv[-1]
+    # The prompt is piped via stdin (see `ai/codex.py`'s own reasoning, which
+    # applies here too, only more so since Claude's prompt also echoes the
+    # response schema): it must never appear as a trailing argv element,
+    # which is what would risk a platform argv-length limit.
+    assert argv[-1] == json.dumps(RESPONSE_SCHEMA)
+    assert not any(str(request.design_image) in arg for arg in argv)
 
 
-def test_generate_sends_the_seller_prompt_and_context_in_the_final_argument(
+def test_generate_sends_the_seller_prompt_and_context_over_stdin(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     envelope = _completed({"type": "result", "is_error": False, "result": "{}"})
@@ -322,9 +325,10 @@ def test_generate_sends_the_seller_prompt_and_context_in_the_final_argument(
 
     provider.generate(request, Deadline.starting_now(seconds=60))
 
-    prompt_arg = calls[0]["argv"][-1]
-    assert "Write great SEO copy." in prompt_arg
-    assert request.brief in prompt_arg
+    stdin_text = calls[0]["input_text"]
+    assert "Write great SEO copy." in stdin_text
+    assert request.brief in stdin_text
+    assert str(request.design_image) in stdin_text
 
 
 def test_generate_appends_the_repair_block_when_repairing(
@@ -343,9 +347,9 @@ def test_generate_appends_the_repair_block_when_repairing(
 
     provider.generate(request, Deadline.starting_now(seconds=60), repair=repair)
 
-    prompt_arg = calls[0]["argv"][-1]
-    assert '{"titles": []}' in prompt_arg
-    assert "titles: expected exactly 3" in prompt_arg
+    stdin_text = calls[0]["input_text"]
+    assert '{"titles": []}' in stdin_text
+    assert "titles: expected exactly 3" in stdin_text
 
 
 def test_generate_raises_cancelled_when_the_process_was_cancelled(
@@ -417,6 +421,28 @@ def test_generate_treats_is_error_envelope_as_generation_error(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderGenerationError):
+        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+
+
+def test_generate_classifies_an_is_error_envelope_reporting_auth_failure_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # `claude -p --output-format json` reports an auth/quota/rate-limit
+    # failure inside its `is_error: true` envelope, with exit code 0 -- the
+    # same recognised-availability text an exit-code failure would carry,
+    # just delivered through the envelope instead of stderr. It must be
+    # classified the same way (`classify_process_failure`), not read as a
+    # generic generation error.
+    envelope = _completed(
+        {"type": "result", "is_error": True, "result": "Error: not authenticated"}
+    )
+    _patch_run_managed(
+        monkeypatch,
+        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
+    )
+    provider = _provider(tmp_path)
+
+    with pytest.raises(ProviderUnavailableError):
         provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
 
 
