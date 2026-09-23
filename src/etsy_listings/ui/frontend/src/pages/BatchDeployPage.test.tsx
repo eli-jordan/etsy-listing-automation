@@ -391,7 +391,9 @@ describe("BatchDeployPage", () => {
     expect(screen.getByText(/1 listing failed/)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Plan again" })).toBeInTheDocument();
     await waitFor(() => expect(listingsApi.listListings).toHaveBeenCalledTimes(2));
-    await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("apply-1"));
+    await waitFor(() => expect(runsApi.markRunSeen).toHaveBeenCalledWith("apply-1"), {
+      timeout: 2_000,
+    });
 
     await userEvent.click(screen.getByRole("button", { name: "Plan again" }));
     await waitFor(() =>
@@ -502,5 +504,48 @@ describe("BatchDeployPage", () => {
 
     expect(cancel).not.toHaveBeenCalled();
     expect(await screen.findByText("listings page")).toBeInTheDocument();
+  });
+
+  it("keeps a just-finished workspace apply unseen when Back is clicked immediately", async () => {
+    // Reproduces the race behind the flaky
+    // test_batch_apply_leaves_reattaches_and_continues_after_stale_listing
+    // browser test: handleApply's own re-navigate to this apply run's URL
+    // can attach here already terminal, and an immediate Back click must not
+    // let the mark-seen effect beat it -- otherwise Listings loses the
+    // "View batch result" affordance entirely.
+    const reviewed = runDetail({
+      id: "plan-1",
+      phase: "ready",
+      events: [{ type: "phase", id: 1, phase: "ready" }],
+    });
+    const apply = runDetail({
+      id: "apply-fast",
+      kind: "apply",
+      phase: "stale",
+      reviewed_run_id: "plan-1",
+      events: [
+        { type: "phase", id: 1, phase: "applying" },
+        {
+          type: "listing_failed",
+          id: 2,
+          listing: "take-a-hike",
+          message: "take-a-hike changed after review",
+          stale_plan: plan(),
+        },
+        { type: "phase", id: 3, phase: "stale" },
+      ],
+    });
+    vi.spyOn(runsApi, "getRun").mockImplementation(async (id) =>
+      id === "plan-1" ? reviewed : apply,
+    );
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary("take-a-hike")]);
+
+    renderPage("/listings/deploy/apply-fast");
+    await screen.findByText("Some listings became stale.");
+    await userEvent.click(screen.getByRole("button", { name: "← Back to listings" }));
+    await screen.findByText("listings page");
+    await new Promise((resolve) => window.setTimeout(resolve, 800));
+
+    expect(runsApi.markRunSeen).not.toHaveBeenCalledWith("apply-fast");
   });
 });

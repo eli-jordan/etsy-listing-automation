@@ -248,6 +248,82 @@ describe("useAutosave", () => {
     expect(result.current.save.kind).toBe("saved");
   });
 
+  it("never sends a second PATCH while one is still in flight", async () => {
+    let resolveFirst!: (value: ListingDetail) => void;
+    const firstPromise = new Promise<ListingDetail>((resolve) => {
+      resolveFirst = resolve;
+    });
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockImplementationOnce(() => firstPromise)
+      .mockResolvedValueOnce(detail({ etsy: { ...detail().etsy, section: "Apparel" } }));
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ etsy: { title: "Take A Hike Tee" } }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(result.current.save.kind).toBe("saving");
+
+    // A second edit arrives, and its debounce fires, while the first PATCH
+    // is still unresolved.
+    act(() => result.current.update({ etsy: { section: "Apparel" } }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    // Deferred, not sent concurrently.
+    expect(patch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveFirst(detail());
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // Once the first PATCH lands, the deferred flush picks up whatever is
+    // pending now and sends it -- one request at a time.
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", { etsy: { section: "Apparel" } });
+    expect(result.current.save.kind).toBe("saved");
+  });
+
+  it("a deferred flush merges with whatever else arrived once an in-flight failure restores it", async () => {
+    let rejectFirst!: (err: unknown) => void;
+    const firstPromise = new Promise<ListingDetail>((_, reject) => {
+      rejectFirst = reject;
+    });
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockImplementationOnce(() => firstPromise)
+      .mockResolvedValueOnce(detail());
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ etsy: { title: "Take A Hike Tee" } }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    act(() => result.current.update({ etsy: { section: "Apparel" } }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    expect(patch).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      rejectFirst(new listingsApi.ListingsApiError("500"));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    // The failed patch's restored edit and the edit that arrived while it
+    // was in flight are merged into the deferred retry -- neither is lost,
+    // and `save` reflects the final outcome, not a stale one.
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", {
+      etsy: { title: "Take A Hike Tee", section: "Apparel" },
+    });
+    expect(result.current.save.kind).toBe("saved");
+  });
+
   it("a later edit after a failed save is merged with the still-pending one", async () => {
     const patch = vi
       .spyOn(listingsApi, "patchListing")

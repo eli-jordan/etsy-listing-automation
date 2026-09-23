@@ -305,7 +305,15 @@ def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
     page.get_by_role("button", name="← Back to listings").click()
     page.wait_for_url("**/listings")
 
-    page.locator("button:has-text('View batch progress')").wait_for(state="visible")
+    # The two-listing apply here is small enough that it can finish before
+    # this page's first poll of the workspace run ever lands, so "View batch
+    # progress" (the in-progress state) is not a reliable thing to wait on --
+    # it may legitimately never render. "View batch result" is the stable
+    # end state this test actually needs, so wait on whichever of the two
+    # shows up first, then require the result once the run is terminal.
+    page.locator(
+        "button:has-text('View batch progress'), button:has-text('View batch result')"
+    ).first.wait_for(state="visible")
     page.locator("button:has-text('View batch result')").wait_for(state="visible")
     page.locator("button:has-text('View batch result')").click()
     page.wait_for_url("**/listings/deploy/**")
