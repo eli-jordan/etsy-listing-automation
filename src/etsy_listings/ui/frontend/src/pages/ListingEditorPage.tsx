@@ -6,9 +6,9 @@ import { OpenOnMenu } from "../components/OpenOnMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
+import { refName } from "../media";
 import type { Issue, IssueTab, ListingDetail } from "../types";
 import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
-import type { AutoDesignBrief } from "./editor/aiSeo/useAutoDesignBrief";
 import { AiActivityIndicator } from "./editor/aiSeo/AiActivityIndicator";
 import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { useAutoDesignBrief } from "./editor/aiSeo/useAutoDesignBrief";
@@ -145,16 +145,47 @@ function ListingEditorPageContent({
   // begins at the design strip, above the tab strip (PRD 68). Living here
   // rather than in `ListingEditorShell` is what lets the page head report
   // them beside the autosave line.
+  /** A name the design pick chose, before the listing exists under it. */
+  const [pickedName, setPickedName] = useState("");
   const aiSeo = useAiSeoMode(detail, update, flush, save);
   const autoBrief = useAutoDesignBrief(detail.brief, detail.garment_profile, update, flush, aiSeo);
+
+  /** Everything picking a design sets off, in the one handler, because two of
+   * the three need the pick itself rather than a later render of its effect.
+   *
+   * The name is here rather than in `ListingEditorShell` because naming is
+   * `useAutosave`'s (`commitName`), and only a draft that has none gets one:
+   * a listing already called something is called that on purpose, and the
+   * artwork changing is not a reason to rename its directory. The design's
+   * own filename is the name a seller would type anyway -- it is what `new
+   * <design>` already derives on the CLI -- and it is what finally writes the
+   * file, so the ordinary create flow becomes "pick a design" with nothing
+   * else required. A name already taken is refused exactly as a typed one is,
+   * and the page head says so. */
+  function pickDesign(ref: string) {
+    update({ design: ref });
+    if (detail.name === "") {
+      const named = refName(ref);
+      // Shown as the name immediately, not only once the file exists. A
+      // create is refused until the document will validate (no price source,
+      // usually), and `useAutosave` holds the name for the edit that retries
+      // it -- so without this the seller would pick a design, see the name
+      // field stay empty, pick a pricing plan, and find the listing suddenly
+      // called something nobody typed. The head already says why it is not
+      // saved yet.
+      setPickedName(named);
+      commitName(named);
+    }
+    autoBrief.start(ref);
+  }
 
   return (
     <ListingEditorShell
       detail={detail}
       update={update}
       flush={flush}
+      onPickDesign={pickDesign}
       aiSeo={aiSeo}
-      autoBrief={autoBrief}
       head={
         <EditorHead
           detail={detail}
@@ -163,7 +194,7 @@ function ListingEditorPageContent({
           activity={<AiActivityIndicator auto={autoBrief} aiSeo={aiSeo} />}
           title={
             <EditableName
-              value={name ?? ""}
+              value={name ?? pickedName}
               onCommit={commitName}
               error={
                 save.kind === "name-taken"
@@ -244,18 +275,21 @@ export function ListingEditorShell({
   detail,
   update,
   flush,
+  onPickDesign,
   aiSeo,
-  autoBrief,
   head,
 }: {
   detail: ListingDetail;
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
+  /** Everything one design pick sets off -- the edit, naming an unnamed
+   * draft, and the brief draft. Built by `ListingEditorPageContent`, which is
+   * the layer that has `commitName`. */
+  onPickDesign: (ref: string) => void;
   /** Owned by `ListingEditorPageContent`, not by this shell and not by
    * `DetailsTab`: a request outlives the tab it was started from -- switching
    * to Variants used to unmount the tab and abort a proposal mid-flight. */
   aiSeo: AiSeoMode;
-  autoBrief: AutoDesignBrief;
   head: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("variants");
@@ -274,17 +308,7 @@ export function ListingEditorShell({
       {/* Above the tabs, not inside one: the artwork is what both Variants
           (which colours suit it) and Listing Images (which mockups show it)
           are about. */}
-      <DesignSelect
-        design={detail.design}
-        onPick={(ref) => {
-          update({ design: ref });
-          // Immediately, in the same handler: the brief request needs the
-          // design and the garment profile, both of which are in hand here,
-          // and nothing about it waits on the save this `update` schedules
-          // (PRD 68).
-          autoBrief.start(ref);
-        }}
-      />
+      <DesignSelect design={detail.design} onPick={onPickDesign} />
 
       <div className="tabs seg">
         {TABS.map((t) => {

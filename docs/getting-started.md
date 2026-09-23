@@ -510,6 +510,11 @@ mode](https://code.claude.com/docs/en/headless). The **AI Mode** button is
 hidden, never disabled, until at least one CLI reports itself signed in and
 ready; if neither is, the Details tab simply looks like it always did.
 
+**Picking a design names a new listing.** A draft with no name takes the
+design's filename without its extension — so creating a listing is: open the
+editor, pick a design, pick a price source. A listing that already has a name
+keeps it; changing its artwork never renames it.
+
 **Attaching a design starts the work.** When you pick a design for a listing
 whose brief is still empty, the brief is drafted from the artwork and written
 into the Brief field for you, and the SEO request that brief unblocks starts

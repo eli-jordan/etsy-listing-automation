@@ -1174,20 +1174,25 @@ def test_a_workspace_without_the_brief_prompt_says_so_and_stops(
 def test_the_create_flow_drafts_for_a_design_attached_before_the_listing_exists(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
-    """Create a listing, attach a design, then name it -- the order a seller
-    actually works in, and the one the first implementation broke on twice:
-    the request waited for a save that had not happened yet, and naming
-    remounted the editor and threw the pending work away.
+    """Create a listing and pick a design: that is the whole gesture.
 
-    `POST /api/ai/design-brief` needs no listing at all (it takes the design
-    and the garment profile), so the draft goes out on the pick, against a
-    listing that does not exist. Naming then creates the file the SEO request
-    needs -- and the editor has to still be the same one that started the
-    chain for that second half to follow.
+    The pick names the draft after the design file, which is what creates the
+    listing, which is what makes the SEO request possible -- and it drafts the
+    brief, against a listing that does not exist yet, because `POST
+    /api/ai/design-brief` takes the design and the garment profile rather than
+    a listing name.
+
+    This is the order a seller actually works in, and the one the first
+    implementation broke on twice: the request waited for a save that had not
+    happened yet, and naming remounted the editor and threw the pending work
+    away. The editor has to still be the same one that started the chain for
+    the second half to follow.
     """
     _seed_prompt(workspace_root)
     _seed_brief_prompt(workspace_root)
     _write_pricing_plan(workspace_root)
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    (workspace_root / "listings" / LISTING / "listing.yaml").unlink()
     provider = _ready_provider(responses=['{"brief": "' + _DRAFTED_BRIEF + '"}', _valid_json()])
 
     with (
@@ -1198,8 +1203,8 @@ def test_the_create_flow_drafts_for_a_design_attached_before_the_listing_exists(
         page.get_by_label("Garment profile").select_option("comfort-colors-1717")
 
         # Nothing on disk, no name, no file -- and the pick still drafts.
-        assert not (workspace_root / "listings" / "drafted-listing").exists()
-        _pick_another_design(page, LISTING)
+        assert not (workspace_root / "listings" / LISTING / "listing.yaml").exists()
+        _pick_another_design(page, "second-design")
         for _ in range(300):
             if provider.tasks:
                 break
@@ -1207,20 +1212,20 @@ def test_the_create_flow_drafts_for_a_design_attached_before_the_listing_exists(
         else:  # pragma: no cover - only on a pathologically slow machine
             raise AssertionError("no brief request was made for the unsaved draft")
 
-        # Name it, which is what finally creates the file.
-        page.get_by_label("Listing name").fill("drafted-listing")
-        page.get_by_label("Listing name").press("Enter")
+        # The pick named it, after the design's own filename -- nobody typed
+        # anything. A price source is still wanted before it can be written.
+        page.get_by_role("heading", name="second-design").wait_for(state="visible")
         page.locator(".tabs .seg-opt", has_text="Listing Details").click()
         page.get_by_label("Plan").select_option(label="tee-basic")
-        page.wait_for_url("**/listings/drafted-listing")
+        page.wait_for_url("**/listings/second-design")
 
         # The drafted brief is in the file, and SEO generation followed --
         # neither of which survives a remount, which is the point.
         for _ in range(300):
-            document = workspace_root / "listings" / "drafted-listing" / "listing.yaml"
+            document = workspace_root / "listings" / "second-design" / "listing.yaml"
             if (
                 document.is_file()
-                and _listing_yaml(workspace_root, "drafted-listing").get("brief") == _DRAFTED_BRIEF
+                and _listing_yaml(workspace_root, "second-design").get("brief") == _DRAFTED_BRIEF
             ):
                 break
             page.wait_for_timeout(100)
