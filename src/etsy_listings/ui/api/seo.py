@@ -333,9 +333,8 @@ def _to_response(proposal: SeoProposal, seo_request: SeoRequest) -> SeoProposalR
 @router.get("/{name}/ai-seo/readiness", response_model=SeoReadinessResponse)
 def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessResponse:
     """Whether **AI Mode** may be offered for this saved listing right now
-    -- the one call the future frontend (PR7) makes to decide whether to
-    render the control at all (hidden, not disabled, per the settled
-    "Entry point" decision). Read-only: every check here, including each
+    -- the call the frontend makes to decide whether to enable the always
+    visible control. Read-only: every check here, including each
     provider's own `readiness()`, is a local probe (a file's existence, a
     fast `--help`/`login status` subprocess) that changes nothing.
     """

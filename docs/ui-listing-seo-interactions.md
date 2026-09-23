@@ -1,6 +1,6 @@
 # Listing SEO AI Mode interactions
 
-**Status:** approved interaction design; implementation has not started.
+**Status:** implemented interaction design; updated for the current editor.
 
 This document is the implementation companion to the drafting
 [SEO prompt source](../seo_prompt.md). It describes what each interaction does
@@ -48,7 +48,7 @@ workspace.
 ## Flow at a glance
 
 1. The seller opens **Listing Details**.
-2. When AI Mode is available, the seller activates its subtle sparkle button.
+2. The seller enters a brief in Listing Details and activates the AI Mode button once it is enabled.
 3. The button enters a loading state while the current listing facts are sent
    for generation.
 4. When generation finishes, the title, tags, and description-lead drawers
@@ -62,21 +62,23 @@ action.
 
 ## 1. AI Mode entry point
 
-The **AI Mode** control sits in the upper-right of the Listing details fieldset.
-It uses the existing subtle secondary-button treatment with a sparkle icon so
-it is discoverable without competing with **Deploy changes**.
+The **AI Mode** control sits in the upper-right of the Listing details header,
+beside its heading and helper text, as in the [v3 review mockup](../src/etsy_listings/ui/frontend/design/scenes/listing-seo-v3/review.tsx). Its compact
+button has a purple and pink sparkle and remains secondary to **Deploy changes**.
 
 | Interaction                      | What happens                                                                                                                                                  | Why it is important                                                                                                |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Hover or focus **AI Mode** | The control receives the same visible hover/focus treatment as other secondary actions. | The feature remains discoverable while still reading as optional assistance. |
+| Hover or focus **AI Mode** | Show a small card listing the saved listing, design, brief, prompt, and provider requirements, with the current readiness reason when available. | A disabled control explains what the seller can do next. |
 | Activate **AI Mode** | Capture the current generation inputs and begin one request for a complete proposal. | A single explicit action keeps model usage predictable and ensures all suggestions share the same listing context. |
-| The listing is unsaved or a prerequisite is unavailable | Do not render the control. | A proposal has an unambiguous workspace/listing scope only after the listing is saved, and unavailable local tooling should not look like a broken editor action. |
+| The listing is unsaved or a prerequisite is unavailable | Keep the control visible and disabled. | Sellers can discover AI Mode while preparing the required inputs; requests still require a saved listing and ready local tooling. |
 
 For v1, AI Mode requires a saved listing with a selected design, a non-empty
-listing brief, `prompts/seo.md`, and at least one ready provider. Garment-profile
-and other existing listing facts are included in the submitted snapshot. The
+listing brief, `prompts/seo.md`, and at least one ready provider. The brief is
+editable in Listing Details. Garment-profile and other existing listing facts
+are included in the submitted snapshot. The
 client learns availability from the saved-listing readiness endpoint; it never
-guesses from browser state.
+guesses from browser state. Readiness is checked again after a successful
+autosave so a newly filled brief can enable the button.
 
 ## 2. Loading and automatic reveal
 
@@ -166,6 +168,10 @@ independently.
 | Choose **Write listing-specific body**                                             | Switch to inline-body mode with an initially blank field.                       | A listing can opt out of shared copy without creating a second competing source. |
 | Switch between body modes                                                          | Replace the active body source immediately; do not retain a hidden fallback.    | Exactly one source makes the final Etsy description predictable.                 |
 | A selected common-copy file is missing, malformed, or not targeted to descriptions | Show a visible Details error and block deployment.                              | Broken shared copy must be fixed before it can reach a customer-facing listing.  |
+
+The body-source picker searches the title, summary, and reference of common
+copy targeted at descriptions. **Write inline body** remains available in the
+picker; choosing it reveals the inline text field below.
 
 A common-copy file has frontmatter fields `title` and `targets`; `summary` is
 optional. The initial supported target is `description`.
@@ -264,7 +270,7 @@ for the packaged default prompt. It is not read as a runtime workspace file.
 The interaction is complete when all of the following are true:
 
 1. **AI Mode** is a subtle sparkle action in the upper-right of Listing Details
-   for a saved listing with all prerequisites; it is absent when unavailable.
+   for every Listing Details view; it is disabled until all prerequisites are met.
 2. Activating it begins one request and shows an inline loading state without
    blocking unrelated editing.
 3. Successful results appear automatically in drawers attached to Title, Tags,

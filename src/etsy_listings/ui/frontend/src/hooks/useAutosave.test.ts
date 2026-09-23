@@ -131,6 +131,57 @@ describe("useAutosave", () => {
     expect(result.current.detail).toBe(server);
   });
 
+  it("keeps newer brief text visible when an older save response arrives", async () => {
+    let finishFirst!: (value: ListingDetail) => void;
+    const first = new Promise<ListingDetail>((resolve) => {
+      finishFirst = resolve;
+    });
+    vi.spyOn(listingsApi, "patchListing")
+      .mockReturnValueOnce(first)
+      .mockResolvedValue(detail({ brief: "A trail shirt." }));
+    const { result, unmount } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ brief: "A trail" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.update({ brief: "A trail shirt." }));
+    expect(result.current.detail.brief).toBe("A trail shirt.");
+
+    await act(async () => finishFirst(detail({ brief: "A trail" })));
+    expect(result.current.detail.brief).toBe("A trail shirt.");
+    unmount();
+  });
+
+  it("serializes edits made while an earlier save is in flight", async () => {
+    let finishFirst!: (value: ListingDetail) => void;
+    const first = new Promise<ListingDetail>((resolve) => {
+      finishFirst = resolve;
+    });
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockReturnValueOnce(first)
+      .mockResolvedValue(detail({ brief: "A trail shirt." }));
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ brief: "A trail" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.update({ brief: "A trail shirt." }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    expect(patch).toHaveBeenCalledTimes(1);
+    expect(result.current.detail.brief).toBe("A trail shirt.");
+
+    await act(async () => finishFirst(detail({ brief: "A trail" })));
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", { brief: "A trail shirt." });
+    expect(result.current.detail.brief).toBe("A trail shirt.");
+    expect(result.current.save.kind).toBe("saved");
+  });
+
   it("flush() sends immediately without waiting for the debounce", async () => {
     const spy = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
     const { result } = renderHook(() => useAutosave("take-a-hike", detail()));

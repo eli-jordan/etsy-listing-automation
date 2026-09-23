@@ -7,6 +7,12 @@ import type { AiSeoMode } from "./useAiSeoMode";
 function mode(over: Partial<AiSeoMode> = {}): AiSeoMode {
   return {
     available: true,
+    requirements: [
+      { label: "Saved listing", ready: true },
+      { label: "Design selected", ready: false },
+      { label: "Brief filled in", ready: false },
+    ],
+    reason: null,
     phase: "idle",
     proposal: null,
     stale: false,
@@ -24,9 +30,21 @@ function mode(over: Partial<AiSeoMode> = {}): AiSeoMode {
 }
 
 describe("AiSeoControl", () => {
-  it("renders nothing when AI Mode is unavailable", () => {
+  it("renders a disabled AI Mode button when unavailable", () => {
     render(<AiSeoControl mode={mode({ available: false })} />);
-    expect(screen.queryByRole("button", { name: /AI Mode/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
+  });
+
+  it("explains the missing fields and setup reason on the hover card", () => {
+    render(<AiSeoControl mode={mode({ available: false, reason: "No AI provider is ready." })} />);
+    const card = screen.getByRole("tooltip");
+    expect(card).toHaveTextContent("Design selected");
+    expect(card).toHaveTextContent("Brief filled in");
+    expect(card).toHaveTextContent("No AI provider is ready.");
+    expect(screen.getByRole("button", { name: /AI Mode/i })).toHaveAttribute(
+      "aria-describedby",
+      card.id,
+    );
   });
 
   it("renders an enabled AI Mode button when ready and idle", () => {

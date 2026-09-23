@@ -119,6 +119,7 @@ export function useAutosave(
       : saved(initial.modified_at === null ? Date.now() : Date.parse(initial.modified_at)),
   );
   const pending = useRef<Patch | null>(null);
+  const inFlight = useRef<Promise<void> | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** The name this listing is on disk under, or `null` while it is not. */
   const savedName = useRef<string | null>(name);
@@ -157,7 +158,12 @@ export function useAutosave(
       setDetail((current) => ({ ...current, field_errors: fresh.field_errors }));
       return;
     }
-    setDetail(fresh);
+    // Keep edits made while a save was in flight visible.
+    setDetail(
+      pending.current === null
+        ? fresh
+        : (coerceDesign(mergePatch(fresh, pending.current)) as ListingDetail),
+    );
   }, []);
 
   const create = useCallback(
@@ -186,6 +192,10 @@ export function useAutosave(
     if (naming.current) return;
 
     if (savedName.current !== null) {
+      const currentName = savedName.current;
+      // Only one PATCH at a time: a later response must not overwrite a
+      // newer listing on disk or in the editor.
+      if (inFlight.current !== null) await inFlight.current;
       const patch = pending.current;
       if (patch === null) return;
       // Cleared only once the PATCH actually lands -- a rejection (dropped
@@ -196,19 +206,24 @@ export function useAutosave(
       // triples included (AI SEO implementation plan, PR6).
       pending.current = null;
       setSave({ kind: "saving" });
-      try {
-        const fresh = await patchListing(savedName.current, patch);
-        applyResponse(fresh);
-        setSave(saved());
-      } catch {
-        // Swallowed, not rethrown: nothing that calls `flush()` (the
-        // debounce timer, `onBlur`, unmount) is set up to catch it, and a
-        // failed autosave is reported through `save` -- the same channel
-        // every other outcome here uses -- rather than an exception a caller
-        // would have to remember to handle.
-        pending.current = mergePatch(patch, pending.current ?? {});
-        setSave({ kind: "save-failed" });
-      }
+      const work = (async () => {
+        try {
+          const fresh = await patchListing(currentName, patch);
+          applyResponse(fresh);
+          if (pending.current === null) setSave(saved());
+        } catch {
+          // Swallowed, not rethrown: nothing that calls `flush()` (the
+          // debounce timer, `onBlur`, unmount) is set up to catch it, and a
+          // failed autosave is reported through `save` -- the same channel
+          // every other outcome here uses -- rather than an exception a caller
+          // would have to remember to handle.
+          pending.current = mergePatch(patch, pending.current ?? {});
+          setSave({ kind: "save-failed" });
+        }
+      })();
+      inFlight.current = work;
+      await work;
+      if (inFlight.current === work) inFlight.current = null;
       return;
     }
 

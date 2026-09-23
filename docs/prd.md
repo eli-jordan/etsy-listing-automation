@@ -853,9 +853,10 @@ relevant editor values to a locally authenticated coding-agent CLI. Vision can
 infer style and audience; the brief carries exact design text that stylised
 lettering might obscure.
 
-- It appears only when the listing has a selected design and non-empty brief,
-  `prompts/seo.md` exists, and at least one provider is ready. It is hidden,
-  rather than disabled, when unavailable.
+- The Details tab exposes the listing brief for ordinary editing and autosave.
+  AI Mode is always visible there, but disabled until the listing is saved, a
+  design and non-empty brief are set, `prompts/seo.md` exists, and at least one
+  provider is ready.
 - Providers use their locally configured subscription accounts: Codex first,
   then Claude Code only for recognised unavailable, authentication/quota, or
   rate-limit failures. Neither an API key nor a model picker is part of v1.

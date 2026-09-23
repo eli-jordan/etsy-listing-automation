@@ -476,11 +476,10 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 
 
 class SeoReadinessResponse(BaseModel):
-    """Whether AI Mode may be offered for one saved listing right now
-    (implementation plan, "Entry point"). The frontend (PR7) uses this to
-    decide whether to render the control at all -- hidden, not disabled, so
-    ``reason`` is prose for a developer/support reader, never shown as a
-    disabled-button tooltip."""
+    """Whether AI Mode can be enabled for one saved listing right now
+    (implementation plan, "Entry point"). The frontend leaves the control
+    visible and disabled when ``ready`` is false; ``reason`` explains why
+    to a developer or support reader."""
 
     ready: bool
     reason: str | None = None
