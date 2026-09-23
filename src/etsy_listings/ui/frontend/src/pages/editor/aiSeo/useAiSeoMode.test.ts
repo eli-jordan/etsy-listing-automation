@@ -18,6 +18,9 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     colors: ["black"],
     brief: "A relaxed hiking tee.",
     garment_materials: ["ring-spun cotton"],
+    garment_product_type: "tee",
+    garment_brand: "Comfort Colors",
+    garment_model: "1717",
     prices: {},
     price_overrides: {},
     artwork: {},
@@ -42,6 +45,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     pricing_plan_name: null,
     resolved_prices: [],
     description_composed: "",
+    design_content_hash: null,
     ...over,
   };
 }
@@ -62,6 +66,9 @@ function proposal(over: Partial<SeoProposalResponse> = {}): SeoProposalResponse 
       colors: ["black"],
       garment_brand: "Comfort Colors",
       garment_model: "1717",
+      garment_profile: "comfort-colors-1717",
+      design: { default: "designs/take-a-hike.png" },
+      design_content_hash: null,
     },
     generated_at: "2026-09-23T00:00:00Z",
     expires_at: "2026-09-24T00:00:00Z",
@@ -69,8 +76,8 @@ function proposal(over: Partial<SeoProposalResponse> = {}): SeoProposalResponse 
   };
 }
 
-function mockWorkspace(shopName: string | null = "Pine & Thread") {
-  const workspace: WorkspaceSummary = { shop_name: shopName };
+function mockWorkspace(shopName: string | null = "Pine & Thread", storageId = "workspace-1") {
+  const workspace: WorkspaceSummary = { shop_name: shopName, storage_id: storageId };
   vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue(workspace);
 }
 
@@ -177,9 +184,7 @@ describe("useAiSeoMode generation", () => {
 
     await waitFor(() => expect(result.current.phase).toBe("idle"));
     expect(result.current.proposal?.proposal).toEqual(body);
-    expect(
-      loadStoredProposal({ workspace: "Pine & Thread", listing: "take-a-hike" }),
-    ).not.toBeNull();
+    expect(loadStoredProposal({ workspace: "workspace-1", listing: "take-a-hike" })).not.toBeNull();
   });
 
   it("moves to a failed phase and stores nothing when generation fails", async () => {
@@ -373,11 +378,33 @@ describe("useAiSeoMode acceptance", () => {
     act(() => result.current.rejectLead());
 
     expect(result.current.proposal).toBeNull();
-    expect(loadStoredProposal({ workspace: "Pine & Thread", listing: "take-a-hike" })).toBeNull();
+    expect(loadStoredProposal({ workspace: "workspace-1", listing: "take-a-hike" })).toBeNull();
   });
 });
 
 describe("useAiSeoMode stale state", () => {
+  it("keeps an in-flight proposal tied to the saved inputs it used", async () => {
+    mockWorkspace();
+    mockReadiness({ ready: true });
+    let finish!: (value: Awaited<ReturnType<typeof seoApi.requestSeoProposal>>) => void;
+    vi.spyOn(seoApi, "requestSeoProposal").mockImplementation(
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    const { result, rerender } = renderHook(
+      (d: ListingDetail) => useAiSeoMode(d, vi.fn(), vi.fn()),
+      {
+        initialProps: detail(),
+      },
+    );
+    await waitFor(() => expect(result.current.available).toBe(true));
+
+    act(() => result.current.generate());
+    rerender(detail({ design: { default: "designs/new.png" }, garment_profile: "new-profile" }));
+    await act(async () => finish({ kind: "success", proposal: proposal() }));
+
+    expect(result.current.stale).toBe(true);
+  });
+
   it("marks the proposal stale once the brief changes, and refuses further acceptance", async () => {
     const onUpdate = vi.fn();
     const { result, rerender } = await readyHookWithProposal(onUpdate);
@@ -403,8 +430,8 @@ describe("useAiSeoMode restoring from storage", () => {
     const body = proposal();
     const { toStoredProposal, saveStoredProposal } = await import("./aiSeoStorage");
     saveStoredProposal(
-      { workspace: "Pine & Thread", listing: "take-a-hike" },
-      toStoredProposal(body, detail()),
+      { workspace: "workspace-1", listing: "take-a-hike" },
+      toStoredProposal(body),
     );
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
@@ -418,8 +445,8 @@ describe("useAiSeoMode restoring from storage", () => {
     const body = proposal({ expires_at: "2020-01-01T00:00:00Z" });
     const { toStoredProposal, saveStoredProposal } = await import("./aiSeoStorage");
     saveStoredProposal(
-      { workspace: "Pine & Thread", listing: "take-a-hike" },
-      toStoredProposal(body, detail()),
+      { workspace: "workspace-1", listing: "take-a-hike" },
+      toStoredProposal(body),
     );
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));

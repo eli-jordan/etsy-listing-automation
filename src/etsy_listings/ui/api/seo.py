@@ -96,9 +96,9 @@ a deterministic single pick. ``"default"`` covers the common single-artwork
 case (`config/listing.py._coerce_design`'s own normalisation target);
 ``on-light`` is preferred over ``on-dark`` next only because it has to be
 one of them, arbitrarily, and a fixed order beats letting `dict` iteration
-order decide. Anything not in this tuple falls back to the map's first key
-(`_primary_design_image` below), so a listing that uses neither convention
-still resolves to *something* rather than raising."""
+order decide. Anything not in this tuple falls back to the alphabetically
+first key (`_primary_design_image` below), so reordering the mapping cannot
+change the image sent to a provider."""
 
 
 class ActiveSeoRequests:
@@ -174,8 +174,7 @@ def _active_requests(request: Request) -> ActiveSeoRequests:
 
 def _primary_design_image(workspace: Workspace, name: str, listing: Listing) -> Path:
     listing_dir = workspace.listing_dir(name)
-    keys = list(listing.design.keys())
-    key = next((k for k in _PREFERRED_DESIGN_KEYS if k in keys), keys[0])
+    key = next((k for k in _PREFERRED_DESIGN_KEYS if k in listing.design), min(listing.design))
     return workspace.resolve(listing.design[key], relative_to=listing_dir)
 
 
@@ -241,7 +240,7 @@ def _build_request(workspace: Workspace, name: str, listing: Listing) -> SeoRequ
         )
     return SeoRequest(
         brief=listing.brief,
-        product_type=profile.blueprint.title or str(profile.blueprint),
+        product_type=profile.blueprint.display_title,
         etsy_category=listing.etsy.section or "",
         materials=tuple(profile.materials),
         colors=tuple(listing.colors),
@@ -296,7 +295,27 @@ async def generate_with_cancellation(
     return await future
 
 
-def _to_response(proposal: SeoProposal, seo_request: SeoRequest) -> SeoProposalResponse:
+def _proposal_snapshot(
+    workspace: Workspace, name: str, listing: Listing, seo_request: SeoRequest
+) -> SeoProposalSnapshot:
+    """Freeze the saved inputs before the provider starts its long request."""
+    return SeoProposalSnapshot(
+        brief=seo_request.brief,
+        product_type=seo_request.product_type,
+        etsy_category=seo_request.etsy_category,
+        materials=list(seo_request.materials),
+        colors=list(seo_request.colors),
+        garment_brand=seo_request.garment.brand,
+        garment_model=seo_request.garment.model,
+        garment_profile=listing.garment_profile,
+        design=dict(listing.design),
+        design_content_hash=workspace.design_content_hash(
+            listing.design, listing_dir=workspace.listing_dir(name)
+        ),
+    )
+
+
+def _to_response(proposal: SeoProposal, snapshot: SeoProposalSnapshot) -> SeoProposalResponse:
     generated_at = datetime.now(UTC)
     return SeoProposalResponse(
         titles=list(proposal.titles),
@@ -316,15 +335,7 @@ def _to_response(proposal: SeoProposal, seo_request: SeoRequest) -> SeoProposalR
             for warning in proposal.warnings
         ],
         observed_text=proposal.observed_text,
-        snapshot=SeoProposalSnapshot(
-            brief=seo_request.brief,
-            product_type=seo_request.product_type,
-            etsy_category=seo_request.etsy_category,
-            materials=list(seo_request.materials),
-            colors=list(seo_request.colors),
-            garment_brand=seo_request.garment.brand,
-            garment_model=seo_request.garment.model,
-        ),
+        snapshot=snapshot,
         generated_at=generated_at,
         expires_at=generated_at + _PROPOSAL_TTL,
     )
@@ -397,6 +408,7 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
         )
     try:
         seo_request = _build_request(workspace, name, listing)
+        snapshot = _proposal_snapshot(workspace, name, listing, seo_request)
         proposal = await generate_with_cancellation(
             seo_request, providers, is_disconnected=request.is_disconnected
         )
@@ -413,4 +425,4 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
     finally:
         active.end(name)
 
-    return _to_response(proposal, seo_request)
+    return _to_response(proposal, snapshot)

@@ -20,7 +20,10 @@ function renderAt(path: string) {
 }
 
 beforeEach(() => {
-  vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: null });
+  vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+    shop_name: null,
+    storage_id: "workspace-1",
+  });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -29,7 +32,10 @@ describe("AppShell", () => {
   it("names the shop this workspace is for", async () => {
     /* One workspace is one shop, and the difference between the test shop and
        the real one is worth seeing before an edit, not after an apply. */
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "TakeAHikeTees" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "TakeAHikeTees",
+      storage_id: "workspace-1",
+    });
     renderAt("/");
 
     await waitFor(() => expect(screen.getByText("TakeAHikeTees")).toBeInTheDocument());

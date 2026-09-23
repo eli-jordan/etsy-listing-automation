@@ -128,10 +128,11 @@ state remains the provider's own responsibility.
 
 ### Proposal and stale-state rules
 
-The request snapshots precisely the submitted editor inputs: listing brief,
+The request snapshots precisely the saved listing inputs: listing brief,
 selected design identity/content hash, garment context, and relevant editable
-listing values. A completed proposal stores that snapshot hash beside its
-choices in browser local storage. Changes to those editor inputs stale unresolved
+listing values. The server captures the snapshot before generation and returns
+it with the proposal; the browser stores both under an opaque workspace-root
+identity and listing name. Changes to those editor inputs stale unresolved
 choices; prompt-file edits, unrelated workspace edits, and changes in other
 listings do not. A stale proposal remains visible but cannot be selected until
 regenerated.

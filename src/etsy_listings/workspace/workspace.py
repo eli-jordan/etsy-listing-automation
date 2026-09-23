@@ -10,8 +10,11 @@ future file-serving endpoints safe), not a tidiness rule.
 
 from __future__ import annotations
 
+import hashlib
+import json
 import os
 import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
@@ -54,6 +57,14 @@ class WorkspaceNotFoundError(FileNotFoundError):
 class PathEscapesWorkspaceError(ValueError):
     def __init__(self, ref: str, root: Path) -> None:
         super().__init__(f"path {ref!r} escapes the workspace root ({root})")
+
+
+@dataclass(frozen=True)
+class DescriptionResolution:
+    """One common-copy read, shared by the editor's preview and its issue check."""
+
+    composed: str
+    error: CommonCopyError | None = None
 
 
 class InvalidNameError(ValueError):
@@ -137,6 +148,15 @@ class Workspace:
     def __init__(self, root: Path, defaults: Defaults) -> None:
         self.root = root
         self.defaults = defaults
+
+    def browser_storage_id(self) -> str:
+        """Stable workspace identity without exposing its absolute path to the UI.
+
+        PRD 4 scopes pending SEO proposals to a workspace and listing. Shop
+        name cannot identify a workspace: two roots can use the same name.
+        """
+        native_root = os.path.normcase(str(self.root.resolve()))
+        return hashlib.sha256(native_root.encode("utf-8")).hexdigest()
 
     @classmethod
     def discover(
@@ -240,6 +260,31 @@ class Workspace:
 
     def listing_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LISTING_FILE
+
+    def design_content_hash(self, design: Mapping[str, str], *, listing_dir: Path) -> str | None:
+        """Content identity for the design the editor and SEO request see.
+
+        Keys and refs are sorted, and the hash contains no absolute path. A
+        missing secondary file gets a stable marker so changes to readable
+        artwork still change the identity of an incomplete draft.
+        """
+        if not design:
+            return None
+        digest = hashlib.sha256()
+        for key, ref in sorted(design.items()):
+            content_hash: str | None = None
+            try:
+                path = self.resolve(ref, relative_to=listing_dir)
+                file_digest = hashlib.sha256()
+                with path.open("rb") as source:
+                    for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                        file_digest.update(chunk)
+                content_hash = file_digest.hexdigest()
+            except (OSError, PathEscapesWorkspaceError):
+                pass
+            entry = json.dumps((key, ref, content_hash), ensure_ascii=False)
+            digest.update(entry.encode("utf-8"))
+        return digest.hexdigest()
 
     def lock_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LOCK_FILE
@@ -351,11 +396,26 @@ class Workspace:
             raise CommonCopyError(f"{ref!r}: file not found")
         return parse_common_copy(ref, path.read_text(encoding="utf-8"))
 
+    def resolve_description(self, description: DescriptionConfig) -> DescriptionResolution:
+        """Resolve a description once, retaining both its preview and any ref error.
+
+        The editor needs both facts from the same file read. Deployment uses
+        :meth:`compose_description`, which raises the error from this result.
+        """
+        text = description.text
+        if description.ref is not None:
+            try:
+                text = self.load_common_copy(description.ref).body
+            except CommonCopyError as exc:
+                return DescriptionResolution(compose_description(description.lead, None), exc)
+        return DescriptionResolution(compose_description(description.lead, text))
+
     def compose_description(self, description: DescriptionConfig) -> str:
         """The final concrete `etsy.description` text -- the one shared
         resolver every deployment reader (Printify, Etsy, snapshots, diffs,
-        local validation, the UI preview) is required to call, rather than
-        each re-deriving it (docs/ai-seo-implementation-plan.md,
+        local validation) is required to call, rather than each re-deriving
+        it. The editor reads :meth:`resolve_description` once for both its
+        preview and its issue check (docs/ai-seo-implementation-plan.md,
         "Description and common-copy boundaries").
 
         Loads ``description.ref`` through :meth:`load_common_copy` when one is
@@ -365,10 +425,10 @@ class Workspace:
         :func:`~etsy_listings.config.description.compose_description`, which
         knows nothing about `ref` or the filesystem.
         """
-        text = description.text
-        if description.ref is not None:
-            text = self.load_common_copy(description.ref).body
-        return compose_description(description.lead, text)
+        resolved = self.resolve_description(description)
+        if resolved.error is not None:
+            raise resolved.error
+        return resolved.composed
 
     def garment_profile_names(self) -> list[str]:
         garment_profiles = self.root / layout.GARMENT_PROFILES_DIR

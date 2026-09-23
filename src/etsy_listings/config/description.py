@@ -11,7 +11,7 @@ which has to stay satisfiable by an unsaved draft.
 `compose_description` is the pure half of "the one shared composition path":
 it only joins an already-resolved `lead`/`text` pair, and knows nothing about
 `ref`, `common-copy/`, or the filesystem -- resolving a `ref` into text is
-`Workspace.load_common_copy`'s job, and `Workspace.compose_description` is the
+`Workspace.load_common_copy`'s job, and `Workspace.resolve_description` is the
 one place that calls both in order (see `workspace/common_copy.py`). No other
 stage, API serializer, or UI handler may independently concatenate, parse, or
 path-resolve description text.

@@ -241,6 +241,11 @@ class ListingDetail(Listing):
     They remain outside ``Listing`` because a listing never writes or owns
     them; this derived field merely lets the editor show what Etsy will use.
     """
+    # Profile context sent to AI SEO generation, including edits that leave
+    # the profile name and materials unchanged.
+    garment_product_type: str | None = None
+    garment_brand: str | None = None
+    garment_model: str | None = None
     description_composed: str = ""
     """The final `etsy.description` text, exactly as
     `Workspace.compose_description` joins it -- the one value the Details
@@ -248,6 +253,9 @@ class ListingDetail(Listing):
     itself (AI SEO implementation plan, PR6). Falls back to the lead alone
     when `ref` fails to resolve; `description_ref_error`-derived issues
     already say why, so this field only avoids also raising."""
+    design_content_hash: str | None = None
+    """Hash of selected design refs and bytes, for AI proposal staleness.
+    Unreadable files contribute a stable marker; absent only with no design."""
 
     @model_validator(mode="after")
     def _require_a_price_source(self) -> ListingDetail:
@@ -350,6 +358,10 @@ class WorkspaceSummary(BaseModel):
     """`etsy.shop_name` from `shop.yaml`. ``None`` until `setup` reads it back
     from Etsy (PRD 51), which a workspace that has only ever rendered mockups
     never has."""
+    storage_id: str
+    """Opaque identity of the workspace root for browser-only pending proposals
+    (PRD 4). Distinct roots must not share a local-storage key merely because
+    they use the same Etsy shop name."""
 
 
 class DraftListingRequest(BaseModel):
@@ -515,9 +527,8 @@ class SeoProposalSnapshot(BaseModel):
     state against to decide a pending proposal has gone stale
     (`docs/ui-listing-seo-interactions.md` section 7) -- everything
     `ai/models.py.SeoRequest` sent to the provider except the design image
-    itself, which the browser already holds and can compare or hash on its
-    own (`SeoRequest`'s own docstring: design identity/content hashing is
-    deliberately the browser's bookkeeping, not a fact this API computes).
+    itself. Design identity and content are captured before generation, rather
+    than inferred from whichever editor state exists when the response arrives.
     """
 
     brief: str
@@ -527,6 +538,9 @@ class SeoProposalSnapshot(BaseModel):
     colors: list[str]
     garment_brand: str
     garment_model: str
+    garment_profile: str
+    design: dict[str, str]
+    design_content_hash: str | None
 
 
 class SeoProposalResponse(BaseModel):

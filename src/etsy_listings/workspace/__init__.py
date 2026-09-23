@@ -27,6 +27,7 @@ from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import (
     AmbiguousColourSuffixError,
+    DescriptionResolution,
     InvalidNameError,
     PathEscapesWorkspaceError,
     ScenePhoto,
@@ -36,6 +37,7 @@ from etsy_listings.workspace.workspace import (
 
 __all__ = [
     "Workspace",
+    "DescriptionResolution",
     "ScenePhoto",
     # What a listing check reads off the tree, gathered once per request.
     "WorkspaceFacts",

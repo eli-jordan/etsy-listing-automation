@@ -6,6 +6,7 @@ a writable copy of the fixture workspace -- same pattern as
 from __future__ import annotations
 
 import os
+import shutil
 import time
 from collections.abc import Callable, Iterator, Sequence
 from datetime import UTC, datetime
@@ -28,6 +29,7 @@ from etsy_listings.workspace.workspace import Workspace
 from tests.support.builders import (
     copy_listing,
     edit_garment_profile,
+    edit_listing,
     listing_file,
     set_etsy_shop_id,
 )
@@ -220,6 +222,55 @@ class TestGetListingDetail:
         assert body["status"] == "draft"
         assert body["field_errors"] == {}
 
+    def test_design_content_change_updates_editor_identity(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        first = client.get("/api/listings/take-a-hike").json()["design_content_hash"]
+        design_file = workspace_root / "designs" / "take-a-hike.png"
+        design_file.write_bytes(design_file.read_bytes() + b"updated")
+
+        second = client.get("/api/listings/take-a-hike").json()["design_content_hash"]
+
+        assert first is not None
+        assert second != first
+
+    def test_missing_secondary_design_does_not_mask_a_primary_change(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        edit_listing(
+            workspace_root,
+            design={
+                "default": "../../designs/take-a-hike.png",
+                "alternate": "../../designs/missing.png",
+            },
+        )
+        first = client.get("/api/listings/take-a-hike").json()["design_content_hash"]
+        design_file = workspace_root / "designs" / "take-a-hike.png"
+        design_file.write_bytes(design_file.read_bytes() + b"updated")
+
+        second = client.get("/api/listings/take-a-hike").json()["design_content_hash"]
+
+        assert first is not None
+        assert second != first
+
+    def test_profile_blueprint_context_changes_without_a_new_profile_name(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        original = client.get("/api/listings/take-a-hike").json()
+        edit_garment_profile(
+            workspace_root,
+            "comfort-colors-1717",
+            blueprint={"brand": "New Brand", "model": "2000", "title": "Long sleeve tee"},
+        )
+
+        updated = client.get("/api/listings/take-a-hike").json()
+
+        assert updated["garment_profile"] == original["garment_profile"]
+        assert updated["garment_materials"] == original["garment_materials"]
+        assert updated["garment_product_type"] == "Long sleeve tee"
+        assert updated["garment_brand"] == "New Brand"
+        assert updated["garment_model"] == "2000"
+
     def test_returns_listing_yaml_modified_time(
         self, client: TestClient, workspace_root: Path
     ) -> None:
@@ -309,6 +360,44 @@ class TestGetListingDetail:
         body = client.get("/api/listings/take-a-hike").json()
 
         assert body["description_composed"] == "A retro sunset.\n\nPrinted to order."
+
+    def test_description_issue_and_preview_use_the_same_common_copy_read(
+        self, client: TestClient, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        shared = workspace_root / "common-copy"
+        shared.mkdir()
+        copy_file = shared / "comfort-colors.md"
+        copy_file.write_text(
+            "---\ntitle: Comfort Colors\ntargets: [description]\n---\nPrinted to order.",
+            encoding="utf-8",
+        )
+        client.patch(
+            "/api/listings/take-a-hike",
+            json={
+                "etsy": {
+                    "description": {
+                        "lead": "A retro sunset.",
+                        "ref": "common-copy/comfort-colors.md",
+                    }
+                }
+            },
+        )
+        original = Workspace.load_common_copy
+        reads = 0
+
+        def read_then_remove(workspace: Workspace, ref: str):
+            nonlocal reads
+            reads += 1
+            document = original(workspace, ref)
+            copy_file.unlink()
+            return document
+
+        monkeypatch.setattr(Workspace, "load_common_copy", read_then_remove)
+        body = client.get("/api/listings/take-a-hike").json()
+
+        assert reads == 1
+        assert body["description_composed"] == "A retro sunset.\n\nPrinted to order."
+        assert not any("common-copy" in issue["message"] for issue in body["issues"])
 
     def test_composed_description_falls_back_to_the_lead_alone_for_a_bad_ref(
         self, client: TestClient
@@ -976,6 +1065,19 @@ class TestSupportingEndpoints:
         response = client.get("/api/workspace")
         assert response.status_code == 200
         assert response.json()["shop_name"] == "TakeAHikeTees"
+
+    def test_storage_identity_distinguishes_workspaces_with_the_same_shop_name(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        other_root = workspace_root.parent / "other-workspace"
+        other_root.mkdir()
+        shutil.copyfile(workspace_root / "shop.yaml", other_root / "shop.yaml")
+        with TestClient(create_app(Workspace.discover(root_override=other_root))) as other:
+            other_summary = other.get("/api/workspace").json()
+
+        summary = client.get("/api/workspace").json()
+        assert summary["shop_name"] == other_summary["shop_name"]
+        assert summary["storage_id"] != other_summary["storage_id"]
 
     def test_reports_a_shop_with_no_name_yet_rather_than_failing(
         self, workspace_root: Path

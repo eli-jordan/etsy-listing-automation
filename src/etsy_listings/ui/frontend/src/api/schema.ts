@@ -22,8 +22,8 @@ export interface paths {
      *     there is nowhere here to report the problem, and offering it would only
      *     produce a pick that immediately fails to resolve. (A *stored* ref that
      *     fails to resolve still surfaces as a details-tab issue -- see
-     *     `_description_ref_error` -- this is only the list of things one could
-     *     newly pick.)
+     *     `Workspace.resolve_description` -- this is only the list of things one
+     *     could newly pick.)
      */
     get: operations["list_common_copy_api_common_copy_get"];
     put?: never;
@@ -1481,6 +1481,8 @@ export interface components {
       design: {
         [key: string]: string;
       };
+      /** Design Content Hash */
+      design_content_hash?: string | null;
       /**
        * @default {
        *       "description": {
@@ -1500,8 +1502,14 @@ export interface components {
       field_errors: {
         [key: string]: string;
       };
+      /** Garment Brand */
+      garment_brand?: string | null;
       /** Garment Materials */
       garment_materials?: string[] | null;
+      /** Garment Model */
+      garment_model?: string | null;
+      /** Garment Product Type */
+      garment_product_type?: string | null;
       /** Garment Profile */
       garment_profile: string;
       /** Issues */
@@ -2147,21 +2155,28 @@ export interface components {
      *     state against to decide a pending proposal has gone stale
      *     (`docs/ui-listing-seo-interactions.md` section 7) -- everything
      *     `ai/models.py.SeoRequest` sent to the provider except the design image
-     *     itself, which the browser already holds and can compare or hash on its
-     *     own (`SeoRequest`'s own docstring: design identity/content hashing is
-     *     deliberately the browser's bookkeeping, not a fact this API computes).
+     *     itself. Design identity and content are captured before generation, rather
+     *     than inferred from whichever editor state exists when the response arrives.
      */
     SeoProposalSnapshot: {
       /** Brief */
       brief: string;
       /** Colors */
       colors: string[];
+      /** Design */
+      design: {
+        [key: string]: string;
+      };
+      /** Design Content Hash */
+      design_content_hash: string | null;
       /** Etsy Category */
       etsy_category: string;
       /** Garment Brand */
       garment_brand: string;
       /** Garment Model */
       garment_model: string;
+      /** Garment Profile */
+      garment_profile: string;
       /** Materials */
       materials: string[];
       /** Product Type */
@@ -2555,6 +2570,8 @@ export interface components {
     WorkspaceSummary: {
       /** Shop Name */
       shop_name: string | null;
+      /** Storage Id */
+      storage_id: string;
     };
   };
   responses: never;

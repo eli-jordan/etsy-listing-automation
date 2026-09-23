@@ -46,6 +46,11 @@ class BlueprintRef(BaseModel):
         """How the pair is quoted in an error or a log line: "Comfort Colors 1717"."""
         return f"{self.brand} {self.model}".strip()
 
+    @property
+    def display_title(self) -> str:
+        """The catalogue title, falling back to the identifying brand and model."""
+        return self.title or str(self)
+
 
 class GarmentProfile(BaseModel):
     model_config = ConfigDict(extra="forbid")
