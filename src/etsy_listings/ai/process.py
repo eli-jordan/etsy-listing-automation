@@ -109,12 +109,11 @@ def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
     marks `Popen` itself as reaped.
     """
     if sys.platform == "win32":
-        result = subprocess.run(
+        subprocess.run(
             ["taskkill", "/T", "/F", "/PID", str(proc.pid)],
             capture_output=True,
             check=False,
         )
-        print(f"[DEBUG-tree] pid={proc.pid} parent_before={proc.poll()} taskkill={result.returncode} stdout={result.stdout!r} stderr={result.stderr!r}", file=sys.stderr)
     else:
         with contextlib.suppress(ProcessLookupError):
             os.killpg(os.getpgid(proc.pid), _SIGKILL)

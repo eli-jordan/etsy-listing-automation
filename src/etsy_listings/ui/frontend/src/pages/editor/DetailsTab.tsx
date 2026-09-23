@@ -66,14 +66,14 @@ export function DetailsTab({ detail, onUpdate, onFlush, save }: Props) {
   const previewRef = useRef<HTMLDivElement>(null);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
   const aiSeo = useAiSeoMode(detail, onUpdate, onFlush, save);
-  const wasGenerating = useRef(false);
   const [drawerMotion, setDrawerMotion] = useState(false);
-  if (aiSeo.phase === "loading") {
-    wasGenerating.current = true;
-  } else if (wasGenerating.current) {
-    wasGenerating.current = false;
-    const reveal = aiSeo.proposal !== null && document.visibilityState === "visible";
-    if (reveal !== drawerMotion) setDrawerMotion(reveal);
+  const [prevAiSeoPhase, setPrevAiSeoPhase] = useState(aiSeo.phase);
+  if (aiSeo.phase !== prevAiSeoPhase) {
+    setPrevAiSeoPhase(aiSeo.phase);
+    if (prevAiSeoPhase === "loading") {
+      const reveal = aiSeo.proposal !== null && document.visibilityState === "visible";
+      if (reveal !== drawerMotion) setDrawerMotion(reveal);
+    }
   }
   if (aiSeo.proposal === null && drawerMotion) setDrawerMotion(false);
   const aiModeButtonRef = useRef<HTMLButtonElement>(null);
