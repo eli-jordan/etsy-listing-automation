@@ -4,6 +4,45 @@
  */
 
 export interface paths {
+  "/api/ai/design-brief": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request Design Brief
+     * @description Draft a listing brief from a design image (PRD 68).
+     *
+     *     The browser calls this by itself, once, the moment a design is attached
+     *     to a listing whose brief is empty -- including a listing that has no name
+     *     and no file yet, which is the ordinary case while one is being created.
+     *     So every refusal here is one a caller nobody asked to call has to be able
+     *     to live with silently, and the client's reason for calling is re-checked
+     *     rather than trusted: the design has to resolve inside the workspace and
+     *     exist, the garment profile has to load, some provider has to be ready,
+     *     and `prompts/brief.md` has to be readable.
+     *
+     *     It deliberately does *not* ask whether any brief is already filled in.
+     *     There is no listing here to ask about, and the browser is the only thing
+     *     that knows whether the seller has typed into the field since the request
+     *     was armed.
+     *
+     *     Never writes the drafted text anywhere. It is returned, the editor puts
+     *     it in the ordinary Brief field, and autosave persists it exactly as it
+     *     persists a typed one -- which is what keeps "the model never writes
+     *     `listing.yaml`" true (PRD 4, as amended by PRD 68).
+     */
+    post: operations["request_design_brief_api_ai_design_brief_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/common-copy": {
     parameters: {
       query?: never;
@@ -330,42 +369,6 @@ export interface paths {
     head?: never;
     /** Patch Listing */
     patch: operations["patch_listing_api_listings__name__patch"];
-    trace?: never;
-  };
-  "/api/listings/{name}/ai-seo/brief": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Request Design Brief
-     * @description Draft this saved listing's brief from its design image (PRD 68).
-     *
-     *     The browser calls this by itself, once, when a design is attached to a
-     *     listing whose brief is empty -- so every refusal here is one a caller
-     *     nobody asked to call has to be able to live with silently. That shapes
-     *     two things. First, this endpoint re-checks the state it needs rather
-     *     than trusting the client's reason for calling: a design must be
-     *     selected, some provider must be ready, and `prompts/brief.md` must be
-     *     readable. Second, it deliberately does *not* check whether the brief is
-     *     already filled -- only the browser knows whether the seller has typed
-     *     into the field since the request was armed, and refusing based on a file
-     *     autosave may not have reached yet would refuse the common case.
-     *
-     *     Never writes the drafted text anywhere. It is returned, the editor puts
-     *     it in the ordinary Brief field, and autosave persists it exactly as it
-     *     persists a typed one -- which is what keeps "the model never writes
-     *     `listing.yaml`" true (PRD 4, as amended by PRD 68).
-     */
-    post: operations["request_design_brief_api_listings__name__ai_seo_brief_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
     trace?: never;
   };
   "/api/listings/{name}/ai-seo/proposal": {
@@ -1154,6 +1157,28 @@ export interface components {
       ref?: string | null;
       /** Text */
       text?: string | null;
+    };
+    /**
+     * DesignBriefRequest
+     * @description What drafting a brief actually needs (PRD 68): a design, and the
+     *     garment it will be printed on.
+     *
+     *     Not a listing. A brief describes the *artwork*, and the one moment it is
+     *     most wanted is the moment a design is attached -- which, when a seller is
+     *     creating a listing, is usually before that listing has a name or a file.
+     *     Asking for the two facts directly is what lets the request go out then,
+     *     instead of waiting for a save the seller has not made yet.
+     *
+     *     ``design`` is workspace-relative and POSIX (``designs/take-a-hike.png``),
+     *     resolved through `Workspace.resolve`, which is what refuses anything
+     *     pointing outside the workspace (`A8`) -- this value arrives from a
+     *     browser, so that check is the security boundary, not a tidiness rule.
+     */
+    DesignBriefRequest: {
+      /** Design */
+      design: string;
+      /** Garment Profile */
+      garment_profile: string;
     };
     /**
      * DesignBriefResponse
@@ -2611,6 +2636,39 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  request_design_brief_api_ai_design_brief_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DesignBriefRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DesignBriefResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   list_common_copy_api_common_copy_get: {
     parameters: {
       query?: never;
@@ -3071,37 +3129,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  request_design_brief_api_listings__name__ai_seo_brief_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["DesignBriefResponse"];
         };
       };
       /** @description Validation Error */

@@ -5,9 +5,11 @@ import { EditableName } from "../components/EditableName";
 import { OpenOnMenu } from "../components/OpenOnMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
-import { useAutosave, type SaveState } from "../hooks/useAutosave";
+import { useAutosave } from "../hooks/useAutosave";
 import type { Issue, IssueTab, ListingDetail } from "../types";
-import { AutoDesignBriefStatus } from "./editor/aiSeo/AutoDesignBriefStatus";
+import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
+import type { AutoDesignBrief } from "./editor/aiSeo/useAutoDesignBrief";
+import { AiActivityIndicator } from "./editor/aiSeo/AiActivityIndicator";
 import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { useAutoDesignBrief } from "./editor/aiSeo/useAutoDesignBrief";
 import { DeployControl } from "./editor/DeployControl";
@@ -103,10 +105,16 @@ export function ListingEditorPage() {
 
   return (
     <ListingEditorPageContent
-      // A genuine listing switch remounts; naming or renaming this one does
-      // not lose anything by remounting either, because `useAutosave` drains
-      // what is pending before the name changes and again on unmount.
-      key={routeName ?? "new"}
+      // Deliberately unkeyed. A genuine listing switch already remounts --
+      // `initial` goes `null` above while the new one loads, which unmounts
+      // this whole subtree -- so the key only ever forced the *extra*
+      // remount that naming a draft caused, where `handed` keeps `initial`
+      // non-null. `useAutosave` handles a name change itself (`commitName`
+      // updates its own `savedName`, `detail` and `save` before `onNamed`
+      // fires), so that remount threw away state for nothing. It is not
+      // nothing any more: PRD 68's chain starts when a design is attached,
+      // which on a new listing is usually *before* it is named, and a
+      // remount there aborted the request the seller was waiting on.
       name={routeName}
       initial={initial}
       onBack={() => navigate("/listings")}
@@ -132,18 +140,27 @@ function ListingEditorPageContent({
   onNamed: (name: string, fresh: ListingDetail) => void;
 }) {
   const { detail, update, flush, commitName, save } = useAutosave(name, initial, { onNamed });
+  // Both AI requests live here rather than inside a tab: each outlives the
+  // tab that was showing when it started, and the chain that begins them
+  // begins at the design strip, above the tab strip (PRD 68). Living here
+  // rather than in `ListingEditorShell` is what lets the page head report
+  // them beside the autosave line.
+  const aiSeo = useAiSeoMode(detail, update, flush, save);
+  const autoBrief = useAutoDesignBrief(detail.brief, detail.garment_profile, update, flush, aiSeo);
 
   return (
     <ListingEditorShell
       detail={detail}
       update={update}
       flush={flush}
-      save={save}
+      aiSeo={aiSeo}
+      autoBrief={autoBrief}
       head={
         <EditorHead
           detail={detail}
           onBack={onBack}
           flush={flush}
+          activity={<AiActivityIndicator auto={autoBrief} aiSeo={aiSeo} />}
           title={
             <EditableName
               value={name ?? ""}
@@ -178,12 +195,17 @@ export function EditorHead({
   title,
   meta,
   flush,
+  activity,
 }: {
   detail: ListingDetail;
   onBack: () => void;
   title: ReactNode;
   meta: ReactNode;
   flush: () => Promise<void>;
+  /** What the editor is doing on its own right now, beside the meta line
+   * (PRD 68). `null` whenever nothing is running, which is most of the
+   * time. */
+  activity?: ReactNode;
 }) {
   // Not keyed off `status`: a listing can carry a Printify product without an
   // Etsy listing id, and an id it has is worth a link whatever state Etsy
@@ -207,6 +229,7 @@ export function EditorHead({
 
       <StatusTag status={detail.status} />
       <span className="page-head__meta">{meta}</span>
+      {activity}
 
       {detail.name !== "" && (
         <div className="page-head__actions dv-head-actions">
@@ -221,25 +244,21 @@ export function ListingEditorShell({
   detail,
   update,
   flush,
-  save,
+  aiSeo,
+  autoBrief,
   head,
 }: {
   detail: ListingDetail;
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
-  save?: SaveState;
+  /** Owned by `ListingEditorPageContent`, not by this shell and not by
+   * `DetailsTab`: a request outlives the tab it was started from -- switching
+   * to Variants used to unmount the tab and abort a proposal mid-flight. */
+  aiSeo: AiSeoMode;
+  autoBrief: AutoDesignBrief;
   head: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("variants");
-
-  // AI Mode lives here rather than inside `DetailsTab` for two reasons that
-  // are really one: a request outlives the tab it was started from. Switching
-  // to Variants used to unmount the tab and abort a proposal mid-flight, and
-  // PRD 68's chain starts from the design strip above the tabs, which the
-  // seller is normally looking at from Variants. `DetailsTab` receives the
-  // same object as a prop and is otherwise unchanged.
-  const aiSeo = useAiSeoMode(detail, update, flush, save);
-  const autoBrief = useAutoDesignBrief(detail, update, flush, aiSeo, save);
 
   function pickTab(next: Tab) {
     flush();
@@ -255,11 +274,16 @@ export function ListingEditorShell({
       {/* Above the tabs, not inside one: the artwork is what both Variants
           (which colours suit it) and Listing Images (which mockups show it)
           are about. */}
-      <DesignSelect design={detail.design} onPick={(ref) => update({ design: ref })} />
-      <AutoDesignBriefStatus
-        auto={autoBrief}
-        aiSeo={aiSeo}
-        onOpenDetails={() => pickTab("details")}
+      <DesignSelect
+        design={detail.design}
+        onPick={(ref) => {
+          update({ design: ref });
+          // Immediately, in the same handler: the brief request needs the
+          // design and the garment profile, both of which are in hand here,
+          // and nothing about it waits on the save this `update` schedules
+          // (PRD 68).
+          autoBrief.start(ref);
+        }}
       />
 
       <div className="tabs seg">

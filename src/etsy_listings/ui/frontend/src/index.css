@@ -2614,42 +2614,40 @@ table.listings tbody tr:last-child td {
 /* — Listing Details AI Mode (design/scenes/listing-seo-v3, adapted to this
    app's real tokens and the live `.field`/`.btn` structure rather than the
    mockup's standalone screen) — */
-/* The one line the design strip shows while PRD 68's chain runs. Sized and
-   coloured like `.seo-inline-status` (the Details tab's own AI line) so the
-   two read as the same voice, but full width rather than capped: this sits
-   under the design row, where there is room, and the tab's version sits
-   beside a field, where there is not. */
-.auto-brief-status {
-  display: flex;
+/* What the page head says while PRD 68's chain runs, beside the autosave meta
+   line. Sized to sit on that line rather than beside it: same 11px, same muted
+   weight, so the head reads as one sentence about where this listing stands
+   and not as a notification bar that appeared. */
+.ai-activity {
+  display: inline-flex;
   align-items: center;
-  gap: 8px;
-  margin: 0 0 10px;
-  padding: 6px 9px;
-  border-radius: var(--radius-sm);
-  background: var(--color-neutral-200);
-  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  gap: 5px;
+  margin-left: 10px;
+  color: var(--color-accent);
   font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.auto-brief-status button {
+.ai-activity__spinner {
   flex: none;
-  margin-left: auto;
-  padding: 3px 8px;
-  border: 1px solid var(--color-divider);
-  border-radius: 999px;
-  background: var(--color-neutral-100);
-  color: var(--color-text);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
 }
 
-/* The busy cue is a border tint, not motion: something already animates on
-   this screen while AI Mode runs (the sparkle), and two independent pulses
-   read as two separate things happening. */
-.auto-brief-status--busy {
-  border-left: 3px solid var(--color-accent);
-  padding-left: 6px;
+/* Still legible with no motion at all: the label says which of the two steps
+   is running, and the ring keeps its lit quarter. Section 10's rule
+   ("motion honors prefers-reduced-motion") applied to the one place this
+   feature animates. */
+@media (prefers-reduced-motion: no-preference) {
+  .ai-activity__spinner {
+    animation: ai-activity-spin 900ms linear infinite;
+    transform-origin: center;
+  }
+}
+
+@keyframes ai-activity-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .seo-inline-status {

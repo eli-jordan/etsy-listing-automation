@@ -1,7 +1,12 @@
-"""``POST /api/listings/{name}/ai-seo/brief`` (PRD 68): payload shape, status
-codes, and the two behaviours that make it safe for a caller nobody asked to
-call -- it refuses rather than guesses when its prerequisites are missing,
-and it never writes the drafted text anywhere.
+"""``POST /api/ai/design-brief`` (PRD 68): payload shape, status codes, and
+the two behaviours that make it safe for a caller nobody asked to call -- it
+refuses rather than guesses when its prerequisites are missing, and it never
+writes the drafted text anywhere.
+
+It is deliberately not a per-listing route. A seller creating a listing
+attaches the design before naming it, and that is exactly when the brief is
+wanted; a route under `/api/listings/{name}` could only answer 404 then. So
+these tests never save a listing at all, which is itself the point.
 
 Its own file rather than more of `test_ai_seo_api.py`: one test file, one
 subject. That file's subject is the proposal surface -- readiness, the
@@ -20,7 +25,6 @@ from __future__ import annotations
 
 import json
 import threading
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
@@ -37,9 +41,11 @@ from etsy_listings.workspace.layout import BRIEF_PROMPT_FILE, PROMPTS_DIR
 from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import edit_listing, listing_file
+from tests.support.builders import listing_file
 
 _DRAFT = "Retro sunset mountains. The design text reads exactly TAKE A HIKE."
+_DESIGN = f"designs/{LISTING}.png"
+_PROFILE = "comfort-colors-1717"
 
 
 def _payload(brief: str = _DRAFT) -> str:
@@ -75,17 +81,17 @@ def _client(
 
 @pytest.fixture
 def client(workspace_root: Path) -> Iterator[TestClient]:
-    """The state a design attach leaves behind: a saved listing with a
-    design, an empty brief, a seeded `prompts/brief.md`, and one ready
-    provider."""
+    """The state a design pick leaves behind: a seeded `prompts/brief.md` and
+    one ready provider. No listing is saved, named, or edited -- this endpoint
+    never looks at one."""
     _seed_brief_prompt(workspace_root)
-    edit_listing(workspace_root, brief="")
     with _client(workspace_root, providers=[_ready_provider()]) as test_client:
         yield test_client
 
 
-def _post(client: TestClient) -> Any:
-    return client.post(f"/api/listings/{LISTING}/ai-seo/brief")
+def _post(client: TestClient, **over: str) -> Any:
+    body = {"design": _DESIGN, "garment_profile": _PROFILE, **over}
+    return client.post("/api/ai/design-brief", json=body)
 
 
 # ------------------------------------------------------------------ the draft
@@ -98,7 +104,9 @@ def test_a_drafted_brief_comes_back_as_plain_text(client: TestClient) -> None:
     assert response.json() == {"brief": _DRAFT}
 
 
-def test_the_provider_is_handed_the_listings_design_image(workspace_root: Path) -> None:
+def test_the_provider_is_handed_the_design_image_and_the_sellers_prompt(
+    workspace_root: Path,
+) -> None:
     _seed_brief_prompt(workspace_root)
     provider = _ready_provider()
 
@@ -106,57 +114,51 @@ def test_the_provider_is_handed_the_listings_design_image(workspace_root: Path) 
         _post(c)
 
     (task,) = provider.tasks
-    assert task.design_image.name == "take-a-hike.png"
+    assert task.design_image.name == f"{LISTING}.png"
     assert "Describe the artwork." in task.prompt_text
 
 
-def test_nothing_is_written_to_the_listing(workspace_root: Path, client: TestClient) -> None:
-    """The settled rule PRD 4 keeps even as PRD 68 amends it: the model
-    never writes `listing.yaml`. The editor does, through ordinary autosave,
-    once it has this response."""
+def test_nothing_is_written_to_the_workspace(workspace_root: Path, client: TestClient) -> None:
+    """The settled rule PRD 4 keeps even as PRD 68 amends it: the model never
+    writes `listing.yaml`. The editor does, through ordinary autosave, once it
+    has this response."""
     before = listing_file(workspace_root).read_text(encoding="utf-8")
+    tree = sorted(p.relative_to(workspace_root) for p in workspace_root.rglob("*"))
 
     assert _post(client).status_code == 200
 
     assert listing_file(workspace_root).read_text(encoding="utf-8") == before
-
-
-def test_a_listing_that_already_has_a_brief_is_still_drafted_for(
-    workspace_root: Path,
-) -> None:
-    """Deliberately *not* refused here. Only the browser knows whether the
-    seller has typed into the field since the request was armed, and
-    refusing from a file autosave may not have reached yet would refuse the
-    common case (`ui/api/seo.py.request_design_brief`)."""
-    _seed_brief_prompt(workspace_root)
-    edit_listing(workspace_root, brief="Something the seller wrote.")
-
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        assert _post(c).status_code == 200
+    assert sorted(p.relative_to(workspace_root) for p in workspace_root.rglob("*")) == tree
 
 
 # ------------------------------------------------------------------- refusals
 
 
-def test_404_for_a_listing_that_was_never_saved(client: TestClient) -> None:
-    assert client.post("/api/listings/never-saved/ai-seo/brief").status_code == 404
+def test_400_for_a_design_path_that_escapes_the_workspace(client: TestClient) -> None:
+    """This value arrives from a browser, so `Workspace.resolve`'s boundary
+    (`A8`) is a security check here, not a tidiness rule."""
+    response = _post(client, design="../../../etc/passwd")
+
+    assert response.status_code == 400
 
 
-def test_409_without_a_selected_design(workspace_root: Path) -> None:
-    _seed_brief_prompt(workspace_root)
-    edit_listing(workspace_root, design={})
+def test_409_for_a_design_that_does_not_exist(client: TestClient) -> None:
+    response = _post(client, design="designs/nothing-here.png")
 
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        response = _post(c)
+    assert response.status_code == 409
+    assert "nothing-here" in response.json()["detail"]
 
-        assert response.status_code == 409
-        assert "design" in response.json()["detail"]
+
+def test_409_for_a_garment_profile_that_will_not_load(client: TestClient) -> None:
+    response = _post(client, garment_profile="no-such-profile")
+
+    assert response.status_code == 409
+    assert "no-such-profile" in response.json()["detail"]
 
 
 def test_409_without_prompts_brief_md(workspace_root: Path) -> None:
-    """A workspace that predates this feature has no `prompts/brief.md`. It
-    can still use AI Mode by hand; only the automatic draft is unavailable,
-    and it says which file to seed."""
+    """A workspace that predates this feature. AI Mode by hand still works;
+    only the automatic draft is unavailable, and it says which file to seed."""
     with _client(workspace_root, providers=[_ready_provider()]) as c:
         response = _post(c)
 
@@ -180,9 +182,9 @@ def test_409_when_no_provider_is_ready(workspace_root: Path) -> None:
 
 
 def test_502_when_generation_fails(workspace_root: Path) -> None:
-    """An unrepairable response is "Try again", the same mapping the
-    proposal endpoint uses -- `ui/api/seo.py._generation_errors` owns it
-    once for both."""
+    """An unrepairable response is "Try again", the same mapping the proposal
+    endpoint uses -- `ui/api/seo.py._generation_errors` owns it once for
+    both."""
     _seed_brief_prompt(workspace_root)
     provider = _ready_provider(responses=[_payload(""), _payload("   ")])
 
@@ -195,8 +197,8 @@ def test_502_when_generation_fails(workspace_root: Path) -> None:
 
 @dataclass
 class _BlockingProvider:
-    """Holds `generate()` open until released, so a second request can be
-    made while the first is genuinely in flight."""
+    """Holds `generate()` open until released, so a second request can be made
+    while the first is genuinely in flight."""
 
     name: str = "codex"
     ready: ProviderReadiness = field(default_factory=lambda: ProviderReadiness(ready=True))
@@ -219,9 +221,9 @@ class _BlockingProvider:
         return RawProviderResult(provider=self.name, raw_output=_payload())
 
 
-def test_a_second_brief_request_for_the_same_listing_is_refused(
-    workspace_root: Path,
-) -> None:
+def test_a_second_request_for_the_same_design_is_refused(workspace_root: Path) -> None:
+    """Two editors drafting for one artwork would be two CLI subprocesses
+    reading the same image to produce the same answer."""
     _seed_brief_prompt(workspace_root)
     provider = _BlockingProvider()
     statuses: list[int] = []
@@ -241,40 +243,12 @@ def test_a_second_brief_request_for_the_same_listing_is_refused(
     assert statuses == [200]
 
 
-def test_a_brief_request_does_not_block_this_listings_proposal(
-    workspace_root: Path,
-) -> None:
+def test_a_brief_request_does_not_block_a_listings_proposal(workspace_root: Path) -> None:
     """The chain's whole shape depends on this: a drafted brief is what
-    unblocks a proposal, so the two are never rivals for one listing's
-    slot."""
+    unblocks a proposal, so the two are never rivals."""
     from etsy_listings.ui.api.seo import ActiveSeoRequests
 
     active = ActiveSeoRequests()
 
-    assert active.begin("brief", LISTING) is True
+    assert active.begin("brief", _DESIGN) is True
     assert active.begin("proposal", LISTING) is True
-
-
-def test_a_slow_brief_never_holds_up_another_listing(workspace_root: Path) -> None:
-    from tests.support.builders import copy_listing
-
-    _seed_brief_prompt(workspace_root)
-    copy_listing(workspace_root, "second-listing")
-    provider = _BlockingProvider()
-
-    with _client(workspace_root, providers=[provider]) as c:
-        slow = threading.Thread(target=lambda: _post(c))
-        slow.start()
-        assert provider.started.wait(timeout=10)
-
-        # The other listing's request reaches the same blocking provider, so
-        # it is "accepted and running", not "refused" -- which is the claim.
-        started_at = time.monotonic()
-        other = threading.Thread(target=lambda: c.post("/api/listings/second-listing/ai-seo/brief"))
-        other.start()
-
-        provider.release.set()
-        slow.join(timeout=10)
-        other.join(timeout=10)
-
-    assert time.monotonic() - started_at < 10

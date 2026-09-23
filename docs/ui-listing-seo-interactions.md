@@ -103,20 +103,29 @@ the work by itself (PRD 68).
 
 | Interaction | What happens | Why it is important |
 | --- | --- | --- |
-| Attach or change the design while the brief is empty | Draft a brief from the artwork, write it into the ordinary Brief field, and request the SEO proposal it unblocks. | The seller reaches Listing Details to review suggestions rather than to start a two-minute wait. |
+| Attach or change the design while the brief is empty | Draft a brief from the artwork immediately, write it into the ordinary Brief field, and request the SEO proposal it unblocks. | The seller reaches Listing Details to review suggestions rather than to start a two-minute wait. |
 | Attach or change the design while the brief has text | Do nothing at all. | A brief the seller wrote is the authority on the design; regenerating over it would lose the one input only they have. |
-| Attach the design before the listing has a name | Wait. Draft as soon as naming has saved the listing. | Every request still needs a saved listing, and the natural create order puts the design first. |
-| Type in the Brief field while a draft is in flight | Abandon the draft; the seller's text wins. Generation still follows once their brief is saved. | Two authors of one field is the failure to design out, not to detect afterwards. |
-| The draft or the generation it started fails | Show the failure where AI Mode already shows one, and stop. **AI Mode** and **Try again** remain. | A background attempt that quietly retries spends a subscription budget nobody asked it to. |
+| Attach the design before the listing has a name | Draft anyway, on the pick. The brief request is about a design, not a listing. | This is the ordinary order while creating a listing. Waiting for a name would mean the feature never ran in the flow it exists for. |
+| Type in the Brief field while a draft is in flight | Discard the draft when it arrives; the seller's text wins. | Two authors of one field is the failure to design out, not to detect afterwards. |
+| The draft or the generation it started fails | Stop. The Brief field is simply still empty, and **AI Mode** explains what it needs. | A background attempt that quietly retries spends a subscription budget nobody asked it to. |
 | Leave the editor while either request runs | Abort it, exactly as **Cancel** does. Retain no brief and no proposal. | Section 7's cancellation rule is about who is left to own a result, and that does not change because the request started itself. |
+
+While either step runs, the editor's page head says **Generating brief…** and
+then **Generating SEO…**, beside the autosave line. That is where it belongs
+rather than beside the Brief field: the seller who attached a design is
+normally looking at Variants, and the head is the one part of the editor that
+reads the same on every tab. It reports only; there is no cancel and no retry
+there.
 
 The drafted brief is ordinary listing content the moment it lands: editable,
 autosaved through the normal path, and carrying no badge, no pending state, and
 no accept step. It is not part of the proposal, so it never goes stale and is
 never cleared by resolving a drawer.
 
-The chain arms once per attach. Changing the design again re-arms it — but only
-while the brief is still empty, which after a successful draft it is not.
+The chain runs once per pick, because the pick is what starts it — there is no
+render-level condition that could fire it a second time. Changing the design
+again starts a fresh draft, but only while the brief is still empty, which
+after a successful draft it is not.
 
 Brief drafting has its own prompt, `prompts/brief.md`, seeded exactly as
 `prompts/seo.md` is, and runs through the same provider chain, deadline and

@@ -4,13 +4,21 @@ SEO implementation plan, PR5; PRD 68 for the brief).
 ```
 GET  /api/listings/{name}/ai-seo/readiness  -> SeoReadinessResponse
 POST /api/listings/{name}/ai-seo/proposal   -> SeoProposalResponse  | 409/499/502/503
-POST /api/listings/{name}/ai-seo/brief      -> DesignBriefResponse  | 409/499/502/503
+POST /api/ai/design-brief                   -> DesignBriefResponse  | 409/499/502/503
 ```
 
 The brief endpoint is the older two's sibling in every respect that matters
 here -- same providers, same deadline, same disconnect-cancellation, same
-"nothing is written to a workspace file" rule. It differs only in what it
-asks for and what a seller does with the answer: the browser writes a
+"nothing is written to a workspace file" rule. It differs in two ways, and
+both follow from the same fact: a brief is about a *design*, not a listing.
+
+So it is **not** a per-listing route. A seller creating a listing attaches
+the design before naming it, and that is precisely when the brief is wanted
+(PRD 68); a route under `/api/listings/{name}` could only answer 404 at that
+moment. It takes the design and the garment profile directly instead, and
+needs nothing on disk.
+
+And a seller does something different with the answer: the browser writes a
 drafted brief into the ordinary Brief field through the existing autosave
 path, where a proposal's three suggestions instead wait for a per-field
 choice. Which is to say the *model* still never writes `listing.yaml`; the
@@ -74,6 +82,7 @@ from etsy_listings.ai.providers import AiProvider
 from etsy_listings.config.listing import Listing
 from etsy_listings.ui.api.listings import Existing
 from etsy_listings.ui.api.schemas import (
+    DesignBriefRequest,
     DesignBriefResponse,
     SeoProposalResponse,
     SeoProposalSnapshot,
@@ -82,9 +91,15 @@ from etsy_listings.ui.api.schemas import (
     SeoWarningEntry,
 )
 from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.workspace.workspace import PathEscapesWorkspaceError, Workspace
 
 router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
+brief_router = APIRouter(prefix="/api/ai", tags=["ai-brief"])
+"""Drafting a brief is not about one listing (PRD 68), so it does not sit
+under `/api/listings/{name}` and does not go through `Existing`. Same
+module, because everything it does reach for -- the provider factory, the
+active-request registry, the cancellation race, the error mapping -- is
+right here."""
 
 _PROPOSAL = "proposal"
 _BRIEF = "brief"
@@ -202,6 +217,15 @@ def _providers(request: Request, workspace: Workspace) -> Sequence[AiProvider]:
     return result
 
 
+def _workspace(request: Request) -> Workspace:
+    """The workspace this server was started on. `ui/api/listings.py` reads
+    it the same way; this module's other two endpoints get it through
+    `Existing`, which a listing-independent route has no business asking
+    for."""
+    workspace: Workspace = request.app.state.workspace
+    return workspace
+
+
 def _active_requests(request: Request) -> ActiveSeoRequests:
     registry: ActiveSeoRequests = request.app.state.seo_active_requests
     return registry
@@ -284,26 +308,36 @@ def _build_request(workspace: Workspace, name: str, listing: Listing) -> SeoRequ
     )
 
 
-def _build_brief_request(workspace: Workspace, name: str, listing: Listing) -> BriefRequest:
-    """The inputs for one drafted brief, read fresh from the saved listing.
+def _build_brief_request(workspace: Workspace, asked: DesignBriefRequest) -> BriefRequest:
+    """The inputs for one drafted brief, from the two facts the client sent.
 
     Far less than :func:`_build_request` gathers, because a brief describes
     the artwork and not the listing -- see `ai/brief.py.BriefRequest` for why
-    colours and category are deliberately left out. The garment profile is
-    still required rather than defaulted: the same 409 a proposal gives for
-    an unusable one is the honest answer here too, and a brief written about
-    a garment this listing does not actually use would be worse than no
-    brief.
+    colours and category are deliberately left out, and `DesignBriefRequest`
+    for why there is no listing here at all.
+
+    Both facts are checked rather than trusted. The design path goes through
+    `Workspace.resolve` (which refuses anything outside the workspace) and
+    then has to actually exist, since a provider handed a missing image
+    describes nothing. The garment profile has to load: a brief written about
+    a garment the listing does not use would be worse than no brief, and the
+    same 409 a proposal gives for an unusable profile is the honest answer.
     """
-    facts = WorkspaceFacts.gather(workspace)
-    profile = facts.garment_profile(listing.garment_profile)
+    try:
+        design_image = workspace.resolve(asked.design, relative_to=workspace.root)
+    except PathEscapesWorkspaceError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    if not design_image.is_file():
+        raise HTTPException(status_code=409, detail=f"no design file at {asked.design!r}")
+
+    profile = WorkspaceFacts.gather(workspace).garment_profile(asked.garment_profile)
     if profile is None:
         raise HTTPException(
             status_code=409,
-            detail=f"listing {name!r} has no usable garment profile {listing.garment_profile!r}",
+            detail=f"no usable garment profile {asked.garment_profile!r}",
         )
     return BriefRequest(
-        design_image=_primary_design_image(workspace, name, listing),
+        design_image=design_image,
         product_type=profile.blueprint.display_title,
         garment=GarmentContext(brand=profile.blueprint.brand, model=profile.blueprint.model),
     )
@@ -525,47 +559,50 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
     return _to_response(proposal, snapshot)
 
 
-@router.post("/{name}/ai-seo/brief", response_model=DesignBriefResponse)
-async def request_design_brief(target: Existing, request: Request) -> DesignBriefResponse:
-    """Draft this saved listing's brief from its design image (PRD 68).
+@brief_router.post("/design-brief", response_model=DesignBriefResponse)
+async def request_design_brief(asked: DesignBriefRequest, request: Request) -> DesignBriefResponse:
+    """Draft a listing brief from a design image (PRD 68).
 
-    The browser calls this by itself, once, when a design is attached to a
-    listing whose brief is empty -- so every refusal here is one a caller
-    nobody asked to call has to be able to live with silently. That shapes
-    two things. First, this endpoint re-checks the state it needs rather
-    than trusting the client's reason for calling: a design must be
-    selected, some provider must be ready, and `prompts/brief.md` must be
-    readable. Second, it deliberately does *not* check whether the brief is
-    already filled -- only the browser knows whether the seller has typed
-    into the field since the request was armed, and refusing based on a file
-    autosave may not have reached yet would refuse the common case.
+    The browser calls this by itself, once, the moment a design is attached
+    to a listing whose brief is empty -- including a listing that has no name
+    and no file yet, which is the ordinary case while one is being created.
+    So every refusal here is one a caller nobody asked to call has to be able
+    to live with silently, and the client's reason for calling is re-checked
+    rather than trusted: the design has to resolve inside the workspace and
+    exist, the garment profile has to load, some provider has to be ready,
+    and `prompts/brief.md` has to be readable.
+
+    It deliberately does *not* ask whether any brief is already filled in.
+    There is no listing here to ask about, and the browser is the only thing
+    that knows whether the seller has typed into the field since the request
+    was armed.
 
     Never writes the drafted text anywhere. It is returned, the editor puts
     it in the ordinary Brief field, and autosave persists it exactly as it
     persists a typed one -- which is what keeps "the model never writes
     `listing.yaml`" true (PRD 4, as amended by PRD 68).
     """
-    workspace, name = target.workspace, target.name
-    listing = workspace.load_listing(name)
+    workspace = _workspace(request)
     providers = _providers(request, workspace)
-    if not listing.design:
-        raise HTTPException(status_code=409, detail="the listing has no selected design")
     checks = [provider.readiness() for provider in providers]
     if not any(check.ready for check in checks):
         reasons = "; ".join(check.reason for check in checks if check.reason)
         detail = reasons or "no provider is configured"
         raise HTTPException(status_code=409, detail=f"no AI provider is ready ({detail})")
 
+    # Keyed by the design rather than a listing, for the same reason the route
+    # is: two editors drafting for the same artwork at once would be two CLI
+    # subprocesses reading one image to produce one answer.
     active = _active_requests(request)
-    if not active.begin(_BRIEF, name):
+    if not active.begin(_BRIEF, asked.design):
         raise HTTPException(
             status_code=409,
-            detail=f"a brief request is already running for listing {name!r}",
+            detail=f"a brief request is already running for design {asked.design!r}",
         )
     try:
         with _generation_errors():
             seller_prompt = _seller_prompt(workspace.brief_prompt_file())
-            brief_request = _build_brief_request(workspace, name, listing)
+            brief_request = _build_brief_request(workspace, asked)
             drafted = await generate_with_cancellation(
                 lambda cancel: generate_brief(
                     brief_request, seller_prompt, providers, cancel_event=cancel
@@ -573,6 +610,6 @@ async def request_design_brief(target: Existing, request: Request) -> DesignBrie
                 is_disconnected=request.is_disconnected,
             )
     finally:
-        active.end(_BRIEF, name)
+        active.end(_BRIEF, asked.design)
 
     return DesignBriefResponse(brief=drafted.brief)

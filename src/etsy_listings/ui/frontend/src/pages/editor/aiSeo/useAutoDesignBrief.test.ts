@@ -1,61 +1,27 @@
-import { renderHook, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
 import * as seoApi from "../../../api/seo";
-import type { SaveState } from "../../../hooks/useAutosave";
-import type { ListingDetail } from "../../../types";
 import type { AiSeoMode } from "./useAiSeoMode";
 import { useAutoDesignBrief } from "./useAutoDesignBrief";
 
 /**
- * PRD 68's chain, at the seam where its two rules actually live: *when* a
- * request is allowed to go out, and *what* happens to the answer.
+ * PRD 68's chain, at the seam where its rules live: what the pick sends, what
+ * happens to the answer, and what stops a drafted brief landing on top of the
+ * seller's own words.
  *
- * `useAiSeoMode` is a stub here rather than the real hook. This file's
- * subject is the chain's own decisions, and driving the real hook would mean
- * standing up its readiness endpoint, its workspace call and its local
- * storage just to observe that `generate()` was eventually called --
- * `useAiSeoMode.test.ts` already owns all of that.
+ * `useAiSeoMode` is a stub rather than the real hook. This file's subject is
+ * the chain's own decisions, and driving the real hook would mean standing up
+ * its readiness endpoint, its workspace call and its local storage just to
+ * observe that `generate()` was eventually called -- `useAiSeoMode.test.ts`
+ * already owns all of that.
  */
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: {},
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    description_composed: "",
-    ...over,
-  };
-}
-
-const DESIGN = { default: "../../designs/take-a-hike.png" };
+const REF = "../../designs/take-a-hike.png";
+const PROFILE = "comfort-colors-1717";
 
 function aiSeoStub(over: Partial<AiSeoMode> = {}): AiSeoMode {
   return {
@@ -79,25 +45,16 @@ function aiSeoStub(over: Partial<AiSeoMode> = {}): AiSeoMode {
 }
 
 interface Props {
-  detail: ListingDetail;
+  brief?: string;
   aiSeo?: AiSeoMode;
-  save?: SaveState;
-  onUpdate?: (patch: Record<string, unknown>) => void;
-  onFlush?: () => void;
 }
 
-function setup(initial: Props) {
-  const onUpdate = initial.onUpdate ?? vi.fn();
-  const onFlush = initial.onFlush ?? vi.fn();
+function setup(initial: Props = {}) {
+  const onUpdate = vi.fn();
+  const onFlush = vi.fn();
   const view = renderHook(
     (props: Props) =>
-      useAutoDesignBrief(
-        props.detail,
-        onUpdate,
-        onFlush,
-        props.aiSeo ?? aiSeoStub(),
-        props.save ?? { kind: "saved", savedAt: 0 },
-      ),
+      useAutoDesignBrief(props.brief ?? "", PROFILE, onUpdate, onFlush, props.aiSeo ?? aiSeoStub()),
     { initialProps: initial },
   );
   return { ...view, onUpdate, onFlush };
@@ -109,162 +66,161 @@ function drafts(brief = "Retro sunset mountains.") {
     .mockResolvedValue({ kind: "success", brief } as never);
 }
 
-// ------------------------------------------------------------- what arms it
+// ------------------------------------------------------------ what it sends
 
-it("asks for nothing when an editor simply opens on a design with no brief", async () => {
+it("asks for nothing until a design is actually picked", async () => {
   const request = drafts();
 
-  setup({ detail: detail({ design: DESIGN }) });
+  setup();
   await Promise.resolve();
 
   expect(request).not.toHaveBeenCalled();
 });
 
-it("drafts a brief when a design is attached to a listing that has none", async () => {
-  const request = drafts("Retro sunset mountains.");
-  const { rerender, onUpdate, onFlush } = setup({ detail: detail() });
+it("sends the design as a workspace path and the garment profile, not a listing", async () => {
+  const request = drafts();
+  const { result } = setup();
 
-  rerender({ detail: detail({ design: DESIGN }) });
+  act(() => result.current.start(REF));
+
+  await waitFor(() =>
+    expect(request).toHaveBeenCalledWith("designs/take-a-hike.png", PROFILE, expect.anything()),
+  );
+});
+
+it("writes the drafted brief through the ordinary autosave path", async () => {
+  drafts("Retro sunset mountains.");
+  const { result, onUpdate, onFlush } = setup();
+
+  act(() => result.current.start(REF));
 
   await waitFor(() => expect(onUpdate).toHaveBeenCalledWith({ brief: "Retro sunset mountains." }));
-  expect(request).toHaveBeenCalledWith("take-a-hike", expect.anything());
   expect(onFlush).toHaveBeenCalled();
 });
 
-it("leaves a brief the seller already wrote completely alone", async () => {
-  const request = drafts();
-  const { rerender } = setup({ detail: detail({ brief: "Mine." }) });
+it("reports itself drafting while the request is in flight", async () => {
+  vi.spyOn(seoApi, "requestDesignBrief").mockImplementation(() => new Promise(() => {}));
+  const { result } = setup();
 
-  rerender({ detail: detail({ brief: "Mine.", design: DESIGN }) });
+  act(() => result.current.start(REF));
+
+  await waitFor(() => expect(result.current.phase).toBe("drafting"));
+});
+
+// --------------------------------------------------------- the seller's brief
+
+it("does not ask at all when the listing already has a brief", async () => {
+  const request = drafts();
+  const { result } = setup({ brief: "Mine." });
+
+  act(() => result.current.start(REF));
   await Promise.resolve();
 
   expect(request).not.toHaveBeenCalled();
 });
 
-it("does not re-arm when an unrelated field changes", async () => {
-  const request = drafts();
-  const { rerender } = setup({ detail: detail({ design: DESIGN }) });
+it("throws the draft away if the seller wrote a brief while it was running", async () => {
+  let resolveWith: ((outcome: seoApi.DesignBriefOutcome) => void) | undefined;
+  vi.spyOn(seoApi, "requestDesignBrief").mockImplementation(
+    () =>
+      new Promise((resolve) => {
+        resolveWith = resolve;
+      }),
+  );
+  const { result, rerender, onUpdate } = setup();
 
-  rerender({ detail: detail({ design: DESIGN, colors: ["black", "navy"] }) });
-  await Promise.resolve();
+  act(() => result.current.start(REF));
+  await waitFor(() => expect(result.current.phase).toBe("drafting"));
 
-  expect(request).not.toHaveBeenCalled();
-});
-
-it("treats a reordered design map as the same design", async () => {
-  const request = drafts();
-  const both = { "on-light": "a.png", "on-dark": "b.png" };
-  const { rerender } = setup({ detail: detail({ design: both }) });
-
-  rerender({ detail: detail({ design: { "on-dark": "b.png", "on-light": "a.png" } }) });
-  await Promise.resolve();
-
-  expect(request).not.toHaveBeenCalled();
-});
-
-// ----------------------------------------------------- waiting to be saved
-
-it("waits for an unnamed draft to be saved before asking for anything", async () => {
-  const request = drafts();
-  const { result, rerender } = setup({
-    detail: detail({ name: "" }),
-    save: { kind: "unnamed" },
+  // A minute passes; the seller writes their own brief, which is the
+  // authority on the design.
+  rerender({ brief: "I wrote this myself." });
+  await act(async () => {
+    resolveWith?.({ kind: "success", brief: "The model's version." });
   });
 
-  rerender({ detail: detail({ name: "", design: DESIGN }), save: { kind: "unnamed" } });
-
-  await waitFor(() => expect(result.current.waiting).toBe(true));
+  expect(onUpdate).not.toHaveBeenCalled();
   expect(result.current.phase).toBe("idle");
-  expect(request).not.toHaveBeenCalled();
 });
 
-it("asks as soon as naming has saved the listing", async () => {
-  const request = drafts();
-  const { rerender } = setup({ detail: detail({ name: "" }), save: { kind: "unnamed" } });
+// ----------------------------------------------------------------- failures
 
-  rerender({ detail: detail({ name: "", design: DESIGN }), save: { kind: "unnamed" } });
-  rerender({
-    detail: detail({ name: "take-a-hike", design: DESIGN }),
-    save: { kind: "saved", savedAt: 0 },
-  });
-
-  await waitFor(() => expect(request).toHaveBeenCalledWith("take-a-hike", expect.anything()));
-});
-
-// --------------------------------------------------------------- once only
-
-it("spends exactly one request per attach", async () => {
-  const request = drafts();
-  const { rerender } = setup({ detail: detail() });
-
-  rerender({ detail: detail({ design: DESIGN }) });
-  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
-  rerender({ detail: detail({ design: DESIGN, colors: ["navy"] }) });
-  rerender({ detail: detail({ design: DESIGN, colors: ["moss"] }) });
-
-  expect(request).toHaveBeenCalledTimes(1);
-});
-
-it("does not retry after a failure, and says so", async () => {
+it("reports a failure and does not retry on its own", async () => {
   const request = vi
     .spyOn(seoApi, "requestDesignBrief")
     .mockResolvedValue({ kind: "failed" } as never);
-  const { result, rerender } = setup({ detail: detail() });
+  const { result, rerender, onUpdate } = setup();
 
-  rerender({ detail: detail({ design: DESIGN }) });
+  act(() => result.current.start(REF));
 
   await waitFor(() => expect(result.current.phase).toBe("failed"));
-  rerender({ detail: detail({ design: DESIGN, colors: ["navy"] }) });
+  rerender({ brief: "" });
+  rerender({ brief: "" });
   expect(request).toHaveBeenCalledTimes(1);
+  expect(onUpdate).not.toHaveBeenCalled();
 });
 
-it("re-arms when a different design is attached", async () => {
-  const request = drafts();
-  const { rerender } = setup({ detail: detail() });
+it("treats a cancelled draft as nothing having happened", async () => {
+  vi.spyOn(seoApi, "requestDesignBrief").mockResolvedValue({ kind: "cancelled" } as never);
+  const { result, onUpdate } = setup();
 
-  rerender({ detail: detail({ design: DESIGN }) });
-  await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
-  rerender({ detail: detail({ design: { default: "../../designs/other.png" } }) });
+  act(() => result.current.start(REF));
 
-  await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(result.current.phase).toBe("idle"));
+  expect(onUpdate).not.toHaveBeenCalled();
 });
 
-// ------------------------------------------------------ the seller's brief
-
-it("abandons the draft when the seller types their own brief", async () => {
-  let abortedSignal: AbortSignal | undefined;
+it("aborts an in-flight draft when the editor unmounts", async () => {
+  let signal: AbortSignal | undefined;
   vi.spyOn(seoApi, "requestDesignBrief").mockImplementation(
-    (_name: string, signal: AbortSignal) =>
+    (_design: string, _profile: string, incoming: AbortSignal) =>
       new Promise((resolve) => {
-        abortedSignal = signal;
-        signal.addEventListener("abort", () => resolve({ kind: "cancelled" }));
+        signal = incoming;
+        incoming.addEventListener("abort", () => resolve({ kind: "cancelled" }));
       }),
   );
-  const { result, rerender, onUpdate } = setup({ detail: detail() });
+  const { result, unmount } = setup();
 
-  rerender({ detail: detail({ design: DESIGN }) });
-  await waitFor(() => expect(result.current.phase).toBe("drafting"));
+  act(() => result.current.start(REF));
+  await waitFor(() => expect(signal).toBeDefined());
+  unmount();
 
-  rerender({ detail: detail({ design: DESIGN, brief: "I will write it myself." }) });
-
-  await waitFor(() => expect(abortedSignal?.aborted).toBe(true));
-  expect(onUpdate).not.toHaveBeenCalled();
-  await waitFor(() => expect(result.current.phase).toBe("idle"));
+  expect(signal?.aborted).toBe(true);
 });
 
-// ---------------------------------------------------------- the generation
+it("replaces an earlier draft when a second design is picked", async () => {
+  const signals: AbortSignal[] = [];
+  vi.spyOn(seoApi, "requestDesignBrief").mockImplementation(
+    (_design: string, _profile: string, incoming: AbortSignal) => {
+      signals.push(incoming);
+      return new Promise((resolve) => {
+        incoming.addEventListener("abort", () => resolve({ kind: "cancelled" }));
+      });
+    },
+  );
+  const { result } = setup();
+
+  act(() => result.current.start(REF));
+  act(() => result.current.start("../../designs/other.png"));
+
+  expect(signals).toHaveLength(2);
+  expect(signals[0]?.aborted).toBe(true);
+  expect(signals[1]?.aborted).toBe(false);
+});
+
+// ---------------------------------------------------------------- generation
 
 it("starts SEO generation once the drafted brief has made AI Mode available", async () => {
   drafts();
   const unavailable = aiSeoStub({ available: false });
-  const { rerender } = setup({ detail: detail(), aiSeo: unavailable });
+  const { result, rerender } = setup({ aiSeo: unavailable });
 
-  rerender({ detail: detail({ design: DESIGN }), aiSeo: unavailable });
+  act(() => result.current.start(REF));
   await waitFor(() => expect(seoApi.requestDesignBrief).toHaveBeenCalled());
   expect(unavailable.generate).not.toHaveBeenCalled();
 
   const available = aiSeoStub();
-  rerender({ detail: detail({ design: DESIGN, brief: "Drafted." }), aiSeo: available });
+  rerender({ brief: "Drafted.", aiSeo: available });
 
   await waitFor(() => expect(available.generate).toHaveBeenCalledTimes(1));
 });
@@ -272,12 +228,12 @@ it("starts SEO generation once the drafted brief has made AI Mode available", as
 it("never starts generation twice for one drafted brief", async () => {
   drafts();
   const aiSeo = aiSeoStub();
-  const { rerender } = setup({ detail: detail(), aiSeo });
+  const { result, rerender } = setup({ aiSeo });
 
-  rerender({ detail: detail({ design: DESIGN }), aiSeo });
+  act(() => result.current.start(REF));
   await waitFor(() => expect(aiSeo.generate).toHaveBeenCalledTimes(1));
-  rerender({ detail: detail({ design: DESIGN, brief: "Drafted." }), aiSeo });
-  rerender({ detail: detail({ design: DESIGN, brief: "Drafted." }), aiSeo });
+  rerender({ brief: "Drafted.", aiSeo });
+  rerender({ brief: "Drafted.", aiSeo });
 
   expect(aiSeo.generate).toHaveBeenCalledTimes(1);
 });
@@ -285,30 +241,10 @@ it("never starts generation twice for one drafted brief", async () => {
 it("does not start generation after a failed draft", async () => {
   vi.spyOn(seoApi, "requestDesignBrief").mockResolvedValue({ kind: "failed" } as never);
   const aiSeo = aiSeoStub();
-  const { result, rerender } = setup({ detail: detail(), aiSeo });
+  const { result } = setup({ aiSeo });
 
-  rerender({ detail: detail({ design: DESIGN }), aiSeo });
+  act(() => result.current.start(REF));
 
   await waitFor(() => expect(result.current.phase).toBe("failed"));
   expect(aiSeo.generate).not.toHaveBeenCalled();
-});
-
-describe("cancellation", () => {
-  it("aborts an in-flight draft when the editor unmounts", async () => {
-    let signal: AbortSignal | undefined;
-    vi.spyOn(seoApi, "requestDesignBrief").mockImplementation(
-      (_name: string, incoming: AbortSignal) =>
-        new Promise((resolve) => {
-          signal = incoming;
-          incoming.addEventListener("abort", () => resolve({ kind: "cancelled" }));
-        }),
-    );
-    const { rerender, unmount } = setup({ detail: detail() });
-
-    rerender({ detail: detail({ design: DESIGN }) });
-    await waitFor(() => expect(signal).toBeDefined());
-    unmount();
-
-    expect(signal?.aborted).toBe(true);
-  });
 });

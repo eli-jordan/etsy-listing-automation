@@ -513,11 +513,14 @@ ready; if neither is, the Details tab simply looks like it always did.
 **Attaching a design starts the work.** When you pick a design for a listing
 whose brief is still empty, the brief is drafted from the artwork and written
 into the Brief field for you, and the SEO request that brief unblocks starts
-straight after. The design strip says what is happening while it runs, so you
-can carry on with colours and mockups; by the time you open **Listing
-Details**, the suggestion drawers are usually already open. A brief you have
-written is never redrafted or overwritten, nothing retries on its own after a
-failure, and leaving the listing abandons the work exactly as **Cancel** would.
+straight after. It begins the moment you pick — including on a listing you
+have not named yet, which is the usual order when you are creating one. The
+page head says **Generating brief…** and then **Generating SEO…** beside the
+autosave line, so you can carry on with colours and mockups; by the time you
+open **Listing Details**, the suggestion drawers are usually already open. A
+brief you have written is never redrafted or overwritten, nothing retries on
+its own after a failure, and leaving the listing abandons the work exactly as
+**Cancel** would.
 
 **Prompt customization.** The instructions sent to the model live at
 `prompts/seo.md` (SEO suggestions) and `prompts/brief.md` (the drafted brief)

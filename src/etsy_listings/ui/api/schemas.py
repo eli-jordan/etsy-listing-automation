@@ -487,6 +487,26 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 # ──────────────────────────────────────────────────────────────────────────
 
 
+class DesignBriefRequest(BaseModel):
+    """What drafting a brief actually needs (PRD 68): a design, and the
+    garment it will be printed on.
+
+    Not a listing. A brief describes the *artwork*, and the one moment it is
+    most wanted is the moment a design is attached -- which, when a seller is
+    creating a listing, is usually before that listing has a name or a file.
+    Asking for the two facts directly is what lets the request go out then,
+    instead of waiting for a save the seller has not made yet.
+
+    ``design`` is workspace-relative and POSIX (``designs/take-a-hike.png``),
+    resolved through `Workspace.resolve`, which is what refuses anything
+    pointing outside the workspace (`A8`) -- this value arrives from a
+    browser, so that check is the security boundary, not a tidiness rule.
+    """
+
+    design: str
+    garment_profile: str
+
+
 class DesignBriefResponse(BaseModel):
     """One drafted listing brief (PRD 68).
 

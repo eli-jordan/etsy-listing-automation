@@ -63,23 +63,29 @@ export async function requestSeoProposal(
 export type DesignBriefOutcome =
   { kind: "success"; brief: string } | { kind: "cancelled" } | { kind: "failed" };
 
-/** Draft this saved listing's brief from its design image
- * (`POST /api/listings/{name}/ai-seo/brief`, PRD 68).
+/** Draft a listing brief from a design image (`POST /api/ai/design-brief`,
+ * PRD 68).
+ *
+ * Takes the design and the garment profile rather than a listing name,
+ * because the moment a brief is wanted is the moment a design is attached --
+ * which, while a seller is creating a listing, is before it has a name or a
+ * file. `design` is workspace-relative (`designs/take-a-hike.png`): see
+ * `media.ts.workspacePath`.
  *
  * The same three outcomes a proposal request has, for the same reason -- and
  * with more riding on the third here, because nobody asked for this request.
- * It is started by attaching a design, so a workspace with no
- * `prompts/brief.md`, or a signed-out CLI, answers 409 and the seller should
- * simply find the Brief field empty and AI Mode disabled with its usual
- * explanation, not an error about something they never did.
+ * A workspace with no `prompts/brief.md`, or a signed-out CLI, answers 409;
+ * the seller should simply find the Brief field empty and AI Mode disabled
+ * with its usual explanation, not an error about something they never did.
  */
 export async function requestDesignBrief(
-  name: string,
+  design: string,
+  garmentProfile: string,
   signal: AbortSignal,
 ): Promise<DesignBriefOutcome> {
   try {
-    const { data, error } = await api.POST("/api/listings/{name}/ai-seo/brief", {
-      params: { path: { name } },
+    const { data, error } = await api.POST("/api/ai/design-brief", {
+      body: { design, garment_profile: garmentProfile },
       signal,
     });
     if (error || !data) return { kind: "failed" };
