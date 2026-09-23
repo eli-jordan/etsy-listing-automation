@@ -489,6 +489,79 @@ and `plan` will show exactly which render outputs are now stale.
 single bad one (reporting failures at the end) rather than stopping the batch
 — useful once you have more than one listing to manage.
 
+## 8. AI Mode: local SEO suggestions
+
+AI Mode is a small drawer-based editing aid inside a **saved** listing's
+Details tab (`etsy-listings ui`) — see
+[docs/ui-listing-seo-interactions.md](ui-listing-seo-interactions.md) for the
+full interaction contract. It asks a locally authenticated coding-agent CLI
+for one title/tags/description-lead proposal, then lets you accept whichever
+individual suggestions you want; nothing it suggests touches `listing.yaml`
+until you click one.
+
+**CLI sign-in.** AI Mode runs `codex exec` first, falling back to `claude -p`
+only on a recognised sign-in/quota/rate-limit failure. Both use your existing
+subscription — no OpenAI or Anthropic API key, and nothing to configure in
+`shop.yaml`. Sign in to each CLI the ordinary way (`codex login`; for Claude
+Code, run `claude` once and complete its sign-in prompt, or see `claude
+--help` for its auth subcommands) — see the [Codex authentication
+docs](https://learn.chatgpt.com/docs/auth) and [Claude Code headless
+mode](https://code.claude.com/docs/en/headless). The **AI Mode** button is
+hidden, never disabled, until at least one CLI reports itself signed in and
+ready; if neither is, the Details tab simply looks like it always did.
+
+**Prompt customization.** The instructions sent to the model live at
+`prompts/seo.md` in your workspace — plain text, entirely yours to edit.
+`setup` seeds a default there only if the file is absent; it never overwrites
+your own copy on a later run. The application appends the listing's facts (as
+delimited JSON) and the required JSON response schema itself — `seo.md` holds
+only the instructions, never placeholders or executable prompt code.
+
+**Common-copy files.** A listing's description is a required `lead` (the
+opening paragraph — the one part AI Mode drafts) plus at most one shared or
+listing-specific body. A shared body is a Markdown file under
+`common-copy/<name>.md`, front matter first:
+
+```markdown
+---
+title: Comfort Colors care & fit
+targets: [description]
+summary: Reusable fit and care copy for Comfort Colors listings.
+---
+Runs true to size in a relaxed, garment-dyed fit.
+
+Machine wash cold with like colours, tumble dry low.
+```
+
+`title` and `targets` are required (`summary` is optional and shown in the
+picker); `description` is the only supported target today. Point a listing at
+one with `etsy.description.ref: common-copy/comfort-colors.md`, or write
+`etsy.description.text` inline instead — never both. The Details tab's own
+description preview and every deployment desired-document (Printify, Etsy)
+compose the final description through the same one shared function, so what
+you see in the preview is exactly what ships.
+
+**Provider limits, worth setting expectations by:** one 60-second deadline
+covers the whole request, including a repair and the Codex→Claude fallback.
+A malformed response gets exactly one same-provider repair attempt; if that
+also fails (or the deadline runs out), you get **Try again**, not a second
+provider retry. Only a *first-attempt* recognised-unavailable failure (not
+signed in, quota, rate limit) falls through to Claude — nothing else does.
+Leaving the Details tab, losing the connection, or pressing **Cancel**
+terminates the CLI subprocess immediately and keeps no result.
+
+**The deliberate real-workspace read scope.** The CLI subprocess runs with
+its write tools withheld (it cannot edit, create or delete anything), but it
+is *not* sandboxed to the current listing — it can read your whole workspace,
+including `.env`, `.auth/`, and anything else under it, the same access the
+CLI would have run by hand from that directory. This is by design (the
+implementation plan's "Provider process" decision): a per-request sandbox
+narrow enough to hide secrets would also be too narrow to let the model read
+a sibling garment profile or an existing listing for context. Treat each
+signed-in CLI the way you'd treat any other local tool with shell access to
+this workspace, and keep secrets out of files an SEO assistant would have no
+reason to open.
+
 ## What's not here yet
 
 Everything below is real, agreed design in [docs/prd.md](prd.md) and
@@ -502,10 +575,9 @@ you're planning around where this is going — but none of it runs yet:
 | `unlock <listing>` | Clear a Printify product stuck mid-publish |
 | `status [<listing>]` | Run history from the SQLite recorder |
 | `render` | Force the local render stage in isolation (today, it runs as part of `apply`) |
-| AI Mode | Local Codex/Claude SEO suggestions in the saved-listing editor |
 
 `ui` itself will grow a dashboard, setup wizard and run runner in Phase 5 —
-today it serves only the calibrator.
+today it serves the calibrator, the listing editor, and AI Mode (§8).
 
 ## Where things live, quick reference
 
