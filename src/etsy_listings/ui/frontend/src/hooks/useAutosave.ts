@@ -126,6 +126,18 @@ export function useAutosave(
    * but nothing is sent, because the name they would be sent under is exactly
    * what is being decided. */
   const naming = useRef(false);
+  /** A PATCH to the named listing is in flight. `update()` schedules a fresh
+   * debounce on every edit, and `flush()` is also called directly on blur,
+   * tab-switch and unmount -- any of those can land while the previous PATCH
+   * is still outstanding. Without this guard, two PATCHes end up in flight
+   * at once and whichever *resolves* last wins, regardless of which was
+   * *sent* last. */
+  const patching = useRef(false);
+  /** A flush arrived while `patching.current` was true. Rather than firing a
+   * second concurrent PATCH, it sets this so the in-flight one's `finally`
+   * re-runs `flush()` once it settles -- picking up whatever is in `pending`
+   * at that later point, one request at a time. */
+  const patchAgain = useRef(false);
   /** A name typed for a listing that is not on disk yet. It outlives a refused
    * create, which is what lets the next edit retry it rather than asking the
    * user to type the name again. */
@@ -186,6 +198,15 @@ export function useAutosave(
     if (naming.current) return;
 
     if (savedName.current !== null) {
+      if (patching.current) {
+        // A PATCH is already in flight. Sending a second one now would race
+        // it -- whichever *resolves* last would win, not whichever holds the
+        // newer edit. Defer instead: the in-flight one's `finally` calls
+        // `flush()` again once it settles, which will find and send whatever
+        // is in `pending` at that point.
+        patchAgain.current = true;
+        return;
+      }
       const patch = pending.current;
       if (patch === null) return;
       // Cleared only once the PATCH actually lands -- a rejection (dropped
@@ -195,6 +216,7 @@ export function useAutosave(
       // silently discard whatever was pending, structured `description`
       // triples included (AI SEO implementation plan, PR6).
       pending.current = null;
+      patching.current = true;
       setSave({ kind: "saving" });
       try {
         const fresh = await patchListing(savedName.current, patch);
@@ -208,6 +230,12 @@ export function useAutosave(
         // would have to remember to handle.
         pending.current = mergePatch(patch, pending.current ?? {});
         setSave({ kind: "save-failed" });
+      } finally {
+        patching.current = false;
+        if (patchAgain.current) {
+          patchAgain.current = false;
+          void flush();
+        }
       }
       return;
     }
