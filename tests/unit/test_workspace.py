@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import stat
 from pathlib import Path
 
 import pytest
@@ -11,6 +12,7 @@ from etsy_listings.workspace.workspace import (
     PathEscapesWorkspaceError,
     Workspace,
     WorkspaceNotFoundError,
+    remove_tree,
 )
 
 
@@ -450,6 +452,48 @@ def test_preview_file_refuses_a_hash_that_is_not_a_valid_segment(workspace_root:
     ws = Workspace.discover(root_override=workspace_root)
     with pytest.raises(InvalidNameError):
         ws.preview_file("take-a-hike", "flat-lay-01", "black", "sha256:deadbeef")
+
+
+def test_remove_tree_survives_a_read_only_directory(tmp_path: Path) -> None:
+    """A tree this project owns is deletable whatever flag the filesystem has
+    put on it -- a workspace synced by Google Drive arrives with every
+    directory marked read-only, which Windows turns into a bare "Access is
+    denied" on the final `rmdir` of each one.
+
+    The two platforms refuse at different points, which is why the fixture has
+    both a read-only directory and a file inside it: Windows blocks removing
+    the directory itself, POSIX blocks unlinking its entries. One assertion
+    covers both.
+    """
+    root = tmp_path / "listing"
+    protected = root / "renders"
+    protected.mkdir(parents=True)
+    (protected / "black.png").write_bytes(b"png")
+    protected.chmod(stat.S_IREAD | stat.S_IEXEC)
+
+    remove_tree(root)
+
+    assert not root.exists()
+
+
+def test_remove_tree_still_raises_a_refusal_it_cannot_widen(tmp_path: Path) -> None:
+    """The hook widens exactly one refusal. A path that is not there at all is
+    not a permission problem, and must not be quietly swallowed on the way to
+    looking like a successful delete."""
+    with pytest.raises(FileNotFoundError):
+        remove_tree(tmp_path / "never-existed")
+
+
+def test_remove_listing_survives_a_read_only_listing_directory(workspace_root: Path) -> None:
+    """The bug as a seller met it: Delete wiped `listing.yaml` and then failed
+    on the directory, leaving an empty husk the listings table still showed."""
+    ws = Workspace.discover(root_override=workspace_root)
+    listing_dir = ws.listing_dir("take-a-hike")
+    listing_dir.chmod(stat.S_IREAD | stat.S_IEXEC)
+
+    ws.remove_listing("take-a-hike")
+
+    assert not listing_dir.exists()
 
 
 def test_remove_listing_wipes_its_previews_too(workspace_root: Path) -> None:

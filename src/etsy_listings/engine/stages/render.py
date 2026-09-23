@@ -78,7 +78,7 @@ from etsy_listings.render.maps import DerivedMapCache
 from etsy_listings.render.pipeline import Layer, render_scene
 from etsy_listings.render.swatch import sample_swatch
 from etsy_listings.render.types import RGBA
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.workspace.workspace import Workspace, remove_tree
 
 PREVIEW_WORKERS = 2
 """Maximum full-size preview renders in flight.
@@ -786,7 +786,7 @@ class RenderStage:
                 continue
             keep = valid.get(template_dir.name)
             if keep is None:
-                shutil.rmtree(template_dir)
+                remove_tree(template_dir)
                 continue
             for file in template_dir.glob("*.png"):
                 if file.name not in keep:

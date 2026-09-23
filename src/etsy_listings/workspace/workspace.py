@@ -14,7 +14,8 @@ import hashlib
 import json
 import os
 import shutil
-from collections.abc import Mapping
+import stat
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
@@ -144,6 +145,43 @@ class ScenePhoto:
     map_key: str
 
 
+def _make_writable(func: Callable[[str], object], path: str, exc: BaseException) -> None:
+    """`shutil.rmtree`'s ``onexc`` hook: clear a read-only flag and try again.
+
+    Windows refuses `os.rmdir` on a directory carrying
+    ``FILE_ATTRIBUTE_READONLY`` with a bare ``Access is denied``, and whole
+    trees arrive carrying it -- a workspace kept inside a Google Drive folder
+    is the case that found this, where every directory Drive syncs has the
+    attribute set. Nothing about such a tree is genuinely protected: the files
+    inside delete fine, and only the final `rmdir` of each directory fails,
+    which is what makes the traceback so hard to read.
+
+    Adds the owner-write bit rather than replacing the mode, so one call is
+    right on both platforms this project is tested on: on Windows it clears
+    the attribute, and on POSIX it restores write permission to a directory
+    whose own entries could not otherwise be unlinked. Anything that is not a
+    `PermissionError`, and any retry that fails again, is raised -- this
+    widens exactly one refusal, not every one.
+    """
+    if not isinstance(exc, PermissionError):
+        raise exc
+    os.chmod(path, os.stat(path).st_mode | stat.S_IWRITE)
+    func(path)
+
+
+def remove_tree(path: Path) -> None:
+    """`shutil.rmtree`, surviving a read-only directory (see
+    :func:`_make_writable`).
+
+    Every tree this project deletes is one it created and owns -- a listing's
+    directory, its render cache, its previews -- so a read-only flag on one is
+    an artefact of the filesystem it sits on, never an instruction from the
+    user. The one place that rule would not hold is a tree named by a user,
+    and there is no such delete.
+    """
+    shutil.rmtree(path, onexc=_make_writable)
+
+
 class Workspace:
     def __init__(self, root: Path, defaults: Defaults) -> None:
         self.root = root
@@ -253,7 +291,7 @@ class Workspace:
             self.preview_dir(listing),
         ):
             if path.is_dir():
-                shutil.rmtree(path)
+                remove_tree(path)
 
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)

@@ -103,6 +103,12 @@ Windows tools. Use POSIX paths and shell syntax.
   Leave it off; do not commit mode-only changes.
 - Line endings: git warns about `LF → CRLF` on write. Content is stored LF. The
   warnings are noise, not a problem to fix.
+- **A directory can arrive read-only, and Windows then refuses to delete it.**
+  Anything syncing a workspace — Google Drive is the one that found this — sets
+  `FILE_ATTRIBUTE_READONLY` on every directory, and `os.rmdir` answers a bare
+  `WinError 5` while the files inside delete fine. `workspace.remove_tree` is
+  the `shutil.rmtree` that clears the flag and retries; use it rather than
+  `shutil.rmtree` for any tree this tool owns.
 
 ## Toolchain
 
