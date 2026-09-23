@@ -51,9 +51,9 @@ class SeoRequest:
     context, and the other editable listing values relevant to SEO copy.
     `design_image` is a workspace-resolved path, handed to a provider adapter
     to read directly (PRD: "sends the design image") -- this type carries no
-    image bytes, and no design *identity/content hash*, which is the
-    browser's own staleness bookkeeping (`docs/ui-listing-seo-interactions.md`
-    section 7), not a fact the provider needs to generate copy.
+    image bytes, and no design *identity/content hash*: the request endpoint
+    captures that alongside this provider-facing request before generation,
+    so the browser can compare pending choices with the same saved inputs.
 
     Deliberately excludes an explicit "exact design text" field: the PRD's
     entry-point paragraph settles that the *brief* itself carries any

@@ -42,7 +42,6 @@ from pydantic import ValidationError
 from etsy_listings import connections
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
-from etsy_listings.config.description import compose_description
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import EMPTY_DRAFT, Listing
 from etsy_listings.config.listing_validation import (
@@ -127,39 +126,6 @@ def target(request: Request, name: str) -> Target:
 Existing = Annotated[Target, Depends(target)]
 
 
-def _description_ref_error(workspace: Workspace, listing: Listing) -> str | None:
-    """The one place the editor's banner attempts a `description.ref` load --
-    the check itself, and the message a bad one gets, both belong to
-    `config/listing_validation.py`'s :func:`check_description_ref`; this is
-    only the try/except around the one read that can fail, the same split
-    :func:`_resolve_design_paths` already draws for design refs."""
-    ref = listing.etsy.description.ref
-    if ref is None:
-        return None
-    try:
-        workspace.load_common_copy(ref)
-    except CommonCopyError as exc:
-        return str(exc)
-    return None
-
-
-def _composed_description(workspace: Workspace, listing: Listing) -> str:
-    """The same string every deployment reader gets from
-    `Workspace.compose_description` -- the Details tab's preview reads this
-    field rather than joining `lead`/`text`/`ref` itself (AI SEO
-    implementation plan, "Description and common-copy boundaries").
-
-    Falls back to the lead alone when `ref` fails to resolve:
-    `_description_ref_error` already turns that failure into a visible block
-    issue, so this is only the other try/except around the same read, the
-    same split that function's own docstring draws.
-    """
-    try:
-        return workspace.compose_description(listing.etsy.description)
-    except CommonCopyError:
-        return compose_description(listing.etsy.description.lead, None)
-
-
 def _resolve_design_paths(
     workspace: Workspace, listing: Listing, listing_dir: Path
 ) -> dict[str, Path]:
@@ -179,6 +145,7 @@ def _business_issues(
     listing: Listing,
     *,
     published: bool | None = None,
+    description_ref_error: str | None,
 ) -> list[Issue]:
     """*listing_dir* rather than a listing name, because the not-yet-created
     draft the editor opens on ``/listings/new`` has no name and no directory
@@ -192,7 +159,7 @@ def _business_issues(
         design_paths=_resolve_design_paths(workspace, listing, listing_dir),
         templates=facts.templates,
         published=published,
-        description_ref_error=_description_ref_error(workspace, listing),
+        description_ref_error=description_ref_error,
     )
     return [
         Issue(severity=i.severity, tab=i.tab, where=i.where, message=i.message) for i in raw_issues
@@ -326,12 +293,14 @@ def _summarize_listing(
         )
     listing = workspace.load_listing(name)
     published = is_live_etsy_state(etsy_state) if etsy_listing_id is not None else False
+    description = workspace.resolve_description(listing.etsy.description)
     issues = _business_issues(
         workspace,
         facts,
         workspace.listing_dir(name),
         listing,
         published=published,
+        description_ref_error=str(description.error) if description.error is not None else None,
     )
     counts = IssueCounts(
         block=sum(1 for i in issues if i.severity == "block"),
@@ -405,6 +374,7 @@ def _describe(
     and the same resolved prices, or the editor would show one thing before
     the listing was named and another after.
     """
+    description = workspace.resolve_description(listing.etsy.description)
     issues = _business_issues(
         workspace,
         facts,
@@ -413,6 +383,7 @@ def _describe(
         published=is_live_etsy_state(_etsy_state(workspace, etsy_listing_id))
         if etsy_listing_id is not None
         else False,
+        description_ref_error=str(description.error) if description.error is not None else None,
     )
     plan_name, resolved_prices = _pricing_summary(workspace, facts, listing_dir, listing)
     profile = facts.garment_profile(listing.garment_profile)
@@ -429,7 +400,15 @@ def _describe(
             "pricing_plan_name": plan_name,
             "resolved_prices": [p.model_dump() for p in resolved_prices],
             "garment_materials": profile.materials if profile is not None else [],
-            "description_composed": _composed_description(workspace, listing),
+            "garment_product_type": profile.blueprint.display_title
+            if profile is not None
+            else None,
+            "garment_brand": profile.blueprint.brand if profile is not None else None,
+            "garment_model": profile.blueprint.model if profile is not None else None,
+            "description_composed": description.composed,
+            "design_content_hash": workspace.design_content_hash(
+                listing.design, listing_dir=listing_dir
+            ),
         },
         context={"currency": workspace.defaults.etsy.currency},
     )
@@ -844,8 +823,8 @@ def list_common_copy(request: Request) -> list[CommonCopySummary]:
     there is nowhere here to report the problem, and offering it would only
     produce a pick that immediately fails to resolve. (A *stored* ref that
     fails to resolve still surfaces as a details-tab issue -- see
-    `_description_ref_error` -- this is only the list of things one could
-    newly pick.)
+    `Workspace.resolve_description` -- this is only the list of things one
+    could newly pick.)
     """
     workspace = _workspace(request)
     summaries: list[CommonCopySummary] = []
@@ -861,7 +840,11 @@ def list_common_copy(request: Request) -> list[CommonCopySummary]:
 
 @support_router.get("/api/workspace", response_model=WorkspaceSummary)
 def get_workspace(request: Request) -> WorkspaceSummary:
-    return WorkspaceSummary(shop_name=_workspace(request).defaults.etsy.shop_name)
+    workspace = _workspace(request)
+    return WorkspaceSummary(
+        shop_name=workspace.defaults.etsy.shop_name,
+        storage_id=workspace.browser_storage_id(),
+    )
 
 
 @support_router.get("/api/listing-designs", response_model=list[ListingDesignSummary])

@@ -23,17 +23,10 @@ import { canToggleTag } from "./aiSeoTags";
  * the abortable request, local-storage persistence) has one seam a test can
  * drive without rendering the whole tab.
  *
- * `getWorkspace()` is fetched fresh on every mount rather than threaded down
- * as a prop -- the same trade `AppShell` already makes for the sidebar's shop
- * name -- because the alternative (a workspace context reaching every editor
- * tab) is a bigger change than one cheap local `GET` justifies here. Its
- * `shop_name` is the only workspace-identifying fact the frontend has at all
- * (`WorkspaceSummary` carries nothing else); a `null` shop name -- a
- * workspace that hasn't configured one yet -- falls back to a fixed scope
- * string rather than leaving the proposal unscoped.
+ * `getWorkspace()` supplies an opaque root identity for PRD 4's browser-only
+ * proposal scope. Generation waits for it, so two roots with the same shop
+ * name cannot restore each other's pending choices.
  */
-
-const UNSCOPED_WORKSPACE = "workspace";
 
 export type AiSeoPhase = "idle" | "loading" | "failed";
 
@@ -74,7 +67,8 @@ export function useAiSeoMode(
   onFlush: () => void,
   save?: SaveState,
 ): AiSeoMode {
-  const [shopName, setShopName] = useState<string | null>(null);
+  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
+  const [workspaceFailed, setWorkspaceFailed] = useState(false);
   // Only what the readiness *endpoint* answered -- whether the control is
   // enabled also requires the client-observable prerequisites below,
   // computed straight from `detail` rather than mirrored into more state, so
@@ -122,21 +116,23 @@ export function useAiSeoMode(
     let current = true;
     getWorkspace()
       .then((workspace) => {
-        if (current) setShopName(workspace.shop_name);
+        if (current) {
+          setWorkspaceId(workspace.storage_id);
+          setWorkspaceFailed(false);
+        }
       })
       .catch(() => {
-        if (current) setShopName(null);
+        if (current) setWorkspaceFailed(true);
       });
     return () => {
       current = false;
     };
   }, [prerequisitesMet]);
 
-  const workspaceScope = shopName ?? UNSCOPED_WORKSPACE;
   const listingScope = detail.name;
   const scope: AiSeoStorageScope = useMemo(
-    () => ({ workspace: workspaceScope, listing: listingScope }),
-    [workspaceScope, listingScope],
+    () => ({ workspace: workspaceId ?? "", listing: listingScope }),
+    [workspaceId, listingScope],
   );
 
   // A check after an edit can read the old file. Recheck when autosave
@@ -162,13 +158,20 @@ export function useAiSeoMode(
     };
   }, [canCheck, name, detail.modified_at, save]);
 
-  const ready = canCheck && remoteReady;
-  const reason = canCheck && !remoteReady ? (remoteReason ?? "Checking AI setup...") : null;
+  const ready = canCheck && remoteReady && workspaceId !== null;
+  const reason =
+    canCheck && !ready
+      ? workspaceFailed
+        ? "Could not identify the workspace."
+        : workspaceId === null
+          ? "Checking workspace..."
+          : (remoteReason ?? "Checking AI setup...")
+      : null;
   const requirements = [
     { label: "Saved listing", ready: name !== "" && saved },
     { label: "Design selected", ready: hasDesign },
     { label: "Brief filled in", ready: hasBrief },
-    { label: "SEO prompt and AI provider ready", ready: canCheck && remoteReady },
+    { label: "SEO prompt and AI provider ready", ready },
   ];
 
   // Restored during render, not from an effect, the same way `PreviewPanel`
@@ -182,7 +185,7 @@ export function useAiSeoMode(
   const [loadedScope, setLoadedScope] = useState(scope);
   if (loadedScope !== scope) {
     setLoadedScope(scope);
-    setStored(loadStoredProposal(scope));
+    setStored(workspaceId === null ? null : loadStoredProposal(scope));
   }
 
   const abortActive = useCallback(() => {
@@ -190,22 +193,20 @@ export function useAiSeoMode(
     controllerRef.current = null;
   }, []);
 
-  useEffect(() => abortActive, [abortActive]);
+  useEffect(() => abortActive, [abortActive, scope]);
 
   const generate = useCallback(() => {
+    if (workspaceId === null) return;
     abortActive();
     const controller = new AbortController();
     controllerRef.current = controller;
     setPhase("loading");
-    const requestScope: AiSeoStorageScope = {
-      workspace: shopName ?? UNSCOPED_WORKSPACE,
-      listing: latestDetail.current.name,
-    };
+    const requestScope = scope;
     requestSeoProposal(latestDetail.current.name, controller.signal).then((outcome) => {
       if (controllerRef.current !== controller) return;
       controllerRef.current = null;
       if (outcome.kind === "success") {
-        const next = toStoredProposal(outcome.proposal, latestDetail.current);
+        const next = toStoredProposal(outcome.proposal);
         saveStoredProposal(requestScope, next);
         setStored(next);
         setPhase("idle");
@@ -215,7 +216,7 @@ export function useAiSeoMode(
         setPhase("failed");
       }
     });
-  }, [abortActive, shopName]);
+  }, [abortActive, scope, workspaceId]);
 
   const cancel = useCallback(() => {
     abortActive();

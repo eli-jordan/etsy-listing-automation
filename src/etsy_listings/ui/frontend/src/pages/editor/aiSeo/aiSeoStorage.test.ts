@@ -17,6 +17,9 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     colors: ["black"],
     brief: "A relaxed hiking tee.",
     garment_materials: ["ring-spun cotton"],
+    garment_product_type: "tee",
+    garment_brand: "Comfort Colors",
+    garment_model: "1717",
     prices: {},
     price_overrides: {},
     artwork: {},
@@ -41,6 +44,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     pricing_plan_name: null,
     resolved_prices: [],
     description_composed: "",
+    design_content_hash: null,
     ...over,
   };
 }
@@ -61,6 +65,9 @@ function proposal(over: Partial<SeoProposalResponse> = {}): SeoProposalResponse 
       colors: ["black"],
       garment_brand: "Comfort Colors",
       garment_model: "1717",
+      garment_profile: "comfort-colors-1717",
+      design: { default: "designs/take-a-hike.png" },
+      design_content_hash: null,
     },
     generated_at: "2026-09-23T00:00:00Z",
     expires_at: "2026-09-24T00:00:00Z",
@@ -68,7 +75,7 @@ function proposal(over: Partial<SeoProposalResponse> = {}): SeoProposalResponse 
   };
 }
 
-const scope = { workspace: "Pine & Thread", listing: "take-a-hike" };
+const scope = { workspace: "workspace-1", listing: "take-a-hike" };
 
 beforeEach(() => {
   localStorage.clear();
@@ -86,8 +93,12 @@ describe("buildComparableSnapshot", () => {
       colors: ["black"],
       etsy_category: "Graphic Tees",
       materials: ["ring-spun cotton"],
-      garmentProfile: "comfort-colors-1717",
+      garment_profile: "comfort-colors-1717",
+      product_type: "tee",
+      garment_brand: "Comfort Colors",
+      garment_model: "1717",
       design: JSON.stringify([["default", "designs/take-a-hike.png"]]),
+      design_content_hash: null,
     });
   });
 
@@ -102,44 +113,56 @@ describe("buildComparableSnapshot", () => {
 
 describe("isStale", () => {
   it("is false when nothing relevant has changed since generation", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail())).toBe(false);
   });
 
   it("is true once the brief changes", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail({ brief: "A different brief." }))).toBe(true);
   });
 
   it("is true once the selected design changes", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail({ design: { default: "designs/other.png" } }))).toBe(true);
   });
 
+  it("is true when design bytes change at the same reference", () => {
+    const stored = toStoredProposal(proposal());
+    expect(isStale(stored, detail({ design_content_hash: "new-content" }))).toBe(true);
+  });
+
   it("is true once the garment profile changes", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail({ garment_profile: "other-profile" }))).toBe(true);
   });
 
+  it("is true when a profile blueprint changes under the same profile name", () => {
+    const stored = toStoredProposal(proposal());
+    expect(isStale(stored, detail({ garment_product_type: "long sleeve tee" }))).toBe(true);
+    expect(isStale(stored, detail({ garment_brand: "Other Brand" }))).toBe(true);
+    expect(isStale(stored, detail({ garment_model: "2000" }))).toBe(true);
+  });
+
   it("is true once colors change", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail({ colors: ["black", "white"] }))).toBe(true);
   });
 
   it("is true once materials change", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail({ garment_materials: ["organic cotton"] }))).toBe(true);
   });
 
   it("is true once the Etsy section changes", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail({ etsy: { ...detail().etsy, section: "Outdoor Gifts" } }))).toBe(
       true,
     );
   });
 
   it("is false for an unrelated field change (title text)", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail({ etsy: { ...detail().etsy, title: "Take A Hike Tee" } }))).toBe(
       false,
     );
@@ -152,7 +175,6 @@ describe("isStale", () => {
     // selected -- that must not read as a submitted-input change.
     const stored = toStoredProposal(
       proposal({ snapshot: { ...proposal().snapshot, colors: ["black", "white"] } }),
-      detail({ colors: ["black", "white"] }),
     );
     expect(isStale(stored, detail({ colors: ["white", "black"] }))).toBe(false);
   });
@@ -164,20 +186,20 @@ describe("localStorage persistence", () => {
   });
 
   it("round-trips a saved proposal", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     saveStoredProposal(scope, stored);
     expect(loadStoredProposal(scope)).toEqual(stored);
   });
 
   it("scopes storage by workspace and listing independently", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     saveStoredProposal(scope, stored);
-    expect(loadStoredProposal({ workspace: "Other Shop", listing: "take-a-hike" })).toBeNull();
-    expect(loadStoredProposal({ workspace: "Pine & Thread", listing: "other-listing" })).toBeNull();
+    expect(loadStoredProposal({ workspace: "workspace-2", listing: "take-a-hike" })).toBeNull();
+    expect(loadStoredProposal({ workspace: "workspace-1", listing: "other-listing" })).toBeNull();
   });
 
   it("discards and returns null once the proposal has expired", () => {
-    const stored = toStoredProposal(proposal({ expires_at: "2020-01-01T00:00:00Z" }), detail());
+    const stored = toStoredProposal(proposal({ expires_at: "2020-01-01T00:00:00Z" }));
     saveStoredProposal(scope, stored);
     expect(loadStoredProposal(scope)).toBeNull();
     // The expired entry is actually removed, not just ignored.
@@ -185,12 +207,12 @@ describe("localStorage persistence", () => {
   });
 
   it("returns null for malformed JSON instead of throwing", () => {
-    localStorage.setItem("ai-seo-proposal:Pine & Thread:take-a-hike", "{not json");
+    localStorage.setItem("ai-seo-proposal:workspace-1:take-a-hike", "{not json");
     expect(loadStoredProposal(scope)).toBeNull();
   });
 
   it("clearStoredProposal removes the entry", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     saveStoredProposal(scope, stored);
     clearStoredProposal(scope);
     expect(loadStoredProposal(scope)).toBeNull();
@@ -199,14 +221,14 @@ describe("localStorage persistence", () => {
 
 describe("toStoredProposal", () => {
   it("starts every field unresolved", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     expect(stored.unresolved).toEqual({ title: true, tags: true, lead: true });
   });
 });
 
 describe("updateUnresolved", () => {
   it("clears only the named field and keeps the others open", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     saveStoredProposal(scope, stored);
 
     const next = updateUnresolved(scope, { title: false });
@@ -220,7 +242,7 @@ describe("updateUnresolved", () => {
   });
 
   it("removes the stored proposal once every field is resolved", () => {
-    const stored = toStoredProposal(proposal(), detail());
+    const stored = toStoredProposal(proposal());
     saveStoredProposal(scope, stored);
 
     updateUnresolved(scope, { title: false });

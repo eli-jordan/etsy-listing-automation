@@ -1297,6 +1297,17 @@
             "title": "Design",
             "type": "object"
           },
+          "design_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design Content Hash"
+          },
           "etsy": {
             "$ref": "#/components/schemas/EtsyListingConfig",
             "default": {
@@ -1326,6 +1337,17 @@
             "title": "Field Errors",
             "type": "object"
           },
+          "garment_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Brand"
+          },
           "garment_materials": {
             "anyOf": [
               {
@@ -1339,6 +1361,28 @@
               }
             ],
             "title": "Garment Materials"
+          },
+          "garment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Model"
+          },
+          "garment_product_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Product Type"
           },
           "garment_profile": {
             "title": "Garment Profile",
@@ -2844,7 +2888,7 @@
         "type": "object"
       },
       "SeoProposalSnapshot": {
-        "description": "The submitted generation inputs, echoed back beside the proposal\n(implementation plan, PR5 item 4: \"input snapshot data\").\n\nThis is what a future frontend (PR7) compares its own current editor\nstate against to decide a pending proposal has gone stale\n(`docs/ui-listing-seo-interactions.md` section 7) -- everything\n`ai/models.py.SeoRequest` sent to the provider except the design image\nitself, which the browser already holds and can compare or hash on its\nown (`SeoRequest`'s own docstring: design identity/content hashing is\ndeliberately the browser's bookkeeping, not a fact this API computes).",
+        "description": "The submitted generation inputs, echoed back beside the proposal\n(implementation plan, PR5 item 4: \"input snapshot data\").\n\nThis is what a future frontend (PR7) compares its own current editor\nstate against to decide a pending proposal has gone stale\n(`docs/ui-listing-seo-interactions.md` section 7) -- everything\n`ai/models.py.SeoRequest` sent to the provider except the design image\nitself. Design identity and content are captured before generation, rather\nthan inferred from whichever editor state exists when the response arrives.",
         "properties": {
           "brief": {
             "title": "Brief",
@@ -2857,6 +2901,24 @@
             "title": "Colors",
             "type": "array"
           },
+          "design": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Design",
+            "type": "object"
+          },
+          "design_content_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Design Content Hash"
+          },
           "etsy_category": {
             "title": "Etsy Category",
             "type": "string"
@@ -2867,6 +2929,10 @@
           },
           "garment_model": {
             "title": "Garment Model",
+            "type": "string"
+          },
+          "garment_profile": {
+            "title": "Garment Profile",
             "type": "string"
           },
           "materials": {
@@ -2888,7 +2954,10 @@
           "materials",
           "colors",
           "garment_brand",
-          "garment_model"
+          "garment_model",
+          "garment_profile",
+          "design",
+          "design_content_hash"
         ],
         "title": "SeoProposalSnapshot",
         "type": "object"
@@ -3660,10 +3729,15 @@
               }
             ],
             "title": "Shop Name"
+          },
+          "storage_id": {
+            "title": "Storage Id",
+            "type": "string"
           }
         },
         "required": [
-          "shop_name"
+          "shop_name",
+          "storage_id"
         ],
         "title": "WorkspaceSummary",
         "type": "object"
@@ -3678,7 +3752,7 @@
   "paths": {
     "/api/common-copy": {
       "get": {
-        "description": "The Description tab's common-copy selector (AI SEO implementation\nplan, PR6): every reusable description body, with the title and summary\nits front matter carries, so the picker can show something readable\nrather than a bare filename.\n\nA file whose front matter will not parse is left out -- read-only, so\nthere is nowhere here to report the problem, and offering it would only\nproduce a pick that immediately fails to resolve. (A *stored* ref that\nfails to resolve still surfaces as a details-tab issue -- see\n`_description_ref_error` -- this is only the list of things one could\nnewly pick.)",
+        "description": "The Description tab's common-copy selector (AI SEO implementation\nplan, PR6): every reusable description body, with the title and summary\nits front matter carries, so the picker can show something readable\nrather than a bare filename.\n\nA file whose front matter will not parse is left out -- read-only, so\nthere is nowhere here to report the problem, and offering it would only\nproduce a pick that immediately fails to resolve. (A *stored* ref that\nfails to resolve still surfaces as a details-tab issue -- see\n`Workspace.resolve_description` -- this is only the list of things one\ncould newly pick.)",
         "operationId": "list_common_copy_api_common_copy_get",
         "responses": {
           "200": {

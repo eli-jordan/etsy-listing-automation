@@ -98,6 +98,11 @@ export function AiSeoControl({
 /** Seconds since `active` became true, reset when it stops. */
 function useElapsed(active: boolean): number {
   const [seconds, setSeconds] = useState(0);
+  const [prevActive, setPrevActive] = useState(active);
+  if (active !== prevActive) {
+    setPrevActive(active);
+    if (!active) setSeconds(0);
+  }
   useEffect(() => {
     if (!active) return;
     const started = Date.now();

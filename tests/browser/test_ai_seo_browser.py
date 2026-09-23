@@ -64,11 +64,6 @@ DEFAULT_TIMEOUT_MS = 60_000
 """Same headroom as `conftest.py`'s own `DEFAULT_TIMEOUT_MS` -- every wait
 here sits behind the real render/orchestration pipeline, under `pytest --cov`."""
 
-SHOP_NAME = "TakeAHikeTees"
-"""``tests/fixtures/workspace/shop.yaml``'s `etsy.shop_name` -- the
-`localStorage` scope `useAiSeoMode` reads via `getWorkspace()` (see
-`aiSeoStorage.ts`'s module docstring)."""
-
 
 # --------------------------------------------------------------------------
 # Payload builders
@@ -452,7 +447,7 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
         # again --
         remaining = page.evaluate(
             "prefix => Object.keys(localStorage).filter(k => k.startsWith(prefix))",
-            f"ai-seo-proposal:{SHOP_NAME}",
+            "ai-seo-proposal:",
         )
         assert remaining == []
         ai_mode.wait_for(state="visible")
@@ -812,9 +807,12 @@ def test_codex_unavailable_falls_through_to_claude(
 
 
 def _stored_proposal_key(page: Page) -> str:
+    storage_id = page.evaluate(
+        "async () => (await (await fetch('/api/workspace')).json()).storage_id"
+    )
     keys = page.evaluate(
         "prefix => Object.keys(localStorage).filter(k => k.startsWith(prefix))",
-        f"ai-seo-proposal:{SHOP_NAME}:{LISTING}",
+        f"ai-seo-proposal:{storage_id}:{LISTING}",
     )
     assert len(keys) == 1, keys
     key: str = keys[0]
@@ -838,7 +836,7 @@ def test_pending_proposal_survives_refresh_and_expires_after_one_day(
         title_drawer = page.get_by_role("region", name="title AI suggestions")
         title_drawer.get_by_role("button", name="Persisted Title One").wait_for(state="visible")
 
-        # Scoped exactly by workspace (shop name) and listing, per
+        # Scoped exactly by workspace identity and listing, per
         # `aiSeoStorage.ts.storageKey` -- not just "a" key.
         key = _stored_proposal_key(page)
         stored = page.evaluate("k => JSON.parse(localStorage.getItem(k))", key)

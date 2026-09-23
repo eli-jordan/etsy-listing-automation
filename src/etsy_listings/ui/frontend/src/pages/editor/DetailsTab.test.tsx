@@ -538,6 +538,9 @@ describe("DetailsTab AI Mode", () => {
     return detail({
       design: { default: "designs/take-a-hike.png" },
       brief: "A relaxed hiking tee.",
+      garment_product_type: "tee",
+      garment_brand: "Comfort Colors",
+      garment_model: "1717",
       ...over,
     });
   }
@@ -558,6 +561,9 @@ describe("DetailsTab AI Mode", () => {
         colors: ["black"],
         garment_brand: "Comfort Colors",
         garment_model: "1717",
+        garment_profile: "comfort-colors-1717",
+        design: { default: "designs/take-a-hike.png" },
+        design_content_hash: null,
       },
       generated_at: "2026-09-23T00:00:00Z",
       expires_at: "2026-09-24T00:00:00Z",
@@ -570,7 +576,10 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("rechecks AI Mode after a new brief is saved", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
       .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
@@ -598,7 +607,10 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("rechecks readiness after save even when modified_at is unchanged", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
       .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
@@ -636,7 +648,10 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("keeps AI Mode disabled when the readiness endpoint says no", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
@@ -645,7 +660,10 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("renders AI Mode once the readiness endpoint says ready", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
@@ -654,7 +672,10 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("reveals all three drawers after a successful request and focuses the first title option", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
     vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
@@ -673,7 +694,10 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("returns focus to the AI Mode button once the last drawer resolves", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
     vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
@@ -695,7 +719,10 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("applies the chosen title through the normal autosave path", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({
       kind: "success",
@@ -715,7 +742,10 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("shows a Try again failure state without changing any listing field", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "failed" });
     const onUpdate = vi.fn();

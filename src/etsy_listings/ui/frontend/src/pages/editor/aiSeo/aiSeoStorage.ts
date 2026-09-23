@@ -26,39 +26,13 @@ export interface AiSeoUnresolved {
   lead: boolean;
 }
 
-/** The submitted-inputs snapshot fields the frontend can observe on its own,
- * beside what `SeoProposalResponse.snapshot` already echoes back.
- *
- * `garmentProfile` stands in for the snapshot's `garment_brand`/
- * `garment_model`/`product_type`: none of the three is exposed anywhere in
- * `ListingDetail` or `GarmentProfileSummary` (both are resolved server-side
- * from the garment profile's blueprint, which the frontend never loads), but
- * all three are pure functions of *which* profile is selected -- so tracking
- * the profile id catches every case those fields would actually change,
- * without fetching blueprint internals the editor has no other use for.
- *
- * `design` stands in for the plan's "selected design identity/content hash":
- * `SeoRequest`'s own docstring calls that deliberately the browser's
- * bookkeeping, not a fact the API computes, so this module snapshots the
- * listing's own `design` map (already the browser's copy of that identity)
- * as a stable JSON string rather than hashing image bytes it would have to
- * fetch specially. */
-export interface AiSeoExtraSnapshot {
-  garmentProfile: string;
-  design: string;
-}
-
 export interface StoredAiSeoProposal {
   proposal: SeoProposalResponse;
-  extra: AiSeoExtraSnapshot;
   unresolved: AiSeoUnresolved;
 }
 
 export interface AiSeoStorageScope {
-  /** `WorkspaceSummary.shop_name`, or a fixed fallback for a workspace that
-   * has none configured yet -- the one workspace-identifying fact the
-   * frontend can read (`getWorkspace()`); see the module docstring on
-   * `useAiSeoMode.ts` for why nothing more specific exists to scope by. */
+  /** Opaque `WorkspaceSummary.storage_id`, independent of shop name (PRD 4). */
   workspace: string;
   listing: string;
 }
@@ -77,26 +51,31 @@ function designIdentity(design: Record<string, string>): string {
   return JSON.stringify(Object.entries(design).sort(([a], [b]) => a.localeCompare(b)));
 }
 
-/** The generation-input fields of a listing, in the same shape
- * `SeoProposalSnapshot` uses for the fields the server itself can echo, plus
- * `garmentProfile`/`design` for the two it cannot (see `AiSeoExtraSnapshot`).
- * Reads straight off `ListingDetail` -- never a second network call -- so a
- * staleness check never disagrees with what the editor is showing right now. */
+/** Read the editor's current generation inputs for comparison with the saved
+ * inputs the server captured before it started generation. */
 export function buildComparableSnapshot(detail: ListingDetail): {
   brief: string;
   colors: string[];
   etsy_category: string;
   materials: string[];
-  garmentProfile: string;
+  garment_profile: string;
+  product_type: string | null;
+  garment_brand: string | null;
+  garment_model: string | null;
   design: string;
+  design_content_hash: string | null;
 } {
   return {
     brief: detail.brief,
     colors: detail.colors,
     etsy_category: detail.etsy.section ?? "",
     materials: detail.garment_materials ?? [],
-    garmentProfile: detail.garment_profile,
+    garment_profile: detail.garment_profile,
+    product_type: detail.garment_product_type ?? null,
+    garment_brand: detail.garment_brand ?? null,
+    garment_model: detail.garment_model ?? null,
     design: designIdentity(detail.design),
+    design_content_hash: detail.design_content_hash ?? null,
   };
 }
 
@@ -113,17 +92,10 @@ function sameStrings(a: string[], b: string[]): boolean {
   return sortedA.every((value, index) => value === sortedB[index]);
 }
 
-/** Builds a fresh `StoredAiSeoProposal` for a proposal the server just
- * returned, snapshotting the two extra fields it did not (see
- * `AiSeoExtraSnapshot`) and opening every drawer. */
-export function toStoredProposal(
-  proposal: SeoProposalResponse,
-  detail: ListingDetail,
-): StoredAiSeoProposal {
-  const comparable = buildComparableSnapshot(detail);
+/** Open every drawer for a response carrying its own frozen input snapshot. */
+export function toStoredProposal(proposal: SeoProposalResponse): StoredAiSeoProposal {
   return {
     proposal,
-    extra: { garmentProfile: comparable.garmentProfile, design: comparable.design },
     unresolved: { title: true, tags: true, lead: true },
   };
 }
@@ -142,8 +114,12 @@ export function isStale(stored: StoredAiSeoProposal, detail: ListingDetail): boo
     current.etsy_category !== snapshot.etsy_category ||
     !sameStrings(current.colors, snapshot.colors) ||
     !sameStrings(current.materials, snapshot.materials) ||
-    current.garmentProfile !== stored.extra.garmentProfile ||
-    current.design !== stored.extra.design
+    current.garment_profile !== snapshot.garment_profile ||
+    current.product_type !== snapshot.product_type ||
+    current.garment_brand !== snapshot.garment_brand ||
+    current.garment_model !== snapshot.garment_model ||
+    current.design !== designIdentity(snapshot.design) ||
+    current.design_content_hash !== snapshot.design_content_hash
   );
 }
 
@@ -167,7 +143,13 @@ function parseStored(raw: string): StoredAiSeoProposal | null {
     if (typeof parsed !== "object" || parsed === null) return null;
     const record = parsed as Record<string, unknown>;
     if (typeof record.proposal !== "object" || record.proposal === null) return null;
-    if (typeof record.extra !== "object" || record.extra === null) return null;
+    const snapshot = (record.proposal as Record<string, unknown>).snapshot;
+    if (typeof snapshot !== "object" || snapshot === null) return null;
+    const inputs = snapshot as Record<string, unknown>;
+    if (typeof inputs.garment_profile !== "string") return null;
+    if (typeof inputs.design !== "object" || inputs.design === null) return null;
+    if (typeof inputs.design_content_hash !== "string" && inputs.design_content_hash !== null)
+      return null;
     if (!isAiSeoUnresolved(record.unresolved)) return null;
     return record as unknown as StoredAiSeoProposal;
   } catch {

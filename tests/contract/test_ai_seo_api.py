@@ -226,6 +226,13 @@ def test_proposal_returns_the_validated_payload_snapshot_and_expiry(client: Test
     assert snapshot["colors"] == ["black", "blue-jean", "ivory", "moss"]
     assert snapshot["garment_brand"] == "Comfort Colors"
     assert snapshot["garment_model"] == "1717"
+    assert snapshot["garment_profile"] == "comfort-colors-1717"
+    assert snapshot["design"] == {"default": "../../designs/take-a-hike.png"}
+    assert (
+        snapshot["design_content_hash"]
+        == client.get(f"/api/listings/{LISTING}").json()["design_content_hash"]
+    )
+    assert snapshot["design_content_hash"] is not None
     assert "Retro 70s sunset mountain scene" in snapshot["brief"]
 
     from datetime import datetime
@@ -233,6 +240,25 @@ def test_proposal_returns_the_validated_payload_snapshot_and_expiry(client: Test
     generated_at = datetime.fromisoformat(body["generated_at"])
     expires_at = datetime.fromisoformat(body["expires_at"])
     assert (expires_at - generated_at).total_seconds() == pytest.approx(86400, abs=1)
+
+
+def test_unconventional_design_keys_pick_the_same_image_after_reordering(
+    workspace_root: Path,
+) -> None:
+    _seed_prompt(workspace_root)
+    primary_ref = "../../designs/take-a-hike.png"
+    secondary_ref = "../../designs/alternate.png"
+    (workspace_root / "designs" / "alternate.png").write_bytes(b"alternate")
+    provider = _ready_provider(responses=[_valid_payload(), _valid_payload()])
+
+    with _client(workspace_root, providers=[provider]) as c:
+        edit_listing(workspace_root, design={"z": secondary_ref, "a": primary_ref})
+        assert c.post(f"/api/listings/{LISTING}/ai-seo/proposal").status_code == 200
+        edit_listing(workspace_root, design={"a": primary_ref, "z": secondary_ref})
+        assert c.post(f"/api/listings/{LISTING}/ai-seo/proposal").status_code == 200
+
+    assert provider.requests[0].design_image == provider.requests[1].design_image
+    assert provider.requests[0].design_image.name == "take-a-hike.png"
 
 
 def test_proposal_surfaces_a_trademark_warning_from_hard_validation(
@@ -479,6 +505,32 @@ class _ConcurrencyProbeProvider:
         with self._lock:
             self.concurrent_calls -= 1
         return RawProviderResult(provider="codex", raw_output=_valid_payload())
+
+
+def test_proposal_snapshot_keeps_inputs_from_before_generation(workspace_root: Path) -> None:
+    _seed_prompt(workspace_root)
+    provider = _BlockingProvider()
+    responses: list[dict[str, Any]] = []
+
+    with _client(workspace_root, providers=[provider]) as c:
+
+        def request_proposal() -> None:
+            responses.append(c.post(f"/api/listings/{LISTING}/ai-seo/proposal").json())
+
+        thread = threading.Thread(target=request_proposal)
+        thread.start()
+        try:
+            assert provider.started.wait(timeout=5)
+            original = c.get(f"/api/listings/{LISTING}").json()
+            edit_listing(workspace_root, brief="A different brief saved during generation")
+            updated = c.get(f"/api/listings/{LISTING}").json()
+            assert updated["brief"] != original["brief"]
+        finally:
+            provider.release.set()
+            thread.join(timeout=10)
+
+    assert len(responses) == 1
+    assert responses[0]["snapshot"]["brief"] == original["brief"]
 
 
 def test_a_second_request_for_the_same_listing_is_refused_while_the_first_is_active(
