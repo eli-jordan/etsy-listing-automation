@@ -97,7 +97,22 @@ export function useAiSeoMode(
     latestOnFlush.current = onFlush;
   });
 
+  const hasDesign = Object.keys(detail.design).length > 0;
+  const hasBrief = detail.brief.trim() !== "";
+  const name = detail.name;
+  // Every one of AI Mode's client-observable prerequisites, checked before
+  // any network call at all -- not only the readiness endpoint, but also
+  // `getWorkspace()` for local-storage scoping. A listing with no design or
+  // brief yet (the common case: most listings, most of the time) never asks
+  // the network anything, which matters beyond efficiency: an ordinary test
+  // rendering an unrelated tab with a plain `ListingDetail` fixture should
+  // never trigger a real `fetch()` it never mocked, and every fixture in
+  // this codebase leaves `brief` empty except the ones this feature's own
+  // tests write.
+  const prerequisitesMet = name !== "" && hasDesign && hasBrief;
+
   useEffect(() => {
+    if (!prerequisitesMet) return;
     let current = true;
     getWorkspace()
       .then((workspace) => {
@@ -109,7 +124,7 @@ export function useAiSeoMode(
     return () => {
       current = false;
     };
-  }, []);
+  }, [prerequisitesMet]);
 
   const workspaceScope = shopName ?? UNSCOPED_WORKSPACE;
   const listingScope = detail.name;
@@ -118,12 +133,8 @@ export function useAiSeoMode(
     [workspaceScope, listingScope],
   );
 
-  const hasDesign = Object.keys(detail.design).length > 0;
-  const hasBrief = detail.brief.trim() !== "";
-  const name = detail.name;
-
   useEffect(() => {
-    if (name === "" || !hasDesign || !hasBrief) return;
+    if (!prerequisitesMet) return;
     let current = true;
     getSeoReadiness(name)
       .then((response) => {
@@ -135,9 +146,9 @@ export function useAiSeoMode(
     return () => {
       current = false;
     };
-  }, [name, hasDesign, hasBrief]);
+  }, [prerequisitesMet, name]);
 
-  const ready = name !== "" && hasDesign && hasBrief && remoteReady;
+  const ready = prerequisitesMet && remoteReady;
 
   // Restored during render, not from an effect, the same way `PreviewPanel`
   // adjusts state while rendering rather than paying for a second render:
