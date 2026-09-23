@@ -281,6 +281,45 @@ def test_kill_process_tree_uses_killpg_on_posix(monkeypatch: pytest.MonkeyPatch)
     assert calls == [(555, process._SIGKILL)]
 
 
+def test_kill_process_tree_on_posix_also_kills_proc_listed_descendants_by_pid(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """`killpg` alone can miss a grandchild that `/proc` already knows about
+    (the race :func:`process._posix_descendant_pids` exists for) -- so
+    `_kill_process_tree` must SIGKILL every descendant `/proc` reports, by
+    pid, in addition to the group-wide kill."""
+    monkeypatch.setattr(process.sys, "platform", "linux")
+    monkeypatch.setattr(process.os, "getpgid", lambda pid: pid, raising=False)
+    monkeypatch.setattr(process.os, "killpg", lambda pgid, sig: None, raising=False)
+    monkeypatch.setattr(process, "_posix_descendant_pids", lambda pid: [777, 778])
+    killed: list[tuple[int, int]] = []
+    monkeypatch.setattr(process.os, "kill", lambda pid, sig: killed.append((pid, sig)))
+
+    class _Proc:
+        pid = 555
+
+        def kill(self) -> None:
+            pass
+
+    process._kill_process_tree(_Proc())  # type: ignore[arg-type]
+
+    assert killed == [(777, process._SIGKILL), (778, process._SIGKILL)]
+
+
+def test_posix_descendant_pids_returns_empty_without_proc(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """No `/proc` (e.g. macOS) is a normal, silent no-op -- `killpg` is the
+    only kill path there, not a reason for `_kill_process_tree` to raise."""
+    monkeypatch.setattr(
+        process.os,
+        "listdir",
+        lambda path: (_ for _ in ()).throw(FileNotFoundError(path)),
+    )
+
+    assert process._posix_descendant_pids(555) == []
+
+
 # ---------------------------------------------------- real process tree
 
 _GRANDCHILD_SCRIPT = (

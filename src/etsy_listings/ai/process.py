@@ -96,6 +96,45 @@ def _new_process_group_kwargs() -> dict[str, Any]:
     return {"start_new_session": True}
 
 
+def _posix_descendant_pids(pid: int) -> list[int]:
+    """Every live descendant of ``pid``, found by walking `/proc`'s PPID
+    links rather than trusting process-group signal delivery alone.
+
+    `killpg` assumes every descendant is still a member of the group it was
+    forked into -- true by POSIX semantics, but some sandboxed/containerized
+    kernels have a registration race where a grandchild forked moments
+    before the kill is not yet visible to the group-wide signal delivery
+    path, so the group kill reaches the direct child but misses it. Reading
+    `/proc` directly for "whose PPid is this" sidesteps that: it is the same
+    ancestry `taskkill /T` (below) already reads on Windows via a different
+    API. Returns ``[]`` on a kernel with no `/proc` (e.g. macOS) -- `killpg`
+    is the only path there.
+    """
+    try:
+        pids = [entry for entry in os.listdir("/proc") if entry.isdigit()]
+    except OSError:
+        return []
+    children_of: dict[int, list[int]] = {}
+    for entry in pids:
+        try:
+            stat = Path("/proc", entry, "stat").read_text()
+        except OSError:
+            continue
+        # The 2nd field (`comm`) is parenthesised and may itself contain
+        # spaces/parens, so only the 3rd field onward is safe to split on
+        # whitespace; PPid is the first of those.
+        fields_after_comm = stat.rsplit(")", 1)[-1].split()
+        ppid = int(fields_after_comm[1])
+        children_of.setdefault(ppid, []).append(int(entry))
+
+    descendants: list[int] = []
+    frontier = [pid]
+    while frontier:
+        frontier = [child for parent in frontier for child in children_of.get(parent, [])]
+        descendants.extend(frontier)
+    return descendants
+
+
 def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
     """Best-effort termination of ``proc`` and its whole process tree.
 
@@ -103,10 +142,13 @@ def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
     /T /F` (terminate the tree, forcefully) against the process group leader
     it was launched into (:func:`_new_process_group_kwargs`) is the
     documented way to reach children a coding-agent CLI spawned. POSIX kills
-    the whole process group with `SIGKILL` via the same group. Either path
-    also calls `proc.kill()` directly, both as a fallback if the tree kill
-    could not find the process (already exited) and because it is what
-    marks `Popen` itself as reaped.
+    the whole process group with `SIGKILL` via the same group, *and* SIGKILLs
+    each descendant `/proc` still reports individually
+    (:func:`_posix_descendant_pids`), since the group kill alone can race a
+    freshly-forked grandchild on some sandboxed kernels. Either path also
+    calls `proc.kill()` directly, both as a fallback if the tree kill could
+    not find the process (already exited) and because it is what marks
+    `Popen` itself as reaped.
     """
     if sys.platform == "win32":
         subprocess.run(
@@ -115,8 +157,12 @@ def _kill_process_tree(proc: subprocess.Popen[str]) -> None:
             check=False,
         )
     else:
+        descendants = _posix_descendant_pids(proc.pid)
         with contextlib.suppress(ProcessLookupError):
             os.killpg(os.getpgid(proc.pid), _SIGKILL)
+        for pid in descendants:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, _SIGKILL)
     with contextlib.suppress(Exception):
         proc.kill()
 
