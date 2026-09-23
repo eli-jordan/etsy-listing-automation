@@ -105,7 +105,7 @@ export function buildComparableSnapshot(detail: ListingDetail): {
  * appends a re-enabled colour to the end rather than restoring its old
  * position), and the submitted generation input is a JSON list whose order
  * carries no meaning to the model either. Mirrors `designIdentity`'s own
- * sort-before-compare reasoning just below. */
+ * sort-before-compare reasoning just above. */
 function sameStrings(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   const sortedA = [...a].sort();
