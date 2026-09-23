@@ -510,12 +510,24 @@ mode](https://code.claude.com/docs/en/headless). The **AI Mode** button is
 hidden, never disabled, until at least one CLI reports itself signed in and
 ready; if neither is, the Details tab simply looks like it always did.
 
+**Attaching a design starts the work.** When you pick a design for a listing
+whose brief is still empty, the brief is drafted from the artwork and written
+into the Brief field for you, and the SEO request that brief unblocks starts
+straight after. The design strip says what is happening while it runs, so you
+can carry on with colours and mockups; by the time you open **Listing
+Details**, the suggestion drawers are usually already open. A brief you have
+written is never redrafted or overwritten, nothing retries on its own after a
+failure, and leaving the listing abandons the work exactly as **Cancel** would.
+
 **Prompt customization.** The instructions sent to the model live at
-`prompts/seo.md` in your workspace — plain text, entirely yours to edit.
-`setup` seeds a default there only if the file is absent; it never overwrites
-your own copy on a later run. The application appends the listing's facts (as
-delimited JSON) and the required JSON response schema itself — `seo.md` holds
-only the instructions, never placeholders or executable prompt code.
+`prompts/seo.md` (SEO suggestions) and `prompts/brief.md` (the drafted brief)
+in your workspace — plain text, entirely yours to edit. `setup` seeds a
+default for each only if that file is absent; it never overwrites your own
+copy on a later run. The application appends the listing's facts (as
+delimited JSON) and the required JSON response schema itself — both files
+hold only instructions, never placeholders or executable prompt code. A
+workspace without `prompts/brief.md` can still use AI Mode by hand; only the
+automatic draft is unavailable.
 
 **Common-copy files.** A listing's description is a required `lead` (the
 opening paragraph — the one part AI Mode drafts) plus at most one shared or

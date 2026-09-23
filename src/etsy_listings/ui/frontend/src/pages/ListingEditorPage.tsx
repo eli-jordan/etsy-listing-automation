@@ -7,6 +7,9 @@ import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave, type SaveState } from "../hooks/useAutosave";
 import type { Issue, IssueTab, ListingDetail } from "../types";
+import { AutoDesignBriefStatus } from "./editor/aiSeo/AutoDesignBriefStatus";
+import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
+import { useAutoDesignBrief } from "./editor/aiSeo/useAutoDesignBrief";
 import { DeployControl } from "./editor/DeployControl";
 import { DesignSelect } from "./editor/DesignSelect";
 import { DetailsTab } from "./editor/DetailsTab";
@@ -229,6 +232,15 @@ export function ListingEditorShell({
 }) {
   const [tab, setTab] = useState<Tab>("variants");
 
+  // AI Mode lives here rather than inside `DetailsTab` for two reasons that
+  // are really one: a request outlives the tab it was started from. Switching
+  // to Variants used to unmount the tab and abort a proposal mid-flight, and
+  // PRD 68's chain starts from the design strip above the tabs, which the
+  // seller is normally looking at from Variants. `DetailsTab` receives the
+  // same object as a prop and is otherwise unchanged.
+  const aiSeo = useAiSeoMode(detail, update, flush, save);
+  const autoBrief = useAutoDesignBrief(detail, update, flush, aiSeo, save);
+
   function pickTab(next: Tab) {
     flush();
     setTab(next);
@@ -244,6 +256,11 @@ export function ListingEditorShell({
           (which colours suit it) and Listing Images (which mockups show it)
           are about. */}
       <DesignSelect design={detail.design} onPick={(ref) => update({ design: ref })} />
+      <AutoDesignBriefStatus
+        auto={autoBrief}
+        aiSeo={aiSeo}
+        onOpenDetails={() => pickTab("details")}
+      />
 
       <div className="tabs seg">
         {TABS.map((t) => {
@@ -267,7 +284,7 @@ export function ListingEditorShell({
       {tab === "variants" && <VariantsTab detail={detail} onUpdate={update} />}
       {tab === "images" && <ImagesTab detail={detail} onUpdate={update} />}
       {tab === "details" && (
-        <DetailsTab detail={detail} onUpdate={update} onFlush={flush} save={save} />
+        <DetailsTab detail={detail} onUpdate={update} onFlush={flush} aiSeo={aiSeo} />
       )}
     </div>
   );

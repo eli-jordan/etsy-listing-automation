@@ -52,7 +52,12 @@ from etsy_listings.clients.printify.models import (
 from etsy_listings.config.description import compose_description
 from etsy_listings.engine.context import EventSink, RunContext
 from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
-from etsy_listings.workspace.layout import COMMON_COPY_DIR, PROMPTS_DIR, SEO_PROMPT_FILE
+from etsy_listings.workspace.layout import (
+    BRIEF_PROMPT_FILE,
+    COMMON_COPY_DIR,
+    PROMPTS_DIR,
+    SEO_PROMPT_FILE,
+)
 from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -508,8 +513,11 @@ def test_editing_an_empty_brief_enables_ai_mode_after_autosave(
 
         ai_mode.click()
         page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
-        assert len(provider.requests) == 1
-        assert provider.requests[0].brief == "A retro sunset tee that says TAKE A HIKE."
+        assert len(provider.tasks) == 1
+        # The brief reaches the provider inside the assembled prompt now, not
+        # as a field on a `SeoRequest`: `ai/prompt.py.build_seo_task` wraps it
+        # in the delimited listing context before an adapter ever sees it.
+        assert "A retro sunset tee that says TAKE A HIKE." in provider.tasks[0].prompt_text
 
 
 def test_ai_mode_is_disabled_when_no_provider_is_ready(
@@ -753,7 +761,7 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
         # surfaces as "Try again" -- never a partial proposal.
         failure_text = "AI Mode couldn’t generate valid suggestions. Nothing changed."
         page.get_by_text(failure_text).wait_for(state="visible")
-        assert len(provider.requests) == 2
+        assert len(provider.tasks) == 2
         assert provider.repairs[0] is None
         assert provider.repairs[1] is not None
         assert page.get_by_role("region", name="title AI suggestions").count() == 0
@@ -796,7 +804,7 @@ def test_codex_unavailable_falls_through_to_claude(
         title_drawer = page.get_by_role("region", name="title AI suggestions")
         title_drawer.get_by_role("button", name="Claude Wrote This One").wait_for(state="visible")
         assert codex.calls == 1
-        assert len(claude.requests) == 1
+        assert len(claude.tasks) == 1
 
 
 # ===========================================================================
@@ -849,7 +857,7 @@ def test_pending_proposal_survives_refresh_and_expires_after_one_day(
         page.get_by_role("region", name="title AI suggestions").get_by_role(
             "button", name="Persisted Title One"
         ).wait_for(state="visible")
-        assert len(provider.requests) == 1  # never asked again
+        assert len(provider.tasks) == 1  # never asked again
 
         # -- Rewrite the same entry with an already-past expiry, exactly
         # the shape `aiSeoStorage.ts` itself writes, then reload:
@@ -1023,3 +1031,124 @@ def test_common_copy_description_composes_into_the_printify_desired_document(
     assert printify.created[0].description == expected_description
     assert _LEAD in printify.created[0].description
     assert "Machine wash cold" in printify.created[0].description
+
+
+# ===========================================================================
+# Drafting on design attach (PRD 68)
+#
+# The one thing no other layer can show: that picking a design in the real
+# design strip, on a tab that is not Listing Details, ends with suggestion
+# drawers open on a tab the seller never touched -- through the real editor,
+# the real autosave path, and both real endpoints in sequence.
+# ===========================================================================
+
+
+def _seed_brief_prompt(workspace_root: Path) -> Path:
+    path = workspace_root / PROMPTS_DIR / BRIEF_PROMPT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("Describe the artwork.\n", encoding="utf-8")
+    return path
+
+
+_DRAFTED_BRIEF = "Retro sunset mountains reading TAKE A HIKE."
+
+
+def _pick_another_design(page: Page, name: str) -> None:
+    """Attach a different design through the strip above the tabs, the way a
+    seller does -- `DesignSelect`'s **Change** button, then its card."""
+    page.get_by_role("button", name="Change design").click()
+    page.locator(".template-card", has_text=name).click()
+
+
+def test_attaching_a_design_drafts_a_brief_and_leaves_suggestions_waiting(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """The whole chain, from the Variants tab, without the seller asking for
+    any of it (`docs/ui-listing-seo-interactions.md` section 1a)."""
+    _seed_prompt(workspace_root)
+    _seed_brief_prompt(workspace_root)
+    edit_listing(workspace_root, brief="")
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    provider = _ready_provider(responses=['{"brief": "' + _DRAFTED_BRIEF + '"}', _valid_json()])
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        # The seller is on Variants -- the editor's own default tab -- when
+        # they attach the design. Nothing about this flow requires them to
+        # visit Listing Details first, which is the point of it.
+        page.locator(".design-row__name").wait_for(state="visible")
+        _pick_another_design(page, "second-design")
+
+        status = page.locator(".auto-brief-status")
+        status.wait_for(state="visible")
+
+        # The drafted brief lands in the ordinary field, saved the ordinary
+        # way: the file on disk is what proves it went through autosave and
+        # not some separate write path.
+        for _ in range(200):
+            if _listing_yaml(workspace_root).get("brief") == _DRAFTED_BRIEF:
+                break
+            page.wait_for_timeout(100)
+        else:  # pragma: no cover - only on a pathologically slow machine
+            raise AssertionError("the drafted brief never reached listing.yaml")
+
+        # ... and generation follows on its own, so the drawers are already
+        # open the first time Listing Details is opened.
+        _open_details_tab(page)
+        page.locator(".seo-choice-list").first.wait_for(state="visible")
+        assert page.locator("#details-brief").input_value() == _DRAFTED_BRIEF
+        assert len(provider.tasks) == 2
+        assert "Describe the artwork." in provider.tasks[0].prompt_text
+        assert "Write great Etsy SEO copy." in provider.tasks[1].prompt_text
+
+
+def test_a_design_attached_to_a_listing_with_a_brief_changes_nothing(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """A brief the seller wrote is the authority on the design. Attaching a
+    new design must not redraft it, and must not spend a request."""
+    _seed_prompt(workspace_root)
+    _seed_brief_prompt(workspace_root)
+    edit_listing(workspace_root, brief="My own words.")
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    provider = _ready_provider(responses=[])
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.locator(".design-row__name").wait_for(state="visible")
+        _pick_another_design(page, "second-design")
+
+        _open_details_tab(page)
+        assert page.locator("#details-brief").input_value() == "My own words."
+        assert page.locator(".seo-choice-list").count() == 0
+        assert provider.tasks == []
+
+
+def test_a_workspace_without_the_brief_prompt_says_so_and_stops(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """A workspace that predates this feature. AI Mode by hand still works;
+    only the automatic draft is unavailable, and nothing retries."""
+    _seed_prompt(workspace_root)  # but no prompts/brief.md
+    edit_listing(workspace_root, brief="")
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    provider = _ready_provider(responses=[])
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.locator(".design-row__name").wait_for(state="visible")
+        _pick_another_design(page, "second-design")
+
+        status = page.locator(".auto-brief-status")
+        status.wait_for(state="visible")
+        page.wait_for_function(
+            "() => document.querySelector('.auto-brief-status')?.textContent?.includes('Couldn')"
+        )
+        assert _listing_yaml(workspace_root).get("brief") == ""
+        assert provider.tasks == []

@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { SeoProposalResponse, SeoReadinessResponse } from "../types";
+import type { DesignBriefResponse, SeoProposalResponse, SeoReadinessResponse } from "../types";
 
 /**
  * Listing SEO AI Mode's HTTP surface (AI SEO implementation plan, PR7).
@@ -52,6 +52,38 @@ export async function requestSeoProposal(
     });
     if (error || !data) return { kind: "failed" };
     return { kind: "success", proposal: data };
+  } catch (err) {
+    if (signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+      return { kind: "cancelled" };
+    }
+    return { kind: "failed" };
+  }
+}
+
+export type DesignBriefOutcome =
+  { kind: "success"; brief: string } | { kind: "cancelled" } | { kind: "failed" };
+
+/** Draft this saved listing's brief from its design image
+ * (`POST /api/listings/{name}/ai-seo/brief`, PRD 68).
+ *
+ * The same three outcomes a proposal request has, for the same reason -- and
+ * with more riding on the third here, because nobody asked for this request.
+ * It is started by attaching a design, so a workspace with no
+ * `prompts/brief.md`, or a signed-out CLI, answers 409 and the seller should
+ * simply find the Brief field empty and AI Mode disabled with its usual
+ * explanation, not an error about something they never did.
+ */
+export async function requestDesignBrief(
+  name: string,
+  signal: AbortSignal,
+): Promise<DesignBriefOutcome> {
+  try {
+    const { data, error } = await api.POST("/api/listings/{name}/ai-seo/brief", {
+      params: { path: { name } },
+      signal,
+    });
+    if (error || !data) return { kind: "failed" };
+    return { kind: "success", brief: (data as DesignBriefResponse).brief };
   } catch (err) {
     if (signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
       return { kind: "cancelled" };

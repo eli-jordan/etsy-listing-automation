@@ -2614,6 +2614,44 @@ table.listings tbody tr:last-child td {
 /* — Listing Details AI Mode (design/scenes/listing-seo-v3, adapted to this
    app's real tokens and the live `.field`/`.btn` structure rather than the
    mockup's standalone screen) — */
+/* The one line the design strip shows while PRD 68's chain runs. Sized and
+   coloured like `.seo-inline-status` (the Details tab's own AI line) so the
+   two read as the same voice, but full width rather than capped: this sits
+   under the design row, where there is room, and the tab's version sits
+   beside a field, where there is not. */
+.auto-brief-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 10px;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-200);
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+  font-size: 11px;
+}
+
+.auto-brief-status button {
+  flex: none;
+  margin-left: auto;
+  padding: 3px 8px;
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+  background: var(--color-neutral-100);
+  color: var(--color-text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+/* The busy cue is a border tint, not motion: something already animates on
+   this screen while AI Mode runs (the sparkle), and two independent pulses
+   read as two separate things happening. */
+.auto-brief-status--busy {
+  border-left: 3px solid var(--color-accent);
+  padding-left: 6px;
+}
+
 .seo-inline-status {
   display: flex;
   align-items: center;
