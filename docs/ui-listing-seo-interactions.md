@@ -62,13 +62,13 @@ action.
 
 ## 1. AI Mode entry point
 
-The **AI Mode** control sits in the upper-right of the Listing details header,
-beside its heading and helper text, as in the [v3 review mockup](../src/etsy_listings/ui/frontend/design/scenes/listing-seo-v3/review.tsx). Its compact
+The **AI Mode** control sits to the right of the Brief field, as in the [v3 review mockup](../src/etsy_listings/ui/frontend/design/scenes/listing-seo-v3/review.tsx). Its compact
 button has a purple and pink sparkle and remains secondary to **Deploy changes**.
 
 | Interaction                      | What happens                                                                                                                                                  | Why it is important                                                                                                |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Hover or focus **AI Mode** | Show a small card listing the saved listing, design, brief, prompt, and provider requirements, with the current readiness reason when available. | A disabled control explains what the seller can do next. |
+| Hover or focus **AI Mode** when it cannot run | Show a small card listing the saved listing, design, brief, prompt, and provider requirements, with the current readiness reason when available. | A disabled control explains what the seller can do next. |
+| Hover or focus **AI Mode** when it can run | Show **Generates SEO fields using AI (title, description lead and tags)**. | The ready control needs a description of the action, not a checklist the seller has already satisfied. |
 | Activate **AI Mode** | Capture the current generation inputs and begin one request for a complete proposal. | A single explicit action keeps model usage predictable and ensures all suggestions share the same listing context. |
 | The listing is unsaved or a prerequisite is unavailable | Keep the control visible and disabled. | Sellers can discover AI Mode while preparing the required inputs; requests still require a saved listing and ready local tooling. |
 
@@ -88,8 +88,8 @@ editing other fields while generation runs.
 
 | State      | UI response                                                                                                     | Why it is important                                                                                  |
 | ---------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Generating | Show a compact message such as **Generating title, tag, and description suggestions…** in a polite live region, with **Cancel**. | The request can take time, so the interface must acknowledge the action without blocking the editor and must permit an intentional stop. |
-| Success    | Remove the loading message and reveal all three field-attached drawers automatically.                           | Requiring a second click to view results adds ceremony without adding safety.                        |
+| Generating | Keep **AI Mode** disabled. The sparkle twinkles and the button glows in a pulse. Under the button, **Generating for 0:00 seconds** counts up beside **Cancel**. Hovering the button shows **Generating title, description and tag recommendations for your review**. Motion is still when reduced motion is requested. | The request can take time, so the button itself shows that work is underway, and the seller can see how long it has run and stop it without the card staying open. |
+| Success    | Remove the loading message. If the seller is looking at the page, the suggestion drawers slide out from under Title, Tags, and Description lead, slightly narrower than those fields, headed by the AI Mode sparkle. A proposal restored later appears in place, without the slide. | The drawers should read as coming out of the fields they belong to, and a later visit should not replay that motion. |
 | Failure    | Remove the loading state and show an inline user-facing error with **Try again**. Do not change listing fields. | A model or validation failure must never look like an empty successful result.                       |
 | Cancelled  | Remove the loading state and retain no proposal. Do not change listing fields.                                  | Leaving the editor, losing the connection, or pressing **Cancel** must not leave a result from an abandoned request. |
 

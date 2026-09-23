@@ -1,5 +1,5 @@
 import type { SeoRationaleEntry, SeoWarningEntry } from "../../../types";
-import { AiSeoDisclosure } from "./AiChoiceDrawer";
+import { AiModeMark, AiSeoDisclosure } from "./AiChoiceDrawer";
 import { canToggleTag, MAX_TAGS } from "./aiSeoTags";
 
 /** The tag drawer (`docs/ui-listing-seo-interactions.md` section 4): 20
@@ -16,6 +16,7 @@ export function AiTagsDrawer({
   onToggle,
   onAcceptBest,
   onClose,
+  enter = false,
 }: {
   tags: string[];
   selected: string[];
@@ -26,54 +27,63 @@ export function AiTagsDrawer({
   onToggle: (tag: string) => void;
   onAcceptBest: () => void;
   onClose: () => void;
+  /** Play the draw-out only when generation finishes while this page is open. */
+  enter?: boolean;
 }) {
   const relevantRationale = rationale.filter((entry) => entry.used_in.includes("tags"));
   const best13 = tags.slice(0, 13);
   const more = tags.slice(13);
 
   return (
-    <aside
-      className={stale ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
-      role="region"
-      aria-label="tag AI suggestions"
+    <div
+      className={enter ? "seo-suggestion-slot seo-suggestion-slot--draw" : "seo-suggestion-slot"}
     >
-      <div className="seo-suggestion__topline">
-        <span>{stale ? "Suggestions are out of date" : "20 ranked suggestions"}</span>
-        <div className="seo-suggestion__actions">
-          <button className="seo-suggestion__quiet-action" onClick={onClose} type="button">
-            Close
-          </button>
-          <button disabled={stale} onClick={onAcceptBest} type="button">
-            Accept best 13
-          </button>
+      <aside
+        className={stale ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
+        role="region"
+        aria-label="tag AI suggestions"
+      >
+        <div className="seo-suggestion__topline">
+          <div className="seo-suggestion__identity">
+            <AiModeMark />
+            <span>{stale ? "Suggestions are out of date" : "20 ranked suggestions"}</span>
+          </div>
+          <div className="seo-suggestion__actions">
+            <button className="seo-suggestion__quiet-action" onClick={onClose} type="button">
+              Close
+            </button>
+            <button disabled={stale} onClick={onAcceptBest} type="button">
+              Accept best 13
+            </button>
+          </div>
         </div>
-      </div>
 
-      <TagPool
-        label="Best 13"
-        tags={best13}
-        selected={selected}
-        stale={stale}
-        onToggle={onToggle}
-      />
-      <TagPool
-        label="More options"
-        tags={more}
-        selected={selected}
-        stale={stale}
-        onToggle={onToggle}
-      />
+        <TagPool
+          label="Best 13"
+          tags={best13}
+          selected={selected}
+          stale={stale}
+          onToggle={onToggle}
+        />
+        <TagPool
+          label="More options"
+          tags={more}
+          selected={selected}
+          stale={stale}
+          onToggle={onToggle}
+        />
 
-      <p className="seo-suggestion__count">
-        {selected.length} of {MAX_TAGS} tags selected
-      </p>
+        <p className="seo-suggestion__count">
+          {selected.length} of {MAX_TAGS} tags selected
+        </p>
 
-      <AiSeoDisclosure
-        rationale={relevantRationale}
-        warnings={warnings}
-        observedText={observedText}
-      />
-    </aside>
+        <AiSeoDisclosure
+          rationale={relevantRationale}
+          warnings={warnings}
+          observedText={observedText}
+        />
+      </aside>
+    </div>
   );
 }
 

@@ -476,8 +476,8 @@ def test_editing_an_empty_brief_enables_ai_mode_after_autosave(
         _open_details_tab(page)
         ai_mode = page.get_by_role("button", name="AI Mode")
         assert ai_mode.is_disabled()
-        assert page.locator(".seo-details-head").get_by_role("button", name="AI Mode").count() == 1
-        page.locator(".seo-ai-mode-wrap").hover()
+        assert page.locator(".seo-brief-row").get_by_role("button", name="AI Mode").count() == 1
+        page.locator(".seo-ai-mode-anchor").hover()
         tip = page.get_by_role("tooltip")
         tip.wait_for(state="visible")
         assert "Brief filled in" in tip.inner_text()
@@ -537,7 +537,7 @@ def test_ai_mode_is_disabled_when_no_provider_is_ready(
 
         page.wait_for_timeout(500)  # let the readiness effect actually settle
         assert page.get_by_role("button", name="AI Mode").is_disabled()
-        page.locator(".seo-ai-mode-wrap").hover()
+        page.locator(".seo-ai-mode-anchor").hover()
         assert "no AI provider is ready" in page.get_by_role("tooltip").inner_text()
 
 
@@ -680,7 +680,7 @@ def test_cancel_during_generation_retains_no_proposal_and_frees_the_listing(
         before_bytes, before_tree = _workspace_snapshot(workspace_root)
 
         ai_mode.click()
-        page.get_by_text("Generating title, tag, and description").wait_for(state="visible")
+        page.get_by_text("Generating for", exact=False).wait_for(state="visible")
         assert ai_mode.is_disabled()
         cancel_button = page.get_by_role("button", name="Cancel")
         cancel_button.wait_for(state="visible")
@@ -693,7 +693,7 @@ def test_cancel_during_generation_retains_no_proposal_and_frees_the_listing(
 
         # The loading state clears, no drawer ever appears, and nothing
         # about the listing changed -- not even a lockfile.
-        page.get_by_text("Generating title, tag, and description").wait_for(state="hidden")
+        page.get_by_text("Generating for", exact=False).wait_for(state="hidden")
         assert page.get_by_role("region", name="title AI suggestions").count() == 0
         assert page.get_by_role("region", name="tag AI suggestions").count() == 0
         assert page.get_by_role("region", name="description lead AI suggestions").count() == 0
@@ -982,15 +982,16 @@ def test_common_copy_description_composes_into_the_printify_desired_document(
         page.get_by_role("heading", name=LISTING).wait_for(state="visible")
         _open_details_tab(page)
 
-        # -- The editor's own preview already shows the composed string
-        # -- the exact server-side `compose_description` call the
-        # deployment builder below will also make --
+        # -- The editor's preview is the exact server-side
+        # `compose_description` call the deployment builder below will
+        # also make. It stays behind the preview link until opened. --
         source_select = page.locator("#details-description-source")
         source_select.click()
         page.get_by_role("searchbox", name="Search description body sources").fill("comfort")
         page.get_by_role("option", name="Comfort Colors care & fit").click()
         expected_description = compose_description(_LEAD, _COMMON_COPY_BODY)
-        preview = page.locator("#details-description-preview")
+        page.get_by_role("button", name="Description preview").click()
+        preview = page.locator("#details-description-preview .description-preview")
         for _ in range(100):
             if preview.inner_text() == expected_description:
                 break

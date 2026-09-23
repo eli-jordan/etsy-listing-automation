@@ -58,6 +58,10 @@ describe("DetailsTab", () => {
 
     const brief = screen.getByRole("textbox", { name: "Brief" });
     expect(brief).toHaveValue("A hiking shirt.");
+    expect(brief).toHaveAttribute(
+      "placeholder",
+      "Describe the design and include any exact words shown in it.",
+    );
     fireEvent.change(brief, { target: { value: "A trail shirt." } });
     fireEvent.blur(brief);
     expect(onUpdate).toHaveBeenCalledWith({ brief: "A trail shirt." });
@@ -148,6 +152,8 @@ describe("DetailsTab", () => {
     expect(
       await screen.findByRole("option", { name: "Comfort Colors care and fit" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("common-copy/comfort-colors.md")).toBeInTheDocument();
+    expect(screen.getByText("common-copy/generic-care.md")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Generic care" })).toBeInTheDocument();
   });
 
@@ -162,6 +168,8 @@ describe("DetailsTab", () => {
     const search = screen.getByRole("searchbox", { name: "Search description body sources" });
     await userEvent.type(search, "care");
     expect(screen.getByRole("option", { name: /Comfort Colors/ })).toBeInTheDocument();
+    expect(screen.getByText("common-copy/comfort.md")).toBeInTheDocument();
+    expect(screen.queryByText("Care and fit")).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: /Shipping/ })).not.toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Write inline body" })).toBeInTheDocument();
   });
@@ -226,7 +234,7 @@ describe("DetailsTab", () => {
     });
   });
 
-  it("shows the selected common-copy file's title and summary", async () => {
+  it("hides the inline body when a common-copy file is selected", async () => {
     vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([
       {
         ref: "common-copy/comfort-colors.md",
@@ -246,15 +254,14 @@ describe("DetailsTab", () => {
         onFlush={vi.fn()}
       />,
     );
+    expect(await screen.findByLabelText("Description Body")).toHaveTextContent(
+      "Comfort Colors care and fit",
+    );
+    expect(screen.queryByLabelText("Description body")).not.toBeInTheDocument();
     expect(
-      await screen.findByText("Comfort Colors care and fit", {
-        selector: ".common-copy-meta__title",
-      }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Care and fit notes shared across every Comfort Colors listing."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("common-copy/comfort-colors.md")).toBeInTheDocument();
+      screen.queryByText("Care and fit notes shared across every Comfort Colors listing."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("common-copy/comfort-colors.md")).not.toBeInTheDocument();
   });
 
   it("shows a block issue for a description reference that will not resolve", () => {

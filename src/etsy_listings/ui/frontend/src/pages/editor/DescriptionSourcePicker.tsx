@@ -84,18 +84,25 @@ export function DescriptionSourcePicker({
             >
               Write inline body
             </button>
-            {matches.map((item) => (
-              <button
-                key={item.ref}
-                type="button"
-                role="option"
-                aria-selected={value === item.ref}
-                onClick={() => choose(item.ref)}
-              >
-                <strong>{item.title}</strong>
-                {item.summary && <span>{item.summary}</span>}
-              </button>
-            ))}
+            {matches.map((item) => {
+              const pathId = `description-source-path-${item.ref.replace(/[^a-z0-9]+/gi, "-")}`;
+              return (
+                <button
+                  key={item.ref}
+                  type="button"
+                  role="option"
+                  aria-selected={value === item.ref}
+                  aria-label={item.title}
+                  aria-describedby={pathId}
+                  onClick={() => choose(item.ref)}
+                >
+                  <strong>{item.title}</strong>
+                  <span id={pathId} className="description-source-picker__path">
+                    {item.ref}
+                  </span>
+                </button>
+              );
+            })}
             {matches.length === 0 && <p>No matching common copy</p>}
           </div>
         </div>
