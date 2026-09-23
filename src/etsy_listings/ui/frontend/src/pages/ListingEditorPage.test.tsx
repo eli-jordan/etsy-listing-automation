@@ -200,7 +200,7 @@ describe("ListingEditorPage", () => {
     await screen.findByText("designs/take-a-hike.png");
 
     fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
-    fireEvent.click(screen.getByRole("button", { name: /cosmic-cat/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
     await waitFor(() =>
       expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {

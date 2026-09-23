@@ -36,6 +36,7 @@ describe("AiChoiceDrawer", () => {
       />,
     );
     expect(screen.getByRole("region", { name: "title AI suggestions" })).toBeInTheDocument();
+    expect(screen.getByText("AI Mode")).toBeInTheDocument();
   });
 
   it("calls onChoose with the activated option", async () => {

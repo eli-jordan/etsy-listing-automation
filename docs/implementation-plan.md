@@ -810,8 +810,9 @@ proposal only as browser-local, independently accepted title, tag, and lead
 drawers; normal editor autosave owns every accepted value.
 
 *Exit:* invalid description sources and deployment copy are blocked with the
-offending field named; unavailable AI Mode is hidden; invalid, cancelled, or
-failed proposals change no listing, lockfile, workspace file, or remote state;
+offending field named; unavailable AI Mode stays visible but disabled; invalid,
+cancelled, or failed proposals change no listing, lockfile, workspace file, or
+remote state;
 and accepted choices survive through the normal autosave and deploy paths.
 
 ### Phase 5 — full UI

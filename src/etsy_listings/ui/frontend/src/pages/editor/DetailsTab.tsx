@@ -6,7 +6,9 @@ import type {
   ListingDetail,
   PricingPlanSummary,
 } from "../../types";
+import type { SaveState } from "../../hooks/useAutosave";
 import { AiChoiceDrawer } from "./aiSeo/AiChoiceDrawer";
+import { DescriptionSourcePicker } from "./DescriptionSourcePicker";
 import { AiSeoControl } from "./aiSeo/AiSeoControl";
 import { AiTagsDrawer } from "./aiSeo/AiTagsDrawer";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
@@ -40,13 +42,6 @@ function splitAmount(raw: string): { amount: string; currency: string } {
 const MAX_TITLE_LENGTH = 140;
 const MAX_TAGS = 13;
 
-type EtsyDescription = ListingDetail["etsy"]["description"];
-
-/** The sentinel the body-source `<select>` uses for "write it here" --
- * distinct from every real value that field can hold, since a `ref` is
- * always a `common-copy/...` path (`Workspace.common_copy_file`). */
-const INLINE_BODY = "inline";
-
 /** `check_copy_is_concrete`/`check_description_ref`
  * (`config/listing_validation.py`) file every description issue -- the empty
  * lead that blocks deployment, and a `ref` that will not resolve -- under
@@ -55,25 +50,31 @@ const INLINE_BODY = "inline";
  * page-level banner surfaces, but visible without leaving the tab. */
 const DESCRIPTION_ISSUE_WHERE = "Listing Details › Description";
 
-/** The current body source as the `<select>` reads it: the stored `ref`, or
- * the inline sentinel when neither `ref` nor `text` is set (a fresh draft
- * defaults to writing it here, matching PR2's prior default). */
-function bodySourceValue(description: EtsyDescription): string {
-  return description.ref ?? INLINE_BODY;
-}
-
 interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
   onFlush: () => void;
+  save?: SaveState | undefined;
 }
 
-export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
+export function DetailsTab({ detail, onUpdate, onFlush, save }: Props) {
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
   const [plans, setPlans] = useState<PricingPlanSummary[]>([]);
   const [commonCopy, setCommonCopy] = useState<CommonCopySummary[]>([]);
-  const aiSeo = useAiSeoMode(detail, onUpdate, onFlush);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewRef = useRef<HTMLDivElement>(null);
+  const previewButtonRef = useRef<HTMLButtonElement>(null);
+  const aiSeo = useAiSeoMode(detail, onUpdate, onFlush, save);
+  const [trackedPhase, setTrackedPhase] = useState(aiSeo.phase);
+  const [drawerMotion, setDrawerMotion] = useState(false);
+  if (aiSeo.phase !== trackedPhase) {
+    setTrackedPhase(aiSeo.phase);
+    if (trackedPhase === "loading") {
+      setDrawerMotion(aiSeo.proposal !== null && document.visibilityState === "visible");
+    }
+  }
+  if (aiSeo.proposal === null && drawerMotion) setDrawerMotion(false);
   const aiModeButtonRef = useRef<HTMLButtonElement>(null);
   const titleDrawerRef = useRef<HTMLDivElement>(null);
   const hadAiSeoProposal = useRef(false);
@@ -84,7 +85,6 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   const materials = detail.garment_materials ?? [];
   const description = detail.etsy.description;
   const descriptionIssues = detail.issues.filter((i) => i.where === DESCRIPTION_ISSUE_WHERE);
-  const selectedCommonCopy = commonCopy.find((c) => c.ref === description.ref);
 
   useEffect(() => {
     listEtsySections().then(setSections);
@@ -99,6 +99,25 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   useEffect(() => {
     listCommonCopy().then(setCommonCopy);
   }, []);
+
+  useEffect(() => {
+    if (!previewOpen) return;
+    function onPointerDown(event: PointerEvent) {
+      if (!previewRef.current?.contains(event.target as Node)) setPreviewOpen(false);
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        setPreviewOpen(false);
+        previewButtonRef.current?.focus();
+      }
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [previewOpen]);
 
   // Accessibility (`docs/ui-listing-seo-interactions.md` section 10):
   // "Keyboard focus moves to the first useful control in the first opened
@@ -119,8 +138,8 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
     hadAiSeoProposal.current = hasProposal;
   }, [aiSeo.proposal]);
 
-  function setBodySource(source: string) {
-    if (source === INLINE_BODY) {
+  function setBodySource(source: string | null) {
+    if (source === null) {
       onUpdate({
         etsy: { description: { ...description, text: description.text ?? "", ref: null } },
       });
@@ -147,39 +166,56 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   return (
     <div className="details-tab">
       <fieldset className="seo-details-fieldset">
-        <legend>Listing details</legend>
+        <legend className="seo-details-legend">Listing details</legend>
 
-        <AiSeoControl mode={aiSeo} buttonRef={aiModeButtonRef} />
+        <div className="seo-brief-row">
+          <div className="field">
+            <label htmlFor="details-brief">Brief</label>
+            <textarea
+              id="details-brief"
+              placeholder="Describe the design and include any exact words shown in it."
+              value={detail.brief}
+              onChange={(event) => onUpdate({ brief: event.target.value })}
+              onBlur={onFlush}
+            />
+          </div>
+          <AiSeoControl mode={aiSeo} buttonRef={aiModeButtonRef} />
+        </div>
 
         <div className={titleError ? "field field--invalid" : "field"}>
           <label htmlFor="details-title">Title</label>
-          <input
-            id="details-title"
-            className="input"
-            type="text"
-            placeholder="The title shoppers see on Etsy"
-            value={detail.etsy.title}
-            onChange={(event) => onUpdate({ etsy: { title: event.target.value } })}
-            onBlur={onFlush}
-          />
-          {titleError && <span className="field__error">{titleError}</span>}
-          <span className="field__hint">
-            {title.length} / {MAX_TITLE_LENGTH}
-          </span>
-          {aiSeo.proposal?.unresolved.title && (
-            <div ref={titleDrawerRef}>
-              <AiChoiceDrawer
-                field="title"
-                options={aiSeo.proposal.proposal.titles}
-                stale={aiSeo.stale}
-                rationale={aiSeo.proposal.proposal.rationale}
-                warnings={aiSeo.proposal.proposal.warnings}
-                observedText={aiSeo.proposal.proposal.observed_text}
-                onChoose={aiSeo.chooseTitle}
-                onReject={aiSeo.rejectTitle}
+          <div className="field__line">
+            <div className="field__stack">
+              <input
+                id="details-title"
+                className="input"
+                type="text"
+                placeholder="The title shoppers see on Etsy"
+                value={detail.etsy.title}
+                onChange={(event) => onUpdate({ etsy: { title: event.target.value } })}
+                onBlur={onFlush}
               />
+              {titleError && <span className="field__error">{titleError}</span>}
+              {aiSeo.proposal?.unresolved.title && (
+                <div ref={titleDrawerRef}>
+                  <AiChoiceDrawer
+                    enter={drawerMotion}
+                    field="title"
+                    options={aiSeo.proposal.proposal.titles}
+                    stale={aiSeo.stale}
+                    rationale={aiSeo.proposal.proposal.rationale}
+                    warnings={aiSeo.proposal.proposal.warnings}
+                    observedText={aiSeo.proposal.proposal.observed_text}
+                    onChoose={aiSeo.chooseTitle}
+                    onReject={aiSeo.rejectTitle}
+                  />
+                </div>
+              )}
             </div>
-          )}
+            <span className="field__count">
+              {title.length} / {MAX_TITLE_LENGTH}
+            </span>
+          </div>
         </div>
 
         <div className="field">
@@ -195,41 +231,46 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
             ))}
             {tags.length === 0 && <span className="chips__empty">No tags yet</span>}
           </div>
-          <input
-            id="details-tag-draft"
-            className="input tag-paste"
-            type="text"
-            placeholder="Type or paste tags, comma separated — press Enter to add"
-            value={tagDraft}
-            onChange={(event) => setTagDraft(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                commitTags();
-              }
-            }}
-            onBlur={commitTags}
-          />
-          <span className="field__hint">
-            {tags.length} / {MAX_TAGS}
-          </span>
-          {aiSeo.proposal?.unresolved.tags && (
-            <AiTagsDrawer
-              tags={aiSeo.proposal.proposal.tags}
-              selected={tags}
-              stale={aiSeo.stale}
-              rationale={aiSeo.proposal.proposal.rationale}
-              warnings={aiSeo.proposal.proposal.warnings}
-              observedText={aiSeo.proposal.proposal.observed_text}
-              onToggle={aiSeo.toggleTag}
-              onAcceptBest={aiSeo.acceptBestTags}
-              onClose={aiSeo.closeTags}
-            />
-          )}
+          <div className="field__line">
+            <div className="field__stack">
+              <input
+                id="details-tag-draft"
+                className="input tag-paste"
+                type="text"
+                placeholder="Type or paste tags, comma separated — press Enter to add"
+                value={tagDraft}
+                onChange={(event) => setTagDraft(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    commitTags();
+                  }
+                }}
+                onBlur={commitTags}
+              />
+              {aiSeo.proposal?.unresolved.tags && (
+                <AiTagsDrawer
+                  enter={drawerMotion}
+                  tags={aiSeo.proposal.proposal.tags}
+                  selected={tags}
+                  stale={aiSeo.stale}
+                  rationale={aiSeo.proposal.proposal.rationale}
+                  warnings={aiSeo.proposal.proposal.warnings}
+                  observedText={aiSeo.proposal.proposal.observed_text}
+                  onToggle={aiSeo.toggleTag}
+                  onAcceptBest={aiSeo.acceptBestTags}
+                  onClose={aiSeo.closeTags}
+                />
+              )}
+            </div>
+            <span className="field__count">
+              {tags.length} / {MAX_TAGS}
+            </span>
+          </div>
         </div>
 
         <div className="field">
-          <label htmlFor="details-description-lead">Description lead</label>
+          <label htmlFor="details-description-lead">Description Lead</label>
           <textarea
             id="details-description-lead"
             value={description.lead}
@@ -242,6 +283,7 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
           />
           {aiSeo.proposal?.unresolved.lead && (
             <AiChoiceDrawer
+              enter={drawerMotion}
               field="description lead"
               options={aiSeo.proposal.proposal.description_leads}
               stale={aiSeo.stale}
@@ -255,34 +297,17 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
         </div>
 
         <div className={descriptionIssues.length > 0 ? "field field--invalid" : "field"}>
-          <label htmlFor="details-description-source">Description body source</label>
-          <select
-            id="details-description-source"
-            className="input"
-            value={bodySourceValue(description)}
-            onChange={(event) => {
-              setBodySource(event.target.value);
+          <label htmlFor="details-description-source">Description Body</label>
+          <DescriptionSourcePicker
+            value={description.ref ?? null}
+            items={commonCopy}
+            onSelect={(source) => {
+              setBodySource(source);
               onFlush();
             }}
-          >
-            <option value={INLINE_BODY}>Write inline body</option>
-            {commonCopy.map((file) => (
-              <option key={file.ref} value={file.ref}>
-                {file.title}
-              </option>
-            ))}
-            {/* A stored ref this workspace's common-copy listing does not
-                offer (removed, renamed, or broken) still has to appear
-                selected -- otherwise the select would silently show
-                "Write inline body" for a listing that has not actually
-                changed source. `descriptionIssues` is what tells the seller
-                why it will not resolve. */}
-            {description.ref !== null && selectedCommonCopy === undefined && (
-              <option value={description.ref}>{description.ref}</option>
-            )}
-          </select>
+          />
 
-          {description.ref === null ? (
+          {description.ref === null && (
             <textarea
               id="details-description-text"
               aria-label="Description body"
@@ -294,16 +319,6 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
               }
               onBlur={onFlush}
             />
-          ) : (
-            <div className="common-copy-meta">
-              {selectedCommonCopy && (
-                <p className="common-copy-meta__title">{selectedCommonCopy.title}</p>
-              )}
-              {selectedCommonCopy?.summary && (
-                <p className="common-copy-meta__summary">{selectedCommonCopy.summary}</p>
-              )}
-              <p className="field__hint">{description.ref}</p>
-            </div>
           )}
 
           {descriptionIssues.map((issue, index) => (
@@ -313,17 +328,34 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
           ))}
         </div>
 
-        <div className="field">
-          <label htmlFor="details-description-preview">Description preview</label>
+        <div className="description-preview-control" ref={previewRef}>
+          <button
+            ref={previewButtonRef}
+            type="button"
+            className="description-preview-control__link"
+            aria-expanded={previewOpen}
+            aria-controls="details-description-preview"
+            onClick={() => setPreviewOpen((open) => !open)}
+          >
+            Description preview
+          </button>
           {/* The server's own join of lead + resolved body
               (`Workspace.compose_description`) -- rendered as-is, never
               rejoined here, so this can never disagree with what Printify,
               Etsy, and the deploy comparison view will actually send
               (AI SEO implementation plan, "Description and common-copy
               boundaries"). */}
-          <p id="details-description-preview" className="description-preview">
-            {detail.description_composed}
-          </p>
+          {previewOpen && (
+            <div
+              id="details-description-preview"
+              className="description-preview-card"
+              role="region"
+              aria-label="Description preview"
+            >
+              <strong className="description-preview-card__title">Description preview</strong>
+              <p className="description-preview">{detail.description_composed}</p>
+            </div>
+          )}
         </div>
 
         <div className={sectionError ? "field field--invalid" : "field"}>

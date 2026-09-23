@@ -5,7 +5,7 @@ import { EditableName } from "../components/EditableName";
 import { OpenOnMenu } from "../components/OpenOnMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
-import { useAutosave } from "../hooks/useAutosave";
+import { useAutosave, type SaveState } from "../hooks/useAutosave";
 import type { Issue, IssueTab, ListingDetail } from "../types";
 import { DeployControl } from "./editor/DeployControl";
 import { DesignSelect } from "./editor/DesignSelect";
@@ -135,6 +135,7 @@ function ListingEditorPageContent({
       detail={detail}
       update={update}
       flush={flush}
+      save={save}
       head={
         <EditorHead
           detail={detail}
@@ -217,11 +218,13 @@ export function ListingEditorShell({
   detail,
   update,
   flush,
+  save,
   head,
 }: {
   detail: ListingDetail;
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
+  save?: SaveState;
   head: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("variants");
@@ -263,7 +266,9 @@ export function ListingEditorShell({
 
       {tab === "variants" && <VariantsTab detail={detail} onUpdate={update} />}
       {tab === "images" && <ImagesTab detail={detail} onUpdate={update} />}
-      {tab === "details" && <DetailsTab detail={detail} onUpdate={update} onFlush={flush} />}
+      {tab === "details" && (
+        <DetailsTab detail={detail} onUpdate={update} onFlush={flush} save={save} />
+      )}
     </div>
   );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getWorkspace } from "../../../api/listings";
+import type { SaveState } from "../../../hooks/useAutosave";
 import { getSeoReadiness, requestSeoProposal } from "../../../api/seo";
 import type { ListingDetail } from "../../../types";
 import {
@@ -37,10 +38,11 @@ const UNSCOPED_WORKSPACE = "workspace";
 export type AiSeoPhase = "idle" | "loading" | "failed";
 
 export interface AiSeoMode {
-  /** Whether to render the AI Mode control at all -- the settled "Entry
-   * point" decision is hidden, not disabled, so a caller renders nothing
-   * rather than a disabled button when this is `false`. */
+  /** Whether the AI Mode control can start a request. The button stays
+   * visible and is disabled while this is false. */
   available: boolean;
+  requirements: { label: string; ready: boolean }[];
+  reason: string | null;
   phase: AiSeoPhase;
   /** The current pending proposal, or `null` once every drawer has resolved
    * (or none was ever requested). */
@@ -70,16 +72,18 @@ export function useAiSeoMode(
   detail: ListingDetail,
   onUpdate: (patch: Record<string, unknown>) => void,
   onFlush: () => void,
+  save?: SaveState,
 ): AiSeoMode {
   const [shopName, setShopName] = useState<string | null>(null);
   // Only what the readiness *endpoint* answered -- whether the control is
-  // actually shown also requires the client-observable prerequisites below,
+  // enabled also requires the client-observable prerequisites below,
   // computed straight from `detail` rather than mirrored into more state, so
-  // clearing the brief hides the control immediately without waiting on
+  // clearing the brief disables the control immediately without waiting on
   // another round trip (or a synchronous `setState` inside the effect below,
   // which `react-hooks/set-state-in-effect` flags for good reason: nothing
   // here needs the extra render that resetting this to `false` would cost).
   const [remoteReady, setRemoteReady] = useState(false);
+  const [remoteReason, setRemoteReason] = useState<string | null>(null);
   const [phase, setPhase] = useState<AiSeoPhase>("idle");
   const [stored, setStored] = useState<StoredAiSeoProposal | null>(null);
   const controllerRef = useRef<AbortController | null>(null);
@@ -110,6 +114,8 @@ export function useAiSeoMode(
   // this codebase leaves `brief` empty except the ones this feature's own
   // tests write.
   const prerequisitesMet = name !== "" && hasDesign && hasBrief;
+  const saved = save === undefined || save.kind === "saved";
+  const canCheck = prerequisitesMet && saved;
 
   useEffect(() => {
     if (!prerequisitesMet) return;
@@ -133,22 +139,37 @@ export function useAiSeoMode(
     [workspaceScope, listingScope],
   );
 
+  // A check after an edit can read the old file. Recheck when autosave
+  // succeeds, even if modified_at is unchanged.
   useEffect(() => {
-    if (!prerequisitesMet) return;
+    if (!canCheck) return;
     let current = true;
     getSeoReadiness(name)
       .then((response) => {
-        if (current) setRemoteReady(response.ready);
+        if (current) {
+          setRemoteReady(response.ready);
+          setRemoteReason(response.reason ?? null);
+        }
       })
       .catch(() => {
-        if (current) setRemoteReady(false);
+        if (current) {
+          setRemoteReady(false);
+          setRemoteReason("Could not check AI setup.");
+        }
       });
     return () => {
       current = false;
     };
-  }, [prerequisitesMet, name]);
+  }, [canCheck, name, detail.modified_at, save]);
 
-  const ready = prerequisitesMet && remoteReady;
+  const ready = canCheck && remoteReady;
+  const reason = canCheck && !remoteReady ? (remoteReason ?? "Checking AI setup...") : null;
+  const requirements = [
+    { label: "Saved listing", ready: name !== "" && saved },
+    { label: "Design selected", ready: hasDesign },
+    { label: "Brief filled in", ready: hasBrief },
+    { label: "SEO prompt and AI provider ready", ready: canCheck && remoteReady },
+  ];
 
   // Restored during render, not from an effect, the same way `PreviewPanel`
   // adjusts state while rendering rather than paying for a second render:
@@ -259,6 +280,8 @@ export function useAiSeoMode(
 
   return {
     available: ready,
+    requirements,
+    reason,
     phase,
     proposal: stored,
     stale,

@@ -169,7 +169,12 @@ export function useAutosave(
       setDetail((current) => ({ ...current, field_errors: fresh.field_errors }));
       return;
     }
-    setDetail(fresh);
+    // Keep edits made while a save was in flight visible.
+    setDetail(
+      pending.current === null
+        ? fresh
+        : (coerceDesign(mergePatch(fresh, pending.current)) as ListingDetail),
+    );
   }, []);
 
   const create = useCallback(
@@ -208,10 +213,12 @@ export function useAutosave(
       }
       // A loop, not recursion, so a deferred continuation (below) can pick up
       // whatever landed in `pending` while the previous PATCH was in flight,
-      // one request at a time, without the function calling itself.
+      // one request at a time, without the function calling itself. The React
+      // compiler cannot memoize a `useCallback` that calls itself.
       for (;;) {
         const patch = pending.current;
-        if (patch === null) return;
+        const currentName = savedName.current;
+        if (patch === null || currentName === null) return;
         // Cleared only once the PATCH actually lands -- a rejection (dropped
         // connection, a 5xx) must leave the edit right where the next flush
         // (the next debounce, or the next `update()`, which merges onto
@@ -222,9 +229,11 @@ export function useAutosave(
         patching.current = true;
         setSave({ kind: "saving" });
         try {
-          const fresh = await patchListing(savedName.current, patch);
+          const fresh = await patchListing(currentName, patch);
           applyResponse(fresh);
-          setSave(saved());
+          // A newer edit may already be waiting. Marking this one saved would
+          // hide it until the next iteration starts.
+          if (pending.current === null) setSave(saved());
         } catch {
           // Swallowed, not rethrown: nothing that calls `flush()` (the
           // debounce timer, `onBlur`, unmount) is set up to catch it, and a

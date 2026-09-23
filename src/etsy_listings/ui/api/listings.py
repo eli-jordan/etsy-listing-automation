@@ -27,6 +27,7 @@ directory rather than the workspace as a whole.
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -500,7 +501,7 @@ def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
         Listing.model_validate(merged, context={"currency": workspace.defaults.etsy.currency})
     except ValidationError as exc:
         return _detail(workspace, name, field_errors=_field_errors(exc))
-    path.write_text(yaml.safe_dump(merged, sort_keys=False), encoding="utf-8")
+    _replace_listing_yaml(path, merged)
     return _detail(workspace, name)
 
 
@@ -520,11 +521,22 @@ def delete_listing(target: Existing) -> ListingSummary | Response:
         path = workspace.listing_file(name)
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         raw["lifecycle"] = "deleted"
-        path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+        _replace_listing_yaml(path, raw)
         facts = WorkspaceFacts.gather(workspace)
         return _summarize_listing(workspace, facts, name, live=False, etsy_state=etsy_state)
     workspace.remove_listing(name)
     return Response(status_code=204)
+
+
+def _replace_listing_yaml(path: Path, document: Mapping[str, Any]) -> None:
+    """Replace ``listing.yaml`` without a window where a reader sees it empty.
+
+    ``Path.write_text`` truncates first. The editor's browser tests read the
+    file while a blur is flushing, and an empty read is not a document.
+    """
+    temporary = path.with_name(path.name + ".tmp")
+    temporary.write_text(yaml.safe_dump(dict(document), sort_keys=False), encoding="utf-8")
+    os.replace(temporary, path)
 
 
 def _describe_draft(

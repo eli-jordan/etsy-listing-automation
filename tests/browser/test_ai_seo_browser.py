@@ -132,9 +132,14 @@ def _seed_prompt(workspace_root: Path) -> Path:
 
 
 def _listing_yaml(workspace_root: Path, name: str = LISTING) -> dict[str, Any]:
-    return yaml.safe_load(
-        (workspace_root / "listings" / name / "listing.yaml").read_text(encoding="utf-8")
-    )
+    path = workspace_root / "listings" / name / "listing.yaml"
+    # A flush replaces the file. A read that lands on the empty moment
+    # between truncate and write is not the document; try once more.
+    for _ in range(2):
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            return loaded
+    raise AssertionError(f"{path} did not contain a listing document")
 
 
 def _workspace_snapshot(workspace_root: Path) -> tuple[bytes, list[Path]]:
@@ -455,15 +460,64 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
 
 
 # ===========================================================================
-# 2. Unavailable AI Mode: hidden, not disabled, for each of the settled
-#    "Entry point" prerequisites this layer can actually exercise from the
-#    browser (a saved listing with a design and a brief is already what
-#    `take-a-hike` is, so these two vary the two *server-side* prerequisites:
-#    a ready provider, and `prompts/seo.md`).
+# 2. AI Mode stays visible but disabled until its prerequisites are ready.
+#    The brief test starts empty and fills it through the real editor; the
+#    other two exercise provider and prompt readiness.
 # ===========================================================================
 
 
-def test_ai_mode_is_hidden_when_no_provider_is_ready(
+def test_editing_an_empty_brief_enables_ai_mode_after_autosave(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    _seed_prompt(workspace_root)
+    edit_listing(workspace_root, brief="")
+    provider = _ready_provider()
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.get_by_role("heading", name=LISTING).wait_for(state="visible")
+        _open_details_tab(page)
+        ai_mode = page.get_by_role("button", name="AI Mode")
+        assert ai_mode.is_disabled()
+        assert page.locator(".seo-brief-row").get_by_role("button", name="AI Mode").count() == 1
+        page.locator(".seo-ai-mode-anchor").hover()
+        tip = page.get_by_role("tooltip")
+        tip.wait_for(state="visible")
+        assert "Brief filled in" in tip.inner_text()
+        fills = page.locator(".seo-ai-mode svg path").evaluate_all(
+            "paths => paths.map(path => getComputedStyle(path).fill)"
+        )
+        assert fills == ["rgb(118, 85, 201)", "rgb(220, 94, 154)"]
+
+        brief = page.get_by_role("textbox", name="Brief")
+        assert brief.input_value() == ""
+        brief.fill("A retro sunset tee that says TAKE A HIKE.")
+        page.locator("#details-title").click()  # blur and flush the brief
+
+        for _ in range(100):
+            if (
+                _listing_yaml(workspace_root)["brief"]
+                == "A retro sunset tee that says TAKE A HIKE."
+            ):
+                break
+            page.wait_for_timeout(100)
+        else:
+            raise AssertionError("brief edit never reached listing.yaml")
+
+        # The first readiness request may have raced the write and seen the
+        # old empty brief; the saved response must trigger another check.
+        page.wait_for_function("document.querySelector('.seo-ai-mode')?.disabled === false")
+        assert ai_mode.is_enabled()
+
+        ai_mode.click()
+        page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
+        assert len(provider.requests) == 1
+        assert provider.requests[0].brief == "A retro sunset tee that says TAKE A HIKE."
+
+
+def test_ai_mode_is_disabled_when_no_provider_is_ready(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     _seed_prompt(workspace_root)
@@ -479,9 +533,7 @@ def test_ai_mode_is_hidden_when_no_provider_is_ready(
         page.get_by_role("heading", name=LISTING).wait_for(state="visible")
         _open_details_tab(page)
 
-        # The readiness endpoint itself explains why, for a developer or
-        # support reader (`ui/api/seo.py`'s own docstring) -- the control
-        # is still absent, not a disabled button with a tooltip.
+        # The readiness endpoint explains why the visible control is disabled.
         readiness = page.request.get(f"{base_url}/api/listings/{LISTING}/ai-seo/readiness")
         body = readiness.json()
         assert body["ready"] is False
@@ -489,10 +541,12 @@ def test_ai_mode_is_hidden_when_no_provider_is_ready(
         assert "claude was not found on PATH" in body["reason"]
 
         page.wait_for_timeout(500)  # let the readiness effect actually settle
-        assert page.get_by_role("button", name="AI Mode").count() == 0
+        assert page.get_by_role("button", name="AI Mode").is_disabled()
+        page.locator(".seo-ai-mode-anchor").hover()
+        assert "no AI provider is ready" in page.get_by_role("tooltip").inner_text()
 
 
-def test_ai_mode_is_hidden_without_prompts_seo_md(
+def test_ai_mode_is_disabled_without_prompts_seo_md(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     # Deliberately no `_seed_prompt` call -- `prompts/` does not even exist.
@@ -511,7 +565,7 @@ def test_ai_mode_is_hidden_without_prompts_seo_md(
         assert "seo.md" in body["reason"]
 
         page.wait_for_timeout(500)
-        assert page.get_by_role("button", name="AI Mode").count() == 0
+        assert page.get_by_role("button", name="AI Mode").is_disabled()
         # Nothing about the missing prompt file is this feature's to fix
         # on its own -- `setup` seeds it (implementation plan, "Prompt").
         assert not (workspace_root / PROMPTS_DIR / SEO_PROMPT_FILE).exists()
@@ -631,7 +685,7 @@ def test_cancel_during_generation_retains_no_proposal_and_frees_the_listing(
         before_bytes, before_tree = _workspace_snapshot(workspace_root)
 
         ai_mode.click()
-        page.get_by_text("Generating title, tag, and description").wait_for(state="visible")
+        page.get_by_text("Generating for", exact=False).wait_for(state="visible")
         assert ai_mode.is_disabled()
         cancel_button = page.get_by_role("button", name="Cancel")
         cancel_button.wait_for(state="visible")
@@ -644,7 +698,7 @@ def test_cancel_during_generation_retains_no_proposal_and_frees_the_listing(
 
         # The loading state clears, no drawer ever appears, and nothing
         # about the listing changed -- not even a lockfile.
-        page.get_by_text("Generating title, tag, and description").wait_for(state="hidden")
+        page.get_by_text("Generating for", exact=False).wait_for(state="hidden")
         assert page.get_by_role("region", name="title AI suggestions").count() == 0
         assert page.get_by_role("region", name="tag AI suggestions").count() == 0
         assert page.get_by_role("region", name="description lead AI suggestions").count() == 0
@@ -933,13 +987,16 @@ def test_common_copy_description_composes_into_the_printify_desired_document(
         page.get_by_role("heading", name=LISTING).wait_for(state="visible")
         _open_details_tab(page)
 
-        # -- The editor's own preview already shows the composed string
-        # -- the exact server-side `compose_description` call the
-        # deployment builder below will also make --
+        # -- The editor's preview is the exact server-side
+        # `compose_description` call the deployment builder below will
+        # also make. It stays behind the preview link until opened. --
         source_select = page.locator("#details-description-source")
-        source_select.select_option(label="Comfort Colors care & fit")
+        source_select.click()
+        page.get_by_role("searchbox", name="Search description body sources").fill("comfort")
+        page.get_by_role("option", name="Comfort Colors care & fit").click()
         expected_description = compose_description(_LEAD, _COMMON_COPY_BODY)
-        preview = page.locator("#details-description-preview")
+        page.get_by_role("button", name="Description preview").click()
+        preview = page.locator("#details-description-preview .description-preview")
         for _ in range(100):
             if preview.inner_text() == expected_description:
                 break

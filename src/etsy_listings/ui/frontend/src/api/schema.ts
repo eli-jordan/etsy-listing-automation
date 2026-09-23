@@ -397,9 +397,8 @@ export interface paths {
     /**
      * Get Seo Readiness
      * @description Whether **AI Mode** may be offered for this saved listing right now
-     *     -- the one call the future frontend (PR7) makes to decide whether to
-     *     render the control at all (hidden, not disabled, per the settled
-     *     "Entry point" decision). Read-only: every check here, including each
+     *     -- the call the frontend makes to decide whether to enable the always
+     *     visible control. Read-only: every check here, including each
      *     provider's own `readiness()`, is a local probe (a file's existence, a
      *     fast `--help`/`login status` subprocess) that changes nothing.
      */
@@ -2188,11 +2187,10 @@ export interface components {
     };
     /**
      * SeoReadinessResponse
-     * @description Whether AI Mode may be offered for one saved listing right now
-     *     (implementation plan, "Entry point"). The frontend (PR7) uses this to
-     *     decide whether to render the control at all -- hidden, not disabled, so
-     *     ``reason`` is prose for a developer/support reader, never shown as a
-     *     disabled-button tooltip.
+     * @description Whether AI Mode can be enabled for one saved listing right now
+     *     (implementation plan, "Entry point"). The frontend leaves the control
+     *     visible and disabled when ``ready`` is false; ``reason`` explains why
+     *     to a developer or support reader.
      */
     SeoReadinessResponse: {
       /** Ready */

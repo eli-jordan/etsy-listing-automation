@@ -22,6 +22,7 @@ export function AiChoiceDrawer({
   observedText,
   onChoose,
   onReject,
+  enter = false,
 }: {
   field: Field;
   options: string[];
@@ -31,37 +32,64 @@ export function AiChoiceDrawer({
   observedText: string;
   onChoose: (value: string) => void;
   onReject: () => void;
+  /** Play the draw-out only when generation finishes while this page is open. */
+  enter?: boolean;
 }) {
   const relevantRationale = rationale.filter((entry) => entry.used_in.includes(usedInKey(field)));
 
   return (
-    <aside
-      className={stale ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
-      role="region"
-      aria-label={`${field} AI suggestions`}
+    <div
+      className={enter ? "seo-suggestion-slot seo-suggestion-slot--draw" : "seo-suggestion-slot"}
     >
-      <div className="seo-suggestion__topline">
-        <span>{stale ? "Suggestions are out of date" : "Choose one suggestion"}</span>
-        <button className="seo-suggestion__quiet-action" onClick={onReject} type="button">
-          Reject all
-        </button>
-      </div>
-
-      <div className="seo-choice-list">
-        {options.map((option, index) => (
-          <button disabled={stale} key={option} onClick={() => onChoose(option)} type="button">
-            <span>{index + 1}</span>
-            {option}
+      <aside
+        className={stale ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
+        role="region"
+        aria-label={`${field} AI suggestions`}
+      >
+        <div className="seo-suggestion__topline">
+          <div className="seo-suggestion__identity">
+            <AiModeMark />
+            <span>{stale ? "Suggestions are out of date" : "Choose one suggestion"}</span>
+          </div>
+          <button className="seo-suggestion__quiet-action" onClick={onReject} type="button">
+            Reject all
           </button>
-        ))}
-      </div>
+        </div>
 
-      <AiSeoDisclosure
-        rationale={relevantRationale}
-        warnings={warnings}
-        observedText={observedText}
-      />
-    </aside>
+        <div className="seo-choice-list">
+          {options.map((option, index) => (
+            <button disabled={stale} key={option} onClick={() => onChoose(option)} type="button">
+              <span>{index + 1}</span>
+              {option}
+            </button>
+          ))}
+        </div>
+
+        <AiSeoDisclosure
+          rationale={relevantRationale}
+          warnings={warnings}
+          observedText={observedText}
+        />
+      </aside>
+    </div>
+  );
+}
+
+export function AiModeMark() {
+  return (
+    <span className="seo-suggestion__brand">
+      <svg aria-hidden="true" viewBox="0 0 20 20" width="13" height="13">
+        <path
+          className="seo-sparkle-primary"
+          d="M8.2 2.2c.5 3.1 1.5 4.1 4.6 4.6-3.1.5-4.1 1.5-4.6 4.6-.5-3.1-1.5-4.1-4.6-4.6 3.1-.5 4.1-1.5 4.6-4.6Z"
+        />
+        <path
+          className="seo-sparkle-secondary"
+          d="M14.5 11.2c.3 2 1 2.7 3 3-2 .3-2.7 1-3 3-.3-2-1-2.7-3-3 2-.3 2.7-1 3-3Z"
+        />
+      </svg>
+      AI Mode
+    </span>
   );
 }
 

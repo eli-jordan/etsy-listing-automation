@@ -45,6 +45,29 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
 }
 
 describe("DetailsTab", () => {
+  it("shows and edits the brief through normal autosave", () => {
+    const onUpdate = vi.fn();
+    const onFlush = vi.fn();
+    render(
+      <DetailsTab
+        detail={detail({ brief: "A hiking shirt." })}
+        onUpdate={onUpdate}
+        onFlush={onFlush}
+      />,
+    );
+
+    const brief = screen.getByRole("textbox", { name: "Brief" });
+    expect(brief).toHaveValue("A hiking shirt.");
+    expect(brief).toHaveAttribute(
+      "placeholder",
+      "Describe the design and include any exact words shown in it.",
+    );
+    fireEvent.change(brief, { target: { value: "A trail shirt." } });
+    fireEvent.blur(brief);
+    expect(onUpdate).toHaveBeenCalledWith({ brief: "A trail shirt." });
+    expect(onFlush).toHaveBeenCalled();
+  });
+
   it("renders the current title, description lead and tags", () => {
     render(
       <DetailsTab
@@ -54,7 +77,7 @@ describe("DetailsTab", () => {
       />,
     );
     expect(screen.getByLabelText("Title")).toHaveValue("Take A Hike Tee");
-    expect(screen.getByLabelText("Description lead")).toHaveValue("");
+    expect(screen.getByLabelText("Description Lead")).toHaveValue("");
     expect(screen.getByText("Botanical")).toBeInTheDocument();
     expect(screen.getByText("Gift")).toBeInTheDocument();
   });
@@ -73,7 +96,7 @@ describe("DetailsTab", () => {
         onFlush={vi.fn()}
       />,
     );
-    fireEvent.change(screen.getByLabelText("Description lead"), {
+    fireEvent.change(screen.getByLabelText("Description Lead"), {
       target: { value: "A relaxed tee." },
     });
     expect(onUpdate).toHaveBeenCalledWith({
@@ -94,7 +117,7 @@ describe("DetailsTab", () => {
         onFlush={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("Description body source")).toHaveValue("inline");
+    expect(screen.getByLabelText("Description Body")).toHaveTextContent("Write inline body");
     expect(screen.getByLabelText("Description body")).toHaveValue("Printed to order.");
   });
 
@@ -125,10 +148,30 @@ describe("DetailsTab", () => {
       { ref: "common-copy/generic-care.md", title: "Generic care" },
     ]);
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    await userEvent.click(screen.getByLabelText("Description Body"));
     expect(
       await screen.findByRole("option", { name: "Comfort Colors care and fit" }),
     ).toBeInTheDocument();
+    expect(screen.getByText("common-copy/comfort-colors.md")).toBeInTheDocument();
+    expect(screen.getByText("common-copy/generic-care.md")).toBeInTheDocument();
     expect(screen.getByRole("option", { name: "Generic care" })).toBeInTheDocument();
+  });
+
+  it("filters common copy by title and summary", async () => {
+    vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([
+      { ref: "common-copy/comfort.md", title: "Comfort Colors", summary: "Care and fit" },
+      { ref: "common-copy/shipping.md", title: "Shipping", summary: "Delivery notes" },
+    ]);
+    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    await userEvent.click(screen.getByLabelText("Description Body"));
+    const search = screen.getByRole("searchbox", { name: "Search description body sources" });
+    await userEvent.type(search, "care");
+    expect(screen.getByRole("option", { name: /Comfort Colors/ })).toBeInTheDocument();
+    expect(screen.getByText("common-copy/comfort.md")).toBeInTheDocument();
+    expect(screen.queryByText("Care and fit")).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: /Shipping/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Write inline body" })).toBeInTheDocument();
   });
 
   it("selecting a common-copy file sets the ref and clears any inline text", async () => {
@@ -148,11 +191,10 @@ describe("DetailsTab", () => {
         onFlush={vi.fn()}
       />,
     );
-    await screen.findByRole("option", { name: "Comfort Colors care and fit" });
-
-    fireEvent.change(screen.getByLabelText("Description body source"), {
-      target: { value: "common-copy/comfort-colors.md" },
-    });
+    await userEvent.click(screen.getByLabelText("Description Body"));
+    await userEvent.click(
+      await screen.findByRole("option", { name: "Comfort Colors care and fit" }),
+    );
 
     expect(onUpdate).toHaveBeenCalledWith({
       etsy: {
@@ -165,7 +207,7 @@ describe("DetailsTab", () => {
     });
   });
 
-  it("switching back to inline body clears any stored ref", () => {
+  it("switching back to inline body clears any stored ref", async () => {
     const onUpdate = vi.fn();
     render(
       <DetailsTab
@@ -184,16 +226,15 @@ describe("DetailsTab", () => {
       />,
     );
 
-    fireEvent.change(screen.getByLabelText("Description body source"), {
-      target: { value: "inline" },
-    });
+    await userEvent.click(screen.getByLabelText("Description Body"));
+    await userEvent.click(screen.getByRole("option", { name: "Write inline body" }));
 
     expect(onUpdate).toHaveBeenCalledWith({
       etsy: { description: { lead: "A relaxed tee.", text: "", ref: null } },
     });
   });
 
-  it("shows the selected common-copy file's title and summary", async () => {
+  it("hides the inline body when a common-copy file is selected", async () => {
     vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([
       {
         ref: "common-copy/comfort-colors.md",
@@ -213,14 +254,14 @@ describe("DetailsTab", () => {
         onFlush={vi.fn()}
       />,
     );
-    await screen.findByRole("option", { name: "Comfort Colors care and fit" });
+    expect(await screen.findByLabelText("Description Body")).toHaveTextContent(
+      "Comfort Colors care and fit",
+    );
+    expect(screen.queryByLabelText("Description body")).not.toBeInTheDocument();
     expect(
-      screen.getByText("Comfort Colors care and fit", { selector: ".common-copy-meta__title" }),
-    ).toBeInTheDocument();
-    expect(
-      screen.getByText("Care and fit notes shared across every Comfort Colors listing."),
-    ).toBeInTheDocument();
-    expect(screen.getByText("common-copy/comfort-colors.md")).toBeInTheDocument();
+      screen.queryByText("Care and fit notes shared across every Comfort Colors listing."),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("common-copy/comfort-colors.md")).not.toBeInTheDocument();
   });
 
   it("shows a block issue for a description reference that will not resolve", () => {
@@ -285,9 +326,15 @@ describe("DetailsTab", () => {
         onFlush={vi.fn()}
       />,
     );
-    expect(
-      screen.getByText("A relaxed tee. Printed to order. (composed server-side)"),
-    ).toBeInTheDocument();
+    const previewLink = screen.getByRole("button", { name: "Description preview" });
+    expect(screen.queryByRole("region", { name: "Description preview" })).not.toBeInTheDocument();
+    fireEvent.click(previewLink);
+    expect(screen.getByRole("region", { name: "Description preview" })).toHaveTextContent(
+      "A relaxed tee. Printed to order. (composed server-side)",
+    );
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("region", { name: "Description preview" })).not.toBeInTheDocument();
+    expect(previewLink).toHaveFocus();
   });
 
   it("typing in the title updates etsy.title", () => {
@@ -517,9 +564,84 @@ describe("DetailsTab AI Mode", () => {
     };
   }
 
-  it("does not render AI Mode without a design and brief", () => {
+  it("shows disabled AI Mode without a design and brief", () => {
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
-    expect(screen.queryByRole("button", { name: /AI Mode/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
+  });
+
+  it("rechecks AI Mode after a new brief is saved", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    const readiness = vi
+      .spyOn(seoApi, "getSeoReadiness")
+      .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
+      .mockResolvedValueOnce({ ready: true });
+    const { rerender } = render(
+      <DetailsTab detail={readyDetail({ brief: "" })} onUpdate={vi.fn()} onFlush={vi.fn()} />,
+    );
+
+    expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
+    expect(readiness).not.toHaveBeenCalled();
+
+    rerender(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    await waitFor(() => expect(readiness).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
+
+    rerender(
+      <DetailsTab
+        detail={readyDetail({ modified_at: "2026-09-17T10:00:01Z" })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /AI Mode/i })).toBeEnabled());
+    expect(readiness).toHaveBeenCalledTimes(2);
+  });
+
+  it("rechecks readiness after save even when modified_at is unchanged", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    const readiness = vi
+      .spyOn(seoApi, "getSeoReadiness")
+      .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
+      .mockResolvedValueOnce({ ready: true });
+    const current = readyDetail();
+    const { rerender } = render(
+      <DetailsTab
+        detail={current}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+        save={{ kind: "saved", savedAt: 1 }}
+      />,
+    );
+    await waitFor(() => expect(readiness).toHaveBeenCalledTimes(1));
+    expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
+
+    rerender(
+      <DetailsTab
+        detail={current}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+        save={{ kind: "saving" }}
+      />,
+    );
+    rerender(
+      <DetailsTab
+        detail={current}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+        save={{ kind: "saved", savedAt: 2 }}
+      />,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /AI Mode/i })).toBeEnabled());
+    expect(readiness).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps AI Mode disabled when the readiness endpoint says no", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    await waitFor(() => expect(seoApi.getSeoReadiness).toHaveBeenCalled());
+    expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
   });
 
   it("renders AI Mode once the readiness endpoint says ready", async () => {
@@ -528,7 +650,7 @@ describe("DetailsTab AI Mode", () => {
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
-    expect(await screen.findByRole("button", { name: /AI Mode/i })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: /AI Mode/i })).toBeEnabled();
   });
 
   it("reveals all three drawers after a successful request and focuses the first title option", async () => {

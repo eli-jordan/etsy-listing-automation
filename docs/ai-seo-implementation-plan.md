@@ -33,7 +33,7 @@ different credentials boundary.
 
 | Topic | Decision |
 |---|---|
-| Entry point | AI Mode appears only for a saved listing with a selected design, a non-empty brief, `prompts/seo.md`, and at least one ready provider. It is hidden rather than disabled when unavailable. |
+| Entry point | AI Mode stays visible in Listing Details and is disabled until the listing is saved with a selected design, a non-empty brief, `prompts/seo.md`, and at least one ready provider. The brief is editable in Listing Details. |
 | Providers | v1 tries Codex, then Claude. Grok is deferred until an API-backed integration. Each CLI uses its currently configured account model; there is no model picker or provider settings UI. |
 | Provider process | Run in the real workspace with full coding-agent tools constrained to read-only mode, automatic non-interactive approval, no durable provider session, and access to all readable workspace files. This explicitly includes readable workspace secrets and caches. |
 | Timeout and retries | The entire request, including a repair and provider fallback, has a 60-second deadline. A malformed response gets one repair attempt from the same provider. Only recognised provider-unavailable, authentication-quota, or rate-limit failures fall through to Claude. Other failures show **Try again**. |
@@ -172,7 +172,7 @@ the total remains below 3,000 changed lines.
 2. Amend `docs/implementation-plan.md` to remove the Generate stage and old A9
    review decision, replacing them with the browser-only proposal lifecycle.
 3. Update `docs/ui-listing-seo-interactions.md` for saved-listing-only entry,
-   hidden-unavailable behavior, cancellation, provider fallback, the final
+   visible-disabled behavior, cancellation, provider fallback, the final
    description model, and direct conversion.
 4. Keep the repository-root `seo_prompt.md` as the drafting source only; it is
    not a runtime workspace file.
@@ -285,7 +285,7 @@ listing behavior, timeout/cancellation, fallback errors, and no-write behavior.
 
 **Target: about 2,950 lines.**
 
-1. Add the hidden-unavailable AI Mode control and accessible loading, Cancel,
+1. Add the always-visible AI Mode control and accessible loading, Cancel,
    failure, and Try again states.
 2. Add title, tag, and lead drawers with the approved independent acceptance
    behavior; expose warnings, rationale, and observed OCR as disclosures.

@@ -16,11 +16,8 @@ import type { SeoProposalResponse, SeoReadinessResponse } from "../types";
 
 export class SeoApiError extends Error {}
 
-/** Whether **AI Mode** may be offered for this saved listing right now
- * (`GET /api/listings/{name}/ai-seo/readiness`). `reason` exists on the wire
- * for a developer/support reader; per the settled "Entry point" decision the
- * control is hidden rather than disabled, so no caller here surfaces it as a
- * tooltip. */
+/** Whether **AI Mode** can be enabled for this saved listing right now.
+ * The control stays visible and disabled when the response is not ready. */
 export async function getSeoReadiness(name: string): Promise<SeoReadinessResponse> {
   const { data, error } = await api.GET("/api/listings/{name}/ai-seo/readiness", {
     params: { path: { name } },

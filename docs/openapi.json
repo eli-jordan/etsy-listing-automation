@@ -2936,7 +2936,7 @@
         "type": "object"
       },
       "SeoReadinessResponse": {
-        "description": "Whether AI Mode may be offered for one saved listing right now\n(implementation plan, \"Entry point\"). The frontend (PR7) uses this to\ndecide whether to render the control at all -- hidden, not disabled, so\n``reason`` is prose for a developer/support reader, never shown as a\ndisabled-button tooltip.",
+        "description": "Whether AI Mode can be enabled for one saved listing right now\n(implementation plan, \"Entry point\"). The frontend leaves the control\nvisible and disabled when ``ready`` is false; ``reason`` explains why\nto a developer or support reader.",
         "properties": {
           "ready": {
             "title": "Ready",
@@ -4319,7 +4319,7 @@
     },
     "/api/listings/{name}/ai-seo/readiness": {
       "get": {
-        "description": "Whether **AI Mode** may be offered for this saved listing right now\n-- the one call the future frontend (PR7) makes to decide whether to\nrender the control at all (hidden, not disabled, per the settled\n\"Entry point\" decision). Read-only: every check here, including each\nprovider's own `readiness()`, is a local probe (a file's existence, a\nfast `--help`/`login status` subprocess) that changes nothing.",
+        "description": "Whether **AI Mode** may be offered for this saved listing right now\n-- the call the frontend makes to decide whether to enable the always\nvisible control. Read-only: every check here, including each\nprovider's own `readiness()`, is a local probe (a file's existence, a\nfast `--help`/`login status` subprocess) that changes nothing.",
         "operationId": "get_seo_readiness_api_listings__name__ai_seo_readiness_get",
         "parameters": [
           {
