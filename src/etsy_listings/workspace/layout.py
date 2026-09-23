@@ -18,6 +18,12 @@ written by this tool rather than pasted by the user, and rewritten on every
 refresh (PRD 49)."""
 CACHE_DIR = ".cache"
 PROMPTS_DIR = "prompts"
+SEO_PROMPT_FILE = "seo.md"
+"""Inside :data:`PROMPTS_DIR`. Plain seller-editable instruction text the AI
+SEO feature appends its delimited JSON context and response schema to
+(``ai/prompt.py``) -- `setup` seeds a packaged default only when this file is
+absent, and never overwrites seller content (AI SEO implementation plan,
+PR3)."""
 GARMENT_PROFILES_DIR = "garment-profiles"
 PRICING_PLANS_DIR = "pricing-plans"
 DESIGNS_DIR = "designs"
@@ -28,6 +34,12 @@ ships -- mixing them into ``designs/`` would put non-products in the one
 directory that is meant to hold only products (A19)."""
 MOCKUP_TEMPLATES_DIR = "mockup-templates"
 COMMON_MEDIA_DIR = "common-media"
+COMMON_COPY_DIR = "common-copy"
+"""Reusable `description` bodies, one Markdown file per shared paragraph
+(AI SEO implementation plan). Sibling to `COMMON_MEDIA_DIR` -- both hold
+content shared across listings -- but never confused with it: this directory
+holds text a `description.ref` resolves to, not pictures a listing's `media:`
+uploads."""
 LISTINGS_DIR = "listings"
 
 # Per listing, inside LISTINGS_DIR/<name>/

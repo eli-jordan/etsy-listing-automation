@@ -12,9 +12,10 @@ prices:
   XXL: 369 NOK
   XXXL: 379 NOK
 etsy:
-  title: <generate>
-  description: <generate>
-  tags: <generate>
+  title: ""
+  description:
+    lead: ""
+  tags: []
   renewal: manual
 media:
   - { template: flat-lay-01, colour: black }

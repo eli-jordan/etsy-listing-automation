@@ -7,7 +7,7 @@
       "key": "n_i4ruh010wuwkm",
       "frame": "demo/dark",
       "x": 0,
-      "y": 1641,
+      "y": 6678,
       "w": 390,
       "h": 844
     },
@@ -15,7 +15,7 @@
       "key": "n_m1z7m6xgko4s",
       "frame": "demo/form",
       "x": 544,
-      "y": 1641,
+      "y": 6678,
       "w": 1280,
       "h": 800
     },
@@ -23,7 +23,7 @@
       "key": "n_d8gev61lpr1y8",
       "frame": "demo/welcome",
       "x": 1977,
-      "y": 1641,
+      "y": 6678,
       "w": 390,
       "h": 844
     },
@@ -31,19 +31,359 @@
       "key": "n_1nubvaulkqfpw",
       "frame": "batch-deploy-specs/intent",
       "x": 0,
-      "y": 960
+      "y": 5945
     },
     {
       "key": "n_36i50oo6cjey",
       "frame": "batch-deploy-specs/flow",
       "x": 1434,
-      "y": 960
+      "y": 5945
     },
     {
       "key": "n_fv6hn51kkzwhf",
       "frame": "batch-deploy-lofi/listings",
       "x": 0,
+      "y": 960,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_16oiwbr7wsiyt",
+      "frame": "archive/batch-deploy-result",
+      "x": 0,
       "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1943tzsja4rga",
+      "frame": "archive/batch-deploy-review-side-drawer",
+      "x": 1434,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_fbz8bv9lr2dl",
+      "frame": "archive/batch-deploy-review-stage-matrix",
+      "x": 2867,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_glbbmjh2kfax",
+      "frame": "batch-deploy-lofi-v1/listings",
+      "x": 0,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_rjstxf9nqesh",
+      "frame": "batch-deploy-lofi-v1/result",
+      "x": 1434,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_t69ykwbfusky",
+      "frame": "batch-deploy-lofi-v1/review",
+      "x": 2867,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1uv5fvc1gep3lm",
+      "frame": "batch-deploy-lofi-v1/review-applied",
+      "x": 4301,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1ti2njdelonm3",
+      "frame": "batch-deploy-lofi-v1/review-applying",
+      "x": 5734,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1qq9w281xefsdu",
+      "frame": "batch-deploy-lofi-v1/review-bottom-sheet",
+      "x": 7452,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_sc182j1quay2h",
+      "frame": "batch-deploy-lofi-v1/review-loading",
+      "x": 8886,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_svp00f1q1nup9",
+      "frame": "batch-deploy-lofi-v1/review-stages-per-listing",
+      "x": 10319,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_lqyv2m5opzqk",
+      "frame": "batch-deploy-lofi-v1/review-stages-shared",
+      "x": 12037,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_o9gbcq161ncgo",
+      "frame": "batch-deploy-lofi-v1/review-stages-whole-run",
+      "x": 13754,
+      "y": 1921,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1j4pt881vp99cq",
+      "frame": "batch-deploy-lofi-v2/listings",
+      "x": 0,
+      "y": 3005,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_5nrs9f133ef1t",
+      "frame": "batch-deploy-lofi-v2/review-bottom-sheet",
+      "x": 1434,
+      "y": 3005,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1ta8i8p1wx0khn",
+      "frame": "batch-deploy-lofi-v3/listings",
+      "x": 0,
+      "y": 3966,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1myeh76fdx65s",
+      "frame": "batch-deploy-lofi-v3/review-bottom-sheet",
+      "x": 1434,
+      "y": 3966,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1tseb5z1k0p57p",
+      "frame": "batch-deploy-lofi-v4/_snapshot/ComparisonView",
+      "x": 0,
+      "y": 4933,
+      "w": 390,
+      "h": 844
+    },
+    {
+      "key": "n_1l31i4e12lix24",
+      "frame": "batch-deploy-lofi-v4/listings",
+      "x": 544,
+      "y": 4933,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_19nuqj91iip4fr",
+      "frame": "batch-deploy-lofi-v4/review-bottom-sheet",
+      "x": 1977,
+      "y": 4933,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ubs9aybndnnc",
+      "frame": "batch-deploy-lofi/review-bottom-sheet",
+      "x": 1718,
+      "y": 960,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1psxj74pd9gpe",
+      "frame": "listing-seo-lofi-v1/description-source",
+      "x": 0,
+      "y": 9611,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1283o2w13yks22",
+      "frame": "listing-seo-lofi-v1/generating",
+      "x": 1434,
+      "y": 9611,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1vjlmcq1gnsjig",
+      "frame": "listing-seo-lofi-v1/proposal",
+      "x": 2867,
+      "y": 9611,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_nytiye5nm32s",
+      "frame": "listing-seo-lofi-v1/readiness",
+      "x": 4301,
+      "y": 9611,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1el6g6h1102dl7",
+      "frame": "listing-seo-lofi-v1/stale",
+      "x": 5734,
+      "y": 9611,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_b57nju9ihyag",
+      "frame": "listing-seo-lofi/description-source",
+      "x": 0,
+      "y": 8650,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_mgfa8y110l8g",
+      "frame": "listing-seo-lofi/generating",
+      "x": 1434,
+      "y": 8650,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1m3mbmob694jm",
+      "frame": "listing-seo-lofi/proposal",
+      "x": 2867,
+      "y": 8650,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_cjnev0utati6",
+      "frame": "listing-seo-lofi/readiness",
+      "x": 4301,
+      "y": 8650,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_uxnbxf1g9mby9",
+      "frame": "listing-seo-lofi/stale",
+      "x": 5734,
+      "y": 8650,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_jtztbp15j3nh3",
+      "frame": "listing-seo-specs/decisions",
+      "x": 0,
+      "y": 10571
+    },
+    {
+      "key": "n_o9ocw4ynqcdi",
+      "frame": "listing-seo-specs/flow",
+      "x": 1434,
+      "y": 10571
+    },
+    {
+      "key": "n_ptqnxg1eou0zq",
+      "frame": "listing-seo-v1/failed",
+      "x": 0,
+      "y": 11456,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1gvt7whw33wkj",
+      "frame": "listing-seo-v1/loading",
+      "x": 1434,
+      "y": 11456,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_z2orjr1kox2s5",
+      "frame": "listing-seo-v1/readiness",
+      "x": 2867,
+      "y": 11456,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_111pswt1n64uin",
+      "frame": "listing-seo-v1/review",
+      "x": 4301,
+      "y": 11456,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_4z4qawk0zoqy",
+      "frame": "listing-seo-v1/stale",
+      "x": 5734,
+      "y": 11456,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_lnnlla1c9sei4",
+      "frame": "listing-seo/failed",
+      "x": 0,
+      "y": 7690,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1m0mpm314ghj0p",
+      "frame": "listing-seo/loading",
+      "x": 1434,
+      "y": 7690,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_jkjw0t1bm4lhb",
+      "frame": "listing-seo/readiness",
+      "x": 2867,
+      "y": 7690,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_keqvav1imtx05",
+      "frame": "listing-seo/review",
+      "x": 4301,
+      "y": 7690,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_ejqa2qb1sd40",
+      "frame": "listing-seo/stale",
+      "x": 5734,
+      "y": 7690,
       "w": 1280,
       "h": 800
     }

@@ -4,6 +4,36 @@
  */
 
 export interface paths {
+  "/api/common-copy": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Common Copy
+     * @description The Description tab's common-copy selector (AI SEO implementation
+     *     plan, PR6): every reusable description body, with the title and summary
+     *     its front matter carries, so the picker can show something readable
+     *     rather than a bare filename.
+     *
+     *     A file whose front matter will not parse is left out -- read-only, so
+     *     there is nowhere here to report the problem, and offering it would only
+     *     produce a pick that immediately fails to resolve. (A *stored* ref that
+     *     fails to resolve still surfaces as a details-tab issue -- see
+     *     `_description_ref_error` -- this is only the list of things one could
+     *     newly pick.)
+     */
+    get: operations["list_common_copy_api_common_copy_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/common-media": {
     parameters: {
       query?: never;
@@ -300,6 +330,86 @@ export interface paths {
     head?: never;
     /** Patch Listing */
     patch: operations["patch_listing_api_listings__name__patch"];
+    trace?: never;
+  };
+  "/api/listings/{name}/ai-seo/proposal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request Seo Proposal
+     * @description Run one complete AI Mode SEO request for this saved listing.
+     *
+     *     Refuses with 409 for exactly two reasons: this listing does not meet
+     *     :func:`_readiness`'s prerequisites (re-checked here independently of
+     *     whatever the client last saw from the readiness endpoint -- state can
+     *     change between the two calls), or another request for the same listing
+     *     is already running (the settled "Concurrent requests" decision; a
+     *     *different* listing's request is never refused). Every failure the
+     *     orchestrator itself can raise maps onto the settled "Timeout and
+     *     retries" outcomes: 503 when every provider was recognised-unavailable,
+     *     502 for everything else the plan calls "Try again". A cancellation
+     *     (browser disconnect) answers 499 -- there is usually nobody left to
+     *     receive it, but the request must still resolve to *something* so this
+     *     coroutine, and the process it was managing, both end cleanly.
+     *
+     *     The final ``except Exception`` is a deliberate catch-all, not a
+     *     swallow-and-hope: everything above it is a recognised
+     *     `~etsy_listings.ai.errors.SeoGenerationError` outcome the plan already
+     *     names, but `ai/process.py.run_managed` can also raise a plain
+     *     `CliProcessError` (`subprocess.Popen` itself failing to launch a
+     *     provider's CLI -- e.g. a binary readiness confirmed present and then
+     *     removed before this call), and any adapter bug is, by definition,
+     *     something this module cannot enumerate in advance. Neither may leave
+     *     FastAPI's own unhandled-exception path to answer: that path is a
+     *     plain-text "Internal Server Error", not this module's
+     *     ``{"detail": ...}`` JSON shape every other status code here uses, and a
+     *     future frontend (PR7) should not have to special-case one endpoint's
+     *     error body. ``HTTPException`` is re-raised untouched first, since
+     *     :func:`_build_request` raises one of those directly (the "no usable
+     *     garment profile" 409) and it must reach the client as itself, not get
+     *     folded into a 502.
+     *
+     *     Returns only what item 4 permits: the validated proposal, the input
+     *     snapshot, and expiry metadata. Nothing here is written to a workspace
+     *     file, a lockfile, or any server-side cache -- ``proposal`` and
+     *     ``seo_request`` fall out of scope the moment this function returns.
+     */
+    post: operations["request_seo_proposal_api_listings__name__ai_seo_proposal_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/ai-seo/readiness": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Seo Readiness
+     * @description Whether **AI Mode** may be offered for this saved listing right now
+     *     -- the one call the future frontend (PR7) makes to decide whether to
+     *     render the control at all (hidden, not disabled, per the settled
+     *     "Entry point" decision). Read-only: every check here, including each
+     *     provider's own `readiness()`, is a local probe (a file's existence, a
+     *     fast `--help`/`login status` subprocess) that changes nothing.
+     */
+    get: operations["get_seo_readiness_api_listings__name__ai_seo_readiness_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
     trace?: never;
   };
   "/api/listings/{name}/previews/{template}": {
@@ -975,6 +1085,22 @@ export interface components {
       filename: string;
     };
     /**
+     * CommonCopySummary
+     * @description One `common-copy/*.md` file, for the Description tab's body-source
+     *     selector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s
+     *     ref, a common-copy ref is portable -- workspace-relative, not
+     *     listing-relative -- so it is exactly what `description.ref` stores,
+     *     already usable as-is.
+     */
+    CommonCopySummary: {
+      /** Ref */
+      ref: string;
+      /** Summary */
+      summary?: string | null;
+      /** Title */
+      title: string;
+    };
+    /**
      * CommonMediaSummary
      * @description One shared asset under ``common-media/`` -- the other half of `media:`,
      *     a bare path rather than a rendered mockup.
@@ -1003,6 +1129,18 @@ export interface components {
       };
       /** Name */
       name: string;
+    };
+    /** DescriptionConfig */
+    DescriptionConfig: {
+      /**
+       * Lead
+       * @default
+       */
+      lead: string;
+      /** Ref */
+      ref?: string | null;
+      /** Text */
+      text?: string | null;
     };
     /**
      * DesignSummary
@@ -1087,10 +1225,11 @@ export interface components {
     /** EtsyListingConfig */
     EtsyListingConfig: {
       /**
-       * Description
-       * @default
+       * @default {
+       *       "lead": ""
+       *     }
        */
-      description: string;
+      description: components["schemas"]["DescriptionConfig"];
       /** Renewal */
       renewal?: ("manual" | "auto") | null;
       /** Section */
@@ -1099,9 +1238,9 @@ export interface components {
       shipping_profile?: string | null;
       /**
        * Tags
-       * @default <generate>
+       * @default []
        */
-      tags: string[] | "<generate>";
+      tags: string[];
       /**
        * Title
        * @default
@@ -1334,14 +1473,21 @@ export interface components {
       brief: string;
       /** Colors */
       colors: string[];
+      /**
+       * Description Composed
+       * @default
+       */
+      description_composed: string;
       /** Design */
       design: {
         [key: string]: string;
       };
       /**
        * @default {
-       *       "description": "",
-       *       "tags": "<generate>",
+       *       "description": {
+       *         "lead": ""
+       *       },
+       *       "tags": [],
        *       "title": ""
        *     }
        */
@@ -1962,6 +2108,113 @@ export interface components {
       stage: "retract";
     };
     /**
+     * SeoProposalResponse
+     * @description A complete, hard-validated proposal plus what PR5 item 4 promises
+     *     beside it: the input snapshot and expiry metadata. Never cached
+     *     server-side past this one response -- `ui/api/seo.py` builds this,
+     *     returns it, and keeps nothing.
+     */
+    SeoProposalResponse: {
+      /** Description Leads */
+      description_leads: string[];
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string;
+      /** Observed Text */
+      observed_text: string;
+      /** Rationale */
+      rationale: components["schemas"]["SeoRationaleEntry"][];
+      snapshot: components["schemas"]["SeoProposalSnapshot"];
+      /** Tags */
+      tags: string[];
+      /** Titles */
+      titles: string[];
+      /** Warnings */
+      warnings: components["schemas"]["SeoWarningEntry"][];
+    };
+    /**
+     * SeoProposalSnapshot
+     * @description The submitted generation inputs, echoed back beside the proposal
+     *     (implementation plan, PR5 item 4: "input snapshot data").
+     *
+     *     This is what a future frontend (PR7) compares its own current editor
+     *     state against to decide a pending proposal has gone stale
+     *     (`docs/ui-listing-seo-interactions.md` section 7) -- everything
+     *     `ai/models.py.SeoRequest` sent to the provider except the design image
+     *     itself, which the browser already holds and can compare or hash on its
+     *     own (`SeoRequest`'s own docstring: design identity/content hashing is
+     *     deliberately the browser's bookkeeping, not a fact this API computes).
+     */
+    SeoProposalSnapshot: {
+      /** Brief */
+      brief: string;
+      /** Colors */
+      colors: string[];
+      /** Etsy Category */
+      etsy_category: string;
+      /** Garment Brand */
+      garment_brand: string;
+      /** Garment Model */
+      garment_model: string;
+      /** Materials */
+      materials: string[];
+      /** Product Type */
+      product_type: string;
+    };
+    /**
+     * SeoRationaleEntry
+     * @description One of the proposal's seven priority-phrase rationales -- the wire
+     *     shape of `ai/models.py.PhraseRationale`.
+     */
+    SeoRationaleEntry: {
+      /**
+       * Intent
+       * @enum {string}
+       */
+      intent: "core_product" | "bottom_of_funnel" | "style";
+      /** Phrase */
+      phrase: string;
+      /** Reason */
+      reason: string;
+      /** Used In */
+      used_in: ("title" | "tags" | "description_lead")[];
+    };
+    /**
+     * SeoReadinessResponse
+     * @description Whether AI Mode may be offered for one saved listing right now
+     *     (implementation plan, "Entry point"). The frontend (PR7) uses this to
+     *     decide whether to render the control at all -- hidden, not disabled, so
+     *     ``reason`` is prose for a developer/support reader, never shown as a
+     *     disabled-button tooltip.
+     */
+    SeoReadinessResponse: {
+      /** Ready */
+      ready: boolean;
+      /** Reason */
+      reason?: string | null;
+    };
+    /**
+     * SeoWarningEntry
+     * @description The wire shape of `ai/models.py.ProposalWarning`.
+     */
+    SeoWarningEntry: {
+      /**
+       * Kind
+       * @default general
+       * @enum {string}
+       */
+      kind: "general" | "trademark";
+      /** Message */
+      message: string;
+    };
+    /**
      * ShadeConfig
      * @description Blends the base mockup photo's own greyscale lighting over the printed
      *     design, so a flat design picks up the garment's real fold shadows and
@@ -2314,6 +2567,26 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  list_common_copy_api_common_copy_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["CommonCopySummary"][];
+        };
+      };
+    };
+  };
   list_common_media_api_common_media_get: {
     parameters: {
       query?: never;
@@ -2754,6 +3027,68 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  request_seo_proposal_api_listings__name__ai_seo_proposal_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SeoProposalResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_seo_readiness_api_listings__name__ai_seo_readiness_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SeoReadinessResponse"];
         };
       };
       /** @description Validation Error */

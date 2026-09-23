@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../api/listings";
-import type { ListingDetail } from "../../types";
+import * as seoApi from "../../api/seo";
+import type { ListingDetail, SeoProposalResponse } from "../../types";
 import { DetailsTab } from "./DetailsTab";
 
 afterEach(() => {
@@ -19,8 +21,8 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     artwork: {},
     pricing_plan: null,
     etsy: {
-      title: "<generate>",
-      description: "<generate>",
+      title: "",
+      description: { lead: "", text: null, ref: null },
       tags: ["Botanical", "Gift"],
       variation_images: null,
       renewal: null,
@@ -37,17 +39,255 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: "tee-basic",
     resolved_prices: [{ size: "S", amount: "349 NOK" }],
+    description_composed: "",
     ...over,
   };
 }
 
 describe("DetailsTab", () => {
-  it("renders the current title, description and tags", () => {
-    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
-    expect(screen.getByLabelText("Title")).toHaveValue("<generate>");
-    expect(screen.getByLabelText("Description")).toHaveValue("<generate>");
+  it("renders the current title, description lead and tags", () => {
+    render(
+      <DetailsTab
+        detail={detail({ etsy: { ...detail().etsy, title: "Take A Hike Tee" } })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Title")).toHaveValue("Take A Hike Tee");
+    expect(screen.getByLabelText("Description lead")).toHaveValue("");
     expect(screen.getByText("Botanical")).toBeInTheDocument();
     expect(screen.getByText("Gift")).toBeInTheDocument();
+  });
+
+  it("typing in the description lead patches the structured value, preserving the body", () => {
+    const onUpdate = vi.fn();
+    render(
+      <DetailsTab
+        detail={detail({
+          etsy: {
+            ...detail().etsy,
+            description: { lead: "", text: "Printed to order.", ref: null },
+          },
+        })}
+        onUpdate={onUpdate}
+        onFlush={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Description lead"), {
+      target: { value: "A relaxed tee." },
+    });
+    expect(onUpdate).toHaveBeenCalledWith({
+      etsy: { description: { lead: "A relaxed tee.", text: "Printed to order.", ref: null } },
+    });
+  });
+
+  it("defaults the body source to inline and shows the stored text", () => {
+    render(
+      <DetailsTab
+        detail={detail({
+          etsy: {
+            ...detail().etsy,
+            description: { lead: "", text: "Printed to order.", ref: null },
+          },
+        })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("Description body source")).toHaveValue("inline");
+    expect(screen.getByLabelText("Description body")).toHaveValue("Printed to order.");
+  });
+
+  it("typing the inline body patches the structured value, preserving the lead", () => {
+    const onUpdate = vi.fn();
+    render(
+      <DetailsTab
+        detail={detail({
+          etsy: { ...detail().etsy, description: { lead: "A relaxed tee.", text: "", ref: null } },
+        })}
+        onUpdate={onUpdate}
+        onFlush={vi.fn()}
+      />,
+    );
+    fireEvent.change(screen.getByLabelText("Description body"), {
+      target: { value: "Printed to order." },
+    });
+    expect(onUpdate).toHaveBeenCalledWith({
+      etsy: {
+        description: { lead: "A relaxed tee.", text: "Printed to order.", ref: null },
+      },
+    });
+  });
+
+  it("offers every common-copy file as a body-source option", async () => {
+    vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([
+      { ref: "common-copy/comfort-colors.md", title: "Comfort Colors care and fit" },
+      { ref: "common-copy/generic-care.md", title: "Generic care" },
+    ]);
+    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    expect(
+      await screen.findByRole("option", { name: "Comfort Colors care and fit" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Generic care" })).toBeInTheDocument();
+  });
+
+  it("selecting a common-copy file sets the ref and clears any inline text", async () => {
+    vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([
+      { ref: "common-copy/comfort-colors.md", title: "Comfort Colors care and fit" },
+    ]);
+    const onUpdate = vi.fn();
+    render(
+      <DetailsTab
+        detail={detail({
+          etsy: {
+            ...detail().etsy,
+            description: { lead: "A relaxed tee.", text: "Printed to order.", ref: null },
+          },
+        })}
+        onUpdate={onUpdate}
+        onFlush={vi.fn()}
+      />,
+    );
+    await screen.findByRole("option", { name: "Comfort Colors care and fit" });
+
+    fireEvent.change(screen.getByLabelText("Description body source"), {
+      target: { value: "common-copy/comfort-colors.md" },
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      etsy: {
+        description: {
+          lead: "A relaxed tee.",
+          text: null,
+          ref: "common-copy/comfort-colors.md",
+        },
+      },
+    });
+  });
+
+  it("switching back to inline body clears any stored ref", () => {
+    const onUpdate = vi.fn();
+    render(
+      <DetailsTab
+        detail={detail({
+          etsy: {
+            ...detail().etsy,
+            description: {
+              lead: "A relaxed tee.",
+              text: null,
+              ref: "common-copy/comfort-colors.md",
+            },
+          },
+        })}
+        onUpdate={onUpdate}
+        onFlush={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Description body source"), {
+      target: { value: "inline" },
+    });
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      etsy: { description: { lead: "A relaxed tee.", text: "", ref: null } },
+    });
+  });
+
+  it("shows the selected common-copy file's title and summary", async () => {
+    vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([
+      {
+        ref: "common-copy/comfort-colors.md",
+        title: "Comfort Colors care and fit",
+        summary: "Care and fit notes shared across every Comfort Colors listing.",
+      },
+    ]);
+    render(
+      <DetailsTab
+        detail={detail({
+          etsy: {
+            ...detail().etsy,
+            description: { lead: "", text: null, ref: "common-copy/comfort-colors.md" },
+          },
+        })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+    await screen.findByRole("option", { name: "Comfort Colors care and fit" });
+    expect(
+      screen.getByText("Comfort Colors care and fit", { selector: ".common-copy-meta__title" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Care and fit notes shared across every Comfort Colors listing."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("common-copy/comfort-colors.md")).toBeInTheDocument();
+  });
+
+  it("shows a block issue for a description reference that will not resolve", () => {
+    render(
+      <DetailsTab
+        detail={detail({
+          etsy: {
+            ...detail().etsy,
+            description: { lead: "A relaxed tee.", text: null, ref: "common-copy/missing.md" },
+          },
+          issues: [
+            {
+              severity: "block",
+              tab: "details",
+              where: "Listing Details › Description",
+              message: "'common-copy/missing.md': file not found",
+            },
+          ],
+        })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+    expect(screen.getByText("'common-copy/missing.md': file not found")).toBeInTheDocument();
+  });
+
+  it("shows the lead-required issue that blocks deployment while the lead is empty", () => {
+    render(
+      <DetailsTab
+        detail={detail({
+          issues: [
+            {
+              severity: "block",
+              tab: "details",
+              where: "Listing Details › Description",
+              message:
+                "etsy.description.lead is empty. The lead is the opening paragraph a shopper reads, and deployment is blocked until it is set.",
+            },
+          ],
+        })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/deployment is blocked until it is set/)).toBeInTheDocument();
+  });
+
+  it("renders the server-composed description without re-joining lead and body itself", () => {
+    render(
+      <DetailsTab
+        detail={detail({
+          etsy: {
+            ...detail().etsy,
+            description: { lead: "A relaxed tee.", text: "Printed to order.", ref: null },
+          },
+          // Deliberately not what a naive `${lead}\n\n${text}` join would
+          // produce -- this proves the preview renders the server's own
+          // value rather than recomputing it.
+          description_composed: "A relaxed tee. Printed to order. (composed server-side)",
+        })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText("A relaxed tee. Printed to order. (composed server-side)"),
+    ).toBeInTheDocument();
   });
 
   it("typing in the title updates etsy.title", () => {
@@ -122,9 +362,9 @@ describe("DetailsTab", () => {
     expect(screen.getByText("2 / 13")).toBeInTheDocument();
   });
 
-  it("does not count a <generate> title, which is a sentinel and not copy", () => {
+  it("counts an empty title as zero, not as a sentinel to hide", () => {
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
-    expect(screen.queryByText("10 / 140")).not.toBeInTheDocument();
+    expect(screen.getByText("0 / 140")).toBeInTheDocument();
   });
 
   it("shows garment materials as read-only text", () => {
@@ -243,5 +483,125 @@ describe("DetailsTab with no garment profile chosen", () => {
     const option = await screen.findByRole("option", { name: "tee-basic" });
     expect(option).toBeInTheDocument();
     expect(screen.queryByText(/different garment/)).toBeNull();
+  });
+});
+
+describe("DetailsTab AI Mode", () => {
+  function readyDetail(over: Partial<ListingDetail> = {}): ListingDetail {
+    return detail({
+      design: { default: "designs/take-a-hike.png" },
+      brief: "A relaxed hiking tee.",
+      ...over,
+    });
+  }
+
+  function proposal(): SeoProposalResponse {
+    return {
+      titles: ["Title A", "Title B", "Title C"],
+      tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
+      description_leads: ["Lead A", "Lead B", "Lead C"],
+      rationale: [],
+      warnings: [],
+      observed_text: "",
+      snapshot: {
+        brief: "A relaxed hiking tee.",
+        product_type: "tee",
+        etsy_category: "",
+        materials: [],
+        colors: ["black"],
+        garment_brand: "Comfort Colors",
+        garment_model: "1717",
+      },
+      generated_at: "2026-09-23T00:00:00Z",
+      expires_at: "2026-09-24T00:00:00Z",
+    };
+  }
+
+  it("does not render AI Mode without a design and brief", () => {
+    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /AI Mode/i })).not.toBeInTheDocument();
+  });
+
+  it("renders AI Mode once the readiness endpoint says ready", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    expect(await screen.findByRole("button", { name: /AI Mode/i })).toBeInTheDocument();
+  });
+
+  it("reveals all three drawers after a successful request and focuses the first title option", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    const body = proposal();
+    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    const aiModeButton = await screen.findByRole("button", { name: /AI Mode/i });
+    await userEvent.click(aiModeButton);
+
+    expect(await screen.findByRole("region", { name: "title AI suggestions" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "tag AI suggestions" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "description lead AI suggestions" }),
+    ).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Title A/ })).toHaveFocus());
+  });
+
+  it("returns focus to the AI Mode button once the last drawer resolves", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    const body = proposal();
+    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    const aiModeButton = await screen.findByRole("button", { name: /AI Mode/i });
+    await userEvent.click(aiModeButton);
+    await screen.findByRole("region", { name: "title AI suggestions" });
+
+    await userEvent.click(screen.getByRole("button", { name: /Title A/ }));
+    await userEvent.click(
+      within(screen.getByRole("region", { name: "tag AI suggestions" })).getByRole("button", {
+        name: /close/i,
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Lead A/ }));
+
+    await waitFor(() => expect(aiModeButton).toHaveFocus());
+  });
+
+  it("applies the chosen title through the normal autosave path", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({
+      kind: "success",
+      proposal: proposal(),
+    });
+    const onUpdate = vi.fn();
+    const onFlush = vi.fn();
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={onFlush} />);
+    await userEvent.click(await screen.findByRole("button", { name: /AI Mode/i }));
+    await screen.findByRole("region", { name: "title AI suggestions" });
+
+    await userEvent.click(screen.getByRole("button", { name: /Title B/ }));
+
+    expect(onUpdate).toHaveBeenCalledWith({ etsy: { title: "Title B" } });
+    expect(onFlush).toHaveBeenCalled();
+  });
+
+  it("shows a Try again failure state without changing any listing field", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "failed" });
+    const onUpdate = vi.fn();
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: /AI Mode/i }));
+
+    expect(await screen.findByText(/couldn.t generate/i)).toBeInTheDocument();
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 });

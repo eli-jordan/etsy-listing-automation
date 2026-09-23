@@ -1,6 +1,15 @@
-import { useEffect, useState } from "react";
-import { listEtsySections, listPricingPlans } from "../../api/listings";
-import type { EtsySectionSummary, ListingDetail, PricingPlanSummary } from "../../types";
+import { useEffect, useRef, useState } from "react";
+import { listCommonCopy, listEtsySections, listPricingPlans } from "../../api/listings";
+import type {
+  CommonCopySummary,
+  EtsySectionSummary,
+  ListingDetail,
+  PricingPlanSummary,
+} from "../../types";
+import { AiChoiceDrawer } from "./aiSeo/AiChoiceDrawer";
+import { AiSeoControl } from "./aiSeo/AiSeoControl";
+import { AiTagsDrawer } from "./aiSeo/AiTagsDrawer";
+import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
 
 /** Title/tags/description/section/pricing (phase 5).
  *
@@ -31,9 +40,27 @@ function splitAmount(raw: string): { amount: string; currency: string } {
 const MAX_TITLE_LENGTH = 140;
 const MAX_TAGS = 13;
 
-/** The sentinel `generate` fills in for copy nobody has written yet -- it is
- * not a title, so counting its characters would be counting the placeholder. */
-const GENERATE = "<generate>";
+type EtsyDescription = ListingDetail["etsy"]["description"];
+
+/** The sentinel the body-source `<select>` uses for "write it here" --
+ * distinct from every real value that field can hold, since a `ref` is
+ * always a `common-copy/...` path (`Workspace.common_copy_file`). */
+const INLINE_BODY = "inline";
+
+/** `check_copy_is_concrete`/`check_description_ref`
+ * (`config/listing_validation.py`) file every description issue -- the empty
+ * lead that blocks deployment, and a `ref` that will not resolve -- under
+ * this one `where`, matching `_COPY_WHERE["description"]` exactly. Both are
+ * shown together beneath the description fields, the same block issues the
+ * page-level banner surfaces, but visible without leaving the tab. */
+const DESCRIPTION_ISSUE_WHERE = "Listing Details › Description";
+
+/** The current body source as the `<select>` reads it: the stored `ref`, or
+ * the inline sentinel when neither `ref` nor `text` is set (a fresh draft
+ * defaults to writing it here, matching PR2's prior default). */
+function bodySourceValue(description: EtsyDescription): string {
+  return description.ref ?? INLINE_BODY;
+}
 
 interface Props {
   detail: ListingDetail;
@@ -45,11 +72,19 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
   const [plans, setPlans] = useState<PricingPlanSummary[]>([]);
-  const tags = Array.isArray(detail.etsy.tags) ? detail.etsy.tags : [];
+  const [commonCopy, setCommonCopy] = useState<CommonCopySummary[]>([]);
+  const aiSeo = useAiSeoMode(detail, onUpdate, onFlush);
+  const aiModeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleDrawerRef = useRef<HTMLDivElement>(null);
+  const hadAiSeoProposal = useRef(false);
+  const tags = detail.etsy.tags;
   const titleError = detail.field_errors["etsy.title"];
   const sectionError = detail.field_errors["etsy.section"];
   const title = detail.etsy.title;
   const materials = detail.garment_materials ?? [];
+  const description = detail.etsy.description;
+  const descriptionIssues = detail.issues.filter((i) => i.where === DESCRIPTION_ISSUE_WHERE);
+  const selectedCommonCopy = commonCopy.find((c) => c.ref === description.ref);
 
   useEffect(() => {
     listEtsySections().then(setSections);
@@ -60,6 +95,39 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
       .then(setPlans)
       .catch(() => setPlans([]));
   }, [detail.garment_profile]);
+
+  useEffect(() => {
+    listCommonCopy().then(setCommonCopy);
+  }, []);
+
+  // Accessibility (`docs/ui-listing-seo-interactions.md` section 10):
+  // "Keyboard focus moves to the first useful control in the first opened
+  // drawer after generation, and returns to a sensible field or AI Mode
+  // control when the last drawer closes." Every drawer opens together right
+  // after a successful `generate()` (a fresh proposal starts every field
+  // unresolved), so the title drawer -- first in the field order -- is
+  // always "the first opened drawer" at that moment; closing every drawer
+  // (rejecting, choosing, or resolving each one) is exactly when `proposal`
+  // goes back to `null`.
+  useEffect(() => {
+    const hasProposal = aiSeo.proposal !== null;
+    if (hasProposal && !hadAiSeoProposal.current) {
+      titleDrawerRef.current?.querySelector<HTMLButtonElement>(".seo-choice-list button")?.focus();
+    } else if (!hasProposal && hadAiSeoProposal.current) {
+      aiModeButtonRef.current?.focus();
+    }
+    hadAiSeoProposal.current = hasProposal;
+  }, [aiSeo.proposal]);
+
+  function setBodySource(source: string) {
+    if (source === INLINE_BODY) {
+      onUpdate({
+        etsy: { description: { ...description, text: description.text ?? "", ref: null } },
+      });
+      return;
+    }
+    onUpdate({ etsy: { description: { ...description, text: null, ref: source } } });
+  }
 
   function commitTags() {
     const additions = tagDraft
@@ -78,8 +146,10 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
 
   return (
     <div className="details-tab">
-      <fieldset>
+      <fieldset className="seo-details-fieldset">
         <legend>Listing details</legend>
+
+        <AiSeoControl mode={aiSeo} buttonRef={aiModeButtonRef} />
 
         <div className={titleError ? "field field--invalid" : "field"}>
           <label htmlFor="details-title">Title</label>
@@ -93,10 +163,22 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
             onBlur={onFlush}
           />
           {titleError && <span className="field__error">{titleError}</span>}
-          {title !== GENERATE && (
-            <span className="field__hint">
-              {title.length} / {MAX_TITLE_LENGTH}
-            </span>
+          <span className="field__hint">
+            {title.length} / {MAX_TITLE_LENGTH}
+          </span>
+          {aiSeo.proposal?.unresolved.title && (
+            <div ref={titleDrawerRef}>
+              <AiChoiceDrawer
+                field="title"
+                options={aiSeo.proposal.proposal.titles}
+                stale={aiSeo.stale}
+                rationale={aiSeo.proposal.proposal.rationale}
+                warnings={aiSeo.proposal.proposal.warnings}
+                observedText={aiSeo.proposal.proposal.observed_text}
+                onChoose={aiSeo.chooseTitle}
+                onReject={aiSeo.rejectTitle}
+              />
+            </div>
           )}
         </div>
 
@@ -131,16 +213,117 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
           <span className="field__hint">
             {tags.length} / {MAX_TAGS}
           </span>
+          {aiSeo.proposal?.unresolved.tags && (
+            <AiTagsDrawer
+              tags={aiSeo.proposal.proposal.tags}
+              selected={tags}
+              stale={aiSeo.stale}
+              rationale={aiSeo.proposal.proposal.rationale}
+              warnings={aiSeo.proposal.proposal.warnings}
+              observedText={aiSeo.proposal.proposal.observed_text}
+              onToggle={aiSeo.toggleTag}
+              onAcceptBest={aiSeo.acceptBestTags}
+              onClose={aiSeo.closeTags}
+            />
+          )}
         </div>
 
         <div className="field">
-          <label htmlFor="details-description">Description</label>
+          <label htmlFor="details-description-lead">Description lead</label>
           <textarea
-            id="details-description"
-            value={detail.etsy.description}
-            onChange={(event) => onUpdate({ etsy: { description: event.target.value } })}
+            id="details-description-lead"
+            value={description.lead}
+            onChange={(event) =>
+              onUpdate({
+                etsy: { description: { ...description, lead: event.target.value } },
+              })
+            }
             onBlur={onFlush}
           />
+          {aiSeo.proposal?.unresolved.lead && (
+            <AiChoiceDrawer
+              field="description lead"
+              options={aiSeo.proposal.proposal.description_leads}
+              stale={aiSeo.stale}
+              rationale={aiSeo.proposal.proposal.rationale}
+              warnings={aiSeo.proposal.proposal.warnings}
+              observedText={aiSeo.proposal.proposal.observed_text}
+              onChoose={aiSeo.chooseLead}
+              onReject={aiSeo.rejectLead}
+            />
+          )}
+        </div>
+
+        <div className={descriptionIssues.length > 0 ? "field field--invalid" : "field"}>
+          <label htmlFor="details-description-source">Description body source</label>
+          <select
+            id="details-description-source"
+            className="input"
+            value={bodySourceValue(description)}
+            onChange={(event) => {
+              setBodySource(event.target.value);
+              onFlush();
+            }}
+          >
+            <option value={INLINE_BODY}>Write inline body</option>
+            {commonCopy.map((file) => (
+              <option key={file.ref} value={file.ref}>
+                {file.title}
+              </option>
+            ))}
+            {/* A stored ref this workspace's common-copy listing does not
+                offer (removed, renamed, or broken) still has to appear
+                selected -- otherwise the select would silently show
+                "Write inline body" for a listing that has not actually
+                changed source. `descriptionIssues` is what tells the seller
+                why it will not resolve. */}
+            {description.ref !== null && selectedCommonCopy === undefined && (
+              <option value={description.ref}>{description.ref}</option>
+            )}
+          </select>
+
+          {description.ref === null ? (
+            <textarea
+              id="details-description-text"
+              aria-label="Description body"
+              value={description.text ?? ""}
+              onChange={(event) =>
+                onUpdate({
+                  etsy: { description: { ...description, text: event.target.value, ref: null } },
+                })
+              }
+              onBlur={onFlush}
+            />
+          ) : (
+            <div className="common-copy-meta">
+              {selectedCommonCopy && (
+                <p className="common-copy-meta__title">{selectedCommonCopy.title}</p>
+              )}
+              {selectedCommonCopy?.summary && (
+                <p className="common-copy-meta__summary">{selectedCommonCopy.summary}</p>
+              )}
+              <p className="field__hint">{description.ref}</p>
+            </div>
+          )}
+
+          {descriptionIssues.map((issue, index) => (
+            <span key={index} className="field__error">
+              {issue.message}
+            </span>
+          ))}
+        </div>
+
+        <div className="field">
+          <label htmlFor="details-description-preview">Description preview</label>
+          {/* The server's own join of lead + resolved body
+              (`Workspace.compose_description`) -- rendered as-is, never
+              rejoined here, so this can never disagree with what Printify,
+              Etsy, and the deploy comparison view will actually send
+              (AI SEO implementation plan, "Description and common-copy
+              boundaries"). */}
+          <p id="details-description-preview" className="description-preview">
+            {detail.description_composed}
+          </p>
         </div>
 
         <div className={sectionError ? "field field--invalid" : "field"}>

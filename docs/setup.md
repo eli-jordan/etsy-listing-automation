@@ -161,7 +161,6 @@ Point the tool at it with `--root`, or `export ETSY_LISTINGS_ROOT=...` in
 
 ```
 PRINTIFY_API_TOKEN=...
-ANTHROPIC_API_KEY=...        # not needed until Phase 4
 ```
 
 Etsy OAuth tokens land in `.auth/etsy-tokens.json`, written by `auth` in Phase

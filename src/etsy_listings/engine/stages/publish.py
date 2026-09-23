@@ -228,9 +228,7 @@ class PublishStage:
         blocked = check_garment_profile_chosen(config.garment_profile)
         if blocked is not None:
             return blocked
-        blocked = check_copy_is_concrete(
-            title=config.etsy.title, description=config.etsy.description
-        )
+        blocked = check_copy_is_concrete(title=config.etsy.title, lead=config.etsy.description.lead)
         if blocked is not None:
             return blocked
 

@@ -397,7 +397,7 @@ class TestTheFullCycle:
             workspace.root,
             etsy={
                 "title": "etsy-listings e2e -- safe to delete",
-                "description": "Created by an automated test.",
+                "description": {"lead": "Created by an automated test."},
                 "variation_images": "flat-lay-01",
             },
         )

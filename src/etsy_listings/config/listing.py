@@ -16,11 +16,10 @@ from pydantic import (
     model_validator,
 )
 
+from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.money import Money, PriceField, require_currency
 from etsy_listings.config.pricing_plan import PricingPlan
-
-GENERATE: Final = "<generate>"
 
 _DRAFT: Final = "unsaved_draft"
 """Validation-context key set by :meth:`Listing.draft` and by nothing else.
@@ -100,8 +99,8 @@ class EtsyListingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     title: str = ""
-    description: str = ""
-    tags: list[str] | Literal["<generate>"] = GENERATE
+    description: DescriptionConfig = DescriptionConfig()
+    tags: list[str] = []
     renewal: Literal["manual", "auto"] | None = None
     section: str | None = None
     """Which shop section this listing files under, by name (PRD 53). Listing
@@ -133,22 +132,21 @@ class EtsyListingConfig(BaseModel):
 
     @model_validator(mode="after")
     def _validate_concrete_values(self) -> EtsyListingConfig:
-        if self.title != GENERATE and len(self.title) > MAX_TITLE_LENGTH:
+        if len(self.title) > MAX_TITLE_LENGTH:
             raise ValueError(
                 f"etsy.title is {len(self.title)} characters, over Etsy's "
                 f"{MAX_TITLE_LENGTH}-character limit"
             )
-        if isinstance(self.tags, list):
-            if len(self.tags) > MAX_TAGS:
+        if len(self.tags) > MAX_TAGS:
+            raise ValueError(
+                f"etsy.tags has {len(self.tags)} tags, over Etsy's {MAX_TAGS}-tag limit"
+            )
+        for tag in self.tags:
+            if len(tag) > MAX_TAG_LENGTH:
                 raise ValueError(
-                    f"etsy.tags has {len(self.tags)} tags, over Etsy's {MAX_TAGS}-tag limit"
+                    f"etsy.tags: {tag!r} is {len(tag)} characters, over Etsy's "
+                    f"{MAX_TAG_LENGTH}-character-per-tag limit"
                 )
-            for tag in self.tags:
-                if len(tag) > MAX_TAG_LENGTH:
-                    raise ValueError(
-                        f"etsy.tags: {tag!r} is {len(tag)} characters, over Etsy's "
-                        f"{MAX_TAG_LENGTH}-character-per-tag limit"
-                    )
         return self
 
 

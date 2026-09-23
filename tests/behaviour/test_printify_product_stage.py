@@ -88,7 +88,8 @@ def printify() -> FakePrintifyClient:
 @pytest.fixture
 def root(workspace_root: Path) -> Path:
     """The fixture workspace, made Phase-2 ready: a Printify shop id, real
-    copy instead of `<generate>` sentinels, and a design at print resolution.
+    copy instead of the fixture's blank placeholders, and a design at print
+    resolution.
 
     All three are things `plan` refuses without, and each has its own test
     below -- these are the *passing* values."""
@@ -355,13 +356,54 @@ def test_an_update_reads_the_product_before_writing_it(root, catalog, printify) 
 # --------------------------------------------------------------- the gates
 
 
-def test_a_generate_sentinel_blocks_the_stage(root, catalog, printify) -> None:
-    set_copy(root, title="<generate>", description="A retro sunset.")
+def test_an_empty_title_blocks_the_stage(root, catalog, printify) -> None:
+    set_copy(root, title="", description="A retro sunset.")
 
     stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
 
     assert stage_plan.will_run is False
-    assert "<generate>" in (stage_plan.blocked or "")
+    assert "empty" in (stage_plan.blocked or "")
+
+
+def test_a_common_copy_ref_composes_into_the_product_description(root, catalog, printify) -> None:
+    """The product carries the listing's own composed description (PRD 44);
+    it must be exactly what `Workspace.compose_description` produces, not the
+    raw lead alone."""
+    common_copy = root / "common-copy"
+    common_copy.mkdir()
+    (common_copy / "comfort-colors.md").write_text(
+        "---\ntitle: Comfort Colors\ntargets: [description]\n---\n"
+        "Printed to order on a heavyweight shirt.",
+        encoding="utf-8",
+    )
+    edit_listing(
+        root,
+        etsy={
+            "title": "Take A Hike Tee",
+            "description": {"lead": "A retro sunset.", "ref": "common-copy/comfort-colors.md"},
+        },
+    )
+
+    lock = _apply(_ctx(root, catalog, printify), a_lock())
+
+    spec = printify.created[0]
+    assert spec.description == "A retro sunset.\n\nPrinted to order on a heavyweight shirt."
+    assert lock.remote["printify_product_id"] == "fake-product-1"
+
+
+def test_a_missing_common_copy_ref_blocks_the_stage(root, catalog, printify) -> None:
+    edit_listing(
+        root,
+        etsy={
+            "title": "Take A Hike Tee",
+            "description": {"lead": "A retro sunset.", "ref": "common-copy/missing.md"},
+        },
+    )
+
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
+
+    assert stage_plan.will_run is False
+    assert "common-copy/missing.md" in (stage_plan.blocked or "")
 
 
 def test_an_undersized_design_blocks_the_stage(root, catalog, printify) -> None:

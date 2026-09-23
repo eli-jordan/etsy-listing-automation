@@ -233,9 +233,8 @@ so the window is: create succeeds, the process dies before the lockfile is
 written, and the next run creates a duplicate. The lockfile's
 `printify_product_id` closes it in every case but that one. The walk closes
 that one too, matching on **title and description**, which are exactly the
-fields PRD 44 requires to be concrete hand-entered text rather than a
-`<generate>` sentinel. It runs only when a create is already pending, so a
-normal no-op `plan` never pays for it.
+concrete seller-owned values PRD 44 requires. It runs only when a create is
+already pending, so a normal no-op `plan` never pays for it.
 
 Each product record in the list carries `id`, `title`, `description`,
 `blueprint_id`, `print_provider_id`, `variants`, `print_areas`, `images`,

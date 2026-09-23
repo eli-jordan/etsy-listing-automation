@@ -68,6 +68,7 @@ from etsy_listings.engine.stages.product_document import (
     check_garment_unchanged,
     money,
 )
+from etsy_listings.workspace.common_copy import CommonCopyError
 
 PRODUCT_ID_KEY = "printify_product_id"
 UPLOAD_IDS_KEY = "printify_upload_ids"
@@ -107,10 +108,11 @@ NO_SHOP_BLOCKED = Blocked(
 
 Reported as a blocked stage rather than an error, because the alternative is
 that adding this stage to the pipeline breaks every Phase 1 workflow: a
-listing whose copy is still ``<generate>`` is perfectly valid for rendering
-mockups, and `plan` refusing to run at all would be a regression dressed as a
-validation. The gates below fire only once ``setup`` has pointed the workspace
-at a shop -- which is exactly when a product becomes a thing that could exist.
+listing with no title or description filled in yet is perfectly valid for
+rendering mockups, and `plan` refusing to run at all would be a regression
+dressed as a validation. The gates below fire only once ``setup`` has pointed
+the workspace at a shop -- which is exactly when a product becomes a thing
+that could exist.
 """
 
 
@@ -144,11 +146,13 @@ class PrintifyProductStage:
             return blocked
         profile = workspace.load_garment_profile(config.garment_profile)
 
-        blocked = check_copy_is_concrete(
-            title=config.etsy.title, description=config.etsy.description
-        )
+        blocked = check_copy_is_concrete(title=config.etsy.title, lead=config.etsy.description.lead)
         if blocked is not None:
             return blocked
+        try:
+            description = workspace.compose_description(config.etsy.description)
+        except CommonCopyError as exc:
+            return Blocked(str(exc))
 
         placement = DesignPlacement.resolve(workspace, listing, config, profile)
         for path in placement.paths.values():
@@ -168,7 +172,7 @@ class PrintifyProductStage:
 
         return PrintifyProductDesired(
             title=config.etsy.title,
-            description=config.etsy.description,
+            description=description,
             blueprint_id=resolved.blueprint_id,
             print_provider_id=resolved.print_provider_id,
             position=profile.placeholder,

@@ -28,7 +28,7 @@ comments and commit messages without colliding with the PRD's own decision log.
 | A6 | Run history | SQLite at `.cache/runs.db` in WAL mode, `runs` + `run_events`. One recorder shared by CLI and UI, so CLI runs appear in the dashboard. Disposable: drop-and-recreate rather than migrate. |
 | A7 | Renderer | Pure functions over ndarrays composed in fixed order. Frozen pydantic `RenderConfig`; its canonical JSON is the hash. Explicit determinism controls. Goldens per pass *and* end-to-end. Extended by A12 for `multiple`-kind scenes: a **separate** `render_scene()`/`export_many()`, not a generalisation of the single-layer `render()`/`export()` — zero regression risk to the pre-existing goldens, verified by an explicit byte-identity test. |
 | A8 | Workspace | The data tree is a separate directory you own, marked by `shop.yaml`, discovered by walking up from cwd. `--root` / `ETSY_LISTINGS_ROOT` override. All config paths resolve against the workspace root, never cwd. |
-| A9 | Review gate | The Etsy draft is the only gate; `apply` generates and pushes in one run. `generate` remains standalone for when you want to read the copy first. |
+| A9 | SEO proposal lifecycle | AI Mode is a saved-listing, request-scoped editing aid, not an engine stage or a deploy review gate. Ready local Codex and Claude Code adapters supply one validated proposal; unresolved choices are browser-local for one day, and only individually accepted title, tag, and description-lead values travel through normal autosave. No generated file, lockfile record, server-side proposal cache, or remote write exists. |
 | A10 | Build order | Strict PRD phase order, 0 to 6. |
 | A11 | Template kind schema | Discriminated pydantic union on `kind` (`ColourMatrixTemplate \| MultipleTemplate \| SingleTemplate`, `Field(discriminator="kind")`), loaded via `load_template_config()` — no wrapping model, since the file *is* one of the three shapes. PRD 28. |
 | A12 | Multi-layer rendering | `render_scene()`/`Layer`/`export_many()` in `render/pipeline.py`/`render/passes.py`, `multiple`-kind only. The existing single-layer `render()`/`export()` are untouched, not generalised — see A7. |
@@ -100,7 +100,7 @@ src/etsy_listings/
     context.py          RunContext (workspace, clients, limiter, event sink)
     plan.py             builds a Plan across stages
     apply.py            executes a Plan, resumable
-    stages/             render, generate, printify_product, publish, etsy_listing,
+    stages/             render, printify_product, publish, etsy_listing,
                         etsy_media
   render/
     config.py           frozen RenderConfig, TemplateConfig
@@ -130,7 +130,8 @@ src/etsy_listings/
       fakes.py          in-memory implementations of both protocols
     limiter.py          token buckets, incl. persisted daily budget
     retry.py            backoff policy
-  ai/                   prompt loading, generation, hard validation
+  ai/                   SEO proposal contracts, prompt loading, provider adapters,
+                        orchestration, hard validation
   fx/                   USD to NOK fetch + .cache/fx.json with TTL
   runs/                 SQLite recorder, schema, event types
   ui/
@@ -163,8 +164,7 @@ class Stage(Protocol[D, A, L]):
     def plan(self, desired: D, applied: A | None, live: L | None) -> Verdict: ...
     def apply(self, ctx, desired: D, applied: A | None, live, lock) -> StageApplyResult: ...
 
-STAGES = [Render(), Generate(), PrintifyProduct(),
-          Publish(), EtsyListing(), EtsyMedia()]
+STAGES = [Render(), PrintifyProduct(), Publish(), EtsyListing(), EtsyMedia()]
 ```
 
 `applied` is the stage's **own subtree** of the lockfile, and every question
@@ -212,7 +212,6 @@ below.
 | Stage | `desired` | `read_live` | `apply` |
 |---|---|---|---|
 | `render` | design/artwork bytes hashes + template assets + resolved `RenderConfig`(s) per referenced scene (A11–A14) | which rendered files still exist under `.cache/renders/` | render each scene actually referenced by `media` into `.cache/renders/{listing}/{template}/` (A15) |
-| `generate` | brief + design hash + garment profile context + prompt template hashes | whether `generated.yaml` still exists | call the model, validate hard, write `generated.yaml` |
 | `printify_product` | title + description (PRD 44), blueprint/provider ids, enabled variant matrix with prices, print areas | `GET products/{id}`, incl. `visible` (below); `None` without a request when the lockfile has no product id | create (after the PRD 48 duplicate walk) or update product |
 | `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
 | `etsy_listing` | title, description, tags, materials, section, shipping profile, return policy, `who_made`/`when_made`/`is_supply`, production partners, `should_auto_renew` — names resolved to ids through A25 | `getListing` | one `updateListing` PATCH carrying only what changed (A24) |
@@ -224,11 +223,15 @@ rather than each stage having to remember; and their `read_live()` is cheap and
 local, so it never joins A3's live-fetch pool.
 
 It does not mean they observe nothing. `render` writes PNGs into a gitignored,
-fully derivable cache, which is precisely the kind of directory people delete;
-`generate` writes `generated.yaml`. Those outputs are live state in every sense
-that matters — they simply have no second writer to have drifted *from*. So
-every stage's `read_live()` is called, local ones included, and a difference a
-local stage finds is reported as work to redo rather than as drift.
+fully derivable cache, which is precisely the kind of directory people delete.
+That output is live state in every sense that matters — it simply has no second
+writer to have drifted *from*. So every stage's `read_live()` is called, local
+ones included, and a difference a local stage finds is reported as work to redo
+rather than as drift.
+
+AI Mode is not a stage. It creates a request-scoped, browser-local proposal for
+a saved listing, and it neither reads nor writes lockfile or workspace output.
+Only a seller's accepted field edits enter the ordinary desired documents.
 
 This paragraph used to say local stages have no live state at all, which read as
 licence to skip the read entirely. `plan` duly reported "No changes." over a
@@ -308,7 +311,6 @@ regardless of route".
 
   "applied": {
     "render":   { "input_hash": "sha256:...", "config": {}, "colors": ["black", "moss"] },
-    "generate": { "title": "...", "description": "...", "tags": [], "alt_text": {} },
     "printify_product": { "title": "...", "description": "...",
                           "blueprint_id": 6, "print_provider_id": 29,
                           "variants": [{"id": 17887, "price": 4990, "is_enabled": true}],
@@ -340,7 +342,7 @@ regardless of route".
                "etsy_image_ids": {"flat-lay-01:black": 111},
                "etsy_listing_state": "draft" },
   "outputs": { ".cache/renders/take-a-hike/black.png": "sha256:..." },
-  "stages_completed": ["render", "generate", "printify_product", "publish",
+  "stages_completed": ["render", "printify_product", "publish",
                        "etsy_listing", "etsy_media"]
 }
 ```
@@ -739,8 +741,8 @@ the API reference.
 token it verified and a shop id it discovered; a product is created against a
 test shop carrying exactly the intended variant matrix, prices and print area;
 a second `apply` is a no-op; retiring a colour actually disables its variants;
-and a garment change, an undersized design and an unresolved `<generate>` in
-the copy are each refused at `plan` time with an actionable error.
+and a garment change, an undersized design, or empty concrete deployment copy
+is each refused at `plan` time with an actionable error.
 
 **Publishing is not in this phase's exit criteria, because this account cannot
 reach it.** With no Etsy shop connected, `publish.json` returns
@@ -796,14 +798,21 @@ from the PRD passes; PRD risks 2, 3, 5, 6 and 13 are answered empirically,
 along with risk 12's confirmation (`29900` arrives as `299,00` — measured), and
 written into [printify-etsy-integration.md](printify-etsy-integration.md).
 
-### Phase 4 — AI generation
+### Phase 4 — structured descriptions and AI Mode
 
-Prompt templates in `prompts/`; vision + brief generation; `generated.yaml` as
-cache; hard validation (13 tags or fewer, 20 chars each or fewer, title 140 or
-fewer, banned-word and trademark screen); alt text alongside the copy.
+Structured descriptions gain a required `lead` and one optional body source:
+inline `text` or a portable `common-copy/` `ref`; the final description is
+composed once for every consumer. Setup seeds `prompts/seo.md` only when it is
+absent. AI Mode then uses ready local Codex or Claude Code CLIs to make one
+validated, request-scoped proposal for a saved listing, with a shared deadline,
+repair, recognised fallback, and cancellation cleanup. The UI exposes the
+proposal only as browser-local, independently accepted title, tag, and lead
+drawers; normal editor autosave owns every accepted value.
 
-*Exit:* validation failures abort before any upload with the offending field named;
-a re-run never rewrites reviewed copy without `--regenerate`.
+*Exit:* invalid description sources and deployment copy are blocked with the
+offending field named; unavailable AI Mode is hidden; invalid, cancelled, or
+failed proposals change no listing, lockfile, workspace file, or remote state;
+and accepted choices survive through the normal autosave and deploy paths.
 
 ### Phase 5 — full UI
 

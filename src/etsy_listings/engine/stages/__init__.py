@@ -11,9 +11,10 @@ exist. ``Generate`` (Phase 4) is the one stage still to come.
 
 **A stage in this list is not a stage that always runs.**
 ``PrintifyProduct`` reports itself unconfigured, rather than failing, in a
-workspace with no ``printify.shop_id``: a listing whose copy is still
-``<generate>`` is perfectly valid for rendering mockups, and a `plan` that
-refused to run at all there would be a regression dressed as a validation.
+workspace with no ``printify.shop_id``: a listing with no title or
+description filled in yet is perfectly valid for rendering mockups, and a
+`plan` that refused to run at all there would be a regression dressed as a
+validation.
 Running ``setup`` is what opts a workspace in. ``Publish``/``EtsyListing``/
 ``EtsyMedia`` follow the same rule for ``etsy.shop_id``.
 

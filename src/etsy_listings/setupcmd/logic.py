@@ -26,6 +26,7 @@ WORKSPACE_DIRS: tuple[str, ...] = (
     layout.PRICING_PLANS_DIR,
     layout.MOCKUP_TEMPLATES_DIR,
     layout.COMMON_MEDIA_DIR,
+    layout.COMMON_COPY_DIR,
     layout.TEST_DESIGNS_DIR,
     layout.PROMPTS_DIR,
 )

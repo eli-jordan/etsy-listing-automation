@@ -15,9 +15,9 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     artwork: {},
     pricing_plan: null,
     etsy: {
-      title: "<generate>",
-      description: "<generate>",
-      tags: "<generate>",
+      title: "",
+      description: { lead: "", text: null, ref: null },
+      tags: [],
       variation_images: null,
       renewal: null,
       section: null,
@@ -33,6 +33,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    description_composed: "",
     ...over,
   };
 }
@@ -161,6 +162,62 @@ describe("useAutosave", () => {
     unmount();
 
     expect(spy).toHaveBeenCalledWith("take-a-hike", { colors: ["white"] });
+  });
+
+  it("a PATCH the server rejects leaves the edit pending, retried by the next flush", async () => {
+    /* A named listing's autosave has no retry loop of its own -- the next
+       edit (or the next debounce) is what tries again. What must not happen
+       is silently losing the patch: `flush()`'s old behaviour cleared
+       `pending` before the request settled, so a rejected PATCH dropped the
+       edit on the floor (worse now that a source switch in the Description
+       editor can carry a whole `lead`/`text`/`ref` triple, not just one
+       field -- AI SEO implementation plan, PR6). */
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockRejectedValueOnce(new listingsApi.ListingsApiError("500"))
+      .mockResolvedValueOnce(detail({ etsy: { ...detail().etsy, title: "Take A Hike Tee" } }));
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ etsy: { title: "Take A Hike Tee" } }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(result.current.save).toEqual({ kind: "save-failed" });
+    // The edit itself is not lost, either in local state or in what the
+    // next flush will send.
+    expect(result.current.detail.etsy.title).toBe("Take A Hike Tee");
+
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", { etsy: { title: "Take A Hike Tee" } });
+    expect(result.current.save.kind).toBe("saved");
+  });
+
+  it("a later edit after a failed save is merged with the still-pending one", async () => {
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockRejectedValueOnce(new listingsApi.ListingsApiError("500"))
+      .mockResolvedValueOnce(detail());
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ etsy: { title: "Take A Hike Tee" } }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    expect(result.current.save).toEqual({ kind: "save-failed" });
+
+    act(() => result.current.update({ etsy: { section: "Apparel" } }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", {
+      etsy: { title: "Take A Hike Tee", section: "Apparel" },
+    });
   });
 });
 

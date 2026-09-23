@@ -27,6 +27,7 @@ import typer
 import yaml
 
 from etsy_listings import connections, credentials, prompts
+from etsy_listings.ai.prompt import seed_default_prompt
 from etsy_listings.clients.etsy.models import ReturnPolicy
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
@@ -340,6 +341,21 @@ def run_setup(
         f"  created {len(created)} directories" if created else "  directories already in place"
     )
     credentials.announce_gitignore(root)
+
+    # AI SEO implementation plan, PR3, item 3: seed the packaged default only
+    # when the seller has no prompt of their own -- a re-run must never
+    # overwrite a customized prompts/seo.md, so this is a warn-and-keep, not
+    # a fill-then-report like the directory skeleton above.
+    prompt_seed = seed_default_prompt(root / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE)
+    if prompt_seed.created:
+        typer.echo(
+            f"  seeded {layout.PROMPTS_DIR}/{layout.SEO_PROMPT_FILE} with the default AI SEO prompt"
+        )
+    else:
+        typer.echo(
+            f"  {layout.PROMPTS_DIR}/{layout.SEO_PROMPT_FILE} already exists -- left it exactly as "
+            f"it is"
+        )
 
     token, shops = _verified_token(root, factory)
     shop = _pick_shop(shops)

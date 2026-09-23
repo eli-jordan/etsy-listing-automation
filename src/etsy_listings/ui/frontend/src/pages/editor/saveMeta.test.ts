@@ -15,9 +15,9 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     artwork: {},
     pricing_plan: null,
     etsy: {
-      title: "<generate>",
-      description: "<generate>",
-      tags: "<generate>",
+      title: "",
+      description: { lead: "", text: null, ref: null },
+      tags: [],
       variation_images: null,
       renewal: null,
       section: null,
@@ -33,6 +33,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    description_composed: "",
     ...over,
   };
 }
@@ -71,6 +72,10 @@ describe("metaFor", () => {
     expect(metaFor({ kind: "name-taken", name: "take-a-hike" }, detail(), null)).toMatch(
       /take-a-hike/,
     );
+  });
+
+  it("says a failed save is kept locally, not lost", () => {
+    expect(metaFor({ kind: "save-failed" }, detail(), "take-a-hike")).toMatch(/kept locally/i);
   });
 
   it("says it is saving while a save is in flight", () => {

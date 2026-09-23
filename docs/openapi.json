@@ -451,6 +451,36 @@
         "title": "ColourReportRow",
         "type": "object"
       },
+      "CommonCopySummary": {
+        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s\nref, a common-copy ref is portable -- workspace-relative, not\nlisting-relative -- so it is exactly what `description.ref` stores,\nalready usable as-is.",
+        "properties": {
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "summary": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Summary"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "title"
+        ],
+        "title": "CommonCopySummary",
+        "type": "object"
+      },
       "CommonMediaSummary": {
         "description": "One shared asset under ``common-media/`` -- the other half of `media:`,\na bare path rather than a rendered mockup.",
         "properties": {
@@ -493,6 +523,40 @@
           "document"
         ],
         "title": "CreateListingRequest",
+        "type": "object"
+      },
+      "DescriptionConfig": {
+        "additionalProperties": false,
+        "properties": {
+          "lead": {
+            "default": "",
+            "title": "Lead",
+            "type": "string"
+          },
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "title": "DescriptionConfig",
         "type": "object"
       },
       "DesignSummary": {
@@ -623,9 +687,10 @@
         "additionalProperties": false,
         "properties": {
           "description": {
-            "default": "",
-            "title": "Description",
-            "type": "string"
+            "$ref": "#/components/schemas/DescriptionConfig",
+            "default": {
+              "lead": ""
+            }
           },
           "renewal": {
             "anyOf": [
@@ -665,20 +730,12 @@
             "title": "Shipping Profile"
           },
           "tags": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "const": "<generate>",
-                "type": "string"
-              }
-            ],
-            "default": "<generate>",
-            "title": "Tags"
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
           },
           "title": {
             "default": "",
@@ -1228,6 +1285,11 @@
             "title": "Colors",
             "type": "array"
           },
+          "description_composed": {
+            "default": "",
+            "title": "Description Composed",
+            "type": "string"
+          },
           "design": {
             "additionalProperties": {
               "type": "string"
@@ -1238,8 +1300,10 @@
           "etsy": {
             "$ref": "#/components/schemas/EtsyListingConfig",
             "default": {
-              "description": "",
-              "tags": "<generate>",
+              "description": {
+                "lead": ""
+              },
+              "tags": [],
               "title": ""
             }
           },
@@ -2709,6 +2773,216 @@
         "title": "RetractStagePlanDTO",
         "type": "object"
       },
+      "SeoProposalResponse": {
+        "description": "A complete, hard-validated proposal plus what PR5 item 4 promises\nbeside it: the input snapshot and expiry metadata. Never cached\nserver-side past this one response -- `ui/api/seo.py` builds this,\nreturns it, and keeps nothing.",
+        "properties": {
+          "description_leads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Description Leads",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "observed_text": {
+            "title": "Observed Text",
+            "type": "string"
+          },
+          "rationale": {
+            "items": {
+              "$ref": "#/components/schemas/SeoRationaleEntry"
+            },
+            "title": "Rationale",
+            "type": "array"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SeoProposalSnapshot"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "titles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SeoWarningEntry"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "titles",
+          "tags",
+          "description_leads",
+          "rationale",
+          "warnings",
+          "observed_text",
+          "snapshot",
+          "generated_at",
+          "expires_at"
+        ],
+        "title": "SeoProposalResponse",
+        "type": "object"
+      },
+      "SeoProposalSnapshot": {
+        "description": "The submitted generation inputs, echoed back beside the proposal\n(implementation plan, PR5 item 4: \"input snapshot data\").\n\nThis is what a future frontend (PR7) compares its own current editor\nstate against to decide a pending proposal has gone stale\n(`docs/ui-listing-seo-interactions.md` section 7) -- everything\n`ai/models.py.SeoRequest` sent to the provider except the design image\nitself, which the browser already holds and can compare or hash on its\nown (`SeoRequest`'s own docstring: design identity/content hashing is\ndeliberately the browser's bookkeeping, not a fact this API computes).",
+        "properties": {
+          "brief": {
+            "title": "Brief",
+            "type": "string"
+          },
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Colors",
+            "type": "array"
+          },
+          "etsy_category": {
+            "title": "Etsy Category",
+            "type": "string"
+          },
+          "garment_brand": {
+            "title": "Garment Brand",
+            "type": "string"
+          },
+          "garment_model": {
+            "title": "Garment Model",
+            "type": "string"
+          },
+          "materials": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Materials",
+            "type": "array"
+          },
+          "product_type": {
+            "title": "Product Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brief",
+          "product_type",
+          "etsy_category",
+          "materials",
+          "colors",
+          "garment_brand",
+          "garment_model"
+        ],
+        "title": "SeoProposalSnapshot",
+        "type": "object"
+      },
+      "SeoRationaleEntry": {
+        "description": "One of the proposal's seven priority-phrase rationales -- the wire\nshape of `ai/models.py.PhraseRationale`.",
+        "properties": {
+          "intent": {
+            "enum": [
+              "core_product",
+              "bottom_of_funnel",
+              "style"
+            ],
+            "title": "Intent",
+            "type": "string"
+          },
+          "phrase": {
+            "title": "Phrase",
+            "type": "string"
+          },
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          },
+          "used_in": {
+            "items": {
+              "enum": [
+                "title",
+                "tags",
+                "description_lead"
+              ],
+              "type": "string"
+            },
+            "title": "Used In",
+            "type": "array"
+          }
+        },
+        "required": [
+          "phrase",
+          "intent",
+          "reason",
+          "used_in"
+        ],
+        "title": "SeoRationaleEntry",
+        "type": "object"
+      },
+      "SeoReadinessResponse": {
+        "description": "Whether AI Mode may be offered for one saved listing right now\n(implementation plan, \"Entry point\"). The frontend (PR7) uses this to\ndecide whether to render the control at all -- hidden, not disabled, so\n``reason`` is prose for a developer/support reader, never shown as a\ndisabled-button tooltip.",
+        "properties": {
+          "ready": {
+            "title": "Ready",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "ready"
+        ],
+        "title": "SeoReadinessResponse",
+        "type": "object"
+      },
+      "SeoWarningEntry": {
+        "description": "The wire shape of `ai/models.py.ProposalWarning`.",
+        "properties": {
+          "kind": {
+            "default": "general",
+            "enum": [
+              "general",
+              "trademark"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message"
+        ],
+        "title": "SeoWarningEntry",
+        "type": "object"
+      },
       "ShadeConfig": {
         "description": "Blends the base mockup photo's own greyscale lighting over the printed\ndesign, so a flat design picks up the garment's real fold shadows and\nlight falloff instead of looking pasted on as a flat rectangle -- this is\nwhy a plain flat-lay PNG is enough to mock up, with no purchased\nPhotoshop lighting map needed. On by default: almost every mockup needs\nit. ``multiply`` crushes prints on dark garments, so ``soft-light`` or a\nmid-grey pivot is used for those instead.",
         "properties": {
@@ -3402,6 +3676,32 @@
   },
   "openapi": "3.1.0",
   "paths": {
+    "/api/common-copy": {
+      "get": {
+        "description": "The Description tab's common-copy selector (AI SEO implementation\nplan, PR6): every reusable description body, with the title and summary\nits front matter carries, so the picker can show something readable\nrather than a bare filename.\n\nA file whose front matter will not parse is left out -- read-only, so\nthere is nowhere here to report the problem, and offering it would only\nproduce a pick that immediately fails to resolve. (A *stored* ref that\nfails to resolve still surfaces as a details-tab issue -- see\n`_description_ref_error` -- this is only the list of things one could\nnewly pick.)",
+        "operationId": "list_common_copy_api_common_copy_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/CommonCopySummary"
+                  },
+                  "title": "Response List Common Copy Api Common Copy Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Common Copy",
+        "tags": [
+          "listings-support"
+        ]
+      }
+    },
     "/api/common-media": {
       "get": {
         "description": "The shared assets a listing can add to `media:` as a bare path.\n\nDistinct from both design endpoints: ``designs/`` is the artwork that gets\nprinted, ``test-designs/`` is calibration targets, and these are finished\npictures (a sizing chart, care instructions) uploaded to Etsy as-is,\nnever rendered onto a garment.",
@@ -3971,6 +4271,92 @@
         "summary": "Patch Listing",
         "tags": [
           "listings"
+        ]
+      }
+    },
+    "/api/listings/{name}/ai-seo/proposal": {
+      "post": {
+        "description": "Run one complete AI Mode SEO request for this saved listing.\n\nRefuses with 409 for exactly two reasons: this listing does not meet\n:func:`_readiness`'s prerequisites (re-checked here independently of\nwhatever the client last saw from the readiness endpoint -- state can\nchange between the two calls), or another request for the same listing\nis already running (the settled \"Concurrent requests\" decision; a\n*different* listing's request is never refused). Every failure the\norchestrator itself can raise maps onto the settled \"Timeout and\nretries\" outcomes: 503 when every provider was recognised-unavailable,\n502 for everything else the plan calls \"Try again\". A cancellation\n(browser disconnect) answers 499 -- there is usually nobody left to\nreceive it, but the request must still resolve to *something* so this\ncoroutine, and the process it was managing, both end cleanly.\n\nThe final ``except Exception`` is a deliberate catch-all, not a\nswallow-and-hope: everything above it is a recognised\n`~etsy_listings.ai.errors.SeoGenerationError` outcome the plan already\nnames, but `ai/process.py.run_managed` can also raise a plain\n`CliProcessError` (`subprocess.Popen` itself failing to launch a\nprovider's CLI -- e.g. a binary readiness confirmed present and then\nremoved before this call), and any adapter bug is, by definition,\nsomething this module cannot enumerate in advance. Neither may leave\nFastAPI's own unhandled-exception path to answer: that path is a\nplain-text \"Internal Server Error\", not this module's\n``{\"detail\": ...}`` JSON shape every other status code here uses, and a\nfuture frontend (PR7) should not have to special-case one endpoint's\nerror body. ``HTTPException`` is re-raised untouched first, since\n:func:`_build_request` raises one of those directly (the \"no usable\ngarment profile\" 409) and it must reach the client as itself, not get\nfolded into a 502.\n\nReturns only what item 4 permits: the validated proposal, the input\nsnapshot, and expiry metadata. Nothing here is written to a workspace\nfile, a lockfile, or any server-side cache -- ``proposal`` and\n``seo_request`` fall out of scope the moment this function returns.",
+        "operationId": "request_seo_proposal_api_listings__name__ai_seo_proposal_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeoProposalResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Seo Proposal",
+        "tags": [
+          "ai-seo"
+        ]
+      }
+    },
+    "/api/listings/{name}/ai-seo/readiness": {
+      "get": {
+        "description": "Whether **AI Mode** may be offered for this saved listing right now\n-- the one call the future frontend (PR7) makes to decide whether to\nrender the control at all (hidden, not disabled, per the settled\n\"Entry point\" decision). Read-only: every check here, including each\nprovider's own `readiness()`, is a local probe (a file's existence, a\nfast `--help`/`login status` subprocess) that changes nothing.",
+        "operationId": "get_seo_readiness_api_listings__name__ai_seo_readiness_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SeoReadinessResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Seo Readiness",
+        "tags": [
+          "ai-seo"
         ]
       }
     },

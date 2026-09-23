@@ -23,7 +23,27 @@
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v4"]
+      ["batch-deploy-lofi-v4"],
+      {
+        "space": 4
+      },
+      ["listing-seo-lofi-v1"],
+      {
+        "space": 4
+      },
+      ["listing-seo-v1"],
+      {
+        "space": 4
+      },
+      ["listing-seo-lofi-v2"],
+      {
+        "space": 4
+      },
+      ["listing-seo-v2"],
+      {
+        "space": 4
+      },
+      ["listing-seo-v3"]
     ],
     "scenes": {
       "archive": {
@@ -59,6 +79,21 @@
       },
       "batch-deploy-lofi-v4": {
         "rows": [["listings", "review-bottom-sheet"]]
+      },
+      "listing-seo-lofi-v1": {
+        "rows": [["readiness", "generating", "proposal", "stale", "description-source"]]
+      },
+      "listing-seo-v1": {
+        "rows": [["readiness", "loading", "review", "stale", "failed"]]
+      },
+      "listing-seo-lofi-v2": {
+        "rows": [["readiness", "generating", "proposal", "stale", "description-source"]]
+      },
+      "listing-seo-v2": {
+        "rows": [["readiness", "loading", "review", "stale", "failed"]]
+      },
+      "listing-seo-v3": {
+        "rows": [["readiness", "loading", "review", "stale", "failed"]]
       }
     }
   },
@@ -119,6 +154,81 @@
     },
     {
       "frame": "batch-deploy-lofi-v4/review-bottom-sheet"
+    },
+    {
+      "frame": "listing-seo-lofi-v1/readiness"
+    },
+    {
+      "frame": "listing-seo-lofi-v1/generating"
+    },
+    {
+      "frame": "listing-seo-lofi-v1/proposal"
+    },
+    {
+      "frame": "listing-seo-lofi-v1/stale"
+    },
+    {
+      "frame": "listing-seo-lofi-v1/description-source"
+    },
+    {
+      "frame": "listing-seo-v1/readiness"
+    },
+    {
+      "frame": "listing-seo-v1/loading"
+    },
+    {
+      "frame": "listing-seo-v1/review"
+    },
+    {
+      "frame": "listing-seo-v1/stale"
+    },
+    {
+      "frame": "listing-seo-v1/failed"
+    },
+    {
+      "frame": "listing-seo-lofi-v2/readiness"
+    },
+    {
+      "frame": "listing-seo-lofi-v2/generating"
+    },
+    {
+      "frame": "listing-seo-lofi-v2/proposal"
+    },
+    {
+      "frame": "listing-seo-lofi-v2/stale"
+    },
+    {
+      "frame": "listing-seo-lofi-v2/description-source"
+    },
+    {
+      "frame": "listing-seo-v2/readiness"
+    },
+    {
+      "frame": "listing-seo-v2/loading"
+    },
+    {
+      "frame": "listing-seo-v2/review"
+    },
+    {
+      "frame": "listing-seo-v2/stale"
+    },
+    {
+      "frame": "listing-seo-v2/failed"
+    },
+    {
+      "frame": "listing-seo-v3/readiness"
+    },
+    {
+      "frame": "listing-seo-v3/loading"
+    },
+    {
+      "frame": "listing-seo-v3/review"
+    },
+    {
+      "frame": "listing-seo-v3/stale"
+    },
+    {
+      "frame": "listing-seo-v3/failed"
     }
   ]
 }

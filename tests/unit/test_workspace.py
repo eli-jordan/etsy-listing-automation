@@ -111,6 +111,7 @@ def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path
         == root / "garment-profiles" / "comfort-colors-1717.yaml"
     )
     assert ws.exceptions_file() == root / "exceptions.yaml"
+    assert ws.seo_prompt_file() == root / "prompts" / "seo.md"
     assert ws.template_dir("flat-lay-01") == root / "mockup-templates" / "flat-lay-01"
     assert (
         ws.template_config_file("flat-lay-01") == ws.template_dir("flat-lay-01") / "template.yaml"
@@ -154,6 +155,25 @@ def test_common_media_files_is_empty_when_the_directory_is_absent(workspace_root
     """A workspace that has never needed a shared asset still lists."""
     ws = Workspace.discover(root_override=workspace_root)
     assert ws.common_media_files() == []
+
+
+def test_common_copy_files_lists_the_shared_bodies(workspace_root: Path) -> None:
+    """The common-copy picker's source list (AI SEO implementation plan, PR6):
+    every reusable description body, so the editor can offer one without a
+    seller having to know or type its filename."""
+    shared = workspace_root / "common-copy"
+    shared.mkdir(exist_ok=True)
+    (shared / "comfort-colors.md").write_text("---\ntitle: x\n---\nbody", encoding="utf-8")
+    (shared / "care.md").write_text("---\ntitle: y\n---\nbody", encoding="utf-8")
+    (shared / "notes.txt").write_text("not markdown", encoding="utf-8")
+
+    ws = Workspace.discover(root_override=workspace_root)
+    assert [p.name for p in ws.common_copy_files()] == ["care.md", "comfort-colors.md"]
+
+
+def test_common_copy_files_is_empty_when_the_directory_is_absent(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.common_copy_files() == []
 
 
 def test_listing_names_finds_listings_with_a_listing_file(workspace_root: Path) -> None:

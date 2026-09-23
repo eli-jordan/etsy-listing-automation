@@ -39,9 +39,9 @@ function detail(): ListingDetail {
     artwork: {},
     pricing_plan: null,
     etsy: {
-      title: "<generate>",
-      description: "<generate>",
-      tags: "<generate>",
+      title: "",
+      description: { lead: "", text: null, ref: null },
+      tags: [],
       variation_images: null,
       renewal: null,
       section: null,
@@ -57,6 +57,7 @@ function detail(): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    description_composed: "",
   };
 }
 

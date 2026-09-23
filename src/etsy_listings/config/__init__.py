@@ -13,11 +13,11 @@ models live in :mod:`etsy_listings.render`.
 """
 
 from etsy_listings.config.defaults import Defaults
+from etsy_listings.config.description import DescriptionConfig, compose_description
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile, PrintArea
 from etsy_listings.config.listing import (
-    GENERATE,
     EtsyListingConfig,
     Listing,
     MediaEntry,
@@ -43,7 +43,9 @@ __all__ = [
     "MediaEntry",
     "TemplateMediaEntry",
     "PrintArea",
-    "GENERATE",
+    # The description model and its one shared join rule (AI SEO plan PR2).
+    "DescriptionConfig",
+    "compose_description",
     # Money. Every price carries an explicit currency (PRD 24).
     "Money",
     "PriceField",

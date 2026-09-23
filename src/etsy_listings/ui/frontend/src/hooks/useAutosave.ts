@@ -24,7 +24,8 @@ export type SaveState =
   | { kind: "saving" }
   | { kind: "saved"; savedAt: number }
   | { kind: "unsaved" }
-  | { kind: "name-taken"; name: string };
+  | { kind: "name-taken"; name: string }
+  | { kind: "save-failed" };
 
 /** A `{ kind: "saved" }` stamped with when. Successful writes use the browser
  * clock; the initial state can instead use `listing.yaml`'s mtime supplied by
@@ -187,11 +188,27 @@ export function useAutosave(
     if (savedName.current !== null) {
       const patch = pending.current;
       if (patch === null) return;
+      // Cleared only once the PATCH actually lands -- a rejection (dropped
+      // connection, a 5xx) must leave the edit right where the next flush
+      // (the next debounce, or the next `update()`, which merges onto
+      // whatever is still here) will find and retry it. Losing it here would
+      // silently discard whatever was pending, structured `description`
+      // triples included (AI SEO implementation plan, PR6).
       pending.current = null;
       setSave({ kind: "saving" });
-      const fresh = await patchListing(savedName.current, patch);
-      applyResponse(fresh);
-      setSave(saved());
+      try {
+        const fresh = await patchListing(savedName.current, patch);
+        applyResponse(fresh);
+        setSave(saved());
+      } catch {
+        // Swallowed, not rethrown: nothing that calls `flush()` (the
+        // debounce timer, `onBlur`, unmount) is set up to catch it, and a
+        // failed autosave is reported through `save` -- the same channel
+        // every other outcome here uses -- rather than an exception a caller
+        // would have to remember to handle.
+        pending.current = mergePatch(patch, pending.current ?? {});
+        setSave({ kind: "save-failed" });
+      }
       return;
     }
 
