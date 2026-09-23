@@ -99,10 +99,7 @@ export function AiSeoControl({
 function useElapsed(active: boolean): number {
   const [seconds, setSeconds] = useState(0);
   useEffect(() => {
-    if (!active) {
-      setSeconds(0);
-      return;
-    }
+    if (!active) return;
     const started = Date.now();
     const update = () => setSeconds(Math.floor((Date.now() - started) / 1000));
     const id = window.setInterval(update, 250);

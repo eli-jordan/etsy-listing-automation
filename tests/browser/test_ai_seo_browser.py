@@ -132,9 +132,14 @@ def _seed_prompt(workspace_root: Path) -> Path:
 
 
 def _listing_yaml(workspace_root: Path, name: str = LISTING) -> dict[str, Any]:
-    return yaml.safe_load(
-        (workspace_root / "listings" / name / "listing.yaml").read_text(encoding="utf-8")
-    )
+    path = workspace_root / "listings" / name / "listing.yaml"
+    # A flush replaces the file. A read that lands on the empty moment
+    # between truncate and write is not the document; try once more.
+    for _ in range(2):
+        loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+        if isinstance(loaded, dict):
+            return loaded
+    raise AssertionError(f"{path} did not contain a listing document")
 
 
 def _workspace_snapshot(workspace_root: Path) -> tuple[bytes, list[Path]]:
