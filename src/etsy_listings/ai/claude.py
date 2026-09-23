@@ -36,6 +36,14 @@ transcript. In particular:
   ``-i/--image`` is. The design image's absolute path is named in the prompt
   text instead, asking the model to open it with the (still available)
   ``Read`` tool, which supports image files.
+- The prompt is sent over stdin, with no positional ``prompt`` argument on
+  the argv (confirmed live: `echo '<prompt>' | claude -p ...` with no
+  trailing prompt argument returns the same result a positional one would),
+  mirroring `ai/codex.py`'s own reasoning -- so an unusually long prompt
+  (Claude's especially, since `build_prompt` echoes the full response schema
+  a second time on top of the already-inline ``--json-schema`` argument)
+  never risks a platform argv-length limit (Windows' ~32K command-line
+  limit).
 """
 
 from __future__ import annotations
@@ -165,6 +173,11 @@ class ClaudeProvider:
         return None
 
     def _check_read_only_capability(self) -> ProviderReadiness | None:
+        # Known limitation (docs/ai-seo-implementation-plan.md, PR4): this
+        # only confirms `--help` advertises the required flags, not that a
+        # live `-p` invocation actually honours them. Same "no speculative
+        # quota check" tradeoff as the auth check above -- readiness stays a
+        # local, static check rather than spending a real generation call.
         try:
             result = subprocess.run(
                 [self._resolved_binary(), "-p", "--help"],
@@ -214,13 +227,12 @@ class ClaudeProvider:
             "none",
             "--json-schema",
             json.dumps(RESPONSE_SCHEMA),
-            prompt_text,
         ]
 
         result = run_managed(
             argv,
             cwd=self.workspace_root,
-            input_text="",
+            input_text=prompt_text,
             deadline=deadline,
             cancel_event=cancel_event,
         )
@@ -244,9 +256,15 @@ class ClaudeProvider:
     def _extract_result_text(self, stdout: str) -> str:
         """Pull the final response text out of `--output-format json`'s one
         envelope. Any shape this does not recognise -- not JSON, not an
-        object, ``is_error`` true, or no ``result`` string -- is a generation
-        error, not an availability failure: the process itself exited 0, so
-        `classify_process_failure` never runs on this path."""
+        object, or no ``result`` string -- is a generation error, not an
+        availability failure: the process itself exited 0, so
+        `classify_process_failure` never runs on that path.
+
+        An ``is_error: true`` envelope is different: the CLI can report an
+        auth/quota/rate-limit failure this way, with exit code 0, so its text
+        is routed through the same `classify_process_failure` an exit-code
+        failure already goes through above -- an availability failure must be
+        recognised as one regardless of which of the two shapes carried it."""
         try:
             envelope: Any = json.loads(stdout)
         except json.JSONDecodeError as exc:
@@ -256,8 +274,9 @@ class ClaudeProvider:
         if not isinstance(envelope, dict):
             raise ProviderGenerationError(PROVIDER_NAME, 0, "stdout was not a JSON object")
         if envelope.get("is_error"):
-            raise ProviderGenerationError(
-                PROVIDER_NAME, 0, str(envelope.get("result") or "claude reported is_error")
+            error_text = str(envelope.get("result") or "claude reported is_error")
+            raise classify_process_failure(
+                PROVIDER_NAME, returncode=0, stdout=error_text, stderr=""
             )
         result_text = envelope.get("result")
         if not isinstance(result_text, str):
