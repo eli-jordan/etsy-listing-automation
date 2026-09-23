@@ -201,43 +201,44 @@ export function useAutosave(
       if (patching.current) {
         // A PATCH is already in flight. Sending a second one now would race
         // it -- whichever *resolves* last would win, not whichever holds the
-        // newer edit. Defer instead: the in-flight one's `finally` calls
-        // `flush()` again once it settles, which will find and send whatever
-        // is in `pending` at that point.
+        // newer edit. Defer instead: the loop below re-checks `pending` once
+        // the in-flight one settles, rather than firing a concurrent request.
         patchAgain.current = true;
         return;
       }
-      const patch = pending.current;
-      if (patch === null) return;
-      // Cleared only once the PATCH actually lands -- a rejection (dropped
-      // connection, a 5xx) must leave the edit right where the next flush
-      // (the next debounce, or the next `update()`, which merges onto
-      // whatever is still here) will find and retry it. Losing it here would
-      // silently discard whatever was pending, structured `description`
-      // triples included (AI SEO implementation plan, PR6).
-      pending.current = null;
-      patching.current = true;
-      setSave({ kind: "saving" });
-      try {
-        const fresh = await patchListing(savedName.current, patch);
-        applyResponse(fresh);
-        setSave(saved());
-      } catch {
-        // Swallowed, not rethrown: nothing that calls `flush()` (the
-        // debounce timer, `onBlur`, unmount) is set up to catch it, and a
-        // failed autosave is reported through `save` -- the same channel
-        // every other outcome here uses -- rather than an exception a caller
-        // would have to remember to handle.
-        pending.current = mergePatch(patch, pending.current ?? {});
-        setSave({ kind: "save-failed" });
-      } finally {
-        patching.current = false;
-        if (patchAgain.current) {
-          patchAgain.current = false;
-          void flush();
+      // A loop, not recursion, so a deferred continuation (below) can pick up
+      // whatever landed in `pending` while the previous PATCH was in flight,
+      // one request at a time, without the function calling itself.
+      for (;;) {
+        const patch = pending.current;
+        if (patch === null) return;
+        // Cleared only once the PATCH actually lands -- a rejection (dropped
+        // connection, a 5xx) must leave the edit right where the next flush
+        // (the next debounce, or the next `update()`, which merges onto
+        // whatever is still here) will find and retry it. Losing it here
+        // would silently discard whatever was pending, structured
+        // `description` triples included (AI SEO implementation plan, PR6).
+        pending.current = null;
+        patching.current = true;
+        setSave({ kind: "saving" });
+        try {
+          const fresh = await patchListing(savedName.current, patch);
+          applyResponse(fresh);
+          setSave(saved());
+        } catch {
+          // Swallowed, not rethrown: nothing that calls `flush()` (the
+          // debounce timer, `onBlur`, unmount) is set up to catch it, and a
+          // failed autosave is reported through `save` -- the same channel
+          // every other outcome here uses -- rather than an exception a
+          // caller would have to remember to handle.
+          pending.current = mergePatch(patch, pending.current ?? {});
+          setSave({ kind: "save-failed" });
+        } finally {
+          patching.current = false;
         }
+        if (!patchAgain.current) return;
+        patchAgain.current = false;
       }
-      return;
     }
 
     if (pending.current === null) return;
