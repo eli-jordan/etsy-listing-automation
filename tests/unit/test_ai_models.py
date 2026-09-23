@@ -115,8 +115,17 @@ def test_proposal_warning_can_be_a_trademark_kind() -> None:
 
 
 def test_deadline_starting_now_has_the_full_budget_remaining() -> None:
+    # A tiny epsilon on the upper bound: `deadline_at` is `time.monotonic() +
+    # 60` computed once, then `remaining_seconds()` subtracts a *second*,
+    # slightly later `time.monotonic()` reading from it. The true result is
+    # always < 60, but float64 rounding of that first addition (monotonic()
+    # on a long-uptime machine is already a large number of seconds, so `+
+    # 60` loses precision in its low bits) can round the difference a few
+    # ULPs *above* 60.0 even though it is mathematically smaller -- a real,
+    # previously-observed flake (e.g. `60.00000000000006 <= 60.0`), not a
+    # sign of a slow test runner.
     deadline = Deadline.starting_now(seconds=60)
-    assert 59.0 < deadline.remaining_seconds() <= 60.0
+    assert 59.0 < deadline.remaining_seconds() <= 60.0 + 1e-6
     assert not deadline.expired
 
 
