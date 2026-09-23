@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { listCommonCopy, listEtsySections, listPricingPlans } from "../../api/listings";
 import type {
   CommonCopySummary,
@@ -6,6 +6,10 @@ import type {
   ListingDetail,
   PricingPlanSummary,
 } from "../../types";
+import { AiChoiceDrawer } from "./aiSeo/AiChoiceDrawer";
+import { AiSeoControl } from "./aiSeo/AiSeoControl";
+import { AiTagsDrawer } from "./aiSeo/AiTagsDrawer";
+import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
 
 /** Title/tags/description/section/pricing (phase 5).
  *
@@ -69,6 +73,10 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
   const [plans, setPlans] = useState<PricingPlanSummary[]>([]);
   const [commonCopy, setCommonCopy] = useState<CommonCopySummary[]>([]);
+  const aiSeo = useAiSeoMode(detail, onUpdate, onFlush);
+  const aiModeButtonRef = useRef<HTMLButtonElement>(null);
+  const titleDrawerRef = useRef<HTMLDivElement>(null);
+  const hadAiSeoProposal = useRef(false);
   const tags = detail.etsy.tags;
   const titleError = detail.field_errors["etsy.title"];
   const sectionError = detail.field_errors["etsy.section"];
@@ -91,6 +99,25 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
   useEffect(() => {
     listCommonCopy().then(setCommonCopy);
   }, []);
+
+  // Accessibility (`docs/ui-listing-seo-interactions.md` section 10):
+  // "Keyboard focus moves to the first useful control in the first opened
+  // drawer after generation, and returns to a sensible field or AI Mode
+  // control when the last drawer closes." Every drawer opens together right
+  // after a successful `generate()` (a fresh proposal starts every field
+  // unresolved), so the title drawer -- first in the field order -- is
+  // always "the first opened drawer" at that moment; closing every drawer
+  // (rejecting, choosing, or resolving each one) is exactly when `proposal`
+  // goes back to `null`.
+  useEffect(() => {
+    const hasProposal = aiSeo.proposal !== null;
+    if (hasProposal && !hadAiSeoProposal.current) {
+      titleDrawerRef.current?.querySelector<HTMLButtonElement>(".seo-choice-list button")?.focus();
+    } else if (!hasProposal && hadAiSeoProposal.current) {
+      aiModeButtonRef.current?.focus();
+    }
+    hadAiSeoProposal.current = hasProposal;
+  }, [aiSeo.proposal]);
 
   function setBodySource(source: string) {
     if (source === INLINE_BODY) {
@@ -119,8 +146,10 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
 
   return (
     <div className="details-tab">
-      <fieldset>
+      <fieldset className="seo-details-fieldset">
         <legend>Listing details</legend>
+
+        <AiSeoControl mode={aiSeo} buttonRef={aiModeButtonRef} />
 
         <div className={titleError ? "field field--invalid" : "field"}>
           <label htmlFor="details-title">Title</label>
@@ -137,6 +166,20 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
           <span className="field__hint">
             {title.length} / {MAX_TITLE_LENGTH}
           </span>
+          {aiSeo.proposal?.unresolved.title && (
+            <div ref={titleDrawerRef}>
+              <AiChoiceDrawer
+                field="title"
+                options={aiSeo.proposal.proposal.titles}
+                stale={aiSeo.stale}
+                rationale={aiSeo.proposal.proposal.rationale}
+                warnings={aiSeo.proposal.proposal.warnings}
+                observedText={aiSeo.proposal.proposal.observed_text}
+                onChoose={aiSeo.chooseTitle}
+                onReject={aiSeo.rejectTitle}
+              />
+            </div>
+          )}
         </div>
 
         <div className="field">
@@ -170,6 +213,19 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
           <span className="field__hint">
             {tags.length} / {MAX_TAGS}
           </span>
+          {aiSeo.proposal?.unresolved.tags && (
+            <AiTagsDrawer
+              tags={aiSeo.proposal.proposal.tags}
+              selected={tags}
+              stale={aiSeo.stale}
+              rationale={aiSeo.proposal.proposal.rationale}
+              warnings={aiSeo.proposal.proposal.warnings}
+              observedText={aiSeo.proposal.proposal.observed_text}
+              onToggle={aiSeo.toggleTag}
+              onAcceptBest={aiSeo.acceptBestTags}
+              onClose={aiSeo.closeTags}
+            />
+          )}
         </div>
 
         <div className="field">
@@ -184,6 +240,18 @@ export function DetailsTab({ detail, onUpdate, onFlush }: Props) {
             }
             onBlur={onFlush}
           />
+          {aiSeo.proposal?.unresolved.lead && (
+            <AiChoiceDrawer
+              field="description lead"
+              options={aiSeo.proposal.proposal.description_leads}
+              stale={aiSeo.stale}
+              rationale={aiSeo.proposal.proposal.rationale}
+              warnings={aiSeo.proposal.proposal.warnings}
+              observedText={aiSeo.proposal.proposal.observed_text}
+              onChoose={aiSeo.chooseLead}
+              onReject={aiSeo.rejectLead}
+            />
+          )}
         </div>
 
         <div className={descriptionIssues.length > 0 ? "field field--invalid" : "field"}>

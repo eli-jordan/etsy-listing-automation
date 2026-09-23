@@ -1,7 +1,9 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../api/listings";
-import type { ListingDetail } from "../../types";
+import * as seoApi from "../../api/seo";
+import type { ListingDetail, SeoProposalResponse } from "../../types";
 import { DetailsTab } from "./DetailsTab";
 
 afterEach(() => {
@@ -481,5 +483,125 @@ describe("DetailsTab with no garment profile chosen", () => {
     const option = await screen.findByRole("option", { name: "tee-basic" });
     expect(option).toBeInTheDocument();
     expect(screen.queryByText(/different garment/)).toBeNull();
+  });
+});
+
+describe("DetailsTab AI Mode", () => {
+  function readyDetail(over: Partial<ListingDetail> = {}): ListingDetail {
+    return detail({
+      design: { default: "designs/take-a-hike.png" },
+      brief: "A relaxed hiking tee.",
+      ...over,
+    });
+  }
+
+  function proposal(): SeoProposalResponse {
+    return {
+      titles: ["Title A", "Title B", "Title C"],
+      tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
+      description_leads: ["Lead A", "Lead B", "Lead C"],
+      rationale: [],
+      warnings: [],
+      observed_text: "",
+      snapshot: {
+        brief: "A relaxed hiking tee.",
+        product_type: "tee",
+        etsy_category: "",
+        materials: [],
+        colors: ["black"],
+        garment_brand: "Comfort Colors",
+        garment_model: "1717",
+      },
+      generated_at: "2026-09-23T00:00:00Z",
+      expires_at: "2026-09-24T00:00:00Z",
+    };
+  }
+
+  it("does not render AI Mode without a design and brief", () => {
+    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: /AI Mode/i })).not.toBeInTheDocument();
+  });
+
+  it("renders AI Mode once the readiness endpoint says ready", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    expect(await screen.findByRole("button", { name: /AI Mode/i })).toBeInTheDocument();
+  });
+
+  it("reveals all three drawers after a successful request and focuses the first title option", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    const body = proposal();
+    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    const aiModeButton = await screen.findByRole("button", { name: /AI Mode/i });
+    await userEvent.click(aiModeButton);
+
+    expect(await screen.findByRole("region", { name: "title AI suggestions" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "tag AI suggestions" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "description lead AI suggestions" }),
+    ).toBeInTheDocument();
+
+    await waitFor(() => expect(screen.getByRole("button", { name: /Title A/ })).toHaveFocus());
+  });
+
+  it("returns focus to the AI Mode button once the last drawer resolves", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    const body = proposal();
+    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    const aiModeButton = await screen.findByRole("button", { name: /AI Mode/i });
+    await userEvent.click(aiModeButton);
+    await screen.findByRole("region", { name: "title AI suggestions" });
+
+    await userEvent.click(screen.getByRole("button", { name: /Title A/ }));
+    await userEvent.click(
+      within(screen.getByRole("region", { name: "tag AI suggestions" })).getByRole("button", {
+        name: /close/i,
+      }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: /Lead A/ }));
+
+    await waitFor(() => expect(aiModeButton).toHaveFocus());
+  });
+
+  it("applies the chosen title through the normal autosave path", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({
+      kind: "success",
+      proposal: proposal(),
+    });
+    const onUpdate = vi.fn();
+    const onFlush = vi.fn();
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={onFlush} />);
+    await userEvent.click(await screen.findByRole("button", { name: /AI Mode/i }));
+    await screen.findByRole("region", { name: "title AI suggestions" });
+
+    await userEvent.click(screen.getByRole("button", { name: /Title B/ }));
+
+    expect(onUpdate).toHaveBeenCalledWith({ etsy: { title: "Title B" } });
+    expect(onFlush).toHaveBeenCalled();
+  });
+
+  it("shows a Try again failure state without changing any listing field", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({ shop_name: "Pine & Thread" });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "failed" });
+    const onUpdate = vi.fn();
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
+    await userEvent.click(await screen.findByRole("button", { name: /AI Mode/i }));
+
+    expect(await screen.findByText(/couldn.t generate/i)).toBeInTheDocument();
+    expect(onUpdate).not.toHaveBeenCalled();
   });
 });

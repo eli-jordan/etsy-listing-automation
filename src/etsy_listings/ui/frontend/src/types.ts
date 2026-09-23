@@ -29,6 +29,14 @@ export type TemplateSummary = components["schemas"]["TemplateSummary"];
  * through `Workspace.scene_photo`, not composed from PRD 7a's convention. */
 export type TemplatePhoto = components["schemas"]["TemplatePhoto"];
 
+// ── Listing SEO AI Mode (AI SEO implementation plan, PR7) ───────────────────
+
+export type SeoReadinessResponse = components["schemas"]["SeoReadinessResponse"];
+export type SeoProposalResponse = components["schemas"]["SeoProposalResponse"];
+export type SeoProposalSnapshot = components["schemas"]["SeoProposalSnapshot"];
+export type SeoRationaleEntry = components["schemas"]["SeoRationaleEntry"];
+export type SeoWarningEntry = components["schemas"]["SeoWarningEntry"];
+
 // ── Listings UI (phase 5) ──────────────────────────────────────────────────
 
 export type Issue = components["schemas"]["Issue"];
