@@ -1,29 +1,27 @@
-"""The narrow provider boundary the orchestration service (`ai/orchestrator.py`,
-PR4) drives, and `FakeSeoProvider`, the one implementation PR3 shipped (AI SEO
-implementation plan, "Provider adapters"; item 6: fake providers and
+"""The narrow provider boundary the orchestration service (`ai/orchestrator.py`)
+drives, and `FakeAiProvider`, the double every offline test runs against (AI
+SEO implementation plan, "Provider adapters"; item 6: fake providers and
 contract fixtures, no real CLI call in unit or CI tests).
 
-`SeoProvider` is exactly the protocol the plan already sketches: an adapter
-owns its own CLI invocation, structured-output parsing down to raw text, and
-provider-specific error classification -- it must not edit a listing or
-implement SEO validation. The Codex and Claude adapters behind it are PR4's
-job; nothing here launches a subprocess.
+An adapter owns its own CLI invocation, structured-output parsing down to raw
+text, and provider-specific error classification -- it must not edit a
+listing, assemble a prompt, or implement SEO validation.
 
-`generate`'s ``repair`` keyword is PR4's one addition to this protocol -- see
-`ai/models.py.RepairContext` for why a same-provider repair call cannot be
-expressed as a second, identical `generate(request, deadline)` call once a
-real CLI adapter is behind it. It defaults to `None`, so every PR3 call site
-that only ever wanted a first attempt is unaffected.
+`generate` takes a `ai/models.py.ProviderTask`, not a `SeoRequest`: PRD 68
+gives this codebase a second AI feature (drafting a listing brief from its
+design), and a provider was never the layer that knew which one it was
+serving. Assembled prompt text, a response schema and one image is the whole
+of what a CLI invocation needs, so that is the whole of what crosses this
+boundary -- and both features then share one fallback order, one repair rule
+and one deadline rather than growing a second copy of each.
 
-`generate`'s ``cancel_event`` keyword is PR4's other addition: the runtime
-design's "SEO service" box is where the settled "Cancellation" decision says
-the backend terminates a request's subprocess tree once the browser aborts
-it. Both real adapters (`ai/codex.py`, `ai/claude.py`) already accept and
-forward it to `ai/process.py.run_managed`; it belongs on the protocol too so
-`ai/orchestrator.py.generate_proposal` -- the one place that drives a
-provider without knowing whether it is real or fake -- has somewhere to pass
-the one `threading.Event` PR5's disconnect/Cancel handling will set. Defaults
-to `None`, same as ``repair``, so it is additive for the same reason.
+`generate`'s ``repair`` keyword is why a same-provider repair call cannot be
+expressed as a second, identical `generate(task, deadline)` call once a real
+CLI adapter is behind it -- see `ai/models.py.RepairContext`. Its
+``cancel_event`` keyword is where the settled "Cancellation" decision reaches
+a running subprocess: both real adapters forward it to
+`ai/process.py.run_managed`, which is what actually kills the tree. Both
+default to `None`, so an ordinary first, uncancellable attempt says nothing.
 """
 
 from __future__ import annotations
@@ -35,27 +33,27 @@ from typing import Protocol, runtime_checkable
 from etsy_listings.ai.models import (
     Deadline,
     ProviderReadiness,
+    ProviderTask,
     RawProviderResult,
     RepairContext,
-    SeoRequest,
 )
 
 
 @runtime_checkable
-class SeoProvider(Protocol):
+class AiProvider(Protocol):
     """One provider's readiness check and its generation call.
 
     The orchestration service owns retry classification, the Codex-then-
     Claude fallback order, the shared 60-second deadline, and turning raw
-    output into a validated `SeoProposal` (via `ai/validation.py`) -- none of
-    that belongs to an adapter, which is why this protocol is this small.
+    output into a validated result -- none of that belongs to an adapter,
+    which is why this protocol is this small.
     """
 
     def readiness(self) -> ProviderReadiness: ...
 
     def generate(
         self,
-        request: SeoRequest,
+        task: ProviderTask,
         deadline: Deadline,
         *,
         repair: RepairContext | None = None,
@@ -64,30 +62,30 @@ class SeoProvider(Protocol):
 
 
 @dataclass
-class FakeSeoProvider:
-    """A scriptable `SeoProvider` double, standing in for a real Codex or
-    Claude adapter at the same seam later PRs drive their orchestration
-    tests through -- fallback ordering, one same-provider repair, and
-    deadline handling can all be exercised entirely offline.
+class FakeAiProvider:
+    """A scriptable `AiProvider` double, standing in for a real Codex or
+    Claude adapter at the same seam the orchestration tests drive -- fallback
+    ordering, one same-provider repair, and deadline handling can all be
+    exercised entirely offline.
 
     ``responses`` is consumed in order, one raw-output string per
     :meth:`generate` call -- a two-entry queue is how a test represents "the
     first response was malformed, the repaired second one was not," without
     this double knowing anything about repair itself (that stays the
-    orchestration service's decision). ``requests`` records every
-    `SeoRequest` this provider was asked to handle, for a test to assert on
-    what the orchestrator actually sent; ``repairs`` records the matching
-    ``repair`` argument for each of those calls (``None`` for an ordinary
-    first attempt), same length and order as ``requests``. ``cancel_events``
-    records the matching ``cancel_event`` argument the same way, so a test
-    can assert the orchestrator forwarded the one cancellation signal it was
-    given rather than silently dropping it.
+    orchestration service's decision). ``tasks`` records every `ProviderTask`
+    this provider was asked to handle, for a test to assert on what the
+    orchestrator actually sent; ``repairs`` records the matching ``repair``
+    argument for each of those calls (``None`` for an ordinary first
+    attempt), same length and order as ``tasks``. ``cancel_events`` records
+    the matching ``cancel_event`` argument the same way, so a test can assert
+    the orchestrator forwarded the one cancellation signal it was given
+    rather than silently dropping it.
     """
 
     name: str
     responses: list[str] = field(default_factory=list)
     ready: ProviderReadiness = field(default_factory=lambda: ProviderReadiness(ready=True))
-    requests: list[SeoRequest] = field(default_factory=list, init=False)
+    tasks: list[ProviderTask] = field(default_factory=list, init=False)
     repairs: list[RepairContext | None] = field(default_factory=list, init=False)
     cancel_events: list[threading.Event | None] = field(default_factory=list, init=False)
 
@@ -96,18 +94,18 @@ class FakeSeoProvider:
 
     def generate(
         self,
-        request: SeoRequest,
+        task: ProviderTask,
         deadline: Deadline,
         *,
         repair: RepairContext | None = None,
         cancel_event: threading.Event | None = None,
     ) -> RawProviderResult:
-        self.requests.append(request)
+        self.tasks.append(task)
         self.repairs.append(repair)
         self.cancel_events.append(cancel_event)
         if not self.responses:
             raise AssertionError(
-                f"FakeSeoProvider {self.name!r} was asked to generate with no queued "
+                f"FakeAiProvider {self.name!r} was asked to generate with no queued "
                 f"response left -- give it one more entry in `responses`"
             )
         return RawProviderResult(provider=self.name, raw_output=self.responses.pop(0))

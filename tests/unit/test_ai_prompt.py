@@ -2,8 +2,8 @@
 and delimited-context prompt assembly (AI SEO implementation plan, PR3,
 items 2-4).
 
-`seed_default_prompt` is the one seam `setupcmd` needs (see
-`test_setup_logic.py`'s own AI-prompt tests): create `prompts/seo.md` when
+`seed_prompt` is the one seam `setupcmd` needs (see
+`test_setup_logic.py`'s own AI-prompt tests): create a prompt file when
 absent, warn and leave a seller's file exactly alone otherwise. Everything
 else here is pure string/JSON assembly, so it is tested directly against
 string fixtures rather than a workspace.
@@ -24,8 +24,8 @@ from etsy_listings.ai.prompt import (
     SeedResult,
     build_prompt,
     build_repair_prompt,
-    default_prompt_text,
-    seed_default_prompt,
+    default_seo_prompt_text,
+    seed_prompt,
 )
 
 
@@ -46,12 +46,12 @@ def _request(**overrides: object) -> SeoRequest:
 # --------------------------------------------------------------- default prompt text
 
 
-def test_default_prompt_text_requires_the_complete_proposal_contract() -> None:
+def test_default_seo_prompt_text_requires_the_complete_proposal_contract() -> None:
     """Item 2: the packaged default is updated from the `seo_prompt.md` draft
     to ask for the full contract -- three titles, 20 tags, three leads, seven
     rationale entries, warnings, and observed OCR text -- not the draft's
     single title/13-tag/one-sentence shape."""
-    text = default_prompt_text()
+    text = default_seo_prompt_text()
     assert "three independent title options" in text
     assert "exactly 20 tags" in text
     assert "three independent description-lead options" in text
@@ -64,43 +64,43 @@ def test_default_prompt_text_requires_the_complete_proposal_contract() -> None:
     assert '"observed_text"' in text
 
 
-def test_default_prompt_text_is_stable_plain_text_not_a_template() -> None:
+def test_default_seo_prompt_text_is_stable_plain_text_not_a_template() -> None:
     """The application appends context; the prompt itself supports no
     placeholders or executable prompt code (implementation plan, "Prompt")."""
-    text = default_prompt_text()
+    text = default_seo_prompt_text()
     assert "{" not in text.split("# Output", 1)[0]
-    assert text == default_prompt_text()
+    assert text == default_seo_prompt_text()
 
 
 # --------------------------------------------------------------- seeding
 
 
-def test_seed_default_prompt_creates_the_file_when_absent(tmp_path: Path) -> None:
+def test_seed_prompt_creates_the_file_when_absent(tmp_path: Path) -> None:
     target = tmp_path / "prompts" / "seo.md"
 
-    result = seed_default_prompt(target)
+    result = seed_prompt(target, default_seo_prompt_text())
 
     assert result == SeedResult(created=True, path=target)
     assert target.is_file()
-    assert target.read_text(encoding="utf-8") == default_prompt_text()
+    assert target.read_text(encoding="utf-8") == default_seo_prompt_text()
 
 
-def test_seed_default_prompt_leaves_a_sellers_file_exactly_alone(tmp_path: Path) -> None:
+def test_seed_prompt_leaves_a_sellers_file_exactly_alone(tmp_path: Path) -> None:
     target = tmp_path / "prompts" / "seo.md"
     target.parent.mkdir(parents=True)
     target.write_text("My own house style.\n", encoding="utf-8")
 
-    result = seed_default_prompt(target)
+    result = seed_prompt(target, default_seo_prompt_text())
 
     assert result == SeedResult(created=False, path=target)
     assert target.read_text(encoding="utf-8") == "My own house style.\n"
 
 
-def test_seed_default_prompt_is_idempotent(tmp_path: Path) -> None:
+def test_seed_prompt_is_idempotent(tmp_path: Path) -> None:
     target = tmp_path / "prompts" / "seo.md"
 
-    first = seed_default_prompt(target)
-    second = seed_default_prompt(target)
+    first = seed_prompt(target, default_seo_prompt_text())
+    second = seed_prompt(target, default_seo_prompt_text())
 
     assert first.created
     assert not second.created

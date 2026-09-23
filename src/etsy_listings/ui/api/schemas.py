@@ -487,6 +487,20 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 # ──────────────────────────────────────────────────────────────────────────
 
 
+class DesignBriefResponse(BaseModel):
+    """One drafted listing brief (PRD 68).
+
+    Deliberately thinner than `SeoProposalResponse`: no snapshot and no
+    expiry, because there is nothing here to keep. The browser writes
+    ``brief`` straight into the ordinary Brief field through the existing
+    autosave path, at which point it is seller-owned listing content like
+    any other -- so there is no pending state to go stale, nothing to
+    restore after a refresh, and nothing to retain past this response.
+    """
+
+    brief: str
+
+
 class SeoReadinessResponse(BaseModel):
     """Whether AI Mode can be enabled for one saved listing right now
     (implementation plan, "Entry point"). The frontend leaves the control

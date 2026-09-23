@@ -6,7 +6,7 @@ real Printify desired-document builder all agree, end to end, in a real
 browser against a real running app.
 
 Every test drives ``create_app(seo_provider_factory=...)`` -- PR5's own
-injection seam -- with `FakeSeoProvider` doubles (`ai/providers.py`, PR3) or
+injection seam -- with `FakeAiProvider` doubles (`ai/providers.py`, PR3) or
 small local test doubles, exactly the way `tests/contract/test_ai_seo_api.py`
 already does for the HTTP layer alone. No test here ever shells out to a real
 Codex or Claude CLI (PR4's own rule: CI stays fake-provider-only).
@@ -37,7 +37,7 @@ from playwright.sync_api import Page
 
 from etsy_listings.ai.errors import ProviderCancelledError, ProviderUnavailableError
 from etsy_listings.ai.models import Deadline, ProviderReadiness, RawProviderResult, SeoRequest
-from etsy_listings.ai.providers import FakeSeoProvider, SeoProvider
+from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.clients.printify.models import (
     Blueprint,
@@ -150,16 +150,16 @@ def _workspace_snapshot(workspace_root: Path) -> tuple[bytes, list[Path]]:
     return listing_bytes, tree
 
 
-def _ready_provider(name: str = "codex", *, responses: list[str] | None = None) -> FakeSeoProvider:
-    return FakeSeoProvider(
+def _ready_provider(name: str = "codex", *, responses: list[str] | None = None) -> FakeAiProvider:
+    return FakeAiProvider(
         name=name,
         ready=ProviderReadiness(ready=True),
         responses=responses if responses is not None else [_valid_json()],
     )
 
 
-def _unready_provider(name: str, reason: str) -> FakeSeoProvider:
-    return FakeSeoProvider(name=name, ready=ProviderReadiness(ready=False, reason=reason))
+def _unready_provider(name: str, reason: str) -> FakeAiProvider:
+    return FakeAiProvider(name=name, ready=ProviderReadiness(ready=False, reason=reason))
 
 
 @dataclass
@@ -236,12 +236,12 @@ def _seo_server(
     workspace_root: Path,
     prerequisite_missing: Any,
     *,
-    providers: list[SeoProvider],
+    providers: list[AiProvider],
     context_factory: Any = None,
 ) -> Iterator[str]:
     """The real app -- built SPA served by FastAPI, exactly as `etsy-listings
     ui` runs it -- over `create_app(seo_provider_factory=...)`, so a test
-    drives AI Mode's readiness and proposal endpoints against `FakeSeoProvider`
+    drives AI Mode's readiness and proposal endpoints against `FakeAiProvider`
     doubles instead of a real Codex or Claude CLI."""
     if not FRONTEND_DIST.is_dir():
         prerequisite_missing(
@@ -516,7 +516,7 @@ def test_ai_mode_is_disabled_when_no_provider_is_ready(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     _seed_prompt(workspace_root)
-    providers: list[SeoProvider] = [
+    providers: list[AiProvider] = [
         _unready_provider("codex", "codex is not authenticated"),
         _unready_provider("claude", "claude was not found on PATH"),
     ]
@@ -666,7 +666,7 @@ def test_cancel_during_generation_retains_no_proposal_and_frees_the_listing(
 ) -> None:
     _seed_prompt(workspace_root)
     provider = _CancelAwareProvider()
-    providers: list[SeoProvider] = [provider]
+    providers: list[AiProvider] = [provider]
 
     with (
         _seo_server(workspace_root, prerequisite_missing, providers=providers) as base_url,
@@ -734,7 +734,7 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
 ) -> None:
     _seed_prompt(workspace_root)
     provider = _ready_provider(responses=["not json at all", '{"still": "not a proposal"}'])
-    providers: list[SeoProvider] = [provider]
+    providers: list[AiProvider] = [provider]
 
     with (
         _seo_server(workspace_root, prerequisite_missing, providers=providers) as base_url,

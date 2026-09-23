@@ -1,5 +1,5 @@
-"""The request, proposal, rationale, warning, and readiness shapes one AI
-Mode SEO request passes between its layers (AI SEO implementation plan, PR3,
+"""The request, task, proposal, rationale, warning, and readiness shapes one
+AI Mode request passes between its layers (AI SEO implementation plan, PR3,
 item 1; `docs/ui-listing-seo-interactions.md`).
 
 Plain frozen dataclasses, not pydantic models. A `SeoProposal` is never
@@ -22,13 +22,41 @@ own remaining time from a start timestamp it has to be separately handed.
 from __future__ import annotations
 
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 RationaleIntent = Literal["core_product", "bottom_of_funnel", "style"]
 RationaleField = Literal["title", "tags", "description_lead"]
 WarningKind = Literal["general", "trademark"]
+
+
+@dataclass(frozen=True)
+class ProviderTask:
+    """One complete unit of work for a provider CLI, with nothing in it that
+    says which AI feature asked (PRD 68).
+
+    This is the seam that lets brief drafting and SEO generation share one
+    Codex adapter, one Claude adapter, one fallback order, one repair rule
+    and one deadline. An adapter's job was always "run the CLI read-only
+    against this prompt, hand it this schema, let it see this image, return
+    what it printed" -- what made that look SEO-shaped was only that the
+    adapter itself assembled the prompt from `prompts/seo.md`. Assembling it
+    is the caller's now (`ai/prompt.py.build_seo_task`,
+    `ai/brief.py.build_brief_task`), which also settles a question two
+    readiness checks used to answer differently: a missing prompt file makes
+    a *request* impossible, not a CLI unready, so it is no longer part of
+    `readiness()`.
+
+    ``prompt_text`` is already complete -- seller prose, delimited context,
+    schema and all. A repair call appends to it (`ai/repair.py`); nothing
+    else ever rewrites it.
+    """
+
+    prompt_text: str
+    response_schema: Mapping[str, Any]
+    design_image: Path
 
 
 @dataclass(frozen=True)

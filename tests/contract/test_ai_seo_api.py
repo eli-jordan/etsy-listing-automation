@@ -5,7 +5,7 @@ listing behaviour, provider-failure mapping, and no-write behaviour.
 
 Every test drives `create_app` with a ``seo_provider_factory`` -- the same
 injection seam `context_factory` already is for `ui/runs` -- wired to
-`FakeSeoProvider` doubles or small local test doubles, never a real Codex or
+`FakeAiProvider` doubles or small local test doubles, never a real Codex or
 Claude adapter (PR4's own rule: CI stays fake-provider-only).
 
 Cancellation itself (the disconnect-to-`threading.Event` wiring) is unit
@@ -30,7 +30,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.ai.models import ProviderReadiness, RawProviderResult, SeoRequest
-from etsy_listings.ai.providers import FakeSeoProvider, SeoProvider
+from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.ui.api.app import create_app
 from etsy_listings.workspace.layout import COMMON_COPY_DIR, PROMPTS_DIR, SEO_PROMPT_FILE
 from etsy_listings.workspace.workspace import Workspace
@@ -72,21 +72,21 @@ def _seed_prompt(workspace_root: Path) -> Path:
     return path
 
 
-def _ready_provider(name: str = "codex", *, responses: list[str] | None = None) -> FakeSeoProvider:
-    return FakeSeoProvider(
+def _ready_provider(name: str = "codex", *, responses: list[str] | None = None) -> FakeAiProvider:
+    return FakeAiProvider(
         name=name,
         ready=ProviderReadiness(ready=True),
         responses=responses if responses is not None else [_valid_payload()],
     )
 
 
-def _unready_provider(name: str, reason: str) -> FakeSeoProvider:
-    return FakeSeoProvider(name=name, ready=ProviderReadiness(ready=False, reason=reason))
+def _unready_provider(name: str, reason: str) -> FakeAiProvider:
+    return FakeAiProvider(name=name, ready=ProviderReadiness(ready=False, reason=reason))
 
 
 @contextmanager
 def _client(
-    workspace_root: Path, *, providers: list[SeoProvider] | None = None
+    workspace_root: Path, *, providers: list[AiProvider] | None = None
 ) -> Iterator[TestClient]:
     workspace = Workspace.discover(root_override=workspace_root)
     kwargs: dict[str, Any] = {}
@@ -98,13 +98,13 @@ def _client(
 
 
 @pytest.fixture
-def ready_provider() -> FakeSeoProvider:
+def ready_provider() -> FakeAiProvider:
     return _ready_provider()
 
 
 @pytest.fixture
-def client(workspace_root: Path, ready_provider: FakeSeoProvider) -> Iterator[TestClient]:
-    """A client wired to one always-ready `FakeSeoProvider`, with
+def client(workspace_root: Path, ready_provider: FakeAiProvider) -> Iterator[TestClient]:
+    """A client wired to one always-ready `FakeAiProvider`, with
     ``prompts/seo.md`` already seeded -- the state every test starts from
     unless it is specifically testing a missing prerequisite."""
     _seed_prompt(workspace_root)
@@ -257,8 +257,8 @@ def test_unconventional_design_keys_pick_the_same_image_after_reordering(
         edit_listing(workspace_root, design={"a": primary_ref, "z": secondary_ref})
         assert c.post(f"/api/listings/{LISTING}/ai-seo/proposal").status_code == 200
 
-    assert provider.requests[0].design_image == provider.requests[1].design_image
-    assert provider.requests[0].design_image.name == "take-a-hike.png"
+    assert provider.tasks[0].design_image == provider.tasks[1].design_image
+    assert provider.tasks[0].design_image.name == "take-a-hike.png"
 
 
 def test_proposal_surfaces_a_trademark_warning_from_hard_validation(

@@ -1,4 +1,4 @@
-"""``ai/codex.py``: the Codex CLI adapter behind `SeoProvider` (AI SEO
+"""``ai/codex.py``: the Codex CLI adapter behind `AiProvider` (AI SEO
 implementation plan, PR4, items 1-4).
 
 Nothing here launches a real `codex` process. Readiness tests replace
@@ -30,11 +30,12 @@ from etsy_listings.ai.models import (
     Deadline,
     GarmentContext,
     ProviderReadiness,
+    ProviderTask,
     RepairContext,
     SeoRequest,
 )
 from etsy_listings.ai.process import ProcessResult
-from etsy_listings.ai.prompt import RESPONSE_SCHEMA
+from etsy_listings.ai.prompt import RESPONSE_SCHEMA, build_seo_task
 
 _EXEC_HELP = """
 Usage: codex exec [OPTIONS] [PROMPT]
@@ -67,10 +68,18 @@ def _request(tmp_path: Path) -> SeoRequest:
 
 
 def _provider(tmp_path: Path, *, binary: str = "codex") -> codex.CodexProvider:
-    prompt_file = tmp_path / "prompts" / "seo.md"
-    prompt_file.parent.mkdir(parents=True, exist_ok=True)
-    prompt_file.write_text("Write great SEO copy.", encoding="utf-8")
-    return codex.CodexProvider(workspace_root=tmp_path, prompt_file=prompt_file, binary=binary)
+    return codex.CodexProvider(workspace_root=tmp_path, binary=binary)
+
+
+def _task(tmp_path: Path) -> ProviderTask:
+    """An ordinary SEO task, assembled the way `ui/api/seo.py` assembles one.
+
+    The adapter no longer reads a prompt file (PRD 68), so the seller prose
+    is a plain string here rather than something a fixture has to write to
+    disk -- which is the whole point of the change: an adapter test can say
+    what the CLI is asked to run without staging a workspace.
+    """
+    return build_seo_task("Write great SEO copy.", _request(tmp_path))
 
 
 # --------------------------------------------------------------- readiness
@@ -198,19 +207,21 @@ def test_readiness_fails_when_exec_help_exits_nonzero(
     assert "exec --help" in (readiness.reason or "")
 
 
-def test_readiness_fails_when_prompt_file_is_missing(
+def test_readiness_says_nothing_about_a_prompt_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """A workspace with no `prompts/` directory at all still has a ready
+    codex (PRD 68). Which prompt a request uses -- and whether that file
+    exists -- is the request's business; answering it here said "codex is
+    not ready" about a file that has nothing to do with codex, and said it
+    twice, since `ui/api/seo.py` checked the same thing itself."""
     monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun({("login", "status"): _ok(), ("exec", "--help"): _ok(stdout=_EXEC_HELP)})
     monkeypatch.setattr(codex.subprocess, "run", fake)
-    prompt_file = tmp_path / "prompts" / "seo.md"  # never created
-    provider = codex.CodexProvider(workspace_root=tmp_path, prompt_file=prompt_file)
 
-    readiness = provider.readiness()
+    readiness = codex.CodexProvider(workspace_root=tmp_path).readiness()
 
-    assert readiness.ready is False
-    assert "seo.md" in (readiness.reason or "")
+    assert readiness == ProviderReadiness(ready=True)
 
 
 def test_readiness_is_ready_when_every_check_passes(
@@ -267,7 +278,7 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     request = _request(tmp_path)
     deadline = Deadline.starting_now(seconds=60)
 
-    result = provider.generate(request, deadline)
+    result = provider.generate(_task(tmp_path), deadline)
 
     assert result.provider == "codex"
     assert result.raw_output == '{"ok": true}'
@@ -299,7 +310,7 @@ def test_generate_sends_the_seller_prompt_and_context_over_stdin(
     provider = _provider(tmp_path)
     request = _request(tmp_path)
 
-    provider.generate(request, Deadline.starting_now(seconds=60))
+    provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
     stdin_text = calls[0]["input_text"]
     assert "Write great SEO copy." in stdin_text
@@ -315,12 +326,11 @@ def test_generate_appends_the_repair_block_when_repairing(
         ProcessResult(returncode=0, stdout="{}", stderr="", timed_out=False, cancelled=False),
     )
     provider = _provider(tmp_path)
-    request = _request(tmp_path)
     repair = RepairContext(
         prior_raw_output='{"titles": []}', reasons=("titles: expected exactly 3",)
     )
 
-    provider.generate(request, Deadline.starting_now(seconds=60), repair=repair)
+    provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60), repair=repair)
 
     stdin_text = calls[0]["input_text"]
     assert '{"titles": []}' in stdin_text
@@ -337,7 +347,7 @@ def test_generate_raises_cancelled_when_the_process_was_cancelled(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderCancelledError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_raises_timeout_when_the_process_timed_out(
@@ -350,7 +360,7 @@ def test_generate_raises_timeout_when_the_process_timed_out(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderTimeoutError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_classifies_an_availability_failure(
@@ -369,7 +379,7 @@ def test_generate_classifies_an_availability_failure(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderUnavailableError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_classifies_an_unrecognised_failure_as_generation_error(
@@ -384,4 +394,4 @@ def test_generate_classifies_an_unrecognised_failure_as_generation_error(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderGenerationError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))

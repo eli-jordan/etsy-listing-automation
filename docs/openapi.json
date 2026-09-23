@@ -559,6 +559,20 @@
         "title": "DescriptionConfig",
         "type": "object"
       },
+      "DesignBriefResponse": {
+        "description": "One drafted listing brief (PRD 68).\n\nDeliberately thinner than `SeoProposalResponse`: no snapshot and no\nexpiry, because there is nothing here to keep. The browser writes\n``brief`` straight into the ordinary Brief field through the existing\nautosave path, at which point it is seller-owned listing content like\nany other -- so there is no pending state to go stale, nothing to\nrestore after a refresh, and nothing to retain past this response.",
+        "properties": {
+          "brief": {
+            "title": "Brief",
+            "type": "string"
+          }
+        },
+        "required": [
+          "brief"
+        ],
+        "title": "DesignBriefResponse",
+        "type": "object"
+      },
       "DesignSummary": {
         "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
         "properties": {
@@ -4348,9 +4362,52 @@
         ]
       }
     },
+    "/api/listings/{name}/ai-seo/brief": {
+      "post": {
+        "description": "Draft this saved listing's brief from its design image (PRD 68).\n\nThe browser calls this by itself, once, when a design is attached to a\nlisting whose brief is empty -- so every refusal here is one a caller\nnobody asked to call has to be able to live with silently. That shapes\ntwo things. First, this endpoint re-checks the state it needs rather\nthan trusting the client's reason for calling: a design must be\nselected, some provider must be ready, and `prompts/brief.md` must be\nreadable. Second, it deliberately does *not* check whether the brief is\nalready filled -- only the browser knows whether the seller has typed\ninto the field since the request was armed, and refusing based on a file\nautosave may not have reached yet would refuse the common case.\n\nNever writes the drafted text anywhere. It is returned, the editor puts\nit in the ordinary Brief field, and autosave persists it exactly as it\npersists a typed one -- which is what keeps \"the model never writes\n`listing.yaml`\" true (PRD 4, as amended by PRD 68).",
+        "operationId": "request_design_brief_api_listings__name__ai_seo_brief_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DesignBriefResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Request Design Brief",
+        "tags": [
+          "ai-seo"
+        ]
+      }
+    },
     "/api/listings/{name}/ai-seo/proposal": {
       "post": {
-        "description": "Run one complete AI Mode SEO request for this saved listing.\n\nRefuses with 409 for exactly two reasons: this listing does not meet\n:func:`_readiness`'s prerequisites (re-checked here independently of\nwhatever the client last saw from the readiness endpoint -- state can\nchange between the two calls), or another request for the same listing\nis already running (the settled \"Concurrent requests\" decision; a\n*different* listing's request is never refused). Every failure the\norchestrator itself can raise maps onto the settled \"Timeout and\nretries\" outcomes: 503 when every provider was recognised-unavailable,\n502 for everything else the plan calls \"Try again\". A cancellation\n(browser disconnect) answers 499 -- there is usually nobody left to\nreceive it, but the request must still resolve to *something* so this\ncoroutine, and the process it was managing, both end cleanly.\n\nThe final ``except Exception`` is a deliberate catch-all, not a\nswallow-and-hope: everything above it is a recognised\n`~etsy_listings.ai.errors.SeoGenerationError` outcome the plan already\nnames, but `ai/process.py.run_managed` can also raise a plain\n`CliProcessError` (`subprocess.Popen` itself failing to launch a\nprovider's CLI -- e.g. a binary readiness confirmed present and then\nremoved before this call), and any adapter bug is, by definition,\nsomething this module cannot enumerate in advance. Neither may leave\nFastAPI's own unhandled-exception path to answer: that path is a\nplain-text \"Internal Server Error\", not this module's\n``{\"detail\": ...}`` JSON shape every other status code here uses, and a\nfuture frontend (PR7) should not have to special-case one endpoint's\nerror body. ``HTTPException`` is re-raised untouched first, since\n:func:`_build_request` raises one of those directly (the \"no usable\ngarment profile\" 409) and it must reach the client as itself, not get\nfolded into a 502.\n\nReturns only what item 4 permits: the validated proposal, the input\nsnapshot, and expiry metadata. Nothing here is written to a workspace\nfile, a lockfile, or any server-side cache -- ``proposal`` and\n``seo_request`` fall out of scope the moment this function returns.",
+        "description": "Run one complete AI Mode SEO request for this saved listing.\n\nRefuses with 409 for exactly two reasons: this listing does not meet\n:func:`_readiness`'s prerequisites (re-checked here independently of\nwhatever the client last saw from the readiness endpoint -- state can\nchange between the two calls), or another proposal request for the same\nlisting is already running (the settled \"Concurrent requests\" decision;\na *different* listing's request, or this listing's brief draft, is never\nrefused). :func:`_generation_errors` owns every other outcome.\n\nReturns only what PR5 item 4 permits: the validated proposal, the input\nsnapshot, and expiry metadata. Nothing here is written to a workspace\nfile, a lockfile, or any server-side cache -- ``proposal`` and\n``seo_request`` fall out of scope the moment this function returns.",
         "operationId": "request_seo_proposal_api_listings__name__ai_seo_proposal_post",
         "parameters": [
           {

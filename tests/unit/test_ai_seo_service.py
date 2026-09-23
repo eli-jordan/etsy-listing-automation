@@ -30,17 +30,21 @@ from etsy_listings.ai.models import (
     Deadline,
     GarmentContext,
     ProviderReadiness,
+    ProviderTask,
     RawProviderResult,
     RepairContext,
     SeoRequest,
 )
-from etsy_listings.ai.providers import FakeSeoProvider
+from etsy_listings.ai.orchestrator import generate_proposal
+from etsy_listings.ai.providers import FakeAiProvider
 from etsy_listings.ui.api.seo import (
     ActiveSeoRequests,
-    default_seo_providers,
+    default_ai_providers,
     generate_with_cancellation,
 )
 from etsy_listings.workspace.workspace import Workspace
+
+_PROMPT = "Write SEO copy."
 
 
 def _seo_request() -> SeoRequest:
@@ -78,6 +82,20 @@ def _valid_payload() -> str:
 
 async def _never_disconnected() -> bool:
     return False
+
+
+def _generation(providers: list[object]):  # noqa: ANN001, ANN202 - test helper
+    """The blocking call `generate_with_cancellation` now takes.
+
+    It races a *call*, not a request and a provider list (PRD 68 gave it a
+    second kind of generation to race), so a test supplies the same closure
+    the endpoints do."""
+    return lambda cancel: generate_proposal(
+        _seo_request(),
+        _PROMPT,
+        providers,  # type: ignore[arg-type]
+        cancel_event=cancel,
+    )
 
 
 def _run(coro):  # noqa: ANN001, ANN202 - test helper, inference is exact
@@ -136,35 +154,44 @@ def _run(coro):  # noqa: ANN001, ANN202 - test helper, inference is exact
 def test_a_listing_can_only_be_claimed_once_at_a_time() -> None:
     active = ActiveSeoRequests()
 
-    assert active.begin("take-a-hike") is True
-    assert active.begin("take-a-hike") is False
+    assert active.begin("proposal", "take-a-hike") is True
+    assert active.begin("proposal", "take-a-hike") is False
 
-    active.end("take-a-hike")
+    active.end("proposal", "take-a-hike")
 
-    assert active.begin("take-a-hike") is True
+    assert active.begin("proposal", "take-a-hike") is True
 
 
 def test_different_listings_are_claimed_independently() -> None:
     active = ActiveSeoRequests()
 
-    assert active.begin("take-a-hike") is True
-    assert active.begin("another-listing") is True
+    assert active.begin("proposal", "take-a-hike") is True
+    assert active.begin("proposal", "another-listing") is True
+
+
+def test_the_two_kinds_of_request_do_not_block_each_other() -> None:
+    """A brief draft is what *unblocks* a proposal (PRD 68), so the two are
+    never rivals -- refusing a proposal because a brief is in flight would
+    break the automatic chain on its very first step."""
+    active = ActiveSeoRequests()
+
+    assert active.begin("brief", "take-a-hike") is True
+    assert active.begin("proposal", "take-a-hike") is True
 
 
 def test_ending_a_listing_that_was_never_begun_does_not_raise() -> None:
-    ActiveSeoRequests().end("never-claimed")
+    ActiveSeoRequests().end("proposal", "never-claimed")
 
 
 # ----------------------------------------------------- generate_with_cancellation
 
 
 def test_returns_the_generated_proposal_when_never_disconnected() -> None:
-    provider = FakeSeoProvider(name="codex", responses=[_valid_payload()])
+    provider = FakeAiProvider(name="codex", responses=[_valid_payload()])
 
     proposal = _run(
         generate_with_cancellation(
-            _seo_request(),
-            [provider],
+            _generation([provider]),
             is_disconnected=_never_disconnected,
             poll_interval=0.01,
         )
@@ -177,11 +204,11 @@ def test_returns_the_generated_proposal_when_never_disconnected() -> None:
 
 @dataclass
 class _CancelAwareProvider:
-    """A `SeoProvider` double that blocks inside `generate()` until its
+    """A `AiProvider` double that blocks inside `generate()` until its
     ``cancel_event`` is set, then raises `ProviderCancelledError` -- exactly
     the shape `ai/process.py.run_managed` and both real adapters already
     give a cancelled call (`ai/codex.py`, `ai/claude.py`: `if
-    result.cancelled: raise ProviderCancelledError(...)`). `FakeSeoProvider`
+    result.cancelled: raise ProviderCancelledError(...)`). `FakeAiProvider`
     itself never blocks, so it cannot stand in for "generation is still in
     flight when the disconnect happens" -- the one behaviour this test
     needs."""
@@ -195,7 +222,7 @@ class _CancelAwareProvider:
 
     def generate(
         self,
-        request: SeoRequest,
+        task: ProviderTask,
         deadline: Deadline,
         *,
         repair: RepairContext | None = None,
@@ -221,8 +248,7 @@ def test_a_disconnect_sets_the_cancel_event_and_propagates_cancellation() -> Non
     async def scenario() -> None:
         try:
             await generate_with_cancellation(
-                _seo_request(),
-                [provider],
+                _generation([provider]),
                 is_disconnected=is_disconnected,
                 poll_interval=0.01,
             )
@@ -237,12 +263,11 @@ def test_a_disconnect_sets_the_cancel_event_and_propagates_cancellation() -> Non
 
 
 def test_never_disconnecting_never_touches_the_cancel_event() -> None:
-    provider = FakeSeoProvider(name="claude", responses=[_valid_payload()])
+    provider = FakeAiProvider(name="claude", responses=[_valid_payload()])
 
     _run(
         generate_with_cancellation(
-            _seo_request(),
-            [provider],
+            _generation([provider]),
             is_disconnected=_never_disconnected,
             poll_interval=0.01,
         )
@@ -253,10 +278,10 @@ def test_never_disconnecting_never_touches_the_cancel_event() -> None:
     assert not recorded_event.is_set()
 
 
-# --------------------------------------------------------- default_seo_providers
+# --------------------------------------------------------- default_ai_providers
 
 
-def test_default_seo_providers_is_codex_then_claude_over_the_workspace(
+def test_default_ai_providers_is_codex_then_claude_over_the_workspace(
     workspace_root: Path,
 ) -> None:
     from etsy_listings.ai.claude import ClaudeProvider
@@ -264,7 +289,7 @@ def test_default_seo_providers_is_codex_then_claude_over_the_workspace(
 
     workspace = Workspace.discover(root_override=workspace_root)
 
-    providers = default_seo_providers(workspace)
+    providers = default_ai_providers(workspace)
 
     assert [type(p) for p in providers] == [CodexProvider, ClaudeProvider]
     codex, claude = providers
@@ -272,5 +297,3 @@ def test_default_seo_providers_is_codex_then_claude_over_the_workspace(
     assert isinstance(claude, ClaudeProvider)
     assert codex.workspace_root == workspace.root
     assert claude.workspace_root == workspace.root
-    assert codex.prompt_file == workspace.seo_prompt_file()
-    assert claude.prompt_file == workspace.seo_prompt_file()

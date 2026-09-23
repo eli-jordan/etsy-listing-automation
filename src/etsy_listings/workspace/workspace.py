@@ -339,6 +339,12 @@ class Workspace:
         accessor draws."""
         return self.root / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE
 
+    def brief_prompt_file(self) -> Path:
+        """``prompts/brief.md`` -- the seller-editable prompt that drafts a
+        listing brief from its design image (PRD 68). Same split as
+        :meth:`seo_prompt_file`: this accessor only names the file."""
+        return self.root / layout.PROMPTS_DIR / layout.BRIEF_PROMPT_FILE
+
     def common_copy_dir(self) -> Path:
         return self.root / layout.COMMON_COPY_DIR
 

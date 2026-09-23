@@ -332,6 +332,42 @@ export interface paths {
     patch: operations["patch_listing_api_listings__name__patch"];
     trace?: never;
   };
+  "/api/listings/{name}/ai-seo/brief": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Request Design Brief
+     * @description Draft this saved listing's brief from its design image (PRD 68).
+     *
+     *     The browser calls this by itself, once, when a design is attached to a
+     *     listing whose brief is empty -- so every refusal here is one a caller
+     *     nobody asked to call has to be able to live with silently. That shapes
+     *     two things. First, this endpoint re-checks the state it needs rather
+     *     than trusting the client's reason for calling: a design must be
+     *     selected, some provider must be ready, and `prompts/brief.md` must be
+     *     readable. Second, it deliberately does *not* check whether the brief is
+     *     already filled -- only the browser knows whether the seller has typed
+     *     into the field since the request was armed, and refusing based on a file
+     *     autosave may not have reached yet would refuse the common case.
+     *
+     *     Never writes the drafted text anywhere. It is returned, the editor puts
+     *     it in the ordinary Brief field, and autosave persists it exactly as it
+     *     persists a typed one -- which is what keeps "the model never writes
+     *     `listing.yaml`" true (PRD 4, as amended by PRD 68).
+     */
+    post: operations["request_design_brief_api_listings__name__ai_seo_brief_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/listings/{name}/ai-seo/proposal": {
     parameters: {
       query?: never;
@@ -348,34 +384,12 @@ export interface paths {
      *     Refuses with 409 for exactly two reasons: this listing does not meet
      *     :func:`_readiness`'s prerequisites (re-checked here independently of
      *     whatever the client last saw from the readiness endpoint -- state can
-     *     change between the two calls), or another request for the same listing
-     *     is already running (the settled "Concurrent requests" decision; a
-     *     *different* listing's request is never refused). Every failure the
-     *     orchestrator itself can raise maps onto the settled "Timeout and
-     *     retries" outcomes: 503 when every provider was recognised-unavailable,
-     *     502 for everything else the plan calls "Try again". A cancellation
-     *     (browser disconnect) answers 499 -- there is usually nobody left to
-     *     receive it, but the request must still resolve to *something* so this
-     *     coroutine, and the process it was managing, both end cleanly.
+     *     change between the two calls), or another proposal request for the same
+     *     listing is already running (the settled "Concurrent requests" decision;
+     *     a *different* listing's request, or this listing's brief draft, is never
+     *     refused). :func:`_generation_errors` owns every other outcome.
      *
-     *     The final ``except Exception`` is a deliberate catch-all, not a
-     *     swallow-and-hope: everything above it is a recognised
-     *     `~etsy_listings.ai.errors.SeoGenerationError` outcome the plan already
-     *     names, but `ai/process.py.run_managed` can also raise a plain
-     *     `CliProcessError` (`subprocess.Popen` itself failing to launch a
-     *     provider's CLI -- e.g. a binary readiness confirmed present and then
-     *     removed before this call), and any adapter bug is, by definition,
-     *     something this module cannot enumerate in advance. Neither may leave
-     *     FastAPI's own unhandled-exception path to answer: that path is a
-     *     plain-text "Internal Server Error", not this module's
-     *     ``{"detail": ...}`` JSON shape every other status code here uses, and a
-     *     future frontend (PR7) should not have to special-case one endpoint's
-     *     error body. ``HTTPException`` is re-raised untouched first, since
-     *     :func:`_build_request` raises one of those directly (the "no usable
-     *     garment profile" 409) and it must reach the client as itself, not get
-     *     folded into a 502.
-     *
-     *     Returns only what item 4 permits: the validated proposal, the input
+     *     Returns only what PR5 item 4 permits: the validated proposal, the input
      *     snapshot, and expiry metadata. Nothing here is written to a workspace
      *     file, a lockfile, or any server-side cache -- ``proposal`` and
      *     ``seo_request`` fall out of scope the moment this function returns.
@@ -1140,6 +1154,21 @@ export interface components {
       ref?: string | null;
       /** Text */
       text?: string | null;
+    };
+    /**
+     * DesignBriefResponse
+     * @description One drafted listing brief (PRD 68).
+     *
+     *     Deliberately thinner than `SeoProposalResponse`: no snapshot and no
+     *     expiry, because there is nothing here to keep. The browser writes
+     *     ``brief`` straight into the ordinary Brief field through the existing
+     *     autosave path, at which point it is seller-owned listing content like
+     *     any other -- so there is no pending state to go stale, nothing to
+     *     restore after a refresh, and nothing to retain past this response.
+     */
+    DesignBriefResponse: {
+      /** Brief */
+      brief: string;
     };
     /**
      * DesignSummary
@@ -3042,6 +3071,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  request_design_brief_api_listings__name__ai_seo_brief_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DesignBriefResponse"];
         };
       };
       /** @description Validation Error */
