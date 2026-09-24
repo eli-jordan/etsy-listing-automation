@@ -164,7 +164,7 @@ than relying on shape-sniffing across all three."""
 # ──────────────────────────────────────────────────────────────────────────
 
 IssueSeverity = Literal["block", "warn"]
-IssueTab = Literal["variants", "images", "details"]
+IssueTab = Literal["variants", "pricing", "images", "details"]
 
 
 class Issue(BaseModel):

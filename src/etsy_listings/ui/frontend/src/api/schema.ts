@@ -1454,7 +1454,7 @@ export interface components {
        * Tab
        * @enum {string}
        */
-      tab: "variants" | "images" | "details";
+      tab: "variants" | "pricing" | "images" | "details";
       /** Where */
       where: string;
     };
