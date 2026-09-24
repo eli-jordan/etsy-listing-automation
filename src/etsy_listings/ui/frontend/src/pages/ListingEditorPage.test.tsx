@@ -105,13 +105,34 @@ describe("ListingEditorPage", () => {
       }),
     );
     renderAt("/listings/take-a-hike");
-    await screen.findByText(/1 problem blocks this listing/);
+    await screen.findByText(/1 to fix before deploying/);
     expect(screen.getByText("still <generate>")).toBeInTheDocument();
   });
 
+  it("presents deploy blockers as warnings, marked in words (PRD 70)", async () => {
+    /* None of these stops the save -- naming the listing wrote it -- so an
+       error's red circle told a seller their work was refused. A blocker
+       wears the warning icon like everything else, and says what it stops
+       on its own row, so the difference from plain advice is not colour. */
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [
+          { severity: "block", tab: "details", where: "Title", message: "no title" },
+          { severity: "warn", tab: "details", where: "Tags", message: "no tags" },
+        ],
+      }),
+    );
+    const { container } = renderAt("/listings/take-a-hike");
+    await screen.findByText("no title");
+
+    expect(container.querySelector(".issue--block")).toBeNull();
+    expect(container.querySelectorAll(".issue--warn")).toHaveLength(2);
+    expect(screen.getAllByText("Prevents deploying")).toHaveLength(1);
+  });
+
   it("counts warnings in the summary alongside the blocks", async () => {
-    /* Reporting only the blocks left "1 problem blocks this listing" sitting
-       above three issues, two of which the summary never mentioned. */
+    /* Reporting only the blocks left a one-item summary sitting above three
+       issues, two of which it never mentioned. */
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
       detail({
         issues: [
@@ -123,7 +144,7 @@ describe("ListingEditorPage", () => {
     );
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("1 problem blocks this listing · 2 warnings");
+    await screen.findByText("1 to fix before deploying · 2 other warnings");
   });
 
   it("summarises warnings alone when nothing blocks", async () => {
@@ -148,7 +169,7 @@ describe("ListingEditorPage", () => {
     );
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("2 problems block this listing");
+    await screen.findByText("2 to fix before deploying");
   });
 
   it("jumps to the tab that owns an issue when Fix is clicked", async () => {
@@ -250,7 +271,9 @@ describe("ListingEditorPage", () => {
     const imagesTabButton = Array.from(container.querySelectorAll(".seg-opt")).find((el) =>
       el.textContent?.startsWith("Listing Images"),
     ) as HTMLElement;
-    expect(imagesTabButton.querySelector(".tab-badge--block")).toHaveTextContent("1");
+    // A warning-coloured count: the tab only says there is something to look
+    // at, and none of it stops the save.
+    expect(imagesTabButton.querySelector(".tab-badge--warn")).toHaveTextContent("1");
   });
 
   it("shows Draft for an unpublished listing and no open-elsewhere menu", async () => {

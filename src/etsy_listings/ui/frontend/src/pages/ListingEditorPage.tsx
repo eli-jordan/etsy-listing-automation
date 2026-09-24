@@ -325,9 +325,12 @@ export function ListingEditorShell({
               onClick={() => pickTab(t.id)}
             >
               {t.label}
-              {badge.block > 0 && <span className="tab-badge tab-badge--block">{badge.block}</span>}
-              {badge.block === 0 && badge.warn > 0 && (
-                <span className="tab-badge tab-badge--warn">{badge.warn}</span>
+              {/* One warning-coloured count, however many of them stop a
+                  deploy: none of them stops the save (PRD 70), and the tab
+                  is only saying there is something to look at. The banner
+                  says which ones matter for deploying. */}
+              {badge.block + badge.warn > 0 && (
+                <span className="tab-badge tab-badge--warn">{badge.block + badge.warn}</span>
               )}
             </div>
           );
