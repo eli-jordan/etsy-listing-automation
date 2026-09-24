@@ -15,10 +15,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import httpx
 import pytest
 
 from etsy_listings import connections
 from etsy_listings.clients.etsy.listings import HttpEtsyListingClient
+from etsy_listings.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
+from etsy_listings.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
 from etsy_listings.config.secrets import MissingCredentialError
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import Workspace
@@ -108,3 +111,52 @@ def test_a_run_context_carries_every_client_a_stage_might_ask_for(workspace_root
     assert ctx.catalog is not None
     assert ctx.printify is not None
     assert ctx.etsy is None  # no Etsy sign-in in the fixture workspace
+
+
+# ------------------------------------------------------------ Etsy market
+
+
+def _market_over(root: Path, seen: list[httpx.Request]) -> EtsyMarketClient | None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen.append(request)
+        return httpx.Response(200, json={"count": 0, "results": []})
+
+    return connections.etsy_market_client(
+        root, http=httpx.Client(transport=httpx.MockTransport(handler), base_url=ETSY_BASE_URL)
+    )
+
+
+def test_no_etsy_key_pair_means_no_market_client(workspace_root: Path) -> None:
+    assert connections.etsy_market_client(workspace_root) is None
+
+
+def test_the_market_client_needs_only_the_key_pair_not_a_sign_in(workspace_root: Path) -> None:
+    """Every market call is unscoped. A workspace with a key pair and no
+    sign-in can research the market -- nothing asks the token store."""
+    _env(workspace_root, KEY_PAIR)
+    seen: list[httpx.Request] = []
+
+    client = _market_over(workspace_root, seen)
+    assert isinstance(client, HttpEtsyMarketClient)
+    client.search_active("hiking shirt")
+
+    assert seen[0].headers["x-api-key"] == "test-keystring:test-secret"
+    assert "authorization" not in seen[0].headers
+
+
+def test_the_market_client_never_spends_a_refresh_token(workspace_root: Path) -> None:
+    """Even when a sign-in exists, no bearer is attached. Etsy rotates the
+    refresh token on every use, so a bearer the calls do not need would only
+    add a refresh -- and a chance to race `plan`/`apply` or the e2e layer for
+    the one valid token -- to every market research."""
+    _env(workspace_root, KEY_PAIR)
+    tokens = workspace_root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE
+    tokens.parent.mkdir(parents=True, exist_ok=True)
+    tokens.write_text("this is not a token file", encoding="utf-8")
+    seen: list[httpx.Request] = []
+
+    client = _market_over(workspace_root, seen)
+    assert client is not None
+    client.review_count(1)
+
+    assert "authorization" not in seen[0].headers
