@@ -16,6 +16,8 @@ import uvicorn
 from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
 from etsy_listings.workspace.workspace import Workspace
 
+from tests.support.server import stop_server
+
 STARTUP_TIMEOUT_SECONDS = 30
 
 
@@ -73,8 +75,7 @@ def calibrator_server(workspace_root: Path, prerequisite_missing) -> Iterator[st
     try:
         yield f"http://127.0.0.1:{port}"
     finally:
-        server.should_exit = True
-        thread.join(timeout=10)
+        stop_server(server, thread)
 
 
 DEFAULT_TIMEOUT_MS = 60_000
