@@ -3,12 +3,39 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../api/listings";
 import * as seoApi from "../../api/seo";
+import type { SaveState } from "../../hooks/useAutosave";
 import type { ListingDetail, SeoProposalResponse } from "../../types";
-import { DetailsTab } from "./DetailsTab";
+import { DetailsTab as DetailsTabView } from "./DetailsTab";
+import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
+
+/** The tab with AI Mode attached, exactly as `ListingEditorShell` mounts it.
+ *
+ * `useAiSeoMode` moved out of `DetailsTab` and up to the shell (PRD 68): a
+ * request has to survive a tab switch, and the chain that starts one begins
+ * at the design strip above the tabs. Every test below is still about what
+ * the tab *does* with AI Mode, so the harness supplies the same wiring the
+ * real caller does rather than a stub -- a hand-built `AiSeoMode` object
+ * would test this file's idea of the hook instead of the hook. */
+function DetailsTab(props: {
+  detail: ListingDetail;
+  onUpdate: (patch: Record<string, unknown>) => void;
+  onFlush: () => void;
+  save?: SaveState;
+}) {
+  const aiSeo = useAiSeoMode(props.detail, props.onUpdate, props.onFlush, props.save);
+  return (
+    <DetailsTabView
+      detail={props.detail}
+      onUpdate={props.onUpdate}
+      onFlush={props.onFlush}
+      aiSeo={aiSeo}
+    />
+  );
+}
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
@@ -566,7 +593,9 @@ describe("DetailsTab AI Mode", () => {
         design_content_hash: null,
       },
       generated_at: "2026-09-23T00:00:00Z",
-      expires_at: "2026-09-24T00:00:00Z",
+      // Relative to now -- see `aiSeoStorage.test.ts` for why a fixed pair is a
+      // fixture with an expiry date of its own.
+      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
     };
   }
 

@@ -46,13 +46,12 @@ from etsy_listings.ai.errors import (
 from etsy_listings.ai.models import (
     Deadline,
     ProviderReadiness,
+    ProviderTask,
     RawProviderResult,
     RepairContext,
-    SeoRequest,
 )
 from etsy_listings.ai.process import run_managed
-from etsy_listings.ai.prompt import RESPONSE_SCHEMA, build_prompt
-from etsy_listings.ai.repair import repair_prompt_suffix
+from etsy_listings.ai.repair import prompt_text_for
 
 PROVIDER_NAME = "codex"
 
@@ -84,14 +83,18 @@ class CodexProvider:
     launched in (`-C`, and the child process's cwd) -- the plan's "agreed
     readable scope": full read access to the workspace tree, deliberately
     including readable secrets and caches (implementation plan, "Provider
-    process"). ``prompt_file`` is the seller's `prompts/seo.md`, read fresh
-    on every call. Both are plain `Path`s rather than a `Workspace`, mirroring
+    process"). A plain `Path` rather than a `Workspace`, mirroring
     `ai/prompt.py.seed_default_prompt`'s own rule: the caller already knows
-    how to reach `Workspace.root` and `Workspace.seo_prompt_file()`.
+    how to reach `Workspace.root`.
+
+    No prompt file: which prose a request is built from, and whether that
+    file exists at all, is the *request's* business (`ai/models.py.ProviderTask`,
+    PRD 68). This adapter is only ever told "run the CLI on this text", so a
+    missing `prompts/seo.md` is reported by the endpoint that needed it
+    rather than as this CLI being unready.
     """
 
     workspace_root: Path
-    prompt_file: Path
     binary: str = "codex"
 
     def _resolved_binary(self) -> str:
@@ -120,12 +123,6 @@ class CodexProvider:
         unavailable = self._check_read_only_capability()
         if unavailable is not None:
             return unavailable
-
-        if not self.prompt_file.is_file():
-            return ProviderReadiness(
-                ready=False,
-                reason=f"{self.prompt_file} is missing; run `etsy-listings setup` to seed it",
-            )
 
         return ProviderReadiness(ready=True)
 
@@ -185,17 +182,17 @@ class CodexProvider:
 
     def generate(
         self,
-        request: SeoRequest,
+        task: ProviderTask,
         deadline: Deadline,
         *,
         repair: RepairContext | None = None,
         cancel_event: threading.Event | None = None,
     ) -> RawProviderResult:
-        prompt_text = self._build_prompt_text(request, repair)
+        prompt_text = prompt_text_for(task, repair)
         with tempfile.TemporaryDirectory(prefix="etsy-listings-ai-codex-") as tmp:
             tmp_path = Path(tmp)
             schema_path = tmp_path / "schema.json"
-            schema_path.write_text(json.dumps(RESPONSE_SCHEMA), encoding="utf-8")
+            schema_path.write_text(json.dumps(dict(task.response_schema)), encoding="utf-8")
             last_message_path = tmp_path / "last-message.json"
 
             argv = [
@@ -208,7 +205,7 @@ class CodexProvider:
                 "-C",
                 str(self.workspace_root),
                 "-i",
-                str(request.design_image),
+                str(task.design_image),
                 "--output-schema",
                 str(schema_path),
                 "-o",
@@ -244,10 +241,3 @@ class CodexProvider:
             )
 
         return RawProviderResult(provider=PROVIDER_NAME, raw_output=raw_output)
-
-    def _build_prompt_text(self, request: SeoRequest, repair: RepairContext | None) -> str:
-        seller_prompt = self.prompt_file.read_text(encoding="utf-8")
-        prompt_text = build_prompt(seller_prompt, request)
-        if repair is not None:
-            prompt_text = f"{prompt_text}\n\n{repair_prompt_suffix(repair)}"
-        return prompt_text

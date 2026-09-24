@@ -14,7 +14,8 @@ import hashlib
 import json
 import os
 import shutil
-from collections.abc import Mapping
+import stat
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path, PureWindowsPath
 
@@ -144,6 +145,55 @@ class ScenePhoto:
     map_key: str
 
 
+def _add_owner_write(path: Path) -> None:
+    """Add the owner-write bit, leaving the rest of the mode alone. On Windows
+    this is what clears ``FILE_ATTRIBUTE_READONLY``."""
+    os.chmod(path, os.stat(path).st_mode | stat.S_IWRITE)
+
+
+def remove_tree(path: Path) -> None:
+    """`shutil.rmtree`, surviving a tree that is marked read-only.
+
+    Every tree this project deletes is one it created and owns -- a listing's
+    directory, its render cache, its previews -- so a read-only flag on one is
+    an artefact of the filesystem it sits on, never an instruction from the
+    user. A workspace kept inside a Google Drive folder is the case that found
+    this: Drive sets the flag on every directory it syncs.
+
+    The two platforms this project is tested on refuse at different steps,
+    and the hook has to answer both:
+
+    * **Windows** refuses `os.rmdir` on a directory that is itself read-only.
+      The files inside delete fine, so the traceback points at the one step
+      that looks least likely to be the problem. Fix: make *the path* writable.
+    * **POSIX** refuses to unlink an entry whose *parent directory* is not
+      writable; the entry's own mode is irrelevant. Fix: make *the parent*
+      writable. The first version of this hook only did the Windows half,
+      said in its docstring that it did both, and passed on Windows while
+      failing on the Ubuntu CI runner.
+
+    Both are done, because it is not worth sniffing the platform to skip a
+    chmod that is harmless where it is not needed. The parent is only touched
+    while it is still inside the tree being removed: the root's own parent
+    belongs to the caller, and write permission on it is not this function's
+    to grant. Anything that is not a `PermissionError`, and any retry that
+    fails again, is raised -- this widens exactly one refusal, not every one.
+    """
+    root = Path(path)
+
+    def make_writable(func: Callable[[str], object], failed: str, exc: BaseException) -> None:
+        if not isinstance(exc, PermissionError):
+            raise exc
+        target = Path(failed)
+        _add_owner_write(target)
+        parent = target.parent
+        if parent == root or root in parent.parents:
+            _add_owner_write(parent)
+        func(failed)
+
+    shutil.rmtree(root, onexc=make_writable)
+
+
 class Workspace:
     def __init__(self, root: Path, defaults: Defaults) -> None:
         self.root = root
@@ -253,7 +303,7 @@ class Workspace:
             self.preview_dir(listing),
         ):
             if path.is_dir():
-                shutil.rmtree(path)
+                remove_tree(path)
 
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)
@@ -338,6 +388,12 @@ class Workspace:
         accessor only names the file, the same split every other layout
         accessor draws."""
         return self.root / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE
+
+    def brief_prompt_file(self) -> Path:
+        """``prompts/brief.md`` -- the seller-editable prompt that drafts a
+        listing brief from its design image (PRD 68). Same split as
+        :meth:`seo_prompt_file`: this accessor only names the file."""
+        return self.root / layout.PROMPTS_DIR / layout.BRIEF_PROMPT_FILE
 
     def common_copy_dir(self) -> Path:
         return self.root / layout.COMMON_COPY_DIR

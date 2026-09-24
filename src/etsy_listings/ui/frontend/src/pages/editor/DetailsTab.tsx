@@ -6,12 +6,11 @@ import type {
   ListingDetail,
   PricingPlanSummary,
 } from "../../types";
-import type { SaveState } from "../../hooks/useAutosave";
 import { AiChoiceDrawer } from "./aiSeo/AiChoiceDrawer";
 import { DescriptionSourcePicker } from "./DescriptionSourcePicker";
 import { AiSeoControl } from "./aiSeo/AiSeoControl";
 import { AiTagsDrawer } from "./aiSeo/AiTagsDrawer";
-import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
+import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
 
 /** Title/tags/description/section/pricing (phase 5).
  *
@@ -54,10 +53,13 @@ interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
   onFlush: () => void;
-  save?: SaveState | undefined;
+  /** AI Mode, owned by `ListingEditorShell` rather than by this tab (PRD
+   * 68): a request has to survive a tab switch, and the chain that starts
+   * one begins at the design strip above the tabs. */
+  aiSeo: AiSeoMode;
 }
 
-export function DetailsTab({ detail, onUpdate, onFlush, save }: Props) {
+export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
   const [plans, setPlans] = useState<PricingPlanSummary[]>([]);
@@ -65,7 +67,6 @@ export function DetailsTab({ detail, onUpdate, onFlush, save }: Props) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
-  const aiSeo = useAiSeoMode(detail, onUpdate, onFlush, save);
   const [trackedPhase, setTrackedPhase] = useState(aiSeo.phase);
   const [drawerMotion, setDrawerMotion] = useState(false);
   if (aiSeo.phase !== trackedPhase) {

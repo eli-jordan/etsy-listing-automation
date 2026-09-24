@@ -18,7 +18,7 @@ import typer
 import yaml
 
 from etsy_listings import prompts
-from etsy_listings.ai.prompt import default_prompt_text
+from etsy_listings.ai.prompt import default_seo_prompt_text
 from etsy_listings.clients.etsy.fakes import FakeEtsyShopClient
 from etsy_listings.clients.etsy.models import ReturnPolicy
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
@@ -124,7 +124,7 @@ def test_it_seeds_the_default_ai_seo_prompt_when_absent(tmp_path: Path, scripted
     )
 
     prompt_file = tmp_path / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE
-    assert prompt_file.read_text(encoding="utf-8") == default_prompt_text()
+    assert prompt_file.read_text(encoding="utf-8") == default_seo_prompt_text()
 
 
 def test_it_never_overwrites_a_sellers_own_ai_seo_prompt(tmp_path: Path, scripted) -> None:

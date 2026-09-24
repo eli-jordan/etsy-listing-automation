@@ -29,7 +29,8 @@ from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.listings import router as listings_router
 from etsy_listings.ui.api.listings import support_router as listings_support_router
 from etsy_listings.ui.api.runs import router as runs_router
-from etsy_listings.ui.api.seo import ActiveSeoRequests, SeoProviderFactory, default_seo_providers
+from etsy_listings.ui.api.seo import ActiveSeoRequests, AiProviderFactory, default_ai_providers
+from etsy_listings.ui.api.seo import brief_router as ai_brief_router
 from etsy_listings.ui.api.seo import router as seo_router
 from etsy_listings.ui.api.templates import router as templates_router
 from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
@@ -43,7 +44,7 @@ def create_app(
     workspace: Workspace,
     *,
     context_factory: ContextFactory = connections.run_context,
-    seo_provider_factory: SeoProviderFactory = default_seo_providers,
+    seo_provider_factory: AiProviderFactory = default_ai_providers,
 ) -> FastAPI:
     registry = RunRegistry()
     executor = RunExecutor(workspace=workspace, context_factory=context_factory, registry=registry)
@@ -106,6 +107,7 @@ def create_app(
     app.include_router(listings_support_router)
     app.include_router(runs_router)
     app.include_router(seo_router)
+    app.include_router(ai_brief_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

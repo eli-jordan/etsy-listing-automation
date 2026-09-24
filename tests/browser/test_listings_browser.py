@@ -56,7 +56,13 @@ def _wait_for_listing(page, workspace_root: Path, name: str, **fields: object) -
 
 def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:  # noqa: ANN001
     """`+ New listing` opens the editor on nothing, and the listing appears on
-    disk the moment it has a name and something to price it by."""
+    disk the moment it has a name (PRD 70).
+
+    It used to need a price source as well, and this test asserted that: the
+    file stayed missing while the head explained what was in the way. That was
+    the one incompleteness out of eight that withheld the file rather than
+    only the deploy.
+    """
     _write_pricing_plan(workspace_root)
 
     page.goto(page.url.rsplit("/", 1)[0] + "/listings")
@@ -78,24 +84,25 @@ def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:
     page.get_by_label("Listing name").fill("wildflower-crew")
     page.get_by_label("Listing name").press("Enter")
 
-    # Named, but `Listing` refuses a document with no pricing plan and no
-    # prices -- so nothing is written yet, and the head says so rather than
-    # leaving the user waiting for a file.
-    page.wait_for_function(
-        "document.querySelector('.page-head__meta')?.textContent?.includes('Not saved')"
-    )
-    assert not (workspace_root / "listings" / "wildflower-crew").exists()
-
-    # Supplying the missing piece retries the create: the edit is the retry.
-    page.locator(".tabs .seg-opt", has_text="Listing Details").click()
-    page.get_by_label("Plan").select_option(label="tee-basic")
-
+    # Naming it wrote it, with no garment profile, no design, no colours and
+    # no price source. All four are still in the banner, where they block
+    # deploying it.
     page.wait_for_url("**/listings/wildflower-crew")
     page.get_by_role("heading", name="wildflower-crew").wait_for(state="visible")
-
     written = _listing_yaml(workspace_root, "wildflower-crew")
-    assert written["pricing_plan"].endswith("pricing-plans/tee-basic.yaml")
+    assert written["pricing_plan"] is None
     assert written["media"] == []
+    assert "pricing plan" in page.locator(".issues").inner_text().lower()
+
+    # And a price source is an ordinary edit from here, not a second create.
+    page.locator(".tabs .seg-opt", has_text="Listing Details").click()
+    page.get_by_label("Plan").select_option(label="tee-basic")
+    _wait_for_listing(
+        page,
+        workspace_root,
+        "wildflower-crew",
+        pricing_plan="../../pricing-plans/tee-basic.yaml",
+    )
 
     # And from here it is an ordinary listing: autosave patches it.
     page.locator(".tabs .seg-opt", has_text="Variants").click()

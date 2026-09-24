@@ -5,8 +5,13 @@ import { EditableName } from "../components/EditableName";
 import { OpenOnMenu } from "../components/OpenOnMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
-import { useAutosave, type SaveState } from "../hooks/useAutosave";
+import { useAutosave } from "../hooks/useAutosave";
+import { refName } from "../media";
 import type { Issue, IssueTab, ListingDetail } from "../types";
+import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
+import { AiActivityIndicator } from "./editor/aiSeo/AiActivityIndicator";
+import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
+import { useAutoDesignBrief } from "./editor/aiSeo/useAutoDesignBrief";
 import { DeployControl } from "./editor/DeployControl";
 import { DesignSelect } from "./editor/DesignSelect";
 import { DetailsTab } from "./editor/DetailsTab";
@@ -100,10 +105,16 @@ export function ListingEditorPage() {
 
   return (
     <ListingEditorPageContent
-      // A genuine listing switch remounts; naming or renaming this one does
-      // not lose anything by remounting either, because `useAutosave` drains
-      // what is pending before the name changes and again on unmount.
-      key={routeName ?? "new"}
+      // Deliberately unkeyed. A genuine listing switch already remounts --
+      // `initial` goes `null` above while the new one loads, which unmounts
+      // this whole subtree -- so the key only ever forced the *extra*
+      // remount that naming a draft caused, where `handed` keeps `initial`
+      // non-null. `useAutosave` handles a name change itself (`commitName`
+      // updates its own `savedName`, `detail` and `save` before `onNamed`
+      // fires), so that remount threw away state for nothing. It is not
+      // nothing any more: PRD 68's chain starts when a design is attached,
+      // which on a new listing is usually *before* it is named, and a
+      // remount there aborted the request the seller was waiting on.
       name={routeName}
       initial={initial}
       onBack={() => navigate("/listings")}
@@ -129,22 +140,67 @@ function ListingEditorPageContent({
   onNamed: (name: string, fresh: ListingDetail) => void;
 }) {
   const { detail, update, flush, commitName, save } = useAutosave(name, initial, { onNamed });
+  // Both AI requests live here rather than inside a tab: each outlives the
+  // tab that was showing when it started, and the chain that begins them
+  // begins at the design strip, above the tab strip (PRD 68). Living here
+  // rather than in `ListingEditorShell` is what lets the page head report
+  // them beside the autosave line.
+  /** A name the design pick chose, before the listing exists under it. */
+  const [pickedName, setPickedName] = useState("");
+  /** A name the seller has started typing but not committed. `detail.name` is
+   * still `""` at that point -- an uncommitted name is not the listing's name
+   * -- so without this a design pick would overwrite what they were typing. */
+  const [typedName, setTypedName] = useState("");
+  const aiSeo = useAiSeoMode(detail, update, flush, save);
+  const autoBrief = useAutoDesignBrief(detail.brief, update, flush, aiSeo);
+
+  /** Everything picking a design sets off, in the one handler, because two of
+   * the three need the pick itself rather than a later render of its effect.
+   *
+   * The name is here rather than in `ListingEditorShell` because naming is
+   * `useAutosave`'s (`commitName`), and only a draft that has none gets one:
+   * a listing already called something is called that on purpose, and the
+   * artwork changing is not a reason to rename its directory. The design's
+   * own filename is the name a seller would type anyway -- it is what `new
+   * <design>` already derives on the CLI -- and it is what finally writes the
+   * file, so the ordinary create flow becomes "pick a design" with nothing
+   * else required. A name already taken is refused exactly as a typed one is,
+   * and the page head says so. */
+  function pickDesign(ref: string) {
+    update({ design: ref });
+    if (detail.name === "" && typedName.trim() === "") {
+      const named = refName(ref);
+      // Shown as the name immediately, not only once the file exists. A
+      // create is refused until the document will validate (no price source,
+      // usually), and `useAutosave` holds the name for the edit that retries
+      // it -- so without this the seller would pick a design, see the name
+      // field stay empty, pick a pricing plan, and find the listing suddenly
+      // called something nobody typed. The head already says why it is not
+      // saved yet.
+      setPickedName(named);
+      commitName(named);
+    }
+    autoBrief.start(ref);
+  }
 
   return (
     <ListingEditorShell
       detail={detail}
       update={update}
       flush={flush}
-      save={save}
+      onPickDesign={pickDesign}
+      aiSeo={aiSeo}
       head={
         <EditorHead
           detail={detail}
           onBack={onBack}
           flush={flush}
+          activity={<AiActivityIndicator auto={autoBrief} aiSeo={aiSeo} />}
           title={
             <EditableName
-              value={name ?? ""}
+              value={name ?? pickedName}
               onCommit={commitName}
+              onDraftChange={setTypedName}
               error={
                 save.kind === "name-taken"
                   ? { name: save.name, message: "that name is already taken" }
@@ -153,7 +209,7 @@ function ListingEditorPageContent({
               busy={save.kind === "saving"}
             />
           }
-          meta={metaFor(save, detail, name)}
+          meta={metaFor(save, name)}
         />
       }
     />
@@ -175,12 +231,17 @@ export function EditorHead({
   title,
   meta,
   flush,
+  activity,
 }: {
   detail: ListingDetail;
   onBack: () => void;
   title: ReactNode;
   meta: ReactNode;
   flush: () => Promise<void>;
+  /** What the editor is doing on its own right now, beside the meta line
+   * (PRD 68). `null` whenever nothing is running, which is most of the
+   * time. */
+  activity?: ReactNode;
 }) {
   // Not keyed off `status`: a listing can carry a Printify product without an
   // Etsy listing id, and an id it has is worth a link whatever state Etsy
@@ -204,6 +265,7 @@ export function EditorHead({
 
       <StatusTag status={detail.status} />
       <span className="page-head__meta">{meta}</span>
+      {activity}
 
       {detail.name !== "" && (
         <div className="page-head__actions dv-head-actions">
@@ -218,13 +280,21 @@ export function ListingEditorShell({
   detail,
   update,
   flush,
-  save,
+  onPickDesign,
+  aiSeo,
   head,
 }: {
   detail: ListingDetail;
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
-  save?: SaveState;
+  /** Everything one design pick sets off -- the edit, naming an unnamed
+   * draft, and the brief draft. Built by `ListingEditorPageContent`, which is
+   * the layer that has `commitName`. */
+  onPickDesign: (ref: string) => void;
+  /** Owned by `ListingEditorPageContent`, not by this shell and not by
+   * `DetailsTab`: a request outlives the tab it was started from -- switching
+   * to Variants used to unmount the tab and abort a proposal mid-flight. */
+  aiSeo: AiSeoMode;
   head: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("variants");
@@ -243,7 +313,7 @@ export function ListingEditorShell({
       {/* Above the tabs, not inside one: the artwork is what both Variants
           (which colours suit it) and Listing Images (which mockups show it)
           are about. */}
-      <DesignSelect design={detail.design} onPick={(ref) => update({ design: ref })} />
+      <DesignSelect design={detail.design} onPick={onPickDesign} />
 
       <div className="tabs seg">
         {TABS.map((t) => {
@@ -255,9 +325,12 @@ export function ListingEditorShell({
               onClick={() => pickTab(t.id)}
             >
               {t.label}
-              {badge.block > 0 && <span className="tab-badge tab-badge--block">{badge.block}</span>}
-              {badge.block === 0 && badge.warn > 0 && (
-                <span className="tab-badge tab-badge--warn">{badge.warn}</span>
+              {/* One warning-coloured count, however many of them stop a
+                  deploy: none of them stops the save (PRD 70), and the tab
+                  is only saying there is something to look at. The banner
+                  says which ones matter for deploying. */}
+              {badge.block + badge.warn > 0 && (
+                <span className="tab-badge tab-badge--warn">{badge.block + badge.warn}</span>
               )}
             </div>
           );
@@ -267,7 +340,7 @@ export function ListingEditorShell({
       {tab === "variants" && <VariantsTab detail={detail} onUpdate={update} />}
       {tab === "images" && <ImagesTab detail={detail} onUpdate={update} />}
       {tab === "details" && (
-        <DetailsTab detail={detail} onUpdate={update} onFlush={flush} save={save} />
+        <DetailsTab detail={detail} onUpdate={update} onFlush={flush} aiSeo={aiSeo} />
       )}
     </div>
   );

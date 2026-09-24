@@ -6,7 +6,7 @@ real Printify desired-document builder all agree, end to end, in a real
 browser against a real running app.
 
 Every test drives ``create_app(seo_provider_factory=...)`` -- PR5's own
-injection seam -- with `FakeSeoProvider` doubles (`ai/providers.py`, PR3) or
+injection seam -- with `FakeAiProvider` doubles (`ai/providers.py`, PR3) or
 small local test doubles, exactly the way `tests/contract/test_ai_seo_api.py`
 already does for the HTTP layer alone. No test here ever shells out to a real
 Codex or Claude CLI (PR4's own rule: CI stays fake-provider-only).
@@ -37,7 +37,7 @@ from playwright.sync_api import Page
 
 from etsy_listings.ai.errors import ProviderCancelledError, ProviderUnavailableError
 from etsy_listings.ai.models import Deadline, ProviderReadiness, RawProviderResult, SeoRequest
-from etsy_listings.ai.providers import FakeSeoProvider, SeoProvider
+from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.clients.printify.models import (
     Blueprint,
@@ -52,7 +52,12 @@ from etsy_listings.clients.printify.models import (
 from etsy_listings.config.description import compose_description
 from etsy_listings.engine.context import EventSink, RunContext
 from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
-from etsy_listings.workspace.layout import COMMON_COPY_DIR, PROMPTS_DIR, SEO_PROMPT_FILE
+from etsy_listings.workspace.layout import (
+    BRIEF_PROMPT_FILE,
+    COMMON_COPY_DIR,
+    PROMPTS_DIR,
+    SEO_PROMPT_FILE,
+)
 from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -119,6 +124,24 @@ def _valid_json(**kwargs: Any) -> str:
 # --------------------------------------------------------------------------
 
 
+def _write_pricing_plan(workspace_root: Path) -> None:
+    """A listing will not be *written* without a price source (`Listing`'s own
+    validator), so the create flow needs one to reach disk at all. Same plan
+    `test_listings_browser.py` writes, for the same reason."""
+    path = workspace_root / "pricing-plans" / "tee-basic.yaml"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        yaml.safe_dump(
+            {
+                "garment_profile": "comfort-colors-1717",
+                "prices": {"S": "249 NOK", "M": "249 NOK"},
+                "price_overrides": {},
+            }
+        ),
+        encoding="utf-8",
+    )
+
+
 def _seed_prompt(workspace_root: Path) -> Path:
     path = workspace_root / PROMPTS_DIR / SEO_PROMPT_FILE
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -150,16 +173,16 @@ def _workspace_snapshot(workspace_root: Path) -> tuple[bytes, list[Path]]:
     return listing_bytes, tree
 
 
-def _ready_provider(name: str = "codex", *, responses: list[str] | None = None) -> FakeSeoProvider:
-    return FakeSeoProvider(
+def _ready_provider(name: str = "codex", *, responses: list[str] | None = None) -> FakeAiProvider:
+    return FakeAiProvider(
         name=name,
         ready=ProviderReadiness(ready=True),
         responses=responses if responses is not None else [_valid_json()],
     )
 
 
-def _unready_provider(name: str, reason: str) -> FakeSeoProvider:
-    return FakeSeoProvider(name=name, ready=ProviderReadiness(ready=False, reason=reason))
+def _unready_provider(name: str, reason: str) -> FakeAiProvider:
+    return FakeAiProvider(name=name, ready=ProviderReadiness(ready=False, reason=reason))
 
 
 @dataclass
@@ -236,12 +259,12 @@ def _seo_server(
     workspace_root: Path,
     prerequisite_missing: Any,
     *,
-    providers: list[SeoProvider],
+    providers: list[AiProvider],
     context_factory: Any = None,
 ) -> Iterator[str]:
     """The real app -- built SPA served by FastAPI, exactly as `etsy-listings
     ui` runs it -- over `create_app(seo_provider_factory=...)`, so a test
-    drives AI Mode's readiness and proposal endpoints against `FakeSeoProvider`
+    drives AI Mode's readiness and proposal endpoints against `FakeAiProvider`
     doubles instead of a real Codex or Claude CLI."""
     if not FRONTEND_DIST.is_dir():
         prerequisite_missing(
@@ -508,15 +531,18 @@ def test_editing_an_empty_brief_enables_ai_mode_after_autosave(
 
         ai_mode.click()
         page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
-        assert len(provider.requests) == 1
-        assert provider.requests[0].brief == "A retro sunset tee that says TAKE A HIKE."
+        assert len(provider.tasks) == 1
+        # The brief reaches the provider inside the assembled prompt now, not
+        # as a field on a `SeoRequest`: `ai/prompt.py.build_seo_task` wraps it
+        # in the delimited listing context before an adapter ever sees it.
+        assert "A retro sunset tee that says TAKE A HIKE." in provider.tasks[0].prompt_text
 
 
 def test_ai_mode_is_disabled_when_no_provider_is_ready(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     _seed_prompt(workspace_root)
-    providers: list[SeoProvider] = [
+    providers: list[AiProvider] = [
         _unready_provider("codex", "codex is not authenticated"),
         _unready_provider("claude", "claude was not found on PATH"),
     ]
@@ -666,7 +692,7 @@ def test_cancel_during_generation_retains_no_proposal_and_frees_the_listing(
 ) -> None:
     _seed_prompt(workspace_root)
     provider = _CancelAwareProvider()
-    providers: list[SeoProvider] = [provider]
+    providers: list[AiProvider] = [provider]
 
     with (
         _seo_server(workspace_root, prerequisite_missing, providers=providers) as base_url,
@@ -734,7 +760,7 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
 ) -> None:
     _seed_prompt(workspace_root)
     provider = _ready_provider(responses=["not json at all", '{"still": "not a proposal"}'])
-    providers: list[SeoProvider] = [provider]
+    providers: list[AiProvider] = [provider]
 
     with (
         _seo_server(workspace_root, prerequisite_missing, providers=providers) as base_url,
@@ -753,7 +779,7 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
         # surfaces as "Try again" -- never a partial proposal.
         failure_text = "AI Mode couldn’t generate valid suggestions. Nothing changed."
         page.get_by_text(failure_text).wait_for(state="visible")
-        assert len(provider.requests) == 2
+        assert len(provider.tasks) == 2
         assert provider.repairs[0] is None
         assert provider.repairs[1] is not None
         assert page.get_by_role("region", name="title AI suggestions").count() == 0
@@ -796,7 +822,7 @@ def test_codex_unavailable_falls_through_to_claude(
         title_drawer = page.get_by_role("region", name="title AI suggestions")
         title_drawer.get_by_role("button", name="Claude Wrote This One").wait_for(state="visible")
         assert codex.calls == 1
-        assert len(claude.requests) == 1
+        assert len(claude.tasks) == 1
 
 
 # ===========================================================================
@@ -849,7 +875,7 @@ def test_pending_proposal_survives_refresh_and_expires_after_one_day(
         page.get_by_role("region", name="title AI suggestions").get_by_role(
             "button", name="Persisted Title One"
         ).wait_for(state="visible")
-        assert len(provider.requests) == 1  # never asked again
+        assert len(provider.tasks) == 1  # never asked again
 
         # -- Rewrite the same entry with an already-past expiry, exactly
         # the shape `aiSeoStorage.ts` itself writes, then reload:
@@ -1023,3 +1049,257 @@ def test_common_copy_description_composes_into_the_printify_desired_document(
     assert printify.created[0].description == expected_description
     assert _LEAD in printify.created[0].description
     assert "Machine wash cold" in printify.created[0].description
+
+
+# ===========================================================================
+# Drafting on design attach (PRD 68)
+#
+# The one thing no other layer can show: that picking a design in the real
+# design strip, on a tab that is not Listing Details, ends with suggestion
+# drawers open on a tab the seller never touched -- through the real editor,
+# the real autosave path, and both real endpoints in sequence.
+#
+# The last test is the flow this feature was actually built for and the one
+# the first implementation got wrong: creating a listing, where the design is
+# attached *before* there is a name or a file to attach it to.
+# ===========================================================================
+
+
+def _seed_brief_prompt(workspace_root: Path) -> Path:
+    path = workspace_root / PROMPTS_DIR / BRIEF_PROMPT_FILE
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("Describe the artwork.\n", encoding="utf-8")
+    return path
+
+
+_DRAFTED_BRIEF = "Retro sunset mountains reading TAKE A HIKE."
+
+
+def _pick_another_design(page: Page, name: str) -> None:
+    """Attach a different design through the strip above the tabs, the way a
+    seller does -- `DesignSelect`'s **Change** button, then its card."""
+    page.get_by_role("button", name="Change design").click()
+    page.locator(".template-card", has_text=name).click()
+
+
+def test_attaching_a_design_drafts_a_brief_and_leaves_suggestions_waiting(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """The whole chain, from the Variants tab, without the seller asking for
+    any of it (`docs/ui-listing-seo-interactions.md` section 1a)."""
+    _seed_prompt(workspace_root)
+    _seed_brief_prompt(workspace_root)
+    edit_listing(workspace_root, brief="")
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    provider = _ready_provider(responses=['{"brief": "' + _DRAFTED_BRIEF + '"}', _valid_json()])
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        # The seller is on Variants -- the editor's own default tab -- when
+        # they attach the design. Nothing about this flow requires them to
+        # visit Listing Details first, which is the point of it.
+        page.locator(".design-row__name").wait_for(state="visible")
+        _pick_another_design(page, "second-design")
+
+        # The drafted brief lands in the ordinary field, saved the ordinary
+        # way: the file on disk is what proves it went through autosave and
+        # not some separate write path.
+        for _ in range(200):
+            if _listing_yaml(workspace_root).get("brief") == _DRAFTED_BRIEF:
+                break
+            page.wait_for_timeout(100)
+        else:  # pragma: no cover - only on a pathologically slow machine
+            raise AssertionError("the drafted brief never reached listing.yaml")
+
+        # ... and generation follows on its own, so the drawers are already
+        # open the first time Listing Details is opened.
+        _open_details_tab(page)
+        page.locator(".seo-choice-list").first.wait_for(state="visible")
+        assert page.locator("#details-brief").input_value() == _DRAFTED_BRIEF
+        assert len(provider.tasks) == 2
+        assert "Describe the artwork." in provider.tasks[0].prompt_text
+        assert "Write great Etsy SEO copy." in provider.tasks[1].prompt_text
+
+
+def test_a_design_attached_to_a_listing_with_a_brief_changes_nothing(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """A brief the seller wrote is the authority on the design. Attaching a
+    new design must not redraft it, and must not spend a request."""
+    _seed_prompt(workspace_root)
+    _seed_brief_prompt(workspace_root)
+    edit_listing(workspace_root, brief="My own words.")
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    provider = _ready_provider(responses=[])
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.locator(".design-row__name").wait_for(state="visible")
+        _pick_another_design(page, "second-design")
+
+        _open_details_tab(page)
+        assert page.locator("#details-brief").input_value() == "My own words."
+        assert page.locator(".seo-choice-list").count() == 0
+        assert provider.tasks == []
+
+
+def test_a_workspace_without_the_brief_prompt_says_so_and_stops(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """A workspace that predates this feature. AI Mode by hand still works;
+    only the automatic draft is unavailable, and nothing retries."""
+    _seed_prompt(workspace_root)  # but no prompts/brief.md
+    edit_listing(workspace_root, brief="")
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    provider = _ready_provider(responses=[])
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.locator(".design-row__name").wait_for(state="visible")
+        _pick_another_design(page, "second-design")
+
+        # The 409 settles quickly; nothing is written and nothing retries.
+        page.wait_for_timeout(500)
+        assert page.locator(".ai-activity").count() == 0
+        assert _listing_yaml(workspace_root).get("brief") == ""
+        assert provider.tasks == []
+
+
+def test_the_create_flow_drafts_for_a_design_attached_before_the_listing_exists(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """Create a listing and pick a design: that is the whole gesture.
+
+    The pick names the draft after the design file, which is what creates the
+    listing, which is what makes the SEO request possible -- and it drafts the
+    brief, against a listing that does not exist yet, because `POST
+    /api/ai/design-brief` takes the design and the garment profile rather than
+    a listing name.
+
+    This is the order a seller actually works in, and the one the first
+    implementation broke on twice: the request waited for a save that had not
+    happened yet, and naming remounted the editor and threw the pending work
+    away. The editor has to still be the same one that started the chain for
+    the second half to follow.
+    """
+    _seed_prompt(workspace_root)
+    _seed_brief_prompt(workspace_root)
+    _write_pricing_plan(workspace_root)
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    (workspace_root / "listings" / LISTING / "listing.yaml").unlink()
+    provider = _ready_provider(responses=['{"brief": "' + _DRAFTED_BRIEF + '"}', _valid_json()])
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url, path="/listings/new") as page,
+    ):
+        page.get_by_label("Garment profile").wait_for(state="visible")
+        page.get_by_label("Garment profile").select_option("comfort-colors-1717")
+
+        # Nothing on disk, no name, no file -- and the pick still drafts.
+        assert not (workspace_root / "listings" / LISTING / "listing.yaml").exists()
+        _pick_another_design(page, "second-design")
+        for _ in range(300):
+            if provider.tasks:
+                break
+            page.wait_for_timeout(100)
+        else:  # pragma: no cover - only on a pathologically slow machine
+            raise AssertionError("no brief request was made for the unsaved draft")
+
+        # The pick named it, after the design's own filename -- nobody typed
+        # anything. A price source is still wanted before it can be written.
+        page.get_by_role("heading", name="second-design").wait_for(state="visible")
+        page.locator(".tabs .seg-opt", has_text="Listing Details").click()
+        page.get_by_label("Plan").select_option(label="tee-basic")
+        page.wait_for_url("**/listings/second-design")
+
+        # The drafted brief is in the file, and SEO generation followed --
+        # neither of which survives a remount, which is the point.
+        for _ in range(300):
+            document = workspace_root / "listings" / "second-design" / "listing.yaml"
+            if (
+                document.is_file()
+                and _listing_yaml(workspace_root, "second-design").get("brief") == _DRAFTED_BRIEF
+            ):
+                break
+            page.wait_for_timeout(100)
+        else:  # pragma: no cover - only on a pathologically slow machine
+            raise AssertionError("the drafted brief never reached the named listing")
+
+        page.locator(".seo-choice-list").first.wait_for(state="visible")
+        assert len(provider.tasks) == 2
+
+
+@dataclass
+class _HeldProvider:
+    """Answers each call from a queue, holding the first one open until it is
+    released -- so a state the chain otherwise passes through in milliseconds
+    against a fake is actually observable in a browser.
+
+    `FakeAiProvider` cannot do this: it returns immediately, which is right
+    for every other test here and exactly wrong for one about what the seller
+    sees *while* something runs.
+    """
+
+    responses: list[str] = field(default_factory=list)
+    name: str = "codex"
+    started: threading.Event = field(default_factory=threading.Event)
+    release: threading.Event = field(default_factory=threading.Event)
+    calls: int = field(default=0, init=False)
+
+    def readiness(self) -> ProviderReadiness:
+        return ProviderReadiness(ready=True)
+
+    def generate(
+        self,
+        task: Any,
+        deadline: Deadline,
+        *,
+        repair: Any = None,
+        cancel_event: threading.Event | None = None,
+    ) -> RawProviderResult:
+        self.calls += 1
+        if self.calls == 1:
+            self.started.set()
+            self.release.wait(timeout=30)
+        return RawProviderResult(provider=self.name, raw_output=self.responses.pop(0))
+
+
+def test_the_page_head_names_the_brief_step_while_it_runs(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """**Generating brief…** beside the autosave line, on the Variants tab,
+    which is where the seller is when they attach a design.
+
+    The SEO half of the same indicator is `AiActivityIndicator.test.tsx`'s
+    subject -- holding a second provider call open here to catch it would be
+    testing this test's own timing, not the app's."""
+    _seed_prompt(workspace_root)
+    _seed_brief_prompt(workspace_root)
+    edit_listing(workspace_root, brief="")
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    provider = _HeldProvider(
+        responses=['{"brief": "' + _DRAFTED_BRIEF + '"}', _valid_json()],
+    )
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.locator(".design-row__name").wait_for(state="visible")
+        _pick_another_design(page, "second-design")
+
+        head = page.locator(".page-head .ai-activity")
+        head.wait_for(state="visible")
+        assert "Generating brief" in head.inner_text()
+
+        provider.release.set()
+
+        # And it goes away again once the chain is done with it.
+        page.wait_for_function("() => document.querySelector('.ai-activity') === null")

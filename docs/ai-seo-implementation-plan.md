@@ -34,6 +34,8 @@ different credentials boundary.
 | Topic | Decision |
 |---|---|
 | Entry point | AI Mode stays visible in Listing Details and is disabled until the listing is saved with a selected design, a non-empty brief, `prompts/seo.md`, and at least one ready provider. The brief is editable in Listing Details. |
+| Drafting on design attach | Attaching a design to a listing whose brief is empty drafts a brief from the artwork, writes it through the ordinary autosave path, and then starts one SEO request (PRD 68). The draft is requested from the design-strip's own pick handler, so it goes out immediately and needs no saved listing — `POST /api/ai/design-brief` takes the design path alone -- no listing name and no garment profile, since the brief prompt forbids describing the garment anyway. Only that transition starts it, only into an empty brief, and never again automatically after a failure. The chain belongs to the open editor: same request-scoped endpoints, same 60-second deadline per request, same abort-on-leave rule — there is still no server-side job, queue or proposal cache. |
+| Brief prompt | `prompts/brief.md`, seeded by `setup` exactly as `prompts/seo.md` is, wrapped in the same delimited JSON context and response schema. A valid draft is one non-empty plain-text brief within a fixed length ceiling; there is no repair-specific handling beyond the one the shared orchestrator already gives every task. |
 | Providers | v1 tries Codex, then Claude. Grok is deferred until an API-backed integration. Each CLI uses its currently configured account model; there is no model picker or provider settings UI. |
 | Provider process | Run in the real workspace with full coding-agent tools constrained to read-only mode, automatic non-interactive approval, no durable provider session, and access to all readable workspace files. This explicitly includes readable workspace secrets and caches. |
 | Timeout and retries | The entire request, including a repair and provider fallback, has a 60-second deadline. A malformed response gets one repair attempt from the same provider. Only recognised provider-unavailable, authentication-quota, or rate-limit failures fall through to Claude. Other failures show **Try again**. |
@@ -103,10 +105,19 @@ browser-local proposal drawers ── seller selection ── normal autosave
 `ai/providers.py` exposes a narrow provider protocol, for example:
 
 ```python
-class SeoProvider(Protocol):
+class AiProvider(Protocol):
     def readiness(self) -> ProviderReadiness: ...
-    def generate(self, request: SeoRequest, deadline: Deadline) -> RawProviderResult: ...
+    def generate(self, task: ProviderTask, deadline: Deadline) -> RawProviderResult: ...
 ```
+
+A `ProviderTask` is assembled prompt text, a response schema, and the design
+image — everything a CLI invocation needs and nothing about *which* AI feature
+asked for it. That is what lets brief drafting and SEO generation share one
+adapter, one fallback order, one repair rule and one deadline instead of
+growing a second copy of each (PRD 68). Assembling the task from a seller's
+prompt file is the caller's job, so an adapter no longer reads `prompts/seo.md`
+and no longer reports a missing one as *provider* unreadiness — a prompt file
+is a property of the request, not of the CLI.
 
 The orchestration service owns retry classification, fallback order, the shared
 deadline, and conversion from raw output to `SeoProposal`. An adapter owns only

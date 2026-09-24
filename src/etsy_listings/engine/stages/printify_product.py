@@ -58,6 +58,7 @@ from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
     check_garment_profile_chosen,
+    check_price_source,
 )
 from etsy_listings.engine.stages.placement import DesignPlacement
 from etsy_listings.engine.stages.product_diff import compare
@@ -145,6 +146,15 @@ class PrintifyProductStage:
         if blocked is not None:
             return blocked
         profile = workspace.load_garment_profile(config.garment_profile)
+
+        # PRD 70: an unpriced listing is written, and refused here. Before the
+        # variants are built, because `resolved_price` raises `KeyError` rather
+        # than refusing, and a `KeyError` ends a `--all` batch.
+        blocked = check_price_source(
+            pricing_plan=config.pricing_plan, priced_sizes=bool(config.prices)
+        )
+        if blocked is not None:
+            return blocked
 
         blocked = check_copy_is_concrete(title=config.etsy.title, lead=config.etsy.description.lead)
         if blocked is not None:

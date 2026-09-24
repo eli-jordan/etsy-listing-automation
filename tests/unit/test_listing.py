@@ -224,14 +224,22 @@ def test_pricing_plan_defaults_to_none() -> None:
     assert listing.pricing_plan is None
 
 
-def test_rejects_a_listing_with_neither_pricing_plan_nor_prices() -> None:
+def test_a_listing_with_neither_pricing_plan_nor_prices_still_parses() -> None:
+    """PRD 70: this model stopped owning the price-source refusal. It is a
+    `listing_validation.check_price_source` block issue and a
+    `gates.check_price_source` refusal -- the same two places every other
+    incompleteness is reported from -- so the file is written and the deploy
+    is what stops."""
     data = {**BASE}
     del data["prices"]
-    with pytest.raises(ValidationError, match="pricing_plan"):
-        Listing.model_validate(data, context={"currency": "NOK"})
+
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+
+    assert listing.pricing_plan is None
+    assert listing.prices == {}
 
 
-def test_a_pricing_plan_reference_alone_satisfies_the_at_least_one_check() -> None:
+def test_a_pricing_plan_reference_alone_leaves_prices_empty() -> None:
     data = {**BASE}
     del data["prices"]
     data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
@@ -320,8 +328,7 @@ def test_lifecycle_rejects_a_working_state_written_as_a_value() -> None:
 
 def test_an_empty_draft_builds_with_nothing_chosen() -> None:
     """What `+ New listing` opens on. Every field is empty rather than
-    invented, and the one rule that stands in the way of an empty document --
-    "set pricing_plan or prices" -- is the only one waived."""
+    invented, and nothing about being empty is a validation failure."""
     draft = Listing.empty_draft(currency="NOK")
     assert draft.garment_profile == ""
     assert draft.design == {}
@@ -333,12 +340,15 @@ def test_an_empty_draft_builds_with_nothing_chosen() -> None:
     assert draft.etsy.description == DescriptionConfig()
 
 
-def test_the_same_empty_document_is_still_refused_as_a_listing() -> None:
-    """The waiver is a property of `draft()`, not of the document. Nothing
-    incomplete reaches disk, which is the whole reason the editor has to hold
-    an unsaved one at all."""
-    with pytest.raises(ValidationError):
-        Listing.model_validate(EMPTY_DRAFT, context={"currency": "NOK"})
+def test_the_empty_document_validates_as_an_ordinary_listing() -> None:
+    """PRD 70: incompleteness is not a validation failure, so there is no
+    separate draft rule and nothing for one to waive. An empty document is a
+    listing that has nothing chosen yet -- the banner says what is missing,
+    and the stages refuse to deploy it."""
+    listing = Listing.model_validate(EMPTY_DRAFT, context={"currency": "NOK"})
+
+    assert listing.pricing_plan is None
+    assert listing.prices == {}
 
 
 @pytest.mark.parametrize(
@@ -351,13 +361,16 @@ def test_the_same_empty_document_is_still_refused_as_a_listing() -> None:
         ({"etsy": {"title": "x" * 141}}, "140"),
     ],
 )
-def test_a_draft_still_enforces_every_other_rule(
+def test_an_incomplete_listing_still_cannot_contradict_itself(
     over: dict[str, object], expected_in_message: str
 ) -> None:
-    """Only the price-source rule is waived. These are the failures the editor
-    shows inline *before* the listing has a name, so a draft that skipped them
-    would leave a user typing into a form that never objects and then refuses
-    to save."""
+    """The line PRD 70 draws: *incomplete* is fine, *malformed* is not.
+
+    Every case here is a field somebody filled in that disagrees with another
+    one -- a colour that is not sold, a price in the wrong currency, a title
+    over Etsy's limit. Those are what the editor shows inline against the
+    field that caused them, and they still refuse the write.
+    """
     with pytest.raises(ValidationError) as exc:
-        Listing.draft({**BASE, **over}, currency="NOK")
+        Listing.model_validate({**BASE, **over}, context={"currency": "NOK"})
     assert expected_in_message in str(exc.value)

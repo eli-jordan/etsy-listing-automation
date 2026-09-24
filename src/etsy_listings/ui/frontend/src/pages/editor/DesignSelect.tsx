@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listingDesignThumbnailUrl, listListingDesigns } from "../../api/listings";
-import { refName } from "../../media";
+import { refName, workspacePath } from "../../media";
 import type { ListingDesignSummary } from "../../types";
 
 /**
@@ -35,12 +35,6 @@ const RECENT = 4;
  * against a fixed root (PRD 34's rule, shared with `pricing_plan`). */
 function refFor(design: ListingDesignSummary): string {
   return `../../${design.file}`;
-}
-
-/** The workspace-relative path, for display: a listing-relative ref is what
- * is stored, but `designs/take-a-hike.png` is what the user recognises. */
-function displayPath(ref: string): string {
-  return ref.replace(/^(\.\.\/)+/, "");
 }
 
 export function DesignSelect({ design, onPick }: Props) {
@@ -91,7 +85,7 @@ export function DesignSelect({ design, onPick }: Props) {
           ) : single !== null ? (
             <>
               <div className="design-row__name">{refName(single)}</div>
-              <div className="design-row__file">{displayPath(single)}</div>
+              <div className="design-row__file">{workspacePath(single)}</div>
             </>
           ) : (
             <>

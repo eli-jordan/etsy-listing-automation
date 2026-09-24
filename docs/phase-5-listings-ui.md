@@ -244,6 +244,7 @@ reading once the profile is no longer chosen before the editor opens.
 **Incompleteness is the issues banner's job, not a 400's.** Every refusal
 `_stub()` used to raise is a block issue instead: no design selected, no
 garment profile selected, no pricing plan and no prices. `_stub()` is gone.
+PRD 70 finished the thought: none of those three withholds the file either.
 `newcmd.logic.build_listing_stub` stays untouched and un-deduplicated — the CLI
 `new` picker pre-fills because it asked the questions; the editor has not.
 
@@ -287,6 +288,16 @@ listing can have a name, a design, a garment profile and colours and still not
 exist on disk. The page head's meta line says so in those words rather than a
 bland "Not saved", and names the price source as the one thing standing in the
 way when it is.
+
+**Amended (PRD 70): naming writes it, and nothing else withholds it.** The
+price-source rule was the only incompleteness out of eight that blocked the
+*file* rather than only the deploy, which made it the one a seller met as the
+tool refusing to save their work. It moved out of `Listing` entirely — the
+model now describes an incomplete listing without complaint, `plan` and
+`apply` refuse through `gates.check_price_source` like every other
+prerequisite, and the banner keeps the sentence it always had. A write is
+still refused for a document that is *malformed*: those are `field_errors`,
+and they name a field.
 
 The banner also has to stay true while the listing is unnamed, which a
 mount-time draft cannot do — it goes stale the moment a colour is toggled. So

@@ -510,12 +510,38 @@ mode](https://code.claude.com/docs/en/headless). The **AI Mode** button is
 hidden, never disabled, until at least one CLI reports itself signed in and
 ready; if neither is, the Details tab simply looks like it always did.
 
+**Picking a design names a new listing.** A draft with no name takes the
+design's filename without its extension — so creating a listing is: open the
+editor and pick a design. A listing that already has a name keeps it, and one
+you have started typing a name for keeps that; changing the artwork never
+renames a listing.
+
+The file is written as soon as it has a name. Everything still missing — a
+garment profile, colours, a price source, a title, a lead, an image — is
+listed in the issues banner and blocks **deploying** the listing, never
+saving it.
+
+**Attaching a design starts the work.** When you pick a design for a listing
+whose brief is still empty, the brief is drafted from the artwork and written
+into the Brief field for you, and the SEO request that brief unblocks starts
+straight after. It begins the moment you pick — including on a listing you
+have not named yet, which is the usual order when you are creating one. The
+page head says **Generating brief…** and then **Generating SEO…** beside the
+autosave line, so you can carry on with colours and mockups; by the time you
+open **Listing Details**, the suggestion drawers are usually already open. A
+brief you have written is never redrafted or overwritten, nothing retries on
+its own after a failure, and leaving the listing abandons the work exactly as
+**Cancel** would.
+
 **Prompt customization.** The instructions sent to the model live at
-`prompts/seo.md` in your workspace — plain text, entirely yours to edit.
-`setup` seeds a default there only if the file is absent; it never overwrites
-your own copy on a later run. The application appends the listing's facts (as
-delimited JSON) and the required JSON response schema itself — `seo.md` holds
-only the instructions, never placeholders or executable prompt code.
+`prompts/seo.md` (SEO suggestions) and `prompts/brief.md` (the drafted brief)
+in your workspace — plain text, entirely yours to edit. `setup` seeds a
+default for each only if that file is absent; it never overwrites your own
+copy on a later run. The application appends the listing's facts (as
+delimited JSON) and the required JSON response schema itself — both files
+hold only instructions, never placeholders or executable prompt code. A
+workspace without `prompts/brief.md` can still use AI Mode by hand; only the
+automatic draft is unavailable.
 
 **Common-copy files.** A listing's description is a required `lead` (the
 opening paragraph — the one part AI Mode drafts) plus at most one shared or

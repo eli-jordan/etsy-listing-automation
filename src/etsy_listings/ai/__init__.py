@@ -1,39 +1,57 @@
-"""Local AI Mode SEO proposals: request/proposal contracts, the packaged
-default prompt, delimited-context prompt assembly, hard validation, and the
-local Codex/Claude CLI adapters behind `SeoProvider` (AI SEO implementation
-plan, PR3 and PR4).
+"""Local AI Mode: request/task contracts, the two packaged default prompts,
+delimited-context prompt assembly, hard validation, and the local
+Codex/Claude CLI adapters behind `AiProvider` (AI SEO implementation plan,
+PR3 and PR4; PRD 68 for brief drafting).
 
-- ``models`` -- ``SeoRequest``, ``SeoProposal``, ``PhraseRationale``,
-  ``ProposalWarning``, ``ProviderReadiness``, ``RawProviderResult``,
-  ``RepairContext``, ``Deadline``.
-- ``prompt`` -- the packaged default ``seo.md``, ``seed_default_prompt`` (the
-  setup seed operation), and ``build_prompt``/``build_repair_prompt``, which
-  wrap a seller's plain prompt text in delimited JSON context and a response
-  schema.
+Two features, one machine. **SEO generation** produces a proposal a seller
+reviews suggestion by suggestion; **brief drafting** produces the one input
+that generation needs, from the design image alone. They differ only in the
+prompt, the schema and the validation -- the provider adapters, the
+Codex-then-Claude fallback, the one same-provider repair and the 60-second
+deadline are shared, which is what `ProviderTask` exists to make possible.
+
+- ``models`` -- ``ProviderTask``, ``SeoRequest``, ``SeoProposal``,
+  ``PhraseRationale``, ``ProposalWarning``, ``ProviderReadiness``,
+  ``RawProviderResult``, ``RepairContext``, ``Deadline``.
+- ``prompt`` -- the packaged default ``seo.md``, ``seed_prompt`` (the setup
+  seed operation, for either prompt file), ``build_task_prompt`` (the shared
+  delimited-context wrapper) and ``build_seo_task``.
+- ``brief`` -- everything drafting-specific in one small module:
+  ``BriefRequest``, ``DesignBrief``, the packaged default ``brief.md``,
+  ``build_brief_task`` and ``validate_brief``.
 - ``validation`` -- ``validate_proposal``: normalize harmless formatting, then
   hard-validate exact counts, Etsy limits, uniqueness, and the agreed
   affiliation/content checks; trademark findings become warnings, never a
   refusal.
-- ``providers`` -- the ``SeoProvider`` protocol and ``FakeSeoProvider``.
+- ``providers`` -- the ``AiProvider`` protocol and ``FakeAiProvider``.
 - ``codex``/``claude`` -- the real `CodexProvider`/`ClaudeProvider`
   adapters: a non-interactive, read-only, session-less CLI invocation each,
-  behind the same `SeoProvider` protocol (PR4).
-- ``orchestrator`` -- `generate_proposal`: the Codex-then-Claude chain, one
-  same-provider repair, and the shared 60-second deadline (PR4).
+  behind the same `AiProvider` protocol (PR4). Neither reads a prompt file
+  or knows which feature it is serving.
+- ``orchestrator`` -- `run_task`, and the two entry points over it,
+  `generate_proposal` and `generate_brief`.
 - ``errors`` -- the exception hierarchy `orchestrator` and both adapters
   raise, and `classify_process_failure`, the availability classifier.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
   cleanup for timeouts, cancellation, and request disconnects (PR4).
 
-Nothing in this package is wired to the UI or API yet -- that is PR5's job.
-CI never invokes a real ``codex`` or ``claude`` binary: every adapter test
-replaces the subprocess layer with a double (see `ai/codex.py`'s and
-`ai/claude.py`'s own test suites), and every orchestrator test runs against
-`FakeSeoProvider`.
+`ui/api/seo.py` is where this package is wired to HTTP. CI never invokes a
+real ``codex`` or ``claude`` binary: every adapter test replaces the
+subprocess layer with a double, and every orchestrator test runs against
+`FakeAiProvider`.
 """
 
 from __future__ import annotations
 
+from etsy_listings.ai.brief import (
+    BRIEF_RESPONSE_SCHEMA,
+    BriefRequest,
+    BriefValidationError,
+    DesignBrief,
+    build_brief_task,
+    default_brief_prompt_text,
+    validate_brief,
+)
 from etsy_listings.ai.claude import ClaudeProvider
 from etsy_listings.ai.codex import CodexProvider
 from etsy_listings.ai.errors import (
@@ -53,28 +71,36 @@ from etsy_listings.ai.models import (
     PhraseRationale,
     ProposalWarning,
     ProviderReadiness,
+    ProviderTask,
     RawProviderResult,
     RepairContext,
     SeoProposal,
     SeoRequest,
 )
-from etsy_listings.ai.orchestrator import generate_proposal
+from etsy_listings.ai.orchestrator import generate_brief, generate_proposal, run_task
 from etsy_listings.ai.process import CliProcessError, ProcessResult, run_managed
 from etsy_listings.ai.prompt import (
     build_prompt,
     build_repair_prompt,
-    default_prompt_text,
-    seed_default_prompt,
+    build_seo_task,
+    build_task_prompt,
+    default_seo_prompt_text,
+    seed_prompt,
 )
-from etsy_listings.ai.providers import FakeSeoProvider, SeoProvider
+from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.ai.validation import ProposalValidationError, validate_proposal
 
 __all__ = [
+    "BRIEF_RESPONSE_SCHEMA",
+    "AiProvider",
+    "BriefRequest",
+    "BriefValidationError",
     "ClaudeProvider",
     "CliProcessError",
     "CodexProvider",
     "Deadline",
-    "FakeSeoProvider",
+    "DesignBrief",
+    "FakeAiProvider",
     "GarmentContext",
     "PhraseRationale",
     "ProcessResult",
@@ -83,6 +109,7 @@ __all__ = [
     "ProviderCancelledError",
     "ProviderGenerationError",
     "ProviderReadiness",
+    "ProviderTask",
     "ProviderTimeoutError",
     "ProviderUnavailableError",
     "RawProviderResult",
@@ -91,15 +118,21 @@ __all__ = [
     "SeoDeadlineExceededError",
     "SeoGenerationError",
     "SeoProposal",
-    "SeoProvider",
     "SeoRequest",
     "SeoTryAgainError",
+    "build_brief_task",
     "build_prompt",
     "build_repair_prompt",
+    "build_seo_task",
+    "build_task_prompt",
     "classify_process_failure",
-    "default_prompt_text",
+    "default_brief_prompt_text",
+    "default_seo_prompt_text",
+    "generate_brief",
     "generate_proposal",
     "run_managed",
-    "seed_default_prompt",
+    "run_task",
+    "seed_prompt",
+    "validate_brief",
     "validate_proposal",
 ]

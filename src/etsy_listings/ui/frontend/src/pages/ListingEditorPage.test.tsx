@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as calibrator from "../api/calibrator";
@@ -105,13 +105,34 @@ describe("ListingEditorPage", () => {
       }),
     );
     renderAt("/listings/take-a-hike");
-    await screen.findByText(/1 problem blocks this listing/);
+    await screen.findByText(/1 to fix before deploying/);
     expect(screen.getByText("still <generate>")).toBeInTheDocument();
   });
 
+  it("presents deploy blockers as warnings, marked in words (PRD 70)", async () => {
+    /* None of these stops the save -- naming the listing wrote it -- so an
+       error's red circle told a seller their work was refused. A blocker
+       wears the warning icon like everything else, and says what it stops
+       on its own row, so the difference from plain advice is not colour. */
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [
+          { severity: "block", tab: "details", where: "Title", message: "no title" },
+          { severity: "warn", tab: "details", where: "Tags", message: "no tags" },
+        ],
+      }),
+    );
+    const { container } = renderAt("/listings/take-a-hike");
+    await screen.findByText("no title");
+
+    expect(container.querySelector(".issue--block")).toBeNull();
+    expect(container.querySelectorAll(".issue--warn")).toHaveLength(2);
+    expect(screen.getAllByText("Prevents deploying")).toHaveLength(1);
+  });
+
   it("counts warnings in the summary alongside the blocks", async () => {
-    /* Reporting only the blocks left "1 problem blocks this listing" sitting
-       above three issues, two of which the summary never mentioned. */
+    /* Reporting only the blocks left a one-item summary sitting above three
+       issues, two of which it never mentioned. */
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
       detail({
         issues: [
@@ -123,7 +144,7 @@ describe("ListingEditorPage", () => {
     );
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("1 problem blocks this listing · 2 warnings");
+    await screen.findByText("1 to fix before deploying · 2 other warnings");
   });
 
   it("summarises warnings alone when nothing blocks", async () => {
@@ -148,7 +169,7 @@ describe("ListingEditorPage", () => {
     );
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("2 problems block this listing");
+    await screen.findByText("2 to fix before deploying");
   });
 
   it("jumps to the tab that owns an issue when Fix is clicked", async () => {
@@ -209,6 +230,27 @@ describe("ListingEditorPage", () => {
     );
   });
 
+  it("does not rename a listing that already has a name when its design changes", async () => {
+    /* A listing called something is called that on purpose. Only a draft
+       with no name at all takes one from its artwork. */
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "take-a-hike", file: "designs/take-a-hike.png" },
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
+    const rename = vi.spyOn(listingsApi, "renameListing");
+    renderAt("/listings/take-a-hike");
+    await screen.findByText("designs/take-a-hike.png");
+
+    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() => expect(listingsApi.patchListing).toHaveBeenCalled());
+    expect(rename).not.toHaveBeenCalled();
+    expect(screen.getByRole("heading", { name: "take-a-hike" })).toBeInTheDocument();
+  });
+
   it("shows the listing's path on disk in the page head", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
@@ -229,7 +271,9 @@ describe("ListingEditorPage", () => {
     const imagesTabButton = Array.from(container.querySelectorAll(".seg-opt")).find((el) =>
       el.textContent?.startsWith("Listing Images"),
     ) as HTMLElement;
-    expect(imagesTabButton.querySelector(".tab-badge--block")).toHaveTextContent("1");
+    // A warning-coloured count: the tab only says there is something to look
+    // at, and none of it stops the save.
+    expect(imagesTabButton.querySelector(".tab-badge--warn")).toHaveTextContent("1");
   });
 
   it("shows Draft for an unpublished listing and no open-elsewhere menu", async () => {
@@ -329,6 +373,117 @@ describe("ListingEditorPage at /listings/new", () => {
     // editor, and making it re-fetch would open a window for a GET to answer
     // with a document older than the create that just landed.
     expect(get).not.toHaveBeenCalled();
+  });
+
+  it("takes its name from the design's filename when it has none", async () => {
+    /* The ordinary create flow becomes "pick a design": that is what names
+       the draft, and naming is what writes the file. */
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    const create = vi
+      .spyOn(listingsApi, "createListing")
+      .mockResolvedValue(detail({ name: "cosmic-cat" }));
+    renderAt("/listings/new");
+    await screen.findByLabelText("Listing name");
+
+    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
+    expect(create.mock.calls[0]?.[0].name).toBe("cosmic-cat");
+    // The design it was named after is in the document that created it, not
+    // in a follow-up patch: `useAutosave` merges what is pending into the
+    // create candidate.
+    expect(create.mock.calls[0]?.[0].document).toMatchObject({
+      design: "../../designs/cosmic-cat.png",
+    });
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "cosmic-cat" })).toBeInTheDocument(),
+    );
+  });
+
+  it("shows the picked name even while the listing still cannot be written", async () => {
+    /* A create is refused until the document validates -- no price source,
+       usually. Without this the seller picks a design, watches the name field
+       stay empty, picks a pricing plan, and finds the listing suddenly called
+       something nobody typed. */
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    // What the server answers for a document it will not write: the empty
+    // draft back, with the reasons.
+    vi.spyOn(listingsApi, "createListing").mockResolvedValue(
+      detail({ name: "", field_errors: { pricing_plan: "no price source" } }),
+    );
+    renderAt("/listings/new");
+    await screen.findByLabelText("Listing name");
+
+    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "cosmic-cat" })).toBeInTheDocument(),
+    );
+  });
+
+  it("leaves a name the seller is part-way through typing alone", async () => {
+    /* An uncommitted name is not the listing's name -- `detail.name` is still
+       empty -- so the pick has to be told about the field's own text or it
+       would overwrite what they were in the middle of writing. */
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    const create = vi.spyOn(listingsApi, "createListing");
+    const describe = vi
+      .spyOn(listingsApi, "describeListingDraft")
+      .mockResolvedValue({ ...draft(), design: { default: "../../designs/cosmic-cat.png" } });
+    renderAt("/listings/new");
+
+    const input = await screen.findByLabelText("Listing name");
+    fireEvent.change(input, { target: { value: "my-shi" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() => expect(describe).toHaveBeenCalled());
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Listing name")).toHaveValue("my-shi");
+
+    // Unmount here rather than in the shared cleanup: this is the one test
+    // that ends with an edit still pending on an *unnamed* draft, so
+    // `useAutosave`'s flush-on-unmount describes it -- and the shared
+    // `afterEach` has already restored the mock by the time that runs.
+    cleanup();
+  });
+
+  it("keeps a name the seller already typed, even if the design is picked after", async () => {
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    const create = vi
+      .spyOn(listingsApi, "createListing")
+      .mockResolvedValue(detail({ name: "my-shirt" }));
+    vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail({ name: "my-shirt" }));
+    renderAt("/listings/new");
+
+    const input = await screen.findByLabelText("Listing name");
+    fireEvent.change(input, { target: { value: "my-shirt" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: "my-shirt" })).toBeInTheDocument(),
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() => expect(listingsApi.patchListing).toHaveBeenCalled());
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(screen.getByRole("heading", { name: "my-shirt" })).toBeInTheDocument();
   });
 
   it("explains a draft that cannot be started at all", async () => {

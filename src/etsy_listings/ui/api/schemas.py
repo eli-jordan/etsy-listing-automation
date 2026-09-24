@@ -487,6 +487,40 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 # ──────────────────────────────────────────────────────────────────────────
 
 
+class DesignBriefRequest(BaseModel):
+    """What drafting a brief actually needs (PRD 68): the design, and nothing
+    else.
+
+    Not a listing, and not a garment profile. A brief describes the
+    *artwork*, and the one moment it is most wanted is the moment a design is
+    attached -- which, when a seller is creating a listing, is usually before
+    it has a name, a file, or a garment chosen. Asking only for the design is
+    what lets the request go out then (see `ai/brief.py.BriefRequest` for why
+    the garment context was dropped rather than made optional).
+
+    ``design`` is workspace-relative and POSIX (``designs/take-a-hike.png``),
+    resolved through `Workspace.resolve`, which is what refuses anything
+    pointing outside the workspace (`A8`) -- this value arrives from a
+    browser, so that check is the security boundary, not a tidiness rule.
+    """
+
+    design: str
+
+
+class DesignBriefResponse(BaseModel):
+    """One drafted listing brief (PRD 68).
+
+    Deliberately thinner than `SeoProposalResponse`: no snapshot and no
+    expiry, because there is nothing here to keep. The browser writes
+    ``brief`` straight into the ordinary Brief field through the existing
+    autosave path, at which point it is seller-owned listing content like
+    any other -- so there is no pending state to go stale, nothing to
+    restore after a refresh, and nothing to retain past this response.
+    """
+
+    brief: str
+
+
 class SeoReadinessResponse(BaseModel):
     """Whether AI Mode can be enabled for one saved listing right now
     (implementation plan, "Entry point"). The frontend leaves the control

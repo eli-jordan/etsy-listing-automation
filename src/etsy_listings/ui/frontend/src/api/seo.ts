@@ -1,5 +1,5 @@
 import { api } from "./client";
-import type { SeoProposalResponse, SeoReadinessResponse } from "../types";
+import type { DesignBriefResponse, SeoProposalResponse, SeoReadinessResponse } from "../types";
 
 /**
  * Listing SEO AI Mode's HTTP surface (AI SEO implementation plan, PR7).
@@ -52,6 +52,43 @@ export async function requestSeoProposal(
     });
     if (error || !data) return { kind: "failed" };
     return { kind: "success", proposal: data };
+  } catch (err) {
+    if (signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
+      return { kind: "cancelled" };
+    }
+    return { kind: "failed" };
+  }
+}
+
+export type DesignBriefOutcome =
+  { kind: "success"; brief: string } | { kind: "cancelled" } | { kind: "failed" };
+
+/** Draft a listing brief from a design image (`POST /api/ai/design-brief`,
+ * PRD 68).
+ *
+ * Takes only the design -- not a listing name, and not a garment profile --
+ * because the moment a brief is wanted is the moment a design is attached,
+ * which while a seller is creating a listing is before it has a name, a
+ * file, or a garment chosen. `design` is workspace-relative
+ * (`designs/take-a-hike.png`): see `media.ts.workspacePath`.
+ *
+ * The same three outcomes a proposal request has, for the same reason -- and
+ * with more riding on the third here, because nobody asked for this request.
+ * A workspace with no `prompts/brief.md`, or a signed-out CLI, answers 409;
+ * the seller should simply find the Brief field empty and AI Mode disabled
+ * with its usual explanation, not an error about something they never did.
+ */
+export async function requestDesignBrief(
+  design: string,
+  signal: AbortSignal,
+): Promise<DesignBriefOutcome> {
+  try {
+    const { data, error } = await api.POST("/api/ai/design-brief", {
+      body: { design },
+      signal,
+    });
+    if (error || !data) return { kind: "failed" };
+    return { kind: "success", brief: (data as DesignBriefResponse).brief };
   } catch (err) {
     if (signal.aborted || (err instanceof DOMException && err.name === "AbortError")) {
       return { kind: "cancelled" };

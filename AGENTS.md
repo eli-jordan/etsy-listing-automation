@@ -19,7 +19,7 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 67 numbered product decisions in its appendix. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 70 numbered product decisions in its appendix. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
 
 Four subsidiary documents carry detail those two point at rather than repeat:
@@ -103,6 +103,12 @@ Windows tools. Use POSIX paths and shell syntax.
   Leave it off; do not commit mode-only changes.
 - Line endings: git warns about `LF → CRLF` on write. Content is stored LF. The
   warnings are noise, not a problem to fix.
+- **A directory can arrive read-only, and Windows then refuses to delete it.**
+  Anything syncing a workspace — Google Drive is the one that found this — sets
+  `FILE_ATTRIBUTE_READONLY` on every directory, and `os.rmdir` answers a bare
+  `WinError 5` while the files inside delete fine. `workspace.remove_tree` is
+  the `shutil.rmtree` that clears the flag and retries; use it rather than
+  `shutil.rmtree` for any tree this tool owns.
 
 ## Toolchain
 
@@ -170,9 +176,15 @@ src/etsy_listings/
                   reads, PrintifyClient writes), models, catalog, products,
                   cache, resolve, fakes                                      [done]
                 etsy/ and limiter Phase 3/6; retry.py done
-  ai/           request/proposal contracts, the packaged default prompt,
-                delimited-context assembly, hard validation, fake providers
-                  [contracts done, PR3; real Codex/Claude adapters, PR4]
+  ai/           request/task/proposal contracts, the two packaged default
+                prompts, delimited-context assembly, hard validation, the
+                Codex/Claude adapters and the chain over them  [done]
+                A provider takes a `ProviderTask` -- assembled prompt text, a
+                  response schema, one image -- and knows nothing about which
+                  feature asked, so SEO generation and brief drafting (PRD 68)
+                  share one fallback order, one repair rule and one deadline
+                brief.py -- everything drafting-specific in one small module:
+                  request, schema, packaged prompt, validation
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
                 frontend/ -- AppShell/DashboardPage/ListingsPage/

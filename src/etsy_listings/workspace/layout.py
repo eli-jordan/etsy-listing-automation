@@ -24,6 +24,12 @@ SEO feature appends its delimited JSON context and response schema to
 (``ai/prompt.py``) -- `setup` seeds a packaged default only when this file is
 absent, and never overwrites seller content (AI SEO implementation plan,
 PR3)."""
+BRIEF_PROMPT_FILE = "brief.md"
+"""Inside :data:`PROMPTS_DIR`, and everything said about
+:data:`SEO_PROMPT_FILE` applies unchanged. This is the prompt that drafts a
+listing brief from its design image when a design is attached (PRD 68); a
+workspace without it can still use AI Mode by hand, so its absence disables
+only the automatic draft."""
 GARMENT_PROFILES_DIR = "garment-profiles"
 PRICING_PLANS_DIR = "pricing-plans"
 DESIGNS_DIR = "designs"

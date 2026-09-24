@@ -31,6 +31,7 @@ export type TemplatePhoto = components["schemas"]["TemplatePhoto"];
 
 // ── Listing SEO AI Mode (AI SEO implementation plan, PR7) ───────────────────
 
+export type DesignBriefResponse = components["schemas"]["DesignBriefResponse"];
 export type SeoReadinessResponse = components["schemas"]["SeoReadinessResponse"];
 export type SeoProposalResponse = components["schemas"]["SeoProposalResponse"];
 export type SeoProposalSnapshot = components["schemas"]["SeoProposalSnapshot"];

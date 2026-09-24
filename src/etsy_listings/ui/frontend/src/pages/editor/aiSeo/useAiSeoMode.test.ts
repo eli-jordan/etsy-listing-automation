@@ -70,8 +70,10 @@ function proposal(over: Partial<SeoProposalResponse> = {}): SeoProposalResponse 
       design: { default: "designs/take-a-hike.png" },
       design_content_hash: null,
     },
-    generated_at: "2026-09-23T00:00:00Z",
-    expires_at: "2026-09-24T00:00:00Z",
+    // Relative to now -- see `aiSeoStorage.test.ts` for why a fixed pair is a
+    // fixture with an expiry date of its own.
+    generated_at: new Date(Date.now() - 60_000).toISOString(),
+    expires_at: new Date(Date.now() + 86_400_000).toISOString(),
     ...over,
   };
 }

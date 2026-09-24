@@ -393,6 +393,48 @@ describe("useAutosave before the listing exists", () => {
     expect(result.current.save.kind).toBe("saved");
   });
 
+  it("keeps an edit made while the create was in flight", async () => {
+    /* The window PRD 68's drafted brief resolves in: a design pick names the
+       draft and starts the create, and the brief arrives before the server
+       answers. Clearing `pending` wholesale on success dropped it every time,
+       silently -- the listing appeared, the brief did not, and nothing said
+       so. `applyResponse` already stated this rule for a PATCH. */
+    vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft());
+    let finish: ((fresh: ListingDetail) => void) | undefined;
+    vi.spyOn(listingsApi, "createListing").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockResolvedValue(detail({ name: "my-shirt" }));
+    const { result } = renderHook(() => useAutosave(null, draft(), {}));
+
+    act(() => result.current.update({ colors: ["black"] }));
+    act(() => result.current.commitName("my-shirt"));
+    // Lands after the request went out, before it comes back.
+    act(() => result.current.update({ brief: "Drafted from the design." }));
+    await act(async () => {
+      finish?.(detail({ name: "my-shirt" }));
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await result.current.flush();
+    });
+
+    // The follow-up carries the edits the create already wrote as well: an
+    // edit merges onto whatever is pending, so keeping the later object keeps
+    // both. Re-sending a value the file already has costs one PATCH and
+    // changes nothing, which is the cheaper of the two mistakes available
+    // here.
+    expect(patch).toHaveBeenCalledWith(
+      "my-shirt",
+      expect.objectContaining({ brief: "Drafted from the design." }),
+    );
+  });
+
   it("a document the server will not write leaves it unsaved, and retries on the next edit", async () => {
     vi.spyOn(listingsApi, "describeListingDraft").mockResolvedValue(draft());
     const create = vi

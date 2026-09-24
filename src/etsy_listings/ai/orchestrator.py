@@ -5,11 +5,18 @@ the "Timeout and retries" and "Provider adapters" decisions).
 This is the "orchestration service" the runtime design diagram and
 `ai/providers.py`'s own docstring describe: it owns retry classification,
 fallback order, the shared deadline, and turning a provider's raw text into
-a validated `SeoProposal` (via `ai/validation.py`) -- none of that is an
-adapter's job. `generate_proposal` is the one entry point; it is driven
-entirely against the `SeoProvider` protocol, so it works identically whether
-handed `FakeSeoProvider` doubles (every test in this module) or the real
-`CodexProvider`/`ClaudeProvider` adapters (PR5's job to wire together).
+a validated result -- none of that is an adapter's job. It is driven
+entirely against the `AiProvider` protocol, so it works identically whether
+handed `FakeAiProvider` doubles (every test in this module) or the real
+`CodexProvider`/`ClaudeProvider` adapters.
+
+Two entry points, one rule: `generate_proposal` for an SEO proposal and
+`generate_brief` for a design brief (PRD 68). Both are thin wrappers over
+:func:`run_task`, which knows about a `ProviderTask` and a function that
+turns raw text into *something* -- and nothing about which of the two it is
+serving. That is deliberate: the classification below is where this feature's
+hardest-won behaviour lives, and a second copy of it for brief drafting is
+exactly the kind of near-duplicate that drifts one fix at a time.
 
 Classification summary (implementation plan, "Timeout and retries"):
 
@@ -36,16 +43,24 @@ from __future__ import annotations
 
 import json
 import threading
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 
+from etsy_listings.ai.brief import (
+    BriefRequest,
+    BriefValidationError,
+    DesignBrief,
+    build_brief_task,
+    validate_brief,
+)
 from etsy_listings.ai.errors import (
     ProviderUnavailableError,
     SeoAllProvidersUnavailableError,
     SeoDeadlineExceededError,
     SeoTryAgainError,
 )
-from etsy_listings.ai.models import Deadline, RepairContext, SeoProposal, SeoRequest
-from etsy_listings.ai.providers import SeoProvider
+from etsy_listings.ai.models import Deadline, ProviderTask, RepairContext, SeoProposal, SeoRequest
+from etsy_listings.ai.prompt import build_seo_task
+from etsy_listings.ai.providers import AiProvider
 from etsy_listings.ai.validation import ProposalValidationError, validate_proposal
 
 _DEFAULT_SECONDS = 60.0
@@ -55,40 +70,54 @@ repair, and the permitted Codex-to-Claude fallback all share this one
 
 
 class _Malformed(Exception):
-    """Internal-only: a provider's raw output could not become a
-    `SeoProposal`, for any reason -- not valid JSON, not a JSON object, or a
-    hard-validation failure. Never escapes this module; every case it covers
-    is repaired identically, so nothing downstream needs to distinguish
-    them."""
+    """Internal-only: a provider's raw output could not become the result
+    its task asked for, for any reason -- not valid JSON, not a JSON object,
+    or a hard-validation failure. Never escapes this module; every case it
+    covers is repaired identically, so nothing downstream needs to
+    distinguish them."""
 
     def __init__(self, reasons: Sequence[str]) -> None:
         self.reasons: tuple[str, ...] = tuple(reasons)
         super().__init__("; ".join(self.reasons))
 
 
-def _decode_and_validate(raw_output: str) -> SeoProposal:
+def _decoded(raw_output: str) -> Mapping[str, object]:
+    """The JSON-decoding half of every decoder, which is identical for both
+    tasks -- only what happens to the decoded mapping differs."""
     try:
         parsed = json.loads(raw_output)
     except json.JSONDecodeError as exc:
         raise _Malformed((f"response was not valid JSON: {exc}",)) from exc
     if not isinstance(parsed, Mapping):
         raise _Malformed(("response: expected a JSON object",)) from None
+    return parsed
+
+
+def _seo_decoder(raw_output: str) -> SeoProposal:
     try:
-        return validate_proposal(parsed)
+        return validate_proposal(_decoded(raw_output))
     except ProposalValidationError as exc:
         raise _Malformed(exc.reasons) from exc
 
 
-def _resolve(
-    provider: SeoProvider,
-    request: SeoRequest,
+def _brief_decoder(raw_output: str) -> DesignBrief:
+    try:
+        return validate_brief(dict(_decoded(raw_output)))
+    except BriefValidationError as exc:
+        raise _Malformed(exc.reasons) from exc
+
+
+def _resolve[Result](
+    provider: AiProvider,
+    task: ProviderTask,
+    decode: Callable[[str], Result],
     deadline: Deadline,
     raw_output: str,
     provider_name: str,
     cancel_event: threading.Event | None,
-) -> SeoProposal:
+) -> Result:
     try:
-        return _decode_and_validate(raw_output)
+        return decode(raw_output)
     except _Malformed as first_error:
         if deadline.expired:
             raise SeoDeadlineExceededError(
@@ -98,7 +127,7 @@ def _resolve(
 
         try:
             repaired = provider.generate(
-                request,
+                task,
                 deadline,
                 repair=RepairContext(prior_raw_output=raw_output, reasons=first_error.reasons),
                 cancel_event=cancel_event,
@@ -109,39 +138,48 @@ def _resolve(
             ) from repair_error
 
         try:
-            return _decode_and_validate(repaired.raw_output)
+            return decode(repaired.raw_output)
         except _Malformed as second_error:
             raise SeoTryAgainError(
                 f"{provider_name}: the repaired response was still invalid: {second_error}"
             ) from second_error
 
 
-def generate_proposal(
-    request: SeoRequest,
-    providers: Sequence[SeoProvider],
+def run_task[Result](
+    task: ProviderTask,
+    decode: Callable[[str], Result],
+    providers: Sequence[AiProvider],
     *,
     deadline: Deadline | None = None,
     seconds: float = _DEFAULT_SECONDS,
     cancel_event: threading.Event | None = None,
-) -> SeoProposal:
+) -> Result:
     """Try ``providers`` in order -- Codex, then Claude, per the settled
-    plan -- against ``request``, within one shared ``deadline`` (a fresh
+    plan -- against ``task``, within one shared ``deadline`` (a fresh
     ``seconds``-second one is started if none is given).
+
+    ``decode`` takes raw provider text and returns a validated result,
+    raising `_Malformed` for anything in between -- the only thing this
+    function needs to know about a task beyond how to run it, and the reason
+    the whole classification rule this module documents applies to both AI
+    features without either one restating it. `generate_proposal` and
+    `generate_brief` below are the two callers; both exist only to build the
+    task and name the decoder, so neither can end up with its own idea of
+    when a provider is retried.
 
     ``cancel_event`` is the one `threading.Event` the settled "Cancellation"
     decision describes: the browser leaving the editor or its connection
-    closing (PR5's job to detect) sets it, and this is the single place that
-    forwards it to whichever provider is currently running -- both real
-    adapters (`ai/codex.py`, `ai/claude.py`) already pass it straight through
-    to `ai/process.py.run_managed`, which is what actually kills the
-    subprocess tree. Left `None`, generation is simply not cancellable,
-    which is what every existing call site (and every `FakeSeoProvider` test)
-    wants.
+    closing (`ui/api/seo.py`'s job to detect) sets it, and this is the single
+    place that forwards it to whichever provider is currently running -- both
+    real adapters already pass it straight through to
+    `ai/process.py.run_managed`, which is what actually kills the subprocess
+    tree. Left `None`, generation is simply not cancellable, which is what
+    every `FakeAiProvider` test wants.
 
-    Returns a validated `SeoProposal`, or raises: `SeoAllProvidersUnavailableError`
-    if every provider answered with a recognised availability failure,
+    Raises `SeoAllProvidersUnavailableError` if every provider answered with
+    a recognised availability failure,
     `SeoDeadlineExceededError`/`SeoTryAgainError` for everything the settled
-    plan surfaces as "Try again", or lets a
+    plan surfaces as "Try again", and lets a
     `~etsy_listings.ai.errors.ProviderCancelledError` propagate untouched.
     """
     if deadline is None:
@@ -154,10 +192,66 @@ def generate_proposal(
                 "the shared deadline expired before every configured provider could be tried"
             )
         try:
-            raw = provider.generate(request, deadline, cancel_event=cancel_event)
+            raw = provider.generate(task, deadline, cancel_event=cancel_event)
         except ProviderUnavailableError as exc:
             unavailable_reasons.append(str(exc))
             continue
-        return _resolve(provider, request, deadline, raw.raw_output, raw.provider, cancel_event)
+        return _resolve(
+            provider, task, decode, deadline, raw.raw_output, raw.provider, cancel_event
+        )
 
     raise SeoAllProvidersUnavailableError(unavailable_reasons)
+
+
+def generate_proposal(
+    request: SeoRequest,
+    seller_prompt: str,
+    providers: Sequence[AiProvider],
+    *,
+    deadline: Deadline | None = None,
+    seconds: float = _DEFAULT_SECONDS,
+    cancel_event: threading.Event | None = None,
+) -> SeoProposal:
+    """One complete SEO proposal for ``request``, using the seller's own
+    ``prompts/seo.md`` text.
+
+    ``seller_prompt`` is the already-read file content, never a path and
+    never a default this function falls back to -- the same rule
+    `ai/prompt.py.build_task_prompt` states, held one layer up so that the
+    endpoint which knows the file is missing is the one that says so.
+    """
+    return run_task(
+        build_seo_task(seller_prompt, request),
+        _seo_decoder,
+        providers,
+        deadline=deadline,
+        seconds=seconds,
+        cancel_event=cancel_event,
+    )
+
+
+def generate_brief(
+    request: BriefRequest,
+    seller_prompt: str,
+    providers: Sequence[AiProvider],
+    *,
+    deadline: Deadline | None = None,
+    seconds: float = _DEFAULT_SECONDS,
+    cancel_event: threading.Event | None = None,
+) -> DesignBrief:
+    """One drafted listing brief for ``request``, using the seller's own
+    ``prompts/brief.md`` text (PRD 68).
+
+    Shares every rule above, including the 60-second budget -- a brief is a
+    much smaller ask than a proposal, but it is the same kind of ask, and
+    giving it its own timeout would mean two numbers to keep in agreement for
+    no behaviour anyone wanted.
+    """
+    return run_task(
+        build_brief_task(seller_prompt, request),
+        _brief_decoder,
+        providers,
+        deadline=deadline,
+        seconds=seconds,
+        cancel_event=cancel_event,
+    )

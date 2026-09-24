@@ -1,4 +1,4 @@
-"""``ai/claude.py``: the Claude Code CLI adapter behind `SeoProvider` (AI SEO
+"""``ai/claude.py``: the Claude Code CLI adapter behind `AiProvider` (AI SEO
 implementation plan, PR4, items 1-4).
 
 Same doubling strategy as `test_ai_codex.py`: `subprocess.run` is replaced
@@ -26,11 +26,12 @@ from etsy_listings.ai.models import (
     Deadline,
     GarmentContext,
     ProviderReadiness,
+    ProviderTask,
     RepairContext,
     SeoRequest,
 )
 from etsy_listings.ai.process import ProcessResult
-from etsy_listings.ai.prompt import RESPONSE_SCHEMA
+from etsy_listings.ai.prompt import RESPONSE_SCHEMA, build_seo_task
 
 _HELP_TEXT = """
 Options:
@@ -61,10 +62,14 @@ def _request(tmp_path: Path) -> SeoRequest:
 
 
 def _provider(tmp_path: Path, *, binary: str = "claude") -> claude.ClaudeProvider:
-    prompt_file = tmp_path / "prompts" / "seo.md"
-    prompt_file.parent.mkdir(parents=True, exist_ok=True)
-    prompt_file.write_text("Write great SEO copy.", encoding="utf-8")
-    return claude.ClaudeProvider(workspace_root=tmp_path, prompt_file=prompt_file, binary=binary)
+    return claude.ClaudeProvider(workspace_root=tmp_path, binary=binary)
+
+
+def _task(tmp_path: Path) -> ProviderTask:
+    """An ordinary SEO task, assembled the way `ui/api/seo.py` assembles one
+    -- see `test_ai_codex.py._task` for why the seller prose is a plain
+    string here and not a file (PRD 68)."""
+    return build_seo_task("Write great SEO copy.", _request(tmp_path))
 
 
 # --------------------------------------------------------------- readiness
@@ -213,9 +218,11 @@ def test_readiness_fails_when_help_is_missing_required_flags(
     assert "tools" in (readiness.reason or "").casefold()
 
 
-def test_readiness_fails_when_prompt_file_is_missing(
+def test_readiness_says_nothing_about_a_prompt_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    """The same rule `test_ai_codex.py` states: a prompt file's existence is
+    a fact about a request, not about this CLI (PRD 68)."""
     monkeypatch.setattr(claude.shutil, "which", lambda name: "/usr/bin/claude")
     fake = _FakeRun(
         {
@@ -224,13 +231,10 @@ def test_readiness_fails_when_prompt_file_is_missing(
         }
     )
     monkeypatch.setattr(claude.subprocess, "run", fake)
-    prompt_file = tmp_path / "prompts" / "seo.md"
-    provider = claude.ClaudeProvider(workspace_root=tmp_path, prompt_file=prompt_file)
 
-    readiness = provider.readiness()
+    readiness = claude.ClaudeProvider(workspace_root=tmp_path).readiness()
 
-    assert readiness.ready is False
-    assert "seo.md" in (readiness.reason or "")
+    assert readiness == ProviderReadiness(ready=True)
 
 
 def test_readiness_is_ready_when_every_check_passes(
@@ -287,7 +291,7 @@ def test_generate_builds_the_expected_argv(monkeypatch: pytest.MonkeyPatch, tmp_
     request = _request(tmp_path)
     deadline = Deadline.starting_now(seconds=60)
 
-    result = provider.generate(request, deadline)
+    result = provider.generate(_task(tmp_path), deadline)
 
     assert result.provider == "claude"
     assert result.raw_output == '{"ok": true}'
@@ -323,7 +327,7 @@ def test_generate_sends_the_seller_prompt_and_context_over_stdin(
     provider = _provider(tmp_path)
     request = _request(tmp_path)
 
-    provider.generate(request, Deadline.starting_now(seconds=60))
+    provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
     stdin_text = calls[0]["input_text"]
     assert "Write great SEO copy." in stdin_text
@@ -340,12 +344,11 @@ def test_generate_appends_the_repair_block_when_repairing(
         ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
     )
     provider = _provider(tmp_path)
-    request = _request(tmp_path)
     repair = RepairContext(
         prior_raw_output='{"titles": []}', reasons=("titles: expected exactly 3",)
     )
 
-    provider.generate(request, Deadline.starting_now(seconds=60), repair=repair)
+    provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60), repair=repair)
 
     stdin_text = calls[0]["input_text"]
     assert '{"titles": []}' in stdin_text
@@ -362,7 +365,7 @@ def test_generate_raises_cancelled_when_the_process_was_cancelled(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderCancelledError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_raises_timeout_when_the_process_timed_out(
@@ -375,7 +378,7 @@ def test_generate_raises_timeout_when_the_process_timed_out(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderTimeoutError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_classifies_an_availability_failure_from_exit_code(
@@ -394,7 +397,7 @@ def test_generate_classifies_an_availability_failure_from_exit_code(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderUnavailableError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_classifies_an_unrecognised_failure_as_generation_error(
@@ -407,7 +410,7 @@ def test_generate_classifies_an_unrecognised_failure_as_generation_error(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderGenerationError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_treats_is_error_envelope_as_generation_error(
@@ -421,7 +424,7 @@ def test_generate_treats_is_error_envelope_as_generation_error(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderGenerationError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_classifies_an_is_error_envelope_reporting_auth_failure_as_unavailable(
@@ -443,7 +446,7 @@ def test_generate_classifies_an_is_error_envelope_reporting_auth_failure_as_unav
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderUnavailableError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
 def test_generate_treats_unparseable_envelope_as_generation_error(
@@ -458,4 +461,4 @@ def test_generate_treats_unparseable_envelope_as_generation_error(
     provider = _provider(tmp_path)
 
     with pytest.raises(ProviderGenerationError):
-        provider.generate(_request(tmp_path), Deadline.starting_now(seconds=60))
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))

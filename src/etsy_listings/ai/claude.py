@@ -65,13 +65,12 @@ from etsy_listings.ai.errors import (
 from etsy_listings.ai.models import (
     Deadline,
     ProviderReadiness,
+    ProviderTask,
     RawProviderResult,
     RepairContext,
-    SeoRequest,
 )
 from etsy_listings.ai.process import run_managed
-from etsy_listings.ai.prompt import RESPONSE_SCHEMA, build_prompt
-from etsy_listings.ai.repair import repair_prompt_suffix
+from etsy_listings.ai.repair import prompt_text_for
 
 PROVIDER_NAME = "claude"
 
@@ -101,14 +100,14 @@ is reported unready rather than launched anyway."""
 
 @dataclass
 class ClaudeProvider:
-    """The `SeoProvider` adapter for the local Claude Code CLI.
+    """The `AiProvider` adapter for the local Claude Code CLI.
 
-    Same shape and reasoning as `ai/codex.py.CodexProvider`: plain `Path`s
-    for the workspace root and the seller's prompt file, not a `Workspace`.
+    Same shape and reasoning as `ai/codex.py.CodexProvider`: a plain `Path`
+    for the workspace root, not a `Workspace`, and no prompt file -- a task
+    arrives with its prompt already assembled (`ai/models.py.ProviderTask`).
     """
 
     workspace_root: Path
-    prompt_file: Path
     binary: str = "claude"
 
     def _resolved_binary(self) -> str:
@@ -132,12 +131,6 @@ class ClaudeProvider:
         unavailable = self._check_read_only_capability()
         if unavailable is not None:
             return unavailable
-
-        if not self.prompt_file.is_file():
-            return ProviderReadiness(
-                ready=False,
-                reason=f"{self.prompt_file} is missing; run `etsy-listings setup` to seed it",
-            )
 
         return ProviderReadiness(ready=True)
 
@@ -206,13 +199,13 @@ class ClaudeProvider:
 
     def generate(
         self,
-        request: SeoRequest,
+        task: ProviderTask,
         deadline: Deadline,
         *,
         repair: RepairContext | None = None,
         cancel_event: threading.Event | None = None,
     ) -> RawProviderResult:
-        prompt_text = self._build_prompt_text(request, repair)
+        prompt_text = self._prompt_text(task, repair)
         argv = [
             self._resolved_binary(),
             "-p",
@@ -226,7 +219,7 @@ class ClaudeProvider:
             "--permission-prompts",
             "none",
             "--json-schema",
-            json.dumps(RESPONSE_SCHEMA),
+            json.dumps(dict(task.response_schema)),
         ]
 
         result = run_managed(
@@ -283,13 +276,22 @@ class ClaudeProvider:
             raise ProviderGenerationError(PROVIDER_NAME, 0, "envelope had no `result` string")
         return result_text
 
-    def _build_prompt_text(self, request: SeoRequest, repair: RepairContext | None) -> str:
-        seller_prompt = self.prompt_file.read_text(encoding="utf-8")
-        prompt_text = build_prompt(seller_prompt, request)
-        prompt_text += (
-            f"\n\nThe design image is at this absolute path: {request.design_image}\n"
-            "Use the Read tool to view it before writing copy.\n"
+    def _prompt_text(self, task: ProviderTask, repair: RepairContext | None) -> str:
+        """The task's prompt, plus how *this* CLI is told to look at the design.
+
+        Codex takes the image as an argument (`-i`); `claude -p` has no
+        equivalent, so the path is named in the prompt and the model reads it
+        with its own read-only Read tool. That difference is the adapter's to
+        know -- everything after it, including what a repair attempt resends,
+        is the shared `ai/repair.py` rule.
+        """
+        with_image = ProviderTask(
+            prompt_text=(
+                f"{task.prompt_text}\n\n"
+                f"The design image is at this absolute path: {task.design_image}\n"
+                "Use the Read tool to view it before answering.\n"
+            ),
+            response_schema=task.response_schema,
+            design_image=task.design_image,
         )
-        if repair is not None:
-            prompt_text = f"{prompt_text}\n\n{repair_prompt_suffix(repair)}"
-        return prompt_text
+        return prompt_text_for(with_image, repair)

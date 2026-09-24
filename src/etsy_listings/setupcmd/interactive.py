@@ -27,7 +27,8 @@ import typer
 import yaml
 
 from etsy_listings import connections, credentials, prompts
-from etsy_listings.ai.prompt import seed_default_prompt
+from etsy_listings.ai.brief import default_brief_prompt_text
+from etsy_listings.ai.prompt import default_seo_prompt_text, seed_prompt
 from etsy_listings.clients.etsy.models import ReturnPolicy
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
@@ -65,6 +66,21 @@ teaches them the wizard is not worth reading.
 listing (decision 3) -- not enforced here, since resolving a *name* to a
 partner needs the shop's live list, which `setup` may not be able to reach.
 `plan` is where an unresolvable or missing partner blocks."""
+
+
+def _seed_prompt(root: Path, filename: str, text: str, label: str) -> None:
+    """Seed one ``prompts/*.md`` and say which of the two outcomes happened.
+
+    Both AI prompt files are seeded the same way (PRD 68), and the echo lines
+    differ only by name -- writing them out twice is how the two come to
+    disagree about what "already exists" means to a reader.
+    """
+    seeded = seed_prompt(root / layout.PROMPTS_DIR / filename, text)
+    where = f"{layout.PROMPTS_DIR}/{filename}"
+    if seeded.created:
+        typer.echo(f"  seeded {where} with the default {label} prompt")
+    else:
+        typer.echo(f"  {where} already exists -- left it exactly as it is")
 
 
 def _default_client_factory(token: str) -> PrintifyClient:
@@ -342,20 +358,12 @@ def run_setup(
     )
     credentials.announce_gitignore(root)
 
-    # AI SEO implementation plan, PR3, item 3: seed the packaged default only
+    # AI SEO implementation plan, PR3, item 3: seed each packaged default only
     # when the seller has no prompt of their own -- a re-run must never
-    # overwrite a customized prompts/seo.md, so this is a warn-and-keep, not
-    # a fill-then-report like the directory skeleton above.
-    prompt_seed = seed_default_prompt(root / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE)
-    if prompt_seed.created:
-        typer.echo(
-            f"  seeded {layout.PROMPTS_DIR}/{layout.SEO_PROMPT_FILE} with the default AI SEO prompt"
-        )
-    else:
-        typer.echo(
-            f"  {layout.PROMPTS_DIR}/{layout.SEO_PROMPT_FILE} already exists -- left it exactly as "
-            f"it is"
-        )
+    # overwrite a customized prompt file, so this is a warn-and-keep, not a
+    # fill-then-report like the directory skeleton above.
+    _seed_prompt(root, layout.SEO_PROMPT_FILE, default_seo_prompt_text(), "AI SEO")
+    _seed_prompt(root, layout.BRIEF_PROMPT_FILE, default_brief_prompt_text(), "design brief")
 
     token, shops = _verified_token(root, factory)
     shop = _pick_shop(shops)
