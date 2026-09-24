@@ -1,38 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import { listCommonCopy, listEtsySections, listPricingPlans } from "../../api/listings";
-import type {
-  CommonCopySummary,
-  EtsySectionSummary,
-  ListingDetail,
-  PricingPlanSummary,
-} from "../../types";
+import { listCommonCopy, listEtsySections } from "../../api/listings";
+import type { CommonCopySummary, EtsySectionSummary, ListingDetail } from "../../types";
 import { AiChoiceDrawer } from "./aiSeo/AiChoiceDrawer";
 import { DescriptionSourcePicker } from "./DescriptionSourcePicker";
 import { AiSeoControl } from "./aiSeo/AiSeoControl";
 import { AiTagsDrawer } from "./aiSeo/AiTagsDrawer";
 import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
 
-/** Title/tags/description/section/pricing (phase 5).
+/** Title/tags/description/section (phase 5).
  *
  * Section is a dropdown of the live shop's sections (`GET /api/etsy/sections`,
  * `EtsyShopClient.shop_sections` -- unscoped, needs only the workspace's app
  * key pair) when that list is available, falling back to the original free
  * text field for a workspace that hasn't configured a shop id or Etsy
  * credentials yet -- an ordinary state short of `setup`/`auth etsy`, not an
- * error.
- *
- * Pricing plan is selectable (`GET /api/pricing-plans`, already built for the
- * "+ New listing" flow) and each resolved size carries an editable price,
- * written as a per-size override into `Listing.prices` -- `resolved_price()`
- * already prefers that over the plan, so no new resolution rule is needed. */
-
-/** A `"<amount> <CURRENCY>"` string (a `PriceField`'s wire form), split for
- * an editable amount plus a fixed currency suffix -- the currency itself is
- * the workspace's, not something this field lets you change per size. */
-function splitAmount(raw: string): { amount: string; currency: string } {
-  const [amount, currency] = raw.split(" ");
-  return { amount: amount ?? "", currency: currency ?? "" };
-}
+ * error. Pricing lives on its own tab. */
 
 /** Etsy's own ceilings, mirrored from `config/listing.py`'s MAX_* constants.
  * Shown as counters rather than enforced here: the server is what refuses a
@@ -62,7 +44,6 @@ interface Props {
 export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
-  const [plans, setPlans] = useState<PricingPlanSummary[]>([]);
   const [commonCopy, setCommonCopy] = useState<CommonCopySummary[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -90,12 +71,6 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   useEffect(() => {
     listEtsySections().then(setSections);
   }, []);
-
-  useEffect(() => {
-    listPricingPlans(detail.garment_profile)
-      .then(setPlans)
-      .catch(() => setPlans([]));
-  }, [detail.garment_profile]);
 
   useEffect(() => {
     listCommonCopy().then(setCommonCopy);
@@ -405,71 +380,6 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
           />
           <span className="field__hint">Set by the selected garment profile.</span>
         </div>
-      </fieldset>
-
-      <fieldset>
-        <legend>Pricing</legend>
-
-        <div className="field">
-          <label htmlFor="details-pricing-plan">Plan</label>
-          <select
-            id="details-pricing-plan"
-            className="input"
-            value={detail.pricing_plan ?? ""}
-            onChange={(event) => {
-              onUpdate({ pricing_plan: event.target.value || null });
-              onFlush();
-            }}
-          >
-            {detail.pricing_plan === null && <option value="">No plan selected</option>}
-            {detail.pricing_plan !== null && !plans.some((p) => p.ref === detail.pricing_plan) && (
-              <option value={detail.pricing_plan}>
-                {detail.pricing_plan_name ?? detail.pricing_plan}
-              </option>
-            )}
-            {plans.map((plan) => (
-              <option key={plan.ref} value={plan.ref}>
-                {plan.name}
-                {/* Only worth saying against a garment that was actually
-                    chosen: with none, nothing *is* different. */}
-                {plan.compatible || detail.garment_profile === "" ? "" : " (different garment)"}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        {detail.resolved_prices.length > 0 ? (
-          <div className="price-table">
-            {detail.resolved_prices.map((price) => {
-              const override = detail.prices[price.size];
-              const { amount, currency } = splitAmount(override ?? price.amount);
-              return (
-                <div key={price.size} className="price-table__cell">
-                  <span className="price-table__size">{price.size}</span>
-                  <input
-                    className="input price-table__input"
-                    type="number"
-                    step="0.01"
-                    aria-label={`Price for size ${price.size}`}
-                    value={amount}
-                    onChange={(event) =>
-                      onUpdate({
-                        prices: {
-                          ...detail.prices,
-                          [price.size]: `${event.target.value} ${currency}`,
-                        },
-                      })
-                    }
-                    onBlur={onFlush}
-                  />
-                  <span className="price-table__currency">{currency}</span>
-                </div>
-              );
-            })}
-          </div>
-        ) : (
-          <p className="text-muted">No resolved prices.</p>
-        )}
       </fieldset>
     </div>
   );

@@ -47,7 +47,7 @@ from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing, TemplateMediaEntry
 
 Severity = Literal["block", "warn"]
-Tab = Literal["variants", "images", "details"]
+Tab = Literal["variants", "pricing", "images", "details"]
 
 
 @dataclass(frozen=True)
@@ -335,8 +335,8 @@ def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> list[
     return [
         Issue(
             "block",
-            "details",
-            "Listing Details › Pricing",
+            "pricing",
+            "Pricing",
             "No pricing plan and no prices -- pick a plan, or set a price for every size. "
             "Deployment is blocked until one of them is set.",
         )

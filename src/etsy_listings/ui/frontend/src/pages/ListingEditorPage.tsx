@@ -15,6 +15,7 @@ import { useAutoDesignBrief } from "./editor/aiSeo/useAutoDesignBrief";
 import { DeployControl } from "./editor/DeployControl";
 import { DesignSelect } from "./editor/DesignSelect";
 import { DetailsTab } from "./editor/DetailsTab";
+import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
 import { ImagesTab } from "./editor/ImagesTab";
 import { metaFor } from "./editor/saveMeta";
@@ -35,6 +36,7 @@ type Tab = IssueTab;
 
 const TABS: { id: Tab; label: string }[] = [
   { id: "variants", label: "Variants" },
+  { id: "pricing", label: "Pricing" },
   { id: "images", label: "Listing Images" },
   { id: "details", label: "Listing Details" },
 ];
@@ -338,6 +340,7 @@ export function ListingEditorShell({
       </div>
 
       {tab === "variants" && <VariantsTab detail={detail} onUpdate={update} />}
+      {tab === "pricing" && <PricingTab detail={detail} onUpdate={update} onFlush={flush} />}
       {tab === "images" && <ImagesTab detail={detail} onUpdate={update} />}
       {tab === "details" && (
         <DetailsTab detail={detail} onUpdate={update} onFlush={flush} aiSeo={aiSeo} />

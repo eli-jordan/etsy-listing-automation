@@ -112,7 +112,7 @@ other reasons, not on the underlying question still being unanswered:
   field.
 - **Pricing plan is selectable, and a resolved price is editable.**
   `GET /api/pricing-plans` already existed for "+ New listing"; it grew a
-  `ref` field so the Details tab can PATCH `pricing_plan:` with it directly.
+  `ref` field so the Pricing tab can PATCH `pricing_plan:` with it directly.
   Editing a resolved price writes a per-size entry into `Listing.prices`,
   which `resolved_price()` already preferred over the plan -- no new
   resolution rule, just a control for one that existed.
@@ -398,7 +398,7 @@ therefore costs no remote write and produces no drift.
 the candidate `Listing` fields, the resolved `GarmentProfile`, and a map of
 `{template_name: TemplateSummary}` (from the calibrator's existing
 `GET /api/templates`, so kind/colours are real, not re-derived). Output: a
-list of `Issue{severity: block|warn, tab: variants|images|details, where: str,
+list of `Issue{severity: block|warn, tab: variants|pricing|images|details, where: str,
 message: str}` — the exact shape `ListingEditor.dc.html`'s `issues`/`raw`
 array already expects, so the frontend's presentation code from the mockup
 carries over almost unchanged; only the *source* of the list changes from a
@@ -610,7 +610,8 @@ pages/
                            `listing.yaml` — the document `POST
                            /api/listing-draft` and `POST /api/listings` send
     DetailsTab.tsx          title/tags/description/section/materials, with
-                           Etsy's own limits shown as counters; pricing display
+                           Etsy's own limits shown as counters
+    PricingTab.tsx          pricing-plan select and the per-size price table
 api/
   listings.ts              wrapper functions, mirrors api/calibrator.ts
 hooks/

@@ -455,69 +455,6 @@ describe("DetailsTab", () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
-  it("shows the resolved pricing plan and price table", async () => {
-    vi.spyOn(listingsApi, "listPricingPlans").mockResolvedValue([
-      {
-        name: "tee-basic",
-        garment_profile: "comfort-colors-1717",
-        compatible: true,
-        ref: "../../pricing-plans/tee-basic.yaml",
-      },
-    ]);
-    render(
-      <DetailsTab
-        detail={detail({ pricing_plan: "../../pricing-plans/tee-basic.yaml" })}
-        onUpdate={vi.fn()}
-        onFlush={vi.fn()}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByLabelText("Plan")).toHaveValue("../../pricing-plans/tee-basic.yaml"),
-    );
-    expect(screen.getByText("tee-basic")).toBeInTheDocument();
-    expect(screen.getByLabelText("Price for size S")).toHaveValue(349);
-    expect(screen.getByText("NOK")).toBeInTheDocument();
-  });
-
-  it("selecting a different pricing plan patches pricing_plan with its ref", async () => {
-    const onUpdate = vi.fn();
-    const onFlush = vi.fn();
-    vi.spyOn(listingsApi, "listPricingPlans").mockResolvedValue([
-      {
-        name: "tee-basic",
-        garment_profile: "comfort-colors-1717",
-        compatible: true,
-        ref: "../../pricing-plans/tee-basic.yaml",
-      },
-      {
-        name: "tee-premium",
-        garment_profile: "comfort-colors-1717",
-        compatible: true,
-        ref: "../../pricing-plans/tee-premium.yaml",
-      },
-    ]);
-    render(
-      <DetailsTab
-        detail={detail({ pricing_plan: "../../pricing-plans/tee-basic.yaml" })}
-        onUpdate={onUpdate}
-        onFlush={onFlush}
-      />,
-    );
-    await screen.findByText("tee-premium");
-    fireEvent.change(screen.getByLabelText("Plan"), {
-      target: { value: "../../pricing-plans/tee-premium.yaml" },
-    });
-    expect(onUpdate).toHaveBeenCalledWith({ pricing_plan: "../../pricing-plans/tee-premium.yaml" });
-    expect(onFlush).toHaveBeenCalled();
-  });
-
-  it("editing a size's price writes a per-size override", async () => {
-    const onUpdate = vi.fn();
-    render(<DetailsTab detail={detail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
-    fireEvent.change(screen.getByLabelText("Price for size S"), { target: { value: "399" } });
-    expect(onUpdate).toHaveBeenCalledWith({ prices: { S: "399 NOK" } });
-  });
-
   it("shows a section dropdown once the shop's sections are known", async () => {
     vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([
       { id: 1, title: "Tees" },
@@ -542,21 +479,6 @@ describe("DetailsTab", () => {
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     const field = await screen.findByLabelText("Section");
     expect(field.tagName).toBe("INPUT");
-  });
-});
-
-describe("DetailsTab with no garment profile chosen", () => {
-  it("does not claim every plan is for a different garment", async () => {
-    vi.spyOn(listingsApi, "listPricingPlans").mockResolvedValue([
-      { name: "tee-basic", garment_profile: "comfort-colors-1717", compatible: false, ref: "r" },
-    ]);
-    render(
-      <DetailsTab detail={detail({ garment_profile: "" })} onUpdate={vi.fn()} onFlush={vi.fn()} />,
-    );
-
-    const option = await screen.findByRole("option", { name: "tee-basic" });
-    expect(option).toBeInTheDocument();
-    expect(screen.queryByText(/different garment/)).toBeNull();
   });
 });
 

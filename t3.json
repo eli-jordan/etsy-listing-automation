@@ -1,0 +1,11 @@
+{
+  "$schema": "https://t3.codes",
+  "scripts": [
+    {
+      "name": "Setup Worktree",
+      "command": "./setup_worktree.sh",
+      "icon": "configure",
+      "runOnWorktreeCreate": true
+    }
+  ]
+}

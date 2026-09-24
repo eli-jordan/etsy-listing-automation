@@ -188,7 +188,7 @@ src/etsy_listings/
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
                 frontend/ -- AppShell/DashboardPage/ListingsPage/
-                ListingEditorPage (design strip + Variants/Images/Details
+                ListingEditorPage (design strip + Variants/Pricing/Images/Details
                 tabs, and the create form too: it mounts at /listings/new on
                 an empty draft, where naming it is what writes it) done;
                 setup wizard and run runner remain, Phase 5

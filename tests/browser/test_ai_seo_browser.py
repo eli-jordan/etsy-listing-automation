@@ -1215,8 +1215,8 @@ def test_the_create_flow_drafts_for_a_design_attached_before_the_listing_exists(
         # The pick named it, after the design's own filename -- nobody typed
         # anything. A price source is still wanted before it can be written.
         page.get_by_role("heading", name="second-design").wait_for(state="visible")
-        page.locator(".tabs .seg-opt", has_text="Listing Details").click()
-        page.get_by_label("Plan").select_option(label="tee-basic")
+        page.locator(".tabs .seg-opt", has_text="Pricing").click()
+        page.get_by_label("Plan", exact=True).select_option(label="tee-basic")
         page.wait_for_url("**/listings/second-design")
 
         # The drafted brief is in the file, and SEO generation followed --
@@ -1232,6 +1232,9 @@ def test_the_create_flow_drafts_for_a_design_attached_before_the_listing_exists(
         else:  # pragma: no cover - only on a pathologically slow machine
             raise AssertionError("the drafted brief never reached the named listing")
 
+        # The proposal survives the Pricing tab; the drawers render on
+        # Listing Details, which is where the seller reads them.
+        page.locator(".tabs .seg-opt", has_text="Listing Details").click()
         page.locator(".seo-choice-list").first.wait_for(state="visible")
         assert len(provider.tasks) == 2
 

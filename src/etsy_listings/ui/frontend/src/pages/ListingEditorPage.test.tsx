@@ -78,6 +78,26 @@ describe("ListingEditorPage", () => {
 
     fireEvent.click(screen.getByText("Listing Details"));
     expect(screen.getByLabelText("Title")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Plan")).not.toBeInTheDocument();
+  });
+
+  it("shows pricing on its own tab, immediately after Variants", async () => {
+    vi.spyOn(listingsApi, "listPricingPlans").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({ resolved_prices: [{ size: "S", amount: "349 NOK" }] }),
+    );
+    const { container } = renderAt("/listings/take-a-hike");
+    await screen.findByRole("heading", { name: "take-a-hike" });
+
+    const labels = [...container.querySelectorAll(".tabs .seg-opt")].map((el) =>
+      el.textContent?.replace(/\d+/g, "").trim(),
+    );
+    expect(labels).toEqual(["Variants", "Pricing", "Listing Images", "Listing Details"]);
+
+    fireEvent.click(screen.getByText("Pricing"));
+    expect(screen.getByLabelText("Plan")).toBeInTheDocument();
+    expect(screen.getByLabelText("Price for size S")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Title")).not.toBeInTheDocument();
   });
 
   it("flushes a pending edit when switching tabs", async () => {
