@@ -292,11 +292,7 @@ def test_provider_becoming_unavailable_during_repair_surfaces_as_try_again() -> 
 
 
 def _brief_request() -> BriefRequest:
-    return BriefRequest(
-        design_image=Path("designs/front.png"),
-        product_type="t-shirt",
-        garment=GarmentContext(brand="Comfort Colors", model="1717"),
-    )
+    return BriefRequest(design_image=Path("designs/front.png"))
 
 
 def test_generate_brief_hands_the_provider_the_brief_task_and_returns_its_text() -> None:

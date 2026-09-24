@@ -309,19 +309,12 @@ def _build_request(workspace: Workspace, name: str, listing: Listing) -> SeoRequ
 
 
 def _build_brief_request(workspace: Workspace, asked: DesignBriefRequest) -> BriefRequest:
-    """The inputs for one drafted brief, from the two facts the client sent.
+    """The one input a drafted brief has: the design image.
 
-    Far less than :func:`_build_request` gathers, because a brief describes
-    the artwork and not the listing -- see `ai/brief.py.BriefRequest` for why
-    colours and category are deliberately left out, and `DesignBriefRequest`
-    for why there is no listing here at all.
-
-    Both facts are checked rather than trusted. The design path goes through
-    `Workspace.resolve` (which refuses anything outside the workspace) and
-    then has to actually exist, since a provider handed a missing image
-    describes nothing. The garment profile has to load: a brief written about
-    a garment the listing does not use would be worse than no brief, and the
-    same 409 a proposal gives for an unusable profile is the honest answer.
+    Checked rather than trusted, because it arrives from a browser. The path
+    goes through `Workspace.resolve`, which refuses anything outside the
+    workspace, and then has to exist -- a provider handed a missing image
+    describes nothing, and says so confidently.
     """
     try:
         design_image = workspace.resolve(asked.design, relative_to=workspace.root)
@@ -329,18 +322,7 @@ def _build_brief_request(workspace: Workspace, asked: DesignBriefRequest) -> Bri
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not design_image.is_file():
         raise HTTPException(status_code=409, detail=f"no design file at {asked.design!r}")
-
-    profile = WorkspaceFacts.gather(workspace).garment_profile(asked.garment_profile)
-    if profile is None:
-        raise HTTPException(
-            status_code=409,
-            detail=f"no usable garment profile {asked.garment_profile!r}",
-        )
-    return BriefRequest(
-        design_image=design_image,
-        product_type=profile.blueprint.display_title,
-        garment=GarmentContext(brand=profile.blueprint.brand, model=profile.blueprint.model),
-    )
+    return BriefRequest(design_image=design_image)
 
 
 async def generate_with_cancellation[Result](
@@ -569,8 +551,9 @@ async def request_design_brief(asked: DesignBriefRequest, request: Request) -> D
     So every refusal here is one a caller nobody asked to call has to be able
     to live with silently, and the client's reason for calling is re-checked
     rather than trusted: the design has to resolve inside the workspace and
-    exist, the garment profile has to load, some provider has to be ready,
-    and `prompts/brief.md` has to be readable.
+    exist, some provider has to be ready, and `prompts/brief.md` has to be
+    readable. Nothing about the listing is asked for -- not its name, and not
+    its garment profile, which is usually still unchosen at this point.
 
     It deliberately does *not* ask whether any brief is already filled in.
     There is no listing here to ask about, and the browser is the only thing

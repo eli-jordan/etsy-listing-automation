@@ -21,7 +21,6 @@ afterEach(() => {
 });
 
 const REF = "../../designs/take-a-hike.png";
-const PROFILE = "comfort-colors-1717";
 
 function aiSeoStub(over: Partial<AiSeoMode> = {}): AiSeoMode {
   return {
@@ -54,7 +53,7 @@ function setup(initial: Props = {}) {
   const onFlush = vi.fn();
   const view = renderHook(
     (props: Props) =>
-      useAutoDesignBrief(props.brief ?? "", PROFILE, onUpdate, onFlush, props.aiSeo ?? aiSeoStub()),
+      useAutoDesignBrief(props.brief ?? "", onUpdate, onFlush, props.aiSeo ?? aiSeoStub()),
     { initialProps: initial },
   );
   return { ...view, onUpdate, onFlush };
@@ -77,14 +76,14 @@ it("asks for nothing until a design is actually picked", async () => {
   expect(request).not.toHaveBeenCalled();
 });
 
-it("sends the design as a workspace path and the garment profile, not a listing", async () => {
+it("sends only the design, as a workspace path -- no listing, no garment", async () => {
   const request = drafts();
   const { result } = setup();
 
   act(() => result.current.start(REF));
 
   await waitFor(() =>
-    expect(request).toHaveBeenCalledWith("designs/take-a-hike.png", PROFILE, expect.anything()),
+    expect(request).toHaveBeenCalledWith("designs/take-a-hike.png", expect.anything()),
   );
 });
 
@@ -173,7 +172,7 @@ it("treats a cancelled draft as nothing having happened", async () => {
 it("aborts an in-flight draft when the editor unmounts", async () => {
   let signal: AbortSignal | undefined;
   vi.spyOn(seoApi, "requestDesignBrief").mockImplementation(
-    (_design: string, _profile: string, incoming: AbortSignal) =>
+    (_design: string, incoming: AbortSignal) =>
       new Promise((resolve) => {
         signal = incoming;
         incoming.addEventListener("abort", () => resolve({ kind: "cancelled" }));
@@ -191,7 +190,7 @@ it("aborts an in-flight draft when the editor unmounts", async () => {
 it("replaces an earlier draft when a second design is picked", async () => {
   const signals: AbortSignal[] = [];
   vi.spyOn(seoApi, "requestDesignBrief").mockImplementation(
-    (_design: string, _profile: string, incoming: AbortSignal) => {
+    (_design: string, incoming: AbortSignal) => {
       signals.push(incoming);
       return new Promise((resolve) => {
         incoming.addEventListener("abort", () => resolve({ kind: "cancelled" }));

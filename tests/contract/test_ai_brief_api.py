@@ -45,7 +45,6 @@ from tests.support.builders import listing_file
 
 _DRAFT = "Retro sunset mountains. The design text reads exactly TAKE A HIKE."
 _DESIGN = f"designs/{LISTING}.png"
-_PROFILE = "comfort-colors-1717"
 
 
 def _payload(brief: str = _DRAFT) -> str:
@@ -90,7 +89,7 @@ def client(workspace_root: Path) -> Iterator[TestClient]:
 
 
 def _post(client: TestClient, **over: str) -> Any:
-    body = {"design": _DESIGN, "garment_profile": _PROFILE, **over}
+    body = {"design": _DESIGN, **over}
     return client.post("/api/ai/design-brief", json=body)
 
 
@@ -149,11 +148,20 @@ def test_409_for_a_design_that_does_not_exist(client: TestClient) -> None:
     assert "nothing-here" in response.json()["detail"]
 
 
-def test_409_for_a_garment_profile_that_will_not_load(client: TestClient) -> None:
-    response = _post(client, garment_profile="no-such-profile")
+def test_drafts_before_any_garment_profile_is_chosen(
+    workspace_root: Path, client: TestClient
+) -> None:
+    """The ordinary create order: design first, garment later. The draft used
+    to need a garment profile and failed here, for a fact the brief prompt
+    forbids the model from using."""
+    from tests.support.builders import edit_listing
 
-    assert response.status_code == 409
-    assert "no-such-profile" in response.json()["detail"]
+    edit_listing(workspace_root, garment_profile="")
+
+    response = _post(client)
+
+    assert response.status_code == 200
+    assert response.json() == {"brief": _DRAFT}
 
 
 def test_409_without_prompts_brief_md(workspace_root: Path) -> None:

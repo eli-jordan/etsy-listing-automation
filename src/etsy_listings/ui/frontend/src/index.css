@@ -33,6 +33,12 @@
   --color-text: #201e1d;
   --color-accent: #c67139;
   --color-accent-2: #7a8a5e;
+  /* A warning has to read as a warning at a glance, and nothing in the
+     brand palette does: accent-2 is olive, which renders as grey. Amber is
+     the one colour added for it. The ink is dark enough to carry the mark
+     inside the triangle. */
+  --color-warning: #e2a624;
+  --color-warning-ink: #3b2a05;
   --color-divider: color-mix(in srgb, #201e1d 16%, transparent);
 
   /* Tonal ramps -- generated in OKLCH on one shared lightness scale, so the
@@ -2448,8 +2454,8 @@ table.listings tbody tr:last-child td {
   margin-left: 8px;
   padding: 1px 6px;
   border-radius: 999px;
-  background: color-mix(in srgb, var(--color-accent-2) 22%, transparent);
-  color: var(--color-accent-2-700);
+  background: color-mix(in srgb, var(--color-warning) 30%, transparent);
+  color: var(--color-warning-ink);
   font-weight: 600;
 }
 
@@ -2627,27 +2633,6 @@ table.listings tbody tr:last-child td {
   font-size: 11px;
   font-weight: 600;
   white-space: nowrap;
-}
-
-.ai-activity__spinner {
-  flex: none;
-}
-
-/* Still legible with no motion at all: the label says which of the two steps
-   is running, and the ring keeps its lit quarter. Section 10's rule
-   ("motion honors prefers-reduced-motion") applied to the one place this
-   feature animates. */
-@media (prefers-reduced-motion: no-preference) {
-  .ai-activity__spinner {
-    animation: ai-activity-spin 900ms linear infinite;
-    transform-origin: center;
-  }
-}
-
-@keyframes ai-activity-spin {
-  to {
-    transform: rotate(360deg);
-  }
 }
 
 .seo-inline-status {

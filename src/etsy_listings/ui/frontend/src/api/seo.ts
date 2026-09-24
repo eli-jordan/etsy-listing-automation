@@ -66,11 +66,11 @@ export type DesignBriefOutcome =
 /** Draft a listing brief from a design image (`POST /api/ai/design-brief`,
  * PRD 68).
  *
- * Takes the design and the garment profile rather than a listing name,
- * because the moment a brief is wanted is the moment a design is attached --
- * which, while a seller is creating a listing, is before it has a name or a
- * file. `design` is workspace-relative (`designs/take-a-hike.png`): see
- * `media.ts.workspacePath`.
+ * Takes only the design -- not a listing name, and not a garment profile --
+ * because the moment a brief is wanted is the moment a design is attached,
+ * which while a seller is creating a listing is before it has a name, a
+ * file, or a garment chosen. `design` is workspace-relative
+ * (`designs/take-a-hike.png`): see `media.ts.workspacePath`.
  *
  * The same three outcomes a proposal request has, for the same reason -- and
  * with more riding on the third here, because nobody asked for this request.
@@ -80,12 +80,11 @@ export type DesignBriefOutcome =
  */
 export async function requestDesignBrief(
   design: string,
-  garmentProfile: string,
   signal: AbortSignal,
 ): Promise<DesignBriefOutcome> {
   try {
     const { data, error } = await api.POST("/api/ai/design-brief", {
-      body: { design, garment_profile: garmentProfile },
+      body: { design },
       signal,
     });
     if (error || !data) return { kind: "failed" };

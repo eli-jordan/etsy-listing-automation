@@ -152,7 +152,7 @@ function ListingEditorPageContent({
    * -- so without this a design pick would overwrite what they were typing. */
   const [typedName, setTypedName] = useState("");
   const aiSeo = useAiSeoMode(detail, update, flush, save);
-  const autoBrief = useAutoDesignBrief(detail.brief, detail.garment_profile, update, flush, aiSeo);
+  const autoBrief = useAutoDesignBrief(detail.brief, update, flush, aiSeo);
 
   /** Everything picking a design sets off, in the one handler, because two of
    * the three need the pick itself rather than a later render of its effect.

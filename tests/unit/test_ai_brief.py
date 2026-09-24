@@ -11,7 +11,6 @@ around it is `test_ai_orchestrator.py`'s.
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 import pytest
@@ -26,16 +25,11 @@ from etsy_listings.ai.brief import (
     default_brief_prompt_text,
     validate_brief,
 )
-from etsy_listings.ai.models import GarmentContext
 from etsy_listings.ai.prompt import CONTEXT_BEGIN, CONTEXT_END, SCHEMA_BEGIN, SCHEMA_END
 
 
 def _request() -> BriefRequest:
-    return BriefRequest(
-        design_image=Path("designs/take-a-hike.png"),
-        product_type="Comfort Colors 1717 heavyweight tee",
-        garment=GarmentContext(brand="Comfort Colors", model="1717"),
-    )
+    return BriefRequest(design_image=Path("designs/take-a-hike.png"))
 
 
 # ------------------------------------------------------------ packaged prompt
@@ -69,29 +63,23 @@ def test_the_task_carries_the_seller_prompt_the_context_and_the_schema() -> None
     task = build_brief_task("My house style.", _request())
 
     assert task.prompt_text.startswith("My house style.")
-    assert CONTEXT_BEGIN in task.prompt_text
-    assert CONTEXT_END in task.prompt_text
     assert SCHEMA_BEGIN in task.prompt_text
     assert SCHEMA_END in task.prompt_text
     assert task.response_schema == BRIEF_RESPONSE_SCHEMA
     assert task.design_image == Path("designs/take-a-hike.png")
 
 
-def test_the_context_names_the_garment_but_not_the_listings_own_copy() -> None:
-    """A brief describes the artwork. Colours, category and any existing
-    brief are facts about the *listing*, and feeding them in is how a draft
-    ends up asserting an audience the design never showed."""
+def test_the_image_is_the_whole_input() -> None:
+    """A brief describes the artwork, so nothing about the listing -- not its
+    colours, not its category, and not its garment -- goes in with it. The
+    garment used to, and it made a garment profile a hard prerequisite for a
+    draft the prompt forbade from mentioning the garment at all. There is no
+    context block rather than an empty one: an empty delimited block is one
+    more thing for a model to decide means something."""
     task = build_brief_task("prompt", _request())
-    block = task.prompt_text.split(CONTEXT_BEGIN)[1].split(CONTEXT_END)[0]
 
-    context = json.loads(block)
-
-    assert context == {
-        "listing": {
-            "product_type": "Comfort Colors 1717 heavyweight tee",
-            "garment": {"brand": "Comfort Colors", "model": "1717"},
-        }
-    }
+    assert CONTEXT_BEGIN not in task.prompt_text
+    assert CONTEXT_END not in task.prompt_text
 
 
 # ---------------------------------------------------------------- validation

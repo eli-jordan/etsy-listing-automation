@@ -31,42 +31,13 @@ export function AiActivityIndicator({ auto, aiSeo }: { auto: AutoDesignBrief; ai
 
   return (
     <span className="ai-activity" role="status" aria-live="polite">
-      <Spinner />
+      {/* The app's one spinner, the Deploy page's. A second one here, gated
+          on `prefers-reduced-motion`, sat perfectly still on a Windows
+          machine with "Show animations" off -- which reads as a hang, not as
+          work in progress. A loading spinner is the case where the motion
+          *is* the information. */}
+      <span className="dv-spinner" aria-hidden="true" />
       {label}
     </span>
-  );
-}
-
-/** A ring with one lit quarter, rotated by CSS. An SVG rather than a
- * character or a border trick so it keeps its size next to the meta line's
- * 11px text, and `aria-hidden` because the label beside it already says what
- * it means. Motion is suppressed under `prefers-reduced-motion` in the
- * stylesheet, where the label alone still reports the state. */
-function Spinner() {
-  return (
-    <svg
-      className="ai-activity__spinner"
-      aria-hidden="true"
-      viewBox="0 0 16 16"
-      width="11"
-      height="11"
-    >
-      <circle
-        cx="8"
-        cy="8"
-        r="6"
-        fill="none"
-        strokeWidth="2.5"
-        opacity="0.25"
-        stroke="currentColor"
-      />
-      <path
-        d="M8 2a6 6 0 0 1 6 6"
-        fill="none"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        stroke="currentColor"
-      />
-    </svg>
   );
 }

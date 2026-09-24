@@ -25,9 +25,9 @@ import type { AiSeoMode } from "./useAiSeoMode";
  * not happened yet, and then losing the arming to the remount that naming
  * caused.
  *
- * Nothing about the request needs the listing to exist: `POST
- * /api/ai/design-brief` takes the design and the garment profile, which the
- * pick already has in hand.
+ * Nothing about the request needs the listing to exist, or even to have a
+ * garment chosen: `POST /api/ai/design-brief` takes the design alone, which
+ * the pick has in hand.
  *
  * ## Once, and then never on its own
  *
@@ -52,7 +52,6 @@ export interface AutoDesignBrief {
 
 export function useAutoDesignBrief(
   brief: string,
-  garmentProfile: string,
   onUpdate: (patch: Record<string, unknown>) => void,
   onFlush: () => void,
   aiSeo: AiSeoMode,
@@ -73,33 +72,30 @@ export function useAutoDesignBrief(
     latest.current = { brief, onUpdate, onFlush };
   });
 
-  const start = useCallback(
-    (ref: string) => {
+  const start = useCallback((ref: string) => {
+    if (latest.current.brief.trim() !== "") return;
+    controllerRef.current?.abort();
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    setPhase("drafting");
+    requestDesignBrief(workspacePath(ref), controller.signal).then((outcome) => {
+      if (controllerRef.current !== controller) return;
+      controllerRef.current = null;
+      if (outcome.kind !== "success") {
+        setPhase(outcome.kind === "cancelled" ? "idle" : "failed");
+        return;
+      }
+      setPhase("idle");
+      // Still only into an empty field. The seller may have started typing
+      // their own brief during the minute this took, and their text is the
+      // authority on the design -- two authors of one field is the failure
+      // to design out rather than detect afterwards.
       if (latest.current.brief.trim() !== "") return;
-      controllerRef.current?.abort();
-      const controller = new AbortController();
-      controllerRef.current = controller;
-      setPhase("drafting");
-      requestDesignBrief(workspacePath(ref), garmentProfile, controller.signal).then((outcome) => {
-        if (controllerRef.current !== controller) return;
-        controllerRef.current = null;
-        if (outcome.kind !== "success") {
-          setPhase(outcome.kind === "cancelled" ? "idle" : "failed");
-          return;
-        }
-        setPhase("idle");
-        // Still only into an empty field. The seller may have started typing
-        // their own brief during the minute this took, and their text is the
-        // authority on the design -- two authors of one field is the failure
-        // to design out rather than detect afterwards.
-        if (latest.current.brief.trim() !== "") return;
-        latest.current.onUpdate({ brief: outcome.brief });
-        latest.current.onFlush();
-        setDrafted((token) => token + 1);
-      });
-    },
-    [garmentProfile],
-  );
+      latest.current.onUpdate({ brief: outcome.brief });
+      latest.current.onFlush();
+      setDrafted((token) => token + 1);
+    });
+  }, []);
 
   useEffect(() => () => controllerRef.current?.abort(), []);
 

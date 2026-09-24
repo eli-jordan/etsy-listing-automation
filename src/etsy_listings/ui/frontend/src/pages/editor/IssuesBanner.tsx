@@ -44,18 +44,25 @@ function summarise(issues: Issue[]): string {
   return parts.join(" · ");
 }
 
+/** A filled amber triangle with a dark mark, rather than an outline in the
+ * text colour. The outline took `--color-accent-2-700`, which in this palette
+ * is an olive that reads as grey -- a warning nobody recognises as one. The
+ * colours live on the shapes themselves so the icon cannot drift back into
+ * the surrounding text colour. */
 function WarnIcon() {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2.2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M12 4.2l9.2 16H2.8z" />
-      <path d="M12 10.5v3.8M12 17.4v.01" />
+    <svg viewBox="0 0 24 24">
+      <path
+        d="M10.3 3.9a2 2 0 0 1 3.4 0l8.1 14.1A2 2 0 0 1 20.1 21H3.9a2 2 0 0 1-1.7-3z"
+        fill="var(--color-warning)"
+      />
+      <path
+        d="M12 9v4.6M12 17.2v.01"
+        fill="none"
+        stroke="var(--color-warning-ink)"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+      />
     </svg>
   );
 }

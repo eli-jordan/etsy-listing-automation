@@ -23,8 +23,9 @@ export interface paths {
      *     So every refusal here is one a caller nobody asked to call has to be able
      *     to live with silently, and the client's reason for calling is re-checked
      *     rather than trusted: the design has to resolve inside the workspace and
-     *     exist, the garment profile has to load, some provider has to be ready,
-     *     and `prompts/brief.md` has to be readable.
+     *     exist, some provider has to be ready, and `prompts/brief.md` has to be
+     *     readable. Nothing about the listing is asked for -- not its name, and not
+     *     its garment profile, which is usually still unchosen at this point.
      *
      *     It deliberately does *not* ask whether any brief is already filled in.
      *     There is no listing here to ask about, and the browser is the only thing
@@ -1160,14 +1161,15 @@ export interface components {
     };
     /**
      * DesignBriefRequest
-     * @description What drafting a brief actually needs (PRD 68): a design, and the
-     *     garment it will be printed on.
+     * @description What drafting a brief actually needs (PRD 68): the design, and nothing
+     *     else.
      *
-     *     Not a listing. A brief describes the *artwork*, and the one moment it is
-     *     most wanted is the moment a design is attached -- which, when a seller is
-     *     creating a listing, is usually before that listing has a name or a file.
-     *     Asking for the two facts directly is what lets the request go out then,
-     *     instead of waiting for a save the seller has not made yet.
+     *     Not a listing, and not a garment profile. A brief describes the
+     *     *artwork*, and the one moment it is most wanted is the moment a design is
+     *     attached -- which, when a seller is creating a listing, is usually before
+     *     it has a name, a file, or a garment chosen. Asking only for the design is
+     *     what lets the request go out then (see `ai/brief.py.BriefRequest` for why
+     *     the garment context was dropped rather than made optional).
      *
      *     ``design`` is workspace-relative and POSIX (``designs/take-a-hike.png``),
      *     resolved through `Workspace.resolve`, which is what refuses anything
@@ -1177,8 +1179,6 @@ export interface components {
     DesignBriefRequest: {
       /** Design */
       design: string;
-      /** Garment Profile */
-      garment_profile: string;
     };
     /**
      * DesignBriefResponse

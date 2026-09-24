@@ -161,7 +161,7 @@ def _context_payload(request: SeoRequest) -> dict[str, Any]:
 
 
 def build_task_prompt(
-    seller_prompt: str, context: Mapping[str, Any], schema: Mapping[str, Any]
+    seller_prompt: str, context: Mapping[str, Any] | None, schema: Mapping[str, Any]
 ) -> str:
     """The complete text sent to a provider CLI: the seller's own prompt file
     verbatim, then this request's context and the response schema, each inside
@@ -173,16 +173,24 @@ def build_task_prompt(
     for. :func:`build_prompt` below and `ai/brief.py.build_brief_task` differ
     only in the two payloads they hand in.
 
+    ``context`` is ``None`` for a task whose only input is the image (a
+    drafted brief), and then the context block is left out rather than sent
+    empty -- an empty delimited block is one more thing a model can decide
+    means something.
+
     ``seller_prompt`` is always the caller's already-loaded file content --
     this function never reads a packaged default itself and never falls back
     to one, since a seller's edited prompt silently being ignored would be a
     much worse failure than any formatting mistake.
     """
-    context_json = json.dumps(dict(context), indent=2)
     schema_json = json.dumps(dict(schema), indent=2)
+    context_block = ""
+    if context is not None:
+        context_json = json.dumps(dict(context), indent=2)
+        context_block = f"{CONTEXT_BEGIN}\n{context_json}\n{CONTEXT_END}\n\n"
     return (
         f"{seller_prompt.rstrip()}\n\n"
-        f"{CONTEXT_BEGIN}\n{context_json}\n{CONTEXT_END}\n\n"
+        f"{context_block}"
         f"{SCHEMA_BEGIN}\n{schema_json}\n{SCHEMA_END}\n\n"
         "Return only one JSON object that satisfies the schema above.\n"
     )

@@ -27,7 +27,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Final
 
-from etsy_listings.ai.models import GarmentContext, ProviderTask
+from etsy_listings.ai.models import ProviderTask
 from etsy_listings.ai.prompt import build_task_prompt
 
 MAX_BRIEF_LENGTH: Final = 1000
@@ -41,23 +41,24 @@ detailed brief about a busy design is never refused for being thorough."""
 
 @dataclass(frozen=True)
 class BriefRequest:
-    """The inputs one brief draft is built from.
+    """The inputs one brief draft is built from: the design, and nothing else.
 
-    Far smaller than `ai/models.py.SeoRequest`, and deliberately: a brief
-    describes the *artwork*, so the design image is the input that matters
-    and the garment is context only -- enough for the model to know it is
-    looking at something destined for a shirt rather than a poster, and not
-    so much that it starts writing about the garment (which
-    `resources/brief.md` explicitly forbids).
+    A brief describes the *artwork*. It used to carry the garment as well --
+    brand, model, product type -- on the theory that the model should know it
+    was looking at something destined for a shirt. That context bought
+    nothing: `resources/brief.md` already tells the model the artwork will be
+    printed on a garment, and in the same breath tells it not to write about
+    the garment. What it did cost was a hard dependency on a garment profile,
+    so attaching a design before choosing one -- the ordinary order while
+    creating a listing -- failed the draft for a fact the draft was forbidden
+    to use.
 
-    There is no `brief` field, obviously, and no colours or category either:
-    both are facts about the listing, not the design, and including them is
-    how a brief ends up asserting an audience the artwork never showed.
+    No colours or category either, for the reason the garment went: they are
+    facts about the listing, not the design, and including them is how a
+    brief ends up asserting an audience the artwork never showed.
     """
 
     design_image: Path
-    product_type: str
-    garment: GarmentContext
 
 
 @dataclass(frozen=True)
@@ -112,30 +113,13 @@ def default_brief_prompt_text() -> str:
     )
 
 
-def _context_payload(request: BriefRequest) -> dict[str, Any]:
-    """What the model is told about the listing, beside the image itself.
-
-    Nested under ``listing`` so both features' context objects read the same
-    way inside the delimiters (`ai/prompt.py._context_payload`), which is
-    what makes a seller's edited prompt file transferable knowledge between
-    them.
-    """
-    return {
-        "listing": {
-            "product_type": request.product_type,
-            "garment": {"brand": request.garment.brand, "model": request.garment.model},
-        }
-    }
-
-
 def build_brief_task(seller_prompt: str, request: BriefRequest) -> ProviderTask:
     """One brief draft, as the thing a provider adapter actually runs --
     `ai/prompt.py.build_seo_task`'s counterpart, and the only structural
     difference between the two AI features at the provider boundary."""
     return ProviderTask(
-        prompt_text=build_task_prompt(
-            seller_prompt, _context_payload(request), BRIEF_RESPONSE_SCHEMA
-        ),
+        # No context block: the image is the whole input (see `BriefRequest`).
+        prompt_text=build_task_prompt(seller_prompt, None, BRIEF_RESPONSE_SCHEMA),
         response_schema=BRIEF_RESPONSE_SCHEMA,
         design_image=request.design_image,
     )
