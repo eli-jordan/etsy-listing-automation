@@ -192,9 +192,22 @@ src/etsy_listings/
                 three queries into at most 20 scored listings (percentiles,
                 top-20 review rationing, 5 calls in flight), the ranked
                 phrase list, and `market_block()`, the delimited data the
-                proposal prompt gets (market-seo.md). No files, no cache  [done]
+                proposal prompt gets (market-seo.md). The maths is in
+                memory; two modules touch disk, imported by their own
+                names (not from `market`, which `config` imports):
+                cache.py -- `CachedEtsyMarketClient`, the 7-day search and
+                  per-listing stats caches under `.cache/market/`
+                snapshot.py -- `MarketSnapshot`, `save`/`load` of the latest
+                  research per listing (moved on rename, removed on delete
+                  by the listings API)                                 [done]
+                `settings.yaml` (config/settings.py, `Workspace.load_settings`)
+                  holds the scoring weights; absent means the defaults
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
+                workspace_locks.py -- the per-listing write lock
+                  (`app.state.workspace_locks.listing(name)`). Every
+                  read-merge-write of `listing.yaml` in the UI process holds
+                  it: PATCH, DELETE, create, rename, and AI runs' brief write
                 frontend/ -- AppShell/DashboardPage/ListingsPage/
                 ListingEditorPage (design strip + Variants/Pricing/Images/Details
                 tabs, and the create form too: it mounts at /listings/new on

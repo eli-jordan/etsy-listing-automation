@@ -35,6 +35,7 @@ from etsy_listings.ui.api.seo import router as seo_router
 from etsy_listings.ui.api.templates import router as templates_router
 from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
 from etsy_listings.ui.runs.registry import RunRegistry
+from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
@@ -77,6 +78,9 @@ def create_app(
     # a `Run` (PR5 item 5: no run, no SQLite record, no server-side cache).
     app.state.seo_provider_factory = seo_provider_factory
     app.state.seo_active_requests = ActiveSeoRequests()
+    # Held around every read-merge-write of a listing (`listings.py`, and
+    # PR 5's brief write) -- `ui/workspace_locks.py` says why.
+    app.state.workspace_locks = WorkspaceLocks()
 
     # Permissive CORS for local dev only -- the Vite dev server proxies /api in
     # production-shaped use, but running `uvicorn` and `vite` as two separate

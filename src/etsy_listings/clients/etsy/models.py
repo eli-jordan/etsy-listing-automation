@@ -10,9 +10,10 @@ for the rest.
 from __future__ import annotations
 
 import html
+from collections.abc import Mapping
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, model_validator
 
 
 class Shop(BaseModel):
@@ -232,6 +233,12 @@ def _drop_nulls(value: object) -> object:
     return value
 
 
+ALREADY_DECODED: Mapping[str, bool] = {"already_decoded": True}
+"""Validation context for a market model read back from this tool's own
+cache: its text was unescaped when Etsy's answer was first decoded, and a
+second pass would turn a seller's literal ``&amp;`` into ``&``."""
+
+
 class MarketCandidate(BaseModel):
     """Another seller's active listing, as `findAllListingsActive` returns
     it: what market research filters, scores and quotes (market-seo.md).
@@ -263,9 +270,9 @@ class MarketCandidate(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _decode(cls, value: Any) -> Any:
+    def _decode(cls, value: Any, info: ValidationInfo) -> Any:
         value = _drop_nulls(value)
-        if not isinstance(value, dict):
+        if not isinstance(value, dict) or (info.context or {}).get("already_decoded"):
             return value
         if "original_creation_timestamp" not in value and "creation_timestamp" in value:
             value["original_creation_timestamp"] = value["creation_timestamp"]

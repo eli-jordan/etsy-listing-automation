@@ -36,6 +36,12 @@ from etsy_listings.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, T
 SEARCH_PATH = "/v3/application/listings/active"
 BATCH_PATH = "/v3/application/listings/batch"
 
+SEARCH_DEFAULTS: dict[str, str] = {"sort_on": "score", "buyer_country": "US"}
+"""Every `findAllListingsActive` parameter besides the query and the page
+size. One definition, read by :func:`search_params` -- and so by both the
+request and the search cache's key, which must change whenever a request
+would."""
+
 BATCH_LIMIT = 100
 """Etsy's documented ceiling on `getListingsByListingIds`. About sixty
 candidates survive three searches, so one call normally covers them all."""
@@ -63,15 +69,7 @@ class HttpEtsyMarketClient:
         for a buyer (``sort_on=score``) who ships to the US -- the country the
         seo prompt writes for. Deliberately no ``taxonomy_id``: nothing in a
         listing or garment profile records one (market-seo.md, *Search*)."""
-        response = self._transport.get(
-            SEARCH_PATH,
-            params={
-                "keywords": query,
-                "sort_on": "score",
-                "limit": limit,
-                "buyer_country": "US",
-            },
-        )
+        response = self._transport.get(SEARCH_PATH, params=search_params(query, limit=limit))
         return [MarketCandidate.model_validate(row) for row in _results(response.json())]
 
     def listings_by_ids(self, ids: Sequence[int]) -> list[MarketListing]:
@@ -134,6 +132,12 @@ class HttpEtsyMarketClient:
                 response.status_code, error=f"reviews for listing {listing_id} had no count"
             )
         return count
+
+
+def search_params(query: str, *, limit: int) -> dict[str, str | int]:
+    """The exact parameters :meth:`HttpEtsyMarketClient.search_active` sends
+    for ``query``."""
+    return {"keywords": query, "limit": limit, **SEARCH_DEFAULTS}
 
 
 def _results(body: Any) -> list[Any]:
