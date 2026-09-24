@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as calibrator from "../api/calibrator";
@@ -404,6 +404,37 @@ describe("ListingEditorPage at /listings/new", () => {
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "cosmic-cat" })).toBeInTheDocument(),
     );
+  });
+
+  it("leaves a name the seller is part-way through typing alone", async () => {
+    /* An uncommitted name is not the listing's name -- `detail.name` is still
+       empty -- so the pick has to be told about the field's own text or it
+       would overwrite what they were in the middle of writing. */
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    const create = vi.spyOn(listingsApi, "createListing");
+    const describe = vi
+      .spyOn(listingsApi, "describeListingDraft")
+      .mockResolvedValue({ ...draft(), design: { default: "../../designs/cosmic-cat.png" } });
+    renderAt("/listings/new");
+
+    const input = await screen.findByLabelText("Listing name");
+    fireEvent.change(input, { target: { value: "my-shi" } });
+
+    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() => expect(describe).toHaveBeenCalled());
+    expect(create).not.toHaveBeenCalled();
+    expect(screen.getByLabelText("Listing name")).toHaveValue("my-shi");
+
+    // Unmount here rather than in the shared cleanup: this is the one test
+    // that ends with an edit still pending on an *unnamed* draft, so
+    // `useAutosave`'s flush-on-unmount describes it -- and the shared
+    // `afterEach` has already restored the mock by the time that runs.
+    cleanup();
   });
 
   it("keeps a name the seller already typed, even if the design is picked after", async () => {

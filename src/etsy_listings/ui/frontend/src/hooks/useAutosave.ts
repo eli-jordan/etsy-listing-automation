@@ -14,11 +14,11 @@ type Patch = Record<string, unknown>;
 
 /** Where the listing stands with the disk, as the page head reports it.
  *
- * `unsaved` is the state that only exists because `Listing` is strict: the
- * listing has a name, but the document is one the server will not write yet
- * (in practice, no pricing plan and no prices), so it is described and not
- * created. The banner says which piece is missing; this says that the
- * consequence is a file that does not exist. */
+ * `unsaved` is the state where the listing has a name but the server would
+ * not write the document: since PRD 70 that means the document contradicts
+ * itself (a price in the wrong currency, a title over Etsy's limit), never
+ * that it is merely incomplete. `field_errors` names the field; this says
+ * the consequence is a file that does not exist. */
 export type SaveState =
   | { kind: "unnamed" }
   | { kind: "saving" }
@@ -180,6 +180,15 @@ export function useAutosave(
   const create = useCallback(
     async (next: string) => {
       setSave({ kind: "saving" });
+      // What this create carries, captured before the await. An edit made
+      // while it is in flight lands in a *different* `pending` object
+      // (`update` replaces it rather than mutating), and that one is not in
+      // the document being sent -- so clearing `pending` wholesale on success
+      // would drop it silently. The same rule `applyResponse` already states
+      // for a PATCH, applied to the one request that did not have it: PRD
+      // 68's drafted brief is written by a request that resolves during
+      // exactly this window, and it went missing every time.
+      const sent = pending.current;
       const fresh = await createListing({ name: next, document: candidate() });
       if (fresh.name === "") {
         // The server would not write it -- `field_errors` says why. `pending`
@@ -189,10 +198,13 @@ export function useAutosave(
         setSave({ kind: "unsaved" });
         return;
       }
-      pending.current = null;
+      if (pending.current === sent) pending.current = null;
       savedName.current = next;
-      setDetail(fresh);
-      setSave(saved());
+      applyResponse(fresh);
+      // Left "saving" when something is still pending, so the flush
+      // `commitName` schedules is what reports the listing saved -- the same
+      // way `flush` withholds it while another edit is waiting.
+      if (pending.current === null) setSave(saved());
       onNamed?.(next, fresh);
     },
     [applyResponse, candidate, onNamed],

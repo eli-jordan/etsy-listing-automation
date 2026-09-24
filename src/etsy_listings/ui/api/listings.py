@@ -527,8 +527,11 @@ def _describe_draft(
     already has. A candidate that will not structurally validate comes back
     with ``field_errors`` over the *empty* draft, because there is no previous
     state to echo (unlike PATCH, which still has the listing on disk); one that
-    will is described through :meth:`Listing.draft`, incomplete but structurally
-    sound, and carries its real ``issues``.
+    will is described as it stands -- incomplete but structurally sound -- and
+    carries its real ``issues``. There is no separate draft validation any
+    more: incompleteness is not a validation failure at all (PRD 70), so the
+    only documents that land in the ``except`` below are genuinely malformed
+    ones.
 
     The client must therefore prefer its own local state to everything but
     ``field_errors`` when ``field_errors`` is set -- the issues alongside them
@@ -537,7 +540,7 @@ def _describe_draft(
     currency = workspace.defaults.etsy.currency
     field_errors: dict[str, str] = {}
     try:
-        listing = Listing.draft(document, currency=currency)
+        listing = Listing.model_validate(dict(document), context={"currency": currency})
     except ValidationError as exc:
         listing = Listing.empty_draft(currency=currency)
         field_errors = _field_errors(exc)

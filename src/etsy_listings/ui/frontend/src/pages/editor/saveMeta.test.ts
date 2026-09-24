@@ -1,90 +1,38 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { ListingDetail } from "../../types";
 import { metaFor } from "./saveMeta";
 import { timeAgo } from "./timeAgo";
 
-function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: { default: "../../designs/take-a-hike.png" },
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    description_composed: "",
-    ...over,
-  };
-}
 describe("metaFor", () => {
   it("points an unnamed listing at the name field", () => {
-    expect(metaFor({ kind: "unnamed" }, detail(), null)).toMatch(/double-click the name/i);
+    expect(metaFor({ kind: "unnamed" }, null)).toMatch(/double-click the name/i);
   });
 
-  it("names the price source when it is the only thing left", () => {
-    const blocked = detail({
-      issues: [
-        {
-          severity: "block",
-          tab: "details",
-          where: "Listing Details › Pricing",
-          message: "No pricing plan and no prices",
-        },
-      ],
-    });
-    expect(metaFor({ kind: "unsaved" }, blocked, "my-shirt")).toMatch(/pricing plan/i);
-  });
-
-  it("counts the problems when there is more than one", () => {
-    const blocked = detail({
-      issues: [
-        { severity: "block", tab: "details", where: "Listing Details › Pricing", message: "x" },
-        { severity: "block", tab: "variants", where: "Design", message: "y" },
-      ],
-    });
-    expect(metaFor({ kind: "unsaved" }, blocked, "my-shirt")).toBe(
-      "Not saved — 2 problems above have to be fixed first",
+  it("points an unwritable document at the field that caused it", () => {
+    /* Since PRD 70 this state is never about incompleteness -- naming writes
+       the listing, and what is missing blocks deploying it instead. What is
+       left is a document that contradicts itself, and `field_errors` has
+       already marked the field, so this line only reports the consequence. */
+    expect(metaFor({ kind: "unsaved" }, "my-shirt")).toBe(
+      "Not saved — fix the highlighted field and it will be written",
     );
   });
 
   it("names the listing that took the name", () => {
-    expect(metaFor({ kind: "name-taken", name: "take-a-hike" }, detail(), null)).toMatch(
-      /take-a-hike/,
-    );
+    expect(metaFor({ kind: "name-taken", name: "take-a-hike" }, null)).toMatch(/take-a-hike/);
   });
 
   it("says a failed save is kept locally, not lost", () => {
-    expect(metaFor({ kind: "save-failed" }, detail(), "take-a-hike")).toMatch(/kept locally/i);
+    expect(metaFor({ kind: "save-failed" }, "take-a-hike")).toMatch(/kept locally/i);
   });
 
   it("says it is saving while a save is in flight", () => {
-    expect(metaFor({ kind: "saving" }, detail(), "take-a-hike")).toBe("Saving…");
+    expect(metaFor({ kind: "saving" }, "take-a-hike")).toBe("Saving…");
   });
 
   it("shows the path and a saved-ago caption once saved", () => {
     const now = Date.now();
-    render(metaFor({ kind: "saved", savedAt: now - 2 * 60_000 }, detail(), "take-a-hike"));
+    render(metaFor({ kind: "saved", savedAt: now - 2 * 60_000 }, "take-a-hike"));
     expect(screen.getByText("listings/take-a-hike/listing.yaml")).toBeInTheDocument();
     expect(screen.getByText(/Saved 2 mins ago/)).toBeInTheDocument();
   });

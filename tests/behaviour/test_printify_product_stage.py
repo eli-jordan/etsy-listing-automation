@@ -356,6 +356,22 @@ def test_an_update_reads_the_product_before_writing_it(root, catalog, printify) 
 # --------------------------------------------------------------- the gates
 
 
+def test_an_unpriced_listing_blocks_the_stage(root, catalog, printify) -> None:
+    """PRD 70 moved the price-source refusal out of `Listing`, so an unpriced
+    listing is now a file on disk -- and this is where it has to stop.
+
+    Without the gate it would reach `resolved_price`, which raises `KeyError`
+    rather than refusing. A `KeyError` is not a `UserFacingError`, so one
+    unpriced listing would end a whole `--all` batch.
+    """
+    edit_listing(root, prices={}, pricing_plan=None)
+
+    stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
+
+    assert stage_plan.will_run is False
+    assert "pricing plan" in (stage_plan.blocked or "")
+
+
 def test_an_empty_title_blocks_the_stage(root, catalog, printify) -> None:
     set_copy(root, title="", description="A retro sunset.")
 

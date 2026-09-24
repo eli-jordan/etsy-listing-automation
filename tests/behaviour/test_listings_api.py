@@ -676,34 +676,37 @@ class TestCreateListing:
         assert response.status_code == 200
         assert (workspace_root / "listings" / "priced-by-hand" / "listing.yaml").is_file()
 
-    def test_an_incomplete_document_is_described_not_written(
+    def test_an_incomplete_document_is_written_and_its_gaps_reported(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """No price source, so `Listing` refuses it -- a 200 with an empty
-        `name`, which is the "not created" signal, and nothing on disk.
+        """PRD 70: naming writes it. No price source is an incompleteness, not
+        a malformed document, so the file appears and the banner carries the
+        block issue that stops a deploy.
 
-        The *explanation* is in the issues, not in `field_errors`: this is the
-        one rule a draft is excused, so describing the candidate back does not
-        re-raise it. That division is the whole arrangement -- the model refuses
-        the write, the banner says why."""
+        This test used to assert the opposite, and it was the one rule out of
+        eight that behaved that way -- a seller with a named listing, a design
+        and colours watched the tool decline to save their work."""
         response = client.post(
             "/api/listings",
             json={"name": "half-done", "document": self._document(prices={}, pricing_plan=None)},
         )
         assert response.status_code == 200
         body = response.json()
-        assert body["name"] == ""
+        assert body["name"] == "half-done"
         assert any(
             i["where"] == "Listing Details › Pricing" and i["severity"] == "block"
             for i in body["issues"]
         )
-        assert not (workspace_root / "listings" / "half-done").exists()
+        assert (workspace_root / "listings" / "half-done" / "listing.yaml").is_file()
 
     def test_a_structurally_broken_document_comes_back_as_field_errors(
         self, client: TestClient, workspace_root: Path
     ) -> None:
         """A bare number is not a price (PRD 24) -- that one *is* a field error,
-        rendered inline, and still writes nothing."""
+        rendered inline, and still writes nothing.
+
+        The other side of PRD 70's line: incomplete is written, malformed is
+        not."""
         response = client.post(
             "/api/listings",
             json={"name": "bad-money", "document": self._document(prices={"S": 349})},

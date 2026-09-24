@@ -315,17 +315,22 @@ def _check_design_selected(listing: Listing) -> list[Issue]:
     ]
 
 
-def _check_price_source(listing: Listing) -> list[Issue]:
-    """The one rule this module shares with `Listing` itself.
+def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> list[Issue]:
+    """Nothing says what a variant costs.
 
-    `Listing._require_a_price_source` refuses to *write* a listing with neither
-    a plan nor prices, and waives that only for an unsaved draft; this explains
-    the same gap in the banner, which is the only place a draft can be told
-    about it. Two expressions of one rule, deliberately -- the model owns the
-    refusal, this owns the sentence. Neither is redundant: delete this one and a
-    new listing silently refuses to save with nothing said about why.
+    Public, and narrow-argument, like every other rule a stage shares: this one
+    became one when PRD 70 took it out of `Listing` itself. It used to block
+    the *write*, which made it the single incompleteness out of eight that a
+    seller met as the tool refusing to save their work; now it blocks the
+    deploy, through `engine/stages/gates.py.check_price_source`, exactly as the
+    other seven do.
+
+    That move is also what makes the rule safe to state once. While it lived in
+    the model, this module had to restate it so the banner could say *something*
+    about a refusal the model made silently -- two expressions of one rule, and
+    the comment here used to say so.
     """
-    if listing.pricing_plan is not None or listing.prices:
+    if pricing_plan is not None or priced_sizes:
         return []
     return [
         Issue(
@@ -333,9 +338,13 @@ def _check_price_source(listing: Listing) -> list[Issue]:
             "details",
             "Listing Details › Pricing",
             "No pricing plan and no prices -- pick a plan, or set a price for every size. "
-            "The listing cannot be written until one of them is set.",
+            "Deployment is blocked until one of them is set.",
         )
     ]
+
+
+def _check_price_source(listing: Listing) -> list[Issue]:
+    return check_price_source(pricing_plan=listing.pricing_plan, priced_sizes=bool(listing.prices))
 
 
 def _check_template_kind_colour_match(

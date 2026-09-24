@@ -69,8 +69,12 @@ function proposal(over: Partial<SeoProposalResponse> = {}): SeoProposalResponse 
       design: { default: "designs/take-a-hike.png" },
       design_content_hash: null,
     },
-    generated_at: "2026-09-23T00:00:00Z",
-    expires_at: "2026-09-24T00:00:00Z",
+    // Relative to now, not a fixed date: the server stamps `expires_at` a day
+    // out (`ui/api/seo.py._PROPOSAL_TTL`) and `loadStoredProposal` discards
+    // anything past it -- so a hard-coded pair is a fixture that silently
+    // becomes "expired" on a particular morning, which is exactly what it did.
+    generated_at: new Date(Date.now() - 60_000).toISOString(),
+    expires_at: new Date(Date.now() + 86_400_000).toISOString(),
     ...over,
   };
 }

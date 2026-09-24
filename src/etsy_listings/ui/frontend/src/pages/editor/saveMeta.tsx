@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 import type { SaveState } from "../../hooks/useAutosave";
-import type { ListingDetail } from "../../types";
 import { SavedAgo } from "./SavedAgo";
 
 /** What the editor's page head says about where this listing stands with the
@@ -10,10 +9,12 @@ import { SavedAgo } from "./SavedAgo";
  * sentences rather than five renders.
  *
  * The "not saved yet" ones say what is in the way rather than a bland "Not
- * saved". `Listing` will not be written without a price source, so a listing
- * can have a name, a design, a garment profile and colours and still not exist
- * as a file -- and a user who is not told that watches a file never appear. */
-export function metaFor(save: SaveState, detail: ListingDetail, name: string | null): ReactNode {
+ * saved". Since PRD 70 that is a much rarer state: naming a listing writes it,
+ * and incompleteness never withholds the file. What is left is a document the
+ * server will not write because it contradicts itself -- and `field_errors`
+ * has already said which field, inline, so this line only has to say that the
+ * file has not been written. */
+export function metaFor(save: SaveState, name: string | null): ReactNode {
   switch (save.kind) {
     case "unnamed":
       return "Not saved — double-click the name above to name this listing";
@@ -21,15 +22,8 @@ export function metaFor(save: SaveState, detail: ListingDetail, name: string | n
       return `There is already a listing called “${save.name}” — pick another name`;
     case "save-failed":
       return "Couldn't save — the edit is kept locally and retries on your next change";
-    case "unsaved": {
-      const blocking = detail.issues.filter((i) => i.severity === "block");
-      const pricing = blocking.find((i) => i.where.includes("Pricing"));
-      if (pricing !== undefined && blocking.length === 1) {
-        return "Not saved — pick a pricing plan (or set a price) and it will be written";
-      }
-      const count = blocking.length;
-      return `Not saved — ${count} ${count === 1 ? "problem" : "problems"} above have to be fixed first`;
-    }
+    case "unsaved":
+      return "Not saved — fix the highlighted field and it will be written";
     case "saving":
       return "Saving…";
     case "saved":

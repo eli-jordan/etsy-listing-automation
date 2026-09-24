@@ -21,18 +21,6 @@ from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.money import Money, PriceField, require_currency
 from etsy_listings.config.pricing_plan import PricingPlan
 
-_DRAFT: Final = "unsaved_draft"
-"""Validation-context key set by :meth:`Listing.draft` and by nothing else.
-
-It waives exactly one rule -- "set ``pricing_plan`` or ``prices``" -- for a
-candidate the editor is still assembling, and it is private so that waiving it
-stays a decision made here. ``Listing.load``, the UI's autosave PATCH and its
-create POST all go through a plain ``model_validate``, so nothing incomplete can
-reach disk; ``tests/unit/test_draft_context_is_private.py`` keeps the key from
-being spelled anywhere else, the same way ``test_no_bare_cv2.py`` keeps a
-default-argument ``cv2`` call from creeping back in.
-"""
-
 EMPTY_DRAFT: Final[dict[str, Any]] = {
     "garment_profile": "",
     "design": {},
@@ -217,46 +205,27 @@ class Listing(BaseModel):
 
         return self
 
-    @model_validator(mode="after")
-    def _require_a_price_source(self, info: ValidationInfo) -> Listing:
-        """A listing has to be priced somehow -- unless it is a draft.
-
-        Its own rule rather than a clause in :meth:`_validate` because it is the
-        one rule an unsaved draft is allowed to fail: everything else in this
-        model is either satisfied by an empty value or is a statement about
-        fields that *are* filled in, so this is the only thing standing between
-        "nothing chosen yet" and a document that parses.
-        `config/listing_validation.py` reports the same gap as a block issue --
-        this model owns the refusal, that module owns the explanation.
-        """
-        if (info.context or {}).get(_DRAFT):
-            return self
-        if self.pricing_plan is None and not self.prices:
-            raise ValueError("listing has no pricing_plan and no prices -- set at least one")
-        return self
-
-    @classmethod
-    def draft(cls, raw: Mapping[str, Any], *, currency: str) -> Self:
-        """A candidate the listings editor is still assembling.
-
-        Structurally a real ``Listing`` -- ``media[].colour`` must still name a
-        colour the listing sells, ``price_overrides``/``artwork`` keys must
-        still be colours, a concrete title must still fit Etsy's limit, prices
-        must still carry the shop's currency -- because those are exactly the
-        failures the editor shows inline while the listing is unnamed. Only the
-        price-source rule is waived, and only here.
-
-        Answers ``Self`` rather than ``Listing`` because the UI's
-        ``ListingDetail`` *is* a ``Listing`` with display fields hung off it,
-        and re-deciding this rule while merely describing a listing would refuse
-        to render the one state the rule was waived for.
-        """
-        return cls.model_validate(dict(raw), context={"currency": currency, _DRAFT: True})
-
     @classmethod
     def empty_draft(cls, *, currency: str) -> Self:
-        """:data:`EMPTY_DRAFT` as a ``Listing``: what `+ New listing` opens on."""
-        return cls.draft(EMPTY_DRAFT, currency=currency)
+        """:data:`EMPTY_DRAFT` as a ``Listing``: what `+ New listing` opens on.
+
+        Answers ``Self`` rather than ``Listing`` because the UI's
+        ``ListingDetail`` *is* a ``Listing`` with display fields hung off it.
+
+        There is no ``draft()`` beside this one any more. This model used to
+        hold one rule an unsaved draft was allowed to fail -- "set
+        ``pricing_plan`` or ``prices``" -- which made a document that merely
+        had nothing chosen yet indistinguishable from one that was malformed.
+        PRD 70 moved that refusal to where the other seven incompletenesses
+        already lived: `config/listing_validation.py` explains it in the
+        banner, and `engine/stages/gates.py` turns it into the `Blocked` that
+        stops a deploy. What this model still refuses is a document that
+        contradicts itself -- a ``media[].colour`` naming a colour the listing
+        does not sell, a price in the wrong currency, a title over Etsy's
+        limit -- and those are failures about a field somebody filled in, not
+        about one they have not reached.
+        """
+        return cls.model_validate(dict(EMPTY_DRAFT), context={"currency": currency})
 
     @classmethod
     def load(cls, path: Path, *, currency: str) -> Listing:

@@ -34,6 +34,12 @@ export interface EditableNameProps {
   busy?: boolean;
   placeholder?: string;
   label?: string;
+  /** What is in the field right now, as it is typed. A listing that has no
+   * name yet can be given one by something other than this field (PRD 69,
+   * where picking a design names a draft), and that must not overwrite a name
+   * the seller is part-way through typing -- which `value` cannot show,
+   * because an uncommitted name is not the listing's name. */
+  onDraftChange?: (text: string) => void;
 }
 
 export function EditableName({
@@ -43,6 +49,7 @@ export function EditableName({
   busy = false,
   placeholder = "Name this listing…",
   label = "Listing name",
+  onDraftChange,
 }: EditableNameProps) {
   const [opened, setOpened] = useState(false);
   const [text, setText] = useState(value);
@@ -107,7 +114,10 @@ export function EditableName({
         autoFocus
         readOnly={busy}
         value={text}
-        onChange={(event) => setText(event.target.value)}
+        onChange={(event) => {
+          setText(event.target.value);
+          onDraftChange?.(event.target.value);
+        }}
         onBlur={() => {
           if (reverting.current) {
             reverting.current = false;

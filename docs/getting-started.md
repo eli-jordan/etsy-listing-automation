@@ -512,8 +512,14 @@ ready; if neither is, the Details tab simply looks like it always did.
 
 **Picking a design names a new listing.** A draft with no name takes the
 design's filename without its extension — so creating a listing is: open the
-editor, pick a design, pick a price source. A listing that already has a name
-keeps it; changing its artwork never renames it.
+editor and pick a design. A listing that already has a name keeps it, and one
+you have started typing a name for keeps that; changing the artwork never
+renames a listing.
+
+The file is written as soon as it has a name. Everything still missing — a
+garment profile, colours, a price source, a title, a lead, an image — is
+listed in the issues banner and blocks **deploying** the listing, never
+saving it.
 
 **Attaching a design starts the work.** When you pick a design for a listing
 whose brief is still empty, the brief is drafted from the artwork and written

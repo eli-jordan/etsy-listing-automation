@@ -147,6 +147,10 @@ function ListingEditorPageContent({
   // them beside the autosave line.
   /** A name the design pick chose, before the listing exists under it. */
   const [pickedName, setPickedName] = useState("");
+  /** A name the seller has started typing but not committed. `detail.name` is
+   * still `""` at that point -- an uncommitted name is not the listing's name
+   * -- so without this a design pick would overwrite what they were typing. */
+  const [typedName, setTypedName] = useState("");
   const aiSeo = useAiSeoMode(detail, update, flush, save);
   const autoBrief = useAutoDesignBrief(detail.brief, detail.garment_profile, update, flush, aiSeo);
 
@@ -164,7 +168,7 @@ function ListingEditorPageContent({
    * and the page head says so. */
   function pickDesign(ref: string) {
     update({ design: ref });
-    if (detail.name === "") {
+    if (detail.name === "" && typedName.trim() === "") {
       const named = refName(ref);
       // Shown as the name immediately, not only once the file exists. A
       // create is refused until the document will validate (no price source,
@@ -196,6 +200,7 @@ function ListingEditorPageContent({
             <EditableName
               value={name ?? pickedName}
               onCommit={commitName}
+              onDraftChange={setTypedName}
               error={
                 save.kind === "name-taken"
                   ? { name: save.name, message: "that name is already taken" }
@@ -204,7 +209,7 @@ function ListingEditorPageContent({
               busy={save.kind === "saving"}
             />
           }
-          meta={metaFor(save, detail, name)}
+          meta={metaFor(save, name)}
         />
       }
     />
