@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "name": "market-seo",
+  "auto": false,
+  "title": "Market-informed SEO",
+  "description": "Hi-fi mockups: the three-step AI workflow indicator in the top bar and the related listings panel on Listing Details.",
+  "layout": {
+    "rows": [["market-seo"]],
+    "scenes": {
+      "market-seo": {
+        "rows": [["researching", "suggesting", "ready", "states"]]
+      }
+    }
+  },
+  "nodes": [
+    { "key": "n_mseo_researching", "frame": "market-seo/researching", "x": 0, "y": 0, "w": 1280, "h": 800 },
+    { "key": "n_mseo_suggesting", "frame": "market-seo/suggesting", "x": 1400, "y": 0, "w": 1280, "h": 800 },
+    { "key": "n_mseo_ready", "frame": "market-seo/ready", "x": 2800, "y": 0, "w": 1280, "h": 800 },
+    { "key": "n_mseo_states", "frame": "market-seo/states", "x": 4200, "y": 0, "w": 1280, "h": 800 }
+  ],
+  "order": 3
+}

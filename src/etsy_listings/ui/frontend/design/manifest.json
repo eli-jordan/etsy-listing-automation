@@ -15,6 +15,11 @@
       "description": "One clickable Listing Details prototype: AI Mode loads inline, then reveals selectable title, lead, and ranked tag suggestions."
     },
     {
+      "name": "market-seo",
+      "title": "Market-informed SEO",
+      "description": "Hi-fi mockups: the three-step AI workflow indicator in the top bar and the related listings panel on Listing Details."
+    },
+    {
       "name": "archive",
       "title": "Archive",
       "description": "Retired directions, grouped by feature - history, not options."
@@ -108,6 +113,10 @@
     {
       "name": "listing-seo-v3",
       "frames": 5
+    },
+    {
+      "name": "market-seo",
+      "frames": 4
     }
   ],
   "frames": [
@@ -656,6 +665,42 @@
       "title": "Listing SEO — AI Mode prototype",
       "viewport": "laptop",
       "description": "Single clickable prototype: AI Mode loads in place, then reveals title, lead, and ranked tag suggestions automatically."
+    },
+    {
+      "id": "market-seo/ready",
+      "file": "design/scenes/market-seo/ready.tsx",
+      "kind": "tsx",
+      "scene": "market-seo",
+      "title": "Market SEO — suggestions ready",
+      "viewport": "laptop",
+      "description": "All three nodes done; suggestion drawers open beside the panel, with the top listing expanded to show its tags and lead."
+    },
+    {
+      "id": "market-seo/researching",
+      "file": "design/scenes/market-seo/researching.tsx",
+      "kind": "tsx",
+      "scene": "market-seo",
+      "title": "Market SEO — researching the market",
+      "viewport": "laptop",
+      "description": "Brief drafted; market research is the glowing middle node, and the panel shows the three Etsy searches loading."
+    },
+    {
+      "id": "market-seo/states",
+      "file": "design/scenes/market-seo/states.tsx",
+      "kind": "tsx",
+      "scene": "market-seo",
+      "title": "Market SEO — workflow and panel states",
+      "viewport": "laptop",
+      "description": "Every state of the workflow indicator (with hover cards pinned open) and the panel's phrases, empty and failed states."
+    },
+    {
+      "id": "market-seo/suggesting",
+      "file": "design/scenes/market-seo/suggesting.tsx",
+      "kind": "tsx",
+      "scene": "market-seo",
+      "title": "Market SEO — writing suggestions",
+      "viewport": "laptop",
+      "description": "Market research done and the top listings panel filled; SEO suggestions is the glowing last node."
     }
   ]
 }

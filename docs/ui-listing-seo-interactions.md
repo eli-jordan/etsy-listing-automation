@@ -27,7 +27,10 @@ The one thing it does *not* wait to be asked for is the brief those three
 suggestions are generated from. Attaching a design to a listing with an empty
 brief drafts one from the artwork and requests the proposal it unblocks, so the
 seller usually arrives at Listing Details to find the drawers already open
-(PRD 68). Section 1a describes that chain; everything else in this document is
+(PRD 68, as amended by PRD 71). Every proposal is now market-informed: it is
+worded after comparable Etsy listings, and the page head and a top listings
+panel show that work. See [market-seo.md](market-seo.md) and
+[ui-market-seo-interactions.md](ui-market-seo-interactions.md). Section 1a describes that chain; everything else in this document is
 unchanged by it, because the brief is a generation *input*, not one of the
 three reviewed outputs.
 
@@ -39,8 +42,8 @@ workspace.
 
 1. Generation never changes a listing field by itself, with one named
    exception: the `brief`, which is a generation input rather than copy a
-   shopper reads, is drafted into an *empty* brief field on design attach and
-   never over text the seller wrote (section 1a).
+   shopper reads. The AI run drafts it into an *empty* brief field and never
+   over text the seller wrote (section 1a).
 2. A title or description lead changes only when the seller chooses a specific
    suggestion.
 3. Tags change only when the seller chooses individual tags or activates
@@ -58,9 +61,9 @@ workspace.
 
 ## Flow at a glance
 
-1. The seller attaches a design. If the brief is empty, it is drafted from the
-   artwork and generation starts on its own; the seller may go straight to
-   step 4. Steps 2 and 3 are what a seller does when it did not, or when they
+1. The seller attaches a design. If the brief is empty, then once the listing
+   is saved with a garment profile, the brief is drafted from the artwork and
+   generation starts on its own. The seller may go straight to step 4. Steps 2 and 3 are what a seller does when it did not, or when they
    want a different result.
 2. The seller enters a brief in Listing Details and activates the AI Mode button once it is enabled.
 3. The button enters a loading state while the current listing facts are sent
@@ -99,33 +102,41 @@ autosave so a newly filled brief can enable the button.
 Attaching a design is the moment a listing first has something for a model to
 look at, and it is also the moment the seller is furthest from the copy they
 will eventually need. So that transition — and only that transition — starts
-the work by itself (PRD 68).
+the work by itself (PRD 68, as amended by PRD 71).
+
+The pick *arms* the chain. Picking a design also names and writes the listing
+(PRD 69, 70). The chain fires once, as one AI run
+([market-seo.md › AI runs](market-seo.md#ai-runs)), on the first successful
+save that has a name, a design and a garment profile. The garment is needed
+because the market queries use its item type.
 
 | Interaction | What happens | Why it is important |
 | --- | --- | --- |
-| Attach or change the design while the brief is empty | Draft a brief from the artwork immediately, write it into the ordinary Brief field, and request the SEO proposal it unblocks. | The seller reaches Listing Details to review suggestions rather than to start a two-minute wait. |
+| Attach or change the design while the brief is empty | Arm the chain. When the listing is next saved with a name, design and garment profile, start one AI run: draft the brief, research the market, then request the proposal. | The seller reaches Listing Details to review suggestions rather than to start a wait. |
 | Attach or change the design while the brief has text | Do nothing at all. | A brief the seller wrote is the authority on the design; regenerating over it would lose the one input only they have. |
-| Attach the design before the listing has a name | Draft anyway, on the pick. The brief request is about a design, not a listing. | This is the ordinary order while creating a listing. Waiting for a name would mean the feature never ran in the flow it exists for. |
-| Type in the Brief field while a draft is in flight | Discard the draft when it arrives; the seller's text wins. | Two authors of one field is the failure to design out, not to detect afterwards. |
-| The draft or the generation it started fails | Stop. The Brief field is simply still empty, and **AI Mode** explains what it needs. | A background attempt that quietly retries spends a subscription budget nobody asked it to. |
-| Leave the editor while either request runs | Abort it, exactly as **Cancel** does. Retain no brief and no proposal. | Section 7's cancellation rule is about who is left to own a result, and that does not change because the request started itself. |
+| No garment profile chosen yet | Stay armed and wait. Nothing runs until the garment is saved. | The queries end in the garment's item type, and the proposal needs its facts. |
+| Type in the Brief field before the chain fires | The run still starts, but it skips drafting: the Brief node shows as skipped. | The seller's brief is used as written. |
+| Type in the Brief field while a draft is in flight | The run writes the draft only if the *saved* brief is still empty, under the listing's write lock. Otherwise it discards the draft, and the seller's text wins. | Two authors of one field is the failure to design out, not to detect afterwards. |
+| The run fails | Stop. A brief already written stays, and nothing starts again on its own. **AI Mode** is the way to retry. | A background attempt that quietly retries spends a subscription budget nobody asked it to. |
+| Leave the editor or reload while the run is going | Keep running. Returning to the listing reattaches to the run and replays its progress. Only **Cancel** stops it. Leaving before the chain has fired disarms it. | The work was asked for; walking away from the tab is not a request to throw it away. |
 
-While either step runs, the editor's page head says **Generating brief…** and
-then **Generating SEO…**, beside the autosave line. That is where it belongs
-rather than beside the Brief field: the seller who attached a design is
-normally looking at Variants, and the head is the one part of the editor that
-reads the same on every tab. It reports only; there is no cancel and no retry
-there.
+While the run is going, the editor's page head shows it as three nodes (Brief,
+Market research, SEO suggestions) beside the autosave line
+([ui-market-seo-interactions.md §1](ui-market-seo-interactions.md#1-workflow-indicator)).
+That is where it belongs rather than beside the Brief field: the seller who
+attached a design is normally looking at Variants, and the head is the one
+part of the editor that reads the same on every tab.
 
-The drafted brief is ordinary listing content the moment it lands: editable,
-autosaved through the normal path, and carrying no badge, no pending state, and
-no accept step. It is not part of the proposal, so it never goes stale and is
-never cleared by resolving a drawer.
+The run writes the drafted brief to `listing.yaml` itself, and the editor
+shows it in the Brief field from the run's `brief` event without saving it
+again. From then on it is ordinary listing content: editable, autosaved
+through the normal path, with no badge, no pending state and no accept step.
+It is not part of the proposal, so it never goes stale and is never cleared by
+resolving a drawer.
 
-The chain runs once per pick, because the pick is what starts it — there is no
-render-level condition that could fire it a second time. Changing the design
-again starts a fresh draft, but only while the brief is still empty, which
-after a successful draft it is not.
+The chain fires once per pick. There is no render-level condition that could
+fire it a second time. Changing the design again arms it again, but only while
+the brief is still empty, which after a successful draft it is not.
 
 Brief drafting has its own prompt, `prompts/brief.md`, seeded exactly as
 `prompts/seo.md` is, and runs through the same provider chain, deadline and
@@ -143,13 +154,14 @@ editing other fields while generation runs.
 | Generating | Keep **AI Mode** disabled. The sparkle twinkles and the button glows in a pulse. Under the button, **Generating for 0:00 seconds** counts up beside **Cancel**. Hovering the button shows **Generating title, description and tag recommendations for your review**. Motion is still when reduced motion is requested. | The request can take time, so the button itself shows that work is underway, and the seller can see how long it has run and stop it without the card staying open. |
 | Success    | Remove the loading message. If the seller is looking at the page, the suggestion drawers slide out from under Title, Tags, and Description lead, slightly narrower than those fields, headed by the AI Mode sparkle. A proposal restored later appears in place, without the slide. | The drawers should read as coming out of the fields they belong to, and a later visit should not replay that motion. |
 | Failure    | Remove the loading state and show an inline user-facing error with **Try again**. Do not change listing fields. | A model or validation failure must never look like an empty successful result.                       |
-| Cancelled  | Remove the loading state and retain no proposal. Do not change listing fields.                                  | Leaving the editor, losing the connection, or pressing **Cancel** must not leave a result from an abandoned request. |
+| Cancelled  | Remove the loading state and retain no proposal. A brief or market snapshot the run already wrote stays.       | Pressing **Cancel** must not leave a result from an abandoned request. Leaving the editor or losing the connection is not cancelling: the run continues, and the editor reattaches to it. |
 
 The backend tries Codex first. Only recognised provider-unavailable,
 authentication/quota, or rate-limit failures fall through to Claude Code; a
 malformed response receives one repair attempt from the same provider. Every
-other error exposes **Try again**. The whole request, repair, and allowed
-fallback share one 60-second deadline.
+other error exposes **Try again**. Each provider call (brief, market queries,
+proposal), including its repair and allowed fallback, has one 60-second
+deadline. The whole AI run is capped at 3 minutes.
 
 A short fixed delay is not a product requirement; the implementation reveals
 results when the real request completes.
@@ -306,11 +318,12 @@ ordinary saved-listing autosave destination from the start.
 
 ## 11. Implementation boundary
 
-The authority documents now establish the boundaries this interaction uses:
-the saved-listing readiness and request-scoped proposal endpoints are outside
-`ui/runs`; provider orchestration retains no server-side proposal, job record,
-or workspace output; and local storage scopes a one-day proposal by workspace
-and listing. The application appends delimited JSON context and a response
+The authority documents now establish the boundaries this interaction uses.
+Generation is an in-memory **AI run** with its own registry, separate from
+`ui/runs` and never on the plan/apply worker thread. It keeps no durable job
+record, and its only workspace outputs are the guarded `brief` write and the
+gitignored `.cache/market/` (PRD 71). Local storage scopes a one-day proposal
+by workspace and listing. The application appends delimited JSON context and a response
 schema to plain seller-editable `prompts/seo.md`; it does not support prompt
 placeholders or executable prompt code.
 
@@ -355,7 +368,9 @@ The interaction is complete when all of the following are true:
   (section 1a).
 - Redrafting a brief the seller has written, or a second automatic attempt after
   one fails.
-- Etsy Stats, eRank, or other external performance data as generation input.
+- Etsy Stats, eRank, or search-volume data as generation input. The only
+  external input is the read-only market search in
+  [market-seo.md](market-seo.md).
 - Prompt editing inside Listing Details; prompts remain workspace/source
   configuration.
 - Generating the reusable description body.
