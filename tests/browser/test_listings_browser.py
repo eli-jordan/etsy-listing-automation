@@ -95,8 +95,8 @@ def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:
     assert "pricing plan" in page.locator(".issues").inner_text().lower()
 
     # And a price source is an ordinary edit from here, not a second create.
-    page.locator(".tabs .seg-opt", has_text="Listing Details").click()
-    page.get_by_label("Plan").select_option(label="tee-basic")
+    page.locator(".tabs .seg-opt", has_text="Pricing").click()
+    page.get_by_label("Plan", exact=True).select_option(label="tee-basic")
     _wait_for_listing(
         page,
         workspace_root,
