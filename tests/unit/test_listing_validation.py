@@ -377,13 +377,13 @@ class TestNothingChosenYet:
     def test_a_design_that_is_set_does_not_block(self) -> None:
         assert not [i for i in _check(_listing()) if i.where == "Design"]
 
-    def test_no_price_source_blocks_on_the_details_tab(self) -> None:
+    def test_no_price_source_blocks_on_the_pricing_tab(self) -> None:
         """The one rule shared with `Listing` itself, which refuses to *write*
         a listing in this state and waives it only for an unsaved draft. This
         is the sentence that explains the refusal."""
         listing = _listing().model_copy(update={"prices": {}, "pricing_plan": None})
-        blocking = [i for i in _check(listing) if i.severity == "block" and i.tab == "details"]
-        assert [i for i in blocking if "Pricing" in i.where]
+        blocking = [i for i in _check(listing) if i.severity == "block" and i.tab == "pricing"]
+        assert [i for i in blocking if i.where == "Pricing"]
 
     def test_a_pricing_plan_alone_satisfies_it(self) -> None:
         listing = _listing().model_copy(

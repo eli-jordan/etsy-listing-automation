@@ -1160,6 +1160,7 @@
           "tab": {
             "enum": [
               "variants",
+              "pricing",
               "images",
               "details"
             ],

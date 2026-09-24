@@ -693,10 +693,7 @@ class TestCreateListing:
         assert response.status_code == 200
         body = response.json()
         assert body["name"] == "half-done"
-        assert any(
-            i["where"] == "Listing Details › Pricing" and i["severity"] == "block"
-            for i in body["issues"]
-        )
+        assert any(i["where"] == "Pricing" and i["severity"] == "block" for i in body["issues"])
         assert (workspace_root / "listings" / "half-done" / "listing.yaml").is_file()
 
     def test_a_structurally_broken_document_comes_back_as_field_errors(
@@ -771,7 +768,7 @@ class TestListingDraft:
         assert "Variants › Garment profile" in blocks
         assert "Design" in blocks
         assert "Variants › Colours" in blocks
-        assert "Listing Details › Pricing" in blocks
+        assert "Pricing" in blocks
         assert "Listing Images" in blocks
 
     def test_the_draft_writes_nothing(self, client: TestClient, workspace_root: Path) -> None:
@@ -794,7 +791,7 @@ class TestListingDraft:
         wheres = {i["where"] for i in body["issues"] if i["severity"] == "block"}
         assert "Variants › Colours" not in wheres
         assert "Variants › Garment profile" not in wheres
-        assert "Listing Details › Pricing" in wheres
+        assert "Pricing" in wheres
 
     def test_describing_a_candidate_writes_nothing(
         self, client: TestClient, workspace_root: Path

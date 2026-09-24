@@ -2159,8 +2159,9 @@ table.listings tbody tr:last-child td {
 
 /* Wide enough for a scannable title plus the length counter that sits past
    the end of the input. The suggestion drawers match the input, not the
-   counter, so the fieldset has to hold both. */
-.details-tab {
+   counter, so the fieldset has to hold both. Pricing keeps that same column. */
+.details-tab,
+.pricing-tab {
   max-width: 760px;
 }
 
@@ -2961,7 +2962,7 @@ table.listings tbody tr:last-child td {
   padding-left: 16px;
 }
 
-/* — pricing table (Details tab, display only) — */
+/* — pricing table (Pricing tab) — */
 /* Auto-fit rather than the mockup's hardcoded five columns: a garment
    profile declares its own sizes, and the fixture's six left XXXL alone on a
    second row a fifth of the width. */
