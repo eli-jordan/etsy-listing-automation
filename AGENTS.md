@@ -212,6 +212,12 @@ src/etsy_listings/
                   (`app.state.workspace_locks.listing(name)`). Every
                   read-merge-write of `listing.yaml` in the UI process holds
                   it: PATCH, DELETE, create, rename, and AI runs' brief write
+                airuns/ -- AI runs (market-seo.md, *AI runs*): brief, market
+                  research and proposal as one run per listing, each on its
+                  own daemon thread (never the plan/apply executor), streamed
+                  by api/airuns.py at /api/ai/runs. Tests inject
+                  `seo_provider_factory` and `market_client_factory` into
+                  `create_app` (tests/support/ai_runs.py has the doubles)
                 frontend/ -- AppShell/DashboardPage/ListingsPage/
                 ListingEditorPage (design strip + Variants/Pricing/Images/Details
                 tabs, and the create form too: it mounts at /listings/new on

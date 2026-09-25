@@ -502,7 +502,7 @@ def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
             Listing.model_validate(merged, context={"currency": workspace.defaults.etsy.currency})
         except ValidationError as exc:
             return _detail(workspace, name, field_errors=_field_errors(exc))
-        _replace_listing_yaml(path, merged)
+        replace_listing_yaml(path, merged)
     return _detail(workspace, name)
 
 
@@ -529,13 +529,13 @@ def delete_listing(target: Existing) -> ListingSummary | Response:
         path = workspace.listing_file(name)
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         raw["lifecycle"] = "deleted"
-        _replace_listing_yaml(path, raw)
+        replace_listing_yaml(path, raw)
         workspace.market_snapshot_file(name).unlink(missing_ok=True)
     facts = WorkspaceFacts.gather(workspace)
     return _summarize_listing(workspace, facts, name, live=False, etsy_state=etsy_state)
 
 
-def _replace_listing_yaml(path: Path, document: Mapping[str, Any]) -> None:
+def replace_listing_yaml(path: Path, document: Mapping[str, Any]) -> None:
     """Replace ``listing.yaml`` without a window where a reader sees it empty.
 
     ``Path.write_text`` truncates first. The editor's browser tests read the
