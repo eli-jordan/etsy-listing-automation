@@ -45,6 +45,11 @@ function perDay(n: number): string {
   return n >= 10 ? String(Math.round(n)) : n.toFixed(1);
 }
 
+/** "1 listing", "4 listings". */
+function listings(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 /** A reason as a sentence, so "Nothing changed." can follow it. */
 function sentence(reason: string): string {
   const trimmed = reason.trim();
@@ -200,7 +205,7 @@ function Listings({ snapshot }: { snapshot: MarketSnapshot }) {
           </>
         ) : (
           <button className="mkt-more" type="button" onClick={() => setAll(true)}>
-            Show {rest.length} more scored listings
+            Show {listings(rest.length, "more scored listing")}
           </button>
         ))}
     </>
@@ -247,7 +252,7 @@ function Phrases({
               )}
               {p.phrase}
             </span>
-            <span className="mkt-phrase__count">{p.listings} listings</span>
+            <span className="mkt-phrase__count">{listings(p.listings, "listing")}</span>
             <span className="mkt-score__bar">
               <span style={{ width: `${Math.round(p.score * 100)}%` }} />
             </span>

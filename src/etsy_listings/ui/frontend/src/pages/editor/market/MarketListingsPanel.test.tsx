@@ -308,3 +308,17 @@ it("ends a reason that has no full stop with one", () => {
     "no Etsy API key is configured; run `etsy-listings setup`. Nothing changed.",
   );
 });
+
+it("counts one listing as one", async () => {
+  const user = userEvent.setup();
+  ready(
+    marketSnapshot({
+      scored: 9,
+      phrases: [{ phrase: "yaml error", listings: 1, score: 0.05 }],
+    }),
+  );
+
+  expect(screen.getByRole("button", { name: "Show 1 more scored listing" })).toBeVisible();
+  await user.click(screen.getByRole("tab", { name: "Phrases" }));
+  expect(within(panel()).getByRole("listitem")).toHaveTextContent("yaml error1 listing");
+});
