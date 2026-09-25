@@ -37,16 +37,17 @@ grouped *This listing* / *Shared*. There is no separate design pass.
 
 ## PR sequence
 
-Every PR targets `main`, stays under **3,000 changed lines** (insertions plus
-deletions in `git diff --shortstat main...HEAD`, generated `docs/openapi.json`
+Every PR targets the PR before it, stays under **3,000 changed lines** (insertions plus
+deletions in `git diff --shortstat <base>...HEAD`, generated `docs/openapi.json`
 and `src/api/schema.ts` included), and leaves the suite green on its own.
 
 ```
-PR 0 docs ─► PR 1 refs ─► PR 2 media kinds + gate ─┐
-                          PR 3 Etsy client ────────┴─► PR 4 stage ─► PR 5 API + locator ─► PR 6 reel + review
+PR 1 refs ─► PR 2 media kinds + gate ─► PR 3 Etsy client ─► PR 4 stage ─► PR 5 API + locator ─► PR 6 reel + review
 ```
 
-PR 3 depends only on PR 0 and can be built in parallel with PRs 1 and 2.
+The stack is based on `t3code/support-listing-videos`, which carries the
+documentation (PRD 71/72, decision 9 and this plan). PR 1 targets that branch
+and each later PR targets the one before it.
 
 ### Definition of done — every PR
 
@@ -71,7 +72,7 @@ added to this list, not substituted for it.
    run URL pasted into the PR description. If it fails because
    `ETSY_TOKENS_JSON` is stale, run `etsy-listings auth etsy` locally, update
    the secret and re-run; that failure is not treated as a pass.
-6. **Size.** `git diff --shortstat main...HEAD` totals under 3,000 lines. The
+6. **Size.** `git diff --shortstat <base>...HEAD` totals under 3,000 lines. The
    number goes in the PR description.
 7. **Decisions cited.** Commit messages and any code comment where a choice
    would look arbitrary cite PRD 71/72 or decision 9.
@@ -82,21 +83,6 @@ Local environment note (macOS behind the corporate proxy):
 that talks to Etsy or Printify.
 
 ---
-
-### PR 0 — `docs: listing videos in media (PRD 71) and two-root refs (PRD 72)`
-
-**Size: about 250 lines. Already committed as `fe99b45`.**
-
-The authority change, in its own PR as AGENTS.md requires: PRD 71 and 72, the
-amendments to #12/#30/#34, the validation list, `phase-3-etsy.md` decision 9
-with the probe tables, the `etsy_videos` stage table and lockfile shape, and
-the fix for the image gate that read "≤10". This plan document is added in the
-same PR.
-
-**Success conditions (added to the common list):**
-- A reviewer can trace every row in "Settled decisions" above to a PRD row or
-  to decision 9.
-- There is no code in the diff.
 
 ### PR 1 — `feat(workspace): two-root refs for every listing path`
 
@@ -387,5 +373,5 @@ same PR.
 - A video Etsy's help page would reject never reaches Etsy.
 - No `listing.yaml` in the repository or in `~/try-workspace` contains
   `../`.
-- Seven PRs, each under 3,000 changed lines, each with green CI, green local
+- Six PRs, each under 3,000 changed lines, each with green CI, green local
   gates and a green `workflow_dispatch` e2e run linked in its description.
