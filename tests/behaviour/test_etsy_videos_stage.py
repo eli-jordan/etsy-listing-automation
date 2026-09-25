@@ -113,6 +113,10 @@ def _gallery(etsy: FakeEtsyListingClient, lock: Lockfile) -> list[str]:
     ]
 
 
+def _changes(stage_plan) -> list[tuple[str, object, object]]:  # noqa: ANN001
+    return [(c.path, c.before, c.after) for c in stage_plan.changes]
+
+
 def _refs(*media: object) -> list[str]:
     return [f"{m['template']}:{m['colour']}" if isinstance(m, dict) else str(m) for m in media]
 
@@ -125,7 +129,12 @@ TWO_VIDEOS = [BLACK, FEATURED, BLUE_JEAN, SECOND, IVORY, MOSS]
 
 def test_a_first_apply_places_both_videos_where_media_puts_them(ctx, etsy, workspace_root) -> None:
     edit_listing(workspace_root, media=TWO_VIDEOS)
+    first = a_lock(remote={"etsy_listing_id": ETSY_LISTING_ID})
 
+    assert _changes(_videos_plan(ctx, first)) == [
+        ("videos.featured", None, FEATURED),
+        ("videos.second", None, SECOND),
+    ]
     lock = _first_apply(ctx)
 
     assert _gallery(etsy, lock) == _refs(*TWO_VIDEOS)
@@ -160,7 +169,11 @@ def test_swapping_the_videos_re_attaches_both_without_an_upload(ctx, etsy, works
 
     swapped = [BLACK, SECOND, BLUE_JEAN, FEATURED, IVORY, MOSS]
     edit_listing(workspace_root, media=swapped)
+    changes = _changes(_videos_plan(ctx, lock))
     lock = _apply(ctx, lock)
+
+    # Refs, not prose: the deploy review reads New/Removed off these (PRD 71).
+    assert changes == [("videos.featured", FEATURED, SECOND), ("videos.second", SECOND, FEATURED)]
 
     assert len(etsy.video_uploads) == 2, "a swap re-sends no bytes"
     assert lock.remote["etsy_video_ids"] == ids
@@ -179,7 +192,7 @@ def test_moving_the_second_video_re_attaches_it_after_its_new_anchor(
     stage_plan = _videos_plan(ctx, lock)
     lock = _apply(ctx, lock)
 
-    assert [c.path for c in stage_plan.changes] == ["videos.second"]
+    assert _changes(stage_plan) == [("videos.second.after_images", 2, 3)]
     assert etsy.video_attaches == [ids[SECOND]], "only the second is touched, by id"
     assert len(etsy.video_uploads) == 2
     assert _gallery(etsy, lock) == _refs(*moved)
@@ -194,7 +207,10 @@ def test_replacing_a_files_bytes_uploads_that_one_again(ctx, etsy, workspace_roo
     stage_plan = _videos_plan(ctx, lock)
     lock = _apply(ctx, lock)
 
-    assert "new file contents" in str(stage_plan.changes[0].after)
+    [(path, before, after)] = _changes(stage_plan)
+    assert path == "videos.featured.contents"
+    assert str(before).startswith("sha256:") and str(after).startswith("sha256:")
+    assert before != after
     assert etsy.video_uploads[-1] == replacement
     assert len(etsy.video_uploads) == 3, "the second is re-attached, not re-sent"
     assert _gallery(etsy, lock) == _refs(*TWO_VIDEOS)
@@ -205,7 +221,10 @@ def test_removing_the_videos_deletes_them_from_the_listing(ctx, etsy, workspace_
     lock = _first_apply(ctx)
 
     edit_listing(workspace_root, media=[BLACK, BLUE_JEAN, IVORY, MOSS])
+    changes = _changes(_videos_plan(ctx, lock))
     lock = _apply(ctx, lock)
+
+    assert changes == [("videos.featured", FEATURED, None), ("videos.second", SECOND, None)]
 
     assert "video" not in [slot.kind for slot in etsy.gallery(ETSY_LISTING_ID)]
     assert lock.remote["etsy_video_ids"] == {}

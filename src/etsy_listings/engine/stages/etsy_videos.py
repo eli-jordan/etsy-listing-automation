@@ -462,18 +462,19 @@ class _Placer:
         del self._on_listing[video_id]
 
 
-def _describe(video: AppliedVideo | None) -> str | None:
-    if video is None:
-        return None
-    if video.after_images is None:
-        return video.ref
-    return f"{video.ref}, after {video.after_images} image(s)"
-
-
 def _changes(
     wanted: AppliedEtsyVideos, applied: AppliedEtsyVideos | None
 ) -> tuple[FieldChange, ...]:
-    """One change per slot whose video, bytes or anchor differ."""
+    """What differs, per slot, with the ref itself as the value.
+
+    A slot whose video changed is ``videos.featured``/``videos.second``,
+    ref before and after, so a reader can tell a new video from one that only
+    moved slot by the refs alone -- the deploy review's New and Removed badges
+    come from here rather than from a comparison of its own (A2, PRD 71). The
+    same ref with new bytes is ``.contents``, digest before and after; the
+    second video moved among the images is ``.after_images``, its anchor
+    before and after.
+    """
     before_videos = applied.videos if applied is not None else ()
     changes: list[FieldChange] = []
     for slot, path in enumerate(("videos.featured", "videos.second")):
@@ -481,11 +482,36 @@ def _changes(
         before = before_videos[slot] if slot < len(before_videos) else None
         if after == before:
             continue
-        shown_after = _describe(after)
-        if after is not None and before is not None and _describe(before) == shown_after:
-            shown_after = f"{shown_after} (new file contents)"
-        changes.append(FieldChange(path=path, before=_describe(before), after=shown_after))
+        if after is None or before is None or after.ref != before.ref:
+            changes.append(
+                FieldChange(
+                    path=path,
+                    before=before.ref if before is not None else None,
+                    after=after.ref if after is not None else None,
+                )
+            )
+            continue
+        if after.hash != before.hash:
+            changes.append(
+                FieldChange(
+                    path=f"{path}.contents", before=_digest(before.hash), after=_digest(after.hash)
+                )
+            )
+        if after.after_images != before.after_images:
+            changes.append(
+                FieldChange(
+                    path=f"{path}.after_images",
+                    before=before.after_images,
+                    after=after.after_images,
+                )
+            )
     return tuple(changes)
+
+
+def _digest(content_hash: str) -> str:
+    """``sha256:`` and the first twelve hex digits: enough to tell two files
+    apart in a plan, short enough to read."""
+    return content_hash[: len("sha256:") + 12]
 
 
 def _actions(desired: EtsyVideosDesired) -> tuple[Action, ...]:
