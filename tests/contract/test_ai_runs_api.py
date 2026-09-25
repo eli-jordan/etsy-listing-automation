@@ -199,6 +199,23 @@ def test_an_empty_brief_is_allowed_when_the_run_drafts_it(
     assert client.get(f"/api/listings/{LISTING}").json()["brief"] == DRAFTED_BRIEF
 
 
+def test_an_autosave_that_lands_after_the_drafted_brief_keeps_it(
+    workspace_root: Path, client: TestClient
+) -> None:
+    """The editor's autosave sends only the fields the seller changed, and
+    PATCH merges them into the file as it is when the write lock is taken --
+    so a save the editor sent before the brief was written, served after,
+    cannot erase it."""
+    edit_listing(workspace_root, brief="")
+    _finished(client, _start(client, draft_brief=True)["id"])
+
+    saved = client.patch(f"/api/listings/{LISTING}", json={"etsy": {"section": "Apparel"}})
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["brief"] == DRAFTED_BRIEF
+    assert client.get(f"/api/listings/{LISTING}").json()["brief"] == DRAFTED_BRIEF
+
+
 def test_post_refuses_without_the_market_queries_prompt(
     workspace_root: Path, client: TestClient
 ) -> None:
