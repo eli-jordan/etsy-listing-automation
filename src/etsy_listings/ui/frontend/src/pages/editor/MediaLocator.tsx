@@ -79,10 +79,11 @@ function FileTile({ asset, listing, inListing, unavailable, onToggle, onFocus }:
       type="button"
       className={`loc-img${inListing ? " loc-img--in" : ""}${unavailable ? " loc-img--unavailable" : ""}`}
       aria-pressed={inListing}
-      aria-disabled={unavailable === null ? undefined : true}
+      aria-describedby={unavailable === null ? undefined : "video-limit"}
       aria-label={asset.name}
+      disabled={unavailable !== null}
       title={unavailable ?? undefined}
-      onClick={unavailable === null ? onToggle : undefined}
+      onClick={onToggle}
       onMouseEnter={() => {
         onFocus();
         if (isVideo) play();
@@ -202,8 +203,8 @@ export function MediaLocator({
       {mode === "files" && (
         <div className="locator__list">
           {videoLimitReached && (
-            <p className="locator__limit" role="status">
-              2-video limit reached — remove one before adding another.
+            <p className="locator__limit" id="video-limit" role="status">
+              {MAX_VIDEOS}-video limit reached — remove one before adding another.
             </p>
           )}
           {groups.map((g) => {
@@ -223,7 +224,7 @@ export function MediaLocator({
                           asset.kind === "video" &&
                           videoLimitReached &&
                           !detail.media.includes(asset.ref)
-                            ? "Etsy allows at most 2 videos per listing"
+                            ? `Etsy allows at most ${MAX_VIDEOS} videos per listing`
                             : null
                         }
                         onToggle={() => onToggleFile(asset.ref)}

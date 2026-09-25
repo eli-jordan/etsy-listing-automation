@@ -240,18 +240,25 @@ describe("MediaLocator's video rows", () => {
     ).not.toThrow();
   });
 
-  it("explains why a third clip cannot be added", () => {
+  it("disables and explains an unselected third clip without trapping selected clips", () => {
     const { onToggleFile } = locator({
-      media: ["a.png", "./first.mp4", "b.png", "./second.mp4"],
+      media: ["a.png", CLOSE_UP.ref, "b.png", "./second.mp4"],
     });
-    const third = screen.getByRole("button", { name: "close-up.mp4" });
+    const selected = screen.getByRole("button", { name: "close-up.mp4" });
+    const third = screen.getByRole("button", { name: "videos/size-guide.mp4" });
+    const explanation = screen.getByText(
+      "2-video limit reached — remove one before adding another.",
+    );
 
-    expect(
-      screen.getByText("2-video limit reached — remove one before adding another."),
-    ).toBeVisible();
-    expect(third).toHaveAttribute("aria-disabled", "true");
+    expect(explanation).toBeVisible();
+    expect(selected).toBeEnabled();
+    fireEvent.click(selected);
+    expect(onToggleFile).toHaveBeenCalledWith(CLOSE_UP.ref);
+
+    expect(third).toBeDisabled();
+    expect(third).toHaveAttribute("aria-describedby", explanation.id);
     expect(third).toHaveAttribute("title", "Etsy allows at most 2 videos per listing");
     fireEvent.click(third);
-    expect(onToggleFile).not.toHaveBeenCalled();
+    expect(onToggleFile).toHaveBeenCalledTimes(1);
   });
 });

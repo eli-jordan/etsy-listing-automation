@@ -3,10 +3,10 @@ React reel, the media-files endpoints and the real `listing.yaml` agree about
 where a video sits, and that the browser really decodes the file the API
 serves.
 
-One sequence over the real SPA and FastAPI: add a shared video and one of the
-listing's own, drag the second among the images, wait for autosave, then read
-`media:` off disk. Skips cleanly when playwright or its chromium build is
-missing (`conftest.py`).
+The sequences over the real SPA and FastAPI add a shared video and one of the
+listing's own, exercise drag and removal, wait for autosave, then read the
+complete listing back off disk. Skips cleanly when playwright or its chromium
+build is missing (`conftest.py`).
 """
 
 from __future__ import annotations
@@ -31,20 +31,22 @@ def _image(colour: str) -> dict[str, str]:
     return {"template": "flat-lay-01", "colour": colour}
 
 
-def _media_on_disk(workspace_root: Path) -> list[object]:
+def _listing_on_disk(workspace_root: Path) -> dict[str, object]:
     path = workspace_root / "listings" / "take-a-hike" / "listing.yaml"
-    media: list[object] = yaml.safe_load(path.read_text(encoding="utf-8"))["media"]
-    return media
+    document: dict[str, object] = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return document
 
 
 def _wait_for_media(page, workspace_root: Path, expected: list[object]) -> None:  # noqa: ANN001
     """Poll the file, not the page: "Autosaved" already reads true during the
     debounce before the save is sent (see `test_listings_browser.py`)."""
     for _ in range(100):
-        if _media_on_disk(workspace_root) == expected:
+        if _listing_on_disk(workspace_root)["media"] == expected:
             return
         page.wait_for_timeout(100)
-    raise AssertionError(f"media: never reached {expected}: {_media_on_disk(workspace_root)}")
+    raise AssertionError(
+        f"media: never reached {expected}: {_listing_on_disk(workspace_root)['media']}"
+    )
 
 
 def test_add_two_videos_drag_the_second_and_autosave_the_gallery(
@@ -91,6 +93,7 @@ def test_remove_featured_video_promotes_the_second(
     page,  # noqa: ANN001
     workspace_root: Path,
 ) -> None:
+    before = _listing_on_disk(workspace_root)
     (workspace_root / "common-media").mkdir()
     shutil.copy(VIDEOS / "valid-3s-512.mp4", workspace_root / SHARED)
     shutil.copy(VIDEOS / "valid-3s-512.mp4", workspace_root / "listings" / "take-a-hike" / OWN[2:])
@@ -107,5 +110,7 @@ def test_remove_featured_video_promotes_the_second(
 
     page.get_by_role("button", name="Remove size-guide", exact=True).click()
 
-    _wait_for_media(page, workspace_root, [black, OWN, blue_jean, ivory, moss])
+    expected_media = [black, OWN, blue_jean, ivory, moss]
+    _wait_for_media(page, workspace_root, expected_media)
     assert "Featured · shown 2nd" in (page.locator(".rtile").nth(1).text_content() or "")
+    assert _listing_on_disk(workspace_root) == {**before, "media": expected_media}
