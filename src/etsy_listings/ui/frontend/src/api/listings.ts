@@ -142,30 +142,54 @@ export async function listPricingPlans(garmentProfile: string): Promise<PricingP
   return data;
 }
 
+/** The file locator's *Shared* group: every image and video under
+ * `common-media/`, each with its `kind` and the ref `media:` stores. */
 export async function listCommonMedia(): Promise<MediaFileSummary[]> {
   const { data, error } = await api.GET("/api/common-media");
-  if (error || !data) throw new ListingsApiError("could not load shared images");
+  if (error || !data) throw new ListingsApiError("could not load shared files");
   return data;
 }
 
-/** A shared asset's path under `common-media/`, escaped a segment at a time so
- * the slashes of a subdirectory stay slashes. */
-function commonMediaPath(name: string): string {
+/** The *This listing* group: the listing's own files, each ref spelled
+ * `./…` (PRD 72). */
+export async function listListingMediaFiles(listing: string): Promise<MediaFileSummary[]> {
+  const { data, error } = await api.GET("/api/listings/{listing}/media-files", {
+    params: { path: { listing } },
+  });
+  if (error || !data) throw new ListingsApiError("could not load this listing's files");
+  return data;
+}
+
+/** A file's path under its directory, escaped a segment at a time so the
+ * slashes of a subdirectory stay slashes. */
+function mediaPath(name: string): string {
   return name.split("/").map(encodeURIComponent).join("/");
+}
+
+/** One of the listing's own files, downscaled for a list. Images only: a
+ * video answers `415`, since a `<video>` element draws its own poster. */
+export function listingMediaThumbnailUrl(listing: string, name: string): string {
+  return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/thumbnail`;
+}
+
+/** The same file as-is -- a picture at its own size, or a video `<video>`
+ * can seek in (the endpoint answers `Range`). */
+export function listingMediaFileUrl(listing: string, name: string): string {
+  return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/file`;
 }
 
 /** The shared asset's own picture, downscaled for a list. A URL, like the two
  * thumbnails above. `name` is its path under `common-media/`, extension and
  * all -- `MediaFileSummary.name`. */
 export function commonMediaThumbnailUrl(name: string): string {
-  return `/api/common-media/${commonMediaPath(name)}/thumbnail`;
+  return `/api/common-media/${mediaPath(name)}/thumbnail`;
 }
 
 /** The same asset at its own size -- what the preview pane shows and what the
  * lightbox opens. The thumbnail is 160px on its longest edge, which is a
  * picture to *pick* rather than one to judge. */
 export function commonMediaFileUrl(name: string): string {
-  return `/api/common-media/${commonMediaPath(name)}/file`;
+  return `/api/common-media/${mediaPath(name)}/file`;
 }
 
 /** The Description tab's common-copy selector (AI SEO implementation plan,
