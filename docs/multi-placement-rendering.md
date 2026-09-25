@@ -120,8 +120,8 @@ normalises to `{"default": <path>}`; a map keys artwork files by tag:
 
 ```yaml
 design:
-  on-light: ../../designs/take-a-hike-dark-ink.png
-  on-dark: ../../designs/take-a-hike-light-ink.png
+  on-light: designs/take-a-hike-dark-ink.png
+  on-dark: designs/take-a-hike-light-ink.png
 artwork:
   moss: on-dark   # optional per-colour override
 ```
@@ -173,7 +173,7 @@ media:
   - { template: flat-lay-01, colour: black }
   - { template: flat-lay-01, colour: moss }
   - { template: colour-chart-01 }
-  - ../../common-media/comfort-colors-sizing-chart.png
+  - common-media/comfort-colors-sizing-chart.png
 ```
 
 `colour:` disambiguates which of several colour-matrix outputs; it's rejected

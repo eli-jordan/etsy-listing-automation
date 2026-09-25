@@ -402,7 +402,7 @@ in brand names are all normalised away, so `Comfort Colors` matches its
 ```yaml
 # listings/take-a-hike/listing.yaml
 garment_profile: comfort-colors-1717
-design: ../../designs/take-a-hike.png
+design: designs/take-a-hike.png
 colors: [black, blue-jean, ivory, moss]
 brief: >
   Retro 70s sunset mountain scene. Design text reads exactly "TAKE A HIKE".
@@ -434,6 +434,12 @@ A few things worth knowing about `listing.yaml`:
   (colour required for `colour-matrix`-kind templates, forbidden otherwise)
   or are a bare path to a shared asset under `common-media/` (a sizing
   chart, say). Etsy allows at most 10.
+- **Every path is written from the workspace root** — `designs/x.png`,
+  `common-media/size-guide.png`, `pricing-plans/launch.yaml` — or from the
+  listing's own directory with a `./` prefix (`./close-up.png`). `..` is
+  refused (PRD 72). A workspace written before that rule still spells its
+  refs `../../designs/x.png`; `uv run python scripts/migrate_workspace_refs.py
+  <workspace>` prints the rewrite, and `--write` applies it.
 - **`design` can be a map**, not just a bare path, when you need separate
   light-ink/dark-ink artwork — `{on-light: ..., on-dark: ...}` — with an
   optional per-colour `artwork:` override on the listing. Full resolution
