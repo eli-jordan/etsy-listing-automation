@@ -142,13 +142,27 @@ describe("pictureFor", () => {
 
   it("serves a shared asset as-is at full size -- it is already what Etsy gets", () => {
     expect(pictureFor("common-media/sizing.png", "take-a-hike")).toBe(
-      "/api/common-media/sizing/file",
+      "/api/common-media/sizing.png/file",
+    );
+  });
+
+  it("addresses a shared asset by its full path under common-media/, extension and all", () => {
+    /* A shared file may be a JPEG, and may sit in a subdirectory (PRD 71):
+       the stem alone cannot say which file it is. */
+    expect(pictureFor("common-media/charts/care.jpg", null)).toBe(
+      "/api/common-media/charts/care.jpg/file",
+    );
+  });
+
+  it("escapes each segment of a shared asset's path, but not the slashes between", () => {
+    expect(pictureFor("common-media/a b/c#d.png", null, "tile")).toBe(
+      "/api/common-media/a%20b/c%23d.png/thumbnail",
     );
   });
 
   it("serves a shared asset's thumbnail for a tile", () => {
     expect(pictureFor("common-media/sizing.png", null, "tile")).toBe(
-      "/api/common-media/sizing/thumbnail",
+      "/api/common-media/sizing.png/thumbnail",
     );
   });
 

@@ -44,6 +44,14 @@ export function refName(ref: string): string {
   return file.replace(/\.[^.]+$/, "");
 }
 
+/** A shared ref's path under `common-media/` -- what the picture endpoints
+ * take. The whole path, not the stem: a shared file may be a JPEG and may sit
+ * in a subdirectory (PRD 71), and only its full path says which file it is. */
+function sharedName(ref: string): string {
+  const prefix = "common-media/";
+  return ref.startsWith(prefix) ? ref.slice(prefix.length) : ref;
+}
+
 /**
  * The one design a render can overlay -- `null` for a multi-artwork listing
  * (`on-light`/`on-dark`), where there is no single "the design" to composite,
@@ -116,7 +124,7 @@ export function pictureFor(
   size: PictureSize = "full",
 ): string {
   if (typeof entry === "string") {
-    const name = refName(entry);
+    const name = sharedName(entry);
     return size === "tile" ? commonMediaThumbnailUrl(name) : commonMediaFileUrl(name);
   }
   return templatePicture(entry.template, entry.colour ?? null, design, size);

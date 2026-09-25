@@ -125,7 +125,7 @@ export function MediaLocator({
                   <span className="loc-img__face">
                     <img src={commonMediaThumbnailUrl(asset.name)} alt="" loading="lazy" />
                   </span>
-                  <span className="loc-img__name">{asset.name}.png</span>
+                  <span className="loc-img__name">{asset.name}</span>
                 </button>
               );
             })}
