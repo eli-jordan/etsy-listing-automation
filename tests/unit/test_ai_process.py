@@ -469,3 +469,23 @@ def test_kill_process_tree_on_posix_survives_a_process_that_already_exited(
             pass
 
     process._kill_process_tree(_Proc())  # type: ignore[arg-type]
+
+
+def test_run_managed_speaks_utf8_to_a_real_process_whatever_the_locale(tmp_path: Path) -> None:
+    # The proposal prompt carries Etsy listing titles verbatim (the market
+    # block), and those hold characters a Windows ANSI code page cannot
+    # encode. The CLIs read and write UTF-8; the locale's code page is
+    # neither here nor there.
+    text = "Retro tee ✓ 日本語 — café 🏔️"
+    echo = "import sys; sys.stdout.buffer.write(sys.stdin.buffer.read())"
+
+    result = process.run_managed(
+        [sys.executable, "-c", echo],
+        cwd=tmp_path,
+        input_text=text,
+        deadline=Deadline.starting_now(seconds=30),
+        poll_interval=0.02,
+    )
+
+    assert result.returncode == 0
+    assert result.stdout == text
