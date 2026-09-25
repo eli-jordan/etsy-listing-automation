@@ -56,7 +56,7 @@ from etsy_listings.engine.stages.etsy_target import (
     etsy_listing_id,
     require_etsy_listing_id,
 )
-from etsy_listings.engine.stages.variation_links import image_ref, set_variation_images
+from etsy_listings.engine.stages.variation_links import manifest_ref, set_variation_images
 
 IMAGE_IDS_KEY = "etsy_image_ids"
 """This stage's key in ``lock.remote`` (A20) -- keyed by manifest ref, so a
@@ -210,17 +210,15 @@ def _manifest_entry(
         # A bare string is a file ref, resolved the same way `design:` is:
         # PRD 72's two roots, the workspace or `./` for the listing's own.
         source = workspace.resolve_ref(entry, listing_dir=workspace.listing_dir(listing))
-        ref = entry
         colour = None
     else:
         source = workspace.render_file(listing, entry.template, entry.colour)
-        ref = image_ref(entry.template, entry.colour)
         colour = entry.colour if entry.template == variation_template else None
 
     content_hash = hash_file(source) if source.is_file() else PENDING
     file = to_workspace_relative_posix(workspace.root, source)
     return ManifestEntry(
-        ref=ref, source=source, content_hash=content_hash, file=file, colour=colour
+        ref=manifest_ref(entry), source=source, content_hash=content_hash, file=file, colour=colour
     )
 
 

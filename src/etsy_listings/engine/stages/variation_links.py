@@ -21,11 +21,16 @@ from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.stages.colour_property import resolve_colour_property
 
 
-def image_ref(template: str, colour: str | None) -> str:
-    """A rendered image's manifest ref: ``"{template}:{colour}"``, or the bare
-    template name for a `single`/`multiple` one. Stable across a re-render,
-    since the render's own output path does not appear in it."""
-    return f"{template}:{colour}" if colour is not None else template
+def manifest_ref(entry: MediaEntry) -> str:
+    """A `media:` entry's ref in ``lock.remote``'s id maps:
+    ``"{template}:{colour}"`` for a colour-matrix render, the bare template
+    name for a `single`/`multiple` one, and a file ref as written. Stable
+    across a re-render, since the render's own output path does not appear
+    in it. Both stages key their ids by it, and the video stage reads the
+    image stage's ids back through it to cut and restore `image_ids`."""
+    if isinstance(entry, str):
+        return entry
+    return f"{entry.template}:{entry.colour}" if entry.colour is not None else entry.template
 
 
 def swatch_refs(media: Sequence[MediaEntry], template: str | None) -> dict[str, str]:
@@ -34,7 +39,7 @@ def swatch_refs(media: Sequence[MediaEntry], template: str | None) -> dict[str, 
     if template is None:
         return {}
     return {
-        entry.colour: image_ref(entry.template, entry.colour)
+        entry.colour: manifest_ref(entry)
         for entry in media
         if isinstance(entry, TemplateMediaEntry)
         and entry.template == template
