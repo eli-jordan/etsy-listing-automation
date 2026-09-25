@@ -33,6 +33,9 @@ from etsy_listings.ai.models import (
     RepairContext,
 )
 from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
+from etsy_listings.market import MarketResult, PhraseScore, ScoredListing
+from etsy_listings.market import snapshot as market_snapshot
+from etsy_listings.market.snapshot import MarketSnapshot
 from etsy_listings.ui.airuns.registry import AiRun
 from etsy_listings.workspace.layout import (
     BRIEF_PROMPT_FILE,
@@ -40,6 +43,7 @@ from etsy_listings.workspace.layout import (
     PROMPTS_DIR,
     SEO_PROMPT_FILE,
 )
+from etsy_listings.workspace.workspace import Workspace
 
 Task = Literal["brief", "queries", "seo"]
 
@@ -187,3 +191,60 @@ def wait_for(condition: Callable[[], bool], *, timeout: float = 15.0) -> None:
         if time.monotonic() > deadline:
             raise AssertionError("condition never became true")
         time.sleep(0.01)
+
+
+def scored_listing(listing_id: int, **over: object) -> ScoredListing:
+    """One scored comparable as research would leave it, ranked by its id."""
+    fields: dict[str, object] = {
+        "listing_id": listing_id,
+        "rank": listing_id,
+        "score_raw": 0.9 - listing_id / 100,
+        "score": 90 - listing_id,
+        "title": f"Retro Sunset Hiking Shirt {listing_id}",
+        "url": f"https://www.etsy.com/listing/{listing_id}/retro-sunset",
+        "shop_id": 70 + listing_id,
+        "shop_name": f"TrailTees{listing_id}",
+        "own_shop": False,
+        "thumbnail_url": None,
+        "search_rank": listing_id,
+        "reviews": 10 * listing_id,
+        "favourites_per_day": 1.5,
+        "views_per_day": 12.0,
+        "shop_sales": 500,
+        "shop_rating": 4.8,
+        "tags": ("hiking shirt", "retro sunset"),
+        "lead": "A retro sunset over the peaks.",
+    }
+    fields.update(over)
+    return ScoredListing.model_validate(fields)
+
+
+def seed_snapshot(
+    root: Path,
+    listing: str = "take-a-hike",
+    *,
+    scored: int = 12,
+    searched_at: datetime = TODAY,
+) -> MarketSnapshot:
+    """Writes ``listing``'s market snapshot as a finished run would have:
+    ``scored`` comparables (none makes it the empty answer) and two phrases."""
+    listings = tuple(scored_listing(i) for i in range(1, scored + 1))
+    result = MarketResult(
+        queries=QUERIES,
+        found=3 * scored + 7 if scored else 0,
+        scored=scored,
+        listings=listings,
+        phrases=(
+            (
+                PhraseScore(phrase="hiking shirt", listings=scored, score=1.0),
+                PhraseScore(phrase="retro sunset", listings=scored // 2, score=0.5),
+            )
+            if scored
+            else ()
+        ),
+        relaxed=scored == 0,
+        empty=scored == 0,
+    )
+    taken = MarketSnapshot.of(result, searched_at=searched_at)
+    market_snapshot.save(Workspace.discover(root_override=root), listing, taken)
+    return taken

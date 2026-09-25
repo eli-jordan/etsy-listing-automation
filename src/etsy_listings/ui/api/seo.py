@@ -1,8 +1,10 @@
-"""AI Mode's readiness endpoint, and the helpers AI runs build a proposal
-with (AI SEO implementation plan, PR5; market-seo.md, *AI runs*).
+"""AI Mode's readiness endpoint, the market snapshot the top listings panel
+reads, and the helpers AI runs build a proposal with (AI SEO implementation
+plan, PR5; market-seo.md, *AI runs*; market-seo implementation plan, PR 8).
 
 ```
 GET  /api/listings/{name}/ai-seo/readiness  -> SeoReadinessResponse
+GET  /api/listings/{name}/market            -> MarketSnapshot | 404
 ```
 
 Generation itself is an AI run (``ui/airuns/``, served by
@@ -32,7 +34,7 @@ from collections.abc import Callable, Sequence
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, HTTPException, Request
 
 from etsy_listings.ai.claude import ClaudeProvider
 from etsy_listings.ai.codex import CodexProvider
@@ -40,6 +42,8 @@ from etsy_listings.ai.models import GarmentContext, SeoProposal, SeoRequest
 from etsy_listings.ai.providers import AiProvider
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
+from etsy_listings.market import snapshot as market_snapshot
+from etsy_listings.market.snapshot import MarketSnapshot
 from etsy_listings.ui.api.listings import Existing
 from etsy_listings.ui.api.schemas import (
     SeoProposalResponse,
@@ -249,3 +253,20 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     listing = target.workspace.load_listing(target.name)
     providers = _providers(request, target.workspace)
     return readiness(target.workspace, listing, providers, draft_brief=False)
+
+
+@router.get(
+    "/{name}/market",
+    response_model=MarketSnapshot,
+    responses={404: {"description": "No such listing, or no market search for it yet"}},
+)
+def get_market_snapshot(target: Existing) -> MarketSnapshot:
+    """The listing's latest market research, as the top listings panel shows
+    it after a reload (market-seo.md, *UI*). Written only by an AI run whose
+    search succeeded, so a failed run leaves the previous one here. 404 until
+    the first search -- the panel is not rendered then -- and for a snapshot
+    that no longer reads as one, which the next run replaces."""
+    snapshot = market_snapshot.load(target.workspace, target.name)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail=f"no market snapshot for {target.name!r}")
+    return snapshot

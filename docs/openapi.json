@@ -5291,6 +5291,52 @@
         ]
       }
     },
+    "/api/listings/{name}/market": {
+      "get": {
+        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload (market-seo.md, *UI*). Written only by an AI run whose\nsearch succeeded, so a failed run leaves the previous one here. 404 until\nthe first search -- the panel is not rendered then -- and for a snapshot\nthat no longer reads as one, which the next run replaces.",
+        "operationId": "get_market_snapshot_api_listings__name__market_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MarketSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such listing, or no market search for it yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Market Snapshot",
+        "tags": [
+          "ai-seo"
+        ]
+      }
+    },
     "/api/listings/{name}/previews/{template}": {
       "get": {
         "description": "A ``multiple``/``single``-kind scene: no per-colour photo, so no\ncolour segment (PRD 28's rule, mirrored from ``render_file``).",
