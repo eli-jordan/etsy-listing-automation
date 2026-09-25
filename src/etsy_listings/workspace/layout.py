@@ -33,6 +33,10 @@ BRIEF_PROMPT_FILE = "brief.md"
 listing brief from its design image when a design is attached (PRD 68); a
 workspace without it can still use AI Mode by hand, so its absence disables
 only the automatic draft."""
+MARKET_QUERIES_PROMPT_FILE = "market-queries.md"
+"""Inside :data:`PROMPTS_DIR`, seeded like the other two. The prompt that turns
+a brief, a design and the garment's display title into three Etsy buyer
+searches for market research (market-seo.md, *Query extraction*)."""
 GARMENT_PROFILES_DIR = "garment-profiles"
 PRICING_PLANS_DIR = "pricing-plans"
 DESIGNS_DIR = "designs"

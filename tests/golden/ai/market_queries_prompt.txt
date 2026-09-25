@@ -1,0 +1,34 @@
+The seller's own instructions.
+
+<<<LISTING_CONTEXT_JSON>>>
+{
+  "listing": {
+    "brief": "Retro 70s sunset over mountains; the text reads TAKE A HIKE.",
+    "garment": {
+      "title": "Unisex Heavy Cotton Tee"
+    }
+  }
+}
+<<<END_LISTING_CONTEXT_JSON>>>
+
+<<<RESPONSE_JSON_SCHEMA>>>
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "queries"
+  ],
+  "properties": {
+    "queries": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    }
+  }
+}
+<<<END_RESPONSE_JSON_SCHEMA>>>
+
+Return only one JSON object that satisfies the schema above.

@@ -40,7 +40,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from importlib import resources
 from pathlib import Path
-from typing import Any, Final
+from typing import Any, Final, Literal
 
 from etsy_listings.ai.models import ProviderTask, SeoRequest
 
@@ -143,6 +143,50 @@ def seed_prompt(path: Path, text: str) -> SeedResult:
     return SeedResult(created=True, path=path)
 
 
+PromptSync = Literal["created", "current", "differs", "replaced"]
+"""What :func:`sync_prompt` found or did to one prompt file: seeded it,
+found it equal to its packaged default, found it different and left it, or
+replaced it."""
+
+
+def _matches(path: Path, text: str) -> bool:
+    """Whether ``path`` holds ``text``, reading line endings the way a seller
+    means them: a prompt an editor saved with CRLF says the same thing. A
+    file that is not UTF-8 is not the packaged default, whatever it says."""
+    try:
+        return path.read_text(encoding="utf-8") == text
+    except UnicodeDecodeError:
+        return False
+
+
+def sync_prompt(path: Path, text: str, *, replace: bool) -> PromptSync:
+    """Bring one prompt file into line with its packaged default ``text`` --
+    as far as the seller has allowed (market-seo.md, *Prompts and
+    `setup --replace-prompts`*; PRD 71).
+
+    A missing file is seeded (:func:`seed_prompt`). An existing file equal to
+    ``text`` is left alone either way: replacing it would change nothing, and
+    its ``.bak`` would overwrite the one holding the seller's last real edit.
+    An existing file that differs is left byte for byte unless ``replace``;
+    then it is moved to ``<name>.md.bak`` -- replacing any older backup,
+    which the spec settles -- and ``text`` written in its place.
+    """
+    if seed_prompt(path, text).created:
+        return "created"
+    if _matches(path, text):
+        return "current"
+    if not replace:
+        return "differs"
+    path.replace(backup_path(path))
+    path.write_text(text, encoding="utf-8")
+    return "replaced"
+
+
+def backup_path(path: Path) -> Path:
+    """Where ``setup --replace-prompts`` keeps the prompt it replaced."""
+    return path.with_name(f"{path.name}.bak")
+
+
 def _context_payload(request: SeoRequest) -> dict[str, Any]:
     """The ``listing`` object `seo_prompt.md` documents under "Listing
     context" -- matched field for field against the drafting source so the
@@ -161,7 +205,11 @@ def _context_payload(request: SeoRequest) -> dict[str, Any]:
 
 
 def build_task_prompt(
-    seller_prompt: str, context: Mapping[str, Any] | None, schema: Mapping[str, Any]
+    seller_prompt: str,
+    context: Mapping[str, Any] | None,
+    schema: Mapping[str, Any],
+    *,
+    data_block: str = "",
 ) -> str:
     """The complete text sent to a provider CLI: the seller's own prompt file
     verbatim, then this request's context and the response schema, each inside
@@ -182,15 +230,24 @@ def build_task_prompt(
     this function never reads a packaged default itself and never falls back
     to one, since a seller's edited prompt silently being ignored would be a
     much worse failure than any formatting mistake.
+
+    ``data_block`` is one more block of supplied data, already delimited,
+    placed after the context: the market data a proposal is given
+    (market-seo.md, *What the proposal sees*). It brings its own markers
+    because it has its own author, `market/block.py`, which also defuses any
+    marker another seller's text tries to smuggle in. Empty means none, and
+    then nothing is sent, for the reason an absent context is left out.
     """
     schema_json = json.dumps(dict(schema), indent=2)
-    context_block = ""
+    data = ""
     if context is not None:
         context_json = json.dumps(dict(context), indent=2)
-        context_block = f"{CONTEXT_BEGIN}\n{context_json}\n{CONTEXT_END}\n\n"
+        data = f"{CONTEXT_BEGIN}\n{context_json}\n{CONTEXT_END}\n\n"
+    if data_block.strip():
+        data += f"{data_block.strip()}\n\n"
     return (
         f"{seller_prompt.rstrip()}\n\n"
-        f"{context_block}"
+        f"{data}"
         f"{SCHEMA_BEGIN}\n{schema_json}\n{SCHEMA_END}\n\n"
         "Return only one JSON object that satisfies the schema above.\n"
     )
@@ -198,8 +255,11 @@ def build_task_prompt(
 
 def build_prompt(seller_prompt: str, request: SeoRequest) -> str:
     """The SEO prompt: ``prompts/seo.md`` wrapped around this request's
-    listing context and `RESPONSE_SCHEMA`."""
-    return build_task_prompt(seller_prompt, _context_payload(request), RESPONSE_SCHEMA)
+    listing context, its market data when there is any, and
+    `RESPONSE_SCHEMA`."""
+    return build_task_prompt(
+        seller_prompt, _context_payload(request), RESPONSE_SCHEMA, data_block=request.market_block
+    )
 
 
 def build_seo_task(seller_prompt: str, request: SeoRequest) -> ProviderTask:

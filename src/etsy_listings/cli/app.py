@@ -236,12 +236,22 @@ def setup(
         show_envvar=True,
         metavar="PATH",
     ),
+    replace_prompts: bool = typer.Option(
+        False,
+        "--replace-prompts",
+        help=(
+            "Overwrite every prompt in prompts/ that differs from its packaged "
+            "default, keeping yours as <name>.md.bak (replacing an older .bak). "
+            "Without it, a differing prompt is kept and named in a warning."
+        ),
+    ),
 ) -> None:
     """Initialise a workspace: directories, shop.yaml, and the Printify token.
 
     Safe to re-run: it fills in what is missing and leaves existing answers
-    alone. Verifies the token against Printify before storing it, and reads
-    the shop id back from the same call rather than asking you to find one.
+    alone -- prompts included, unless --replace-prompts asks otherwise.
+    Verifies the token against Printify before storing it, and reads the shop
+    id back from the same call rather than asking you to find one.
 
     Stops before Etsy sign-in, which arrives with `auth` in Phase 3.
     """
@@ -249,7 +259,7 @@ def setup(
 
     target = to_native_path(root) if root else Path.cwd()
     with _wizard():
-        run_setup(target)
+        run_setup(target, replace_prompts=replace_prompts)
 
 
 auth_app = typer.Typer(

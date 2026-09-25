@@ -534,10 +534,14 @@ its own after a failure, and leaving the listing abandons the work exactly as
 **Cancel** would.
 
 **Prompt customization.** The instructions sent to the model live at
-`prompts/seo.md` (SEO suggestions) and `prompts/brief.md` (the drafted brief)
-in your workspace — plain text, entirely yours to edit. `setup` seeds a
-default for each only if that file is absent; it never overwrites your own
-copy on a later run. The application appends the listing's facts (as
+`prompts/seo.md` (SEO suggestions), `prompts/brief.md` (the drafted brief) and
+`prompts/market-queries.md` (the three Etsy searches market research runs) in
+your workspace — plain text, entirely yours to edit. `setup` seeds a default
+for each only if that file is absent. On a later run it keeps your copy byte
+for byte and warns about each one that differs from the packaged default;
+`setup --replace-prompts` replaces those with the defaults and keeps yours as
+`<name>.md.bak`, which is how a workspace picks up new instructions such as
+`seo.md`'s market-data rules. The application appends the listing's facts (as
 delimited JSON) and the required JSON response schema itself — both files
 hold only instructions, never placeholders or executable prompt code. A
 workspace without `prompts/brief.md` can still use AI Mode by hand; only the
