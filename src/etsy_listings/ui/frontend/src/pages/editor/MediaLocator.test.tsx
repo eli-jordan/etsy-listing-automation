@@ -239,4 +239,19 @@ describe("MediaLocator's video rows", () => {
       fireEvent.mouseEnter(screen.getByRole("button", { name: "close-up.mp4" })),
     ).not.toThrow();
   });
+
+  it("explains why a third clip cannot be added", () => {
+    const { onToggleFile } = locator({
+      media: ["a.png", "./first.mp4", "b.png", "./second.mp4"],
+    });
+    const third = screen.getByRole("button", { name: "close-up.mp4" });
+
+    expect(
+      screen.getByText("2-video limit reached — remove one before adding another."),
+    ).toBeVisible();
+    expect(third).toHaveAttribute("aria-disabled", "true");
+    expect(third).toHaveAttribute("title", "Etsy allows at most 2 videos per listing");
+    fireEvent.click(third);
+    expect(onToggleFile).not.toHaveBeenCalled();
+  });
 });

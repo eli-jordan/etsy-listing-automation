@@ -3099,6 +3099,16 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
+.locator__limit {
+  margin: 0 0 var(--space-2);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .loc-tmpl {
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-sm);
@@ -3303,6 +3313,11 @@ table.listings tbody tr:last-child td {
 .loc-img--in {
   border-color: var(--color-accent-2-400);
   background: var(--color-accent-2-100);
+}
+
+.loc-img--unavailable {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .loc-img__face {
@@ -3679,6 +3694,7 @@ table.listings tbody tr:last-child td {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   text-align: center;
+  pointer-events: none;
 }
 
 /* Where Etsy pins the first video, second after the thumbnail. */

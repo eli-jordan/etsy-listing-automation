@@ -85,3 +85,27 @@ def test_add_two_videos_drag_the_second_and_autosave_the_gallery(
         })"""
     )
     assert width == FIXTURE_WIDTH
+
+
+def test_remove_featured_video_promotes_the_second(
+    page,  # noqa: ANN001
+    workspace_root: Path,
+) -> None:
+    (workspace_root / "common-media").mkdir()
+    shutil.copy(VIDEOS / "valid-3s-512.mp4", workspace_root / SHARED)
+    shutil.copy(VIDEOS / "valid-3s-512.mp4", workspace_root / "listings" / "take-a-hike" / OWN[2:])
+
+    page.goto(page.url.rsplit("/", 1)[0] + "/listings/take-a-hike")
+    page.get_by_role("heading", name="take-a-hike").wait_for(state="visible")
+    page.locator(".tabs .seg-opt", has_text="Images").click()
+    page.get_by_role("button", name="Files", exact=True).click()
+    page.get_by_role("button", name="size-guide.mp4").click()
+    page.get_by_role("button", name="how-it-fits.mp4").click()
+
+    black, blue_jean, ivory, moss = (_image(c) for c in ("black", "blue-jean", "ivory", "moss"))
+    _wait_for_media(page, workspace_root, [black, SHARED, blue_jean, ivory, moss, OWN])
+
+    page.get_by_role("button", name="Remove size-guide", exact=True).click()
+
+    _wait_for_media(page, workspace_root, [black, OWN, blue_jean, ivory, moss])
+    assert "Featured · shown 2nd" in (page.locator(".rtile").nth(1).text_content() or "")
