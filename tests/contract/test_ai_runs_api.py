@@ -17,6 +17,7 @@ import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -274,6 +275,10 @@ def test_the_detail_carries_every_event_type(client: TestClient) -> None:
     assert [event["seq"] for event in detail["events"]] == list(range(1, len(types) + 1))
     proposal = next(e for e in detail["events"] if e["type"] == "proposal")
     assert {"titles", "tags", "description_leads", "snapshot", "expires_at"} <= set(proposal)
+    kept_for = datetime.fromisoformat(proposal["expires_at"]) - datetime.fromisoformat(
+        proposal["generated_at"]
+    )
+    assert kept_for == timedelta(days=1)
     market = next(e for e in detail["events"] if e["type"] == "market")
     assert market["snapshot"]["scored"] == 3
     assert detail["events"][-1] == {

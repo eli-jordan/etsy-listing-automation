@@ -189,6 +189,26 @@ def test_extraction_and_the_proposal_see_the_drafted_brief_and_the_market(chain:
     assert chain.provider.task("seo").design_image.name == "take-a-hike.png"
 
 
+def test_unconventional_design_keys_send_the_same_image_whatever_their_order(
+    chain: Chain,
+) -> None:
+    root = chain.workspace.root
+    (root / "designs" / "alternate.png").write_bytes(b"alternate")
+    primary, secondary = "../../designs/take-a-hike.png", "../../designs/alternate.png"
+
+    edit_listing(root, design={"z": secondary, "a": primary})
+    chain.run(draft_brief=False)
+    edit_listing(root, design={"a": primary, "z": secondary})
+    chain.run(draft_brief=False)
+
+    images = [
+        t.design_image
+        for t, k in zip(chain.provider.tasks, chain.provider.calls, strict=True)
+        if k == "seo"
+    ]
+    assert [image.name for image in images] == ["take-a-hike.png", "take-a-hike.png"]
+
+
 def test_the_ai_mode_button_skips_the_brief(chain: Chain) -> None:
     run = chain.run(draft_brief=False)
 

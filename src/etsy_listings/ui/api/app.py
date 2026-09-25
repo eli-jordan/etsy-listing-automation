@@ -33,8 +33,7 @@ from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.listings import router as listings_router
 from etsy_listings.ui.api.listings import support_router as listings_support_router
 from etsy_listings.ui.api.runs import router as runs_router
-from etsy_listings.ui.api.seo import ActiveSeoRequests, AiProviderFactory, default_ai_providers
-from etsy_listings.ui.api.seo import brief_router as ai_brief_router
+from etsy_listings.ui.api.seo import AiProviderFactory, default_ai_providers
 from etsy_listings.ui.api.seo import router as seo_router
 from etsy_listings.ui.api.templates import router as templates_router
 from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
@@ -97,12 +96,9 @@ def create_app(
     # nothing to do with running a run -- reaching through `run_executor` for
     # it would couple that endpoint to the executor's own shape for no reason.
     app.state.context_factory = context_factory
-    # `ui/api/seo.py`'s own injection seam and its in-memory
-    # one-request-per-listing tracker -- deliberately not part of
-    # `run_registry`/`run_executor` above, since a proposal request is never
-    # a `Run` (PR5 item 5: no run, no SQLite record, no server-side cache).
+    # The AI providers' injection seam, read per request by AI Mode's
+    # readiness check (`seo.py`) and per run by `ai_runner`.
     app.state.seo_provider_factory = seo_provider_factory
-    app.state.seo_active_requests = ActiveSeoRequests()
     # Held around every read-merge-write of a listing (`listings.py`, and
     # PR 5's brief write) -- `ui/workspace_locks.py` says why.
     app.state.workspace_locks = locks
@@ -142,7 +138,6 @@ def create_app(
     app.include_router(runs_router)
     app.include_router(ai_runs_router)
     app.include_router(seo_router)
-    app.include_router(ai_brief_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
