@@ -41,6 +41,7 @@ from pathlib import Path
 from etsy_listings.ai.errors import (
     ProviderCancelledError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
     classify_process_failure,
 )
 from etsy_listings.ai.models import (
@@ -188,6 +189,13 @@ class CodexProvider:
         repair: RepairContext | None = None,
         cancel_event: threading.Event | None = None,
     ) -> RawProviderResult:
+        if shutil.which(self.binary) is None:
+            # Recognised-unavailable, so the orchestrator moves on to the next
+            # provider. Launching the bare name would fail with WinError 2 --
+            # a process error, which ends the run instead -- and readiness
+            # only needs *one* provider to be ready, so on a machine with
+            # just the other CLI this is the ordinary case, not an edge.
+            raise ProviderUnavailableError(PROVIDER_NAME, f"{self.binary} was not found on PATH")
         prompt_text = prompt_text_for(task, repair)
         with tempfile.TemporaryDirectory(prefix="etsy-listings-ai-codex-") as tmp:
             tmp_path = Path(tmp)
