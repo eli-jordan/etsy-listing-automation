@@ -63,7 +63,7 @@ from etsy_listings.workspace.layout import (
 )
 from etsy_listings.workspace.workspace import Workspace
 
-from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seeded_market
+from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_snapshot, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing, set_shop_id, write_design
 from tests.support.server import stop_server
@@ -1393,3 +1393,79 @@ def test_a_reload_mid_run_shows_the_same_run_again(
         page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
         page.get_by_text("Generating for", exact=False).wait_for(state="hidden")
         assert provider.count("seo") == 1
+
+
+# ===========================================================================
+# The top listings panel (market-seo implementation plan, PR 8)
+# ===========================================================================
+
+
+def _market_panel(page: Page) -> Any:
+    return page.get_by_role("complementary", name="Top listings on Etsy")
+
+
+def test_a_saved_search_shows_beside_the_fields_and_after_a_reload(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """The panel reads the snapshot on mount (``GET …/market``), so the last
+    search is there again after a reload. It sits right of the fields on a
+    laptop, and under them below 1100px."""
+    _seed_prompt(workspace_root)
+    seed_snapshot(workspace_root, scored=12)
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[_ready_provider()]) as base,
+        _seo_page(browser_type, base) as page,
+    ):
+        _open_details_tab(page)
+        panel = _market_panel(page)
+        panel.wait_for(state="visible")
+        assert "12 scored from 43 found" in panel.inner_text()
+        assert panel.get_by_role("listitem").count() == 8
+
+        fields = page.get_by_role("group", name="Listing details").bounding_box()
+        beside = panel.bounding_box()
+        assert fields is not None and beside is not None
+        assert beside["x"] >= fields["x"] + fields["width"]
+
+        page.reload()
+        _open_details_tab(page)
+        panel.wait_for(state="visible")
+        assert "12 scored from 43 found" in panel.inner_text()
+
+        page.set_viewport_size({"width": 1000, "height": 1000})
+        fields = page.get_by_role("group", name="Listing details").bounding_box()
+        below = panel.bounding_box()
+        assert fields is not None and below is not None
+        assert below["y"] >= fields["y"] + fields["height"]
+
+
+def test_a_run_fills_the_panel_as_it_researches(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """No panel before the first search; *Searching Etsy for…* while the run
+    searches; then what it found, from the run's own ``market`` event."""
+    _seed_prompt(workspace_root)
+    provider = _ready_provider(
+        responses=[_valid_json(tags=["hiking gift", *[f"tag{i}" for i in range(19)]])]
+    )
+    held = provider.gate("seo")
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base,
+        _seo_page(browser_type, base) as page,
+    ):
+        _open_details_tab(page)
+        page.get_by_role("button", name="AI Mode").wait_for(state="visible")
+        assert _market_panel(page).count() == 0
+
+        page.get_by_role("button", name="AI Mode").click()
+        panel = _market_panel(page)
+        assert provider.started["seo"].wait(timeout=10)
+        panel.get_by_text("3 scored from 3 found", exact=False).wait_for(state="visible")
+        assert "Searched Etsy for “retro sunset hiking shirt”" in panel.inner_text()
+
+        held.set()
+        page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
+        panel.get_by_role("tab", name="Phrases").click()
+        assert panel.get_by_label("In your suggestions").count() >= 1
