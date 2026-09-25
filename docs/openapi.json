@@ -1152,7 +1152,8 @@
           "severity": {
             "enum": [
               "block",
-              "warn"
+              "warn",
+              "info"
             ],
             "title": "Severity",
             "type": "string"

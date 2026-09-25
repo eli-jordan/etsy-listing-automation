@@ -163,7 +163,10 @@ than relying on shape-sniffing across all three."""
 # TemplateSummary above follows for template.yaml.
 # ──────────────────────────────────────────────────────────────────────────
 
-IssueSeverity = Literal["block", "warn"]
+IssueSeverity = Literal["block", "warn", "info"]
+"""`listing_validation.Severity` on the wire. ``info`` (PRD 71's stripped
+audio) is shown quietly and counted nowhere: `IssueCounts` stays blocks and
+warnings, the two a seller has to act on."""
 IssueTab = Literal["variants", "pricing", "images", "details"]
 
 

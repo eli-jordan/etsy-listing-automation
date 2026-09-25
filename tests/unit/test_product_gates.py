@@ -21,6 +21,7 @@ with exactly the same words.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -28,6 +29,7 @@ from PIL import Image
 
 from etsy_listings.config import listing_validation as rules
 from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
+from etsy_listings.config.media import ProbeFailure, VideoFacts
 from etsy_listings.engine.stage import Blocked
 from etsy_listings.engine.stages.gates import (
     check_copy_is_concrete,
@@ -35,6 +37,7 @@ from etsy_listings.engine.stages.gates import (
     check_garment_profile_chosen,
     check_lifecycle_verb,
     check_listing_yaml_present,
+    check_videos,
 )
 
 PROFILE = GarmentProfile(
@@ -244,3 +247,31 @@ def test_a_gate_agrees_with_the_banner_about_a_missing_listing_yaml(present: boo
     assert (gate is None) == (banner == [])
     if gate is not None:
         assert gate.message == banner[0].message
+
+
+SILENT_CLIP = VideoFacts(
+    size_bytes=2_643, duration_seconds=3.2, width=512, height=512, has_audio=False
+)
+
+
+def test_a_video_gate_refuses_what_the_banner_blocks() -> None:
+    videos = {"./close-up.mov": ProbeFailure("has no video stream")}
+    assert _refusal(check_videos(videos)) == rules.check_videos(videos)[0].message
+
+
+def test_a_video_s_audio_note_never_refuses_a_stage() -> None:
+    """PRD 71: Etsy strips the sound, which is worth telling a seller and no
+    reason to stop a deploy."""
+    videos = {"common-media/size-guide.mp4": replace(SILENT_CLIP, has_audio=True)}
+    assert [i.severity for i in rules.check_videos(videos)] == ["info"]
+    assert check_videos(videos) is None
+
+
+def test_a_video_gate_skips_a_note_to_refuse_on_the_block_after_it() -> None:
+    videos = {
+        "common-media/a.mp4": VideoFacts(
+            size_bytes=1, duration_seconds=5.0, width=600, height=600, has_audio=True
+        ),
+        "common-media/b.mp4": ProbeFailure("was not found"),
+    }
+    assert "common-media/b.mp4 was not found" in _refusal(check_videos(videos))

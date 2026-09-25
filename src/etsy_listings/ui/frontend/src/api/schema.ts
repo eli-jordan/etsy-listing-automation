@@ -1448,7 +1448,7 @@ export interface components {
        * Severity
        * @enum {string}
        */
-      severity: "block" | "warn";
+      severity: "block" | "warn" | "info";
       /**
        * Tab
        * @enum {string}

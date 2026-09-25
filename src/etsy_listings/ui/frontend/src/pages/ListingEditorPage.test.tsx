@@ -178,6 +178,50 @@ describe("ListingEditorPage", () => {
     await screen.findByText("1 warning");
   });
 
+  it("shows an info note quietly: no warning icon, and never counted as a warning", async () => {
+    /* PRD 71: Etsy strips a video's sound. Worth saying, nothing to fix. */
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [
+          { severity: "warn", tab: "details", where: "Tags", message: "no tags" },
+          { severity: "info", tab: "images", where: "Clip", message: "sound is stripped" },
+        ],
+      }),
+    );
+    const { container } = renderAt("/listings/take-a-hike");
+
+    await screen.findByText("1 warning · 1 note");
+    const note = screen.getByText("sound is stripped").closest(".issue");
+    expect(note).toHaveClass("issue--info");
+    expect(note?.querySelector(".issue__icon svg")).toBeNull();
+    expect(container.querySelectorAll(".issue--warn")).toHaveLength(1);
+  });
+
+  it("summarises a note alone as a note, not a warning", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [{ severity: "info", tab: "images", where: "Clip", message: "sound is stripped" }],
+      }),
+    );
+    renderAt("/listings/take-a-hike");
+
+    await screen.findByText("1 note");
+  });
+
+  it("pluralises notes", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [
+          { severity: "info", tab: "images", where: "A", message: "a is silent" },
+          { severity: "info", tab: "images", where: "B", message: "b is silent" },
+        ],
+      }),
+    );
+    renderAt("/listings/take-a-hike");
+
+    await screen.findByText("2 notes");
+  });
+
   it("pluralises blocking problems", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
       detail({
