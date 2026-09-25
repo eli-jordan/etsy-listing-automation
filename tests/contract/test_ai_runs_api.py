@@ -261,6 +261,25 @@ def test_get_by_listing_is_404_without_a_run(client: TestClient) -> None:
     assert client.get("/api/ai/runs", params={"listing": LISTING}).status_code == 404
 
 
+def test_deleting_the_listing_forgets_its_finished_run(client: TestClient) -> None:
+    _finished(client, _start(client)["id"])
+
+    assert client.delete(f"/api/listings/{LISTING}").status_code == 204
+
+    assert client.get("/api/ai/runs", params={"listing": LISTING}).status_code == 404
+
+
+def test_renaming_the_listing_forgets_the_finished_run_under_the_old_name(
+    client: TestClient,
+) -> None:
+    _finished(client, _start(client)["id"])
+
+    renamed = client.post(f"/api/listings/{LISTING}/rename", json={"new_name": "renamed"})
+
+    assert renamed.status_code == 200
+    assert client.get("/api/ai/runs", params={"listing": LISTING}).status_code == 404
+
+
 def test_get_an_unknown_run_is_404(client: TestClient) -> None:
     assert client.get("/api/ai/runs/nope").status_code == 404
     assert client.get("/api/ai/runs/nope/events").status_code == 404

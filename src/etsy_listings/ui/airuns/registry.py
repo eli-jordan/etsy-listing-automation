@@ -163,6 +163,18 @@ class AiRunRegistry:
         with self._lock:
             return self._runs.get(self._latest.get(listing.casefold(), ""))
 
+    def forget(self, listing: str) -> None:
+        """Drop the listing's finished run: the listing was deleted or
+        renamed, so a new listing given that name must not reattach to it
+        and replay a brief and proposal that belong to another. A running
+        run is left to end on its own -- it fails once the listing is gone."""
+        key = listing.casefold()
+        with self._lock:
+            run = self._runs.get(self._latest.get(key, ""))
+            if run is not None and run.finished:
+                del self._runs[run.id]
+                del self._latest[key]
+
     def active(self) -> list[AiRun]:
         with self._lock:
             return [run for run in self._runs.values() if not run.finished]
