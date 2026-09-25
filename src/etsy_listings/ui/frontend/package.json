@@ -16,6 +16,7 @@
     "gen:api": "openapi-typescript ../../../../docs/openapi.json -o src/api/schema.ts && prettier --write src/api/schema.ts"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "openapi-fetch": "^0.17.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
@@ -24,7 +25,6 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@marver-design/marver": "^0.19.2",
-    "@phosphor-icons/react": "^2.1.10",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.1.0",
     "@testing-library/user-event": "^14.5.2",

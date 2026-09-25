@@ -44,9 +44,9 @@ the app; don't reference the mockup files.
 
 ### What it replaces
 
-Today [`AiActivityIndicator`](../src/etsy_listings/ui/frontend/src/pages/editor/aiSeo/AiActivityIndicator.tsx)
-shows a `dv-spinner` plus *Generating brief…* or *Generating SEO…* beside
-*Saved a moment ago* in the page head. `ListingEditorPage` passes it in through
+Before it, `AiActivityIndicator` (deleted in PR 7)
+showed a `dv-spinner` plus *Generating brief…* or *Generating SEO…* beside
+*Saved a moment ago* in the page head. `ListingEditorPage` passed it in through
 the `activity` prop.
 
 The new indicator goes in the same slot and keeps that component's reasoning.
@@ -219,6 +219,13 @@ disappears without the fade. `warning` and `failed` chains don't fade: they
 stay until the next run or until the editor is left. The fade isn't in the
 mockup, which shows the resting state.
 
+A clean finish is only news to an editor that watched the run go. When the
+editor reattaches to a run that had already finished cleanly (on a return or
+a reload), the indicator renders nothing, as it was left, rather than showing
+*Suggestions ready* on every visit to the listing. A reattached `warning` or
+`failed` run shows again, since it still needs a look. A cancelled run, with
+every node back to `pending`, renders nothing.
+
 **Detail lines.** Every state can carry a `detail` string for the hover card.
 Those in the fixtures:
 
@@ -270,7 +277,7 @@ they breathe together.
 **Reduced motion: slow the pulse down, don't remove it.** Under
 `prefers-reduced-motion: reduce` the period goes to 3s
 ([`marketSeo.css:110-116`](../src/etsy_listings/ui/frontend/design/screens/marketSeo/marketSeo.css#L110)).
-This follows the lesson in `AiActivityIndicator`'s comment: a spinner that
+This follows the lesson in the old `AiActivityIndicator`'s comment: a spinner that
 stopped on a Windows machine with animations off read as a hang. Here the
 motion *is* the information, so it is softened rather than removed.
 
@@ -672,13 +679,12 @@ in it is new, apart from sharing the row with the panel.
 ## 4. Shared visual language
 
 - **The AI purple family** marks everything the AI chain produced or is doing:
-  `--seo-purple #7655c9`, `--seo-pink #dc5e9a`, and ink `#593baf` for text. In
-  the app these are declared again on each AI selector (`.seo-suggestion`,
-  `.seo-brief-row`, `.seo-ai-mode-anchor`), and the ink is a literal `#593baf`.
-  The mockup declares all three on `.aiflow, .mkt-panel`
+  `--seo-purple #7655c9`, `--seo-pink #dc5e9a`, and ink `#593baf` for text. The
+  app declares all three once, on `:root` in `src/index.css` (PR 7). Before
+  that they were declared again on each AI selector (`.seo-suggestion`,
+  `.seo-brief-row`, `.seo-ai-mode-anchor`), and the ink was a literal
+  `#593baf`. The mockup still declares them on `.aiflow, .mkt-panel`
   ([`marketSeo.css:4-9`](../src/etsy_listings/ui/frontend/design/screens/marketSeo/marketSeo.css#L4)).
-  The implementation moves `--seo-purple`, `--seo-pink` and a new
-  `--seo-ink` to `:root` once, rather than adding a fourth and fifth copy.
 - **Neutral for data, purple for AI.** Listing tags, the Your shop pill and the
   notes use the app's neutral and accent tokens. Purple is kept for scores, the
   AI-chain nodes and interaction affordances, so it keeps its meaning.
