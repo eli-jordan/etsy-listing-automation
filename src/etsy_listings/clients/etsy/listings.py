@@ -1,6 +1,7 @@
 """The Etsy listing surface Phase 3's stages write through: `publish`'s poll
-target, `etsy_listing`'s single PATCH, and `etsy_media`'s upload/reorder/
-variation-image calls.
+target, `etsy_listing`'s single PATCH, `etsy_media`'s upload/reorder/
+variation-image calls, and the video upload/attach/delete `etsy_videos`
+places a listing's videos with (PRD 71, phase-3-etsy.md decision 9).
 
 Built against
 [docs/printify-etsy-integration.md](../../../../docs/printify-etsy-integration.md)'s
@@ -110,6 +111,7 @@ def _video_refusal(exc: EtsyApiError) -> EtsyApiError:
         return VideoBudgetExhaustedError(exc.status_code, error=exc.error)
     return exc
 
+
 VIDEO_CONTENT_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime"}
 """PRD 71's two video types -- of Etsy's seven, the two a browser previews --
 and the content type each is sent as."""
@@ -154,7 +156,9 @@ class EtsyListingClient(Protocol):
         self, shop_id: int, listing_id: int, *, file_name: str, contents: bytes
     ) -> ListingVideo: ...
 
-    def attach_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> ListingVideo: ...
+    def attach_listing_video(
+        self, shop_id: int, listing_id: int, video_id: int
+    ) -> ListingVideo: ...
 
     def delete_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> None: ...
 
@@ -189,7 +193,9 @@ class HttpEtsyListingClient:
         # One comma-joined `includes`, never the key twice: which of two
         # repeated keys Etsy honours is not something to leave to chance.
         includes = [
-            name for name, wanted in (("Images", include_images), ("Videos", include_videos)) if wanted
+            name
+            for name, wanted in (("Images", include_images), ("Videos", include_videos))
+            if wanted
         ]
         params = {"includes": ",".join(includes)} if includes else None
         try:

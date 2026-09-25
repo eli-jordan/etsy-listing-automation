@@ -586,7 +586,10 @@ def test_images_and_videos_are_composed_into_one_includes_param() -> None:
             json={
                 **LISTING_PAYLOAD,
                 "images": [],
-                "videos": [VIDEO_PAYLOAD, {**VIDEO_PAYLOAD, "video_id": 1, "video_state": "inactive"}],
+                "videos": [
+                    VIDEO_PAYLOAD,
+                    {**VIDEO_PAYLOAD, "video_id": 1, "video_state": "inactive"},
+                ],
             },
         )
 
@@ -665,9 +668,7 @@ def test_a_video_upload_is_multipart_with_the_multi_video_flag() -> None:
     )
     assert seen["multi"] == ["true"]
     assert seen["fields"] == {"name": "size-guide.mp4"}
-    assert seen["files"] == {
-        "video": ("size-guide.mp4", "video/mp4", b"\x00\x00\x00\x18ftypmp42")
-    }
+    assert seen["files"] == {"video": ("size-guide.mp4", "video/mp4", b"\x00\x00\x00\x18ftypmp42")}
     assert (video.video_id, video.video_state) == (844256454, "active")
 
 
