@@ -77,6 +77,13 @@ class WorkspaceFacts:
             templates=_template_info_map(workspace),
         )
 
+    @classmethod
+    def for_files(cls, workspace: Workspace) -> WorkspaceFacts:
+        """No catalogue, for a caller that only asks about files -- the
+        `etsy_videos` stage's gate, which needs a listing's clips probed and
+        would otherwise pay for every ``template.yaml`` on every plan."""
+        return cls(workspace, garment_profile_names=(), templates={})
+
     def garment_profile(self, name: str) -> GarmentProfile | None:
         """``None`` for a profile that will not load *and* for a name that could
         never name a file at all -- ``""`` (a new listing, before the Variants

@@ -52,6 +52,7 @@ from etsy_listings.engine.change import (
 )
 from etsy_listings.engine.stages.etsy_listing import EtsyListingSnapshot
 from etsy_listings.engine.stages.etsy_media import EtsyMediaSnapshot
+from etsy_listings.engine.stages.etsy_videos import EtsyVideosSnapshot
 from etsy_listings.engine.stages.printify_product import ProductSnapshot
 from etsy_listings.engine.stages.publish import PublishSnapshot
 from etsy_listings.engine.stages.render import RenderSnapshot
@@ -278,6 +279,11 @@ class EtsyMediaStagePlanDTO(_StagePlanDTO):
     snapshot: EtsyMediaSnapshot | None = None
 
 
+class EtsyVideosStagePlanDTO(_StagePlanDTO):
+    stage: Literal["etsy_videos"] = "etsy_videos"
+    snapshot: EtsyVideosSnapshot | None = None
+
+
 class RetractStagePlanDTO(_StagePlanDTO):
     stage: Literal["retract"] = "retract"
     snapshot: None = None
@@ -289,6 +295,7 @@ StagePlanDTO = Annotated[
     | PublishStagePlanDTO
     | EtsyListingStagePlanDTO
     | EtsyMediaStagePlanDTO
+    | EtsyVideosStagePlanDTO
     | RetractStagePlanDTO,
     Field(discriminator="stage"),
 ]
@@ -335,6 +342,7 @@ def stage_plan_dto(
     | PublishStagePlanDTO
     | EtsyListingStagePlanDTO
     | EtsyMediaStagePlanDTO
+    | EtsyVideosStagePlanDTO
     | RetractStagePlanDTO
 ):
     fields = _stage_plan_fields(stage_plan)
@@ -350,6 +358,8 @@ def stage_plan_dto(
         )
     if stage_plan.stage == "etsy_media":
         return EtsyMediaStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, EtsyMediaSnapshot))
+    if stage_plan.stage == "etsy_videos":
+        return EtsyVideosStagePlanDTO(**fields, snapshot=_snapshot(stage_plan, EtsyVideosSnapshot))
     if stage_plan.stage == "retract":
         if stage_plan.snapshot is not None:
             raise TypeError("retract does not have a snapshot")

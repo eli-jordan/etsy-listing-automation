@@ -1234,6 +1234,18 @@ export interface components {
       ref: string;
     };
     /**
+     * DesiredVideoSnapshot
+     * @description One video as this run wants to place it (A30).
+     */
+    DesiredVideoSnapshot: {
+      /** After Images */
+      after_images?: number | null;
+      /** File */
+      file: string;
+      /** Ref */
+      ref: string;
+    };
+    /**
      * DisplaceConfig
      * @description PRD: implemented but off by default -- over-strong displacement looks
      *     melted, so it's tuned per template in the calibrator's live preview.
@@ -1406,6 +1418,38 @@ export interface components {
       id: number;
       /** Title */
       title: string;
+    };
+    /**
+     * EtsyVideosSnapshot
+     * @description Both sides for the deploy review (A30). The live side comes in Etsy's
+     *     response order, which says nothing about the gallery (decision 9).
+     */
+    EtsyVideosSnapshot: {
+      /** Desired */
+      desired: components["schemas"]["DesiredVideoSnapshot"][];
+      /** Live */
+      live: components["schemas"]["LiveVideoSnapshot"][];
+    };
+    /** EtsyVideosStagePlanDTO */
+    EtsyVideosStagePlanDTO: {
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
+      snapshot?: components["schemas"]["EtsyVideosSnapshot"] | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "etsy_videos";
     };
     /** FieldChangeDTO */
     FieldChangeDTO: {
@@ -1727,6 +1771,21 @@ export interface components {
       /** Url */
       url?: string | null;
     };
+    /**
+     * LiveVideoSnapshot
+     * @description One video Etsy has on the listing (A30); ``ref`` is ``None`` for one
+     *     this tool never uploaded.
+     */
+    LiveVideoSnapshot: {
+      /** Ref */
+      ref?: string | null;
+      /** State */
+      state?: string | null;
+      /** Thumbnail Url */
+      thumbnail_url?: string | null;
+      /** Video Id */
+      video_id: number;
+    };
     /** MediaChangeDTO */
     MediaChangeDTO: {
       /** After */
@@ -1858,6 +1917,7 @@ export interface components {
         | components["schemas"]["PublishStagePlanDTO"]
         | components["schemas"]["EtsyListingStagePlanDTO"]
         | components["schemas"]["EtsyMediaStagePlanDTO"]
+        | components["schemas"]["EtsyVideosStagePlanDTO"]
         | components["schemas"]["RetractStagePlanDTO"]
       )[];
     };
@@ -2479,6 +2539,7 @@ export interface components {
         | components["schemas"]["PublishStagePlanDTO"]
         | components["schemas"]["EtsyListingStagePlanDTO"]
         | components["schemas"]["EtsyMediaStagePlanDTO"]
+        | components["schemas"]["EtsyVideosStagePlanDTO"]
         | components["schemas"]["RetractStagePlanDTO"];
       /**
        * @description discriminator enum property added by openapi-typescript
