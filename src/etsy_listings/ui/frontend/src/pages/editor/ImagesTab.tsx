@@ -3,7 +3,7 @@ import { listTemplates } from "../../api/calibrator";
 import { listCommonMedia } from "../../api/listings";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
 import { mediaLabel, pictureFor, singleDesignName } from "../../media";
-import type { CommonMediaSummary, ListingDetail, TemplateSummary } from "../../types";
+import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
 import { type Focus, viewFocus } from "./focus";
@@ -44,7 +44,7 @@ interface Props {
 
 export function ImagesTab({ detail, onUpdate }: Props) {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
-  const [shared, setShared] = useState<CommonMediaSummary[]>([]);
+  const [shared, setShared] = useState<MediaFileSummary[]>([]);
   const [status, setStatus] = useState("");
   const [focus, setFocus] = useState<Focus | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);

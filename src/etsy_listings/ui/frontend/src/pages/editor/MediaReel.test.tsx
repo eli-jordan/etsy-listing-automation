@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { CommonMediaSummary, MediaEntry } from "../../types";
+import type { MediaFileSummary, MediaEntry } from "../../types";
 import { MediaReel } from "./MediaReel";
 
 /**
@@ -12,10 +12,11 @@ import { MediaReel } from "./MediaReel";
  * endpoints behind it, so the drag was the part of the tab nothing exercised.
  */
 
-const SIZING: CommonMediaSummary = {
+const SIZING: MediaFileSummary = {
   name: "sizing.png",
   file: "common-media/sizing.png",
   ref: "common-media/sizing.png",
+  kind: "image",
 };
 
 function reel(over: Partial<Parameters<typeof MediaReel>[0]> = {}) {

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { mediaLabel, pictureFor } from "../../media";
-import type { CommonMediaSummary, MediaEntry } from "../../types";
+import type { MediaFileSummary, MediaEntry } from "../../types";
 import { MAX_MEDIA } from "./mediaEdits";
 import type { Focus } from "./focus";
 
@@ -20,7 +20,7 @@ interface Props {
   design: string | null;
   swatchTemplate: string | null;
   selectedIndex: number | null;
-  shared: readonly CommonMediaSummary[];
+  shared: readonly MediaFileSummary[];
   onOpen: (index: number) => void;
   onRemove: (index: number) => void;
   onReorder: (from: number, to: number) => void;

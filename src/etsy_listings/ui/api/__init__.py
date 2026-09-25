@@ -23,6 +23,7 @@ from etsy_listings.ui.api.app import create_app
 from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.listings import router as listings_router
 from etsy_listings.ui.api.listings import support_router as listings_support_router
+from etsy_listings.ui.api.media_files import router as media_files_router
 from etsy_listings.ui.api.templates import router as templates_router
 
 __all__ = [
@@ -30,5 +31,6 @@ __all__ = [
     "designs_router",
     "listings_router",
     "listings_support_router",
+    "media_files_router",
     "templates_router",
 ]

@@ -6,7 +6,7 @@ import {
   scenePath,
   templatePicture,
 } from "../../media";
-import type { CommonMediaSummary, ListingDetail, TemplateSummary } from "../../types";
+import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 
 /**
  * What the Listing Images tab's preview pane is pointing at, and everything
@@ -24,7 +24,7 @@ import type { CommonMediaSummary, ListingDetail, TemplateSummary } from "../../t
  * `multiple`/`single` template always is. */
 export type Focus =
   | { kind: "template"; template: string; colour: string | null }
-  | { kind: "shared"; asset: CommonMediaSummary };
+  | { kind: "shared"; asset: MediaFileSummary };
 
 /** Everything the preview pane and its foot need, for one focus. */
 export interface FocusView {

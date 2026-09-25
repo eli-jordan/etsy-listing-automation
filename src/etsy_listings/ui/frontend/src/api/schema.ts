@@ -83,17 +83,12 @@ export interface paths {
     };
     /**
      * List Common Media
-     * @description The shared images a listing can add to `media:` as a file ref.
+     * @description The *Shared* group: files every listing can use -- a sizing chart,
+     *     care instructions, a size-guide video.
      *
      *     Distinct from both design endpoints: ``designs/`` is the artwork that gets
      *     printed, ``test-designs/`` is calibration targets, and these are finished
-     *     pictures (a sizing chart, care instructions) uploaded to Etsy as-is,
-     *     never rendered onto a garment.
-     *
-     *     ``name`` is the path under ``common-media/``, subdirectories included --
-     *     what the two picture endpoints below take. Images only, for now: every
-     *     row is drawn as a picture thumbnail, and a video needs the file
-     *     locator's own tile (PRD 71) before it can be offered here.
+     *     files uploaded to Etsy as-is, never rendered onto a garment.
      */
     get: operations["list_common_media_api_common_media_get"];
     put?: never;
@@ -113,14 +108,9 @@ export interface paths {
     };
     /**
      * Common Media File
-     * @description The shared asset at its own size, for the editor's preview pane and its
-     *     lightbox -- the two places a picture is *judged* rather than picked out of
-     *     a list.
-     *
-     *     The bytes as they sit on disk, not a re-encode: a mockup template's
-     *     counterpart (`GET .../design-preview`) has to run the real pipeline to
-     *     exist at all, but this file is already exactly what would be uploaded to
-     *     Etsy, and the one thing worth seeing full-size is what Etsy will get.
+     * @description The shared file at its own size, for the preview pane and the
+     *     lightbox -- the bytes as they sit on disk, which are exactly what Etsy
+     *     would receive.
      */
     get: operations["common_media_file_api_common_media__name__file_get"];
     put?: never;
@@ -138,11 +128,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * Common Media Thumbnail
-     * @description An unusable *name* needs nothing here: ``InvalidNameError`` out of
-     *     ``common_media_file`` becomes a 400 through the app-wide handler.
-     */
+    /** Common Media Thumbnail */
     get: operations["common_media_thumbnail_api_common_media__name__thumbnail_get"];
     put?: never;
     post?: never;
@@ -346,6 +332,63 @@ export interface paths {
      *     ``etsy_listing_id``.
      */
     post: operations["create_listing_api_listings_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{listing}/media-files": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Listing Media Files
+     * @description The *This listing* group: the listing's own files, each with the
+     *     ``./`` ref that names it (PRD 72). A ``404`` for a listing that does not
+     *     exist, rather than an empty group that would look like one with nothing
+     *     in it.
+     */
+    get: operations["list_listing_media_files_api_listings__listing__media_files_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{listing}/media-files/{path}/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listing Media File */
+    get: operations["listing_media_file_api_listings__listing__media_files__path__file_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{listing}/media-files/{path}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listing Media Thumbnail */
+    get: operations["listing_media_thumbnail_api_listings__listing__media_files__path__thumbnail_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1122,19 +1165,6 @@ export interface components {
       title: string;
     };
     /**
-     * CommonMediaSummary
-     * @description One shared asset under ``common-media/`` -- the other half of `media:`,
-     *     a bare path rather than a rendered mockup.
-     */
-    CommonMediaSummary: {
-      /** File */
-      file: string;
-      /** Name */
-      name: string;
-      /** Ref */
-      ref: string;
-    };
-    /**
      * CreateListingRequest
      * @description The whole document, not a handful of fields to build one from.
      *
@@ -1799,6 +1829,25 @@ export interface components {
       kind: "media";
       /** Rank */
       rank: number;
+    };
+    /**
+     * MediaFileSummary
+     * @description One file a listing can put in `media:` as a file ref (PRD 71, 72): a
+     *     shared one under ``common-media/``, or one of the listing's own. A bare
+     *     file uploaded as-is, rather than a rendered mockup.
+     */
+    MediaFileSummary: {
+      /** File */
+      file: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "image" | "video";
+      /** Name */
+      name: string;
+      /** Ref */
+      ref: string;
     };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
@@ -2781,7 +2830,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["CommonMediaSummary"][];
+          "application/json": components["schemas"]["MediaFileSummary"][];
         };
       };
     };
@@ -3107,6 +3156,101 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_listing_media_files_api_listings__listing__media_files_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        listing: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MediaFileSummary"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_media_file_api_listings__listing__media_files__path__file_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        listing: string;
+        path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_media_thumbnail_api_listings__listing__media_files__path__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        listing: string;
+        path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

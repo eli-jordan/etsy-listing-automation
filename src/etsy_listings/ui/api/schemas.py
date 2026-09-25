@@ -13,6 +13,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.media import MediaKind
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -301,7 +302,7 @@ class PricingPlanSummary(BaseModel):
     ref: str
     """Workspace-rooted (PRD 72), ready to PATCH straight into `pricing_plan:`
     unchanged -- `newcmd.logic.pricing_plan_ref`'s write-side form, the same
-    rule `CommonMediaSummary.ref` follows for a shared image."""
+    rule `MediaFileSummary.ref` follows for a shared image."""
 
 
 class ListingDesignSummary(BaseModel):
@@ -311,19 +312,26 @@ class ListingDesignSummary(BaseModel):
     ``designs/take-a-hike.png``."""
 
 
-class CommonMediaSummary(BaseModel):
-    """One shared asset under ``common-media/`` -- the other half of `media:`,
-    a bare path rather than a rendered mockup."""
+class MediaFileSummary(BaseModel):
+    """One file a listing can put in `media:` as a file ref (PRD 71, 72): a
+    shared one under ``common-media/``, or one of the listing's own. A bare
+    file uploaded as-is, rather than a rendered mockup."""
 
     name: str
+    """Its path under the directory it was listed from -- ``common-media/``
+    or the listing's own -- which is what the picture endpoints take."""
     file: str
-    """Workspace-relative, for display: ``common-media/size-guide.png``."""
+    """Workspace-relative, for display: ``common-media/size-guide.png``,
+    ``listings/take-a-hike/close-up.mp4``."""
     ref: str
-    """The ref to write into `media:` unchanged. Under PRD 72's two roots a
-    shared file's ref is its workspace-relative path, so today it equals
-    ``file``; it stays a field of its own because a listing's own files
-    (``./close-up.mp4``) are spelled differently from where they sit, and the
-    picker hands back the stored form rather than leaving callers to build it."""
+    """The ref to write into `media:` unchanged. A shared file's ref is its
+    workspace-relative path, so it equals ``file``; a listing's own file is
+    spelled ``./close-up.mp4`` (PRD 72), which is why this is a field of its
+    own rather than something callers build."""
+    kind: MediaKind
+    """``image`` or ``video``, as `config.media.media_kind` classifies it --
+    served rather than re-derived in the browser, so the locator and the
+    gallery rules cannot disagree about a ``.MOV``."""
 
 
 class CommonCopySummary(BaseModel):

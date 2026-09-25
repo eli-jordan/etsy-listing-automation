@@ -190,7 +190,7 @@ def _photos(workspace: Workspace, name: str, config: AnyTemplate) -> list[Templa
 
 def _relative(template: str, photo: Path) -> str:
     """Forward-slashed and workspace-relative, the shape every other served
-    path uses (`CommonMediaSummary.file`). Built from the layout rather than
+    path uses (`MediaFileSummary.file`). Built from the layout rather than
     `relative_to(root)` so it cannot come back as a Windows path."""
     return f"{layout.MOCKUP_TEMPLATES_DIR}/{template}/{photo.name}"
 

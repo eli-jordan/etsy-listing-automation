@@ -2,7 +2,7 @@ import { useState } from "react";
 import { templateThumbnailUrl } from "../../api/calibrator";
 import { commonMediaThumbnailUrl } from "../../api/listings";
 import { isInMedia, missingColours } from "../../media";
-import type { CommonMediaSummary, ListingDetail, TemplateSummary } from "../../types";
+import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import type { Focus } from "./focus";
 
 /**
@@ -24,7 +24,7 @@ import type { Focus } from "./focus";
 interface Props {
   detail: ListingDetail;
   templates: TemplateSummary[];
-  shared: CommonMediaSummary[];
+  shared: MediaFileSummary[];
   onToggleTemplate: (template: string, colour: string | null) => void;
   onToggleShared: (ref: string) => void;
   onAddMissingColours: (template: string) => void;

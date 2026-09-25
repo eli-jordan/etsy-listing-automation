@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
-import type { ListingDetail, TemplateSummary } from "../../types";
+import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import { ImagesTab } from "./ImagesTab";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
@@ -435,16 +435,18 @@ describe("ImagesTab's Etsy colour-swatch toggle (PRD 56)", () => {
 });
 
 describe("ImagesTab's shared images (common-media/)", () => {
-  const SHARED = [
+  const SHARED: MediaFileSummary[] = [
     {
       name: "size-guide.png",
       file: "common-media/size-guide.png",
       ref: "common-media/size-guide.png",
+      kind: "image",
     },
     {
       name: "care-instructions.png",
       file: "common-media/care-instructions.png",
       ref: "common-media/care-instructions.png",
+      kind: "image",
     },
   ];
 

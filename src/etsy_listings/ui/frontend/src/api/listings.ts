@@ -1,7 +1,7 @@
 import { api } from "./client";
 import type {
   CommonCopySummary,
-  CommonMediaSummary,
+  MediaFileSummary,
   CreateListingRequest,
   EtsySectionSummary,
   GarmentProfileSummary,
@@ -142,7 +142,7 @@ export async function listPricingPlans(garmentProfile: string): Promise<PricingP
   return data;
 }
 
-export async function listCommonMedia(): Promise<CommonMediaSummary[]> {
+export async function listCommonMedia(): Promise<MediaFileSummary[]> {
   const { data, error } = await api.GET("/api/common-media");
   if (error || !data) throw new ListingsApiError("could not load shared images");
   return data;
@@ -156,7 +156,7 @@ function commonMediaPath(name: string): string {
 
 /** The shared asset's own picture, downscaled for a list. A URL, like the two
  * thumbnails above. `name` is its path under `common-media/`, extension and
- * all -- `CommonMediaSummary.name`. */
+ * all -- `MediaFileSummary.name`. */
 export function commonMediaThumbnailUrl(name: string): string {
   return `/api/common-media/${commonMediaPath(name)}/thumbnail`;
 }
