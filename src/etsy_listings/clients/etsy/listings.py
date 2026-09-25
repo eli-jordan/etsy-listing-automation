@@ -330,10 +330,7 @@ class HttpEtsyListingClient:
         landed, and a second send would spend a second association of the
         listing's daily ten.
         """
-        suffix = PurePosixPath(file_name).suffix.lower()
-        content_type = VIDEO_CONTENT_TYPES.get(suffix)
-        if content_type is None:
-            raise ValueError(f"{file_name}: a listing video is .mp4 or .mov, not {suffix!r}")
+        content_type = video_content_type(file_name)
         return self._post_video(
             shop_id,
             listing_id,
@@ -387,6 +384,19 @@ class HttpEtsyListingClient:
         self._transport.post(
             f"/v3/application/shops/{shop_id}/listings/{listing_id}/variation-images", json=body
         )
+
+
+def video_content_type(file_name: str) -> str:
+    """The content type a video upload is sent as, or a :class:`ValueError`
+    for a file PRD 71 does not allow -- raised before a byte is sent, since
+    anything else reaching the client is a caller's bug that would spend one
+    of the listing's daily associations. The fake shares it, so a stage
+    tested against the fake meets the same refusal."""
+    suffix = PurePosixPath(file_name).suffix.lower()
+    content_type = VIDEO_CONTENT_TYPES.get(suffix)
+    if content_type is None:
+        raise ValueError(f"{file_name}: a listing video is .mp4 or .mov, not {suffix!r}")
+    return content_type
 
 
 def _results(body: Any) -> list[Any]:

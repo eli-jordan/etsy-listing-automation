@@ -17,6 +17,7 @@ from etsy_listings.clients.etsy.listings import (
     VIDEO_SLOTS,
     VideoBudgetExhaustedError,
     VideoSlotsFullError,
+    video_content_type,
 )
 from etsy_listings.clients.etsy.models import (
     Inventory,
@@ -207,7 +208,9 @@ class FakeEtsyListingClient:
         """The listing's gallery as Shop Manager would show it (decision 9).
 
         Read-only, and for tests: the real API has no such read, which is
-        exactly why the fake has to model one. Inactive videos do not show.
+        exactly why the fake has to model one. Inactive videos do not show,
+        and neither does any video on a listing with no images: Etsy will not
+        publish one, and what Shop Manager shows then was not measured.
         """
         images = self._images.get(listing_id, [])
         active = sorted(
@@ -327,6 +330,7 @@ class FakeEtsyListingClient:
     def upload_listing_video(
         self, shop_id: int, listing_id: int, *, file_name: str, contents: bytes
     ) -> ListingVideo:
+        video_content_type(file_name)
         self._admit_video(listing_id)
         self.video_uploads.append(contents)
         return self._attach(listing_id, self._new_video().video_id)

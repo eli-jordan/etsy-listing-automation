@@ -376,3 +376,15 @@ def test_what_decision_9_did_not_measure_is_refused_rather_than_guessed() -> Non
     probe.delete("A")
     with pytest.raises(ValueError, match="unmeasured: deleting .* not on the listing"):
         probe.delete("A")
+
+
+def test_a_file_that_is_neither_mp4_nor_mov_is_refused_as_the_real_client_refuses_it() -> None:
+    import pytest
+
+    probe = Probe()
+    probe.image("1")
+
+    with pytest.raises(ValueError, match="webm"):
+        probe.client.upload_listing_video(SHOP_ID, LISTING_ID, file_name="a.webm", contents=b"x")
+
+    assert probe.client.video_uploads == []
