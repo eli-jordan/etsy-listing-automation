@@ -483,6 +483,20 @@ class Workspace:
         """
         return self._media_files_in(self.common_media_dir())
 
+    def listing_media_file(self, listing: str, path: str) -> Path:
+        """One of a listing's own files, by its path under the listing's
+        directory -- what a ``./`` ref names (PRD 72), without the ``./``.
+        The same boundary as :meth:`common_media_file`, which matters more
+        here: this directory also holds ``listing.yaml`` and the lockfile."""
+        return self._media_file_in(self.listing_dir(listing), path)
+
+    def listing_media_files(self, listing: str) -> list[Path]:
+        """Every image and video in a listing's own directory, recursively:
+        the *This listing* half of the file locator (PRD 71). Never
+        ``listing.yaml``, the lockfile, or anything a symlink reaches outside
+        the directory. Empty for a listing with no directory yet."""
+        return self._media_files_in(self.listing_dir(listing))
+
     def _media_file_in(self, directory: Path, path: str) -> Path:
         """``path`` under ``directory``, refused unless it names an image or
         video there.
