@@ -201,7 +201,7 @@ describe("ImagesTab", () => {
         onUpdate={vi.fn()}
       />,
     );
-    expect(screen.getByText("1 of 20")).toBeInTheDocument();
+    expect(screen.getByText("1 of 20 images")).toBeInTheDocument();
   });
 
   it("says what to do at the limit instead of how to reorder", async () => {

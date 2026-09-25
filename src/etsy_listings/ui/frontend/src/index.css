@@ -3564,10 +3564,35 @@ table.listings tbody tr:last-child td {
   justify-content: center;
 }
 
-.rtile__face img {
+.rtile__face img,
+.rtile__face video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+/* The drag belongs to the tile; a <video> would otherwise take the pointer. */
+.rtile__face video {
+  pointer-events: none;
+}
+
+/* A clip in the gallery (PRD 71): the play mark fades while it plays. */
+.rtile__play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-bg);
+  font-size: 24px;
+  text-shadow: 0 1px 4px color-mix(in srgb, var(--color-neutral-900) 80%, transparent);
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.rtile__face:hover .rtile__play {
+  opacity: 0;
 }
 
 .rtile--selected .rtile__face {
@@ -3582,6 +3607,13 @@ table.listings tbody tr:last-child td {
 .rtile--over .rtile__face {
   border-color: var(--color-accent-2);
   border-style: dashed;
+}
+
+/* A drop the gallery rules refuse: the tile will snap back (PRD 71). */
+.rtile--refused .rtile__face {
+  border-color: var(--color-danger);
+  border-style: dashed;
+  cursor: no-drop;
 }
 
 /* This tile is what Etsy shows beside its colour option (PRD 56). */
@@ -3634,6 +3666,11 @@ table.listings tbody tr:last-child td {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   text-align: center;
+}
+
+/* Where Etsy pins the first video, second after the thumbnail. */
+.rtile__first--featured {
+  background: color-mix(in srgb, var(--color-accent-2) 88%, transparent);
 }
 
 .rtile__x {

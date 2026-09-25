@@ -1,5 +1,6 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { templateThumbnailUrl } from "../../api/calibrator";
+import { MutedClip, useHoverPlay } from "../../components/MutedClip";
 import { isInMedia, missingColours, pictureFor } from "../../media";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import type { Focus } from "./focus";
@@ -55,11 +56,6 @@ function clipLength(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-/** Where a muted clip rests: half a second in, since a first frame is often
- * black. Also the media fragment the `<video>` loads with, so the browser
- * draws that frame as its poster. */
-const POSTER_TIME = 0.5;
-
 interface FileTileProps {
   asset: MediaFileSummary;
   listing: string | null;
@@ -71,24 +67,9 @@ interface FileTileProps {
 /** One file in the list: a picture for an image, a first frame and a length
  * for a video. */
 function FileTile({ asset, listing, inListing, onToggle, onFocus }: FileTileProps) {
-  const video = useRef<HTMLVideoElement>(null);
+  const clip = useHoverPlay();
   const [length, setLength] = useState<number | null>(null);
   const isVideo = asset.kind === "video";
-
-  function play() {
-    const clip = video.current;
-    if (clip === null) return;
-    clip.currentTime = 0;
-    // A browser may refuse autoplay; the poster frame stays, which is fine.
-    void clip.play()?.catch(() => {});
-  }
-
-  function rest() {
-    const clip = video.current;
-    if (clip === null) return;
-    clip.pause();
-    clip.currentTime = POSTER_TIME;
-  }
 
   return (
     <button
@@ -99,21 +80,17 @@ function FileTile({ asset, listing, inListing, onToggle, onFocus }: FileTileProp
       onClick={onToggle}
       onMouseEnter={() => {
         onFocus();
-        if (isVideo) play();
+        if (isVideo) clip.play();
       }}
-      onMouseLeave={isVideo ? rest : undefined}
+      onMouseLeave={isVideo ? clip.rest : undefined}
     >
       <span className="loc-img__face">
         {isVideo ? (
           <>
-            <video
-              ref={video}
-              src={`${pictureFor(asset.ref, null, "full", listing)}#t=${POSTER_TIME}`}
-              preload="metadata"
-              muted
-              loop
-              playsInline
-              onLoadedMetadata={(event) => setLength(event.currentTarget.duration)}
+            <MutedClip
+              src={pictureFor(asset.ref, null, "full", listing)}
+              clip={clip}
+              onDuration={setLength}
             />
             <span className="loc-img__badge">
               {length === null ? "▶" : `▶ ${clipLength(length)}`}
