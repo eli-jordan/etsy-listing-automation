@@ -265,7 +265,7 @@ export function EditorHead({
   const hasLinks = hasOpenTargets(detail.etsy_listing_id, detail.printify_product_id);
 
   return (
-    <div className="page-head">
+    <div className="page-head page-head--editor">
       <span className="page-head__crumb" onClick={onBack}>
         Listings
       </span>

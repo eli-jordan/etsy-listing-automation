@@ -2502,6 +2502,51 @@ table.listings tbody tr:last-child td {
   font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
 }
 
+/* The editor's head stays on one line. The AI workflow indicator joins it
+   while a run goes and stays 4s after the suggestions arrive -- exactly when
+   the seller is clicking them -- so if the head wrapped (Deploy dropping to a
+   second line), every drawer below would jump under the pointer as the
+   indicator came and went. Instead the listing path gives way first
+   (ellipsis), then the rest of the meta line, and the title last. */
+.page-head--editor {
+  flex-wrap: nowrap;
+}
+
+.page-head--editor > * {
+  flex-shrink: 0;
+}
+
+.page-head--editor > .page-head__meta {
+  display: flex;
+  align-items: baseline;
+  /* A million times the title's, so the meta gives way first and the title
+     only once the meta is gone: flex freezes an item at its minimum and hands
+     the rest of the shortfall to the others. Any real share for the title
+     would do: a fraction of a pixel is enough to ellipsize it. */
+  flex-shrink: 1000;
+  min-width: 0;
+  overflow: hidden;
+  white-space: pre;
+}
+
+.page-head--editor .page-head__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-head--editor .page-head__saved {
+  flex-shrink: 0;
+}
+
+.page-head--editor > .page-head__title {
+  flex-shrink: 0.001;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Same dot as `.sidebar__shop` -- both say "this is live and current",
    one about the shop connection, the other about the file on disk. */
 .page-head__saved {

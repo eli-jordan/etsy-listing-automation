@@ -1321,6 +1321,45 @@ def test_the_page_head_names_the_brief_step_while_it_runs(
         page.wait_for_function("() => document.querySelector('.aiflow') === null")
 
 
+def test_nothing_below_the_head_moves_when_the_indicator_comes_and_goes(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """The workflow indicator stays 4 seconds after the suggestions arrive,
+    which is when the seller is clicking them. If its arrival or its fade
+    changed the head's height, every drawer would jump under the pointer. So
+    the editor's head stays one line, and the listing path gives way first."""
+    _seed_prompt(workspace_root)
+    provider = _ready_provider()
+    held = provider.gate("seo")
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.get_by_role("heading", name=LISTING).wait_for(state="visible")
+        _open_details_tab(page)
+        tabs = page.locator(".tabs")
+
+        def tabs_top() -> float:
+            box = tabs.bounding_box()
+            assert box is not None
+            return box["y"]
+
+        resting = tabs_top()
+
+        page.get_by_role("button", name="AI Mode").click()
+        page.locator(".page-head .aiflow").wait_for(state="visible")
+        assert provider.started["seo"].wait(timeout=10)
+        assert tabs_top() == resting
+
+        held.set()
+        page.locator(".page-head .aiflow", has_text="Suggestions ready").wait_for(state="visible")
+        assert tabs_top() == resting
+
+        page.locator(".page-head .aiflow").wait_for(state="detached")
+        assert tabs_top() == resting
+
+
 def test_a_reload_mid_run_shows_the_same_run_again(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
