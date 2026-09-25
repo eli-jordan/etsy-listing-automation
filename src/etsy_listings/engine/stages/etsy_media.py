@@ -45,20 +45,18 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.clients.etsy.listings import EtsyListingClient
-from etsy_listings.clients.etsy.models import VariationImageLink
 from etsy_listings.config.listing import TemplateMediaEntry
 from etsy_listings.config.media import media_kind
 from etsy_listings.engine.change import Action, Drift, MediaChange, Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
 from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.colour_property import resolve_colour_property
 from etsy_listings.engine.stages.etsy_target import (
     check_etsy_shop,
     etsy_listing_id,
     require_etsy_listing_id,
 )
+from etsy_listings.engine.stages.variation_links import image_ref, set_variation_images
 
 IMAGE_IDS_KEY = "etsy_image_ids"
 """This stage's key in ``lock.remote`` (A20) -- keyed by manifest ref, so a
@@ -200,10 +198,6 @@ class EtsyMediaLive:
     real `read_live`."""
 
 
-def _ref(template: str, colour: str | None) -> str:
-    return f"{template}:{colour}" if colour is not None else template
-
-
 def _manifest_entry(
     ctx: RunContext,
     listing: str,
@@ -220,7 +214,7 @@ def _manifest_entry(
         colour = None
     else:
         source = workspace.render_file(listing, entry.template, entry.colour)
-        ref = _ref(entry.template, entry.colour)
+        ref = image_ref(entry.template, entry.colour)
         colour = entry.colour if entry.template == variation_template else None
 
     content_hash = hash_file(source) if source.is_file() else PENDING
@@ -408,7 +402,16 @@ class EtsyMediaStage:
         )
 
         if desired.variation_images_template is not None:
-            self._apply_variation_images(ctx, client, shop_id, listing_id, desired, image_ids)
+            set_variation_images(
+                ctx,
+                client,
+                shop_id=shop_id,
+                listing_id=listing_id,
+                colours=desired.colours,
+                image_id_by_colour={
+                    e.colour: image_ids[e.ref] for e in desired.manifest if e.colour is not None
+                },
+            )
 
         applied_doc = AppliedEtsyMedia(
             manifest=tuple(
@@ -420,34 +423,6 @@ class EtsyMediaStage:
         return StageApplyResult(
             applied=applied_doc.model_dump(mode="json"), remote={IMAGE_IDS_KEY: image_ids}
         )
-
-    def _apply_variation_images(
-        self,
-        ctx: RunContext,
-        client: EtsyListingClient,
-        shop_id: int,
-        listing_id: int,
-        desired: EtsyMediaDesired,
-        image_ids: dict[str, int],
-    ) -> None:
-        inventory = client.get_listing_inventory(listing_id)
-        exceptions = ctx.workspace.load_exceptions()
-        colour_property = resolve_colour_property(inventory, desired.colours, exceptions)
-        if colour_property is None:
-            ctx.emit("variation_images: no single matching colour property on Etsy -- skipped")
-            return
-
-        links = [
-            VariationImageLink(
-                property_id=colour_property.property_id,
-                value_id=colour_property.value_id_by_slug[entry.colour],
-                image_id=image_ids[entry.ref],
-            )
-            for entry in desired.manifest
-            if entry.colour is not None and entry.colour in colour_property.value_id_by_slug
-        ]
-        ctx.emit(f"setting {len(links)} variation image link(s)")
-        client.update_variation_images(shop_id, listing_id, links)
 
 
 class MediaNotRenderedError(RuntimeError):
