@@ -12,10 +12,16 @@ or a video by its extension alone -- no file is opened, so this stays pure and
 answers the same for a draft that is on disk nowhere. An extension outside the
 two lists is refused rather than guessed at, since Etsy's help page names
 exactly these formats and anything else would be discovered as a failed upload.
+
+The *facts* a probe reads off a video file are plain data here too:
+`listing_validation.check_videos` is pure and takes no workspace, so the types
+it checks belong on this side of the dependency, as `TemplateInfo` does.
+Reading them off disk is `workspace/video.py`'s job.
 """
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import PurePosixPath
 from typing import Final, Literal
 
@@ -75,3 +81,24 @@ def media_kind(entry: MediaEntry) -> MediaKind:
     if suffix in VIDEO_EXTENSIONS:
         return "video"
     raise UnknownMediaTypeError(entry)
+
+
+@dataclass(frozen=True)
+class VideoFacts:
+    """What a probe read off one video file -- the five facts Etsy's help
+    page sets limits on (PRD 71)."""
+
+    size_bytes: int
+    duration_seconds: float
+    width: int
+    height: int
+    has_audio: bool
+
+
+@dataclass(frozen=True)
+class ProbeFailure:
+    """A video file that could not be read as one: missing, not a container
+    FFmpeg recognises, or holding no picture to show. ``reason`` finishes a
+    sentence that begins with the file's name."""
+
+    reason: str
