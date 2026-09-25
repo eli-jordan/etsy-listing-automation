@@ -3684,6 +3684,10 @@ table.listings tbody tr:last-child td {
 /* Where Etsy pins the first video, second after the thumbnail. */
 .rtile__first--featured {
   background: color-mix(in srgb, var(--color-accent-2) 88%, transparent);
+  /* Sentence case, so the label fits one line of a 104px tile. */
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .rtile__x {
