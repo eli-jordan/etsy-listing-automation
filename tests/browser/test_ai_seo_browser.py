@@ -1341,9 +1341,10 @@ def test_nothing_below_the_head_moves_when_the_indicator_comes_and_goes(
         tabs = page.locator(".tabs")
 
         def tabs_top() -> float:
-            box = tabs.bounding_box()
-            assert box is not None
-            return box["y"]
+            # Suggestions focus their first drawer, which can scroll the page.
+            # Compare document positions so that scroll is not mistaken for a
+            # layout jump when the indicator leaves the head.
+            return tabs.evaluate("element => element.getBoundingClientRect().top + window.scrollY")
 
         resting = tabs_top()
 
