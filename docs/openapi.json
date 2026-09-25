@@ -452,7 +452,7 @@
         "type": "object"
       },
       "CommonCopySummary": {
-        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s\nref, a common-copy ref is portable -- workspace-relative, not\nlisting-relative -- so it is exactly what `description.ref` stores,\nalready usable as-is.",
+        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). A common-copy ref is\nworkspace-relative, like every other ref (PRD 72), so it is exactly what\n`description.ref` stores, already usable as-is.",
         "properties": {
           "ref": {
             "title": "Ref",

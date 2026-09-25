@@ -227,7 +227,7 @@ def test_proposal_returns_the_validated_payload_snapshot_and_expiry(client: Test
     assert snapshot["garment_brand"] == "Comfort Colors"
     assert snapshot["garment_model"] == "1717"
     assert snapshot["garment_profile"] == "comfort-colors-1717"
-    assert snapshot["design"] == {"default": "../../designs/take-a-hike.png"}
+    assert snapshot["design"] == {"default": "designs/take-a-hike.png"}
     assert (
         snapshot["design_content_hash"]
         == client.get(f"/api/listings/{LISTING}").json()["design_content_hash"]
@@ -246,8 +246,8 @@ def test_unconventional_design_keys_pick_the_same_image_after_reordering(
     workspace_root: Path,
 ) -> None:
     _seed_prompt(workspace_root)
-    primary_ref = "../../designs/take-a-hike.png"
-    secondary_ref = "../../designs/alternate.png"
+    primary_ref = "designs/take-a-hike.png"
+    secondary_ref = "designs/alternate.png"
     (workspace_root / "designs" / "alternate.png").write_bytes(b"alternate")
     provider = _ready_provider(responses=[_valid_payload(), _valid_payload()])
 
@@ -425,6 +425,20 @@ def test_proposal_409s_for_a_listing_with_no_usable_garment_profile(
 
     assert response.status_code == 409
     assert "garment profile" in response.json()["detail"]
+
+
+def test_proposal_409s_for_a_legacy_design_ref_naming_the_migration(
+    workspace_root: Path,
+) -> None:
+    """PRD 72: an unmigrated `design:` is the seller's to fix, not a 500."""
+    _seed_prompt(workspace_root)
+    edit_listing(workspace_root, design="../../designs/take-a-hike.png")
+
+    with _client(workspace_root, providers=[_ready_provider()]) as c:
+        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
+
+    assert response.status_code == 409
+    assert "scripts/migrate_workspace_refs.py" in response.json()["detail"]
 
 
 def test_proposal_leaves_the_workspace_unwritten(workspace_root: Path) -> None:

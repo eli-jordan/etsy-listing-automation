@@ -29,6 +29,7 @@ from etsy_listings.workspace.workspace import (
     AmbiguousColourSuffixError,
     DescriptionResolution,
     InvalidNameError,
+    InvalidRefError,
     PathEscapesWorkspaceError,
     ScenePhoto,
     Workspace,
@@ -41,9 +42,11 @@ __all__ = [
     "ScenePhoto",
     # What a listing check reads off the tree, gathered once per request.
     "WorkspaceFacts",
-    # The four refusals, each naming what it refused and why.
+    # The five refusals, each naming what it refused and why.
     "WorkspaceNotFoundError",
     "PathEscapesWorkspaceError",
+    # A `listing.yaml` path that is not a two-root ref (PRD 72).
+    "InvalidRefError",
     "InvalidNameError",
     "AmbiguousColourSuffixError",
     # Every filename and directory name in the tree, in one module.

@@ -387,7 +387,7 @@ class TestNothingChosenYet:
 
     def test_a_pricing_plan_alone_satisfies_it(self) -> None:
         listing = _listing().model_copy(
-            update={"prices": {}, "pricing_plan": "../../pricing-plans/tee.yaml"}
+            update={"prices": {}, "pricing_plan": "pricing-plans/tee.yaml"}
         )
         assert not [i for i in _check(listing) if "Pricing" in i.where]
 

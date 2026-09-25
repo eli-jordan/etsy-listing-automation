@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { requestDesignBrief } from "../../../api/seo";
-import { workspacePath } from "../../../media";
 import type { AiSeoMode } from "./useAiSeoMode";
 
 /**
@@ -78,7 +77,7 @@ export function useAutoDesignBrief(
     const controller = new AbortController();
     controllerRef.current = controller;
     setPhase("drafting");
-    requestDesignBrief(workspacePath(ref), controller.signal).then((outcome) => {
+    requestDesignBrief(ref, controller.signal).then((outcome) => {
       if (controllerRef.current !== controller) return;
       controllerRef.current = null;
       if (outcome.kind !== "success") {

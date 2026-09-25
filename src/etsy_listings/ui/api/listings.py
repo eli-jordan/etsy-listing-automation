@@ -93,7 +93,7 @@ from etsy_listings.workspace import layout
 from etsy_listings.workspace.common_copy import CommonCopyError
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import (
-    PathEscapesWorkspaceError,
+    InvalidRefError,
     Workspace,
 )
 
@@ -132,8 +132,8 @@ def _resolve_design_paths(
     paths: dict[str, Path] = {}
     for key, ref in listing.design.items():
         try:
-            paths[key] = workspace.resolve(ref, relative_to=listing_dir)
-        except PathEscapesWorkspaceError:
+            paths[key] = workspace.resolve_ref(ref, listing_dir=listing_dir)
+        except InvalidRefError:
             continue
     return paths
 
@@ -148,10 +148,10 @@ def _business_issues(
     description_ref_error: str | None,
 ) -> list[Issue]:
     """*listing_dir* rather than a listing name, because the not-yet-created
-    draft the editor opens on ``/listings/new`` has no name and no directory
-    -- and every ref in a listing resolves against a directory at one fixed
-    depth (`listings/{name}/`), so `_any_listing_dir` answers for it exactly
-    as a real one would."""
+    draft the editor opens on ``/listings/new`` has no name and no directory.
+    A workspace-rooted ref (PRD 72) resolves the same against any listing
+    directory, so `Workspace.draft_listing_dir` answers for it exactly as a
+    real one would."""
     raw_issues: list[ValidationIssue] = check_listing(
         listing,
         garment_profile=facts.garment_profile(listing.garment_profile),
@@ -235,10 +235,10 @@ def _pricing_summary(
     plan_name = None
     if listing.pricing_plan is not None:
         try:
-            plan_path = workspace.resolve(listing.pricing_plan, relative_to=listing_dir)
+            plan_path = workspace.resolve_ref(listing.pricing_plan, listing_dir=listing_dir)
             plan = workspace.load_pricing_plan(plan_path)
             plan_name = plan_path.stem
-        except (PathEscapesWorkspaceError, ConfigLoadError):
+        except ConfigLoadError:
             plan = None
             plan_name = None
 
@@ -549,7 +549,7 @@ def _describe_draft(
         WorkspaceFacts.gather(workspace),
         listing,
         name=name,
-        listing_dir=_any_listing_dir(workspace),
+        listing_dir=workspace.draft_listing_dir(),
         status="draft",
         field_errors=field_errors,
     )
@@ -708,15 +708,6 @@ def list_garment_profiles(request: Request) -> list[GarmentProfileSummary]:
     return result
 
 
-def _any_listing_dir(workspace: Workspace) -> Path:
-    """A listing directory to resolve a ref against, without naming a real
-    listing. Every listing sits at the same fixed depth (`listings/{name}/`,
-    the same "one fixed depth" every other bare-name ref in this module
-    relies on -- `design`/`garment_profile`), so the ref this produces is the
-    same regardless of which listing ultimately PATCHes it in."""
-    return workspace.root / layout.LISTINGS_DIR / "_"
-
-
 @support_router.get("/api/pricing-plans", response_model=list[PricingPlanSummary])
 def list_pricing_plans(request: Request, garment_profile: str = "") -> list[PricingPlanSummary]:
     """Every plan, each flagged for whether it was built for this garment.
@@ -729,13 +720,12 @@ def list_pricing_plans(request: Request, garment_profile: str = "") -> list[Pric
     candidates = load_candidate_pricing_plans(workspace)
     by_path = dict(candidates)
     choices = build_pricing_plan_choices(candidates, garment_profile)
-    listing_dir = _any_listing_dir(workspace)
     return [
         PricingPlanSummary(
             name=choice.value.stem,
             garment_profile=by_path[choice.value].garment_profile,
             compatible=choice.marked,
-            ref=pricing_plan_ref(choice.value, listing_dir=listing_dir),
+            ref=pricing_plan_ref(choice.value, root=workspace.root),
         )
         for choice in choices
     ]
@@ -776,7 +766,7 @@ def list_common_media(request: Request) -> list[CommonMediaSummary]:
         CommonMediaSummary(
             name=path.stem,
             file=f"{layout.COMMON_MEDIA_DIR}/{path.name}",
-            ref=f"../../{layout.COMMON_MEDIA_DIR}/{path.name}",
+            ref=f"{layout.COMMON_MEDIA_DIR}/{path.name}",
         )
         for path in workspace.common_media_files()
     ]

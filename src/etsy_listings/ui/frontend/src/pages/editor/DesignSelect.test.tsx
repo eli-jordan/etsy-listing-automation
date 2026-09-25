@@ -19,7 +19,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe("DesignSelect", () => {
   it("names the artwork the listing prints, and the file it comes from", async () => {
-    render(<DesignSelect design={{ default: "../../designs/take-a-hike.png" }} onPick={vi.fn()} />);
+    render(<DesignSelect design={{ default: "designs/take-a-hike.png" }} onPick={vi.fn()} />);
 
     expect(await screen.findByText("take-a-hike")).toBeInTheDocument();
     expect(screen.getByText("designs/take-a-hike.png")).toBeInTheDocument();
@@ -30,16 +30,15 @@ describe("DesignSelect", () => {
     expect(await screen.findByText("No design selected")).toBeInTheDocument();
   });
 
-  it("picks a design from the recent list and writes a listing-relative ref", async () => {
-    /* `Listing.design` resolves relative to the listing's own directory, the
-       same convention `newcmd.logic.build_listing_stub` writes. */
+  it("picks a design from the recent list and writes a workspace-rooted ref", async () => {
+    /* PRD 72: no prefix is the workspace root -- the same ref `new` writes. */
     const onPick = vi.fn();
-    render(<DesignSelect design={{ default: "../../designs/take-a-hike.png" }} onPick={onPick} />);
+    render(<DesignSelect design={{ default: "designs/take-a-hike.png" }} onPick={onPick} />);
 
     fireEvent.click(await screen.findByRole("button", { name: /Change design/ }));
     fireEvent.click(screen.getByRole("button", { name: /wildflower-botanical/ }));
 
-    expect(onPick).toHaveBeenCalledWith("../../designs/wildflower-botanical.png");
+    expect(onPick).toHaveBeenCalledWith("designs/wildflower-botanical.png");
   });
 
   it("searches the whole library when the recent four are not enough", async () => {
@@ -55,7 +54,7 @@ describe("DesignSelect", () => {
     });
 
     fireEvent.click(screen.getByRole("button", { name: /trail-map-badge/ }));
-    expect(onPick).toHaveBeenCalledWith("../../designs/trail-map-badge.png");
+    expect(onPick).toHaveBeenCalledWith("designs/trail-map-badge.png");
   });
 
   it("reports an empty search rather than an empty list", async () => {
@@ -75,8 +74,8 @@ describe("DesignSelect", () => {
     render(
       <DesignSelect
         design={{
-          "on-light": "../../designs/take-a-hike-light.png",
-          "on-dark": "../../designs/take-a-hike-dark.png",
+          "on-light": "designs/take-a-hike-light.png",
+          "on-dark": "designs/take-a-hike-dark.png",
         }}
         onPick={vi.fn()}
       />,

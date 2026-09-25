@@ -34,7 +34,7 @@ import {
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
     garment_profile: "comfort-colors-1717",
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black"],
     brief: "",
     prices: {},

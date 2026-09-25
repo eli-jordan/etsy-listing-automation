@@ -141,6 +141,17 @@ def test_400_for_a_design_path_that_escapes_the_workspace(client: TestClient) ->
     assert response.status_code == 400
 
 
+def test_400_for_a_legacy_listing_relative_design_naming_the_migration(
+    client: TestClient,
+) -> None:
+    """The design is a `design:` ref (PRD 72), read by the one interpreter,
+    so the old `../../` form is refused the way `plan` refuses it."""
+    response = _post(client, design="../../designs/take-a-hike.png")
+
+    assert response.status_code == 400
+    assert "scripts/migrate_workspace_refs.py" in response.json()["detail"]
+
+
 def test_409_for_a_design_that_does_not_exist(client: TestClient) -> None:
     response = _post(client, design="designs/nothing-here.png")
 

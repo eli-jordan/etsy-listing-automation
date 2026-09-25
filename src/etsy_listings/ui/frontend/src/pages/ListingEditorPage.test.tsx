@@ -9,7 +9,7 @@ import { ListingEditorPage } from "./ListingEditorPage";
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
     garment_profile: "comfort-colors-1717",
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black"],
     brief: "",
     prices: {},
@@ -245,7 +245,7 @@ describe("ListingEditorPage", () => {
 
     await waitFor(() =>
       expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
-        design: "../../designs/cosmic-cat.png",
+        design: "designs/cosmic-cat.png",
       }),
     );
   });
@@ -417,7 +417,7 @@ describe("ListingEditorPage at /listings/new", () => {
     // in a follow-up patch: `useAutosave` merges what is pending into the
     // create candidate.
     expect(create.mock.calls[0]?.[0].document).toMatchObject({
-      design: "../../designs/cosmic-cat.png",
+      design: "designs/cosmic-cat.png",
     });
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "cosmic-cat" })).toBeInTheDocument(),
@@ -460,7 +460,7 @@ describe("ListingEditorPage at /listings/new", () => {
     const create = vi.spyOn(listingsApi, "createListing");
     const describe = vi
       .spyOn(listingsApi, "describeListingDraft")
-      .mockResolvedValue({ ...draft(), design: { default: "../../designs/cosmic-cat.png" } });
+      .mockResolvedValue({ ...draft(), design: { default: "designs/cosmic-cat.png" } });
     renderAt("/listings/new");
 
     const input = await screen.findByLabelText("Listing name");

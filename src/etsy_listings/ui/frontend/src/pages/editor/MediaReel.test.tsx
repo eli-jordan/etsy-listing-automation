@@ -15,7 +15,7 @@ import { MediaReel } from "./MediaReel";
 const SIZING: CommonMediaSummary = {
   name: "sizing",
   file: "common-media/sizing.png",
-  ref: "../../common-media/sizing.png",
+  ref: "common-media/sizing.png",
 };
 
 function reel(over: Partial<Parameters<typeof MediaReel>[0]> = {}) {
@@ -140,7 +140,7 @@ describe("MediaReel's other clicks", () => {
   });
 
   it("stays silent for a ref whose file has gone from common-media/", () => {
-    const props = reel({ media: ["../../common-media/deleted.png"], shared: [SIZING] });
+    const props = reel({ media: ["common-media/deleted.png"], shared: [SIZING] });
     fireEvent.mouseEnter(document.querySelectorAll(".rtile__face")[0] as HTMLElement);
     expect(props.onFocus).not.toHaveBeenCalled();
     expect(screen.getByText("deleted")).toBeTruthy();

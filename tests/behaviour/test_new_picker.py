@@ -232,15 +232,15 @@ def test_an_existing_garment_profile_for_the_same_garment_is_reused_untouched(
 def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() -> None:
     data = build_listing_stub(
         garment_profile_slug="unisex-garment-dyed-heavy-weight-tee",
-        design_ref="../../designs/take-a-hike.png",
+        design_ref="designs/take-a-hike.png",
         colours=["black", "blue-jean"],
-        pricing_plan_ref="../../pricing-plans/launch-low.yaml",
+        pricing_plan_ref="pricing-plans/launch-low.yaml",
         brief="",
         media=build_media_entries(
             template="flat-lay-01", kind="colour-matrix", colours=["black", "blue-jean"]
         ),
     )
-    assert data["pricing_plan"] == "../../pricing-plans/launch-low.yaml"
+    assert data["pricing_plan"] == "pricing-plans/launch-low.yaml"
     assert data["prices"] == {}
     assert data["media"] == [
         {"template": "flat-lay-01", "colour": "black"},
@@ -254,14 +254,14 @@ def test_build_listing_stub_references_a_pricing_plan_and_leaves_prices_empty() 
 def test_validate_listing_stub_accepts_a_pricing_plan_reference_with_no_prices() -> None:
     data = build_listing_stub(
         garment_profile_slug="p",
-        design_ref="../../designs/x.png",
+        design_ref="designs/x.png",
         colours=["black"],
-        pricing_plan_ref="../../pricing-plans/x.yaml",
+        pricing_plan_ref="pricing-plans/x.yaml",
         brief="",
         media=[{"template": "flat-lay-01", "colour": "black"}],
     )
     listing = validate_listing_stub(data, currency="NOK")
-    assert listing.pricing_plan == "../../pricing-plans/x.yaml"
+    assert listing.pricing_plan == "pricing-plans/x.yaml"
     assert listing.prices == {}
 
 
@@ -300,9 +300,9 @@ def test_a_truncated_stub_still_validates_and_still_sells_every_colour() -> None
     colours = [f"colour-{n:02d}" for n in range(33)]
     data = build_listing_stub(
         garment_profile_slug="p",
-        design_ref="../../designs/x.png",
+        design_ref="designs/x.png",
         colours=colours,
-        pricing_plan_ref="../../pricing-plans/x.yaml",
+        pricing_plan_ref="pricing-plans/x.yaml",
         brief="",
         media=build_media_entries(template="flat-lay-01", kind="colour-matrix", colours=colours),
     )
@@ -356,9 +356,9 @@ def test_write_listing_refuses_to_overwrite_an_existing_listing(workspace_root: 
     workspace = Workspace.discover(root_override=workspace_root)
     data = build_listing_stub(
         garment_profile_slug="comfort-colors-1717",
-        design_ref="../../designs/take-a-hike.png",
+        design_ref="designs/take-a-hike.png",
         colours=["black"],
-        pricing_plan_ref="../../pricing-plans/x.yaml",
+        pricing_plan_ref="pricing-plans/x.yaml",
         brief="",
         media=[{"template": "flat-lay-01", "colour": "black"}],
     )
@@ -400,17 +400,15 @@ def test_load_candidate_pricing_plans_skips_a_broken_plan_not_the_whole_picker(
     assert [path.stem for path, _ in candidates] == ["good"]
 
 
-def test_pricing_plan_ref_is_relative_to_the_listing_directory(tmp_path: Path) -> None:
-    listing_dir = tmp_path / "listings" / "take-a-hike"
-    listing_dir.mkdir(parents=True)
-
+def test_pricing_plan_ref_is_written_from_the_workspace_root(tmp_path: Path) -> None:
+    # PRD 72: no prefix is the workspace root, whichever listing stores it.
     flat = tmp_path / "pricing-plans" / "launch-low.yaml"
-    assert pricing_plan_ref(flat, listing_dir=listing_dir) == "../../pricing-plans/launch-low.yaml"
+    assert pricing_plan_ref(flat, root=tmp_path) == "pricing-plans/launch-low.yaml"
 
     nested = tmp_path / "pricing-plans" / "comfort-colors-1717" / "launch-low.yaml"
     assert (
-        pricing_plan_ref(nested, listing_dir=listing_dir)
-        == "../../pricing-plans/comfort-colors-1717/launch-low.yaml"
+        pricing_plan_ref(nested, root=tmp_path)
+        == "pricing-plans/comfort-colors-1717/launch-low.yaml"
     )
 
 

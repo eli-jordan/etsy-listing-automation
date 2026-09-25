@@ -24,7 +24,7 @@ const FLAT_LAY: TemplateSummary = {
 const SIZING: CommonMediaSummary = {
   name: "sizing",
   file: "common-media/sizing.png",
-  ref: "../../common-media/sizing.png",
+  ref: "common-media/sizing.png",
 };
 
 function listing(media: MediaEntry[]): ListingDetail {

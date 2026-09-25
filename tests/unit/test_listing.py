@@ -19,7 +19,7 @@ from etsy_listings.config.pricing_plan import PricingPlan
 
 BASE: dict[str, object] = {
     "garment_profile": "comfort-colors-1717",
-    "design": "../../designs/take-a-hike.png",
+    "design": "designs/take-a-hike.png",
     "colors": ["black"],
     "brief": "test brief",
     "prices": {"S": "349 NOK"},
@@ -70,21 +70,21 @@ def test_listing_materials_explains_the_garment_profile_migration() -> None:
 
 def test_bare_design_string_normalises_to_default_key() -> None:
     listing = Listing.model_validate(BASE, context={"currency": "NOK"})
-    assert listing.design == {"default": "../../designs/take-a-hike.png"}
+    assert listing.design == {"default": "designs/take-a-hike.png"}
 
 
 def test_design_map_is_kept_as_is() -> None:
     data = {
         **BASE,
         "design": {
-            "on-light": "../../designs/take-a-hike-dark-ink.png",
-            "on-dark": "../../designs/take-a-hike-light-ink.png",
+            "on-light": "designs/take-a-hike-dark-ink.png",
+            "on-dark": "designs/take-a-hike-light-ink.png",
         },
     }
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     assert listing.design == {
-        "on-light": "../../designs/take-a-hike-dark-ink.png",
-        "on-dark": "../../designs/take-a-hike-light-ink.png",
+        "on-light": "designs/take-a-hike-dark-ink.png",
+        "on-dark": "designs/take-a-hike-light-ink.png",
     }
 
 
@@ -133,9 +133,9 @@ def test_media_entry_without_colour_is_valid_for_non_colour_matrix_templates() -
 
 
 def test_media_shared_asset_path_still_works() -> None:
-    data = {**BASE, "media": [*BASE["media"], "../../common-media/sizing-chart.png"]}
+    data = {**BASE, "media": [*BASE["media"], "common-media/sizing-chart.png"]}
     listing = Listing.model_validate(data, context={"currency": "NOK"})
-    assert listing.media[1] == "../../common-media/sizing-chart.png"
+    assert listing.media[1] == "common-media/sizing-chart.png"
 
 
 def test_rejects_more_than_max_media_entries() -> None:
@@ -242,7 +242,7 @@ def test_a_listing_with_neither_pricing_plan_nor_prices_still_parses() -> None:
 def test_a_pricing_plan_reference_alone_leaves_prices_empty() -> None:
     data = {**BASE}
     del data["prices"]
-    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    data["pricing_plan"] = "pricing-plans/launch-low.yaml"
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     assert listing.prices == {}
 
@@ -269,7 +269,7 @@ def test_resolved_price_prefers_listing_prices_over_the_plan() -> None:
 def test_resolved_price_falls_back_to_the_plan_when_listing_has_no_price() -> None:
     data = {**BASE}
     del data["prices"]
-    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    data["pricing_plan"] = "pricing-plans/launch-low.yaml"
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     plan = PricingPlan(garment_profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
     assert listing.resolved_price("black", "S", pricing_plan=plan) == Money.parse("100 NOK")
@@ -278,7 +278,7 @@ def test_resolved_price_falls_back_to_the_plan_when_listing_has_no_price() -> No
 def test_resolved_price_uses_the_plans_own_colour_override() -> None:
     data = {**BASE}
     del data["prices"]
-    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    data["pricing_plan"] = "pricing-plans/launch-low.yaml"
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     plan = PricingPlan(
         garment_profile="comfort-colors-1717",
@@ -291,7 +291,7 @@ def test_resolved_price_uses_the_plans_own_colour_override() -> None:
 def test_resolved_price_raises_when_nothing_covers_the_size() -> None:
     data = {**BASE}
     del data["prices"]
-    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    data["pricing_plan"] = "pricing-plans/launch-low.yaml"
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     plan = PricingPlan(garment_profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
     with pytest.raises(KeyError):

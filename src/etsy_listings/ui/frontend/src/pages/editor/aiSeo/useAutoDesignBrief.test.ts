@@ -20,7 +20,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const REF = "../../designs/take-a-hike.png";
+const REF = "designs/take-a-hike.png";
 
 function aiSeoStub(over: Partial<AiSeoMode> = {}): AiSeoMode {
   return {
@@ -200,7 +200,7 @@ it("replaces an earlier draft when a second design is picked", async () => {
   const { result } = setup();
 
   act(() => result.current.start(REF));
-  act(() => result.current.start("../../designs/other.png"));
+  act(() => result.current.start("designs/other.png"));
 
   expect(signals).toHaveLength(2);
   expect(signals[0]?.aborted).toBe(true);
