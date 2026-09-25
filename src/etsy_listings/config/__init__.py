@@ -17,11 +17,17 @@ from etsy_listings.config.description import DescriptionConfig, compose_descript
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile, PrintArea
-from etsy_listings.config.listing import (
-    EtsyListingConfig,
-    Listing,
+from etsy_listings.config.listing import EtsyListingConfig, Listing
+from etsy_listings.config.media import (
+    MAX_IMAGES,
+    MAX_VIDEOS,
     MediaEntry,
+    MediaKind,
+    ProbeFailure,
     TemplateMediaEntry,
+    UnknownMediaTypeError,
+    VideoFacts,
+    media_kind,
 )
 from etsy_listings.config.money import Money, PriceField, require_currency
 from etsy_listings.config.pricing_plan import PricingPlan
@@ -43,6 +49,14 @@ __all__ = [
     "MediaEntry",
     "TemplateMediaEntry",
     "PrintArea",
+    # What a media: entry is, and the gallery's caps (PRD 71).
+    "MediaKind",
+    "media_kind",
+    "UnknownMediaTypeError",
+    "MAX_IMAGES",
+    "MAX_VIDEOS",
+    "VideoFacts",
+    "ProbeFailure",
     # The description model and its one shared join rule (AI SEO plan PR2).
     "DescriptionConfig",
     "compose_description",

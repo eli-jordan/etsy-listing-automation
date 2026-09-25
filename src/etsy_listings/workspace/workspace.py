@@ -74,6 +74,7 @@ class InvalidRefError(ConfigLoadError):
 
     def __init__(self, listing_dir: Path, ref: str, detail: str) -> None:
         self.ref = ref
+        self.detail = detail
         super().__init__(listing_dir / layout.LISTING_FILE, f"ref {ref!r}: {detail}")
 
 

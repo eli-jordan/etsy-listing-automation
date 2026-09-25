@@ -160,6 +160,7 @@ def _business_issues(
         templates=facts.templates,
         published=published,
         description_ref_error=description_ref_error,
+        videos=facts.videos(listing, listing_dir),
     )
     return [
         Issue(severity=i.severity, tab=i.tab, where=i.where, message=i.message) for i in raw_issues

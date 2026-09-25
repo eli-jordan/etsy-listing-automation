@@ -34,6 +34,8 @@ from tests.support.builders import (
     set_etsy_shop_id,
 )
 
+VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+
 
 @pytest.fixture
 def client(workspace_root: Path) -> TestClient:
@@ -419,6 +421,45 @@ class TestGetListingDetail:
         issues = client.get("/api/listings/take-a-hike").json()["issues"]
         matches = [i for i in issues if i["tab"] == "variants" and i["severity"] == "block"]
         assert any("360" in i["message"] for i in matches)
+
+    def test_reports_a_too_short_video_as_an_images_block_naming_it(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """PRD 71's gate, read through `WorkspaceFacts` off the real file."""
+        shutil.copy(
+            VIDEOS / "short-2s-512.mp4", workspace_root / "listings" / "take-a-hike" / "clip.mp4"
+        )
+        edit_listing(
+            workspace_root, media=[{"template": "flat-lay-01", "colour": "black"}, "./clip.mp4"]
+        )
+
+        issues = client.get("/api/listings/take-a-hike").json()["issues"]
+
+        [block] = [i for i in issues if "./clip.mp4" in i["message"]]
+        assert (block["severity"], block["tab"]) == ("block", "images")
+        assert "3–15 seconds" in block["message"]
+
+    def test_a_video_s_audio_is_a_note_the_table_does_not_count(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        before = next(r for r in client.get("/api/listings").json() if r["name"] == "take-a-hike")[
+            "issue_counts"
+        ]
+        shutil.copy(
+            VIDEOS / "with-audio-3s-512.mp4",
+            workspace_root / "listings" / "take-a-hike" / "clip.mp4",
+        )
+        edit_listing(
+            workspace_root, media=[{"template": "flat-lay-01", "colour": "black"}, "./clip.mp4"]
+        )
+
+        issues = client.get("/api/listings/take-a-hike").json()["issues"]
+        after = next(r for r in client.get("/api/listings").json() if r["name"] == "take-a-hike")[
+            "issue_counts"
+        ]
+
+        assert [i["severity"] for i in issues if "./clip.mp4" in i["message"]] == ["info"]
+        assert after == before
 
     def test_warns_about_colours_the_garment_profile_does_not_classify(
         self, client: TestClient
