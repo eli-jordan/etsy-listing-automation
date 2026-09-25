@@ -77,6 +77,12 @@ interface UseAutosave {
   /** Applies a partial `listing.yaml` patch: updates local state immediately
    * and schedules (or extends) the debounced save. */
   update: (patch: Patch) => void;
+  /** Shows a value the server has already written -- an AI run's drafted
+   * brief (market-seo.md, *AI runs*) -- without saving it again: local
+   * state only, nothing pending, the save state untouched. Sending it back
+   * would be a second write of the same value, and would race the seller's
+   * own next edit to that field. */
+  adopt: (patch: Patch) => void;
   /** Sends whatever is pending right now, without waiting for the debounce.
    * Callers use this on blur and on a tab switch; the hook itself calls it on
    * unmount, and `rename` awaits it. */
@@ -296,6 +302,10 @@ export function useAutosave(
     [clearTimer, flush],
   );
 
+  const adopt = useCallback((patch: Patch) => {
+    setDetail((current) => coerceDesign(mergePatch(current, patch)) as ListingDetail);
+  }, []);
+
   const commitName = useCallback(
     (next: string) => {
       if (next === savedName.current || naming.current) return;
@@ -340,5 +350,5 @@ export function useAutosave(
   // drops the last few hundred milliseconds of typing.
   useEffect(() => () => void flush(), [flush]);
 
-  return { detail, update, flush, commitName, save };
+  return { detail, update, adopt, flush, commitName, save };
 }

@@ -251,11 +251,12 @@ def readiness(
     missing, since the former is fixed by editing the listing and the
     latter is not this request's to fix at all.
 
-    ``draft_brief`` left ``None`` is the proposal endpoint's rule set. A
-    ``bool`` is an AI run's (market-seo.md, *AI runs*): the same checks plus
-    a usable garment profile, which query extraction needs for the item
-    type, and ``prompts/market-queries.md``. An empty brief is allowed only
-    when ``draft_brief`` is true, and then ``prompts/brief.md`` is needed.
+    ``draft_brief`` left ``None`` is the (retiring) proposal endpoint's rule
+    set. A ``bool`` is an AI run's, and so the AI Mode button's
+    (market-seo.md, *AI runs*): the same checks plus a usable garment
+    profile, which query extraction needs for the item type, and
+    ``prompts/market-queries.md``. An empty brief is allowed only when
+    ``draft_brief`` is true, and then ``prompts/brief.md`` is needed.
 
     The listing itself already being saved is `target`'s job (`listings.py`)
     -- reaching this function at all already proves that, via the 404 every
@@ -456,15 +457,18 @@ def proposal_response(proposal: SeoProposal, snapshot: SeoProposalSnapshot) -> S
 
 @router.get("/{name}/ai-seo/readiness", response_model=SeoReadinessResponse)
 def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessResponse:
-    """Whether **AI Mode** may be offered for this saved listing right now
-    -- the call the frontend makes to decide whether to enable the always
-    visible control. Read-only: every check here, including each
-    provider's own `readiness()`, is a local probe (a file's existence, a
-    fast `--help`/`login status` subprocess) that changes nothing.
+    """Whether the **AI Mode** button may start a run for this saved listing
+    right now -- the call the frontend makes to decide whether to enable the
+    always visible control. The button starts an AI run that never drafts
+    the brief, so this is ``POST /api/ai/runs``'s own rule set for
+    ``draft_brief=false``: a lit button is one the server will not refuse.
+    Read-only: every check here, including each provider's own
+    `readiness()`, is a local probe (a file's existence, a fast
+    `--help`/`login status` subprocess) that changes nothing.
     """
     listing = target.workspace.load_listing(target.name)
     providers = _providers(request, target.workspace)
-    return readiness(target.workspace, listing, providers)
+    return readiness(target.workspace, listing, providers, draft_brief=False)
 
 
 @contextmanager

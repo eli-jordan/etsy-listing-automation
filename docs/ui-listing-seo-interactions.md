@@ -89,8 +89,10 @@ button has a purple and pink sparkle and remains secondary to **Deploy changes**
 | Activate **AI Mode** | Capture the current generation inputs and begin one request for a complete proposal. | A single explicit action keeps model usage predictable and ensures all suggestions share the same listing context. |
 | The listing is unsaved or a prerequisite is unavailable | Keep the control visible and disabled. | Sellers can discover AI Mode while preparing the required inputs; requests still require a saved listing and ready local tooling. |
 
-For v1, AI Mode requires a saved listing with a selected design, a non-empty
-listing brief, `prompts/seo.md`, and at least one ready provider. The brief is
+AI Mode starts an AI run that does not draft the brief, so it requires what
+such a run requires: a saved listing with a selected design, a non-empty
+listing brief, a usable garment profile, `prompts/seo.md` and
+`prompts/market-queries.md`, and at least one ready provider. The brief is
 editable in Listing Details. Garment-profile and other existing listing facts
 are included in the submitted snapshot. The
 client learns availability from the saved-listing readiness endpoint; it never
@@ -260,7 +262,7 @@ brief, garment context, and other facts supplied to the model.
 | Event                                                                           | UI response                                                                                                             | Why it is important                                                                                                 |
 | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | A relevant input changes while suggestions are pending | Keep the proposal visible, mark it stale, and disable selecting its pending values. Offer **Regenerate**. | Hiding the result would be disorienting, while accepting copy based on obsolete facts could introduce inaccuracies. |
-| The editor is left or its connection closes while generation runs | Abort the request and retain no proposal. | A request without its saved-listing editor has no useful owner. |
+| The editor is left or reloaded while generation runs | Keep running. The editor reattaches to the run on return and stores its proposal when it arrives. | The work was asked for; walking away from the tab is not a request to throw it away. |
 | Activate **Regenerate**                                                         | Request a complete replacement proposal from the current inputs. Preserve all values already chosen into normal fields. | Regeneration repairs context without undoing seller decisions.                                                      |
 | Resolve or dismiss one drawer                                                   | Clear only that part of the pending proposal.                                                                           | Title, tags, and lead are independent decisions.                                                                    |
 | Resolve or dismiss all drawers                                                  | Remove the pending proposal from local storage.                                                                         | Temporary suggestions should not linger after they can no longer help.                                              |

@@ -38,6 +38,17 @@ export type SeoProposalSnapshot = components["schemas"]["SeoProposalSnapshot"];
 export type SeoRationaleEntry = components["schemas"]["SeoRationaleEntry"];
 export type SeoWarningEntry = components["schemas"]["SeoWarningEntry"];
 
+// ── AI runs (market-seo.md, *AI runs*; the implementation plan's Run contract) ─
+
+export type AiRunSummary = components["schemas"]["AiRunSummary"];
+export type AiRunDetail = components["schemas"]["AiRunDetail"];
+export type AiRunPhase = AiRunSummary["phase"];
+export type AiRunEvent = AiRunDetail["events"][number];
+/** One node of the chain -- brief, market research, SEO suggestions -- as the
+ * latest `step` event for it left it. */
+export type WorkflowStep = components["schemas"]["WorkflowStep"];
+export type MarketSnapshot = components["schemas"]["MarketSnapshot"];
+
 // ── Listings UI (phase 5) ──────────────────────────────────────────────────
 
 export type Issue = components["schemas"]["Issue"];

@@ -85,8 +85,12 @@ class ChainProvider:
     gates: dict[Task, threading.Event] = field(default_factory=dict)
     during: dict[Task, Callable[[], None]] = field(default_factory=dict)
     """Run inside the call, before it answers -- a seller typing mid-draft."""
+    answers: dict[Task, list[str]] = field(default_factory=dict)
+    """Raw answers to give a task instead of the standard one, first to last;
+    once a task's list is empty it answers as standard again."""
     calls: list[Task] = field(default_factory=list, init=False)
     tasks: list[ProviderTask] = field(default_factory=list, init=False)
+    repairs: list[RepairContext | None] = field(default_factory=list, init=False)
     cancelled: list[Task] = field(default_factory=list, init=False)
     started: defaultdict[Task, threading.Event] = field(
         default_factory=lambda: defaultdict(threading.Event), init=False
@@ -112,6 +116,7 @@ class ChainProvider:
         kind = _task_kind(task)
         self.calls.append(kind)
         self.tasks.append(task)
+        self.repairs.append(repair)
         self.started[kind].set()
         gate = self.gates.get(kind)
         while gate is not None and not gate.wait(0.01):
@@ -122,6 +127,8 @@ class ChainProvider:
             self.during[kind]()
         if kind in self.failures:
             raise self.failures[kind]
+        if self.answers.get(kind):
+            return RawProviderResult(provider=self.name, raw_output=self.answers[kind].pop(0))
         answers = {
             "brief": json.dumps({"brief": DRAFTED_BRIEF}),
             "queries": json.dumps({"queries": list(QUERIES)}),
@@ -131,6 +138,9 @@ class ChainProvider:
 
     def task(self, kind: Task) -> ProviderTask:
         return next(t for t, k in zip(self.tasks, self.calls, strict=True) if k == kind)
+
+    def count(self, kind: Task) -> int:
+        return self.calls.count(kind)
 
 
 def seed_prompts(root: Path) -> None:
