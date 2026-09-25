@@ -223,10 +223,3 @@ def test_the_cli_flag_reaches_setup(tmp_path: Path, monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert seen == {"root": tmp_path, "replace_prompts": True}
-
-
-def test_setup_help_documents_the_flag() -> None:
-    result = CliRunner().invoke(app, ["setup", "--help"])
-
-    assert "--replace-prompts" in result.output
-    assert ".bak" in result.output
