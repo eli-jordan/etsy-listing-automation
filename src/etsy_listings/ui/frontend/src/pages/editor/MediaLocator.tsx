@@ -1,8 +1,7 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { templateThumbnailUrl } from "../../api/calibrator";
-import { commonMediaThumbnailUrl } from "../../api/listings";
-import { isInMedia, missingColours } from "../../media";
-import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
+import { isInMedia, missingColours, pictureFor } from "../../media";
+import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import type { Focus } from "./focus";
 
 /**
@@ -10,10 +9,15 @@ import type { Focus } from "./focus";
  * things `media:` can hold, and add one.
  *
  * The segmented control is which half is being browsed -- **Mockup templates**
- * (a `{template, colour}` entry, rendered per listing) and **Images**
- * (`common-media/`, a bare path uploaded as-is: a sizing chart, care
- * instructions). One control rather than two panels because they compete for
- * the same twenty slots.
+ * (a `{template, colour}` entry, rendered per listing) and **Files** (a file
+ * ref uploaded as-is: a sizing chart, care instructions, a size-guide video).
+ * One control rather than two panels because they fill the same gallery.
+ *
+ * *Files* is one list in two groups, one per root a ref can name (PRD 72):
+ * *This listing · ./* for the listing's own directory and *Shared ·
+ * common-media/*. Images and videos sit together, because `media:` is one
+ * gallery (PRD 71); a video is drawn by a muted `<video>` from its own first
+ * frame, carries its length, and plays on hover.
  *
  * Its own state is what it is *showing* (which half, the search, which template
  * is expanded). What a click *means* belongs to `mediaEdits`, and where the
@@ -24,16 +28,19 @@ import type { Focus } from "./focus";
 interface Props {
   detail: ListingDetail;
   templates: TemplateSummary[];
-  shared: MediaFileSummary[];
+  /** The listing's own files, or `null` for a draft, which has no directory
+   * yet and so no *This listing* group. */
+  local: readonly MediaFileSummary[] | null;
+  shared: readonly MediaFileSummary[];
   onToggleTemplate: (template: string, colour: string | null) => void;
-  onToggleShared: (ref: string) => void;
+  onToggleFile: (ref: string) => void;
   onAddMissingColours: (template: string) => void;
   onToggleSwatchSource: (template: string) => void;
   onFocus: (focus: Focus) => void;
 }
 
 /** Which half of `media:` the locator is browsing. */
-type LocatorMode = "templates" | "images";
+type LocatorMode = "templates" | "files";
 
 function kindLabel(kind: TemplateSummary["kind"]): string {
   if (kind === "colour-matrix") return "Colour matrix · one photo per colour";
@@ -42,12 +49,92 @@ function kindLabel(kind: TemplateSummary["kind"]): string {
   return "";
 }
 
+/** `0:06`, `1:15` -- a clip's length as the badge shows it. */
+function clipLength(seconds: number): string {
+  const whole = Math.round(seconds);
+  return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
+}
+
+/** Where a muted clip rests: half a second in, since a first frame is often
+ * black. Also the media fragment the `<video>` loads with, so the browser
+ * draws that frame as its poster. */
+const POSTER_TIME = 0.5;
+
+interface FileTileProps {
+  asset: MediaFileSummary;
+  listing: string | null;
+  inListing: boolean;
+  onToggle: () => void;
+  onFocus: () => void;
+}
+
+/** One file in the list: a picture for an image, a first frame and a length
+ * for a video. */
+function FileTile({ asset, listing, inListing, onToggle, onFocus }: FileTileProps) {
+  const video = useRef<HTMLVideoElement>(null);
+  const [length, setLength] = useState<number | null>(null);
+  const isVideo = asset.kind === "video";
+
+  function play() {
+    const clip = video.current;
+    if (clip === null) return;
+    clip.currentTime = 0;
+    // A browser may refuse autoplay; the poster frame stays, which is fine.
+    void clip.play()?.catch(() => {});
+  }
+
+  function rest() {
+    const clip = video.current;
+    if (clip === null) return;
+    clip.pause();
+    clip.currentTime = POSTER_TIME;
+  }
+
+  return (
+    <button
+      type="button"
+      className={inListing ? "loc-img loc-img--in" : "loc-img"}
+      aria-pressed={inListing}
+      aria-label={asset.name}
+      onClick={onToggle}
+      onMouseEnter={() => {
+        onFocus();
+        if (isVideo) play();
+      }}
+      onMouseLeave={isVideo ? rest : undefined}
+    >
+      <span className="loc-img__face">
+        {isVideo ? (
+          <>
+            <video
+              ref={video}
+              src={`${pictureFor(asset.ref, null, "full", listing)}#t=${POSTER_TIME}`}
+              preload="metadata"
+              muted
+              loop
+              playsInline
+              onLoadedMetadata={(event) => setLength(event.currentTarget.duration)}
+            />
+            <span className="loc-img__badge">
+              {length === null ? "▶" : `▶ ${clipLength(length)}`}
+            </span>
+          </>
+        ) : (
+          <img src={pictureFor(asset.ref, null, "tile", listing)} alt="" loading="lazy" />
+        )}
+      </span>
+      <span className="loc-img__name">{asset.name}</span>
+    </button>
+  );
+}
+
 export function MediaLocator({
   detail,
   templates,
+  local,
   shared,
   onToggleTemplate,
-  onToggleShared,
+  onToggleFile,
   onAddMissingColours,
   onToggleSwatchSource,
   onFocus,
@@ -60,7 +147,27 @@ export function MediaLocator({
   const filtered = templates
     .filter((t) => t.status === "calibrated")
     .filter((t) => t.name.toLowerCase().includes(needle));
-  const filteredShared = shared.filter((a) => a.name.toLowerCase().includes(needle));
+  const matches = (a: MediaFileSummary) => a.name.toLowerCase().includes(needle);
+  const listing = detail.name || null;
+  const groups = [
+    ...(local === null
+      ? []
+      : [
+          {
+            label: "This listing · ./",
+            files: local,
+            empty: `Nothing in listings/${detail.name}/ yet — a close-up or a clip saved there appears here.`,
+          },
+        ]),
+    {
+      label: "Shared · common-media/",
+      files: shared,
+      empty:
+        "Nothing in common-media/ yet — drop a sizing chart or a size-guide video there and it appears here.",
+    },
+  ];
+  const nothingMatches =
+    groups.some((g) => g.files.length > 0) && groups.every((g) => !g.files.some(matches));
   const swatchTemplate = detail.etsy.variation_images ?? null;
 
   function entriesFor(template: string): number {
@@ -70,12 +177,12 @@ export function MediaLocator({
   return (
     <div className="locator">
       <div className="locator__head">
-        <span className="locator__title">Add images</span>
+        <span className="locator__title">Add media</span>
         <span className="locator__hint">Hover to preview · click to add</span>
       </div>
 
       <div className="seg">
-        {(["templates", "images"] as LocatorMode[]).map((m) => (
+        {(["templates", "files"] as LocatorMode[]).map((m) => (
           <button
             key={m}
             type="button"
@@ -89,7 +196,7 @@ export function MediaLocator({
               setQuery("");
             }}
           >
-            {m === "templates" ? "Mockup templates" : "Images"}
+            {m === "templates" ? "Mockup templates" : "Files"}
           </button>
         ))}
       </div>
@@ -102,41 +209,38 @@ export function MediaLocator({
         <input
           className="input"
           type="text"
-          placeholder={mode === "templates" ? "Search templates…" : "Search common-media…"}
+          placeholder={mode === "templates" ? "Search templates…" : "Search files…"}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
         />
       </div>
 
-      {mode === "images" && (
+      {mode === "files" && (
         <div className="locator__list">
-          <div className="loc-images">
-            {filteredShared.map((asset) => {
-              const inListing = detail.media.includes(asset.ref);
-              return (
-                <button
-                  key={asset.name}
-                  type="button"
-                  className={inListing ? "loc-img loc-img--in" : "loc-img"}
-                  aria-pressed={inListing}
-                  onClick={() => onToggleShared(asset.ref)}
-                  onMouseEnter={() => onFocus({ kind: "shared", asset })}
-                >
-                  <span className="loc-img__face">
-                    <img src={commonMediaThumbnailUrl(asset.name)} alt="" loading="lazy" />
-                  </span>
-                  <span className="loc-img__name">{asset.name}</span>
-                </button>
-              );
-            })}
-          </div>
-          {filteredShared.length === 0 && (
-            <p className="locator__empty">
-              {shared.length === 0
-                ? "Nothing in common-media/ yet — drop a sizing chart or care instructions there and it appears here."
-                : "No shared image matches that search."}
-            </p>
-          )}
+          {groups.map((g) => {
+            const visible = g.files.filter(matches);
+            return (
+              <div key={g.label} role="group" aria-label={g.label} className="loc-group">
+                <span className="loc-group__label">{g.label}</span>
+                {visible.length > 0 && (
+                  <div className="loc-images">
+                    {visible.map((asset) => (
+                      <FileTile
+                        key={asset.ref}
+                        asset={asset}
+                        listing={listing}
+                        inListing={detail.media.includes(asset.ref)}
+                        onToggle={() => onToggleFile(asset.ref)}
+                        onFocus={() => onFocus({ kind: "file", asset })}
+                      />
+                    ))}
+                  </div>
+                )}
+                {g.files.length === 0 && <p className="locator__empty">{g.empty}</p>}
+              </div>
+            );
+          })}
+          {nothingMatches && <p className="locator__empty">No file matches that search.</p>}
         </div>
       )}
 

@@ -3316,11 +3316,46 @@ table.listings tbody tr:last-child td {
   overflow: hidden;
 }
 
-.loc-img__face img {
+.loc-img__face img,
+.loc-img__face video {
   width: 100%;
   height: 100%;
   object-fit: cover;
   display: block;
+}
+
+/* A video's face draws its own first frame; the badge says it is a clip and
+   how long (PRD 71). Same chip as the reel's position number. */
+.loc-img__face {
+  position: relative;
+}
+
+.loc-img__badge {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--color-neutral-900) 78%, transparent);
+  color: var(--color-bg);
+  font-size: 9.5px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The file list's two groups, one per root a ref can name (PRD 72). */
+.loc-group + .loc-group {
+  margin-top: var(--space-3);
+}
+
+.loc-group__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
 .loc-img__name {

@@ -55,6 +55,7 @@ function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSum
 
 beforeEach(() => {
   vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
+  vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([]);
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -457,12 +458,12 @@ describe("ImagesTab's shared images (common-media/)", () => {
     return onUpdate;
   }
 
-  it("browses templates until you ask for images", async () => {
+  it("browses templates until you ask for files", async () => {
     renderShared();
     await screen.findByText("flat-lay-01");
     expect(screen.queryByText("size-guide.png")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Images" }));
+    fireEvent.click(screen.getByRole("button", { name: "Files" }));
 
     expect(await screen.findByText("size-guide.png")).toBeInTheDocument();
     expect(screen.queryByText("flat-lay-01")).not.toBeInTheDocument();
@@ -472,7 +473,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
     /* `media:` holds these as a plain string ref (PRD 72), not as a
        {template, colour} entry. */
     const onUpdate = renderShared();
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
     fireEvent.click(await screen.findByRole("button", { name: "size-guide.png" }));
 
     expect(onUpdate).toHaveBeenCalledWith({ media: ["common-media/size-guide.png"] });
@@ -480,7 +481,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
 
   it("takes one back out when it is already in the listing", async () => {
     const onUpdate = renderShared({ media: ["common-media/size-guide.png"] });
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
     fireEvent.click(await screen.findByRole("button", { name: "size-guide.png" }));
 
     expect(onUpdate).toHaveBeenCalledWith({ media: [] });
@@ -488,7 +489,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
 
   it("previews one, naming the file it would upload", async () => {
     renderShared();
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
     fireEvent.mouseEnter(await screen.findByRole("button", { name: "care-instructions.png" }));
 
     expect(screen.getByAltText("care-instructions")).toHaveAttribute(
@@ -510,8 +511,8 @@ describe("ImagesTab's shared images (common-media/)", () => {
 
   it("searches shared assets by name", async () => {
     renderShared();
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
-    fireEvent.change(screen.getByPlaceholderText("Search common-media…"), {
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.change(screen.getByPlaceholderText("Search files…"), {
       target: { value: "care" },
     });
 
@@ -524,8 +525,67 @@ describe("ImagesTab's shared images (common-media/)", () => {
     vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
     render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
-    expect(await screen.findByText(/common-media\//)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    expect(await screen.findByText(/Nothing in common-media\//)).toBeInTheDocument();
+  });
+});
+
+describe("ImagesTab's own files (./) and videos (PRD 71, 72)", () => {
+  const CLOSE_UP: MediaFileSummary = {
+    name: "close-up.mp4",
+    file: "listings/take-a-hike/close-up.mp4",
+    ref: "./close-up.mp4",
+    kind: "video",
+  };
+
+  it("lists the listing's own files, asked for by the listing's name", async () => {
+    const list = vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+
+    expect(await screen.findByRole("button", { name: "close-up.mp4" })).toBeInTheDocument();
+    expect(list).toHaveBeenCalledWith("take-a-hike");
+  });
+
+  it("asks nothing for a draft, which has no directory of its own", async () => {
+    const list = vi.spyOn(listingsApi, "listListingMediaFiles");
+    render(<ImagesTab detail={detail({ name: "" })} onUpdate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+
+    expect(screen.queryByRole("group", { name: /This listing/ })).not.toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("puts a first video at position 2, behind the thumbnail", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    const onUpdate = vi.fn();
+    render(<ImagesTab detail={detail({ media: ["a.png", "b.png"] })} onUpdate={onUpdate} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.click(await screen.findByRole("button", { name: "close-up.mp4" }));
+
+    expect(onUpdate).toHaveBeenCalledWith({ media: ["a.png", "./close-up.mp4", "b.png"] });
+  });
+
+  it("writes nothing for a video there is no thumbnail to go behind", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    const onUpdate = vi.fn();
+    render(<ImagesTab detail={detail()} onUpdate={onUpdate} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.click(await screen.findByRole("button", { name: "close-up.mp4" }));
+
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("says so when the listing's files cannot be loaded", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockRejectedValue(new Error("boom"));
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    expect(await screen.findByText("failed to load this listing's files")).toBeInTheDocument();
   });
 });
 

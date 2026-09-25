@@ -24,7 +24,7 @@ import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../typ
  * `multiple`/`single` template always is. */
 export type Focus =
   | { kind: "template"; template: string; colour: string | null }
-  | { kind: "shared"; asset: MediaFileSummary };
+  | { kind: "file"; asset: MediaFileSummary };
 
 /** Everything the preview pane and its foot need, for one focus. */
 export interface FocusView {
@@ -47,11 +47,11 @@ export function viewFocus(
   templates: readonly TemplateSummary[],
   design: string | null,
 ): FocusView {
-  if (focus.kind === "shared") {
+  if (focus.kind === "file") {
     return {
       title: refName(focus.asset.ref),
       path: focus.asset.file,
-      picture: pictureFor(focus.asset.ref, design),
+      picture: pictureFor(focus.asset.ref, design, "full", detail.name || null),
       inListing: detail.media.includes(focus.asset.ref),
       reelIndex: detail.media.indexOf(focus.asset.ref),
     };

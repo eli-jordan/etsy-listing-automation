@@ -25,7 +25,8 @@ function reel(over: Partial<Parameters<typeof MediaReel>[0]> = {}) {
     design: null,
     swatchTemplate: null,
     selectedIndex: null,
-    shared: [SIZING],
+    listing: "take-a-hike" as string | null,
+    files: [SIZING],
     onOpen: vi.fn(),
     onRemove: vi.fn(),
     onReorder: vi.fn(),
@@ -50,6 +51,19 @@ describe("MediaReel", () => {
   it("says how full the listing is against Etsy's ceiling", () => {
     reel({ media: THREE });
     expect(screen.getByText("3 of 20")).toBeTruthy();
+  });
+
+  it("counts images against the ceiling, not videos, which Etsy caps apart (PRD 71)", () => {
+    reel({ media: [THREE[0] as MediaEntry, "common-media/intro.mp4", ...THREE.slice(1)] });
+    expect(screen.getByText("3 of 20")).toBeTruthy();
+  });
+
+  it("draws one of the listing's own files from under that listing", () => {
+    reel({ media: ["./shots/back.png"] });
+    expect(screen.getByAltText("back")).toHaveAttribute(
+      "src",
+      "/api/listings/take-a-hike/media-files/shots/back.png/thumbnail",
+    );
   });
 
   it("marks the first tile as the Etsy thumbnail, and only the first", () => {
@@ -137,11 +151,11 @@ describe("MediaReel's other clicks", () => {
   it("previews a shared tile on hover", () => {
     const props = reel({ media: THREE });
     fireEvent.mouseEnter(document.querySelectorAll(".rtile__face")[2] as HTMLElement);
-    expect(props.onFocus).toHaveBeenCalledWith({ kind: "shared", asset: SIZING });
+    expect(props.onFocus).toHaveBeenCalledWith({ kind: "file", asset: SIZING });
   });
 
   it("stays silent for a ref whose file has gone from common-media/", () => {
-    const props = reel({ media: ["common-media/deleted.png"], shared: [SIZING] });
+    const props = reel({ media: ["common-media/deleted.png"], files: [SIZING] });
     fireEvent.mouseEnter(document.querySelectorAll(".rtile__face")[0] as HTMLElement);
     expect(props.onFocus).not.toHaveBeenCalled();
     expect(screen.getByText("deleted")).toBeTruthy();

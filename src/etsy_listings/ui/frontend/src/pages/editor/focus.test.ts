@@ -33,7 +33,7 @@ function listing(media: MediaEntry[]): ListingDetail {
 }
 
 const ON_TEMPLATE: Focus = { kind: "template", template: "flat-lay-01", colour: "black" };
-const ON_SHARED: Focus = { kind: "shared", asset: SIZING };
+const ON_SHARED: Focus = { kind: "file", asset: SIZING };
 
 describe("viewFocus, for a template", () => {
   it("reports it as in the listing when media carries it", () => {
