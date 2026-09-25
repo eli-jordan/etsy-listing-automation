@@ -247,6 +247,10 @@ class _StagePlanDTO(BaseModel):
 
     outcome: StageOutcomeDTO
     drift: tuple[DriftDTO, ...] = ()
+    group: str | None = None
+    """The stage this one is shown under -- the engine's answer, carried
+    so the review nests ``etsy_videos`` under ``etsy_media`` without
+    inferring it from a name (PRD 71)."""
 
 
 class RenderStagePlanDTO(_StagePlanDTO):
@@ -307,6 +311,7 @@ def _stage_plan_fields(stage_plan: StagePlan) -> dict[str, Any]:
     return {
         "outcome": outcome,
         "drift": tuple(_drift_dto(d) for d in stage_plan.drift),
+        "group": stage_plan.group,
     }
 
 

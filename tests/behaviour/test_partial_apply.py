@@ -58,6 +58,7 @@ class _Stage:
 
     name: str
     local: bool = True
+    group: str | None = None
     applied_model: type[_AppliedDoc] = _AppliedDoc
     remote: dict[str, Any] = field(default_factory=dict)
     fails: bool = False

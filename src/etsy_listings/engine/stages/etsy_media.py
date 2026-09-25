@@ -225,6 +225,7 @@ def _manifest_entry(
 class EtsyMediaStage:
     name = "etsy_media"
     local = False
+    group: str | None = None
     applied_model = AppliedEtsyMedia
 
     def desired(

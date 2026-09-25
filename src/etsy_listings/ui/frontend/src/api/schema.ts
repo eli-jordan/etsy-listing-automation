@@ -1347,6 +1347,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -1379,6 +1381,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -2001,6 +2005,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -2072,6 +2078,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -2133,6 +2141,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -2159,6 +2169,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]

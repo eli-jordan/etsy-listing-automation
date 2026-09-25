@@ -887,6 +887,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -967,6 +978,17 @@
             },
             "title": "Drift",
             "type": "array"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
           },
           "outcome": {
             "discriminator": {
@@ -2448,6 +2470,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -2602,6 +2635,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -2734,6 +2778,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -2807,6 +2862,17 @@
             },
             "title": "Drift",
             "type": "array"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
           },
           "outcome": {
             "discriminator": {
