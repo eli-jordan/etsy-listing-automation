@@ -400,6 +400,16 @@ that talks to Etsy or Printify.
    - assert the browser actually decoded the video: its `videoWidth` is the
      fixture's pixel width
 
+**As built.** Where the implementation settled a detail differently:
+
+| Item | Settled as | Why |
+|---|---|---|
+| 1 | While a video holds position 2, an image's move is made among the other entries and the featured video is put back at 2. Only a move the rules cannot take snaps back: a video on the thumbnail, an image on the featured slot, the featured video dragged past an image. A refused drop target is drawn refused while the tile is carried, through `mediaEdits.canReorder` | A plain splice pushed the featured video to 3 whenever an image moved to the thumbnail, so with a video in the listing the thumbnail could not be changed by drag at all |
+| 1 | The locator and the reel share `components/MutedClip` and `hooks/useHoverPlay` | Two copies of the poster-frame and hover-play rules had already started to exist |
+| 2 | The preview pane lists the listing check's issues for the focused file, matched by `where` being `Listing Images › {ref}`, the location `check_videos` gives each one | That is where the audio note is about; the banner above the tabs still shows it too |
+| 3 | `etsy_videos`' changes carry refs (see PR 4's table). New is a ref that arrives in a slot without leaving one; Removed is one that leaves without arriving; new bytes on a ref (`.contents`) are both. A video this tool never uploaded is Removed whenever the stage will run, since the run sweeps it. A **Videos** impact tag joins the headline | The badges read only the engine's changes and outcome (A2); a swap moves two refs and marks neither |
+| 3 | "Nested under Etsy media" is the step strip: a stage whose `group` is in the plan is drawn inside that stage's labelled group. The batch view keys its tiles by stage name and shows an **Etsy videos** tile of its own | The strip is where a stage is drawn; the comparison's Videos block already sits below Images |
+
 **Success conditions (added to the common list):**
 - Vitest covers the reel's drag rules, the Featured label and the preview
   switching between `<img>` and `<video>`. It also covers the review tiles
