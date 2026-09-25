@@ -5235,3 +5235,119 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
   font-size: 13px;
   color: var(--color-text);
 }
+
+/* The desktop shell deliberately spends 240px on persistent navigation. On a
+   phone that leaves too little room for any workflow, so the same labeled
+   navigation becomes a compact two-row header and the page owns the viewport. */
+@media (max-width: 700px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    border-right: 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .sidebar__brand {
+    padding: 0;
+  }
+
+  .sidebar__nav {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: var(--space-2);
+  }
+
+  .sidebar__bottom {
+    display: none;
+  }
+
+  .nav-item {
+    gap: 5px;
+    padding: 6px 5px;
+    font-size: 11.5px;
+  }
+
+  .nav-item svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .shell__main {
+    width: 100%;
+    padding: var(--space-4) var(--space-3);
+  }
+
+  .page-head__title,
+  .page-head__crumb,
+  .design-row__file,
+  .preview-meta__path {
+    overflow-wrap: anywhere;
+  }
+
+  .page-head__actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .page-head__name {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .status-tag__hint {
+    right: 0;
+    left: auto;
+    max-width: calc(100vw - (2 * var(--space-3)));
+  }
+
+  .toolbar__search {
+    width: 100%;
+  }
+
+  table.listings {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
+  .tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tabs .seg-opt {
+    justify-content: center;
+    min-width: 0;
+    padding-inline: var(--space-2);
+    text-align: center;
+  }
+
+  .layout--variants,
+  .images-tab {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-stage--large {
+    min-height: 280px;
+  }
+
+  .dv-col {
+    padding-inline: var(--space-3);
+  }
+}
