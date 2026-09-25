@@ -63,6 +63,18 @@ export function ListingEditorPage() {
   // GET could answer with a document older than the save the unmounting editor
   // just flushed.
   const handed = (useLocation().state as { listing?: ListingDetail } | null)?.listing ?? null;
+  // Used once, then dropped from the browser's history entry: a reload keeps
+  // history state, and the handed document is the listing as it was named,
+  // long since changed on disk. `window.history` directly, not `navigate`,
+  // because React Router does not watch it -- this page must not re-render
+  // (and remount the editor) over it; only the next load must not see it.
+  useEffect(() => {
+    if (handed === null) return;
+    const entry = window.history.state as Record<string, unknown> | null;
+    if (entry !== null && typeof entry === "object" && "usr" in entry) {
+      window.history.replaceState({ ...entry, usr: null }, "");
+    }
+  }, [handed]);
   const [fetched, setFetched] = useState<ListingDetail | null>(null);
   const [loadError, setLoadError] = useState("");
 

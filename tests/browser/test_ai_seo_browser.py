@@ -1255,6 +1255,41 @@ def test_the_create_flow_drafts_once_the_picked_design_is_saved(
         assert provider.calls == ["brief", "queries", "seo"]
 
 
+def test_a_reload_after_naming_shows_the_file_not_the_named_draft(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """Naming a draft hands the freshly written listing to the new route in
+    the navigation's state, and a reload keeps that state. Found against a
+    real workspace: a reload mid-run showed the listing as the create wrote
+    it -- no garment profile, every issue that implies -- though the file had
+    moved on. A reload must read the file."""
+    _seed_prompt(workspace_root)
+    write_design(workspace_root, (4000, 4000), name="second-design")
+    (workspace_root / "listings" / LISTING / "listing.yaml").unlink()
+
+    with (
+        _seo_server(
+            workspace_root, prerequisite_missing, providers=[_ready_provider()]
+        ) as base_url,
+        _seo_page(browser_type, base_url, path="/listings/new") as page,
+    ):
+        _pick_another_design(page, "second-design")
+        page.wait_for_url("**/listings/second-design")
+        page.get_by_label("Garment profile").select_option("comfort-colors-1717")
+        for _ in range(100):
+            if _listing_yaml(workspace_root, "second-design").get("garment_profile"):
+                break
+            page.wait_for_timeout(100)
+        else:  # pragma: no cover - only on a pathologically slow machine
+            raise AssertionError("the garment profile never reached listing.yaml")
+
+        page.reload()
+
+        garment = page.get_by_label("Garment profile")
+        garment.wait_for(state="visible")
+        assert garment.input_value() == "comfort-colors-1717"
+
+
 def test_the_page_head_names_the_brief_step_while_it_runs(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
