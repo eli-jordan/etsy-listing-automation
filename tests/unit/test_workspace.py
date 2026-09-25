@@ -251,7 +251,8 @@ def test_common_media_file_takes_the_path_under_common_media_as_is(
 
 
 @pytest.mark.parametrize(
-    "name", ["../shop.yaml", "videos/../../shop.yaml", "", "a//b.png", "C:x.png", "a\\b.png"]
+    "name",
+    ["../shop.yaml", "videos/../../shop.yaml", "", "a//b.png", "C:x.png", "a\\b.png", "notes.txt"],
 )
 def test_common_media_file_refuses_a_path_that_could_leave_common_media(
     workspace_root: Path, name: str
@@ -260,6 +261,20 @@ def test_common_media_file_refuses_a_path_that_could_leave_common_media(
     ws = Workspace.discover(root_override=workspace_root)
     with pytest.raises(InvalidNameError):
         ws.common_media_file(name)
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need elevation on Windows")
+def test_common_media_refuses_a_symlink_out_of_common_media(workspace_root: Path) -> None:
+    """Inside the root is not enough: `shop.yaml` behind a `.png` name is not
+    a shared picture, and neither listed nor served."""
+    shared = workspace_root / "common-media"
+    shared.mkdir()
+    (shared / "shop.png").symlink_to(workspace_root / "shop.yaml")
+
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.common_media_files() == []
+    with pytest.raises(InvalidNameError):
+        ws.common_media_file("shop.png")
 
 
 def test_common_media_files_is_empty_when_the_directory_is_absent(workspace_root: Path) -> None:

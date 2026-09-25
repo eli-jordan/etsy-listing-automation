@@ -105,6 +105,39 @@ def _segment(name: str) -> str:
     return name
 
 
+class NotAMediaFileError(InvalidNameError):
+    """A path, from a URL, that does not name an image or video in the
+    directory it was asked of (PRD 71).
+
+    An :class:`InvalidNameError`, so the UI's one handler turns it into a
+    ``400`` like any other name it cannot use."""
+
+    def __init__(self, path: str, directory: Path) -> None:
+        ValueError.__init__(self, f"{path!r} is not a media file in {directory.name}/")
+
+
+_MEDIA_EXTENSIONS: tuple[str, ...] = (*IMAGE_EXTENSIONS, *VIDEO_EXTENSIONS)
+
+
+def _is_media_file_in(path: Path, directory: Path) -> bool:
+    """Is ``path`` an image or video that really sits inside ``directory``?
+
+    Judged on the *resolved* path, both halves: a symlink inside the directory
+    may point at another listing's files, or at ``shop.yaml`` behind a ``.png``
+    name. Inside the workspace root is not enough -- these directories are
+    what a picture endpoint serves, and they hold ``listing.yaml`` and the
+    lockfile beside the pictures. The extension is matched case-insensitively,
+    as :func:`~etsy_listings.config.media.media_kind` matches it, and it is
+    also what keeps those two files out.
+    """
+    if not path.is_file():
+        return False
+    target = path.resolve()
+    if not target.is_relative_to(directory.resolve()):
+        return False
+    return path.suffix.lower() in _MEDIA_EXTENSIONS and target.suffix.lower() in _MEDIA_EXTENSIONS
+
+
 class AmbiguousColourSuffixError(ValueError):
     """More than one photo in a template's directory ends in the same colour
     slug's hyphen segments, so :func:`Workspace.template_base_image`'s
@@ -431,13 +464,10 @@ class Workspace:
 
         Taken as written, with no extension appended: a shared file may be a
         JPEG or a video (PRD 71) and may sit in a subdirectory, so the name
-        has to say which. Each segment goes through the same single-segment
-        rule every other layout accessor applies, because this one takes
-        names from URLs too (A8); :meth:`resolve` then catches a symlink out
-        of the root.
+        has to say which. See :meth:`_media_file_in` for the boundary it
+        enforces; it takes names from URLs (A8).
         """
-        segments = [_segment(segment) for segment in path.split("/")]
-        return self.resolve("/".join(segments), relative_to=self.common_media_dir())
+        return self._media_file_in(self.common_media_dir(), path)
 
     def common_media_files(self) -> list[Path]:
         """Every image and video under ``common-media/``, recursively: the
@@ -451,13 +481,38 @@ class Workspace:
         by path rather than mtime -- unlike a design, a shared asset is
         written once and reused for years, so recency says nothing useful.
         """
-        shared = self.common_media_dir()
-        if not shared.is_dir():
+        return self._media_files_in(self.common_media_dir())
+
+    def _media_file_in(self, directory: Path, path: str) -> Path:
+        """``path`` under ``directory``, refused unless it names an image or
+        video there.
+
+        Every segment goes through the single-segment rule every other layout
+        accessor applies, which is what stops ``..``. The escape check is then
+        tighter than :meth:`resolve`'s: the resolved file has to be inside
+        *this directory*, not merely inside the root, so a symlink to another
+        listing or to ``shop.yaml`` is refused. The file need not exist -- a
+        missing one is the caller's ``404``, not a refusal.
+        """
+        joined = "/".join(_segment(segment) for segment in path.split("/"))
+        if Path(joined).suffix.lower() not in _MEDIA_EXTENSIONS:
+            raise NotAMediaFileError(path, directory)
+        try:
+            candidate = self.resolve(joined, relative_to=directory)
+        except PathEscapesWorkspaceError as exc:
+            raise NotAMediaFileError(path, directory) from exc
+        if not candidate.is_relative_to(directory.resolve()):
+            raise NotAMediaFileError(path, directory)
+        if candidate.suffix.lower() not in _MEDIA_EXTENSIONS:
+            raise NotAMediaFileError(path, directory)
+        return candidate
+
+    def _media_files_in(self, directory: Path) -> list[Path]:
+        if not directory.is_dir():
             return []
-        allowed = (*IMAGE_EXTENSIONS, *VIDEO_EXTENSIONS)
         return sorted(
-            (p for p in shared.rglob("*") if p.is_file() and p.suffix.lower() in allowed),
-            key=lambda p: p.relative_to(shared).as_posix(),
+            (p for p in directory.rglob("*") if _is_media_file_in(p, directory)),
+            key=lambda p: p.relative_to(directory).as_posix(),
         )
 
     def seo_prompt_file(self) -> Path:
