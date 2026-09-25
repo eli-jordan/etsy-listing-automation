@@ -17,7 +17,8 @@ import { POSTER_TIME } from "../hooks/useHoverPlay";
 
 interface Props {
   src: string;
-  clipRef: RefObject<HTMLVideoElement | null>;
+  /** `useHoverPlay`'s, for a clip that plays on hover; a still one needs none. */
+  clipRef?: RefObject<HTMLVideoElement | null>;
   label?: string;
   onDuration?: (seconds: number) => void;
 }

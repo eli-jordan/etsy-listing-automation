@@ -137,3 +137,8 @@ export type EtsyListingSnapshot = components["schemas"]["EtsyListingSnapshot"];
 export type DesiredImageSnapshot = components["schemas"]["DesiredImageSnapshot"];
 export type LiveImageSnapshot = components["schemas"]["LiveImageSnapshot"];
 export type EtsyMediaSnapshot = components["schemas"]["EtsyMediaSnapshot"];
+
+/** `engine/stages/etsy_videos.py`'s `EtsyVideosSnapshot` (PRD 71). */
+export type DesiredVideoSnapshot = components["schemas"]["DesiredVideoSnapshot"];
+export type LiveVideoSnapshot = components["schemas"]["LiveVideoSnapshot"];
+export type EtsyVideosSnapshot = components["schemas"]["EtsyVideosSnapshot"];

@@ -4020,6 +4020,17 @@ table.listings tbody tr:last-child td {
   grid-column: span 2;
   grid-row: span 2;
 }
+/* Videos have slots, not ranks (decision 9): no big first tile. */
+.dv-gallery--videos .dv-thumb-wrap:first-child {
+  grid-column: auto;
+  grid-row: auto;
+}
+.dv-thumb__caption {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
 .dv-block {
   border-radius: var(--radius-sm);
   padding: 8px 10px;
@@ -4142,7 +4153,8 @@ table.listings tbody tr:last-child td {
   align-items: center;
   justify-content: center;
 }
-.dv-thumb img {
+.dv-thumb img,
+.dv-thumb video {
   display: block;
   width: 100%;
   height: 100%;
