@@ -3403,7 +3403,8 @@ table.listings tbody tr:last-child td {
   padding: var(--space-2);
 }
 
-.preview-stage--large img {
+.preview-stage--large img,
+.preview-stage--large video {
   max-width: 100%;
   max-height: min(1024px, calc(100vh - 260px));
 }
@@ -3486,6 +3487,18 @@ table.listings tbody tr:last-child td {
   font-size: 10.5px;
   font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* What the listing's check says about the file on the stage (PRD 71). */
+.preview-meta__note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+
+.preview-meta__note--block {
+  color: var(--color-danger);
 }
 
 .preview-actions {

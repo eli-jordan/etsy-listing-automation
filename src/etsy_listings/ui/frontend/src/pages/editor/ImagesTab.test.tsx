@@ -580,6 +580,83 @@ describe("ImagesTab's own files (./) and videos (PRD 71, 72)", () => {
     expect(onUpdate).not.toHaveBeenCalled();
   });
 
+  it("previews a hovered video with a playable <video>, not an <img>", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    render(
+      <ImagesTab detail={detail({ media: ["a.png", "./close-up.mp4"] })} onUpdate={vi.fn()} />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "close-up.mp4" }));
+
+    const stage = document.querySelector(".preview-stage") as HTMLElement;
+    const clip = stage.querySelector("video");
+    expect(clip).toHaveAttribute("src", "/api/listings/take-a-hike/media-files/close-up.mp4/file");
+    expect(clip).toHaveAttribute("controls");
+    expect(stage.querySelector("img")).toBeNull();
+  });
+
+  it("goes back to an <img> when an image is hovered after a video", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([
+      CLOSE_UP,
+      { name: "back.png", file: "listings/take-a-hike/back.png", ref: "./back.png", kind: "image" },
+    ]);
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "close-up.mp4" }));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "back.png" }));
+
+    const stage = document.querySelector(".preview-stage") as HTMLElement;
+    expect(stage.querySelector("video")).toBeNull();
+    expect(stage.querySelector("img")).toHaveAttribute(
+      "src",
+      "/api/listings/take-a-hike/media-files/back.png/file",
+    );
+  });
+
+  it("shows the focused video's own notes under the preview -- Etsy strips its sound", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    const note =
+      "./close-up.mp4 has a sound track; Etsy strips the sound, so buyers see it silent.";
+    render(
+      <ImagesTab
+        detail={detail({
+          media: ["a.png", "./close-up.mp4"],
+          issues: [
+            {
+              severity: "info",
+              tab: "images",
+              where: "Listing Images › ./close-up.mp4",
+              message: note,
+            },
+            { severity: "warn", tab: "images", where: "Listing Images › a.png", message: "other" },
+          ],
+        })}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "close-up.mp4" }));
+
+    const foot = document.querySelector(".preview-foot") as HTMLElement;
+    expect(foot).toHaveTextContent(note);
+    expect(foot).not.toHaveTextContent("other");
+  });
+
+  it("opens a video from the reel in the lightbox as a playable clip", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    render(
+      <ImagesTab detail={detail({ media: ["a.png", "./close-up.mp4"] })} onUpdate={vi.fn()} />,
+    );
+
+    fireEvent.click(document.querySelectorAll(".rtile__face")[1] as HTMLElement);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.querySelector("video")).toHaveAttribute("controls");
+  });
+
   it("says so when the listing's files cannot be loaded", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
     vi.spyOn(listingsApi, "listListingMediaFiles").mockRejectedValue(new Error("boom"));

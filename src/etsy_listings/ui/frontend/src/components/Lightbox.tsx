@@ -19,6 +19,8 @@ export interface LightboxItem {
   id: string;
   label: string;
   url: string;
+  /** A video plays with the browser's own controls instead (PRD 71). */
+  kind?: "image" | "video";
 }
 
 interface Props {
@@ -117,7 +119,19 @@ export function Lightbox({
       </div>
 
       <div className={actualSize ? "lightbox__stage lightbox__stage--actual" : "lightbox__stage"}>
-        <img src={item.url} alt={item.label} className="lightbox__image" />
+        {item.kind === "video" ? (
+          <video
+            key={item.id}
+            src={item.url}
+            aria-label={item.label}
+            className="lightbox__image"
+            controls
+            playsInline
+            preload="metadata"
+          />
+        ) : (
+          <img src={item.url} alt={item.label} className="lightbox__image" />
+        )}
       </div>
     </div>
   );

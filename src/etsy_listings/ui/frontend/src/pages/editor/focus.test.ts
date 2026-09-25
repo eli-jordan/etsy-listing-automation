@@ -29,7 +29,7 @@ const SIZING: MediaFileSummary = {
 };
 
 function listing(media: MediaEntry[]): ListingDetail {
-  return { media } as ListingDetail;
+  return { media, issues: [] } as unknown as ListingDetail;
 }
 
 const ON_TEMPLATE: Focus = { kind: "template", template: "flat-lay-01", colour: "black" };
@@ -93,5 +93,23 @@ describe("viewFocus, for a shared asset", () => {
   it("shows the file itself, never a render -- it is already what Etsy gets", () => {
     const view = viewFocus(ON_SHARED, listing([]), [], "take-a-hike");
     expect(view.picture).toBe("/api/common-media/sizing.png/file");
+  });
+});
+
+describe("viewFocus, for what kind of thing it is (PRD 71)", () => {
+  it("says a template is an image", () => {
+    expect(viewFocus(ON_TEMPLATE, listing([]), [FLAT_LAY], null).kind).toBe("image");
+  });
+
+  it("says a clip is a video, and points at its file rather than a thumbnail", () => {
+    const clip: MediaFileSummary = {
+      name: "intro.mp4",
+      file: "common-media/intro.mp4",
+      ref: "common-media/intro.mp4",
+      kind: "video",
+    };
+    const view = viewFocus({ kind: "file", asset: clip }, listing([]), [], null);
+    expect(view.kind).toBe("video");
+    expect(view.picture).toBe("/api/common-media/intro.mp4/file");
   });
 });

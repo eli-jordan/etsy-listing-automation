@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { MutedClip, useHoverPlay } from "../../components/MutedClip";
+import { MutedClip } from "../../components/MutedClip";
+import { useHoverPlay } from "../../hooks/useHoverPlay";
 import { mediaKind, mediaLabel, pictureFor } from "../../media";
 import type { MediaFileSummary, MediaEntry } from "../../types";
 import { MAX_IMAGES, MAX_VIDEOS, canReorder } from "./mediaEdits";
@@ -162,7 +163,7 @@ function ReelTile({
   onFocus,
   onRemove,
 }: TileProps) {
-  const clip = useHoverPlay();
+  const { ref: clipRef, play, rest } = useHoverPlay();
   const isVideo = mediaKind(entry) === "video";
   const label = mediaLabel(entry);
   return (
@@ -182,13 +183,13 @@ function ReelTile({
         onClick={onOpen}
         onMouseEnter={() => {
           onFocus();
-          if (isVideo) clip.play();
+          if (isVideo) play();
         }}
-        onMouseLeave={isVideo ? clip.rest : undefined}
+        onMouseLeave={isVideo ? rest : undefined}
       >
         {isVideo ? (
           <>
-            <MutedClip src={picture} clip={clip} label={label} />
+            <MutedClip src={picture} clipRef={clipRef} label={label} />
             <span className="rtile__play" aria-hidden="true">
               ▶
             </span>
@@ -219,7 +220,9 @@ function ReelTile({
           ×
         </span>
         {index === 0 && <span className="rtile__first">Etsy thumbnail</span>}
-        {index === 1 && isVideo && <span className="rtile__first rtile__first--featured">Featured · shown 2nd</span>}
+        {index === 1 && isVideo && (
+          <span className="rtile__first rtile__first--featured">Featured · shown 2nd</span>
+        )}
       </div>
       <span className="rtile__label">{label}</span>
     </div>

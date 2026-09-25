@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { templateThumbnailUrl } from "../../api/calibrator";
-import { MutedClip, useHoverPlay } from "../../components/MutedClip";
+import { MutedClip } from "../../components/MutedClip";
+import { useHoverPlay } from "../../hooks/useHoverPlay";
 import { isInMedia, missingColours, pictureFor } from "../../media";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import type { Focus } from "./focus";
@@ -67,7 +68,7 @@ interface FileTileProps {
 /** One file in the list: a picture for an image, a first frame and a length
  * for a video. */
 function FileTile({ asset, listing, inListing, onToggle, onFocus }: FileTileProps) {
-  const clip = useHoverPlay();
+  const { ref: clipRef, play, rest } = useHoverPlay();
   const [length, setLength] = useState<number | null>(null);
   const isVideo = asset.kind === "video";
 
@@ -80,16 +81,16 @@ function FileTile({ asset, listing, inListing, onToggle, onFocus }: FileTileProp
       onClick={onToggle}
       onMouseEnter={() => {
         onFocus();
-        if (isVideo) clip.play();
+        if (isVideo) play();
       }}
-      onMouseLeave={isVideo ? clip.rest : undefined}
+      onMouseLeave={isVideo ? rest : undefined}
     >
       <span className="loc-img__face">
         {isVideo ? (
           <>
             <MutedClip
               src={pictureFor(asset.ref, null, "full", listing)}
-              clip={clip}
+              clipRef={clipRef}
               onDuration={setLength}
             />
             <span className="loc-img__badge">

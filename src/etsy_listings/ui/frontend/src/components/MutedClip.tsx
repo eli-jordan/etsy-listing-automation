@@ -1,4 +1,5 @@
-import { useRef, type RefObject } from "react";
+import type { RefObject } from "react";
+import { POSTER_TIME } from "../hooks/useHoverPlay";
 
 /**
  * A video drawn as a tile: muted, reading only its metadata, resting on a
@@ -7,53 +8,24 @@ import { useRef, type RefObject } from "react";
  *
  * The locator's file list and the reel both draw clips this way, and the
  * hover belongs to the *holder* -- a locator row, a reel tile's face -- not to
- * the `<video>`, which is why the play and rest actions come out of a hook
- * rather than living inside the element. No poster image is fetched: the
- * `#t=` media fragment makes the browser draw that frame itself, and the
- * thumbnail endpoint refuses a video for exactly that reason.
+ * the `<video>`, which is why the play and rest actions come out of
+ * `useHoverPlay` and the element goes back to it through `clipRef`. No poster
+ * image is fetched: the `#t=` media fragment makes the browser draw that
+ * frame itself, and the thumbnail endpoint refuses a video for exactly that
+ * reason.
  */
-
-/** Where a muted clip rests: half a second in, since a first frame is often
- * black. */
-export const POSTER_TIME = 0.5;
-
-export interface HoverPlay {
-  ref: RefObject<HTMLVideoElement | null>;
-  play: () => void;
-  rest: () => void;
-}
-
-export function useHoverPlay(): HoverPlay {
-  const ref = useRef<HTMLVideoElement>(null);
-  return {
-    ref,
-    play() {
-      const clip = ref.current;
-      if (clip === null) return;
-      clip.currentTime = 0;
-      // A browser may refuse autoplay; the poster frame stays, which is fine.
-      void clip.play()?.catch(() => {});
-    },
-    rest() {
-      const clip = ref.current;
-      if (clip === null) return;
-      clip.pause();
-      clip.currentTime = POSTER_TIME;
-    },
-  };
-}
 
 interface Props {
   src: string;
-  clip: HoverPlay;
+  clipRef: RefObject<HTMLVideoElement | null>;
   label?: string;
   onDuration?: (seconds: number) => void;
 }
 
-export function MutedClip({ src, clip, label, onDuration }: Props) {
+export function MutedClip({ src, clipRef, label, onDuration }: Props) {
   return (
     <video
-      ref={clip.ref}
+      ref={clipRef}
       src={`${src}#t=${POSTER_TIME}`}
       aria-label={label}
       preload="metadata"
