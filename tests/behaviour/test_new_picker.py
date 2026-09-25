@@ -25,7 +25,7 @@ from etsy_listings.clients.printify.models import (
 )
 from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.listing import MAX_MEDIA_ENTRIES
+from etsy_listings.config.media import MAX_IMAGES
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.slug import ColourExceptions, SlugCollisionError
@@ -290,8 +290,8 @@ def test_media_stops_at_etsys_image_limit() -> None:
     colours = [f"colour-{n:02d}" for n in range(33)]
     media = build_media_entries(template="flat-lay-01", kind="colour-matrix", colours=colours)
 
-    assert len(media) == MAX_MEDIA_ENTRIES
-    assert [entry["colour"] for entry in media] == colours[:MAX_MEDIA_ENTRIES]
+    assert len(media) == MAX_IMAGES
+    assert [entry["colour"] for entry in media] == colours[:MAX_IMAGES]
 
 
 def test_a_truncated_stub_still_validates_and_still_sells_every_colour() -> None:
@@ -309,7 +309,7 @@ def test_a_truncated_stub_still_validates_and_still_sells_every_colour() -> None
 
     listing = validate_listing_stub(data, currency="NOK")
     assert len(listing.colors) == 33
-    assert len(listing.media) == MAX_MEDIA_ENTRIES
+    assert len(listing.media) == MAX_IMAGES
 
 
 @pytest.mark.parametrize("kind", ["multiple", "single"])

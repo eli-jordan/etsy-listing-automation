@@ -43,7 +43,7 @@ from pydantic import BaseModel, ConfigDict
 
 from etsy_listings.clients.etsy.listings import EtsyListingClient
 from etsy_listings.clients.etsy.models import VariationImageLink
-from etsy_listings.config.listing import MAX_MEDIA_ENTRIES, TemplateMediaEntry
+from etsy_listings.config.listing import TemplateMediaEntry
 from etsy_listings.engine.change import Action, Drift, MediaChange, Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
@@ -238,12 +238,9 @@ class EtsyMediaStage:
         if blocked is not None:
             return blocked
 
+        # No image-count gate here: `Listing` refuses a gallery over Etsy's
+        # caps when it loads (PRD 71), so a second copy could never fire.
         config = ctx.workspace.load_listing(listing)
-        if len(config.media) > MAX_MEDIA_ENTRIES:
-            return Blocked(
-                f"media has {len(config.media)} entries, over Etsy's "
-                f"{MAX_MEDIA_ENTRIES}-image limit."
-            )
 
         variation_template = config.etsy.variation_images
         if variation_template is not None and not any(
