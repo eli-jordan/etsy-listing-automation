@@ -64,6 +64,12 @@ These drive most of the design, so they are stated up front.
   endpoint** — only delete plus `uploadListingImage` at a `rank`, so image
   idempotency must be hash-driven locally. Limits: 20 images and 2 videos per
   listing, ~10 req/sec, 10k requests/day.
+- **Etsy videos** have no rank, no update and no order parameter — only
+  `uploadListingVideo` (a file, or an existing `video_id`) and
+  `deleteListingVideo`. Where a video appears is decided by *when* it was
+  attached, and cannot be read back through the API at all. Unpublished: at
+  most **10 video associations per listing per 24 hours**, re-attaches
+  included (#71, measured 2026-09-25).
 - **Etsy API access requires app registration and approval.** Not instant, and a
   hard dependency for the entire Etsy half of this tool.
 
@@ -83,6 +89,7 @@ design.png + listing.yaml
         │
         └─► etsy        patch title/desc/tags/section/materials/renewal
                         replace all images in rank order
+                        attach videos in gallery order (#71)
 ```
 
 ### Default workflow
@@ -145,15 +152,18 @@ etsy-listings/
       template.yaml                 # written by the calibrator
       blue-jean.png  black.png  ...
       _derived/                     # displacement + shading maps, generated
-  common-media/
+  common-media/                       # shared images and videos (#71)
     comfort-colors-sizing-chart.png
     care-instructions.png
+    size-guide.mp4
   common-copy/                        # reusable description bodies
     comfort-colors.md                 # title/targets front matter + body
   listings/
     {listing-name}/
       listing.yaml
       state.lock.json
+      close-up.mp4                    # optional media for this listing only,
+                                      # referenced as ./close-up.mp4 (#72)
 ```
 
 **Rendered mockups live in the gitignored `.cache/renders/` directory**, keyed by
@@ -382,12 +392,12 @@ listing must set at least one of `pricing_plan` or `prices`.
 
 ```yaml
 garment_profile: comfort-colors-1717
-design: ../../designs/take-a-hike.png
+design: designs/take-a-hike.png
 colors: [black, blue-jean, ivory, moss]
 brief: >
   Retro 70s sunset mountain scene. Design text reads exactly
   "TAKE A HIKE". Audience: hikers, national-park visitors, outdoorsy gifts.
-pricing_plan: ../../pricing-plans/launch-low.yaml
+pricing_plan: pricing-plans/launch-low.yaml
 prices: {}                 # optional per-size overrides on top of the plan
 price_overrides:           # optional — specialty colours can cost more
   ice-blue: { XXL: 379 NOK }
@@ -402,12 +412,14 @@ etsy:
   shipping_profile: NOK heavy tee     # optional — overrides shop.yaml (#54)
   variation_images: flat-lay-01       # optional — the colour-matrix template
                                       # whose renders become swatches (#56)
-media:
-  - { template: flat-lay-01, colour: black }
+media:                     # the Etsy gallery, in order (#71)
+  - { template: flat-lay-01, colour: black }    # 1: the thumbnail — an image
+  - common-media/size-guide.mp4                 # 2: the featured video
   - { template: flat-lay-01, colour: blue-jean }
+  - ./close-up.mp4                              # the second video, placed here
   - { template: flat-lay-01, colour: ivory }
-  - ../../common-media/comfort-colors-sizing-chart.png
-  - ../../common-media/care-instructions.png
+  - common-media/comfort-colors-sizing-chart.png
+  - common-media/care-instructions.png
 ```
 
 **Every price carries its currency explicitly** — in a pricing plan just as
@@ -416,10 +428,24 @@ from `shop.yaml`, and any bare number — so a figure can never be silently
 misread as the wrong currency, which matters when the revenue side is NOK and
 Printify's cost side is USD.
 
-**Media entries are either `mockup: <colour-slug>` or a path** to a shared asset.
-The `mockup:` form is a logical reference the renderer resolves into
+**A media entry is either a `{template, colour?}` render reference or a file
+ref** (#29). The render form is a logical reference the renderer resolves into
 `.cache/renders/`, so the listing file never points at a cache path, and
-validation can confirm the colour is one the listing actually offers.
+validation can confirm the colour is one the listing actually offers. A file
+ref is an image (`.png`, `.jpg`, `.jpeg`) or a video (`.mp4`, `.mov`), told
+apart by extension.
+
+**`media:` is the gallery**, videos included, in the order a buyer sees it
+(#71). Etsy decides that shape more than we do: the first entry is the
+thumbnail and must be an image; a listing with any video has one at position
+2, where Etsy pins its featured video; at most 2 videos and 20 images.
+
+**Every path in `listing.yaml` is a ref with one of two roots** (#72): no
+prefix means the workspace root (`designs/take-a-hike.png`,
+`common-media/size-guide.mp4`), and `./` means the listing's own directory
+(`./close-up.mp4`, `./shots/back.png`). `..` is refused. It covers `design:`,
+`pricing_plan:` and every file entry in `media:`; `etsy.description.ref`
+already worked this way.
 
 `etsy.description` has a required `lead` and may carry exactly one sibling body
 source: inline `text` or a `ref` beneath `common-copy/`. The final description
@@ -957,6 +983,20 @@ answers `200` and reduces the listing to a single image; and replacing an image
 leaves any colour swatch bound to it (#56) pointing at an id no longer on the
 listing, which Etsy also reports as a healthy `200`.
 
+**Videos sync through their own stage, and by a different mechanism** (#71),
+because Etsy gives them none of the image tools: no rank, no ordering call,
+and no way to read a position back. Placement is a consequence of attach
+order. The video attached longest is the featured one, pinned at gallery
+position 2, and the other takes over that slot if it goes. The second is
+anchored "after *n* images", *n* being however many images the listing held
+when it was attached, and it stays there through any later image reorder. So
+the stage places it by briefly cutting `image_ids` to the images that precede
+it, attaching it by id, and restoring the full list — no bytes re-sent. That
+cut costs something measured: **detaching an image deletes its swatch link**,
+so the swatches are re-asserted afterwards, every time. A position changed by
+hand in Shop Manager is invisible to the API and therefore to `plan`; the tool
+re-asserts only what its own desired layout changes.
+
 ---
 
 ## CLI
@@ -1034,8 +1074,16 @@ Etsy, and `external.id` appears on success.
   lead is required for deployment; a configured common-copy reference must
   resolve and be valid for descriptions.
 - Every requested colour has a matching mockup file.
-- Every media entry resolves: `mockup:` references name a colour the listing
-  offers, paths exist. ≤20 images total.
+- Every media entry resolves: render references name a colour the listing
+  offers, file refs exist under one of the two roots (#72). ≤20 images and ≤2
+  videos; the first entry is an image, and any video puts one at position 2
+  (#71).
+- **Every video is one Etsy documents as acceptable** (#71): `.mp4` or `.mov`,
+  at most 100 MB, 3–15 seconds, shorter side at least 500 px, and decodable
+  with a video stream in it. Anything outside that is blocked rather than
+  sent, because the API is no guide — it accepted a 20-second clip, and
+  answered a PNG renamed `.mp4` with a bare `500`. Etsy strips audio; a video
+  that has some gets a note saying so, not a warning.
 - Every price carries an explicit currency, and it matches `shop.yaml`. Bare
   numbers are rejected.
 - Blueprint and print provider names resolve to catalog IDs; failure lists the
@@ -1285,7 +1333,7 @@ whether Norway is among them needs checking, not assuming).
 | 10 | Pricing | Explicit table per listing, optional per-colour overrides, optional shared pricing-plan file (#33) as the base layer under both. Never set via Etsy API. |
 | 10b | Margin | Gross only, labelled as excluding fees; live FX rate with rate and age always shown. |
 | 11 | Etsy fields | Core + merchandising, plus renewal policy (default manual). |
-| 12 | Media | Explicit per-listing list; full replace on change. |
+| 12 | Media | Explicit per-listing list; full replace on change. **Amended (#71):** the list holds videos too, and is the gallery in order. |
 | 13 | AI inputs | Vision + short brief; seller-editable `prompts/seo.md` and `prompts/brief.md`; hard proposal validation before the browser sees it. |
 | 14 | Auth | Single guided `auth` covering the deployment credentials: Printify token, Etsy app key pair, and Etsy OAuth flow, each verified before storage. AI Mode instead uses already-authenticated local coding-agent CLIs and stores no provider credential. **Amended:** it writes credentials and nothing else — no `shop.yaml`, no ids (#49). One command to answer "what do I need to give this tool, and where does it go" beats a credential list split across two wizards by which service happens to need a browser. **Amended:** it also takes the part as an argument -- `auth printify`, `auth etsy` -- with bare `auth` running both. One credential expiring is the ordinary case, and having to walk past a working one to renew the other is what teaches people to avoid the command. |
 | 15 | Failures | Resumable staged apply; `unlock` for stuck products. |
@@ -1303,11 +1351,11 @@ whether Norway is among them needs checking, not assuming).
 | 27 | Stage orchestration | `plan` determines whether rendering needs to run from input hashes; `apply` runs it. `render` remains available as an explicit command. AI Mode proposals are browser-only and never a stage. |
 | 28 | Template kinds | A template is exactly one of `colour-matrix` / `multiple` / `single`, never a mix — [docs/multi-placement-rendering.md](multi-placement-rendering.md). |
 | 29 | Multiple templates per listing | No garment-profile-level registry of *listing* templates — a listing's `media:` may reference any template that exists in `mockup-templates/`, always naming it explicitly as `{template, colour?}`; no default, no shorthand. Superseded once from an earlier `profile.templates: list[str]` registry, dropped because a template is a purely local, Etsy-facing asset Printify never sees. **Amended:** the garment profile may name one `preview_template`, a `colour-matrix` template the editor uses to judge colours. That is not a `media:` default and does not decide what renders. |
-| 30 | Multi-artwork | `listing.design:` polymorphic (bare path or a map keyed by artwork tag); `garment_profile.colors` classified by hand-editing the generated garment profile file (`new` does not ask), not inferred from Printify. |
+| 30 | Multi-artwork | `listing.design:` polymorphic (bare path or a map keyed by artwork tag); `garment_profile.colors` classified by hand-editing the generated garment profile file (`new` does not ask), not inferred from Printify. **Amended (#72):** the paths are workspace-rooted refs, `designs/x.png`, not `../../designs/x.png`. |
 | 31 | What renders | Driven purely by `media` references, not by `listing.colors` membership — a listing's colours drive which Printify variants sell, not which photos render. |
 | 32 | Frontend testing | Vitest + React Testing Library, v8 coverage provider, 80%-branch floor mirroring the Python gate, wired into `scripts/check.sh`. |
 | 33 | Pricing plan | A separate, reusable `pricing-plans/{name}.yaml` file holding a per-size price table plus optional per-colour overrides (same shape as the listing's own) and a `garment_profile:` back-reference. `Listing.resolved_price` precedence: `price_overrides` > `prices` > the plan's own (override-then-flat) resolution. Named "pricing plan", not "pricing profile", to avoid colliding with the existing `GarmentProfile` concept. |
-| 34 | Pricing plan reference | A listing references a pricing plan by workspace-relative path (`pricing_plan: ../../pricing-plans/x.yaml`), the same mechanism as `design:` — not a bare name against a fixed root, unlike `garment_profile:`/`media[].template` (#29). `pricing-plans/` is a conventional discovery root for `new`'s picker, not an enforced resolution root — nested layouts, and plans stored elsewhere, both work. Migrating `media[].template` to the same path-based scheme is explicitly out of scope: it would also touch the calibrator UI/API and render-cache key naming, a separate, larger piece of work. |
+| 34 | Pricing plan reference | A listing references a pricing plan by workspace-relative path (`pricing_plan: ../../pricing-plans/x.yaml`), the same mechanism as `design:` — not a bare name against a fixed root, unlike `garment_profile:`/`media[].template` (#29). `pricing-plans/` is a conventional discovery root for `new`'s picker, not an enforced resolution root — nested layouts, and plans stored elsewhere, both work. Migrating `media[].template` to the same path-based scheme is explicitly out of scope: it would also touch the calibrator UI/API and render-cache key naming, a separate, larger piece of work. **Amended (#72):** the reference is workspace-rooted, `pricing_plan: pricing-plans/x.yaml` — the old example, `../../pricing-plans/x.yaml`, was called workspace-relative here but was in fact relative to the listing. `media[].template` stays a bare name. |
 | 35 | Undocumented cost data | `new`'s "create a pricing plan" flow reads Printify's undocumented per-variant manufacturing-cost endpoint (`product-catalog-service`, no auth, no docs — verified working in this project against a live response) to seed a starting price, joined against the public `variants.json` catalog on variant id for colour/size names. Isolated in its own module outside the documented `catalog/` surface, fail-soft by construction: any failure degrades to a blank price for the affected size(s), never aborts `new`. `decoration_method` is hardcoded to `dtg` (risk item 11). Shipping cost, by contrast, comes from Printify's documented `shipping.json` endpoint and lives in the normal `catalog/` client. |
 | 36 | Wizard-time FX | The starting-price computation ((manufacturing + shipping) × 1.10 margin) converts USD cost to the shop currency via a minimal, uncached, one-off live rate fetch — deliberately not the deferred full-margin-model FX cache (#10b); that remains unbuilt. Where colours offering the same size disagree on cost, the max is used and the disagreement is noted in the generated file's comment. |
 | 37 | Changing the garment | Refused, not automated. Once a listing has a Printify product its blueprint and print provider are fixed; `plan` fails and says to start a new listing or make the change by hand. Printify silently ignores both fields on an update (`200`, no change — [api-findings.md](api-findings.md)), so the only automated route is delete-and-recreate, which throws away the Etsy listing's history to save retyping a short file. |
@@ -1344,3 +1392,5 @@ whether Norway is among them needs checking, not assuming).
 | 68 | Drafting on design attach | Attaching a design to a listing whose `brief` is empty drafts one from the artwork through the same provider chain AI Mode uses, writes it into that ordinary field, and then requests the SEO proposal the filled brief unblocks. The draft goes out **on the pick**, waiting for nothing: it is a request about a design, not a listing, so it takes the design alone and needs no saved file, no name, no garment profile and no autosave — which is what lets it serve the flow it exists for, where the design is attached before the listing is named. Only that one transition arms it: opening an editor, typing, or changing any other field never starts a request, and a brief the seller has written is never redrafted or overwritten. The chain is the open editor's, not a server job — leaving the listing abandons it, exactly as pressing **Cancel** does (#4's cancellation rule). Drafting the brief is an input the seller would otherwise type; the three SEO outputs still reach `listing.yaml` only through an explicit per-suggestion choice. The page head reports each step beside the autosave line, since the seller is normally on another tab while it runs. |
 | 70 | Naming writes it; nothing else withholds it | A named listing is written, full stop. Incompleteness is never a reason to withhold the file: no garment profile, no colours, no price source, no title, no lead, no images — all of them block *deployment* and none of them blocks the save. Before this, the price-source rule sat in `Listing` itself, so a seller could name a listing, attach a design and pick colours and still have nothing on disk, with the head explaining that the file would appear once they picked a plan. That is the tool withholding a file the seller plainly asked for, and it is the one incompleteness out of eight that behaved differently from the rest. The rule keeps its refusal — `plan` and `apply` still stop, as a `Blocked` from the stage that needs a price — and the banner keeps its sentence; only the write stops depending on it. What still refuses a write is a document that is *malformed* rather than incomplete: a title over Etsy's limit, a price in the wrong currency, a `media` entry naming a colour the listing does not sell. Those come back as `field_errors` on the field that caused them, as they already did. |
 | 69 | A design names an unnamed draft | Picking a design for a listing that has no name yet names it after the design's filename, without the extension — the same derivation `new <design>` already makes on the CLI, and the name a seller would have typed. Only a *nameless* draft takes one: a listing already called something is called that on purpose, and changing its artwork is not a reason to move its directory. The name shows in the page head from the pick, not from when the file appears, because a create is still refused until the document validates and a name held invisibly until then reads as the tool renaming things by itself. A name already in use is refused exactly as a typed one is (#60). With this, and #70, the ordinary create flow is one gesture: open the editor and pick a design. |
+| 71 | Listing videos | **Videos are entries in `media:`, and `media:` is the gallery.** Up to two, as `.mp4`/`.mov` file refs, in the positions a buyer sees them: position 1 is the thumbnail and must be an image; any video puts one at position 2, which is where Etsy pins its featured video; the second may sit anywhere after that. Etsy has no rank, no ordering call and no way to read a video's position, but placement follows attach order in a way measured on 2026-09-25 ([phase-3-etsy.md](phase-3-etsy.md), decision 9): the video attached longest is featured, the other is promoted if it goes, and a second video is anchored "after *n* images" by however many images the listing held when it was attached, surviving any later reorder. So a separate `etsy_videos` stage, shown under Etsy media, attaches the featured one first and places the second by cutting `image_ids` to the images before it, attaching by id and restoring — at the measured price of every detached image's swatch link, re-asserted after. A layout change re-attaches by id; only changed bytes, and a video of ours gone missing, are uploaded again. Foreign videos are deleted when the stage runs, the way `image_ids` detaches foreign images, and never trigger a run by themselves. Always sent `is_multi_video=true`, which becomes mandatory on 2026-10-21. Local checks follow Etsy's help page and block everything outside it (`.mp4`/`.mov`, ≤100 MB, 3–15 s, shorter side ≥500 px, decodable with a video stream, read through PyAV); the API itself accepted 3- and 20-second clips and answered a non-video with a bare `500`, so it is no guide. Rejected: a separate `videos:` list, which was the first answer while position looked uncontrollable, and which would now describe a gallery in two lists; and leaving the second video wherever Etsy puts it, which is the end of the gallery. Accepted costs: a video moved by hand in Shop Manager is invisible to `plan`; and Etsy allows **10 associations per listing per 24 h**, re-attaches included, whose refusal is a `400` reading "maximum number of videos" — reworded into what it actually is, not predicted. |
+| 72 | Paths in `listing.yaml` | Every path is a ref with two roots: **no prefix is the workspace root**, **`./` is the listing's own directory**, subdirectories allowed on both, `..` refused. Covers `design:` (#30), `pricing_plan:` (#34) and every file entry in `media:`; `etsy.description.ref` already worked this way. The previous form was relative to the listing, so every shared reference began `../../` — a path that said nothing a reader needed and broke the moment a file moved. One pass of a one-off script (`scripts/migrate_workspace_refs.py`) rewrites a workspace, after which a `../` ref is refused by name. Accepted cost: shared images upload once more, because the media stage keys Etsy ids by ref; nothing re-renders and Printify is untouched, since the render hash and Printify's upload ids are both keyed by a design's bytes, never by the text that named it. |

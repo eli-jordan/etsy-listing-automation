@@ -19,7 +19,7 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 70 numbered product decisions in its appendix. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 72 numbered product decisions in its appendix. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
 
 Four subsidiary documents carry detail those two point at rather than repeat:
