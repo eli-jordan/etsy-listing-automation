@@ -154,7 +154,8 @@ export function useAiRun(
   /** Bumped by every start and attach: an answer or an event that arrives for
    * an older one is ignored. */
   const generation = useRef(0);
-  /** The save state showing when the design was picked, while armed. */
+  /** While armed: the last save state the trigger judged (at first, the one
+   * showing when the design was picked). */
   const armed = useRef<{ baseline: SaveState | undefined } | null>(null);
   const latest = useRef({ detail, save, handlers });
   useEffect(() => {
@@ -164,12 +165,17 @@ export function useAiRun(
   const attach = useCallback((run: AiRunSummary) => {
     stream.current?.close();
     const mine = ++generation.current;
+    // A finished run's brief is already in the file the editor loaded -- or
+    // the seller has changed it since. Only a run still going hands one over.
+    const live = run.phase === "running";
     setView(viewOf(run));
     stream.current = openAiRunStream(run.id, {
       onEvent: (event) => {
         if (mine !== generation.current) return;
         setView((current) => applyEvent(current, event));
-        if (event.type === "brief" && event.written) latest.current.handlers.onBrief?.(event.text);
+        if (event.type === "brief" && event.written && live) {
+          latest.current.handlers.onBrief?.(event.text);
+        }
         if (event.type === "proposal") latest.current.handlers.onProposal?.(proposalOf(event));
       },
       onError: () => {
@@ -244,13 +250,17 @@ export function useAiRun(
     };
   }, [name, hasDesign, attach]);
 
-  // The auto chain's trigger.
+  // The auto chain's trigger. Each save is judged once, in the render it
+  // arrives in, where the editor still shows what that save wrote: an edit
+  // made afterwards (choosing a garment profile) changes the editor at once
+  // but not the file, and the chain must wait for the save that carries it.
   const brief = detail.brief;
   const garmentProfile = detail.garment_profile;
   useEffect(() => {
     const pick = armed.current;
-    if (pick === null || save === undefined) return;
-    if (save.kind !== "saved" || save === pick.baseline) return;
+    if (pick === null || save === undefined || save === pick.baseline) return;
+    pick.baseline = save;
+    if (save.kind !== "saved") return;
     if (name === "" || !hasDesign || garmentProfile.trim() === "") return;
     armed.current = null;
     start({ draftBrief: brief.trim() === "" });

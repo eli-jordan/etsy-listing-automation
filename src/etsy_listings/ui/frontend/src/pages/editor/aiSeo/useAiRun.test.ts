@@ -314,6 +314,19 @@ describe("useAiRun reattaching", () => {
     expect(view.result.current.phase).toBe("done");
   });
 
+  it("does not hand over the brief of a run that had already finished", async () => {
+    /* The file already has it, or the seller has since changed it: either
+       way the listing that loaded is the truth, not the replay. */
+    runs.find.mockResolvedValue(aiRunSummary({ phase: "done" }));
+    const onBrief = vi.fn();
+    setup({}, { onBrief });
+
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(briefEvent("Drafted an hour ago."), phaseEvent("done"));
+
+    expect(onBrief).not.toHaveBeenCalled();
+  });
+
   it("asks nothing for a listing that is not saved yet", async () => {
     setup({ detail: detail({ name: "" }), save: { kind: "unnamed" } });
 
@@ -410,6 +423,23 @@ describe("useAiRun auto chain (PRD 68)", () => {
     const view = picked({ garment_profile: "" });
 
     view.rerender({ detail: detail({ brief: "", garment_profile: "" }), save: saved(2) });
+    await act(async () => {});
+    expect(runs.start).not.toHaveBeenCalled();
+
+    view.rerender({ detail: detail({ brief: "" }), save: saved(3) });
+    await waitFor(() => expect(runs.start).toHaveBeenCalledTimes(1));
+  });
+
+  it("waits for the save that carries the garment profile, not the edit that chose it", async () => {
+    /* Found against a real workspace: the create saved without a garment
+       profile; choosing one then changed the editor at once, but the save
+       showing was still the create's -- the file had no profile yet. */
+    const created = saved(2);
+    const view = picked({ garment_profile: "" });
+    view.rerender({ detail: detail({ brief: "", garment_profile: "" }), save: created });
+    await act(async () => {});
+
+    view.rerender({ detail: detail({ brief: "" }), save: created });
     await act(async () => {});
     expect(runs.start).not.toHaveBeenCalled();
 
