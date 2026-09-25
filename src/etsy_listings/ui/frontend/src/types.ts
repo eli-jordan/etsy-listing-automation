@@ -50,6 +50,8 @@ export type AiRunEvent = AiRunDetail["events"][number];
  * latest `step` event for it left it. */
 export type WorkflowStep = components["schemas"]["WorkflowStep"];
 export type MarketSnapshot = components["schemas"]["MarketSnapshot"];
+export type ScoredListing = components["schemas"]["ScoredListing"];
+export type PhraseScore = components["schemas"]["PhraseScore"];
 
 // ── Listings UI (phase 5) ──────────────────────────────────────────────────
 

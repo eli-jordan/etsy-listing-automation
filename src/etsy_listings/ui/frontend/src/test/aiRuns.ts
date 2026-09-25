@@ -1,9 +1,16 @@
 import { act } from "@testing-library/react";
 import { type MockInstance, vi } from "vitest";
 import * as aiRunsApi from "../api/aiRuns";
+import * as marketApi from "../api/market";
 import type { AiRunStreamOptions } from "../api/aiRuns";
 import type { AiRun } from "../pages/editor/aiSeo/useAiRun";
-import type { AiRunEvent, AiRunSummary, SeoProposalResponse, WorkflowStep } from "../types";
+import type {
+  AiRunEvent,
+  AiRunSummary,
+  MarketSnapshot,
+  SeoProposalResponse,
+  WorkflowStep,
+} from "../types";
 
 /**
  * A stand-in for the AI runs server, at `api/aiRuns.ts`'s seam: no run is
@@ -47,6 +54,8 @@ export interface FakeAiRuns {
   find: MockInstance<typeof aiRunsApi.findAiRun>;
   start: MockInstance<typeof aiRunsApi.startAiRun>;
   cancel: MockInstance<typeof aiRunsApi.cancelAiRun>;
+  /** `GET …/market`: no snapshot unless a test gives one. */
+  market: MockInstance<typeof marketApi.getMarketSnapshot>;
 }
 
 export function fakeAiRuns(): FakeAiRuns {
@@ -69,6 +78,7 @@ export function fakeAiRuns(): FakeAiRuns {
       }),
     }));
   const cancel = vi.spyOn(aiRunsApi, "cancelAiRun").mockResolvedValue(true);
+  const market = vi.spyOn(marketApi, "getMarketSnapshot").mockResolvedValue(null);
   vi.spyOn(aiRunsApi, "openAiRunStream").mockImplementation((runId, options) => {
     const stream: FakeStream = { runId, options, closed: false };
     streams.push(stream);
@@ -96,6 +106,7 @@ export function fakeAiRuns(): FakeAiRuns {
     find,
     start,
     cancel,
+    market,
   };
 }
 
@@ -116,6 +127,11 @@ export function briefEvent(text: string, written = true): AiRunEvent {
 
 export function queriesEvent(queries: string[]): AiRunEvent {
   return { type: "queries", seq: ++seq, queries };
+}
+
+/** A `market` event: research finished and its snapshot was saved. */
+export function marketEvent(snapshot: MarketSnapshot): AiRunEvent {
+  return { type: "market", seq: ++seq, snapshot };
 }
 
 export function proposalEvent(proposal: SeoProposalResponse): AiRunEvent {
