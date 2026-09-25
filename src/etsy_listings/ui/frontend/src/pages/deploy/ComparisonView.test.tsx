@@ -146,4 +146,34 @@ describe("ComparisonView", () => {
     expect(screen.getByText("On Etsy now")).toBeInTheDocument();
     expect(screen.queryByText("After apply")).not.toBeInTheDocument();
   });
+
+  it("draws one of the listing's own images from under that listing (PRD 72)", () => {
+    const p = plan([
+      stage({
+        stage: "etsy_media",
+        snapshot: {
+          desired: [
+            { rank: 1, ref: "./shots/back.png", file: "listings/take-a-hike/shots/back.png" },
+          ],
+          live: [],
+        },
+      }),
+    ]);
+    render(
+      <ComparisonView
+        comparison={buildComparison(p)}
+        listing={{ name: detail().name, design: detail().design }}
+        renderSnapshot={null}
+        previewsRendered={new Set()}
+        collapsed={false}
+        etsyListingId={1698234512}
+      />,
+    );
+
+    expect(
+      document.querySelector(
+        'img[src="/api/listings/take-a-hike/media-files/shots/back.png/file"]',
+      ),
+    ).not.toBeNull();
+  });
 });

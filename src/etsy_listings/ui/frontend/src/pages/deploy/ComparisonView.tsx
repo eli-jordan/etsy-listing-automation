@@ -80,7 +80,7 @@ function AfterTile({
   if (imageUrlForRef !== undefined) {
     src = imageUrlForRef(tile.ref);
   } else if (parsed === null) {
-    src = pictureFor(tile.ref, design, "full");
+    src = pictureFor(tile.ref, design, "full", listing.name || null);
   } else {
     const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
     const key = `${parsed.template}|${parsed.colour ?? ""}`;
