@@ -398,6 +398,12 @@ class Workspace:
         :meth:`seo_prompt_file`: this accessor only names the file."""
         return self.root / layout.PROMPTS_DIR / layout.BRIEF_PROMPT_FILE
 
+    def market_queries_prompt_file(self) -> Path:
+        """``prompts/market-queries.md`` -- the seller-editable prompt that
+        extracts three buyer searches for market research (market-seo.md,
+        *Query extraction*). Same split: this accessor only names the file."""
+        return self.root / layout.PROMPTS_DIR / layout.MARKET_QUERIES_PROMPT_FILE
+
     def common_copy_dir(self) -> Path:
         return self.root / layout.COMMON_COPY_DIR
 

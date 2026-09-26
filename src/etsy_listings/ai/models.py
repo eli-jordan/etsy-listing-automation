@@ -97,6 +97,11 @@ class SeoRequest:
     colors: tuple[str, ...]
     garment: GarmentContext
     design_image: Path
+    market_block: str = ""
+    """`market.market_block()`'s delimited market data (market-seo.md, *What
+    the proposal sees*), appended after the listing context. Empty when a
+    search found nothing comparable -- the one case a proposal goes ahead
+    without market data -- and then no block is sent at all."""
 
 
 @dataclass(frozen=True)

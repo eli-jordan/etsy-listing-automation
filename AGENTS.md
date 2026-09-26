@@ -179,8 +179,8 @@ src/etsy_listings/
                   header pacing, `RateGate`), shops, listings, and market
                   (the read-only search market-informed SEO reads; built
                   from the key pair alone, never a bearer). retry.py done
-  ai/           request/task/proposal contracts, the two packaged default
-                prompts, delimited-context assembly, hard validation, the
+  ai/           request/task/proposal contracts, the three packaged default
+                prompts (seo.md, brief.md, market-queries.md), delimited-context assembly, hard validation, the
                 Codex/Claude adapters and the chain over them  [done]
                 A provider takes a `ProviderTask` -- assembled prompt text, a
                   response schema, one image -- and knows nothing about which
@@ -188,6 +188,10 @@ src/etsy_listings/
                   share one fallback order, one repair rule and one deadline
                 brief.py -- everything drafting-specific in one small module:
                   request, schema, packaged prompt, validation
+                market_queries.py -- the same shape for market-informed SEO's
+                  query extraction (three unique, non-empty buyer searches);
+                  `SeoRequest.market_block` carries market/'s block into the
+                  proposal prompt
   market/       market-informed SEO's research, in memory: `research()` turns
                 three queries into at most 20 scored listings (percentiles,
                 top-20 review rationing, 5 calls in flight), the ranked
@@ -611,6 +615,8 @@ assume a command exists because it is listed here.
 ```
 setup              initialise a workspace: skeleton, shop.yaml, ids   [done; its token
                    capture moves to `auth` in Phase 3 — PRD 49]
+                   --replace-prompts: reset prompts/ to the packaged
+                   defaults, keeping each old file as <name>.md.bak (PRD 71)
 new [<design>]     interactive design/garment/provider picker; writes garment profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified   [done; render + printify]

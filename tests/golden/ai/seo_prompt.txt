@@ -1,0 +1,114 @@
+The seller's own instructions.
+
+<<<LISTING_CONTEXT_JSON>>>
+{
+  "listing": {
+    "brief": "Retro 70s sunset over mountains; the text reads TAKE A HIKE.",
+    "product_type": "Unisex Heavy Cotton Tee",
+    "etsy_category": "Clothing > Unisex Adult Clothing > Tops & Tees > T-shirts",
+    "materials": [
+      "cotton"
+    ],
+    "colors": [
+      "Black",
+      "Natural"
+    ],
+    "garment": {
+      "brand": "Gildan",
+      "model": "5000"
+    }
+  }
+}
+<<<END_LISTING_CONTEXT_JSON>>>
+
+<<<RESPONSE_JSON_SCHEMA>>>
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "titles",
+    "tags",
+    "description_leads",
+    "rationale",
+    "warnings",
+    "observed_text"
+  ],
+  "properties": {
+    "titles": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 20,
+      "maxItems": 20
+    },
+    "description_leads": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 3,
+      "maxItems": 3
+    },
+    "rationale": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "phrase",
+          "intent",
+          "reason",
+          "used_in"
+        ],
+        "properties": {
+          "phrase": {
+            "type": "string"
+          },
+          "intent": {
+            "enum": [
+              "core_product",
+              "bottom_of_funnel",
+              "style"
+            ]
+          },
+          "reason": {
+            "type": "string"
+          },
+          "used_in": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "title",
+                "tags",
+                "description_lead"
+              ]
+            }
+          }
+        }
+      },
+      "minItems": 7,
+      "maxItems": 7
+    },
+    "warnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "observed_text": {
+      "type": "string"
+    }
+  }
+}
+<<<END_RESPONSE_JSON_SCHEMA>>>
+
+Return only one JSON object that satisfies the schema above.
