@@ -175,7 +175,10 @@ src/etsy_listings/
                   transport (token/retry/errors), two protocols (CatalogClient
                   reads, PrintifyClient writes), models, catalog, products,
                   cache, resolve, fakes                                      [done]
-                etsy/ and limiter Phase 3/6; retry.py done
+                etsy/ — the same shape for Etsy: auth, transport (retry plus
+                  header pacing, `RateGate`), shops, listings, and market
+                  (the read-only search market-informed SEO reads; built
+                  from the key pair alone, never a bearer). retry.py done
   ai/           request/task/proposal contracts, the two packaged default
                 prompts, delimited-context assembly, hard validation, the
                 Codex/Claude adapters and the chain over them  [done]
