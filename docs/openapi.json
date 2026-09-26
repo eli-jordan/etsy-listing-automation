@@ -38,6 +38,455 @@
         "title": "ActionDTO",
         "type": "object"
       },
+      "AiBriefEvent": {
+        "description": "The brief was drafted. ``written`` is false when the seller filled the\nfield in the meantime, so their text was kept.",
+        "properties": {
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "text": {
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "brief",
+            "default": "brief",
+            "title": "Type",
+            "type": "string"
+          },
+          "written": {
+            "title": "Written",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "seq",
+          "text",
+          "written"
+        ],
+        "title": "AiBriefEvent",
+        "type": "object"
+      },
+      "AiMarketEvent": {
+        "description": "A successful or empty search, once its snapshot is saved.",
+        "properties": {
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/MarketSnapshot"
+          },
+          "type": {
+            "const": "market",
+            "default": "market",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "snapshot"
+        ],
+        "title": "AiMarketEvent",
+        "type": "object"
+      },
+      "AiPhaseEvent": {
+        "description": "Terminal, and always the run's last event.",
+        "properties": {
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "phase": {
+            "enum": [
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "phase",
+            "default": "phase",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "phase"
+        ],
+        "title": "AiPhaseEvent",
+        "type": "object"
+      },
+      "AiProposalEvent": {
+        "description": "The validated proposal: :class:`SeoProposalResponse` unchanged, plus\n``type`` and ``seq``.",
+        "properties": {
+          "description_leads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Description Leads",
+            "type": "array"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "observed_text": {
+            "title": "Observed Text",
+            "type": "string"
+          },
+          "rationale": {
+            "items": {
+              "$ref": "#/components/schemas/SeoRationaleEntry"
+            },
+            "title": "Rationale",
+            "type": "array"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SeoProposalSnapshot"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "titles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "array"
+          },
+          "type": {
+            "const": "proposal",
+            "default": "proposal",
+            "title": "Type",
+            "type": "string"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SeoWarningEntry"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "titles",
+          "tags",
+          "description_leads",
+          "rationale",
+          "warnings",
+          "observed_text",
+          "snapshot",
+          "generated_at",
+          "expires_at",
+          "seq"
+        ],
+        "title": "AiProposalEvent",
+        "type": "object"
+      },
+      "AiQueriesEvent": {
+        "description": "The three buyer searches extraction chose.",
+        "properties": {
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 3,
+            "minItems": 3,
+            "title": "Queries",
+            "type": "array"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "type": {
+            "const": "queries",
+            "default": "queries",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seq",
+          "queries"
+        ],
+        "title": "AiQueriesEvent",
+        "type": "object"
+      },
+      "AiRunDetail": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "draft_brief": {
+            "title": "Draft Brief",
+            "type": "boolean"
+          },
+          "events": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "brief": "#/components/schemas/AiBriefEvent",
+                  "market": "#/components/schemas/AiMarketEvent",
+                  "phase": "#/components/schemas/AiPhaseEvent",
+                  "proposal": "#/components/schemas/AiProposalEvent",
+                  "queries": "#/components/schemas/AiQueriesEvent",
+                  "step": "#/components/schemas/AiStepEvent"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/AiStepEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/AiBriefEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/AiQueriesEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/AiMarketEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/AiProposalEvent"
+                },
+                {
+                  "$ref": "#/components/schemas/AiPhaseEvent"
+                }
+              ]
+            },
+            "title": "Events",
+            "type": "array"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "running",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "draft_brief",
+          "phase",
+          "steps",
+          "created_at",
+          "finished_at",
+          "events"
+        ],
+        "title": "AiRunDetail",
+        "type": "object"
+      },
+      "AiRunRefusal": {
+        "description": "A ``409`` from ``POST /api/ai/runs``: exactly one of the two is set.\n``active_run`` names the run to reattach to; ``reason`` says which\nreadiness rule failed.",
+        "properties": {
+          "active_run": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Active Run"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          }
+        },
+        "title": "AiRunRefusal",
+        "type": "object"
+      },
+      "AiRunSummary": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "draft_brief": {
+            "title": "Draft Brief",
+            "type": "boolean"
+          },
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          },
+          "phase": {
+            "enum": [
+              "running",
+              "done",
+              "failed",
+              "cancelled"
+            ],
+            "title": "Phase",
+            "type": "string"
+          },
+          "steps": {
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStep"
+            },
+            "title": "Steps",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "listing",
+          "draft_brief",
+          "phase",
+          "steps",
+          "created_at",
+          "finished_at"
+        ],
+        "title": "AiRunSummary",
+        "type": "object"
+      },
+      "AiStepEvent": {
+        "description": "A node changed. The first three events of a run set each node's\ninitial state.",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "id": {
+            "enum": [
+              "brief",
+              "market",
+              "seo"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "seq": {
+            "title": "Seq",
+            "type": "integer"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "done",
+              "skipped",
+              "warning",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "type": {
+            "const": "step",
+            "default": "step",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state",
+          "seq"
+        ],
+        "title": "AiStepEvent",
+        "type": "object"
+      },
       "ApplyRunDetail": {
         "properties": {
           "created_at": {
@@ -503,6 +952,24 @@
           "ref"
         ],
         "title": "CommonMediaSummary",
+        "type": "object"
+      },
+      "CreateAiRunRequest": {
+        "properties": {
+          "draft_brief": {
+            "default": false,
+            "title": "Draft Brief",
+            "type": "boolean"
+          },
+          "listing": {
+            "title": "Listing",
+            "type": "string"
+          }
+        },
+        "required": [
+          "listing"
+        ],
+        "title": "CreateAiRunRequest",
         "type": "object"
       },
       "CreateListingRequest": {
@@ -1807,6 +2274,70 @@
         "title": "LiveImageSnapshot",
         "type": "object"
       },
+      "MarketSnapshot": {
+        "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (market-seo.md, *What the\nproposal sees*).",
+        "properties": {
+          "block": {
+            "title": "Block",
+            "type": "string"
+          },
+          "empty": {
+            "title": "Empty",
+            "type": "boolean"
+          },
+          "found": {
+            "title": "Found",
+            "type": "integer"
+          },
+          "listings": {
+            "items": {
+              "$ref": "#/components/schemas/ScoredListing"
+            },
+            "title": "Listings",
+            "type": "array"
+          },
+          "phrases": {
+            "items": {
+              "$ref": "#/components/schemas/PhraseScore"
+            },
+            "title": "Phrases",
+            "type": "array"
+          },
+          "queries": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Queries",
+            "type": "array"
+          },
+          "relaxed": {
+            "title": "Relaxed",
+            "type": "boolean"
+          },
+          "scored": {
+            "title": "Scored",
+            "type": "integer"
+          },
+          "searched_at": {
+            "format": "date-time",
+            "title": "Searched At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "queries",
+          "found",
+          "scored",
+          "searched_at",
+          "listings",
+          "phrases",
+          "relaxed",
+          "empty",
+          "block"
+        ],
+        "title": "MarketSnapshot",
+        "type": "object"
+      },
       "MediaChangeDTO": {
         "properties": {
           "after": {
@@ -1984,6 +2515,30 @@
           "phase"
         ],
         "title": "PhaseEvent",
+        "type": "object"
+      },
+      "PhraseScore": {
+        "description": "One tag used by the scored listings: how many use it, and the sum of\ntheir scores normalised so the best phrase is 1.",
+        "properties": {
+          "listings": {
+            "title": "Listings",
+            "type": "integer"
+          },
+          "phrase": {
+            "title": "Phrase",
+            "type": "string"
+          },
+          "score": {
+            "title": "Score",
+            "type": "number"
+          }
+        },
+        "required": [
+          "phrase",
+          "listings",
+          "score"
+        ],
+        "title": "PhraseScore",
         "type": "object"
       },
       "Placement": {
@@ -2846,6 +3401,143 @@
         "title": "RetractStagePlanDTO",
         "type": "object"
       },
+      "ScoredListing": {
+        "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (ui-market-seo-interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (market-seo.md, *What the proposal\nsees*).",
+        "properties": {
+          "favourites_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Favourites Per Day"
+          },
+          "lead": {
+            "title": "Lead",
+            "type": "string"
+          },
+          "listing_id": {
+            "title": "Listing Id",
+            "type": "integer"
+          },
+          "own_shop": {
+            "title": "Own Shop",
+            "type": "boolean"
+          },
+          "rank": {
+            "title": "Rank",
+            "type": "integer"
+          },
+          "reviews": {
+            "title": "Reviews",
+            "type": "integer"
+          },
+          "score": {
+            "title": "Score",
+            "type": "integer"
+          },
+          "score_raw": {
+            "title": "Score Raw",
+            "type": "number"
+          },
+          "search_rank": {
+            "title": "Search Rank",
+            "type": "integer"
+          },
+          "shop_id": {
+            "title": "Shop Id",
+            "type": "integer"
+          },
+          "shop_name": {
+            "title": "Shop Name",
+            "type": "string"
+          },
+          "shop_rating": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shop Rating"
+          },
+          "shop_sales": {
+            "title": "Shop Sales",
+            "type": "integer"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url"
+          },
+          "views_per_day": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Views Per Day"
+          }
+        },
+        "required": [
+          "listing_id",
+          "rank",
+          "score_raw",
+          "score",
+          "title",
+          "url",
+          "shop_id",
+          "shop_name",
+          "own_shop",
+          "thumbnail_url",
+          "search_rank",
+          "reviews",
+          "favourites_per_day",
+          "views_per_day",
+          "shop_sales",
+          "shop_rating",
+          "tags",
+          "lead"
+        ],
+        "title": "ScoredListing",
+        "type": "object"
+      },
       "SeoProposalResponse": {
         "description": "A complete, hard-validated proposal plus what PR5 item 4 promises\nbeside it: the input snapshot and expiry metadata. Never cached\nserver-side past this one response -- `ui/api/seo.py` builds this,\nreturns it, and keeps nothing.",
         "properties": {
@@ -3682,6 +4374,49 @@
         "title": "WorkOutcomeDTO",
         "type": "object"
       },
+      "WorkflowStep": {
+        "description": "One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s\n``WorkflowStep``).",
+        "properties": {
+          "detail": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Detail"
+          },
+          "id": {
+            "enum": [
+              "brief",
+              "market",
+              "seo"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "active",
+              "done",
+              "skipped",
+              "warning",
+              "failed"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "state"
+        ],
+        "title": "WorkflowStep",
+        "type": "object"
+      },
       "WorkspaceApplyRequest": {
         "additionalProperties": false,
         "properties": {
@@ -3818,6 +4553,240 @@
         "summary": "Request Design Brief",
         "tags": [
           "ai-brief"
+        ]
+      }
+    },
+    "/api/ai/runs": {
+      "get": {
+        "description": "The listing's running or most recent run -- what the editor\nreattaches to after a reload.",
+        "operationId": "find_ai_run_api_ai_runs_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "listing",
+            "required": true,
+            "schema": {
+              "title": "Listing",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Find Ai Run",
+        "tags": [
+          "ai-runs"
+        ]
+      },
+      "post": {
+        "description": "Start a run for a saved listing. A ``409`` either names the active run\nto reattach to, or gives the readiness rule that failed.",
+        "operationId": "create_ai_run_api_ai_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateAiRunRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunRefusal"
+                }
+              }
+            },
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Ai Run",
+        "tags": [
+          "ai-runs"
+        ]
+      }
+    },
+    "/api/ai/runs/{run_id}": {
+      "delete": {
+        "description": "Cancel: the run's provider subprocess tree is killed and research\nstarts no new call. The run ends ``cancelled`` on its own thread\nshortly after; a brief or snapshot already written stays.",
+        "operationId": "cancel_ai_run_api_ai_runs__run_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "409": {
+            "description": "Conflict"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Ai Run",
+        "tags": [
+          "ai-runs"
+        ]
+      },
+      "get": {
+        "operationId": "get_ai_run_api_ai_runs__run_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AiRunDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Ai Run",
+        "tags": [
+          "ai-runs"
+        ]
+      }
+    },
+    "/api/ai/runs/{run_id}/events": {
+      "get": {
+        "operationId": "stream_ai_run_events_api_ai_runs__run_id__events_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Not Found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Stream Ai Run Events",
+        "tags": [
+          "ai-runs"
         ]
       }
     },
@@ -4288,7 +5257,7 @@
     },
     "/api/listings/{name}": {
       "delete": {
-        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.",
+        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot goes now (market-seo.md, *Cache*): a\nlisting pending deletion is one the seller is done researching, and\notherwise only the wipe after the remote deletion would remove it.",
         "operationId": "delete_listing_api_listings__name__delete",
         "parameters": [
           {
@@ -4421,7 +5390,7 @@
     },
     "/api/listings/{name}/ai-seo/proposal": {
       "post": {
-        "description": "Run one complete AI Mode SEO request for this saved listing.\n\nRefuses with 409 for exactly two reasons: this listing does not meet\n:func:`_readiness`'s prerequisites (re-checked here independently of\nwhatever the client last saw from the readiness endpoint -- state can\nchange between the two calls), or another proposal request for the same\nlisting is already running (the settled \"Concurrent requests\" decision;\na *different* listing's request, or this listing's brief draft, is never\nrefused). :func:`_generation_errors` owns every other outcome.\n\nReturns only what PR5 item 4 permits: the validated proposal, the input\nsnapshot, and expiry metadata. Nothing here is written to a workspace\nfile, a lockfile, or any server-side cache -- ``proposal`` and\n``seo_request`` fall out of scope the moment this function returns.",
+        "description": "Run one complete AI Mode SEO request for this saved listing.\n\nRefuses with 409 for exactly two reasons: this listing does not meet\n:func:`readiness`'s prerequisites (re-checked here independently of\nwhatever the client last saw from the readiness endpoint -- state can\nchange between the two calls), or another proposal request for the same\nlisting is already running (the settled \"Concurrent requests\" decision;\na *different* listing's request, or this listing's brief draft, is never\nrefused). :func:`_generation_errors` owns every other outcome.\n\nReturns only what PR5 item 4 permits: the validated proposal, the input\nsnapshot, and expiry metadata. Nothing here is written to a workspace\nfile, a lockfile, or any server-side cache -- ``proposal`` and\n``seo_request`` fall out of scope the moment this function returns.",
         "operationId": "request_seo_proposal_api_listings__name__ai_seo_proposal_post",
         "parameters": [
           {

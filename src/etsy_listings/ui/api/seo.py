@@ -43,7 +43,7 @@ fallback order, the shared deadline, hard validation) already exists from
 PR3/PR4 and is reused as-is; nothing here adds new AI-domain logic. What is
 new is entirely the HTTP wiring around it: turning a `Listing` already on
 disk into the `SeoRequest` the orchestrator wants, deciding whether AI Mode
-may run at all (:func:`_readiness`), refusing a second concurrent request
+may run at all (:func:`readiness`), refusing a second concurrent request
 for the same listing, and racing generation against the browser
 disconnecting (:func:`generate_with_cancellation` -- the settled
 "Cancellation" decision: "The browser aborts a request when its editor is
@@ -79,6 +79,7 @@ from etsy_listings.ai.errors import (
 from etsy_listings.ai.models import GarmentContext, SeoProposal, SeoRequest
 from etsy_listings.ai.orchestrator import generate_brief, generate_proposal
 from etsy_listings.ai.providers import AiProvider
+from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
 from etsy_listings.ui.api.listings import Existing
 from etsy_listings.ui.api.schemas import (
@@ -132,7 +133,7 @@ case (`config/listing.py._coerce_design`'s own normalisation target);
 ``on-light`` is preferred over ``on-dark`` next only because it has to be
 one of them, arbitrarily, and a fixed order beats letting `dict` iteration
 order decide. Anything not in this tuple falls back to the alphabetically
-first key (`_primary_design_image` below), so reordering the mapping cannot
+first key (`primary_design_image` below), so reordering the mapping cannot
 change the image sent to a provider."""
 
 
@@ -202,8 +203,8 @@ def default_ai_providers(workspace: Workspace) -> Sequence[AiProvider]:
     which prose a request is built from is the request's business and not
     the CLI's (`ai/models.py.ProviderTask`). That also removes a rule this
     module and both adapters used to hold separate copies of -- "a missing
-    prompt file means not ready" now lives only in :func:`_readiness` and
-    :func:`_seller_prompt`, where the answer can name *which* file.
+    prompt file means not ready" now lives only in :func:`readiness` and
+    :func:`seller_prompt`, where the answer can name *which* file.
     """
     return (
         CodexProvider(workspace_root=workspace.root),
@@ -231,14 +232,18 @@ def _active_requests(request: Request) -> ActiveSeoRequests:
     return registry
 
 
-def _primary_design_image(workspace: Workspace, name: str, listing: Listing) -> Path:
+def primary_design_image(workspace: Workspace, name: str, listing: Listing) -> Path:
     listing_dir = workspace.listing_dir(name)
     key = next((k for k in _PREFERRED_DESIGN_KEYS if k in listing.design), min(listing.design))
     return workspace.resolve(listing.design[key], relative_to=listing_dir)
 
 
-def _readiness(
-    workspace: Workspace, listing: Listing, providers: Sequence[AiProvider]
+def readiness(
+    workspace: Workspace,
+    listing: Listing,
+    providers: Sequence[AiProvider],
+    *,
+    draft_brief: bool | None = None,
 ) -> SeoReadinessResponse:
     """Every prerequisite the settled "Entry point" decision names, checked
     in the order a seller would most usefully hear about them: what *this*
@@ -246,20 +251,35 @@ def _readiness(
     missing, since the former is fixed by editing the listing and the
     latter is not this request's to fix at all.
 
+    ``draft_brief`` left ``None`` is the proposal endpoint's rule set. A
+    ``bool`` is an AI run's (market-seo.md, *AI runs*): the same checks plus
+    a usable garment profile, which query extraction needs for the item
+    type, and ``prompts/market-queries.md``. An empty brief is allowed only
+    when ``draft_brief`` is true, and then ``prompts/brief.md`` is needed.
+
     The listing itself already being saved is `target`'s job (`listings.py`)
     -- reaching this function at all already proves that, via the 404 every
     other per-listing endpoint in this module goes through the same way.
     """
+    run = draft_brief is not None
+    drafting = bool(draft_brief) and not listing.brief.strip()
     if not listing.design:
         return SeoReadinessResponse(ready=False, reason="the listing has no selected design")
-    if not listing.brief.strip():
+    if not listing.brief.strip() and not drafting:
         return SeoReadinessResponse(ready=False, reason="the listing brief is empty")
-    prompt_file = workspace.seo_prompt_file()
-    if not prompt_file.is_file():
-        return SeoReadinessResponse(
-            ready=False,
-            reason=f"{prompt_file} is missing; run `etsy-listings setup` to seed it",
-        )
+    if run and WorkspaceFacts.gather(workspace).garment_profile(listing.garment_profile) is None:
+        return SeoReadinessResponse(ready=False, reason="the listing has no usable garment profile")
+    prompts = [workspace.seo_prompt_file()]
+    if run:
+        prompts.append(workspace.market_queries_prompt_file())
+    if drafting:
+        prompts.append(workspace.brief_prompt_file())
+    for prompt_file in prompts:
+        if not prompt_file.is_file():
+            return SeoReadinessResponse(
+                ready=False,
+                reason=f"{prompt_file} is missing; run `etsy-listings setup` to seed it",
+            )
     checks = [provider.readiness() for provider in providers]
     if not any(check.ready for check in checks):
         reasons = "; ".join(check.reason for check in checks if check.reason)
@@ -297,14 +317,28 @@ def _build_request(workspace: Workspace, name: str, listing: Listing) -> SeoRequ
             status_code=409,
             detail=f"listing {name!r} has no usable garment profile {listing.garment_profile!r}",
         )
+    return build_seo_request(workspace, name, listing, profile)
+
+
+def build_seo_request(
+    workspace: Workspace,
+    name: str,
+    listing: Listing,
+    profile: GarmentProfile,
+    *,
+    market_block: str = "",
+) -> SeoRequest:
+    """:func:`_build_request` once the garment profile is known, with the
+    AI run's market-data block (``""`` is none)."""
     return SeoRequest(
+        market_block=market_block,
         brief=listing.brief,
         product_type=profile.blueprint.display_title,
         etsy_category=listing.etsy.section or "",
         materials=tuple(profile.materials),
         colors=tuple(listing.colors),
         garment=GarmentContext(brand=profile.blueprint.brand, model=profile.blueprint.model),
-        design_image=_primary_design_image(workspace, name, listing),
+        design_image=primary_design_image(workspace, name, listing),
     )
 
 
@@ -374,7 +408,7 @@ async def generate_with_cancellation[Result](
     return await future
 
 
-def _proposal_snapshot(
+def proposal_snapshot(
     workspace: Workspace, name: str, listing: Listing, seo_request: SeoRequest
 ) -> SeoProposalSnapshot:
     """Freeze the saved inputs before the provider starts its long request."""
@@ -394,7 +428,7 @@ def _proposal_snapshot(
     )
 
 
-def _to_response(proposal: SeoProposal, snapshot: SeoProposalSnapshot) -> SeoProposalResponse:
+def proposal_response(proposal: SeoProposal, snapshot: SeoProposalSnapshot) -> SeoProposalResponse:
     generated_at = datetime.now(UTC)
     return SeoProposalResponse(
         titles=list(proposal.titles),
@@ -430,7 +464,7 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     """
     listing = target.workspace.load_listing(target.name)
     providers = _providers(request, target.workspace)
-    return _readiness(target.workspace, listing, providers)
+    return readiness(target.workspace, listing, providers)
 
 
 @contextmanager
@@ -476,7 +510,7 @@ def _generation_errors() -> Iterator[None]:
         raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
-def _seller_prompt(path: Path) -> str:
+def read_seller_prompt(path: Path) -> str:
     """The seller's own prompt text, or the 409 that names the file it could
     not read.
 
@@ -499,7 +533,7 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
     """Run one complete AI Mode SEO request for this saved listing.
 
     Refuses with 409 for exactly two reasons: this listing does not meet
-    :func:`_readiness`'s prerequisites (re-checked here independently of
+    :func:`readiness`'s prerequisites (re-checked here independently of
     whatever the client last saw from the readiness endpoint -- state can
     change between the two calls), or another proposal request for the same
     listing is already running (the settled "Concurrent requests" decision;
@@ -514,9 +548,9 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
     workspace, name = target.workspace, target.name
     listing = workspace.load_listing(name)
     providers = _providers(request, workspace)
-    readiness = _readiness(workspace, listing, providers)
-    if not readiness.ready:
-        raise HTTPException(status_code=409, detail=readiness.reason)
+    ready = readiness(workspace, listing, providers)
+    if not ready.ready:
+        raise HTTPException(status_code=409, detail=ready.reason)
 
     active = _active_requests(request)
     if not active.begin(_PROPOSAL, name):
@@ -526,9 +560,9 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
         )
     try:
         with _generation_errors():
-            seller_prompt = _seller_prompt(workspace.seo_prompt_file())
+            seller_prompt = read_seller_prompt(workspace.seo_prompt_file())
             seo_request = _build_request(workspace, name, listing)
-            snapshot = _proposal_snapshot(workspace, name, listing, seo_request)
+            snapshot = proposal_snapshot(workspace, name, listing, seo_request)
             proposal = await generate_with_cancellation(
                 lambda cancel: generate_proposal(
                     seo_request, seller_prompt, providers, cancel_event=cancel
@@ -538,7 +572,7 @@ async def request_seo_proposal(target: Existing, request: Request) -> SeoProposa
     finally:
         active.end(_PROPOSAL, name)
 
-    return _to_response(proposal, snapshot)
+    return proposal_response(proposal, snapshot)
 
 
 @brief_router.post("/design-brief", response_model=DesignBriefResponse)
@@ -584,7 +618,7 @@ async def request_design_brief(asked: DesignBriefRequest, request: Request) -> D
         )
     try:
         with _generation_errors():
-            seller_prompt = _seller_prompt(workspace.brief_prompt_file())
+            seller_prompt = read_seller_prompt(workspace.brief_prompt_file())
             brief_request = _build_brief_request(workspace, asked)
             drafted = await generate_with_cancellation(
                 lambda cancel: generate_brief(

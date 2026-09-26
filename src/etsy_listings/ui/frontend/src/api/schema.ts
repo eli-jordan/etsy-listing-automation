@@ -44,6 +44,72 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/ai/runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Find Ai Run
+     * @description The listing's running or most recent run -- what the editor
+     *     reattaches to after a reload.
+     */
+    get: operations["find_ai_run_api_ai_runs_get"];
+    put?: never;
+    /**
+     * Create Ai Run
+     * @description Start a run for a saved listing. A ``409`` either names the active run
+     *     to reattach to, or gives the readiness rule that failed.
+     */
+    post: operations["create_ai_run_api_ai_runs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/ai/runs/{run_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Ai Run */
+    get: operations["get_ai_run_api_ai_runs__run_id__get"];
+    put?: never;
+    post?: never;
+    /**
+     * Cancel Ai Run
+     * @description Cancel: the run's provider subprocess tree is killed and research
+     *     starts no new call. The run ends ``cancelled`` on its own thread
+     *     shortly after; a brief or snapshot already written stays.
+     */
+    delete: operations["cancel_ai_run_api_ai_runs__run_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/ai/runs/{run_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Stream Ai Run Events */
+    get: operations["stream_ai_run_events_api_ai_runs__run_id__events_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/common-copy": {
     parameters: {
       query?: never;
@@ -364,6 +430,10 @@ export interface paths {
      *
      *     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
      *     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
+     *
+     *     Either way the market snapshot goes now (market-seo.md, *Cache*): a
+     *     listing pending deletion is one the seller is done researching, and
+     *     otherwise only the wipe after the remote deletion would remove it.
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
@@ -386,7 +456,7 @@ export interface paths {
      * @description Run one complete AI Mode SEO request for this saved listing.
      *
      *     Refuses with 409 for exactly two reasons: this listing does not meet
-     *     :func:`_readiness`'s prerequisites (re-checked here independently of
+     *     :func:`readiness`'s prerequisites (re-checked here independently of
      *     whatever the client last saw from the readiness endpoint -- state can
      *     change between the two calls), or another proposal request for the same
      *     listing is already running (the settled "Concurrent requests" decision;
@@ -891,6 +961,203 @@ export interface components {
       /** Outputs */
       outputs: string[];
     };
+    /**
+     * AiBriefEvent
+     * @description The brief was drafted. ``written`` is false when the seller filled the
+     *     field in the meantime, so their text was kept.
+     */
+    AiBriefEvent: {
+      /** Seq */
+      seq: number;
+      /** Text */
+      text: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "brief";
+      /** Written */
+      written: boolean;
+    };
+    /**
+     * AiMarketEvent
+     * @description A successful or empty search, once its snapshot is saved.
+     */
+    AiMarketEvent: {
+      /** Seq */
+      seq: number;
+      snapshot: components["schemas"]["MarketSnapshot"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "market";
+    };
+    /**
+     * AiPhaseEvent
+     * @description Terminal, and always the run's last event.
+     */
+    AiPhaseEvent: {
+      /** Message */
+      message?: string | null;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "done" | "failed" | "cancelled";
+      /** Seq */
+      seq: number;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "phase";
+    };
+    /**
+     * AiProposalEvent
+     * @description The validated proposal: :class:`SeoProposalResponse` unchanged, plus
+     *     ``type`` and ``seq``.
+     */
+    AiProposalEvent: {
+      /** Description Leads */
+      description_leads: string[];
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string;
+      /** Observed Text */
+      observed_text: string;
+      /** Rationale */
+      rationale: components["schemas"]["SeoRationaleEntry"][];
+      /** Seq */
+      seq: number;
+      snapshot: components["schemas"]["SeoProposalSnapshot"];
+      /** Tags */
+      tags: string[];
+      /** Titles */
+      titles: string[];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "proposal";
+      /** Warnings */
+      warnings: components["schemas"]["SeoWarningEntry"][];
+    };
+    /**
+     * AiQueriesEvent
+     * @description The three buyer searches extraction chose.
+     */
+    AiQueriesEvent: {
+      /** Queries */
+      queries: string[];
+      /** Seq */
+      seq: number;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "queries";
+    };
+    /** AiRunDetail */
+    AiRunDetail: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Draft Brief */
+      draft_brief: boolean;
+      /** Events */
+      events: (
+        | components["schemas"]["AiStepEvent"]
+        | components["schemas"]["AiBriefEvent"]
+        | components["schemas"]["AiQueriesEvent"]
+        | components["schemas"]["AiMarketEvent"]
+        | components["schemas"]["AiProposalEvent"]
+        | components["schemas"]["AiPhaseEvent"]
+      )[];
+      /** Finished At */
+      finished_at: string | null;
+      /** Id */
+      id: string;
+      /** Listing */
+      listing: string;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "running" | "done" | "failed" | "cancelled";
+      /** Steps */
+      steps: components["schemas"]["WorkflowStep"][];
+    };
+    /**
+     * AiRunRefusal
+     * @description A ``409`` from ``POST /api/ai/runs``: exactly one of the two is set.
+     *     ``active_run`` names the run to reattach to; ``reason`` says which
+     *     readiness rule failed.
+     */
+    AiRunRefusal: {
+      /** Active Run */
+      active_run?: string | null;
+      /** Reason */
+      reason?: string | null;
+    };
+    /** AiRunSummary */
+    AiRunSummary: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Draft Brief */
+      draft_brief: boolean;
+      /** Finished At */
+      finished_at: string | null;
+      /** Id */
+      id: string;
+      /** Listing */
+      listing: string;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "running" | "done" | "failed" | "cancelled";
+      /** Steps */
+      steps: components["schemas"]["WorkflowStep"][];
+    };
+    /**
+     * AiStepEvent
+     * @description A node changed. The first three events of a run set each node's
+     *     initial state.
+     */
+    AiStepEvent: {
+      /** Detail */
+      detail?: string | null;
+      /**
+       * Id
+       * @enum {string}
+       */
+      id: "brief" | "market" | "seo";
+      /** Seq */
+      seq: number;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "pending" | "active" | "done" | "skipped" | "warning" | "failed";
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "step";
+    };
     /** ApplyRunDetail */
     ApplyRunDetail: {
       /**
@@ -1129,6 +1396,16 @@ export interface components {
       name: string;
       /** Ref */
       ref: string;
+    };
+    /** CreateAiRunRequest */
+    CreateAiRunRequest: {
+      /**
+       * Draft Brief
+       * @default false
+       */
+      draft_brief: boolean;
+      /** Listing */
+      listing: string;
     };
     /**
      * CreateListingRequest
@@ -1719,6 +1996,36 @@ export interface components {
       /** Url */
       url?: string | null;
     };
+    /**
+     * MarketSnapshot
+     * @description One research, as the panel reads it back: the result's fields, when
+     *     the search ran, and the exact block the proposal was given. Holds each
+     *     listing's lead, never its full description (market-seo.md, *What the
+     *     proposal sees*).
+     */
+    MarketSnapshot: {
+      /** Block */
+      block: string;
+      /** Empty */
+      empty: boolean;
+      /** Found */
+      found: number;
+      /** Listings */
+      listings: components["schemas"]["ScoredListing"][];
+      /** Phrases */
+      phrases: components["schemas"]["PhraseScore"][];
+      /** Queries */
+      queries: string[];
+      /** Relaxed */
+      relaxed: boolean;
+      /** Scored */
+      scored: number;
+      /**
+       * Searched At
+       * Format: date-time
+       */
+      searched_at: string;
+    };
     /** MediaChangeDTO */
     MediaChangeDTO: {
       /** After */
@@ -1817,6 +2124,19 @@ export interface components {
        * @enum {string}
        */
       type: "phase";
+    };
+    /**
+     * PhraseScore
+     * @description One tag used by the scored listings: how many use it, and the sum of
+     *     their scores normalised so the best phrase is 1.
+     */
+    PhraseScore: {
+      /** Listings */
+      listings: number;
+      /** Phrase */
+      phrase: string;
+      /** Score */
+      score: number;
     };
     /**
      * Placement
@@ -2167,6 +2487,52 @@ export interface components {
        * @enum {string}
        */
       stage: "retract";
+    };
+    /**
+     * ScoredListing
+     * @description One of the (at most) twenty listings scored, with everything the top
+     *     listings panel shows (ui-market-seo-interactions.md, *Where the data
+     *     comes from*) -- and deliberately not the full description, which neither
+     *     the panel nor the model is given (market-seo.md, *What the proposal
+     *     sees*).
+     */
+    ScoredListing: {
+      /** Favourites Per Day */
+      favourites_per_day: number | null;
+      /** Lead */
+      lead: string;
+      /** Listing Id */
+      listing_id: number;
+      /** Own Shop */
+      own_shop: boolean;
+      /** Rank */
+      rank: number;
+      /** Reviews */
+      reviews: number;
+      /** Score */
+      score: number;
+      /** Score Raw */
+      score_raw: number;
+      /** Search Rank */
+      search_rank: number;
+      /** Shop Id */
+      shop_id: number;
+      /** Shop Name */
+      shop_name: string;
+      /** Shop Rating */
+      shop_rating: number | null;
+      /** Shop Sales */
+      shop_sales: number;
+      /** Tags */
+      tags: string[];
+      /** Thumbnail Url */
+      thumbnail_url: string | null;
+      /** Title */
+      title: string;
+      /** Url */
+      url: string | null;
+      /** Views Per Day */
+      views_per_day: number | null;
     };
     /**
      * SeoProposalResponse
@@ -2581,6 +2947,25 @@ export interface components {
        */
       type: "work";
     };
+    /**
+     * WorkflowStep
+     * @description One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
+     *     ``WorkflowStep``).
+     */
+    WorkflowStep: {
+      /** Detail */
+      detail?: string | null;
+      /**
+       * Id
+       * @enum {string}
+       */
+      id: "brief" | "market" | "seo";
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "pending" | "active" | "done" | "skipped" | "warning" | "failed";
+    };
     /** WorkspaceApplyRequest */
     WorkspaceApplyRequest: {
       /** Expect */
@@ -2657,6 +3042,214 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["DesignBriefResponse"];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  find_ai_run_api_ai_runs_get: {
+    parameters: {
+      query: {
+        listing: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunSummary"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_ai_run_api_ai_runs_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateAiRunRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunSummary"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunRefusal"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_ai_run_api_ai_runs__run_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunDetail"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cancel_ai_run_api_ai_runs__run_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunSummary"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stream_ai_run_events_api_ai_runs__run_id__events_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
