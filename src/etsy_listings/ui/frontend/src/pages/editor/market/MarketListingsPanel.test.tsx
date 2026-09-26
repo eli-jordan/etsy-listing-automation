@@ -14,7 +14,7 @@ function must<T>(value: T | null | undefined, what: string): T {
 }
 
 function panel() {
-  return screen.getByRole("complementary", { name: "Top listings on Etsy" });
+  return screen.getByRole("complementary", { name: "Similar Etsy Listings" });
 }
 
 it("says how big and how fresh the sample is, and what was searched", () => {
@@ -27,7 +27,7 @@ it("says how big and how fresh the sample is, and what was searched", () => {
     />,
   );
 
-  expect(within(panel()).getByRole("heading", { name: "Top listings on Etsy" })).toBeVisible();
+  expect(within(panel()).getByRole("heading", { name: "Similar Etsy Listings" })).toBeVisible();
   expect(panel()).toHaveTextContent("12 scored from 58 found · searched 5 mins ago");
   expect(panel()).toHaveTextContent(
     "Searched Etsy for “retro sunset hiking shirt”, “take a hike t shirt” and “vintage mountain graphic tee”",

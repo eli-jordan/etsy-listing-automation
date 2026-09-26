@@ -1,11 +1,12 @@
 """``GET /api/listings/{name}/ai-seo/readiness``: whether the **AI Mode**
 button may start a run (market-seo.md, *AI runs*; implementation plan, PR 6).
 
-The button starts a run with ``draft_brief=false``, so readiness answers
-with exactly the rules ``POST /api/ai/runs`` applies to that request: a
-design, a brief, a usable garment profile, ``prompts/seo.md`` and
-``prompts/market-queries.md``, and a ready provider. A button that lit up
-for a run the server would then refuse was the gap this closes.
+The button drafts a brief when the saved one is empty, so readiness answers
+with the rules ``POST /api/ai/runs`` applies to ``draft_brief=true``: a
+design, a usable garment profile, ``prompts/seo.md`` and
+``prompts/market-queries.md``, a ready provider, and -- only while the brief
+is empty -- ``prompts/brief.md``. A button that lit up for a run the server
+would then refuse was the gap this closes.
 
 The two generation endpoints that used to live beside it are retired; AI
 runs replaced both (``test_ai_runs_api.py``).
@@ -23,7 +24,12 @@ from fastapi.testclient import TestClient
 from etsy_listings.ai.models import ProviderReadiness
 from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.layout import MARKET_QUERIES_PROMPT_FILE, PROMPTS_DIR, SEO_PROMPT_FILE
+from etsy_listings.workspace.layout import (
+    BRIEF_PROMPT_FILE,
+    MARKET_QUERIES_PROMPT_FILE,
+    PROMPTS_DIR,
+    SEO_PROMPT_FILE,
+)
 from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.ai_runs import seed_prompts
@@ -99,13 +105,20 @@ def test_readiness_is_hidden_without_a_selected_design(workspace_root: Path) -> 
     assert "design" in str(body["reason"])
 
 
-def test_readiness_is_hidden_with_an_empty_brief(workspace_root: Path) -> None:
-    """The button never drafts: it runs with ``draft_brief=false``."""
+def test_an_empty_brief_is_ready_because_the_button_drafts_it(workspace_root: Path) -> None:
     edit_listing(workspace_root, brief="   ")
+
+    assert _readiness(workspace_root) == {"ready": True, "reason": None}
+
+
+def test_an_empty_brief_needs_the_brief_prompt(workspace_root: Path) -> None:
+    edit_listing(workspace_root, brief="")
+    (workspace_root / PROMPTS_DIR / BRIEF_PROMPT_FILE).unlink()
 
     body = _readiness(workspace_root)
 
-    assert body == {"ready": False, "reason": "the listing brief is empty"}
+    assert body["ready"] is False
+    assert BRIEF_PROMPT_FILE in str(body["reason"])
 
 
 def test_readiness_is_hidden_without_a_usable_garment_profile(workspace_root: Path) -> None:

@@ -168,9 +168,9 @@ def run_task[Result](
     seconds: float = _DEFAULT_SECONDS,
     cancel_event: threading.Event | None = None,
 ) -> Result:
-    """Try ``providers`` in order -- Codex, then Claude, per the settled
-    plan -- against ``task``, within one shared ``deadline`` (a fresh
-    ``seconds``-second one is started if none is given).
+    """Try ``providers`` in order -- Codex, then Claude, then Grok -- against
+    ``task``, within one shared ``deadline`` (a fresh ``seconds``-second one
+    is started if none is given).
 
     ``decode`` takes raw provider text and returns a validated result,
     raising `_Malformed` for anything in between -- the only thing this
@@ -283,8 +283,8 @@ def generate_market_queries(
     """Three buyer search queries for ``request``, using the seller's own
     ``prompts/market-queries.md`` text (market-seo.md, *Query extraction*).
 
-    The third task over the same chain: Codex, then Claude on a recognised
-    unavailable failure, one same-provider repair, and its own 60 seconds
+    The third task over the same chain: Codex, then Claude, then Grok on a
+    recognised unavailable failure, one same-provider repair, and its own 60 seconds
     (PRD 4's deadline applies to each provider call of an AI run on its own).
     Never cached -- a second request is free to try different queries.
     """

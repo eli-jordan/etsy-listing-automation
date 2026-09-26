@@ -47,9 +47,9 @@ from step 1 stays written either way.
 
 The call has its own seller-editable prompt, `prompts/market-queries.md`,
 seeded by `setup` like `seo.md` and `brief.md`. It goes through the same
-provider chain as every other AI Mode request: Codex, then Claude Code on a
-recognised unavailable failure, and one same-provider repair for malformed
-output.
+provider chain as every other AI Mode request: Codex, then Claude, then Grok
+Code on a recognised unavailable failure, and one same-provider repair for
+malformed output.
 
 - **Input:** the brief, the design image, and the garment profile's display
   title (for example *Unisex Heavy Cotton Tee*).
@@ -280,7 +280,10 @@ GET    /api/listings/{name}/market  the latest snapshot, or 404
 
 - **Readiness.** `POST` checks the same things AI Mode's readiness does, plus
   a garment profile, which the queries need for the item type. An empty brief
-  is allowed only when `draft_brief` is true.
+  is allowed only when `draft_brief` is true. The button's own readiness
+  check asks with `draft_brief=true`, so an empty brief lights the button
+  when `prompts/brief.md` is present, and the click sends `draft_brief` set
+  exactly when the field is still empty.
 - **One per listing.** A second `POST` while one is active returns 409, naming
   the active run. A finished run is kept in memory until the next run for that
   listing replaces it. Nothing survives a server restart.

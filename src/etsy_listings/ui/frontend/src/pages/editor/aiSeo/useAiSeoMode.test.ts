@@ -154,14 +154,20 @@ describe("useAiSeoMode availability", () => {
     expect(workspace).not.toHaveBeenCalled();
   });
 
-  it("is unavailable without calling the readiness endpoint when the brief is empty", async () => {
+  it("is available with an empty brief, and the click drafts one", async () => {
     mockWorkspace();
-    const readiness = vi.spyOn(seoApi, "getSeoReadiness");
+    mockReadiness({ ready: true });
 
     const { result } = renderHook(() => useAiSeoMode(detail({ brief: "   " }), vi.fn(), vi.fn()));
 
-    await waitFor(() => expect(result.current.available).toBe(false));
-    expect(readiness).not.toHaveBeenCalled();
+    await waitFor(() => expect(result.current.available).toBe(true));
+    expect(result.current.draftsBrief).toBe(true);
+    expect(result.current.requirements.map((requirement) => requirement.label)).not.toContain(
+      "Brief filled in",
+    );
+
+    act(() => result.current.generate());
+    expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true });
   });
 
   it("asks the readiness endpoint once name/design/brief are present, and reflects its answer", async () => {
@@ -280,6 +286,8 @@ describe("useAiSeoMode generation", () => {
 
 describe("useAiSeoMode and the auto chain's brief", () => {
   it("puts a drafted brief into an empty field without saving it again", async () => {
+    mockWorkspace();
+    mockReadiness({ ready: true });
     const onUpdate = vi.fn();
     const onAdopt = vi.fn();
     const { result } = renderHook(() =>
@@ -295,6 +303,8 @@ describe("useAiSeoMode and the auto chain's brief", () => {
   });
 
   it("leaves a brief the seller typed meanwhile alone", async () => {
+    mockWorkspace();
+    mockReadiness({ ready: true });
     const onAdopt = vi.fn();
     const { result, rerender } = renderHook(
       (d: ListingDetail) => useAiSeoMode(d, vi.fn(), vi.fn(), undefined, onAdopt),
@@ -309,20 +319,25 @@ describe("useAiSeoMode and the auto chain's brief", () => {
     expect(onAdopt).not.toHaveBeenCalled();
   });
 
-  it("keeps a proposal that arrives before the workspace is known", async () => {
-    mockWorkspace();
+  it("keeps a proposal that arrives before the workspace id does", async () => {
+    let resolveWorkspace: (workspace: WorkspaceSummary) => void = () => {};
+    vi.spyOn(listingsApi, "getWorkspace").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveWorkspace = resolve;
+        }),
+    );
     mockReadiness({ ready: true });
     const body = proposal();
-    const { result, rerender } = renderHook(
-      (d: ListingDetail) => useAiSeoMode(d, vi.fn(), vi.fn()),
-      { initialProps: detail({ brief: "" }) },
-    );
+    const { result } = renderHook(() => useAiSeoMode(detail({ brief: "" }), vi.fn(), vi.fn()));
     act(() => result.current.run.start({ draftBrief: true }));
     await waitFor(() => expect(runs.streams).toHaveLength(1));
     runs.emit(proposalEvent(body), phaseEvent("done"));
     expect(result.current.proposal).toBeNull();
 
-    rerender(detail());
+    await act(async () => {
+      resolveWorkspace({ shop_name: "Pine & Thread", storage_id: "workspace-1" });
+    });
 
     await waitFor(() => expect(result.current.proposal?.proposal).toEqual(body));
   });

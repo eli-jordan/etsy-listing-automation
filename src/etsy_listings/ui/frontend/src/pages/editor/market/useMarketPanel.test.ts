@@ -116,7 +116,7 @@ it("shows the empty note when the run found nothing comparable", async () => {
   expect(result.current).toEqual({ kind: "empty", queries: MARKET_QUERIES });
 });
 
-it("shows a failure it watched happen, with the spec's reason", async () => {
+it("hides the panel when a failure was watched, instead of quoting the reason", async () => {
   get.mockResolvedValue(marketSnapshot());
   const { result, rerender } = panel("take-a-hike", run("active", { busy: true }));
   await waitFor(() => expect(get).toHaveBeenCalled());
@@ -128,13 +128,10 @@ it("shows a failure it watched happen, with the spec's reason", async () => {
     }),
   });
 
-  expect(result.current).toEqual({
-    kind: "failed",
-    reason: "Etsy did not respond (HTTP 503) after 3 retries.",
-  });
+  expect(result.current).toBeNull();
 });
 
-it("keeps a failure's own words when they are not a search failure", async () => {
+it("hides the panel for a failure that is not a search error either", async () => {
   const { result, rerender } = panel("take-a-hike", run("active", { busy: true }));
   await waitFor(() => expect(get).toHaveBeenCalled());
 
@@ -143,10 +140,7 @@ it("keeps a failure's own words when they are not a search failure", async () =>
     run: run("failed", { detail: "The AI run took longer than 3 minutes, so it was stopped." }),
   });
 
-  expect(result.current).toEqual({
-    kind: "failed",
-    reason: "The AI run took longer than 3 minutes, so it was stopped.",
-  });
+  expect(result.current).toBeNull();
 });
 
 it("returns to the saved snapshot after a reload, when the failure is only replayed", async () => {

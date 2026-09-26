@@ -551,23 +551,19 @@ describe("DetailsTab AI Mode", () => {
     expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
   });
 
-  it("rechecks AI Mode after a new brief is saved", async () => {
+  it("asks readiness with an empty brief, and again after the listing changes", async () => {
     vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
       shop_name: "Pine & Thread",
       storage_id: "workspace-1",
     });
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
-      .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
+      .mockResolvedValueOnce({ ready: false, reason: "prompts/brief.md is missing" })
       .mockResolvedValueOnce({ ready: true });
     const { rerender } = render(
       <DetailsTab detail={readyDetail({ brief: "" })} onUpdate={vi.fn()} onFlush={vi.fn()} />,
     );
 
-    expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
-    expect(readiness).not.toHaveBeenCalled();
-
-    rerender(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     await waitFor(() => expect(readiness).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
 
@@ -744,7 +740,7 @@ describe("DetailsTab top listings panel", () => {
     render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
     await waitFor(() => expect(runs.market).toHaveBeenCalledWith("take-a-hike"));
-    expect(screen.queryByRole("complementary", { name: "Top listings on Etsy" })).toBeNull();
+    expect(screen.queryByRole("complementary", { name: "Similar Etsy Listings" })).toBeNull();
     expect(fieldset().closest(".mkt-layout")).toBeNull();
   });
 
@@ -753,7 +749,7 @@ describe("DetailsTab top listings panel", () => {
 
     render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
-    const panel = await screen.findByRole("complementary", { name: "Top listings on Etsy" });
+    const panel = await screen.findByRole("complementary", { name: "Similar Etsy Listings" });
     const layout = fieldset().closest(".mkt-layout");
     expect(layout?.children).toHaveLength(2);
     expect(layout?.children[0]).toHaveClass("details-tab");
@@ -770,7 +766,7 @@ describe("DetailsTab top listings panel", () => {
 
     runs.emit(stepEvent("market", "active"));
 
-    expect(screen.getByRole("complementary", { name: "Top listings on Etsy" })).toBeVisible();
+    expect(screen.getByRole("complementary", { name: "Similar Etsy Listings" })).toBeVisible();
     expect(screen.getByLabelText("Title")).toBe(title);
     expect(title).toHaveFocus();
   });
@@ -782,7 +778,7 @@ describe("DetailsTab top listings panel", () => {
 
     runs.emit(stepEvent("market", "active"), queriesEvent(MARKET_QUERIES));
 
-    const panel = screen.getByRole("complementary", { name: "Top listings on Etsy" });
+    const panel = screen.getByRole("complementary", { name: "Similar Etsy Listings" });
     expect(panel).toHaveTextContent("Searching Etsy for “retro sunset hiking shirt”");
 
     runs.emit(marketEvent(marketSnapshot({ found: 31 })), stepEvent("market", "done"));
@@ -799,7 +795,7 @@ describe("DetailsTab top listings panel", () => {
     runs.find.mockResolvedValue(aiRunSummary());
     const user = userEvent.setup();
     render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
-    const panel = await screen.findByRole("complementary", { name: "Top listings on Etsy" });
+    const panel = await screen.findByRole("complementary", { name: "Similar Etsy Listings" });
     await user.click(within(panel).getByRole("tab", { name: "Phrases" }));
     expect(within(panel).queryByLabelText("In your suggestions")).toBeNull();
 

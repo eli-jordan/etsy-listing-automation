@@ -38,7 +38,8 @@ import type {
  * empty. The chain then fires **once**, on the first successful save after
  * the pick that has a name, a design and a garment profile -- the first
  * moment the server can run it -- asking for a brief only if the field is
- * still empty then. A new pick re-arms it; leaving the editor disarms it.
+ * still empty then. That start raises {@link AiRun.autoNotice}; pressing
+ * AI Mode does not. A new pick re-arms it; leaving the editor disarms it.
  * A run that fails is reported and left alone: an automatic retry against a
  * metered CLI is the failure mode "once" exists to rule out.
  */
@@ -65,10 +66,13 @@ export interface AiRun {
   message: string | null;
   /** When the run started (ms since the epoch), from the server. */
   startedAt: number | null;
-  start: (options: { draftBrief: boolean }) => void;
+  start: (options: { draftBrief: boolean; automatic?: boolean }) => void;
   cancel: () => void;
   /** Arms the auto chain; see the module docstring. */
   arm: () => void;
+  /** The auto chain started the run now on screen. A press of AI Mode does not set this. */
+  autoNotice: boolean;
+  dismissAutoNotice: () => void;
 }
 
 export interface AiRunHandlers {
@@ -150,6 +154,7 @@ export function useAiRun(
   handlers: AiRunHandlers = {},
 ): AiRun {
   const [view, setView] = useState<View>(IDLE);
+  const [autoNotice, setAutoNotice] = useState(false);
   const stream = useRef<EventStreamHandle | null>(null);
   /** Bumped by every start and attach: an answer or an event that arrives for
    * an older one is ignored. */
@@ -190,9 +195,10 @@ export function useAiRun(
   }, []);
 
   const start = useCallback(
-    ({ draftBrief }: { draftBrief: boolean }) => {
+    ({ draftBrief, automatic = false }: { draftBrief: boolean; automatic?: boolean }) => {
       const listing = latest.current.detail.name;
       if (listing === "") return;
+      setAutoNotice(automatic);
       stream.current?.close();
       stream.current = null;
       const mine = ++generation.current;
@@ -263,7 +269,7 @@ export function useAiRun(
     if (save.kind !== "saved") return;
     if (name === "" || !hasDesign || garmentProfile.trim() === "") return;
     armed.current = null;
-    start({ draftBrief: brief.trim() === "" });
+    start({ draftBrief: brief.trim() === "", automatic: true });
   }, [save, name, hasDesign, garmentProfile, brief, start]);
 
   useEffect(() => () => stream.current?.close(), []);
@@ -280,5 +286,7 @@ export function useAiRun(
     start,
     cancel,
     arm,
+    autoNotice,
+    dismissAutoNotice: () => setAutoNotice(false),
   };
 }

@@ -2872,6 +2872,7 @@ table.listings tbody tr:last-child td {
   line-height: 1.4;
   text-align: left;
   white-space: normal;
+  overflow-wrap: break-word;
   opacity: 0;
   visibility: hidden;
   transform: translateY(-4px);
@@ -3332,6 +3333,7 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 75%, transparent);
   font-size: 11.5px;
   line-height: 1.45;
+  overflow-wrap: break-word;
 }
 
 .mkt-note strong {
@@ -3399,54 +3401,6 @@ table.listings tbody tr:last-child td {
   }
   to {
     background-position: -200% 0;
-  }
-}
-
-.seo-inline-status {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 9px;
-  border-radius: var(--radius-sm);
-  background: var(--color-neutral-200);
-  color: color-mix(in srgb, var(--color-text) 70%, transparent);
-  font-size: 11px;
-  max-width: 260px;
-}
-
-.seo-inline-status button {
-  flex: none;
-  padding: 3px 8px;
-  border: 1px solid var(--color-divider);
-  border-radius: 999px;
-  background: var(--color-neutral-100);
-  color: var(--color-text);
-  font: inherit;
-  font-weight: 700;
-  cursor: pointer;
-}
-
-.seo-inline-status__pulse {
-  flex: none;
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--color-accent);
-}
-
-@media (prefers-reduced-motion: no-preference) {
-  .seo-inline-status__pulse {
-    animation: seo-pulse 1.4s ease-in-out infinite;
-  }
-}
-
-@keyframes seo-pulse {
-  0%,
-  100% {
-    opacity: 0.4;
-  }
-  50% {
-    opacity: 1;
   }
 }
 
@@ -5557,12 +5511,80 @@ table.listings tbody tr:last-child td {
   align-self: start;
 }
 
-.seo-brief-row > .seo-ai-mode-progress,
-.seo-brief-row > .seo-inline-status {
+.seo-brief-row > .seo-ai-mode-progress {
   grid-column: 1;
   grid-row: 3;
   justify-self: end;
   margin-top: 6px;
+}
+
+/* Upper right of the viewport, below the page head, so Deploy stays
+   clickable. The automatic-run notice is portaled to document.body: it has
+   to stay up on Variants, Pricing and Listing Images, not only while
+   Listing Details is mounted. The failure toast shares the frame. */
+.ai-failure-toast,
+.ai-auto-toast {
+  position: fixed;
+  z-index: 40;
+  top: 72px;
+  right: 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: min(22rem, calc(100vw - 32px));
+  padding: 12px 12px 12px 14px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.ai-failure-toast {
+  border-color: color-mix(in srgb, var(--color-danger) 35%, var(--color-divider));
+}
+
+.ai-auto-toast {
+  border-color: color-mix(in srgb, var(--seo-purple) 45%, var(--color-divider));
+}
+
+.ai-failure-toast p,
+.ai-auto-toast p {
+  margin: 0;
+  overflow-wrap: break-word;
+}
+
+.ai-failure-toast button,
+.ai-auto-toast button {
+  flex: none;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  .ai-failure-toast,
+  .ai-auto-toast {
+    animation: ai-failure-toast-in 180ms ease-out;
+  }
+}
+
+@keyframes ai-failure-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
 }
 
 .seo-ai-mode {

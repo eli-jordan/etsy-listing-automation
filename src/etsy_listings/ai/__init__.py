@@ -29,10 +29,10 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
   affiliation/content checks; trademark findings become warnings, never a
   refusal.
 - ``providers`` -- the ``AiProvider`` protocol and ``FakeAiProvider``.
-- ``codex``/``claude`` -- the real `CodexProvider`/`ClaudeProvider`
-  adapters: a non-interactive, read-only, session-less CLI invocation each,
-  behind the same `AiProvider` protocol (PR4). Neither reads a prompt file
-  or knows which feature it is serving.
+- ``grok``/``codex``/``claude`` -- the real CLI adapters: a non-interactive,
+  read-only invocation each, behind the same `AiProvider` protocol. None
+  reads a prompt file or knows which feature it is serving. The chain tries
+  Codex first, then Claude, then Grok.
 - ``orchestrator`` -- `run_task`, and the three entry points over it,
   `generate_proposal`, `generate_brief` and `generate_market_queries`.
 - ``errors`` -- the exception hierarchy `orchestrator` and both adapters
@@ -70,6 +70,7 @@ from etsy_listings.ai.errors import (
     SeoTryAgainError,
     classify_process_failure,
 )
+from etsy_listings.ai.grok import GrokProvider
 from etsy_listings.ai.market_queries import (
     MARKET_QUERIES_RESPONSE_SCHEMA,
     MarketQueries,
@@ -123,6 +124,7 @@ __all__ = [
     "DesignBrief",
     "FakeAiProvider",
     "GarmentContext",
+    "GrokProvider",
     "MarketQueries",
     "MarketQueriesRequest",
     "MarketQueriesValidationError",

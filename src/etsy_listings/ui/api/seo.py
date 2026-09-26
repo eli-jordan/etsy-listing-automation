@@ -16,9 +16,9 @@ browser disconnecting -- were retired when the browser moved onto runs
 (implementation plan, PR 6). What is left is what runs and the button share:
 
 - :func:`readiness`, the rules a run is refused by, which this module's
-  endpoint answers with for the **AI Mode** button (``draft_brief=False``:
-  the button never drafts), so the button is lit exactly when ``POST
-  /api/ai/runs`` would accept it;
+  endpoint answers with for the **AI Mode** button (``draft_brief=True``:
+  an empty brief is drafted by that click), so the button is lit exactly
+  when ``POST /api/ai/runs`` would accept the run the click starts;
 - turning a saved `Listing` into the `SeoRequest` the orchestrator wants
   (:func:`build_seo_request`, :func:`primary_design_image`), and the
   proposal's frozen input snapshot and wire response
@@ -38,6 +38,7 @@ from fastapi import APIRouter, HTTPException, Request
 
 from etsy_listings.ai.claude import ClaudeProvider
 from etsy_listings.ai.codex import CodexProvider
+from etsy_listings.ai.grok import GrokProvider
 from etsy_listings.ai.models import GarmentContext, SeoProposal, SeoRequest
 from etsy_listings.ai.providers import AiProvider
 from etsy_listings.config.garment_profile import GarmentProfile
@@ -88,12 +89,12 @@ since a provider's own `readiness()` can change between calls
 
 
 def default_ai_providers(workspace: Workspace) -> Sequence[AiProvider]:
-    """Codex, then Claude (the settled "Providers" decision) -- the real
-    adapters, freshly constructed per call since both are plain, cheap
-    dataclasses with no state worth reusing across requests (readiness
-    itself is re-checked every call; there is no warm connection to hold
-    onto). `create_app`'s default; a test overrides it with a factory that
-    returns `FakeAiProvider` doubles instead.
+    """Codex, then Claude, then Grok. A recognised unavailable failure
+    falls through, so a usage limit on the first two still reaches Grok.
+    Freshly constructed per call: readiness is re-checked every time, and
+    there is no warm connection to hold onto. `create_app`'s default; a
+    test overrides it with a factory that returns `FakeAiProvider` doubles
+    instead.
 
     No prompt file is handed over: an adapter no longer reads one, because
     which prose a request is built from is the request's business and not
@@ -105,6 +106,7 @@ def default_ai_providers(workspace: Workspace) -> Sequence[AiProvider]:
     return (
         CodexProvider(workspace_root=workspace.root),
         ClaudeProvider(workspace_root=workspace.root),
+        GrokProvider(workspace_root=workspace.root),
     )
 
 
@@ -243,16 +245,17 @@ def proposal_response(proposal: SeoProposal, snapshot: SeoProposalSnapshot) -> S
 def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessResponse:
     """Whether the **AI Mode** button may start a run for this saved listing
     right now -- the call the frontend makes to decide whether to enable the
-    always visible control. The button never drafts a brief, so this is
-    ``POST /api/ai/runs``'s own rule set for ``draft_brief=false``: a lit
-    button is one the server will not refuse. Read-only: every check here,
-    including each provider's own `readiness()`, is a local probe (a file's
-    existence, a fast `--help`/`login status` subprocess) that changes
-    nothing.
+    always visible control. The button drafts a brief when the saved one is
+    empty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``: an
+    empty brief is allowed, and then ``prompts/brief.md`` is required. A
+    filled brief skips drafting. A lit button is one the server will not
+    refuse. Read-only: every check here, including each provider's own
+    `readiness()`, is a local probe (a file's existence, a fast
+    `--help`/`login status` subprocess) that changes nothing.
     """
     listing = target.workspace.load_listing(target.name)
     providers = _providers(request, target.workspace)
-    return readiness(target.workspace, listing, providers, draft_brief=False)
+    return readiness(target.workspace, listing, providers, draft_brief=True)
 
 
 @router.get(

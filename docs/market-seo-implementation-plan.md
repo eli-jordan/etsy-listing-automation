@@ -26,7 +26,7 @@ interactions docs. This table is a summary; those documents are the authority.
 | Leaving and cancelling | Leaving the editor or reloading does not cancel. The editor reattaches and the events replay. **Cancel** sends `DELETE`, which sets the run's cancel event and so kills the provider subprocess tree. A brief or snapshot already written stays. |
 | Brief write | The **server** writes the drafted brief into `listing.yaml`, only if the saved brief is still empty. It does this under a new per-listing write lock that PATCH autosave and rename also take. Then it emits `brief {text, written}`. The editor puts the text into the field without autosaving it again. |
 | Auto chain (PRD 68) | Picking a design while the brief is empty arms the chain in the editor. It fires once, the first time a successful save has a name, design and garment profile. It sends `draft_brief = (brief still empty)`. Picking another design re-arms it; leaving or reloading disarms it. |
-| AI Mode button | Starts a run with `draft_brief=false`. The Brief node shows as **skipped**. |
+| AI Mode button | Starts a run with `draft_brief` set when the brief is empty, so a failed automatic draft can be started again from the button. A brief that already has text is sent with `draft_brief=false`, and the Brief node shows as **skipped**. |
 | Deadlines | Each provider call (brief, extraction, proposal) keeps the orchestrator's 60s. Market search has no limit of its own. The whole run is capped at **3 minutes**. |
 | Old endpoints | `POST /api/ai/design-brief` and `POST /api/listings/{name}/ai-seo/proposal` are retired, with their clients and tests. `GET …/ai-seo/readiness` stays. |
 | Suggestions | `aiSeoStorage` (localStorage, 1 day) stays the lasting home. The browser stores the `proposal` event there. Replay only covers a run that is in flight or has just finished. |
@@ -465,7 +465,7 @@ steps.
   - It fires once, on the first successful save with a name, design and
     garment profile, using `draftBrief = brief.trim() === ""`.
   - A new pick re-arms it. Unmounting disarms it.
-- The AI Mode button calls `start({draftBrief: false})`.
+- The AI Mode button calls `start({draftBrief: brief.trim() === ""})`.
 - *Generating for X seconds* reads from the run's start time.
 - Cancel calls `cancelAiRun`.
 - `AiActivityIndicator` keeps its current markup for now. Its label comes

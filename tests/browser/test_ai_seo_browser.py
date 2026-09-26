@@ -36,7 +36,11 @@ import uvicorn
 import yaml
 from playwright.sync_api import Page
 
-from etsy_listings.ai.errors import ProviderCancelledError, ProviderUnavailableError
+from etsy_listings.ai.errors import (
+    ProviderCancelledError,
+    ProviderGenerationError,
+    ProviderUnavailableError,
+)
 from etsy_listings.ai.models import Deadline, ProviderReadiness, RawProviderResult
 from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient
@@ -517,8 +521,10 @@ def test_editing_an_empty_brief_enables_ai_mode_after_autosave(
         assert page.locator(".seo-brief-row").get_by_role("button", name="AI Mode").count() == 1
         page.locator(".seo-ai-mode-anchor").hover()
         tip = page.get_by_role("tooltip")
-        tip.wait_for(state="visible")
-        assert "Brief filled in" in tip.inner_text()
+        # No brief.md in this workspace, so an empty brief cannot be drafted
+        # and the button stays disabled until the seller writes one.
+        tip.get_by_text("brief.md").wait_for(state="visible")
+        assert "Brief filled in" not in tip.inner_text()
         fills = page.locator(".seo-ai-mode svg path").evaluate_all(
             "paths => paths.map(path => getComputedStyle(path).fill)"
         )
@@ -546,12 +552,53 @@ def test_editing_an_empty_brief_enables_ai_mode_after_autosave(
 
         ai_mode.click()
         page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
-        # The button never drafts: the seller's brief is used as written.
+        # The seller wrote the brief, so the run uses it and does not draft.
         assert provider.calls == ["queries", "seo"]
         # The brief reaches the provider inside the assembled prompt now, not
         # as a field on a `SeoRequest`: `ai/prompt.py.build_seo_task` wraps it
         # in the delimited listing context before an adapter ever sees it.
         assert "A retro sunset tee that says TAKE A HIKE." in provider.task("seo").prompt_text
+
+
+def test_ai_mode_drafts_an_empty_brief_and_a_failed_draft_can_be_retried(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """An empty brief does not disable the button. The click drafts one, and
+    a draft that fails can be started again from the same button."""
+    _seed_prompt(workspace_root)
+    _seed_brief_prompt(workspace_root)
+    edit_listing(workspace_root, brief="")
+    provider = _ready_provider()
+    provider.failures["brief"] = ProviderGenerationError("codex", 1, "not valid json")
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.get_by_role("heading", name=LISTING).wait_for(state="visible")
+        _open_details_tab(page)
+        ai_mode = page.get_by_role("button", name="AI Mode")
+        page.wait_for_function("document.querySelector('.seo-ai-mode')?.disabled === false")
+        page.locator(".seo-ai-mode-anchor").hover()
+        assert "Writes a brief from this design" in page.get_by_role("tooltip").inner_text()
+        assert page.locator(".ai-auto-toast").count() == 0
+
+        ai_mode.click()
+        page.locator(".ai-failure-toast").wait_for(state="visible")
+        assert page.locator("#details-brief").input_value() == ""
+        assert provider.count("brief") == 1
+        assert page.locator(".ai-auto-toast").count() == 0
+
+        del provider.failures["brief"]
+        page.get_by_role("button", name="Try again").click()
+        page.wait_for_function(
+            "expected => document.querySelector('#details-brief').value === expected",
+            arg=_DRAFTED_BRIEF,
+        )
+        assert _listing_yaml(workspace_root).get("brief") == _DRAFTED_BRIEF
+        page.locator(".seo-choice-list").first.wait_for(state="visible")
+        assert provider.calls == ["brief", "brief", "queries", "seo"]
+        assert page.locator(".ai-auto-toast").count() == 0
 
 
 def test_ai_mode_is_disabled_when_no_provider_is_ready(
@@ -791,7 +838,7 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
         # One repair attempt happened server-side (the second queued
         # response was consumed) and it was *also* malformed, so the run
         # fails and this surfaces as "Try again" -- never a partial proposal.
-        failure = page.locator(".seo-inline-status")
+        failure = page.locator(".ai-failure-toast")
         failure.wait_for(state="visible")
         assert "AI Mode couldn’t finish" in failure.inner_text()
         seo_repairs = [
@@ -1190,7 +1237,7 @@ def test_a_workspace_without_the_brief_prompt_says_so_and_stops(
         _pick_another_design(page, "second-design")
 
         _open_details_tab(page)
-        failure = page.locator(".seo-inline-status")
+        failure = page.locator(".ai-failure-toast")
         failure.wait_for(state="visible")
         assert "brief.md is missing" in failure.inner_text()
         page.wait_for_timeout(500)  # nothing retries
@@ -1315,6 +1362,17 @@ def test_the_page_head_names_the_brief_step_while_it_runs(
         head.wait_for(state="visible")
         assert "Drafting brief…" in head.inner_text()
 
+        # The chain started on Variants. The notice is a viewport toast, so
+        # Pricing, Listing Images and Listing Details all keep it.
+        toast = page.locator(".ai-auto-toast")
+        toast.wait_for(state="visible")
+        assert page.locator(".details-tab").count() == 0
+        assert "writing a title, tags and a description" in toast.inner_text()
+        for label in ("Pricing", "Listing Images", "Listing Details"):
+            page.locator(".tabs .seg-opt", has_text=label).click()
+            assert toast.is_visible()
+            assert page.locator(".details-tab .ai-auto-toast").count() == 0
+
         held.set()
 
         # And it goes away again once the chain is done with it.
@@ -1350,6 +1408,7 @@ def test_nothing_below_the_head_moves_when_the_indicator_comes_and_goes(
 
         page.get_by_role("button", name="AI Mode").click()
         page.locator(".page-head .aiflow").wait_for(state="visible")
+        assert page.locator(".ai-auto-toast").count() == 0
         assert provider.started["seo"].wait(timeout=10)
         assert tabs_top() == resting
 
@@ -1402,7 +1461,7 @@ def test_a_reload_mid_run_shows_the_same_run_again(
 
 
 def _market_panel(page: Page) -> Any:
-    return page.get_by_role("complementary", name="Top listings on Etsy")
+    return page.get_by_role("complementary", name="Similar Etsy Listings")
 
 
 def test_a_saved_search_shows_beside_the_fields_and_after_a_reload(

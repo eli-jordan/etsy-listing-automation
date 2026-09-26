@@ -159,6 +159,8 @@ export function aiRunStub(over: Partial<AiRun> = {}): AiRun {
     start: vi.fn(),
     cancel: vi.fn(),
     arm: vi.fn(),
+    autoNotice: false,
+    dismissAutoNotice: vi.fn(),
     ...over,
   };
 }

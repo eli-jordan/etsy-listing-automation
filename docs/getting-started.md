@@ -499,16 +499,14 @@ for one title/tags/description-lead proposal, then lets you accept whichever
 individual suggestions you want; nothing it suggests touches `listing.yaml`
 until you click one.
 
-**CLI sign-in.** AI Mode runs `codex exec` first, falling back to `claude -p`
-only on a recognised sign-in/quota/rate-limit failure. Both use your existing
-subscription — no OpenAI or Anthropic API key, and nothing to configure in
-`shop.yaml`. Sign in to each CLI the ordinary way (`codex login`; for Claude
-Code, run `claude` once and complete its sign-in prompt, or see `claude
---help` for its auth subcommands) — see the [Codex authentication
-docs](https://learn.chatgpt.com/docs/auth) and [Claude Code headless
-mode](https://code.claude.com/docs/en/headless). The **AI Mode** button is
-hidden, never disabled, until at least one CLI reports itself signed in and
-ready; if neither is, the Details tab simply looks like it always did.
+**CLI sign-in.** AI Mode runs `codex exec` first, then `claude -p`, then
+`grok`. It moves to the next CLI only on a recognised
+sign-in/quota/rate-limit failure. All three use your existing subscription —
+no API key, and nothing to configure in `shop.yaml`. Sign in the ordinary way
+(`grok login`, `codex login`; for Claude Code, run `claude` once and complete
+its sign-in prompt). The **AI Mode** button stays hidden until at least one
+CLI reports itself signed in and ready; if none is, the Details tab simply
+looks like it always did.
 
 **Picking a design names a new listing.** A draft with no name takes the
 design's filename without its extension — so creating a listing is: open the

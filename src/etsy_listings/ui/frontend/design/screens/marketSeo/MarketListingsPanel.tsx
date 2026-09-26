@@ -180,9 +180,9 @@ export function MarketListingsPanel({
   const [view, setView] = useState(initialView);
 
   return (
-    <aside className="mkt-panel" aria-label="Top listings on Etsy">
+    <aside className="mkt-panel" aria-label="Similar Etsy Listings">
       <header className="mkt-head">
-        <h2 className="mkt-head__title">Top listings on Etsy</h2>
+        <h2 className="mkt-head__title">Similar Etsy Listings</h2>
         {state.kind === "ready" && (
           <span className="mkt-head__meta">
             {state.research.scored} scored from {state.research.found} found · searched {state.research.searchedAgo}
