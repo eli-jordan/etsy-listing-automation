@@ -62,6 +62,7 @@ from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing, set_shop_id, write_design
+from tests.support.server import stop_server
 
 pytestmark = pytest.mark.browser
 
@@ -295,8 +296,7 @@ def _seo_server(
     try:
         yield f"http://127.0.0.1:{port}"
     finally:
-        server.should_exit = True
-        thread.join(timeout=10)
+        stop_server(server, thread)
 
 
 @contextmanager
@@ -657,7 +657,10 @@ def test_a_changed_editor_input_stales_unresolved_choices_until_regenerated(
 
         # Regenerate: the AI Mode control itself doubles as Regenerate
         # once a proposal is stale, and is not disabled by staleness
-        # (only by an in-flight request).
+        # (only by an in-flight request). It *is* disabled until the
+        # Section blur's autosave lands, so wait for that rather than
+        # sampling once -- the stale badges above appear before it does.
+        page.wait_for_function("document.querySelector('.seo-ai-mode')?.disabled === false")
         assert ai_mode.is_enabled()
         ai_mode.click()
 

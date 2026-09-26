@@ -15,6 +15,7 @@ from typing import Any, Literal, NamedTuple
 import httpx
 
 from etsy_listings.clients.etsy.models import (
+    ALREADY_DECODED,
     Inventory,
     Listing,
     ListingImage,
@@ -319,7 +320,8 @@ class FakeEtsyMarketClient:
             ids = self._searches.get(query, [])[:limit]
             return [
                 MarketCandidate.model_validate(
-                    self._listings[i].model_dump(include=set(MarketCandidate.model_fields))
+                    self._listings[i].model_dump(include=set(MarketCandidate.model_fields)),
+                    context=ALREADY_DECODED,
                 )
                 for i in ids
             ]

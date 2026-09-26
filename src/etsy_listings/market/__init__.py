@@ -2,10 +2,16 @@
 listings, a ranked phrase list and a market-data block out (market-seo.md,
 *Market search*, *Scoring* and *What the proposal sees*).
 
-All in memory. Nothing here writes a file or holds a cache -- that is PR 3's
-snapshot store and cached client, wrapped around the same
-:class:`~etsy_listings.clients.etsy.market.EtsyMarketClient` -- and nothing
-here knows about HTTP or the UI.
+The names below are all in memory, and nothing here knows about HTTP or the
+UI. The two modules that touch disk are imported by their own names, never
+re-exported here, because they need the workspace -- and the workspace's
+``settings.yaml`` loader imports :class:`MarketWeights` from this package:
+
+- ``market.cache`` -- :class:`~etsy_listings.market.cache.CachedEtsyMarketClient`,
+  the 7-day caches wrapped around any
+  :class:`~etsy_listings.clients.etsy.market.EtsyMarketClient`;
+- ``market.snapshot`` -- :class:`~etsy_listings.market.snapshot.MarketSnapshot`
+  and its ``save``/``load``, the latest research per listing.
 
 - ``research`` -- :func:`research`, the whole search, filter, stats and
   score pipeline; :class:`MarketResearchError` (the *Etsy market search

@@ -10,6 +10,9 @@ from __future__ import annotations
 # Top level
 SHOP_FILE = "shop.yaml"
 EXCEPTIONS_FILE = "exceptions.yaml"
+SETTINGS_FILE = "settings.yaml"
+"""The seller's tunable settings -- today the market scoring weights
+(market-seo.md, *Scoring*). Optional: absent means every default."""
 ENV_FILE = ".env"
 AUTH_DIR = ".auth"
 ETSY_TOKENS_FILE = "etsy-tokens.json"
@@ -66,6 +69,15 @@ by `scene_hash` under `PREVIEWS_DIR/<listing>/<template>/`. Sibling to
 `RENDERS_DIR` rather than nested inside it -- a preview is not yet an applied
 render, and `Workspace.remove_listing` needs to be able to wipe one without
 the other."""
+MARKET_DIR = "market"
+"""Market-informed SEO's caches (market-seo.md, *Cache*), each a directory
+inside it: :data:`MARKET_SEARCH_DIR` and :data:`MARKET_STATS_DIR` hold the
+7-day Etsy caches, :data:`MARKET_SNAPSHOTS_DIR` the latest research per
+listing (``{name}.json``), which moves and goes with the listing as
+``RENDERS_DIR/<listing>`` does."""
+MARKET_SEARCH_DIR = "search"
+MARKET_STATS_DIR = "stats"
+MARKET_SNAPSHOTS_DIR = "snapshots"
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 
