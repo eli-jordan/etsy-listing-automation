@@ -24,119 +24,24 @@ import pytest
 from PIL import Image
 from scripts.migrate_workspace_refs import main as migrate
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.clients.etsy.models import ReturnPolicy, ShippingProfile
-from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.clients.printify.models import (
-    Blueprint,
-    PrintAreaPlaceholder,
-    PrintProvider,
-    ProductExternal,
-    Shop,
-    Variant,
-    VariantOptions,
-    VariantSet,
-)
 from etsy_listings.engine.change import MediaChange
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.run import apply_listings, plan_listings
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.publish import PublishStage
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import (
-    a_context,
-    edit_listing,
-    listing_file,
-    set_copy,
-    set_etsy_listing_defaults,
-    set_etsy_shop_id,
-    set_shop_id,
-    write_design,
-)
+from tests.support.builders import edit_listing, listing_file
+from tests.support.pipeline import DESIGN, PLAN, a_deployable_context, real_stages
 
-SHOP_ID = 28819281
-ETSY_SHOP_ID = 12345678
-ETSY_LISTING_ID = 4572550919
-PRINT_AREA = (4500, 5400)
 SHARED = "common-media/size-guide.png"
-PLAN = "pricing-plans/launch.yaml"
-DESIGN = "designs/take-a-hike.png"
-COLOURS = ["Black", "Blue Jean", "Ivory", "Moss"]
-SIZES = ["S", "M", "L", "XL", "XXL", "XXXL"]
-
-
-def _catalog() -> FakeCatalogClient:
-    placeholder = PrintAreaPlaceholder(position="front", width=PRINT_AREA[0], height=PRINT_AREA[1])
-    variants = VariantSet(
-        variants=tuple(
-            Variant(
-                id=1000 + c * 10 + s,
-                title=f"{colour} / {size}",
-                options=VariantOptions(color=colour, size=size),
-                placeholders=(placeholder,),
-            )
-            for c, colour in enumerate(COLOURS)
-            for s, size in enumerate(SIZES)
-        )
-    )
-    return FakeCatalogClient(
-        blueprints=[
-            Blueprint(
-                id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
-            )
-        ],
-        providers_by_blueprint={706: [PrintProvider(id=29, title="Monster Digital")]},
-        variants_by_key={(706, 29): variants},
-    )
 
 
 @pytest.fixture
 def ctx(workspace_root: Path) -> RunContext:
-    root = workspace_root
-    set_shop_id(root, SHOP_ID)
-    set_etsy_shop_id(root, ETSY_SHOP_ID)
-    set_etsy_listing_defaults(root, shipping_profile="NOK standard tee")
-    set_copy(root, title="Take A Hike Tee", description="A retro sunset.")
-    write_design(root, PRINT_AREA)
-    (root / "common-media").mkdir()
-    Image.new("RGB", (64, 64), (200, 200, 200)).save(root / SHARED)
-    (root / "pricing-plans").mkdir()
-    (root / PLAN).write_text(
-        "garment_profile: comfort-colors-1717\nprices:\n"
-        + "".join(f"  {size}: 349 NOK\n" for size in SIZES),
-        encoding="utf-8",
-    )
-    edit_listing(
-        root,
-        design=DESIGN,
-        pricing_plan=PLAN,
-        prices={},
-        media=[{"template": "flat-lay-01", "colour": "black"}, SHARED],
-    )
-
-    printify = FakePrintifyClient([Shop(id=SHOP_ID, title="My new store")])
-    printify.publish_external["fake-product-1"] = ProductExternal(
-        id=str(ETSY_LISTING_ID), handle="https://www.etsy.com/listing/4572550919/x"
-    )
-    etsy = FakeEtsyListingClient(
-        shipping_profiles=[ShippingProfile(shipping_profile_id=1, title="NOK standard tee")],
-        policies=[
-            ReturnPolicy(
-                return_policy_id=99,
-                accepts_returns=True,
-                accepts_exchanges=True,
-                return_deadline=30,
-            )
-        ],
-    )
-    etsy.seed_listing(ETSY_LISTING_ID, shop_id=ETSY_SHOP_ID, state="draft")
-    return a_context(root, catalog=_catalog(), printify=printify, etsy=etsy)
-
-
-def _stages() -> list[object]:
-    """The real pipeline, with `publish`'s poll unable to wait."""
-    return [PublishStage(sleep=lambda seconds: None) if s.name == "publish" else s for s in STAGES]
+    ctx = a_deployable_context(workspace_root)
+    (workspace_root / "common-media").mkdir()
+    Image.new("RGB", (64, 64), (200, 200, 200)).save(workspace_root / SHARED)
+    edit_listing(workspace_root, media=[{"template": "flat-lay-01", "colour": "black"}, SHARED])
+    return ctx
 
 
 def _as_the_old_code_left_it(root: Path) -> None:
@@ -157,7 +62,7 @@ def _as_the_old_code_left_it(root: Path) -> None:
 def test_migrating_re_uploads_the_shared_image_and_changes_nothing_else(
     ctx: RunContext, workspace_root: Path
 ) -> None:
-    applied = apply_listings(ctx, [LISTING], _stages())
+    applied = apply_listings(ctx, [LISTING], real_stages())
     assert applied.outcomes[0].ok, applied.outcomes[0].error
     lock = json.loads((listing_file(workspace_root).parent / "state.lock.json").read_text())
     for stage in ("render", "printify_product", "publish"):
@@ -168,7 +73,7 @@ def test_migrating_re_uploads_the_shared_image_and_changes_nothing_else(
     _as_the_old_code_left_it(workspace_root)
     assert migrate([str(workspace_root), "--write"]) == 0
 
-    planned = plan_listings(ctx, [LISTING], _stages()).outcomes[0].planned
+    planned = plan_listings(ctx, [LISTING], real_stages()).outcomes[0].planned
     assert planned is not None
     by_stage = {sp.stage: sp for sp in planned.plan.stage_plans}
     for stage in ("render", "printify_product", "publish", "etsy_listing"):

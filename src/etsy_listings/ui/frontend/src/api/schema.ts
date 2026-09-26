@@ -83,12 +83,17 @@ export interface paths {
     };
     /**
      * List Common Media
-     * @description The shared assets a listing can add to `media:` as a bare path.
+     * @description The shared images a listing can add to `media:` as a file ref.
      *
      *     Distinct from both design endpoints: ``designs/`` is the artwork that gets
      *     printed, ``test-designs/`` is calibration targets, and these are finished
      *     pictures (a sizing chart, care instructions) uploaded to Etsy as-is,
      *     never rendered onto a garment.
+     *
+     *     ``name`` is the path under ``common-media/``, subdirectories included --
+     *     what the two picture endpoints below take. Images only, for now: every
+     *     row is drawn as a picture thumbnail, and a video needs the file
+     *     locator's own tile (PRD 71) before it can be offered here.
      */
     get: operations["list_common_media_api_common_media_get"];
     put?: never;
@@ -1448,7 +1453,7 @@ export interface components {
        * Severity
        * @enum {string}
        */
-      severity: "block" | "warn";
+      severity: "block" | "warn" | "info";
       /**
        * Tab
        * @enum {string}

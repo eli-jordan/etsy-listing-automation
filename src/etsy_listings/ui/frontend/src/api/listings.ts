@@ -148,17 +148,24 @@ export async function listCommonMedia(): Promise<CommonMediaSummary[]> {
   return data;
 }
 
+/** A shared asset's path under `common-media/`, escaped a segment at a time so
+ * the slashes of a subdirectory stay slashes. */
+function commonMediaPath(name: string): string {
+  return name.split("/").map(encodeURIComponent).join("/");
+}
+
 /** The shared asset's own picture, downscaled for a list. A URL, like the two
- * thumbnails above. */
+ * thumbnails above. `name` is its path under `common-media/`, extension and
+ * all -- `CommonMediaSummary.name`. */
 export function commonMediaThumbnailUrl(name: string): string {
-  return `/api/common-media/${encodeURIComponent(name)}/thumbnail`;
+  return `/api/common-media/${commonMediaPath(name)}/thumbnail`;
 }
 
 /** The same asset at its own size -- what the preview pane shows and what the
  * lightbox opens. The thumbnail is 160px on its longest edge, which is a
  * picture to *pick* rather than one to judge. */
 export function commonMediaFileUrl(name: string): string {
-  return `/api/common-media/${encodeURIComponent(name)}/file`;
+  return `/api/common-media/${commonMediaPath(name)}/file`;
 }
 
 /** The Description tab's common-copy selector (AI SEO implementation plan,

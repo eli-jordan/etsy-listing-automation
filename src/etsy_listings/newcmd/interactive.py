@@ -15,7 +15,7 @@ import typer
 from etsy_listings import prompts, terminal
 from etsy_listings.clients.printify.models import Blueprint, PrintProvider, VariantSet
 from etsy_listings.clients.printify.protocol import CatalogClient
-from etsy_listings.config.listing import MAX_MEDIA_ENTRIES
+from etsy_listings.config.media import MAX_IMAGES
 from etsy_listings.config.slug import SlugCollisionError
 from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
 from etsy_listings.newcmd.logic import (
@@ -156,7 +156,7 @@ def _report_media_choice(
         return
     if len(media) < len(colours):
         typer.echo(
-            f"{len(colours)} colours offered, but Etsy allows {MAX_MEDIA_ENTRIES} images: "
+            f"{len(colours)} colours offered, but Etsy allows {MAX_IMAGES} images: "
             f"media covers the first {len(media)}. All {len(colours)} stay in colors: "
             f"(they decide which variants sell) -- edit media: to choose which get photos."
         )

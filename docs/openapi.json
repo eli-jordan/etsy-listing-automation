@@ -1152,7 +1152,8 @@
           "severity": {
             "enum": [
               "block",
-              "warn"
+              "warn",
+              "info"
             ],
             "title": "Severity",
             "type": "string"
@@ -3849,7 +3850,7 @@
     },
     "/api/common-media": {
       "get": {
-        "description": "The shared assets a listing can add to `media:` as a bare path.\n\nDistinct from both design endpoints: ``designs/`` is the artwork that gets\nprinted, ``test-designs/`` is calibration targets, and these are finished\npictures (a sizing chart, care instructions) uploaded to Etsy as-is,\nnever rendered onto a garment.",
+        "description": "The shared images a listing can add to `media:` as a file ref.\n\nDistinct from both design endpoints: ``designs/`` is the artwork that gets\nprinted, ``test-designs/`` is calibration targets, and these are finished\npictures (a sizing chart, care instructions) uploaded to Etsy as-is,\nnever rendered onto a garment.\n\n``name`` is the path under ``common-media/``, subdirectories included --\nwhat the two picture endpoints below take. Images only, for now: every\nrow is drawn as a picture thumbnail, and a video needs the file\nlocator's own tile (PRD 71) before it can be offered here.",
         "operationId": "list_common_media_api_common_media_get",
         "responses": {
           "200": {

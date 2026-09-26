@@ -11,6 +11,9 @@ because no real design files or mockup photography exist on this machine:
   photography in golden and behaviour tests -- ``colour-matrix`` kind
   (``synthetic-tee``, ``flat-lay-01``) and ``multiple`` kind
   (``colour-chart-01``).
+- Tiny clips for the video gate (PRD 71) under ``tests/fixtures/video/``: one
+  that passes every rule, one per rule a probe can fail on (too short, too
+  small, an audio track, audio but no picture), and a PNG renamed ``.mp4``.
 
 Run with ``uv run python scripts/generate_test_assets.py``. Output is
 committed -- these are deterministic generators, but re-running them should
@@ -22,6 +25,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import av
 import numpy as np
 import yaml
 from PIL import Image, ImageDraw
@@ -30,6 +34,10 @@ REPO_ROOT = Path(__file__).parent.parent
 DESIGN_SIZE = (360, 432)  # matches the fixture garment profile's 5:6 print-area aspect
 TEMPLATE_SIZE = (480, 576)
 CHART_SIZE = (960, 576)  # two garments side by side
+VIDEO_FPS = 10
+"""Low on purpose: a clip's duration is its frame count over this, and fewer
+frames keep a committed fixture a few KB."""
+AUDIO_RATE = 8000
 
 # Corner markers, distinct colours, to make orientation obvious after a warp.
 CORNER_COLOURS = {
@@ -183,6 +191,8 @@ def main() -> None:
     design_dest.parent.mkdir(parents=True, exist_ok=True)
     grid.save(design_dest, format="PNG", optimize=False, compress_level=6)
 
+    _write_video_clips(REPO_ROOT / "tests" / "fixtures" / "video", grid)
+
     print(f"wrote {design_dir / 'grid-target.png'}")
     print(f"wrote {bundled_dir / 'bundled-test-design.png'}")
     print(f"wrote {bundled_dir / 'bundled-test-design-on-light.png'}")
@@ -235,6 +245,65 @@ def _write_multiple_set(template_dir: Path, colours: dict[str, tuple[int, int, i
         yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
     )
     print(f"wrote {template_dir} ({', '.join(colours)}, template.yaml)")
+
+
+def _write_video_clips(video_dir: Path, grid: Image.Image) -> None:
+    """The video gate's fixtures (PRD 71). The good clip clears each rule by a
+    little -- 3.2 s against 3 s, 512 px against 500 -- so each failing one
+    differs from it in exactly one fact."""
+    video_dir.mkdir(parents=True, exist_ok=True)
+    clips = {
+        "valid-3s-512.mp4": {"size": (512, 512), "seconds": 3.2},
+        "short-2s-512.mp4": {"size": (512, 512), "seconds": 2.0},
+        "small-3s-400.mp4": {"size": (400, 400), "seconds": 3.2},
+        "with-audio-3s-512.mp4": {"size": (512, 512), "seconds": 3.2, "audio": True},
+        "audio-only-3s.mp4": {"size": None, "seconds": 3.2, "audio": True},
+    }
+    for name, spec in clips.items():
+        _write_clip(video_dir / name, **spec)  # type: ignore[arg-type]
+        print(f"wrote {video_dir / name}")
+    # Not a video at all: Etsy answers a bare 500 for one (decision 9).
+    grid.save(video_dir / "png-renamed.mp4", format="PNG", optimize=False, compress_level=6)
+    print(f"wrote {video_dir / 'png-renamed.mp4'}")
+
+
+def _write_clip(
+    path: Path, *, size: tuple[int, int] | None, seconds: float, audio: bool = False
+) -> None:
+    """H.264 (and AAC) in MP4, byte-for-byte reproducible: ``bitexact`` keeps
+    the muxer from stamping a creation time or encoder string, one encoder
+    thread keeps x264's output order fixed, and every frame is the same
+    constant picture -- which is also what makes a 3 s clip a few KB."""
+    with av.open(str(path), "w", format="mp4", options={"fflags": "+bitexact"}) as container:
+        video = None
+        if size is not None:
+            video = container.add_stream("libx264", rate=VIDEO_FPS)
+            video.width, video.height = size
+            video.pix_fmt = "yuv420p"
+            video.options = {"preset": "ultrafast", "crf": "45", "threads": "1"}
+        sound = container.add_stream("aac", rate=AUDIO_RATE) if audio else None
+        if sound is not None:
+            sound.layout = "mono"
+
+        if video is not None and size is not None:
+            picture = np.zeros((size[1], size[0], 3), dtype=np.uint8)
+            picture[:, :] = (72, 96, 130)
+            for index in range(round(seconds * VIDEO_FPS)):
+                frame = av.VideoFrame.from_ndarray(picture, format="rgb24")
+                frame.pts = index
+                container.mux(video.encode(frame))
+            container.mux(video.encode(None))
+
+        if sound is not None:
+            total = round(seconds * AUDIO_RATE)
+            silence = np.zeros((1, 1024), dtype=np.float32)
+            for start in range(0, total, 1024):
+                chunk = silence[:, : min(1024, total - start)]
+                samples = av.AudioFrame.from_ndarray(chunk, format="fltp", layout="mono")
+                samples.sample_rate = AUDIO_RATE
+                samples.pts = start
+                container.mux(sound.encode(samples))
+            container.mux(sound.encode(None))
 
 
 if __name__ == "__main__":

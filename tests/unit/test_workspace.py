@@ -213,23 +213,53 @@ def test_layout_accessors_point_at_the_documented_locations(workspace_root: Path
         root / ".cache" / "renders" / "take-a-hike" / "colour-chart-01" / "scene.png"
     )
     assert ws.catalog_cache_dir() == root / ".cache" / "catalog"
-    assert ws.common_media_file("size-guide") == root / "common-media" / "size-guide.png"
+    assert ws.common_media_file("size-guide.png") == root / "common-media" / "size-guide.png"
 
 
-def test_common_media_files_lists_the_shared_assets(workspace_root: Path) -> None:
-    """The other half of `media:` -- a bare path string to something shared
-    across listings, rather than a rendered mockup."""
+def test_common_media_files_lists_every_image_and_video_recursively(
+    workspace_root: Path,
+) -> None:
+    """The other half of `media:` -- a file ref to something shared across
+    listings, rather than a rendered mockup. Every type `media:` accepts
+    (PRD 71), in subdirectories too, sorted by path."""
     shared = workspace_root / "common-media"
-    shared.mkdir(exist_ok=True)
-    (shared / "size-guide.png").write_bytes(b"")
-    (shared / "care-instructions.png").write_bytes(b"")
-    (shared / "notes.txt").write_text("not an image", encoding="utf-8")
+    (shared / "videos").mkdir(parents=True)
+    for name in ("size-guide.png", "care.JPG", "photo.jpeg", "videos/intro.mp4", "clip.MOV"):
+        (shared / name).write_bytes(b"")
+    (shared / "notes.txt").write_text("not media", encoding="utf-8")
+    (shared / "videos" / "raw.webm").write_bytes(b"")
 
     ws = Workspace.discover(root_override=workspace_root)
-    assert [p.name for p in ws.common_media_files()] == [
-        "care-instructions.png",
+    assert [p.relative_to(shared).as_posix() for p in ws.common_media_files()] == [
+        "care.JPG",
+        "clip.MOV",
+        "photo.jpeg",
         "size-guide.png",
+        "videos/intro.mp4",
     ]
+
+
+def test_common_media_file_takes_the_path_under_common_media_as_is(
+    workspace_root: Path,
+) -> None:
+    """No `.png` appended: a shared file may be a JPEG or a video, and may
+    sit in a subdirectory, so the caller names it in full."""
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.common_media_file("videos/intro.mp4") == (
+        workspace_root / "common-media" / "videos" / "intro.mp4"
+    )
+
+
+@pytest.mark.parametrize(
+    "name", ["../shop.yaml", "videos/../../shop.yaml", "", "a//b.png", "C:x.png", "a\\b.png"]
+)
+def test_common_media_file_refuses_a_path_that_could_leave_common_media(
+    workspace_root: Path, name: str
+) -> None:
+    """It takes names from URLs (A8): a security boundary."""
+    ws = Workspace.discover(root_override=workspace_root)
+    with pytest.raises(InvalidNameError):
+        ws.common_media_file(name)
 
 
 def test_common_media_files_is_empty_when_the_directory_is_absent(workspace_root: Path) -> None:

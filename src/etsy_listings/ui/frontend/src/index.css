@@ -2420,6 +2420,12 @@ table.listings tbody tr:last-child td {
   background: color-mix(in srgb, var(--color-accent-2) 11%, transparent);
 }
 
+/* A note (PRD 71's stripped audio): nothing to fix, so no tint and muted
+   text -- present, but never mistaken for a warning. */
+.issue--info .issue__text {
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+
 .issue__body {
   flex: 1;
   min-width: 0;

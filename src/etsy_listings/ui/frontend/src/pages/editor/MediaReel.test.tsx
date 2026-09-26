@@ -13,7 +13,7 @@ import { MediaReel } from "./MediaReel";
  */
 
 const SIZING: CommonMediaSummary = {
-  name: "sizing",
+  name: "sizing.png",
   file: "common-media/sizing.png",
   ref: "common-media/sizing.png",
 };

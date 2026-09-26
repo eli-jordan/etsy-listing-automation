@@ -28,6 +28,7 @@ from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.slug import ColourExceptions
 
@@ -74,6 +75,7 @@ class InvalidRefError(ConfigLoadError):
 
     def __init__(self, listing_dir: Path, ref: str, detail: str) -> None:
         self.ref = ref
+        self.detail = detail
         super().__init__(listing_dir / layout.LISTING_FILE, f"ref {ref!r}: {detail}")
 
 
@@ -423,24 +425,40 @@ class Workspace:
     def common_media_dir(self) -> Path:
         return self.root / layout.COMMON_MEDIA_DIR
 
-    def common_media_file(self, asset: str) -> Path:
-        return self.common_media_dir() / f"{_segment(asset)}.png"
+    def common_media_file(self, path: str) -> Path:
+        """One shared file, named by its path under ``common-media/`` --
+        ``size-guide.png``, ``videos/intro.mp4``.
+
+        Taken as written, with no extension appended: a shared file may be a
+        JPEG or a video (PRD 71) and may sit in a subdirectory, so the name
+        has to say which. Each segment goes through the same single-segment
+        rule every other layout accessor applies, because this one takes
+        names from URLs too (A8); :meth:`resolve` then catches a symlink out
+        of the root.
+        """
+        segments = [_segment(segment) for segment in path.split("/")]
+        return self.resolve("/".join(segments), relative_to=self.common_media_dir())
 
     def common_media_files(self) -> list[Path]:
-        """Every ``common-media/*.png``: the shared assets a listing can put in
-        ``media:`` as a bare path (a sizing chart, care instructions), as
-        opposed to a rendered mockup.
+        """Every image and video under ``common-media/``, recursively: the
+        shared files a listing can put in ``media:`` as a file ref (a sizing
+        chart, a care card, a size-guide video), as opposed to a rendered
+        mockup.
 
-        PNG only and flat, for the same reason :meth:`design_files` is:
-        :meth:`common_media_file` derives one fixed path per name, so anything
-        listed here that it could not resolve would be offered and then fail.
-        Sorted by name rather than mtime -- unlike a design, a shared asset is
+        Only the types ``media:`` accepts (PRD 71), matched case-insensitively
+        as :func:`~etsy_listings.config.media.media_kind` matches them, so
+        nothing is offered that a listing would then refuse to load. Sorted
+        by path rather than mtime -- unlike a design, a shared asset is
         written once and reused for years, so recency says nothing useful.
         """
         shared = self.common_media_dir()
         if not shared.is_dir():
             return []
-        return sorted((p for p in shared.glob("*.png") if p.is_file()), key=lambda p: p.name)
+        allowed = (*IMAGE_EXTENSIONS, *VIDEO_EXTENSIONS)
+        return sorted(
+            (p for p in shared.rglob("*") if p.is_file() and p.suffix.lower() in allowed),
+            key=lambda p: p.relative_to(shared).as_posix(),
+        )
 
     def seo_prompt_file(self) -> Path:
         """``prompts/seo.md`` -- the seller-editable AI SEO prompt (AI SEO
@@ -485,10 +503,9 @@ class Workspace:
     def common_copy_files(self) -> list[Path]:
         """Every ``common-copy/*.md``: the reusable description bodies a
         listing can point ``description.ref`` at (AI SEO implementation plan,
-        PR6's common-copy selector). Flat and Markdown-only, for the same
-        reason :meth:`common_media_files` is -- :meth:`common_copy_file`
-        derives one fixed path per name, so anything listed here that it
-        could not resolve would be offered and then fail. Sorted by name: a
+        PR6's common-copy selector). Flat and Markdown-only, so that
+        everything listed is something :meth:`common_copy_file` resolves --
+        anything it could not would be offered and then fail. Sorted by name: a
         common-copy file, like a shared image, is written once and reused for
         years, so recency says nothing useful about it.
         """

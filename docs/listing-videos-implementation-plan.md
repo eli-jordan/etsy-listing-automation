@@ -179,6 +179,18 @@ that talks to Etsy or Printify.
 
    Generation is deterministic (fixed frames, no clock input).
 
+**As built.** Where the implementation settled a detail differently:
+
+| Item | Settled as | Why |
+|---|---|---|
+| 1 | Extensions match case-insensitively | A phone names its clips `IMG_1234.MOV` |
+| 3 | `VideoFacts` and `ProbeFailure` are defined in `config/media.py`; `workspace/video.py` re-exports them | `check_videos` is pure and lives in `config`, which must not import `workspace` |
+| 3 | The probe decodes one frame and refuses a container that is not FFmpeg's MP4/MOV demuxer | FFmpeg opens a PNG renamed `.mp4` as a one-frame video |
+| 5 | `check_videos` has no extension rule of its own | `Listing` refuses an unknown extension on load, and the probe refuses contents that are not MP4/MOV, so a third copy could never fire |
+| 6 | `etsy_media`'s count gate is removed, not narrowed to images | `Listing` refuses the same gallery on load |
+| 7 | `CommonMediaSummary.name` is the path under `common-media/`; the picture routes take `{name:path}`; `/file` sends the image MIME type; the list stays images-only | The frontend addressed shared files by stem, which stops naming one file once `.png` is not appended. Videos join the list in PR 5, with `kind` |
+| 8 | An audio-only `.mp4` is added | The "no video stream" block needs a file that has none |
+
 **Success conditions (added to the common list):**
 - Unit tests for classification and every gallery rule. Each blocked case
   and each valid layout (no video, one, two, second at the end) is its own

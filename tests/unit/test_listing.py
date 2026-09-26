@@ -9,7 +9,6 @@ from pydantic import ValidationError
 from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.listing import (
     EMPTY_DRAFT,
-    MAX_MEDIA_ENTRIES,
     EtsyListingConfig,
     Listing,
     TemplateMediaEntry,
@@ -138,13 +137,69 @@ def test_media_shared_asset_path_still_works() -> None:
     assert listing.media[1] == "common-media/sizing-chart.png"
 
 
-def test_rejects_more_than_max_media_entries() -> None:
-    data = {
-        **BASE,
-        "media": [f"common-media/asset-{i}.png" for i in range(MAX_MEDIA_ENTRIES + 1)],
-    }
-    with pytest.raises(ValidationError, match=f"{MAX_MEDIA_ENTRIES}-image limit"):
+def test_rejects_more_than_twenty_images() -> None:
+    data = {**BASE, "media": [f"common-media/asset-{i}.png" for i in range(21)]}
+    with pytest.raises(ValidationError, match="21 images, over Etsy's 20-image limit"):
         Listing.model_validate(data, context={"currency": "NOK"})
+
+
+# ------------------------------------------------ the gallery's rules (PRD 71)
+
+THUMB = {"template": "flat-lay-01", "colour": "black"}
+FEATURED = "common-media/size-guide.mp4"
+SECOND = "./close-up.mov"
+
+
+def _media(*entries: object) -> Listing:
+    return Listing.model_validate({**BASE, "media": list(entries)}, context={"currency": "NOK"})
+
+
+def test_a_file_ref_with_an_unknown_extension_is_malformed() -> None:
+    with pytest.raises(ValidationError, match="common-media/size-guide.gif"):
+        _media(THUMB, "common-media/size-guide.gif")
+
+
+def test_a_gallery_without_a_video_is_valid() -> None:
+    assert len(_media(THUMB, "common-media/size-guide.png").media) == 2
+
+
+def test_one_video_at_position_two_is_valid() -> None:
+    assert _media(THUMB, FEATURED, "common-media/care.png").media[1] == FEATURED
+
+
+def test_two_videos_side_by_side_after_the_thumbnail_are_valid() -> None:
+    assert _media(THUMB, FEATURED, SECOND).media[2] == SECOND
+
+
+def test_the_second_video_may_sit_at_the_end_of_the_gallery() -> None:
+    images = [f"common-media/{i}.png" for i in range(5)]
+    assert _media(THUMB, FEATURED, *images, SECOND).media[-1] == SECOND
+
+
+def test_twenty_images_and_two_videos_are_both_within_their_own_caps() -> None:
+    images = [f"common-media/{i}.png" for i in range(19)]
+    assert len(_media(THUMB, FEATURED, *images, SECOND).media) == 22
+
+
+def test_position_one_may_not_be_a_video() -> None:
+    with pytest.raises(ValidationError, match="position 1 is the thumbnail"):
+        _media(FEATURED, THUMB)
+
+
+def test_a_sole_video_is_refused_as_the_thumbnail() -> None:
+    with pytest.raises(ValidationError, match="position 1 is the thumbnail"):
+        _media(FEATURED)
+
+
+def test_a_listing_with_a_video_needs_one_at_position_two() -> None:
+    with pytest.raises(ValidationError, match="position 2") as exc_info:
+        _media(THUMB, "common-media/care.png", FEATURED)
+    assert FEATURED in str(exc_info.value)
+
+
+def test_more_than_two_videos_are_refused() -> None:
+    with pytest.raises(ValidationError, match="3 videos, over Etsy's 2-video limit"):
+        _media(THUMB, FEATURED, SECOND, "./third.mp4")
 
 
 def test_etsy_defaults_to_empty_ordinary_values_not_a_sentinel() -> None:

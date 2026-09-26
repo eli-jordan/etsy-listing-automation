@@ -27,8 +27,8 @@ export interface MediaState {
   etsy: { variation_images?: string | null };
 }
 
-/** Etsy's ceiling on listing images, mirrored from `config/listing.py`'s
- * `MAX_MEDIA_ENTRIES`. Shown, not enforced -- the server refuses past it. */
+/** Etsy's ceiling on listing images, mirrored from `config/media.py`'s
+ * `MAX_IMAGES`. Shown, not enforced -- the server refuses past it. */
 export const MAX_MEDIA = 20;
 
 /** How many more entries will fit before Etsy's ceiling. */

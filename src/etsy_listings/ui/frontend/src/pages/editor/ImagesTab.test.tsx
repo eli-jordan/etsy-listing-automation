@@ -437,12 +437,12 @@ describe("ImagesTab's Etsy colour-swatch toggle (PRD 56)", () => {
 describe("ImagesTab's shared images (common-media/)", () => {
   const SHARED = [
     {
-      name: "size-guide",
+      name: "size-guide.png",
       file: "common-media/size-guide.png",
       ref: "common-media/size-guide.png",
     },
     {
-      name: "care-instructions",
+      name: "care-instructions.png",
       file: "common-media/care-instructions.png",
       ref: "common-media/care-instructions.png",
     },
@@ -491,7 +491,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
 
     expect(screen.getByAltText("care-instructions")).toHaveAttribute(
       "src",
-      "/api/common-media/care-instructions/file",
+      "/api/common-media/care-instructions.png/file",
     );
     expect(screen.getByText("common-media/care-instructions.png")).toBeInTheDocument();
   });
@@ -502,7 +502,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
 
     expect(screen.getByAltText("size-guide")).toHaveAttribute(
       "src",
-      "/api/common-media/size-guide/thumbnail",
+      "/api/common-media/size-guide.png/thumbnail",
     );
   });
 
@@ -622,7 +622,7 @@ describe("ImagesTab's full-size carousel", () => {
 
     expect(screen.getByRole("dialog")).toHaveAccessibleName("size-guide, preview 3 of 3");
     const stage = screen.getByRole("dialog").querySelector(".lightbox__image");
-    expect(stage).toHaveAttribute("src", "/api/common-media/size-guide/file");
+    expect(stage).toHaveAttribute("src", "/api/common-media/size-guide.png/file");
   });
 
   it("removing a tile does not also open the one that slides into its place", async () => {

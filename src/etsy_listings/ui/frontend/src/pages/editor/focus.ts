@@ -1,4 +1,11 @@
-import { isInMedia, mediaLabel, pictureFor, scenePath, templatePicture } from "../../media";
+import {
+  isInMedia,
+  mediaLabel,
+  pictureFor,
+  refName,
+  scenePath,
+  templatePicture,
+} from "../../media";
 import type { CommonMediaSummary, ListingDetail, TemplateSummary } from "../../types";
 
 /**
@@ -42,7 +49,7 @@ export function viewFocus(
 ): FocusView {
   if (focus.kind === "shared") {
     return {
-      title: focus.asset.name,
+      title: refName(focus.asset.ref),
       path: focus.asset.file,
       picture: pictureFor(focus.asset.ref, design),
       inListing: detail.media.includes(focus.asset.ref),

@@ -27,6 +27,10 @@ Two different costs, so two different strategies:
   wants one or two of them and a workspace may hold many. The listings table
   asks for each row's; the picker asks for all of them; neither pays for the
   other's.
+* **Videos are probed on demand and kept, by file** (PRD 71), for the same
+  reason and one more: a shared clip in ``common-media/`` is named by many
+  listings, and opening it once per row would be the four-hundred-parses
+  mistake again, with FFmpeg doing the parsing.
 
 It holds the `Workspace` rather than copying paths out of it: reading is
 `Workspace`'s job (A8), and a snapshot that resolved its own paths would be a
@@ -36,12 +40,16 @@ second place that knows the layout.
 from __future__ import annotations
 
 from collections.abc import Mapping
+from pathlib import Path
 
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.garment_profile import GarmentProfile
+from etsy_listings.config.listing import Listing
 from etsy_listings.config.listing_validation import TemplateInfo
+from etsy_listings.config.media import ProbeFailure, VideoFacts, media_kind
 from etsy_listings.render.config import ColourMatrixTemplate, MultipleTemplate
-from etsy_listings.workspace.workspace import InvalidNameError, Workspace
+from etsy_listings.workspace.video import probe_video
+from etsy_listings.workspace.workspace import InvalidNameError, InvalidRefError, Workspace
 
 
 class WorkspaceFacts:
@@ -58,6 +66,7 @@ class WorkspaceFacts:
         self.garment_profile_names = garment_profile_names
         self.templates = templates
         self._profiles: dict[str, GarmentProfile | None] = {}
+        self._probes: dict[Path, VideoFacts | ProbeFailure] = {}
 
     @classmethod
     def gather(cls, workspace: Workspace) -> WorkspaceFacts:
@@ -89,6 +98,31 @@ class WorkspaceFacts:
         if name not in self._profiles:
             self._profiles[name] = self._load_garment_profile(name)
         return self._profiles[name]
+
+    def videos(self, listing: Listing, listing_dir: Path) -> dict[str, VideoFacts | ProbeFailure]:
+        """Every video ``listing.media`` names, keyed by the ref it is named by
+        -- what `check_videos` reads.
+
+        *listing_dir* rather than a name, because a ``./`` ref is resolved
+        against it and the editor's unsaved draft has no name
+        (`Workspace.draft_listing_dir`). A ref that will not resolve is a
+        :class:`ProbeFailure` carrying the refusal, not a raise: it is still
+        a file the seller named, and the banner is where they learn why it
+        cannot be read.
+        """
+        result: dict[str, VideoFacts | ProbeFailure] = {}
+        for entry in listing.media:
+            if not isinstance(entry, str) or media_kind(entry) != "video":
+                continue
+            try:
+                path = self._workspace.resolve_ref(entry, listing_dir=listing_dir)
+            except InvalidRefError as exc:
+                result[entry] = ProbeFailure(f"cannot be used: {exc.detail}")
+                continue
+            if path not in self._probes:
+                self._probes[path] = probe_video(path)
+            result[entry] = self._probes[path]
+        return result
 
     def _load_garment_profile(self, name: str) -> GarmentProfile | None:
         try:

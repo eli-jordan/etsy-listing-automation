@@ -18,6 +18,15 @@ from pydantic import (
 
 from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.config.media import (
+    MAX_IMAGES,
+    MAX_VIDEOS,
+    MediaKind,
+    UnknownMediaTypeError,
+    media_kind,
+)
+from etsy_listings.config.media import MediaEntry as MediaEntry
+from etsy_listings.config.media import TemplateMediaEntry as TemplateMediaEntry
 from etsy_listings.config.money import Money, PriceField, require_currency
 from etsy_listings.config.pricing_plan import PricingPlan
 
@@ -41,7 +50,6 @@ asked the questions first; the editor opens before any of them have been asked,
 and inventing an answer there would show the user a value they never picked.
 """
 
-MAX_MEDIA_ENTRIES = 20
 MAX_TAGS = 13
 MAX_TAG_LENGTH = 20
 MAX_TITLE_LENGTH = 140
@@ -65,22 +73,42 @@ ink for light vs dark shirts carries more than one entry, conventionally keyed
 too."""
 
 
-class TemplateMediaEntry(BaseModel):
-    """Always-explicit template reference -- there is no bare-colour
-    shorthand. ``colour`` is required when the referenced template is
-    ``colour-matrix`` kind (which colour's photo) and must be omitted for
-    ``multiple``/``single`` kind (exactly one output each, nothing to
-    disambiguate)."""
+def _check_gallery(media: list[MediaEntry]) -> None:
+    """`media:` is the gallery in order (PRD 71), and these are the layouts
+    Etsy cannot show at all -- malformed rather than incomplete (PRD 70), so
+    they refuse the write instead of waiting in the issues banner.
 
-    model_config = ConfigDict(extra="forbid")
+    Position 1 is the thumbnail and Etsy only ever puts an image there. Etsy
+    pins the featured video at position 2 (decision 9), so a listing with any
+    video has one there; the second may sit anywhere after it. Images and
+    videos have separate caps because Etsy counts them apart.
+    """
+    try:
+        kinds: list[MediaKind] = [media_kind(entry) for entry in media]
+    except UnknownMediaTypeError as exc:
+        raise ValueError(str(exc)) from exc
 
-    template: str
-    colour: str | None = None
-
-
-MediaEntry = TemplateMediaEntry | str
-"""Either an explicit template reference, or a bare path string to a shared
-asset under ``common-media/``."""
+    images = kinds.count("image")
+    if images > MAX_IMAGES:
+        raise ValueError(f"media has {images} images, over Etsy's {MAX_IMAGES}-image limit")
+    videos = [entry for entry, kind in zip(media, kinds, strict=True) if kind == "video"]
+    if len(videos) > MAX_VIDEOS:
+        raise ValueError(
+            f"media has {len(videos)} videos, over Etsy's {MAX_VIDEOS}-video limit: "
+            f"{', '.join(map(str, videos))}"
+        )
+    if not videos:
+        return
+    if kinds[0] == "video":
+        raise ValueError(
+            f"media position 1 is the thumbnail and must be an image, not the video "
+            f"{media[0]!s}; put an image first and the video at position 2"
+        )
+    if kinds[1] != "video":
+        raise ValueError(
+            f"media has a video ({videos[0]!s}) but position 2 is not one; Etsy shows the "
+            f"featured video at position 2, so move a video there"
+        )
 
 
 class EtsyListingConfig(BaseModel):
@@ -178,10 +206,7 @@ class Listing(BaseModel):
                 for size, price in overrides.items():
                     require_currency(price, expected_currency, f"price_overrides.{color}.{size}")
 
-        if len(self.media) > MAX_MEDIA_ENTRIES:
-            raise ValueError(
-                f"media has {len(self.media)} entries, over Etsy's {MAX_MEDIA_ENTRIES}-image limit"
-            )
+        _check_gallery(self.media)
 
         for color in self.price_overrides:
             if color not in self.colors:

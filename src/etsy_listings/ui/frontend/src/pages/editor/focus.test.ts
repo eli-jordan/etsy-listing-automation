@@ -22,7 +22,7 @@ const FLAT_LAY: TemplateSummary = {
 };
 
 const SIZING: CommonMediaSummary = {
-  name: "sizing",
+  name: "sizing.png",
   file: "common-media/sizing.png",
   ref: "common-media/sizing.png",
 };
@@ -91,6 +91,6 @@ describe("viewFocus, for a shared asset", () => {
 
   it("shows the file itself, never a render -- it is already what Etsy gets", () => {
     const view = viewFocus(ON_SHARED, listing([]), [], "take-a-hike");
-    expect(view.picture).toBe("/api/common-media/sizing/file");
+    expect(view.picture).toBe("/api/common-media/sizing.png/file");
   });
 });
