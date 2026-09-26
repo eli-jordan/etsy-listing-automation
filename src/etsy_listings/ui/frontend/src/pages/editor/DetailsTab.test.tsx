@@ -466,25 +466,25 @@ describe("DetailsTab", () => {
     expect(screen.getByText("0 / 140")).toBeInTheDocument();
   });
 
-  it("shows garment materials as read-only text", () => {
-    const onUpdate = vi.fn();
+  it("does not show garment materials in listing details", () => {
     render(
       <DetailsTab
         detail={detail({ garment_materials: ["cotton", "水性インク"] })}
-        onUpdate={onUpdate}
+        onUpdate={vi.fn()}
         onFlush={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("Materials")).toHaveValue("cotton, 水性インク");
-    expect(screen.getByLabelText("Materials")).toHaveAttribute("readonly");
-    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Materials")).not.toBeInTheDocument();
   });
 
   it("shows a section dropdown once the shop's sections are known", async () => {
-    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([
-      { id: 1, title: "Tees" },
-      { id: 2, title: "Hoodies" },
-    ]);
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({
+      available: true,
+      sections: [
+        { id: 1, title: "Tees" },
+        { id: 2, title: "Hoodies" },
+      ],
+    });
     const onUpdate = vi.fn();
     render(
       <DetailsTab
@@ -494,16 +494,63 @@ describe("DetailsTab", () => {
       />,
     );
     await screen.findByText("Hoodies");
-    expect(screen.getByLabelText("Section")).toHaveValue("Tees");
-    fireEvent.change(screen.getByLabelText("Section"), { target: { value: "Hoodies" } });
+    expect(screen.getByLabelText("Section")).toHaveValue("1");
+    fireEvent.change(screen.getByLabelText("Section"), { target: { value: "2" } });
     expect(onUpdate).toHaveBeenCalledWith({ etsy: { section: "Hoodies" } });
   });
 
+  it("creates and selects a new shop section from the dropdown", async () => {
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({
+      available: true,
+      sections: [
+        { id: 1, title: "Tees" },
+        { id: 2, title: "Hoodies" },
+      ],
+    });
+    const create = vi
+      .spyOn(listingsApi, "createEtsySection")
+      .mockResolvedValue({ id: 3, title: "Trail Gear" });
+    const onUpdate = vi.fn();
+    const onFlush = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DetailsTab
+        detail={detail({ etsy: { ...detail().etsy, section: "Tees" } })}
+        onUpdate={onUpdate}
+        onFlush={onFlush}
+      />,
+    );
+
+    await screen.findByRole("option", { name: "Hoodies" });
+    await user.selectOptions(screen.getByLabelText("Section"), "create");
+    await user.type(screen.getByLabelText("New section name"), "  Trail Gear  ");
+    await user.click(screen.getByRole("button", { name: "Create section" }));
+
+    expect(create).toHaveBeenCalledWith("Trail Gear");
+    expect(onUpdate).toHaveBeenCalledWith({ etsy: { section: "Trail Gear" } });
+    expect(onFlush).toHaveBeenCalled();
+    expect(screen.queryByLabelText("New section name")).not.toBeInTheDocument();
+  });
+
   it("falls back to a text field when no shop sections are available", async () => {
-    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({
+      available: false,
+      sections: [],
+    });
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     const field = await screen.findByLabelText("Section");
     expect(field.tagName).toBe("INPUT");
+  });
+
+  it("can create the first section in an available empty shop", async () => {
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({
+      available: true,
+      sections: [],
+    });
+    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByLabelText("Section").tagName).toBe("SELECT"));
+    expect(screen.getByRole("option", { name: "Create new section…" })).toBeInTheDocument();
   });
 });
 

@@ -165,6 +165,7 @@ class FakeEtsyListingClient:
         self.shipping_profile_calls = 0
         self.production_partner_calls = 0
         self.section_calls = 0
+        self.created_sections: list[ShopSection] = []
         self.return_policy_calls = 0
 
     def seed_listing(self, listing_id: int, *, shop_id: int | None = None, **fields: Any) -> None:
@@ -273,6 +274,13 @@ class FakeEtsyListingClient:
         return list(self._policies)
 
     # ------------------------------------------------------------- writes
+
+    def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
+        next_id = max((section.shop_section_id for section in self._sections), default=0) + 1
+        section = ShopSection(shop_section_id=next_id, title=title)
+        self._sections.append(section)
+        self.created_sections.append(section)
+        return section
 
     def update_listing(self, shop_id: int, listing_id: int, patch: dict[str, Any]) -> Listing:
         self.updated.append(dict(patch))

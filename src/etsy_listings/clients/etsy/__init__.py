@@ -10,7 +10,8 @@ transport.py  Transport (both credentials, every API call, paced by the
 shops.py      EtsyShopClient -- setup's four unscoped reads
 listings.py   EtsyListingClient -- Phase 3's stages: publish's poll target,
               the copy PATCH, media upload/reorder/variation-images, and
-              video upload/attach/delete with its two refusals (PRD 72)
+              video upload/attach/delete with its two refusals (PRD 72), plus
+              the editor's signed-in shop-section creation (PRD 53)
 market.py     EtsyMarketClient -- market-informed SEO's three unscoped
               reads: search, batch stats, review counts (market-seo.md)
 models.py     what every endpoint above returns
