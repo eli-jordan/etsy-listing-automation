@@ -289,6 +289,20 @@ that talks to Etsy or Printify.
      `video_id`s (no re-upload) and swatch links intact
    - re-apply with no change and assert nothing is written
 
+**As built.** Where the implementation settled a detail differently:
+
+| Item | Settled as | Why |
+|---|---|---|
+| 1 | A listing that names no video and last applied none asks nothing: no shop gate, no refusal, no document written. The first apply's e2e assertion still lists five stages | A workspace with no Etsy shop would otherwise gain a blocked line on every listing for a feature none of them uses |
+| 1 | `read_live` always reads `includes=Videos` once a listing id exists, videos or not | It is not handed `desired`, and a foreign video must be known before the sweep. One `GET` per listing per plan |
+| 1 | Step 3 cuts and restores `image_ids` from `media:`'s image refs and the `etsy_image_ids` `etsy_media` wrote this same apply (A26), not from a fresh `GET`; no cut when the anchor is already the image count | The response's image order is not the gallery's, and the fake keeps `rank` from upload time |
+| 1 | Drift re-uploads, whether the video is missing or `inactive`; a missing featured video also re-places the second | Decision 9's "uploads it again", and an id Etsy has stopped showing is not one to trust |
+| 1 | `WorkspaceFacts.for_files(workspace)` builds facts with no catalogue for the gate | The stage needs its clips probed, not every `template.yaml` parsed on every plan |
+| 2 | `stages/variation_links.py` holds `set_variation_images`, `swatch_refs` and `manifest_ref`, the last also what `etsy_media` keys its ids by | The video stage reads `etsy_media`'s ids back by ref, so the ref rule had to be shared too |
+| 3 | `group` is the *stage name* shown under (`"etsy_media"`), not a label. The CLI names a grouped stage `etsy_media/etsy_videos` on every line that names it | Labels are the frontend's (`STAGE_LABELS`, PR 6 renames `etsy_media`'s to "Etsy media"); the engine hands out identity |
+| 3, 4 | The snapshot, the `etsy_videos` stage-plan DTO and `group` on every DTO ship here, with `gen:api` regenerated | Registering the stage without its DTO makes `stage_plan_dto` refuse every plan run in the UI. It fit the size budget |
+| — | `plan`'s changes are `FieldChange`s on `videos.featured` and `videos.second`, a bytes-only change marked "(new file contents)" | `MediaChange` ranks images among images; a video has a slot, not a rank |
+
 **Success conditions (added to the common list):**
 - Behaviour tests against the PR 3 fake, each asserting the fake's
   `gallery()`:

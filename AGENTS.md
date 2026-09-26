@@ -160,7 +160,8 @@ src/etsy_listings/
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run,
                   lifecycle (PRD 61–67), preview (A32), stages/
                    [done; STAGES = [Render(), PrintifyProduct(), Publish(),
-                   EtsyListing(), EtsyMedia()], Generate() in Phase 4]
+                   EtsyListing(), EtsyMedia(), EtsyVideos()], Generate() in
+                   Phase 4]
                 stages/ splits the product stage three ways: the stage itself
                   (needs a context), product_document (the two documents and
                   the garment gate) and product_diff (the comparison — pure,
@@ -172,6 +173,9 @@ src/etsy_listings/
                   not-minted error, shared by all three Etsy stages) and
                   colour_property (Etsy's inventory property matched onto this
                   listing's colours — pure, same reasoning as product_diff)
+                  and variation_links (the swatch links and manifest refs both
+                  Etsy media stages set — `etsy_videos` cuts `image_ids` to
+                  place a video, which deletes swatches, decision 9)
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]

@@ -7,7 +7,10 @@ because each depends on what the one before it just did *this run*, via
 A26's threading of ``lock.remote`` rather than a second lockfile read:
 ``Publish`` mints the Etsy listing id ``EtsyListing`` and ``EtsyMedia`` both
 PATCH, and ``EtsyMedia`` needs whatever images survive the first two to
-exist. ``Generate`` (Phase 4) is the one stage still to come.
+exist. ``EtsyVideos()`` follows ``EtsyMedia()`` because a second video is
+placed by the number of images on the listing when it is attached (PRD 71,
+decision 9), so the images have to be there and in order first.
+``Generate`` (Phase 4) is the one stage still to come.
 
 **A stage in this list is not a stage that always runs.**
 ``PrintifyProduct`` reports itself unconfigured, rather than failing, in a
@@ -28,6 +31,7 @@ from __future__ import annotations
 from etsy_listings.engine.stage import AnyStage
 from etsy_listings.engine.stages.etsy_listing import EtsyListingStage
 from etsy_listings.engine.stages.etsy_media import EtsyMediaStage
+from etsy_listings.engine.stages.etsy_videos import EtsyVideosStage
 from etsy_listings.engine.stages.printify_product import PrintifyProductStage
 from etsy_listings.engine.stages.publish import PublishStage
 from etsy_listings.engine.stages.render import RenderStage
@@ -38,12 +42,14 @@ STAGES: list[AnyStage] = [
     PublishStage(),
     EtsyListingStage(),
     EtsyMediaStage(),
+    EtsyVideosStage(),
 ]
 
 __all__ = [
     "STAGES",
     "EtsyListingStage",
     "EtsyMediaStage",
+    "EtsyVideosStage",
     "PrintifyProductStage",
     "PublishStage",
     "RenderStage",

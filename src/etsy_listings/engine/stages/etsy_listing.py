@@ -200,6 +200,7 @@ class EtsyListingSnapshot(BaseModel):
 class EtsyListingStage:
     name = "etsy_listing"
     local = False
+    group: str | None = None
     applied_model = AppliedEtsyListing
 
     def desired(

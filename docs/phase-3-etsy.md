@@ -478,6 +478,7 @@ nothing in the API reports where a video sits.
 | Upload a third *without* the flag | The new one goes active and the others turn `inactive` **but stay in every list**. Re-attaching one by id reactivates it |
 | `PATCH image_ids`, and a Printify republish with the publish stage's flags | Videos untouched. The listing stayed a draft |
 | A 3 s and a 20 s clip | Both accepted. The documented 3–15 s is not enforced here |
+| The test suite's 3.2 s, 512×512 H.264 fixtures, 2–4 KB each, one carrying audio (the e2e layer, [2026-09-25](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/36159006791)) | Both `active` straight after upload. Deleting the second, cutting `image_ids` to three images, re-attaching it by id and restoring all four kept its `video_id` and left it `active`. Nothing about the file's size or bitrate was refused |
 | A PNG renamed `.mp4` | A bare `500` |
 | A video id inside `image_ids` | `400` "That ListingImage does not exist". Nothing changed |
 | An undocumented `rank`, as form field and query | Silently ignored |

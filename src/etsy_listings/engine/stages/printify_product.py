@@ -120,6 +120,7 @@ that could exist.
 class PrintifyProductStage:
     name = "printify_product"
     local = False
+    group: str | None = None
     applied_model = AppliedProduct
 
     def desired(

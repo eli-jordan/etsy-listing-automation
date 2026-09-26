@@ -639,6 +639,36 @@
         "title": "DesiredImageSnapshot",
         "type": "object"
       },
+      "DesiredVideoSnapshot": {
+        "description": "One video as this run wants to place it (A30).",
+        "properties": {
+          "after_images": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Images"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "file"
+        ],
+        "title": "DesiredVideoSnapshot",
+        "type": "object"
+      },
       "DisplaceConfig": {
         "description": "PRD: implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
@@ -887,6 +917,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -968,6 +1009,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -1030,6 +1082,98 @@
           "title"
         ],
         "title": "EtsySectionSummary",
+        "type": "object"
+      },
+      "EtsyVideosSnapshot": {
+        "description": "Both sides for the deploy review (A30). The live side comes in Etsy's\nresponse order, which says nothing about the gallery (decision 9).",
+        "properties": {
+          "desired": {
+            "items": {
+              "$ref": "#/components/schemas/DesiredVideoSnapshot"
+            },
+            "title": "Desired",
+            "type": "array"
+          },
+          "live": {
+            "items": {
+              "$ref": "#/components/schemas/LiveVideoSnapshot"
+            },
+            "title": "Live",
+            "type": "array"
+          }
+        },
+        "required": [
+          "desired",
+          "live"
+        ],
+        "title": "EtsyVideosSnapshot",
+        "type": "object"
+      },
+      "EtsyVideosStagePlanDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EtsyVideosSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "const": "etsy_videos",
+            "default": "etsy_videos",
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "EtsyVideosStagePlanDTO",
         "type": "object"
       },
       "FieldChangeDTO": {
@@ -1808,6 +1952,53 @@
         "title": "LiveImageSnapshot",
         "type": "object"
       },
+      "LiveVideoSnapshot": {
+        "description": "One video Etsy has on the listing (A30); ``ref`` is ``None`` for one\nthis tool never uploaded.",
+        "properties": {
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "video_id": {
+            "title": "Video Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "video_id"
+        ],
+        "title": "LiveVideoSnapshot",
+        "type": "object"
+      },
       "MediaChangeDTO": {
         "properties": {
           "after": {
@@ -2060,6 +2251,7 @@
                 "mapping": {
                   "etsy_listing": "#/components/schemas/EtsyListingStagePlanDTO",
                   "etsy_media": "#/components/schemas/EtsyMediaStagePlanDTO",
+                  "etsy_videos": "#/components/schemas/EtsyVideosStagePlanDTO",
                   "printify_product": "#/components/schemas/ProductStagePlanDTO",
                   "publish": "#/components/schemas/PublishStagePlanDTO",
                   "render": "#/components/schemas/RenderStagePlanDTO",
@@ -2082,6 +2274,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/EtsyMediaStagePlanDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/EtsyVideosStagePlanDTO"
                 },
                 {
                   "$ref": "#/components/schemas/RetractStagePlanDTO"
@@ -2448,6 +2643,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -2602,6 +2808,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -2734,6 +2951,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -2807,6 +3035,17 @@
             },
             "title": "Drift",
             "type": "array"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
           },
           "outcome": {
             "discriminator": {
@@ -3382,6 +3621,7 @@
               "mapping": {
                 "etsy_listing": "#/components/schemas/EtsyListingStagePlanDTO",
                 "etsy_media": "#/components/schemas/EtsyMediaStagePlanDTO",
+                "etsy_videos": "#/components/schemas/EtsyVideosStagePlanDTO",
                 "printify_product": "#/components/schemas/ProductStagePlanDTO",
                 "publish": "#/components/schemas/PublishStagePlanDTO",
                 "render": "#/components/schemas/RenderStagePlanDTO",
@@ -3404,6 +3644,9 @@
               },
               {
                 "$ref": "#/components/schemas/EtsyMediaStagePlanDTO"
+              },
+              {
+                "$ref": "#/components/schemas/EtsyVideosStagePlanDTO"
               },
               {
                 "$ref": "#/components/schemas/RetractStagePlanDTO"
