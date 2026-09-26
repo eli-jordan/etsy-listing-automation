@@ -2502,6 +2502,51 @@ table.listings tbody tr:last-child td {
   font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
 }
 
+/* The editor's head stays on one line. The AI workflow indicator joins it
+   while a run goes and stays 4s after the suggestions arrive -- exactly when
+   the seller is clicking them -- so if the head wrapped (Deploy dropping to a
+   second line), every drawer below would jump under the pointer as the
+   indicator came and went. Instead the listing path gives way first
+   (ellipsis), then the rest of the meta line, and the title last. */
+.page-head--editor {
+  flex-wrap: nowrap;
+}
+
+.page-head--editor > * {
+  flex-shrink: 0;
+}
+
+.page-head--editor > .page-head__meta {
+  display: flex;
+  align-items: baseline;
+  /* A million times the title's, so the meta gives way first and the title
+     only once the meta is gone: flex freezes an item at its minimum and hands
+     the rest of the shortfall to the others. Any real share for the title
+     would do: a fraction of a pixel is enough to ellipsize it. */
+  flex-shrink: 1000;
+  min-width: 0;
+  overflow: hidden;
+  white-space: pre;
+}
+
+.page-head--editor .page-head__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.page-head--editor .page-head__saved {
+  flex-shrink: 0;
+}
+
+.page-head--editor > .page-head__title {
+  flex-shrink: 0.001;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* Same dot as `.sidebar__shop` -- both say "this is live and current",
    one about the shop connection, the other about the file on disk. */
 .page-head__saved {
@@ -2621,19 +2666,264 @@ table.listings tbody tr:last-child td {
 /* — Listing Details AI Mode (design/scenes/listing-seo-v3, adapted to this
    app's real tokens and the live `.field`/`.btn` structure rather than the
    mockup's standalone screen) — */
-/* What the page head says while PRD 68's chain runs, beside the autosave meta
-   line. Sized to sit on that line rather than beside it: same 11px, same muted
-   weight, so the head reads as one sentence about where this listing stands
-   and not as a notification bar that appeared. */
-.ai-activity {
+/* The AI purple family (docs/ui-market-seo-interactions.md, section 4): it
+   marks everything the AI chain produced or is doing. Declared once here
+   rather than again on each AI selector; `--seo-ink` is the purple used for
+   text. */
+:root {
+  --seo-purple: #7655c9;
+  --seo-pink: #dc5e9a;
+  --seo-ink: #593baf;
+}
+
+/* The page head's AI workflow indicator (`AiWorkflowIndicator`): the brief,
+   market research and the proposal as three small nodes and a one-line
+   label, beside the autosave meta line. Ported from
+   design/screens/marketSeo/marketSeo.css. It shares a line with the title,
+   status tag and meta, and must not read as a notification bar: 20px nodes,
+   pale tints for finished steps, and colour and motion only on the running
+   one. */
+.aiflow {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  margin-left: 10px;
-  color: var(--color-accent);
+  gap: 7px;
+  margin-left: 4px;
+  align-self: center;
+  transition: opacity 300ms ease-out;
+}
+
+/* A clean finish fades out after 4s (the component unmounts it 300ms later;
+   under reduced motion it skips this class and simply goes). */
+.aiflow--fading {
+  opacity: 0;
+}
+
+.aiflow__nodes {
+  display: flex;
+  align-items: center;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.aiflow__step {
+  display: flex;
+  align-items: center;
+}
+
+.aiflow__link {
+  width: 10px;
+  height: 1px;
+  margin: 0 2px;
+  background: repeating-linear-gradient(90deg, var(--color-divider) 0 2px, transparent 2px 4px);
+}
+
+.aiflow__link--done {
+  background: color-mix(in srgb, var(--seo-purple) 45%, transparent);
+}
+
+.aiflow__node {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--color-divider);
+  border-radius: 50%;
+  background: transparent;
+  color: color-mix(in srgb, var(--color-text) 35%, transparent);
+  cursor: default;
+  transition:
+    background 200ms ease-out,
+    border-color 200ms ease-out,
+    color 200ms ease-out;
+}
+
+.aiflow__node > svg {
+  width: 11px;
+  height: 11px;
+}
+
+.aiflow__node:focus-visible {
+  outline: 2px solid var(--seo-purple);
+  outline-offset: 2px;
+}
+
+.aiflow__node--active {
+  border-color: color-mix(in srgb, var(--seo-purple) 70%, transparent);
+  background: linear-gradient(115deg, #f5efff, #fff0f7);
+  color: var(--seo-ink);
+  animation: aiflow-glow 1.5s ease-in-out infinite;
+}
+
+/* AI Mode's own pulse (`seo-ai-mode-pulse`), scaled down to a 20px node, at
+   the same 1.5s period so the two breathe together while both are busy. */
+@keyframes aiflow-glow {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 color-mix(in srgb, var(--seo-purple) 24%, transparent),
+      0 0 4px 0 color-mix(in srgb, var(--seo-pink) 30%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 3px color-mix(in srgb, var(--seo-purple) 18%, transparent),
+      0 0 10px 2px color-mix(in srgb, var(--seo-pink) 45%, transparent);
+  }
+}
+
+.aiflow__node--done,
+.aiflow__node--warning {
+  border-color: color-mix(in srgb, var(--seo-purple) 35%, transparent);
+  background: color-mix(in srgb, var(--seo-purple) 10%, transparent);
+  color: var(--seo-ink);
+}
+
+/* Didn't run this time (the seller's own brief was kept): greyed and dashed,
+   with a skip badge, so it still shows its place in the chain. */
+.aiflow__node--skipped {
+  border-style: dashed;
+  color: color-mix(in srgb, var(--color-text) 30%, transparent);
+}
+
+.aiflow__node--failed {
+  border-color: var(--color-danger);
+  color: var(--color-danger);
+}
+
+/* A slower, softer glow for people who asked for less motion: the node still
+   visibly breathes, because a frozen "in progress" reads as a hang (a
+   spinner that stopped on a Windows machine with animations off did). */
+@media (prefers-reduced-motion: reduce) {
+  .aiflow__node--active {
+    animation-duration: 3s;
+  }
+
+  .aiflow {
+    transition: none;
+  }
+}
+
+.aiflow__badge {
+  position: absolute;
+  top: -4px;
+  right: -5px;
+  display: grid;
+  place-items: center;
+  width: 11px;
+  height: 11px;
+  border: 1.5px solid var(--color-bg);
+  border-radius: 50%;
+}
+
+.aiflow__badge svg {
+  width: 7px;
+  height: 7px;
+}
+
+.aiflow__badge--skipped {
+  background: var(--color-neutral-500);
+  color: #fff;
+}
+
+.aiflow__badge--warning {
+  background: var(--color-warning);
+  color: var(--color-warning-ink);
+}
+
+.aiflow__badge--failed {
+  background: var(--color-danger);
+  color: #fff;
+}
+
+.aiflow__label {
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.aiflow__label--busy {
+  color: var(--seo-ink);
+}
+
+.aiflow__label--failed {
+  color: var(--color-danger);
+}
+
+/* Hover card, the same build as AI Mode's own tip. Left-aligned under the
+   node: centred, the first node's card clipped at the head's left edge. */
+.aiflow__tip {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 10px);
+  left: -6px;
+  display: grid;
+  gap: 5px;
+  width: 250px;
+  padding: 10px 12px;
+  border: 1px solid color-mix(in srgb, var(--seo-purple) 24%, var(--color-divider));
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  box-shadow: var(--shadow-md);
+  color: var(--color-text);
+  font-size: 11.5px;
+  font-weight: 400;
+  line-height: 1.4;
+  text-align: left;
+  white-space: normal;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out,
+    visibility 120ms ease-out;
+  pointer-events: none;
+}
+
+.aiflow__node:hover .aiflow__tip,
+.aiflow__node:focus-visible .aiflow__tip {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+
+.aiflow__tip-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.aiflow__tip-state {
+  font-size: 10.5px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.aiflow__tip-state--active,
+.aiflow__tip-state--done {
+  color: var(--seo-ink);
+}
+
+.aiflow__tip-state--warning {
+  color: #8a6210;
+}
+
+.aiflow__tip-state--failed {
+  color: var(--color-danger);
+}
+
+.aiflow__tip-about {
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+}
+
+.aiflow__tip-detail {
+  padding-top: 5px;
+  border-top: 1px solid var(--color-divider);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .seo-inline-status {
@@ -2762,8 +3052,6 @@ table.listings tbody tr:last-child td {
   width: calc(100% - 16px);
   margin: -6px auto 0;
   padding: 10px 11px 9px;
-  --seo-purple: #7655c9;
-  --seo-pink: #dc5e9a;
   border: 1px solid color-mix(in srgb, var(--seo-purple) 42%, var(--color-divider));
   border-top: 0;
   border-radius: 0 0 var(--radius-md) var(--radius-md);
@@ -2786,7 +3074,7 @@ table.listings tbody tr:last-child td {
   font-weight: 800;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: #593baf;
+  color: var(--seo-ink);
 }
 
 .seo-suggestion__identity {
@@ -2805,7 +3093,7 @@ table.listings tbody tr:last-child td {
   letter-spacing: 0;
   font-size: 11px;
   font-weight: 700;
-  color: #593baf;
+  color: var(--seo-ink);
 }
 
 .seo-suggestion__brand svg {
@@ -2850,7 +3138,7 @@ table.listings tbody tr:last-child td {
 }
 
 .seo-suggestion__actions button:last-child {
-  color: #593baf;
+  color: var(--seo-ink);
   border-color: color-mix(in srgb, var(--seo-purple) 45%, var(--color-divider));
   background: color-mix(in srgb, var(--seo-purple) 8%, var(--color-neutral-100));
 }
@@ -2889,7 +3177,7 @@ table.listings tbody tr:last-child td {
 }
 
 .seo-choice-list button span {
-  color: #593baf;
+  color: var(--seo-ink);
   font-size: 10px;
   font-weight: 800;
 }
@@ -2930,7 +3218,7 @@ table.listings tbody tr:last-child td {
 }
 
 .seo-tag-choice--selected {
-  color: #593baf;
+  color: var(--seo-ink);
   border-color: color-mix(in srgb, var(--seo-purple) 55%, var(--color-divider));
   background: color-mix(in srgb, var(--seo-purple) 12%, var(--color-neutral-100));
 }
@@ -4764,8 +5052,6 @@ table.listings tbody tr:last-child td {
 }
 
 .seo-brief-row {
-  --seo-purple: #7655c9;
-  --seo-pink: #dc5e9a;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: var(--space-3);
@@ -4789,8 +5075,6 @@ table.listings tbody tr:last-child td {
 }
 
 .seo-ai-mode-anchor {
-  --seo-purple: #7655c9;
-  --seo-pink: #dc5e9a;
   position: relative;
   grid-column: 2;
   grid-row: 2;
@@ -4814,7 +5098,7 @@ table.listings tbody tr:last-child td {
   border: 1px solid color-mix(in srgb, var(--seo-purple) 44%, var(--color-divider));
   border-radius: 999px;
   background: linear-gradient(115deg, #f5efff, #fff0f7);
-  color: #593baf;
+  color: var(--seo-ink);
   box-shadow: 0 2px 7px color-mix(in srgb, var(--seo-purple) 12%, transparent);
   font: inherit;
   font-size: 12px;
@@ -4965,7 +5249,7 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
 }
 .seo-ai-mode-tip p {
   margin: 8px 0 0;
-  color: #593baf;
+  color: var(--seo-ink);
 }
 
 .seo-ai-mode-tip p.seo-ai-mode-tip__note {

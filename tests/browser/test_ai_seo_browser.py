@@ -1194,7 +1194,7 @@ def test_a_workspace_without_the_brief_prompt_says_so_and_stops(
         failure.wait_for(state="visible")
         assert "brief.md is missing" in failure.inner_text()
         page.wait_for_timeout(500)  # nothing retries
-        assert page.locator(".ai-activity").count() == 0
+        assert page.locator(".aiflow").count() == 0
         assert _listing_yaml(workspace_root).get("brief") == ""
         assert provider.calls == []
 
@@ -1296,7 +1296,7 @@ def test_the_page_head_names_the_brief_step_while_it_runs(
     """**Drafting brief…** beside the autosave line, on the Variants tab,
     which is where the seller is when they attach a design.
 
-    The other steps' labels are `AiActivityIndicator.test.tsx`'s subject."""
+    The other states are `AiWorkflowIndicator.test.tsx`'s subject."""
     _seed_prompt(workspace_root)
     _seed_brief_prompt(workspace_root)
     edit_listing(workspace_root, brief="")
@@ -1311,14 +1311,53 @@ def test_the_page_head_names_the_brief_step_while_it_runs(
         page.locator(".design-row__name").wait_for(state="visible")
         _pick_another_design(page, "second-design")
 
-        head = page.locator(".page-head .ai-activity")
+        head = page.locator(".page-head .aiflow")
         head.wait_for(state="visible")
         assert "Drafting brief…" in head.inner_text()
 
         held.set()
 
         # And it goes away again once the chain is done with it.
-        page.wait_for_function("() => document.querySelector('.ai-activity') === null")
+        page.wait_for_function("() => document.querySelector('.aiflow') === null")
+
+
+def test_nothing_below_the_head_moves_when_the_indicator_comes_and_goes(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """The workflow indicator stays 4 seconds after the suggestions arrive,
+    which is when the seller is clicking them. If its arrival or its fade
+    changed the head's height, every drawer would jump under the pointer. So
+    the editor's head stays one line, and the listing path gives way first."""
+    _seed_prompt(workspace_root)
+    provider = _ready_provider()
+    held = provider.gate("seo")
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url) as page,
+    ):
+        page.get_by_role("heading", name=LISTING).wait_for(state="visible")
+        _open_details_tab(page)
+        tabs = page.locator(".tabs")
+
+        def tabs_top() -> float:
+            box = tabs.bounding_box()
+            assert box is not None
+            return box["y"]
+
+        resting = tabs_top()
+
+        page.get_by_role("button", name="AI Mode").click()
+        page.locator(".page-head .aiflow").wait_for(state="visible")
+        assert provider.started["seo"].wait(timeout=10)
+        assert tabs_top() == resting
+
+        held.set()
+        page.locator(".page-head .aiflow", has_text="Suggestions ready").wait_for(state="visible")
+        assert tabs_top() == resting
+
+        page.locator(".page-head .aiflow").wait_for(state="detached")
+        assert tabs_top() == resting
 
 
 def test_a_reload_mid_run_shows_the_same_run_again(
@@ -1348,7 +1387,7 @@ def test_a_reload_mid_run_shows_the_same_run_again(
         page.get_by_text("Generating for", exact=False).wait_for(state="visible")
         page.get_by_role("button", name="Cancel").wait_for(state="visible")
         assert page.get_by_role("button", name="AI Mode").is_disabled()
-        assert "Writing suggestions…" in page.locator(".page-head .ai-activity").inner_text()
+        assert "Writing suggestions…" in page.locator(".page-head .aiflow").inner_text()
 
         held.set()
         page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")

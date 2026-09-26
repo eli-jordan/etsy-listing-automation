@@ -9,7 +9,7 @@ import { useAutosave } from "../hooks/useAutosave";
 import { refName } from "../media";
 import type { Issue, IssueTab, ListingDetail } from "../types";
 import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
-import { AiActivityIndicator } from "./editor/aiSeo/AiActivityIndicator";
+import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { DeployControl } from "./editor/DeployControl";
 import { DesignSelect } from "./editor/DesignSelect";
@@ -211,7 +211,7 @@ function ListingEditorPageContent({
           detail={detail}
           onBack={onBack}
           flush={flush}
-          activity={<AiActivityIndicator steps={aiSeo.run.steps} />}
+          activity={<AiWorkflowIndicator steps={aiSeo.run.steps} running={aiSeo.run.busy} />}
           title={
             <EditableName
               value={name ?? pickedName}
@@ -265,7 +265,7 @@ export function EditorHead({
   const hasLinks = hasOpenTargets(detail.etsy_listing_id, detail.printify_product_id);
 
   return (
-    <div className="page-head">
+    <div className="page-head page-head--editor">
       <span className="page-head__crumb" onClick={onBack}>
         Listings
       </span>
