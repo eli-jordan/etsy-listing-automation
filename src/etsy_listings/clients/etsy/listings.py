@@ -1,6 +1,7 @@
 """The Etsy listing surface Phase 3's stages write through: `publish`'s poll
-target, `etsy_listing`'s single PATCH, and `etsy_media`'s upload/reorder/
-variation-image calls.
+target, `etsy_listing`'s single PATCH, `etsy_media`'s upload/reorder/
+variation-image calls, and the video upload/attach/delete `etsy_videos`
+places a listing's videos with (PRD 71, phase-3-etsy.md decision 9).
 
 Built against
 [docs/printify-etsy-integration.md](../../../../docs/printify-etsy-integration.md)'s
@@ -32,12 +33,14 @@ over the same transport would be the wrong seam to add.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from pathlib import PurePosixPath
 from typing import Any, Protocol
 
 from etsy_listings.clients.etsy.models import (
     Inventory,
     Listing,
     ListingImage,
+    ListingVideo,
     ProductionPartner,
     ReturnPolicy,
     ShippingProfile,
@@ -45,6 +48,77 @@ from etsy_listings.clients.etsy.models import (
     VariationImageLink,
 )
 from etsy_listings.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+
+HTTP_BAD_REQUEST = 400
+HTTP_CONFLICT = 409
+
+MAX_VIDEOS_TEXT = "The listing already has the maximum number of videos allowed."
+"""Etsy's words for **two** different refusals (decision 9, measured): a
+`409` when two videos are already active, and a `400` when the listing has
+spent its ten associations for the day -- on a listing holding none."""
+
+VIDEO_SLOTS = 2
+DAILY_VIDEO_ASSOCIATIONS = 10
+
+
+class VideoSlotsFullError(EtsyApiError):
+    """A `409`: the listing already holds :data:`VIDEO_SLOTS` active videos."""
+
+    def __init__(self, status_code: int = HTTP_CONFLICT, *, error: str = MAX_VIDEOS_TEXT) -> None:
+        super().__init__(
+            status_code,
+            error=error,
+            message=(
+                f"Etsy refused the video ({status_code}): the listing already has "
+                f"{VIDEO_SLOTS} active videos, the most it can hold."
+            ),
+        )
+
+
+class VideoBudgetExhaustedError(EtsyApiError):
+    """A `400` carrying "maximum number of videos": the listing's daily
+    budget of associations is spent (PRD 71, decision 9).
+
+    Re-worded because Etsy's own text says the listing is full, and the
+    listing may hold no videos at all. The tool does not predict the budget;
+    it explains the refusal when it comes. A
+    :class:`~etsy_listings.errors.UserFacingError` through
+    :class:`EtsyApiError`, so a batch reports this listing and carries on
+    (PRD 16).
+    """
+
+    def __init__(
+        self, status_code: int = HTTP_BAD_REQUEST, *, error: str = MAX_VIDEOS_TEXT
+    ) -> None:
+        super().__init__(
+            status_code,
+            error=error,
+            message=(
+                f"Etsy refused the video ({status_code}): Etsy allows "
+                f"{DAILY_VIDEO_ASSOCIATIONS} video uploads or re-attaches per listing in "
+                f"24 hours, and this listing has used them. Etsy words this as "
+                f'"{error}" whatever the listing holds. Re-run tomorrow.'
+            ),
+        )
+
+
+def _video_refusal(exc: EtsyApiError) -> EtsyApiError:
+    """Name a refused upload or attach for what it is; anything else is
+    Etsy's own words, unchanged."""
+    if exc.status_code == HTTP_CONFLICT:
+        return VideoSlotsFullError(exc.status_code, error=exc.error)
+    if exc.status_code == HTTP_BAD_REQUEST and "maximum number of videos" in exc.error:
+        return VideoBudgetExhaustedError(exc.status_code, error=exc.error)
+    return exc
+
+
+VIDEO_CONTENT_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime"}
+"""PRD 71's two video types -- of Etsy's seven, the two a browser previews --
+and the content type each is sent as."""
+
+MULTI_VIDEO = {"is_multi_video": "true"}
+"""On every upload and every attach. Without it Etsy's legacy mode makes
+every other video on the listing `inactive` (decision 9, measured)."""
 
 BATCH_LIMIT = 100
 """Etsy's documented ceiling on `getListingsByListingIds`. Chunking is this
@@ -57,7 +131,9 @@ class EtsyListingClient(Protocol):
     `listings_w` for every write, plus the `shops_r` reads that resolve a
     shipping profile or production partner by name (decision 2)."""
 
-    def get_listing(self, listing_id: int, *, include_images: bool = False) -> Listing | None: ...
+    def get_listing(
+        self, listing_id: int, *, include_images: bool = False, include_videos: bool = False
+    ) -> Listing | None: ...
 
     def listing_states(self, listing_ids: Sequence[int]) -> dict[int, str]: ...
 
@@ -75,6 +151,16 @@ class EtsyListingClient(Protocol):
         overwrite: bool = False,
         listing_image_id: int | None = None,
     ) -> ListingImage: ...
+
+    def upload_listing_video(
+        self, shop_id: int, listing_id: int, *, file_name: str, contents: bytes
+    ) -> ListingVideo: ...
+
+    def attach_listing_video(
+        self, shop_id: int, listing_id: int, video_id: int
+    ) -> ListingVideo: ...
+
+    def delete_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> None: ...
 
     def get_listing_inventory(self, listing_id: int) -> Inventory: ...
 
@@ -101,8 +187,17 @@ class HttpEtsyListingClient:
 
     # ------------------------------------------------------------- reads
 
-    def get_listing(self, listing_id: int, *, include_images: bool = False) -> Listing | None:
-        params = {"includes": "Images"} if include_images else None
+    def get_listing(
+        self, listing_id: int, *, include_images: bool = False, include_videos: bool = False
+    ) -> Listing | None:
+        # One comma-joined `includes`, never the key twice: which of two
+        # repeated keys Etsy honours is not something to leave to chance.
+        includes = [
+            name
+            for name, wanted in (("Images", include_images), ("Videos", include_videos))
+            if wanted
+        ]
+        params = {"includes": ",".join(includes)} if includes else None
         try:
             response = self._transport.get(f"/v3/application/listings/{listing_id}", params=params)
         except EtsyApiError as exc:
@@ -224,6 +319,53 @@ class HttpEtsyListingClient:
         )
         return ListingImage.model_validate(response.json())
 
+    def upload_listing_video(
+        self, shop_id: int, listing_id: int, *, file_name: str, contents: bytes
+    ) -> ListingVideo:
+        """Upload a video file, `active` on return -- there is no processing
+        state to poll (decision 9). No rank and no position: where it lands
+        follows from attach order, which is the caller's to arrange.
+
+        A POST, so the transport retries it on `429` only: a `5xx` may have
+        landed, and a second send would spend a second association of the
+        listing's daily ten.
+        """
+        content_type = video_content_type(file_name)
+        return self._post_video(
+            shop_id,
+            listing_id,
+            data={"name": file_name},
+            files={"video": (file_name, contents, content_type)},
+        )
+
+    def attach_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> ListingVideo:
+        """Attach a video the shop already has, by id -- how a video moves
+        without re-sending a byte, since re-attaching anchors it afresh
+        (decision 9). Counts against the daily ten exactly as an upload does.
+        """
+        return self._post_video(shop_id, listing_id, data={"video_id": str(video_id)})
+
+    def _post_video(self, shop_id: int, listing_id: int, **kwargs: Any) -> ListingVideo:
+        try:
+            response = self._transport.post(
+                f"/v3/application/shops/{shop_id}/listings/{listing_id}/videos",
+                params=MULTI_VIDEO,
+                **kwargs,
+            )
+        except EtsyApiError as exc:
+            refusal = _video_refusal(exc)
+            if refusal is exc:
+                raise
+            raise refusal from exc
+        return ListingVideo.model_validate(response.json())
+
+    def delete_listing_video(self, shop_id: int, listing_id: int, video_id: int) -> None:
+        """Take a video off the listing (`204`). Etsy keeps the file, which
+        is what makes :meth:`attach_listing_video` possible afterwards."""
+        self._transport.delete(
+            f"/v3/application/shops/{shop_id}/listings/{listing_id}/videos/{video_id}"
+        )
+
     def update_variation_images(
         self, shop_id: int, listing_id: int, links: list[VariationImageLink]
     ) -> None:
@@ -242,6 +384,19 @@ class HttpEtsyListingClient:
         self._transport.post(
             f"/v3/application/shops/{shop_id}/listings/{listing_id}/variation-images", json=body
         )
+
+
+def video_content_type(file_name: str) -> str:
+    """The content type a video upload is sent as, or a :class:`ValueError`
+    for a file PRD 71 does not allow -- raised before a byte is sent, since
+    anything else reaching the client is a caller's bug that would spend one
+    of the listing's daily associations. The fake shares it, so a stage
+    tested against the fake meets the same refusal."""
+    suffix = PurePosixPath(file_name).suffix.lower()
+    content_type = VIDEO_CONTENT_TYPES.get(suffix)
+    if content_type is None:
+        raise ValueError(f"{file_name}: a listing video is .mp4 or .mov, not {suffix!r}")
+    return content_type
 
 
 def _results(body: Any) -> list[Any]:

@@ -235,6 +235,16 @@ that talks to Etsy or Printify.
    - it keeps `inactive` videos in the lists
    - it exposes a read-only `gallery(listing_id)` for tests
 
+**As built.** Where the implementation settled a detail differently:
+
+| Item | Settled as | Why |
+|---|---|---|
+| 3 | Each call takes `shop_id` first, like every other write here; any extension but `.mp4`/`.mov` is a `ValueError` before sending, through one `video_content_type` the fake shares | The write paths are shop-scoped. A third type reaching the client is a caller's bug that would spend an association |
+| 4 | Both errors subclass `EtsyApiError`, which gains an optional `message`; `status_code` and Etsy's own `error` text are kept | A caller catching `EtsyApiError` still catches them, and the re-wording does not lose what Etsy said |
+| 5 | `image_ids` keeps a detached image restorable and refuses an id that is no image of the listing with Etsy's measured `400` | Decision 9's cut-and-restore brings detached images back; the old fake dropped them, and silently ignored a video id |
+| 5 | What decision 9 did not measure — re-attaching an active video, attaching an id the shop never had, deleting one not on the listing, which refusal wins when both apply — is a `ValueError` naming the gap, or (the last) the full listing first | A stage that comes to rely on unmeasured behaviour finds out in a test |
+| 5 | `seed_video(listing_id, video_state=...)` places a foreign or `inactive` video without spending budget; `video_uploads` and `video_attaches` record what was sent | PR 4's sweep and drift tests need both, and "no re-upload" is asserted on `video_uploads` |
+
 **Success conditions (added to the common list):**
 - `MockTransport` contract tests cover:
   - the multipart shape, with `is_multi_video=true` present on both upload and
