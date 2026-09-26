@@ -350,6 +350,17 @@ that talks to Etsy or Printify.
      image, a first video lands at 2, a third video is refused, and images
      and videos have separate caps
 
+**As built.** Where the implementation settled a detail differently:
+
+| Item | Settled as | Why |
+|---|---|---|
+| 1 | `listing_media_files` returns absolute paths, like `common_media_files`; the endpoint makes them relative. `listing_media_file(name, path)` is added beside it, and both share one boundary with the common-media pair: single segments, a media extension, and the *resolved* file inside the directory asked of, not merely the root | A symlink under `common-media/` could previously serve any file in the workspace, `shop.yaml` included. One rule for both directories closes that and keeps them from drifting |
+| 2 | The endpoints move to `ui/api/media_files.py`; one `MediaFileSummary` (was `CommonMediaSummary`) serves both groups. The listing-local pictures are `/api/listings/{name}/media-files/{path}/file` and `/thumbnail`. MIME types come from `media:`'s extension list, not `mimetypes` | Both groups answer the same three questions. `mimetypes` reads the registry on Windows |
+| 4 | `pictureFor` takes the listing name as a fourth argument, and answers `""` for a `./` ref with none (the unnamed draft). A video's tile is its file, since `/thumbnail` refuses one. The duration badge reads `loadedmetadata`, so the API probes nothing | A `./` ref cannot be addressed without knowing whose directory it names |
+| 4 | A removal is settled back inside the gallery rules: the next image becomes the thumbnail, and removing the featured video promotes the other, as Etsy does. Removing the last image while a video remains is declined | A click must not write a gallery `_check_gallery` refuses. `reorder` is unchanged; its snap-back is PR 6's |
+| 4 | The reel's header counts images only, and the preview pane still draws a focused video with `<img>` | The header must not count a video against the image cap. The `<video>` preview is PR 6, item 2 |
+| — | `ComparisonView` passes the listing to `pictureFor` | Without it the review drew a `./` image from a `common-media/` URL |
+
 **Success conditions (added to the common list):**
 - API tests show:
   - path traversal in the listing name or file path is refused

@@ -27,7 +27,6 @@ directory rather than the workspace as a whole.
 
 from __future__ import annotations
 
-import mimetypes
 import os
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -51,7 +50,6 @@ from etsy_listings.config.listing_validation import (
     check_listing_yaml_present,
 )
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
-from etsy_listings.config.media import media_kind
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.preview import lookup_preview
 from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
@@ -74,7 +72,6 @@ from etsy_listings.newcmd.logic import (
 from etsy_listings.ui.api.etsystate import etsy_states
 from etsy_listings.ui.api.schemas import (
     CommonCopySummary,
-    CommonMediaSummary,
     CreateListingRequest,
     DraftListingRequest,
     EtsySectionSummary,
@@ -753,65 +750,6 @@ def list_etsy_sections(request: Request) -> list[EtsySectionSummary]:
     except (EtsyApiError, EtsyAuthError):
         return []
     return [EtsySectionSummary(id=s.shop_section_id, title=s.title) for s in sections]
-
-
-@support_router.get("/api/common-media", response_model=list[CommonMediaSummary])
-def list_common_media(request: Request) -> list[CommonMediaSummary]:
-    """The shared images a listing can add to `media:` as a file ref.
-
-    Distinct from both design endpoints: ``designs/`` is the artwork that gets
-    printed, ``test-designs/`` is calibration targets, and these are finished
-    pictures (a sizing chart, care instructions) uploaded to Etsy as-is,
-    never rendered onto a garment.
-
-    ``name`` is the path under ``common-media/``, subdirectories included --
-    what the two picture endpoints below take. Images only, for now: every
-    row is drawn as a picture thumbnail, and a video needs the file
-    locator's own tile (PRD 71) before it can be offered here.
-    """
-    workspace = _workspace(request)
-    shared = workspace.common_media_dir()
-    rows: list[CommonMediaSummary] = []
-    for path in workspace.common_media_files():
-        name = path.relative_to(shared).as_posix()
-        ref = f"{layout.COMMON_MEDIA_DIR}/{name}"
-        if media_kind(ref) == "image":
-            rows.append(CommonMediaSummary(name=name, file=ref, ref=ref))
-    return rows
-
-
-@support_router.get("/api/common-media/{name:path}/thumbnail")
-def common_media_thumbnail(request: Request, name: str) -> Response:
-    """An unusable *name* needs nothing here: ``InvalidNameError`` out of
-    ``common_media_file`` becomes a 400 through the app-wide handler."""
-    return thumbnail_response(_existing_common_media(request, name))
-
-
-@support_router.get("/api/common-media/{name:path}/file")
-def common_media_file(request: Request, name: str) -> Response:
-    """The shared asset at its own size, for the editor's preview pane and its
-    lightbox -- the two places a picture is *judged* rather than picked out of
-    a list.
-
-    The bytes as they sit on disk, not a re-encode: a mockup template's
-    counterpart (`GET .../design-preview`) has to run the real pipeline to
-    exist at all, but this file is already exactly what would be uploaded to
-    Etsy, and the one thing worth seeing full-size is what Etsy will get.
-    """
-    path = _existing_common_media(request, name)
-    media_type, _ = mimetypes.guess_type(path.name)
-    return Response(
-        content=path.read_bytes(),
-        media_type=media_type or "application/octet-stream",
-        headers={"Cache-Control": "no-cache"},
-    )
-
-
-def _existing_common_media(request: Request, name: str) -> Path:
-    path = _workspace(request).common_media_file(name)
-    if not path.is_file():
-        raise HTTPException(status_code=404, detail=f"no shared asset {name!r}")
-    return path
 
 
 @support_router.get("/api/common-copy", response_model=list[CommonCopySummary])

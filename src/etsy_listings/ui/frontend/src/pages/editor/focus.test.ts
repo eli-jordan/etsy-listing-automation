@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { CommonMediaSummary, ListingDetail, MediaEntry, TemplateSummary } from "../../types";
+import type { MediaFileSummary, ListingDetail, MediaEntry, TemplateSummary } from "../../types";
 import { type Focus, viewFocus } from "./focus";
 
 /**
@@ -21,10 +21,11 @@ const FLAT_LAY: TemplateSummary = {
   status_reason: null,
 };
 
-const SIZING: CommonMediaSummary = {
+const SIZING: MediaFileSummary = {
   name: "sizing.png",
   file: "common-media/sizing.png",
   ref: "common-media/sizing.png",
+  kind: "image",
 };
 
 function listing(media: MediaEntry[]): ListingDetail {
@@ -32,7 +33,7 @@ function listing(media: MediaEntry[]): ListingDetail {
 }
 
 const ON_TEMPLATE: Focus = { kind: "template", template: "flat-lay-01", colour: "black" };
-const ON_SHARED: Focus = { kind: "shared", asset: SIZING };
+const ON_SHARED: Focus = { kind: "file", asset: SIZING };
 
 describe("viewFocus, for a template", () => {
   it("reports it as in the listing when media carries it", () => {

@@ -251,7 +251,8 @@ def test_common_media_file_takes_the_path_under_common_media_as_is(
 
 
 @pytest.mark.parametrize(
-    "name", ["../shop.yaml", "videos/../../shop.yaml", "", "a//b.png", "C:x.png", "a\\b.png"]
+    "name",
+    ["../shop.yaml", "videos/../../shop.yaml", "", "a//b.png", "C:x.png", "a\\b.png", "notes.txt"],
 )
 def test_common_media_file_refuses_a_path_that_could_leave_common_media(
     workspace_root: Path, name: str
@@ -262,10 +263,125 @@ def test_common_media_file_refuses_a_path_that_could_leave_common_media(
         ws.common_media_file(name)
 
 
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need elevation on Windows")
+def test_common_media_refuses_a_symlink_out_of_common_media(workspace_root: Path) -> None:
+    """Inside the root is not enough: `shop.yaml` behind a `.png` name is not
+    a shared picture, and neither listed nor served."""
+    shared = workspace_root / "common-media"
+    shared.mkdir()
+    (shared / "shop.png").symlink_to(workspace_root / "shop.yaml")
+
+    ws = Workspace.discover(root_override=workspace_root)
+    assert ws.common_media_files() == []
+    with pytest.raises(InvalidNameError):
+        ws.common_media_file("shop.png")
+
+
 def test_common_media_files_is_empty_when_the_directory_is_absent(workspace_root: Path) -> None:
     """A workspace that has never needed a shared asset still lists."""
     ws = Workspace.discover(root_override=workspace_root)
     assert ws.common_media_files() == []
+
+
+class TestListingMediaFiles:
+    """A listing's own files, the `./` half of `media:` (PRD 71, 72).
+
+    A security boundary (A8): the listing name and the path both arrive from
+    URLs, and the directory also holds `listing.yaml` and the lockfile, which
+    are no business of a picture endpoint."""
+
+    def test_lists_every_image_and_video_recursively_by_path(self, workspace_root: Path) -> None:
+        listing = workspace_root / "listings" / "take-a-hike"
+        (listing / "shots").mkdir()
+        for name in ("close-up.MP4", "shots/back.png", "shots/detail.jpeg", "a.mov"):
+            (listing / name).write_bytes(b"")
+        (listing / "notes.txt").write_text("not media", encoding="utf-8")
+
+        ws = Workspace.discover(root_override=workspace_root)
+        assert [
+            p.relative_to(listing).as_posix() for p in ws.listing_media_files("take-a-hike")
+        ] == [
+            "a.mov",
+            "close-up.MP4",
+            "shots/back.png",
+            "shots/detail.jpeg",
+        ]
+
+    def test_never_lists_the_listing_file_or_the_lockfile(self, workspace_root: Path) -> None:
+        listing = workspace_root / "listings" / "take-a-hike"
+        (listing / "state.lock.json").write_text("{}", encoding="utf-8")
+
+        ws = Workspace.discover(root_override=workspace_root)
+        assert ws.listing_media_files("take-a-hike") == []
+
+    def test_is_empty_for_a_listing_with_no_directory(self, workspace_root: Path) -> None:
+        ws = Workspace.discover(root_override=workspace_root)
+        assert ws.listing_media_files("no-such-listing") == []
+
+    @pytest.mark.parametrize("name", ["..", "../take-a-hike", "", "a\\b"])
+    def test_refuses_a_listing_name_that_is_not_one_segment(
+        self, workspace_root: Path, name: str
+    ) -> None:
+        ws = Workspace.discover(root_override=workspace_root)
+        with pytest.raises(InvalidNameError):
+            ws.listing_media_files(name)
+
+    @pytest.mark.skipif(os.name == "nt", reason="symlinks need elevation on Windows")
+    def test_leaves_out_a_symlink_that_points_out_of_the_listing(
+        self, workspace_root: Path
+    ) -> None:
+        """Inside the root is not enough: a link to another listing's files, or
+        to `shop.yaml` behind a `.png` name, is outside this listing."""
+        listing = workspace_root / "listings" / "take-a-hike"
+        (listing / "shop.png").symlink_to(workspace_root / "shop.yaml")
+        (listing / "design.png").symlink_to(workspace_root / "designs" / "take-a-hike.png")
+        (listing / "self.png").symlink_to(listing / "listing.yaml")
+
+        ws = Workspace.discover(root_override=workspace_root)
+        assert ws.listing_media_files("take-a-hike") == []
+
+    def test_resolves_one_file_by_its_path_under_the_listing(self, workspace_root: Path) -> None:
+        listing = workspace_root / "listings" / "take-a-hike"
+        (listing / "shots").mkdir()
+        (listing / "shots" / "back.png").write_bytes(b"")
+
+        ws = Workspace.discover(root_override=workspace_root)
+        assert (
+            ws.listing_media_file("take-a-hike", "shots/back.png") == listing / "shots" / "back.png"
+        )
+
+    @pytest.mark.parametrize(
+        "path",
+        [
+            "listing.yaml",
+            "state.lock.json",
+            "../../shop.yaml",
+            "shots/../../../shop.yaml",
+            "../other/x.png",
+            "",
+            "a//b.png",
+            "C:x.png",
+            "a\\b.png",
+            "notes.txt",
+        ],
+    )
+    def test_refuses_a_path_that_is_not_one_of_its_media_files(
+        self, workspace_root: Path, path: str
+    ) -> None:
+        ws = Workspace.discover(root_override=workspace_root)
+        with pytest.raises(InvalidNameError):
+            ws.listing_media_file("take-a-hike", path)
+
+    @pytest.mark.skipif(os.name == "nt", reason="symlinks need elevation on Windows")
+    def test_refuses_a_symlink_out_of_the_listing(self, workspace_root: Path) -> None:
+        listing = workspace_root / "listings" / "take-a-hike"
+        (listing / "shop.png").symlink_to(workspace_root / "shop.yaml")
+        (listing / "design.png").symlink_to(workspace_root / "designs" / "take-a-hike.png")
+
+        ws = Workspace.discover(root_override=workspace_root)
+        for path in ("shop.png", "design.png"):
+            with pytest.raises(InvalidNameError):
+                ws.listing_media_file("take-a-hike", path)
 
 
 def test_common_copy_files_lists_the_shared_bodies(workspace_root: Path) -> None:

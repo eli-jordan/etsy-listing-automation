@@ -980,7 +980,7 @@ class TestSupportingEndpoints:
         assert by_name["other-garment"]["compatible"] is False
         # `ref` is what a PATCH writes straight into `pricing_plan:` --
         # workspace-rooted (PRD 72), ready to use unchanged (mirrors
-        # `CommonMediaSummary.ref`).
+        # `MediaFileSummary.ref`).
         assert by_name["tee-basic"]["ref"] == "pricing-plans/tee-basic.yaml"
 
     def test_lists_listing_designs(self, client: TestClient) -> None:
@@ -1006,101 +1006,6 @@ class TestSupportingEndpoints:
 
     def test_a_design_thumbnail_404s_for_an_unknown_design(self, client: TestClient) -> None:
         assert client.get("/api/listing-designs/no-such-art/thumbnail").status_code == 404
-
-    def test_lists_common_media_with_the_ref_a_listing_stores(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """The picker hands back the ref ready to write. A shared file's ref is
-        its workspace-relative path (PRD 72), with no `../../` in front, and
-        its name is its path under `common-media/` -- what the picture
-        endpoints take."""
-        shared = workspace_root / "common-media"
-        (shared / "charts").mkdir(parents=True)
-        (shared / "size-guide.png").write_bytes(b"")
-        (shared / "charts" / "care.jpg").write_bytes(b"")
-
-        response = client.get("/api/common-media")
-        assert response.status_code == 200
-        by_name = {row["name"]: row for row in response.json()}
-        assert by_name["size-guide.png"]["ref"] == "common-media/size-guide.png"
-        assert by_name["size-guide.png"]["file"] == "common-media/size-guide.png"
-        assert by_name["charts/care.jpg"]["ref"] == "common-media/charts/care.jpg"
-
-    def test_the_shared_list_offers_no_video_until_the_locator_can_show_one(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """Every row here is drawn as a picture thumbnail; a video row would
-        be a broken image. PRD 71's locator (grouped files, `<video>` tiles)
-        is what lists them."""
-        shared = workspace_root / "common-media"
-        shared.mkdir()
-        (shared / "size-guide.png").write_bytes(b"")
-        (shared / "size-guide.mp4").write_bytes(b"")
-
-        assert [row["name"] for row in client.get("/api/common-media").json()] == ["size-guide.png"]
-
-    def test_common_media_is_empty_on_a_workspace_that_has_none(self, client: TestClient) -> None:
-        assert client.get("/api/common-media").json() == []
-
-    def test_serves_a_common_media_thumbnail(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        shared = workspace_root / "common-media"
-        shared.mkdir(exist_ok=True)
-        Image.new("RGB", (900, 700), (210, 180, 140)).save(shared / "size-guide.png")
-
-        response = client.get("/api/common-media/size-guide.png/thumbnail")
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "image/png"
-        with Image.open(BytesIO(response.content)) as img:
-            assert max(img.size) <= 160
-
-    def test_serves_a_thumbnail_from_a_subdirectory(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        charts = workspace_root / "common-media" / "charts"
-        charts.mkdir(parents=True)
-        Image.new("RGB", (900, 700), (210, 180, 140)).save(charts / "care.jpg")
-
-        response = client.get("/api/common-media/charts%2Fcare.jpg/thumbnail")
-        assert response.status_code == 200
-
-    def test_a_common_media_thumbnail_404s_for_an_unknown_asset(self, client: TestClient) -> None:
-        assert client.get("/api/common-media/no-such-asset.png/thumbnail").status_code == 404
-
-    def test_a_common_media_path_out_of_the_directory_is_refused(self, client: TestClient) -> None:
-        """A8: the name reaches `common_media_file`, whose segment rule is the
-        boundary."""
-        response = client.get("/api/common-media/..%2Fshop.yaml/file")
-        assert response.status_code == 400
-
-    def test_serves_a_common_media_file_at_its_own_size(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """The other half of the pair: the thumbnail is a picture to *pick*
-        out of a list, this is the one the editor's preview pane and its
-        lightbox show -- and it is the file Etsy would actually receive,
-        byte for byte, not a re-encode."""
-        shared = workspace_root / "common-media"
-        shared.mkdir(exist_ok=True)
-        source = shared / "size-guide.png"
-        Image.new("RGB", (900, 700), (210, 180, 140)).save(source)
-
-        response = client.get("/api/common-media/size-guide.png/file")
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "image/png"
-        assert response.content == source.read_bytes()
-
-    def test_serves_a_shared_jpeg_as_a_jpeg(self, client: TestClient, workspace_root: Path) -> None:
-        shared = workspace_root / "common-media"
-        shared.mkdir(exist_ok=True)
-        Image.new("RGB", (90, 70), (210, 180, 140)).save(shared / "care.jpg")
-
-        response = client.get("/api/common-media/care.jpg/file")
-        assert response.headers["content-type"] == "image/jpeg"
-
-    def test_a_common_media_file_404s_for_an_unknown_asset(self, client: TestClient) -> None:
-        assert client.get("/api/common-media/no-such-asset.png/file").status_code == 404
 
     def test_lists_common_copy_files_with_their_front_matter(
         self, client: TestClient, workspace_root: Path

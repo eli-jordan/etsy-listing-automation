@@ -561,7 +561,11 @@ PATCH /api/listings/{name}          -> partial update; the autosave endpoint
   was `../../common-media/x.png` when every ref was listing-relative. Backed by new `Workspace.common_media_files()` /
   `common_media_file()`, since only `workspace` knows a directory's layout,
   including how to list one; PNG-only and flat for the same reason
-  `design_files()` is.
+  `design_files()` is. PRD 71 widened it to every image and video type,
+  recursively, and moved it to `media_files.py` beside
+  `GET /api/listings/{name}/media-files`, the listing's own `./` files; both
+  rows carry `kind`, `/file` answers `Range` for `<video>`, and `/thumbnail`
+  refuses a video with `415`.
 
 ### Tests
 
@@ -599,8 +603,8 @@ pages/
                            over a colour list (swatch dot + name + light/dark
                            badge beside the switch) beside a large preview
                            stage showing the focused colour's real render
-    ImagesTab.tsx           locator (mockup templates | common-media/
-                           images) + a large preview pane (real renders,
+    ImagesTab.tsx           locator (mockup templates | files, grouped
+                           ./ and common-media/) + a large preview pane (real renders,
                            opening the reel in the calibrator's Lightbox) +
                            reel (drag-reorder), plus the per-template Etsy
                            colour-swatch toggle

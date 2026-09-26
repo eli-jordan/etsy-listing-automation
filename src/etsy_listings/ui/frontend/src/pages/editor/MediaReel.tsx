@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { mediaLabel, pictureFor } from "../../media";
-import type { CommonMediaSummary, MediaEntry } from "../../types";
-import { MAX_MEDIA } from "./mediaEdits";
+import { mediaKind, mediaLabel, pictureFor } from "../../media";
+import type { MediaFileSummary, MediaEntry } from "../../types";
+import { MAX_IMAGES } from "./mediaEdits";
 import type { Focus } from "./focus";
 
 /**
@@ -20,7 +20,11 @@ interface Props {
   design: string | null;
   swatchTemplate: string | null;
   selectedIndex: number | null;
-  shared: readonly CommonMediaSummary[];
+  /** The listing a `./` ref belongs to, or `null` for a draft. */
+  listing: string | null;
+  /** Every file the locator lists, both groups -- what a file ref's tile
+   * points the preview at. */
+  files: readonly MediaFileSummary[];
   onOpen: (index: number) => void;
   onRemove: (index: number) => void;
   onReorder: (from: number, to: number) => void;
@@ -32,7 +36,8 @@ export function MediaReel({
   design,
   swatchTemplate,
   selectedIndex,
-  shared,
+  listing,
+  files,
   onOpen,
   onRemove,
   onReorder,
@@ -40,17 +45,19 @@ export function MediaReel({
 }: Props) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  // Images are what Etsy caps at twenty; videos are counted apart (PRD 71).
+  const images = media.filter((entry) => mediaKind(entry) === "image").length;
 
   function focusFor(entry: MediaEntry) {
     if (typeof entry !== "string") {
       onFocus({ kind: "template", template: entry.template, colour: entry.colour ?? null });
       return;
     }
-    // Only an asset still in common-media/ can be previewed; a ref whose file
-    // has gone keeps its tile and its label, which is how the user finds out
-    // it is missing.
-    const asset = shared.find((a) => a.ref === entry);
-    if (asset !== undefined) onFocus({ kind: "shared", asset });
+    // Only a file still on disk can be previewed; a ref whose file has gone
+    // keeps its tile and its label, which is how the user finds out it is
+    // missing.
+    const asset = files.find((a) => a.ref === entry);
+    if (asset !== undefined) onFocus({ kind: "file", asset });
   }
 
   return (
@@ -58,11 +65,11 @@ export function MediaReel({
       <div className="reel__head">
         <span className="reel__title">Listing images</span>
         <span className="reel__count">
-          {media.length} of {MAX_MEDIA}
+          {images} of {MAX_IMAGES}
         </span>
         <span className="reel__hint">
-          {media.length >= MAX_MEDIA
-            ? `At Etsy's ${MAX_MEDIA}-image limit — remove one before adding another`
+          {images >= MAX_IMAGES
+            ? `At Etsy's ${MAX_IMAGES}-image limit — remove one before adding another`
             : "Drag a tile to change the order Etsy shows them in"}
         </span>
       </div>
@@ -108,7 +115,7 @@ export function MediaReel({
                 onMouseEnter={() => focusFor(entry)}
               >
                 <img
-                  src={pictureFor(entry, design, "tile")}
+                  src={pictureFor(entry, design, "tile", listing)}
                   alt={mediaLabel(entry)}
                   loading="lazy"
                 />

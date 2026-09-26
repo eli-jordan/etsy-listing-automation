@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isInMedia,
+  mediaKind,
   mediaLabel,
   missingColours,
   pictureFor,
@@ -174,6 +175,44 @@ describe("pictureFor", () => {
 
   it("encodes a name that would otherwise break the path", () => {
     expect(pictureFor({ template: "a/b", colour: null }, null)).toContain("a%2Fb");
+  });
+});
+
+describe("pictureFor a video or a listing's own file", () => {
+  it("serves a video's file even for a tile -- the browser draws its poster, there is no thumbnail", () => {
+    expect(pictureFor("common-media/videos/intro.mp4", null, "tile")).toBe(
+      "/api/common-media/videos/intro.mp4/file",
+    );
+  });
+
+  it("addresses a ./ ref under the listing it belongs to", () => {
+    expect(pictureFor("./shots/back.png", null, "tile", "take-a-hike")).toBe(
+      "/api/listings/take-a-hike/media-files/shots/back.png/thumbnail",
+    );
+    expect(pictureFor("./close-up.MOV", null, "full", "take a hike")).toBe(
+      "/api/listings/take%20a%20hike/media-files/close-up.MOV/file",
+    );
+  });
+
+  it("has no picture for a ./ ref when there is no listing directory to find it in", () => {
+    /* The editor's unnamed draft: a `./` ref names nothing yet. */
+    expect(pictureFor("./close-up.mp4", null)).toBe("");
+  });
+});
+
+describe("mediaKind", () => {
+  it("calls a template entry an image: a render is a picture", () => {
+    expect(mediaKind({ template: "flat-lay-01", colour: "black" })).toBe("image");
+  });
+
+  it("calls a file ref a video by its extension, in any case", () => {
+    expect(mediaKind("common-media/intro.mp4")).toBe("video");
+    expect(mediaKind("./IMG_1234.MOV")).toBe("video");
+  });
+
+  it("calls every other file ref an image", () => {
+    expect(mediaKind("common-media/sizing.png")).toBe("image");
+    expect(mediaKind("./shots/back.JPEG")).toBe("image");
   });
 });
 
