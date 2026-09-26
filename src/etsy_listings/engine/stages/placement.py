@@ -92,7 +92,7 @@ class DesignPlacement:
     profile: GarmentProfile
     paths: dict[str, Path]
     """Artwork key -> the design file it names, resolved through
-    :meth:`Workspace.resolve_ref` (PRD 72), so a ``design:`` ref cannot escape
+    :meth:`Workspace.resolve_ref` (PRD 73), so a ``design:`` ref cannot escape
     the root."""
 
     @classmethod

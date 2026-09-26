@@ -26,6 +26,7 @@ from etsy_listings.ai.prompt import (
     build_repair_prompt,
     default_seo_prompt_text,
     seed_prompt,
+    sync_prompt,
 )
 
 
@@ -185,3 +186,12 @@ def test_build_repair_prompt_lists_every_reason() -> None:
 def test_build_repair_prompt_asks_for_json_only() -> None:
     repair = build_repair_prompt(["some reason"])
     assert "JSON" in repair
+
+
+def test_sync_prompt_treats_a_file_that_is_not_utf8_as_different(tmp_path: Path) -> None:
+    target = tmp_path / "prompts" / "seo.md"
+    target.parent.mkdir(parents=True)
+    target.write_bytes(b"caf\xe9 style")
+
+    assert sync_prompt(target, default_seo_prompt_text(), replace=False) == "differs"
+    assert target.read_bytes() == b"caf\xe9 style"

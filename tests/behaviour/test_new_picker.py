@@ -401,7 +401,7 @@ def test_load_candidate_pricing_plans_skips_a_broken_plan_not_the_whole_picker(
 
 
 def test_pricing_plan_ref_is_written_from_the_workspace_root(tmp_path: Path) -> None:
-    # PRD 72: no prefix is the workspace root, whichever listing stores it.
+    # PRD 73: no prefix is the workspace root, whichever listing stores it.
     flat = tmp_path / "pricing-plans" / "launch-low.yaml"
     assert pricing_plan_ref(flat, root=tmp_path) == "pricing-plans/launch-low.yaml"
 

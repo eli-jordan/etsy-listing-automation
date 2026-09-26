@@ -34,7 +34,10 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 
+import httpx
+
 from etsy_listings.clients.etsy.listings import EtsyListingClient, HttpEtsyListingClient
+from etsy_listings.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
 from etsy_listings.clients.etsy.oauth import TokenResponse
 from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
 from etsy_listings.clients.etsy.tokens import TokenStore, utcnow
@@ -188,6 +191,24 @@ def etsy_shop_client(root: Path) -> EtsyShopClient | None:
     tokens = etsy_token_store(root).load()
     bearer = etsy_token_store(root).access_token if tokens is not None else None
     return HttpEtsyShopClient(EtsyTransport(app_key, bearer=bearer))
+
+
+def etsy_market_client(root: Path, *, http: httpx.Client | None = None) -> EtsyMarketClient | None:
+    """The read-only market surface research searches through
+    (market-seo.md), or ``None`` when the workspace has no key pair.
+
+    **The key pair and nothing else** -- never a bearer, even when a sign-in
+    exists. All three market calls are unscoped, and Etsy rotates the refresh
+    token on every use: a bearer these calls do not need would only add a
+    refresh, and a chance to race `plan`/`apply` (or the e2e layer's copy of
+    the token) for the one valid refresh token, to every research run.
+
+    ``http`` is the connection underneath, injected only by tests.
+    """
+    app_key = etsy_app_key(root)
+    if app_key is None:
+        return None
+    return HttpEtsyMarketClient(EtsyTransport(app_key, client=http))
 
 
 # ------------------------------------------------------------------- the run

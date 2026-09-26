@@ -1,10 +1,10 @@
-"""Rewrite a workspace's listing refs into PRD 72's two-root form.
+"""Rewrite a workspace's listing refs into PRD 73's two-root form.
 
     uv run python scripts/migrate_workspace_refs.py <workspace>           # dry run
     uv run python scripts/migrate_workspace_refs.py <workspace> --write   # apply
 
 Every `listings/*/listing.yaml` used to write its paths relative to its own
-directory, so a shared file read `../../designs/x.png`. PRD 72 gives a ref two
+directory, so a shared file read `../../designs/x.png`. PRD 73 gives a ref two
 roots instead: no prefix is the workspace root, `./` is the listing's own
 directory, and `..` is refused. This script is the one pass between the two.
 

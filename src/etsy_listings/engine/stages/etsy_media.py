@@ -4,7 +4,7 @@ and 6).
 
 **The manifest is `listing.media`'s images, in order** -- PRD 12's
 full-replacement media sync retained, ids now surviving a reorder (decision
-5). Videos share `media:` because it is the gallery (PRD 71), but Etsy ranks
+5). Videos share `media:` because it is the gallery (PRD 72), but Etsy ranks
 images among images and places videos by a separate mechanism (decision 9),
 so this stage never sees one: ranks, `MediaChange`s and the snapshot count
 images only, and adding a video is not a reason for this stage to run. Each entry's
@@ -208,7 +208,7 @@ def _manifest_entry(
     workspace = ctx.workspace
     if isinstance(entry, str):
         # A bare string is a file ref, resolved the same way `design:` is:
-        # PRD 72's two roots, the workspace or `./` for the listing's own.
+        # PRD 73's two roots, the workspace or `./` for the listing's own.
         source = workspace.resolve_ref(entry, listing_dir=workspace.listing_dir(listing))
         colour = None
     else:
@@ -237,7 +237,7 @@ class EtsyMediaStage:
             return blocked
 
         # No image-count gate here: `Listing` refuses a gallery over Etsy's
-        # caps when it loads (PRD 71), so a second copy could never fire.
+        # caps when it loads (PRD 72), so a second copy could never fire.
         config = ctx.workspace.load_listing(listing)
 
         variation_template = config.etsy.variation_images

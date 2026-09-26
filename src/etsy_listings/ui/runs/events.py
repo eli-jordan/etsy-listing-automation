@@ -251,7 +251,7 @@ class _StagePlanDTO(BaseModel):
     group: str | None = None
     """The stage this one is shown under -- the engine's answer, carried
     so the review nests ``etsy_videos`` under ``etsy_media`` without
-    inferring it from a name (PRD 71)."""
+    inferring it from a name (PRD 72)."""
 
 
 class RenderStagePlanDTO(_StagePlanDTO):

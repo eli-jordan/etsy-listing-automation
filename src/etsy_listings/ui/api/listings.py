@@ -28,7 +28,8 @@ directory rather than the workspace as a whole.
 from __future__ import annotations
 
 import os
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -88,6 +89,7 @@ from etsy_listings.ui.api.schemas import (
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.ui.runs.executor import ContextFactory
+from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.common_copy import CommonCopyError
 from etsy_listings.workspace.facts import WorkspaceFacts
@@ -109,17 +111,36 @@ def _workspace(request: Request) -> Workspace:
     return workspace
 
 
+def _locks(request: Request) -> WorkspaceLocks:
+    locks: WorkspaceLocks = request.app.state.workspace_locks
+    return locks
+
+
 @dataclass(frozen=True)
 class Target:
     workspace: Workspace
     name: str
+    locks: WorkspaceLocks
+
+    @contextmanager
+    def writing(self) -> Iterator[None]:
+        """Hold this listing's write lock, and 404 if it went while this
+        request waited for it -- a rename or delete that held the lock
+        first."""
+        with self.locks.listing(self.name):
+            _require_listing(self.workspace, self.name)
+            yield
+
+
+def _require_listing(workspace: Workspace, name: str) -> None:
+    if not workspace.listing_file(name).is_file():
+        raise HTTPException(status_code=404, detail=f"no listing {name!r}")
 
 
 def target(request: Request, name: str) -> Target:
     workspace = _workspace(request)
-    if not workspace.listing_file(name).is_file():
-        raise HTTPException(status_code=404, detail=f"no listing {name!r}")
-    return Target(workspace=workspace, name=name)
+    _require_listing(workspace, name)
+    return Target(workspace=workspace, name=name, locks=_locks(request))
 
 
 Existing = Annotated[Target, Depends(target)]
@@ -148,7 +169,7 @@ def _business_issues(
 ) -> list[Issue]:
     """*listing_dir* rather than a listing name, because the not-yet-created
     draft the editor opens on ``/listings/new`` has no name and no directory.
-    A workspace-rooted ref (PRD 72) resolves the same against any listing
+    A workspace-rooted ref (PRD 73) resolves the same against any listing
     directory, so `Workspace.draft_listing_dir` answers for it exactly as a
     real one would."""
     raw_issues: list[ValidationIssue] = check_listing(
@@ -474,40 +495,48 @@ def get_listing(target: Existing) -> ListingDetail:
 def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
     workspace, name = target.workspace, target.name
     path = workspace.listing_file(name)
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
-    merged = _merge(raw, body)
-    try:
-        Listing.model_validate(merged, context={"currency": workspace.defaults.etsy.currency})
-    except ValidationError as exc:
-        return _detail(workspace, name, field_errors=_field_errors(exc))
-    _replace_listing_yaml(path, merged)
+    with target.writing():
+        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        merged = _merge(raw, body)
+        try:
+            Listing.model_validate(merged, context={"currency": workspace.defaults.etsy.currency})
+        except ValidationError as exc:
+            return _detail(workspace, name, field_errors=_field_errors(exc))
+        replace_listing_yaml(path, merged)
     return _detail(workspace, name)
 
 
 @router.delete("/{name}", response_model=None)
-def delete_listing(target: Existing) -> ListingSummary | Response:
+def delete_listing(target: Existing, request: Request) -> ListingSummary | Response:
     """Delete from the listings table (PRD 63, 66).
 
     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
+
+    Either way the market snapshot goes now (market-seo.md, *Cache*): a
+    listing pending deletion is one the seller is done researching, and
+    otherwise only the wipe after the remote deletion would remove it.
     """
     workspace, name = target.workspace, target.name
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
-    if etsy_listing_id is not None or printify_product_id is not None:
+    _forget_ai_run(request, name)
+    with target.writing():
+        if etsy_listing_id is None and printify_product_id is None:
+            workspace.remove_listing(name)
+            return Response(status_code=204)
         path = workspace.listing_file(name)
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         raw["lifecycle"] = "deleted"
-        _replace_listing_yaml(path, raw)
-        facts = WorkspaceFacts.gather(workspace)
-        return _summarize_listing(workspace, facts, name, live=False, etsy_state=etsy_state)
-    workspace.remove_listing(name)
-    return Response(status_code=204)
+        replace_listing_yaml(path, raw)
+        workspace.market_snapshot_file(name).unlink(missing_ok=True)
+    facts = WorkspaceFacts.gather(workspace)
+    return _summarize_listing(workspace, facts, name, live=False, etsy_state=etsy_state)
 
 
-def _replace_listing_yaml(path: Path, document: Mapping[str, Any]) -> None:
+def replace_listing_yaml(path: Path, document: Mapping[str, Any]) -> None:
     """Replace ``listing.yaml`` without a window where a reader sees it empty.
 
     ``Path.write_text`` truncates first. The editor's browser tests read the
@@ -573,20 +602,23 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
     """
     workspace = _workspace(request)
     path = workspace.listing_file(body.name)
-    if path.parent.exists():
-        raise HTTPException(status_code=409, detail=f"a listing already exists named {body.name!r}")
-    try:
-        Listing.model_validate(
-            body.document, context={"currency": workspace.defaults.etsy.currency}
-        )
-    except ValidationError:
-        return _describe_draft(workspace, body.document)
-    write_listing(workspace, body.name, dict(body.document))
+    with _locks(request).listing(body.name):
+        if path.parent.exists():
+            raise HTTPException(
+                status_code=409, detail=f"a listing already exists named {body.name!r}"
+            )
+        try:
+            Listing.model_validate(
+                body.document, context={"currency": workspace.defaults.etsy.currency}
+            )
+        except ValidationError:
+            return _describe_draft(workspace, body.document)
+        write_listing(workspace, body.name, dict(body.document))
     return _detail(workspace, body.name)
 
 
 @router.post("/{name}/rename", response_model=ListingDetail)
-def rename_listing(target: Existing, body: RenameListingRequest) -> ListingDetail:
+def rename_listing(target: Existing, body: RenameListingRequest, request: Request) -> ListingDetail:
     """Move a listing, whole, to a new name.
 
     A listing's identity is its directory name (PRD 60), so the rename is a
@@ -611,13 +643,25 @@ def rename_listing(target: Existing, body: RenameListingRequest) -> ListingDetai
         # Blur commits an unchanged name constantly; that is not an error, and
         # it must not be the 409 below either.
         return _detail(workspace, old)
-    if destination.exists():
-        raise HTTPException(status_code=409, detail=f"a listing already exists named {new!r}")
-    workspace.listing_dir(old).rename(destination)
-    renders = workspace.renders_dir(old)
-    if renders.is_dir():
-        renders.rename(workspace.renders_dir(new))
+    with target.locks.listing(old, new):
+        _require_listing(workspace, old)
+        if destination.exists():
+            raise HTTPException(status_code=409, detail=f"a listing already exists named {new!r}")
+        workspace.listing_dir(old).rename(destination)
+        renders = workspace.renders_dir(old)
+        if renders.is_dir():
+            renders.rename(workspace.renders_dir(new))
+        snapshot = workspace.market_snapshot_file(old)
+        if snapshot.is_file():
+            os.replace(snapshot, workspace.market_snapshot_file(new))
+    _forget_ai_run(request, old)
     return _detail(workspace, new)
+
+
+def _forget_ai_run(request: Request, name: str) -> None:
+    """A deleted or renamed listing's finished AI run goes with it, so a new
+    listing given the name does not reattach to it (`AiRunRegistry.forget`)."""
+    request.app.state.ai_run_registry.forget(name)
 
 
 def _preview_response(

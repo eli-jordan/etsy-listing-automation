@@ -143,7 +143,7 @@ def test_rejects_more_than_twenty_images() -> None:
         Listing.model_validate(data, context={"currency": "NOK"})
 
 
-# ------------------------------------------------ the gallery's rules (PRD 71)
+# ------------------------------------------------ the gallery's rules (PRD 72)
 
 THUMB = {"template": "flat-lay-01", "colour": "black"}
 FEATURED = "common-media/size-guide.mp4"

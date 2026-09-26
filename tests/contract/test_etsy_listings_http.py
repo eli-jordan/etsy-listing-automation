@@ -687,7 +687,7 @@ def test_a_mov_upload_is_sent_as_quicktime() -> None:
 
 
 def test_a_file_that_is_neither_mp4_nor_mov_is_refused_before_sending() -> None:
-    """PRD 71 allows only the two a browser previews; anything else reaching
+    """PRD 72 allows only the two a browser previews; anything else reaching
     the client is a caller's bug, and sending it would spend an association."""
     sent: list[httpx.Request] = []
 

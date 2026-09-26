@@ -414,7 +414,7 @@ describe("buildComparison: no Etsy listing yet", () => {
 });
 
 /**
- * The `etsy_videos` block (PRD 71). Its badges come from the stage's own
+ * The `etsy_videos` block (PRD 72). Its badges come from the stage's own
  * changes -- a slot change names the ref before and after -- never from
  * comparing the snapshot's two sides here (A2).
  */

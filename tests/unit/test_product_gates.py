@@ -260,7 +260,7 @@ def test_a_video_gate_refuses_what_the_banner_blocks() -> None:
 
 
 def test_a_video_s_audio_note_never_refuses_a_stage() -> None:
-    """PRD 71: Etsy strips the sound, which is worth telling a seller and no
+    """PRD 72: Etsy strips the sound, which is worth telling a seller and no
     reason to stop a deploy."""
     videos = {"common-media/size-guide.mp4": replace(SILENT_CLIP, has_audio=True)}
     assert [i.severity for i in rules.check_videos(videos)] == ["info"]

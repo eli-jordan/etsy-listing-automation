@@ -470,7 +470,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
   });
 
   it("adds one as the workspace-rooted ref a listing stores", async () => {
-    /* `media:` holds these as a plain string ref (PRD 72), not as a
+    /* `media:` holds these as a plain string ref (PRD 73), not as a
        {template, colour} entry. */
     const onUpdate = renderShared();
     fireEvent.click(await screen.findByRole("button", { name: "Files" }));
@@ -530,7 +530,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
   });
 });
 
-describe("ImagesTab's own files (./) and videos (PRD 71, 72)", () => {
+describe("ImagesTab's own files (./) and videos (PRD 72, 73)", () => {
   const CLOSE_UP: MediaFileSummary = {
     name: "close-up.mp4",
     file: "listings/take-a-hike/close-up.mp4",

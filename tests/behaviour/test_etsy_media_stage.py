@@ -400,7 +400,7 @@ def test_no_matching_colour_property_skips_the_feature_without_failing(
     assert etsy.get_listing_variation_images(SHOP_ID, ETSY_LISTING_ID) == []
 
 
-# ------------------------------------------------ videos and JPEGs (PRD 71)
+# ------------------------------------------------ videos and JPEGs (PRD 72)
 
 VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
 ALL_COLOURS_MEDIA = [{"template": TEMPLATE, "colour": c} for c in COLOURS]

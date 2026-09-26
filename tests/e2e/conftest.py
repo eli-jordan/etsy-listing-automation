@@ -12,21 +12,67 @@ excludes it, so these only execute under an explicit ``-m e2e``.
 
 from __future__ import annotations
 
+import json
 import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Sequence
 from typing import Any
 
 import httpx
 import pytest
 
+from etsy_listings import connections
+from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.clients.printify import HttpCatalogClient, Transport
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError, Secrets
+from etsy_listings.ui.api.seo import default_ai_providers
 from etsy_listings.workspace.userpath import to_native_path
-from etsy_listings.workspace.workspace import layout
+from etsy_listings.workspace.workspace import Workspace, layout
+
+from tests.support.ai_runs import DRAFTED_BRIEF, QUERIES, proposal_payload
 
 SHOP_ENV_VAR = "PRINTIFY_SHOP_ID"
 """Which shop the write-side tests create their throwaway product in.
 Optional -- an account with a single shop needs no answer."""
+
+
+@pytest.fixture(scope="session")
+def etsy_market_workspace(prerequisite_missing) -> Workspace:
+    """A configured Etsy key pair for read-only market calls; no sign-in is needed."""
+    root = os.environ.get(layout.ROOT_ENV_VAR)
+    if not root:
+        prerequisite_missing(
+            f"{layout.ROOT_ENV_VAR} must point at a workspace with an Etsy app key"
+        )
+    workspace = Workspace.discover(root_override=to_native_path(root))
+    if connections.etsy_market_client(workspace.root) is None:
+        prerequisite_missing(f"{root}: no Etsy app key -- run `etsy-listings auth etsy` there")
+    return workspace
+
+
+@pytest.fixture
+def ai_providers() -> Callable[[Workspace], Sequence[AiProvider]]:
+    """Fake AI in CI and by default; E2E_REAL_AI=1 uses signed-in Codex/Claude locally.
+
+    Both choices enter through create_app's public provider factory. The fake
+    supplies all three chain responses, so CI tests real Etsy research without
+    depending on a developer's local AI sign-in.
+    """
+    if os.environ.get("E2E_REAL_AI") == "1":
+        return default_ai_providers
+
+    def fake(_workspace: Workspace) -> Sequence[AiProvider]:
+        return [
+            FakeAiProvider(
+                name="codex",
+                responses=[
+                    json.dumps({"brief": DRAFTED_BRIEF}),
+                    json.dumps({"queries": QUERIES}),
+                    proposal_payload(),
+                ],
+            )
+        ]
+
+    return fake
 
 
 def _token() -> str | None:

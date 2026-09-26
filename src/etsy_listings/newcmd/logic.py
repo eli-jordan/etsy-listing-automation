@@ -377,7 +377,7 @@ def build_pricing_plan_choices(
 
 def pricing_plan_ref(plan_path: Path, *, root: Path) -> str:
     """The write-side counterpart to :meth:`Workspace.resolve_ref` -- a
-    workspace-rooted POSIX ref (PRD 72), e.g. ``'pricing-plans/tee-basic.yaml'``.
+    workspace-rooted POSIX ref (PRD 73), e.g. ``'pricing-plans/tee-basic.yaml'``.
     Needed because (unlike ``design``, which has one fixed directory) discovery
     under ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the
     way ``designs/{name}.png`` is."""

@@ -210,3 +210,31 @@ export function updateUnresolved(
   saveStoredProposal(scope, next);
   return next;
 }
+
+const RECEIVED_PREFIX = "ai-seo-received";
+
+function receivedKey(scope: AiSeoStorageScope): string {
+  return `${RECEIVED_PREFIX}:${scope.workspace}:${scope.listing}`;
+}
+
+/** Keeps a proposal an AI run delivered (its `proposal` event), opening
+ * every drawer -- once. Returns what is stored for the listing afterwards.
+ *
+ * A run's events replay whenever the editor reattaches (market-seo.md, *AI
+ * runs*), proposal included, so the same proposal arrives again after every
+ * reload. Storing it each time would reopen drawers the seller had already
+ * resolved. Its `generated_at` is remembered per listing, apart from the
+ * pending entry (which is removed once every drawer resolves), and a
+ * proposal already received is left as the seller left it. */
+export function receiveProposal(
+  scope: AiSeoStorageScope,
+  proposal: SeoProposalResponse,
+): StoredAiSeoProposal | null {
+  if (localStorage.getItem(receivedKey(scope)) === proposal.generated_at) {
+    return loadStoredProposal(scope);
+  }
+  localStorage.setItem(receivedKey(scope), proposal.generated_at);
+  const stored = toStoredProposal(proposal);
+  saveStoredProposal(scope, stored);
+  return stored;
+}

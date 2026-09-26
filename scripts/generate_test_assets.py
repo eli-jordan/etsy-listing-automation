@@ -11,7 +11,7 @@ because no real design files or mockup photography exist on this machine:
   photography in golden and behaviour tests -- ``colour-matrix`` kind
   (``synthetic-tee``, ``flat-lay-01``) and ``multiple`` kind
   (``colour-chart-01``).
-- Tiny clips for the video gate (PRD 71) under ``tests/fixtures/video/``: one
+- Tiny clips for the video gate (PRD 72) under ``tests/fixtures/video/``: one
   that passes every rule, one per rule a probe can fail on (too short, too
   small, an audio track, audio but no picture), and a PNG renamed ``.mp4``.
 
@@ -248,7 +248,7 @@ def _write_multiple_set(template_dir: Path, colours: dict[str, tuple[int, int, i
 
 
 def _write_video_clips(video_dir: Path, grid: Image.Image) -> None:
-    """The video gate's fixtures (PRD 71). The good clip clears each rule by a
+    """The video gate's fixtures (PRD 72). The good clip clears each rule by a
     little -- 3.2 s against 3 s, 512 px against 500 -- so each failing one
     differs from it in exactly one fact."""
     video_dir.mkdir(parents=True, exist_ok=True)

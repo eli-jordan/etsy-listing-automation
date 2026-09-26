@@ -1,4 +1,4 @@
-"""The file locator's endpoints (PRD 71, 72): the two directories a `media:`
+"""The file locator's endpoints (PRD 72, 73): the two directories a `media:`
 file ref can name, listed with each file's kind, and served.
 
 A file ref has two roots, and the locator offers one group per root: the
@@ -37,7 +37,7 @@ _MEDIA_TYPES = {
     ".mp4": "video/mp4",
     ".mov": "video/quicktime",
 }
-"""Every extension `media:` accepts (PRD 71), named here rather than asked of
+"""Every extension `media:` accepts (PRD 72), named here rather than asked of
 `mimetypes`, which on Windows reads the registry and may not know ``.mov``."""
 
 
@@ -80,7 +80,7 @@ def common_media_file(request: Request, name: str) -> FileResponse:
 @router.get("/api/listings/{listing}/media-files", response_model=list[MediaFileSummary])
 def list_listing_media_files(request: Request, listing: str) -> list[MediaFileSummary]:
     """The *This listing* group: the listing's own files, each with the
-    ``./`` ref that names it (PRD 72). A ``404`` for a listing that does not
+    ``./`` ref that names it (PRD 73). A ``404`` for a listing that does not
     exist, rather than an empty group that would look like one with nothing
     in it."""
     workspace = _workspace(request)

@@ -1,4 +1,4 @@
-"""`scripts/migrate_workspace_refs.py` (PRD 72): the one-off rewrite of every
+"""`scripts/migrate_workspace_refs.py` (PRD 73): the one-off rewrite of every
 `listing.yaml` from listing-relative `../../` refs to two-root refs.
 
 Driven through `main`, the way a seller runs it: what it prints and what it

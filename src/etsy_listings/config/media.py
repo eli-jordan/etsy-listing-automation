@@ -1,8 +1,8 @@
-"""What a `media:` entry is: the gallery's two shapes and two kinds (PRD 71).
+"""What a `media:` entry is: the gallery's two shapes and two kinds (PRD 72).
 
 `media:` is the listing's Etsy gallery, in the order a buyer sees it. It holds
 two *shapes* -- a ``{template, colour}`` entry the tool renders, and a bare
-file ref (PRD 72's two roots) uploaded as-is -- and two *kinds*, image and
+file ref (PRD 73's two roots) uploaded as-is -- and two *kinds*, image and
 video. The shape is the model's; the kind is answered here, once, because the
 gallery rules in `Listing`, the video gate in `listing_validation` and the
 Etsy media stage all start from it.
@@ -31,13 +31,13 @@ MediaKind = Literal["image", "video"]
 
 IMAGE_EXTENSIONS: Final = (".png", ".jpg", ".jpeg")
 VIDEO_EXTENSIONS: Final = (".mp4", ".mov")
-"""PRD 71. Matched case-insensitively: a phone names its clips ``IMG_1234.MOV``."""
+"""PRD 72. Matched case-insensitively: a phone names its clips ``IMG_1234.MOV``."""
 
 MAX_IMAGES: Final = 20
 """Etsy's image cap per listing. Separate from :data:`MAX_VIDEOS`, because
 Etsy counts the two apart -- a listing may hold 20 images *and* 2 videos."""
 MAX_VIDEOS: Final = 2
-"""Etsy's video cap per listing, with ``is_multi_video=true`` (PRD 71)."""
+"""Etsy's video cap per listing, with ``is_multi_video=true`` (PRD 72)."""
 FEATURED_VIDEO_POSITION: Final = 2
 """Where Etsy pins the featured video, behind the thumbnail (decision 9).
 1-based, as a buyer counts the gallery."""
@@ -57,7 +57,7 @@ class TemplateMediaEntry(BaseModel):
 
 
 MediaEntry = TemplateMediaEntry | str
-"""Either an explicit template reference, or a file ref (PRD 72's two roots:
+"""Either an explicit template reference, or a file ref (PRD 73's two roots:
 no prefix for the workspace, ``./`` for the listing's own directory)."""
 
 
@@ -86,7 +86,7 @@ def media_kind(entry: MediaEntry) -> MediaKind:
 @dataclass(frozen=True)
 class VideoFacts:
     """What a probe read off one video file -- the five facts Etsy's help
-    page sets limits on (PRD 71)."""
+    page sets limits on (PRD 72)."""
 
     size_bytes: int
     duration_seconds: float

@@ -49,7 +49,7 @@ from etsy_listings.config.media import ProbeFailure, VideoFacts
 
 Severity = Literal["block", "warn", "info"]
 """``info`` is a note about what Etsy will do, not a problem with the listing
--- the one today is that Etsy strips a video's sound (PRD 71). The banner shows
+-- the one today is that Etsy strips a video's sound (PRD 72). The banner shows
 it quietly and `engine/stages/gates.py` never refuses on it."""
 Tab = Literal["variants", "pricing", "images", "details"]
 
@@ -463,7 +463,7 @@ axis, and a clip whose shorter side reaches 500 reaches it on both."""
 
 
 def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> list[Issue]:
-    """Refuse a video Etsy's help page would reject (PRD 71).
+    """Refuse a video Etsy's help page would reject (PRD 72).
 
     The help page, not the API, because the API is no guide: it accepted a
     3 s and a 20 s clip and answered a non-video with a bare ``500``

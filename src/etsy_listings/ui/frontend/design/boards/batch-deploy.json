@@ -50,7 +50,7 @@
       "key": "n_132guiy1lvzqaw",
       "frame": "batch-deploy-lofi/listings",
       "x": 0,
-      "y": 896,
+      "y": 949,
       "w": 1920,
       "h": 1080
     },
@@ -58,7 +58,7 @@
       "key": "n_rev8bottomsheet01",
       "frame": "batch-deploy-lofi/review-bottom-sheet",
       "x": 2434,
-      "y": 896,
+      "y": 949,
       "w": 1920,
       "h": 1080
     }

@@ -437,7 +437,7 @@ A few things worth knowing about `listing.yaml`:
 - **Every path is written from the workspace root** — `designs/x.png`,
   `common-media/size-guide.png`, `pricing-plans/launch.yaml` — or from the
   listing's own directory with a `./` prefix (`./close-up.png`). `..` is
-  refused (PRD 72). A workspace written before that rule still spells its
+  refused (PRD 73). A workspace written before that rule still spells its
   refs `../../designs/x.png`; `uv run python scripts/migrate_workspace_refs.py
   <workspace>` prints the rewrite, and `--write` applies it.
 - **`design` can be a map**, not just a bare path, when you need separate
@@ -505,16 +505,14 @@ for one title/tags/description-lead proposal, then lets you accept whichever
 individual suggestions you want; nothing it suggests touches `listing.yaml`
 until you click one.
 
-**CLI sign-in.** AI Mode runs `codex exec` first, falling back to `claude -p`
-only on a recognised sign-in/quota/rate-limit failure. Both use your existing
-subscription — no OpenAI or Anthropic API key, and nothing to configure in
-`shop.yaml`. Sign in to each CLI the ordinary way (`codex login`; for Claude
-Code, run `claude` once and complete its sign-in prompt, or see `claude
---help` for its auth subcommands) — see the [Codex authentication
-docs](https://learn.chatgpt.com/docs/auth) and [Claude Code headless
-mode](https://code.claude.com/docs/en/headless). The **AI Mode** button is
-hidden, never disabled, until at least one CLI reports itself signed in and
-ready; if neither is, the Details tab simply looks like it always did.
+**CLI sign-in.** AI Mode runs `codex exec` first, then `claude -p`, then
+`grok`. It moves to the next CLI only on a recognised
+sign-in/quota/rate-limit failure. All three use your existing subscription —
+no API key, and nothing to configure in `shop.yaml`. Sign in the ordinary way
+(`grok login`, `codex login`; for Claude Code, run `claude` once and complete
+its sign-in prompt). The **AI Mode** button stays hidden until at least one
+CLI reports itself signed in and ready; if none is, the Details tab simply
+looks like it always did.
 
 **Picking a design names a new listing.** A draft with no name takes the
 design's filename without its extension — so creating a listing is: open the
@@ -540,10 +538,14 @@ its own after a failure, and leaving the listing abandons the work exactly as
 **Cancel** would.
 
 **Prompt customization.** The instructions sent to the model live at
-`prompts/seo.md` (SEO suggestions) and `prompts/brief.md` (the drafted brief)
-in your workspace — plain text, entirely yours to edit. `setup` seeds a
-default for each only if that file is absent; it never overwrites your own
-copy on a later run. The application appends the listing's facts (as
+`prompts/seo.md` (SEO suggestions), `prompts/brief.md` (the drafted brief) and
+`prompts/market-queries.md` (the three Etsy searches market research runs) in
+your workspace — plain text, entirely yours to edit. `setup` seeds a default
+for each only if that file is absent. On a later run it keeps your copy byte
+for byte and warns about each one that differs from the packaged default;
+`setup --replace-prompts` replaces those with the defaults and keeps yours as
+`<name>.md.bak`, which is how a workspace picks up new instructions such as
+`seo.md`'s market-data rules. The application appends the listing's facts (as
 delimited JSON) and the required JSON response schema itself — both files
 hold only instructions, never placeholders or executable prompt code. A
 workspace without `prompts/brief.md` can still use AI Mode by hand; only the

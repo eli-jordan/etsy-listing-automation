@@ -25,20 +25,30 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings import connections
+from etsy_listings.clients.etsy.market import EtsyMarketClient
+from etsy_listings.ui.airuns.registry import AiRunRegistry
+from etsy_listings.ui.airuns.runner import AiRunner, MarketClientFactory
+from etsy_listings.ui.api.airuns import router as ai_runs_router
 from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.listings import router as listings_router
 from etsy_listings.ui.api.listings import support_router as listings_support_router
 from etsy_listings.ui.api.media_files import router as media_files_router
 from etsy_listings.ui.api.runs import router as runs_router
-from etsy_listings.ui.api.seo import ActiveSeoRequests, AiProviderFactory, default_ai_providers
-from etsy_listings.ui.api.seo import brief_router as ai_brief_router
+from etsy_listings.ui.api.seo import AiProviderFactory, default_ai_providers
 from etsy_listings.ui.api.seo import router as seo_router
 from etsy_listings.ui.api.templates import router as templates_router
 from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
 from etsy_listings.ui.runs.registry import RunRegistry
+from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
 FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
+
+def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
+    """The real, read-only Etsy market client (the app key only), or `None`
+    when the workspace has none."""
+    return connections.etsy_market_client(workspace.root)
 
 
 def create_app(
@@ -46,9 +56,19 @@ def create_app(
     *,
     context_factory: ContextFactory = connections.run_context,
     seo_provider_factory: AiProviderFactory = default_ai_providers,
+    market_client_factory: MarketClientFactory = default_market_client,
 ) -> FastAPI:
     registry = RunRegistry()
     executor = RunExecutor(workspace=workspace, context_factory=context_factory, registry=registry)
+    locks = WorkspaceLocks()
+    ai_registry = AiRunRegistry()
+    ai_runner = AiRunner(
+        workspace=workspace,
+        registry=ai_registry,
+        locks=locks,
+        providers=seo_provider_factory,
+        market_client=market_client_factory,
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -56,11 +76,16 @@ def create_app(
         for it on the way out -- the same "finish what's in flight, start
         nothing else" shutdown ``ui/desktop.py``'s close handler also needs
         (decision 7), except this is the path every ASGI server already calls
-        (uvicorn's own shutdown, and ``TestClient``'s ``with`` block)."""
+        (uvicorn's own shutdown, and ``TestClient``'s ``with`` block).
+
+        AI runs are cancelled first: each is on its own daemon thread, and
+        cancelling kills its provider subprocess tree, so a server stopping
+        never waits out a model."""
         executor.start()
         try:
             yield
         finally:
+            ai_runner.shutdown()
             executor.stop()
 
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
@@ -72,12 +97,17 @@ def create_app(
     # nothing to do with running a run -- reaching through `run_executor` for
     # it would couple that endpoint to the executor's own shape for no reason.
     app.state.context_factory = context_factory
-    # `ui/api/seo.py`'s own injection seam and its in-memory
-    # one-request-per-listing tracker -- deliberately not part of
-    # `run_registry`/`run_executor` above, since a proposal request is never
-    # a `Run` (PR5 item 5: no run, no SQLite record, no server-side cache).
+    # The AI providers' injection seam, read per request by AI Mode's
+    # readiness check (`seo.py`) and per run by `ai_runner`.
     app.state.seo_provider_factory = seo_provider_factory
-    app.state.seo_active_requests = ActiveSeoRequests()
+    # Held around every read-merge-write of a listing (`listings.py`, and
+    # PR 5's brief write) -- `ui/workspace_locks.py` says why.
+    app.state.workspace_locks = locks
+    # AI runs (market-seo.md, *AI runs*): their own registry and a thread per
+    # run, never `run_executor`. `market_client_factory` is the test seam for
+    # Etsy market search, as `seo_provider_factory` is for the providers.
+    app.state.ai_run_registry = ai_registry
+    app.state.ai_runner = ai_runner
 
     # Permissive CORS for local dev only -- the Vite dev server proxies /api in
     # production-shaped use, but running `uvicorn` and `vite` as two separate
@@ -108,8 +138,8 @@ def create_app(
     app.include_router(listings_support_router)
     app.include_router(media_files_router)
     app.include_router(runs_router)
+    app.include_router(ai_runs_router)
     app.include_router(seo_router)
-    app.include_router(ai_brief_router)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:

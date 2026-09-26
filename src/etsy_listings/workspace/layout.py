@@ -10,6 +10,9 @@ from __future__ import annotations
 # Top level
 SHOP_FILE = "shop.yaml"
 EXCEPTIONS_FILE = "exceptions.yaml"
+SETTINGS_FILE = "settings.yaml"
+"""The seller's tunable settings -- today the market scoring weights
+(market-seo.md, *Scoring*). Optional: absent means every default."""
 ENV_FILE = ".env"
 AUTH_DIR = ".auth"
 ETSY_TOKENS_FILE = "etsy-tokens.json"
@@ -30,6 +33,10 @@ BRIEF_PROMPT_FILE = "brief.md"
 listing brief from its design image when a design is attached (PRD 68); a
 workspace without it can still use AI Mode by hand, so its absence disables
 only the automatic draft."""
+MARKET_QUERIES_PROMPT_FILE = "market-queries.md"
+"""Inside :data:`PROMPTS_DIR`, seeded like the other two. The prompt that turns
+a brief, a design and the garment's display title into three Etsy buyer
+searches for market research (market-seo.md, *Query extraction*)."""
 GARMENT_PROFILES_DIR = "garment-profiles"
 PRICING_PLANS_DIR = "pricing-plans"
 DESIGNS_DIR = "designs"
@@ -66,6 +73,15 @@ by `scene_hash` under `PREVIEWS_DIR/<listing>/<template>/`. Sibling to
 `RENDERS_DIR` rather than nested inside it -- a preview is not yet an applied
 render, and `Workspace.remove_listing` needs to be able to wipe one without
 the other."""
+MARKET_DIR = "market"
+"""Market-informed SEO's caches (market-seo.md, *Cache*), each a directory
+inside it: :data:`MARKET_SEARCH_DIR` and :data:`MARKET_STATS_DIR` hold the
+7-day Etsy caches, :data:`MARKET_SNAPSHOTS_DIR` the latest research per
+listing (``{name}.json``), which moves and goes with the listing as
+``RENDERS_DIR/<listing>`` does."""
+MARKET_SEARCH_DIR = "search"
+MARKET_STATS_DIR = "stats"
+MARKET_SNAPSHOTS_DIR = "snapshots"
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 

@@ -96,7 +96,7 @@ describe("viewFocus, for a shared asset", () => {
   });
 });
 
-describe("viewFocus, for what kind of thing it is (PRD 71)", () => {
+describe("viewFocus, for what kind of thing it is (PRD 72)", () => {
   it("says a template is an image", () => {
     expect(viewFocus(ON_TEMPLATE, listing([]), [FLAT_LAY], null).kind).toBe("image");
   });

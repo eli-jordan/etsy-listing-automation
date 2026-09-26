@@ -16,10 +16,10 @@ import { MAX_VIDEOS } from "./mediaEdits";
  * ref uploaded as-is: a sizing chart, care instructions, a size-guide video).
  * One control rather than two panels because they fill the same gallery.
  *
- * *Files* is one list in two groups, one per root a ref can name (PRD 72):
+ * *Files* is one list in two groups, one per root a ref can name (PRD 73):
  * *This listing · ./* for the listing's own directory and *Shared ·
  * common-media/*. Images and videos sit together, because `media:` is one
- * gallery (PRD 71); a video is drawn by a muted `<video>` from its own first
+ * gallery (PRD 72); a video is drawn by a muted `<video>` from its own first
  * frame, carries its length, and plays on hover.
  *
  * Its own state is what it is *showing* (which half, the search, which template

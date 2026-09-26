@@ -26,7 +26,7 @@ import type { Issue, IssueTab } from "../../types";
  * that both wear the same icon.
  *
  * An `info` row is neither: a note about what Etsy will do (it strips a
- * video's sound, PRD 71), with nothing for the seller to fix. It wears no
+ * video's sound, PRD 72), with nothing for the seller to fix. It wears no
  * warning icon and is counted as a note, never as a warning -- a banner that
  * called it one would train a seller to skim past the real ones.
  */

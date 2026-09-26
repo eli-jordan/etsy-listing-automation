@@ -331,7 +331,7 @@ def test_a_drift_with_no_label_still_shows_the_raw_values(workspace_root: Path) 
 
 
 def test_a_grouped_stage_is_named_under_its_group(workspace_root: Path) -> None:
-    """PRD 71: one gallery, two stages -- a stage the engine groups under
+    """PRD 72: one gallery, two stages -- a stage the engine groups under
     another is shown under it on every line that names it."""
     grouped = replace(
         StagePlan.work(

@@ -82,7 +82,7 @@ def format_blocked(stage_plan: StagePlan) -> list[str]:
 
 def _name(stage_plan: StagePlan) -> str:
     """``etsy_media/etsy_videos``: a stage shown under the one the engine
-    groups it with (PRD 71: one gallery, two stages), else its own name."""
+    groups it with (PRD 72: one gallery, two stages), else its own name."""
     if stage_plan.group is None:
         return stage_plan.stage
     return f"{stage_plan.group}/{stage_plan.stage}"

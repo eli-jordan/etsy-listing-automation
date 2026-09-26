@@ -167,6 +167,7 @@ uv run pytest tests/unit/test_money.py                      # one file
 uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"                                   # by keyword
 uv run pytest -m e2e                                           # only the (env-gated) e2e layer
+E2E_REAL_AI=1 uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py # full market run with signed-in Codex/Claude
 uv run pytest -m browser                                       # only the calibrator browser tests
 uv run pytest -m "not browser"                                 # skip them
 uv run pytest --update-goldens                                 # regenerate render goldens

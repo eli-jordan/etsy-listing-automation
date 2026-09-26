@@ -60,6 +60,7 @@ from etsy_listings.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
     ProviderTimeoutError,
+    ProviderUnavailableError,
     classify_process_failure,
 )
 from etsy_listings.ai.models import (
@@ -205,6 +206,13 @@ class ClaudeProvider:
         repair: RepairContext | None = None,
         cancel_event: threading.Event | None = None,
     ) -> RawProviderResult:
+        if shutil.which(self.binary) is None:
+            # Recognised-unavailable, so the orchestrator moves on to the next
+            # provider. Launching the bare name would fail with WinError 2 --
+            # a process error, which ends the run instead -- and readiness
+            # only needs *one* provider to be ready, so on a machine with
+            # just the other CLI this is the ordinary case, not an edge.
+            raise ProviderUnavailableError(PROVIDER_NAME, f"{self.binary} was not found on PATH")
         prompt_text = self._prompt_text(task, repair)
         argv = [
             self._resolved_binary(),
@@ -235,6 +243,8 @@ class ClaudeProvider:
         if result.timed_out:
             raise ProviderTimeoutError(PROVIDER_NAME)
         if result.returncode != 0:
+            # stdout may be the `--output-format json` envelope. Classification
+            # reads its `result` sentence; the rest is telemetry.
             raise classify_process_failure(
                 PROVIDER_NAME,
                 returncode=result.returncode,
@@ -254,10 +264,12 @@ class ClaudeProvider:
         `classify_process_failure` never runs on that path.
 
         An ``is_error: true`` envelope is different: the CLI can report an
-        auth/quota/rate-limit failure this way, with exit code 0, so its text
-        is routed through the same `classify_process_failure` an exit-code
-        failure already goes through above -- an availability failure must be
-        recognised as one regardless of which of the two shapes carried it."""
+        auth/quota/rate-limit failure this way, with exit code 0, so the raw
+        envelope is routed through the same `classify_process_failure` an
+        exit-code failure already goes through above. Passing the envelope
+        rather than only its ``result`` string keeps ``api_error_status``
+        visible -- an availability failure must be recognised as one
+        regardless of which of the two shapes carried it."""
         try:
             envelope: Any = json.loads(stdout)
         except json.JSONDecodeError as exc:
@@ -267,10 +279,20 @@ class ClaudeProvider:
         if not isinstance(envelope, dict):
             raise ProviderGenerationError(PROVIDER_NAME, 0, "stdout was not a JSON object")
         if envelope.get("is_error"):
-            error_text = str(envelope.get("result") or "claude reported is_error")
-            raise classify_process_failure(
-                PROVIDER_NAME, returncode=0, stdout=error_text, stderr=""
+            # No sentence and no status: the old fixed line, so a bare
+            # `is_error` doesn't surface the envelope. A status with no
+            # sentence still goes through as the envelope, which is what
+            # makes `api_error_status` 429 readable as "HTTP 429".
+            has_sentence = any(
+                isinstance(envelope.get(key), str) and envelope[key].strip()
+                for key in ("result", "message")
             )
+            reported = (
+                stdout
+                if has_sentence or "api_error_status" in envelope
+                else "claude reported is_error"
+            )
+            raise classify_process_failure(PROVIDER_NAME, returncode=0, stdout=reported, stderr="")
         result_text = envelope.get("result")
         if not isinstance(result_text, str):
             raise ProviderGenerationError(PROVIDER_NAME, 0, "envelope had no `result` string")

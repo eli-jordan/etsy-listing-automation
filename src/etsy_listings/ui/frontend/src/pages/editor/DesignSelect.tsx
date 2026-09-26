@@ -20,7 +20,7 @@ import type { ListingDesignSummary } from "../../types";
  */
 
 interface Props {
-  /** `Listing.design` verbatim: artwork key -> ref (PRD 72). */
+  /** `Listing.design` verbatim: artwork key -> ref (PRD 73). */
   design: Record<string, string>;
   /** The new ref, ready to PATCH as `{ design: ref }`. */
   onPick: (ref: string) => void;
@@ -47,7 +47,7 @@ export function DesignSelect({ design, onPick }: Props) {
   const multi = keys.length > 1;
 
   function pick(chosen: ListingDesignSummary) {
-    // PRD 72: a ref with no prefix is the workspace root, so the design's
+    // PRD 73: a ref with no prefix is the workspace root, so the design's
     // workspace-relative path is already the ref `new` writes.
     onPick(chosen.file);
     setPicking(false);

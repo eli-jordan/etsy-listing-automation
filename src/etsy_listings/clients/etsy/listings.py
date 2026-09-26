@@ -1,7 +1,7 @@
 """The Etsy listing surface Phase 3's stages write through: `publish`'s poll
 target, `etsy_listing`'s single PATCH, `etsy_media`'s upload/reorder/
 variation-image calls, and the video upload/attach/delete `etsy_videos`
-places a listing's videos with (PRD 71, phase-3-etsy.md decision 9).
+places a listing's videos with (PRD 72, phase-3-etsy.md decision 9).
 
 Built against
 [docs/printify-etsy-integration.md](../../../../docs/printify-etsy-integration.md)'s
@@ -77,7 +77,7 @@ class VideoSlotsFullError(EtsyApiError):
 
 class VideoBudgetExhaustedError(EtsyApiError):
     """A `400` carrying "maximum number of videos": the listing's daily
-    budget of associations is spent (PRD 71, decision 9).
+    budget of associations is spent (PRD 72, decision 9).
 
     Re-worded because Etsy's own text says the listing is full, and the
     listing may hold no videos at all. The tool does not predict the budget;
@@ -113,7 +113,7 @@ def _video_refusal(exc: EtsyApiError) -> EtsyApiError:
 
 
 VIDEO_CONTENT_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime"}
-"""PRD 71's two video types -- of Etsy's seven, the two a browser previews --
+"""PRD 72's two video types -- of Etsy's seven, the two a browser previews --
 and the content type each is sent as."""
 
 MULTI_VIDEO = {"is_multi_video": "true"}
@@ -388,7 +388,7 @@ class HttpEtsyListingClient:
 
 def video_content_type(file_name: str) -> str:
     """The content type a video upload is sent as, or a :class:`ValueError`
-    for a file PRD 71 does not allow -- raised before a byte is sent, since
+    for a file PRD 72 does not allow -- raised before a byte is sent, since
     anything else reaching the client is a caller's bug that would spend one
     of the listing's daily associations. The fake shares it, so a stage
     tested against the fake meets the same refusal."""

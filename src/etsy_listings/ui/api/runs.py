@@ -217,7 +217,7 @@ def mark_seen(target: Existing) -> RunSummary:
     return _summary(target.run)
 
 
-def _last_event_id(request: Request) -> int:
+def last_event_id(request: Request) -> int:
     """``Last-Event-ID``, the header ``EventSource`` sends on reconnect --
     ``0`` for a fresh connection or a header that is not a plain integer, both
     of which mean "replay everything"."""
@@ -257,7 +257,7 @@ def stream_events(target: Existing, request: Request) -> StreamingResponse:
     """``text/event-stream`` over this run's own event buffer -- every event
     already recorded past ``Last-Event-ID``, then whatever the worker thread
     appends next, until the run reaches a terminal phase."""
-    after_id = _last_event_id(request)
+    after_id = last_event_id(request)
     return StreamingResponse(
         _sse_events(request, target.run, after_id),
         media_type="text/event-stream",

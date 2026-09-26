@@ -8,7 +8,7 @@ A26's threading of ``lock.remote`` rather than a second lockfile read:
 ``Publish`` mints the Etsy listing id ``EtsyListing`` and ``EtsyMedia`` both
 PATCH, and ``EtsyMedia`` needs whatever images survive the first two to
 exist. ``EtsyVideos()`` follows ``EtsyMedia()`` because a second video is
-placed by the number of images on the listing when it is attached (PRD 71,
+placed by the number of images on the listing when it is attached (PRD 72,
 decision 9), so the images have to be there and in order first.
 ``Generate`` (Phase 4) is the one stage still to come.
 

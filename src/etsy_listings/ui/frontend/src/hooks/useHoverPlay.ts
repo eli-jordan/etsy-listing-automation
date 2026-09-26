@@ -2,7 +2,7 @@ import { useRef, type RefObject } from "react";
 
 /**
  * Play a muted clip while the pointer is over whatever holds it, and put it
- * back on its poster frame after (PRD 71). The holder -- a locator row, a
+ * back on its poster frame after (PRD 72). The holder -- a locator row, a
  * reel tile's face -- owns the hover, so the actions come out here and the
  * element goes to `MutedClip` through `ref`.
  */

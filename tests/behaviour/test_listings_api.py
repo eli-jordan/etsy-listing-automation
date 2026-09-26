@@ -425,7 +425,7 @@ class TestGetListingDetail:
     def test_reports_a_too_short_video_as_an_images_block_naming_it(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """PRD 71's gate, read through `WorkspaceFacts` off the real file."""
+        """PRD 72's gate, read through `WorkspaceFacts` off the real file."""
         shutil.copy(
             VIDEOS / "short-2s-512.mp4", workspace_root / "listings" / "take-a-hike" / "clip.mp4"
         )
@@ -979,7 +979,7 @@ class TestSupportingEndpoints:
         assert by_name["tee-basic"]["compatible"] is True
         assert by_name["other-garment"]["compatible"] is False
         # `ref` is what a PATCH writes straight into `pricing_plan:` --
-        # workspace-rooted (PRD 72), ready to use unchanged (mirrors
+        # workspace-rooted (PRD 73), ready to use unchanged (mirrors
         # `MediaFileSummary.ref`).
         assert by_name["tee-basic"]["ref"] == "pricing-plans/tee-basic.yaml"
 

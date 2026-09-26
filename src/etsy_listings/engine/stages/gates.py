@@ -47,7 +47,7 @@ def _refuse(issues: Sequence[Issue]) -> Blocked | None:
     """The first *blocking* issue, as a refusal.
 
     A ``warn`` or ``info`` is something the banner shows and a deploy goes
-    ahead past -- a video's stripped sound (PRD 71) is the case that made a
+    ahead past -- a video's stripped sound (PRD 72) is the case that made a
     rule return both kinds from one call.
 
     A stage refuses or it does not, so only the first message can be shown --
@@ -93,6 +93,6 @@ def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> Block
 
 
 def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> Blocked | None:
-    """A video Etsy's help page would reject (PRD 71). Its audio note is not
+    """A video Etsy's help page would reject (PRD 72). Its audio note is not
     a refusal, which is why `_refuse` reads severity."""
     return _refuse(rules.check_videos(videos))

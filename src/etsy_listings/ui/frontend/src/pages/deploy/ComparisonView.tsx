@@ -38,7 +38,7 @@ import { wordDiff } from "./wordDiff";
  *   shows today's picture directly -- there is nothing new to wait for.
  *   Neither of those endpoints exists for a bare shared-media ref, which
  *   renders through `pictureFor` like the editor's own reel does.
- * - A video (PRD 71) is drawn "after" from its own file, as a muted clip the
+ * - A video (PRD 72) is drawn "after" from its own file, as a muted clip the
  *   browser gives a poster frame, and "now" from Etsy's `thumbnail_url` --
  *   the one picture of it the API offers.
  */

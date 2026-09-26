@@ -30,6 +30,7 @@ from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from etsy_listings.config.pricing_plan import PricingPlan
+from etsy_listings.config.settings import Settings
 from etsy_listings.config.slug import ColourExceptions
 
 # `template.yaml` is render geometry and render settings from top to bottom, so
@@ -62,11 +63,11 @@ class PathEscapesWorkspaceError(ValueError):
 
 
 MIGRATION_SCRIPT = "scripts/migrate_workspace_refs.py"
-"""PRD 72's one-off rewrite, named by every refusal of the form it replaces."""
+"""PRD 73's one-off rewrite, named by every refusal of the form it replaces."""
 
 
 class InvalidRefError(ConfigLoadError):
-    """A path in ``listing.yaml`` that is not a two-root ref (PRD 72).
+    """A path in ``listing.yaml`` that is not a two-root ref (PRD 73).
 
     A :class:`ConfigLoadError`, so a stage that meets one fails that listing
     with a sentence rather than a traceback, and the rest of an ``--all``
@@ -107,7 +108,7 @@ def _segment(name: str) -> str:
 
 class NotAMediaFileError(InvalidNameError):
     """A path, from a URL, that does not name an image or video in the
-    directory it was asked of (PRD 71).
+    directory it was asked of (PRD 72).
 
     An :class:`InvalidNameError`, so the UI's one handler turns it into a
     ``400`` like any other name it cannot use."""
@@ -315,7 +316,7 @@ class Workspace:
         return candidate
 
     def resolve_ref(self, ref: str, *, listing_dir: Path) -> Path:
-        """The one interpreter of a path written in ``listing.yaml`` (PRD 72).
+        """The one interpreter of a path written in ``listing.yaml`` (PRD 73).
 
         Two roots: no prefix is the workspace root (``designs/x.png``), and
         ``./`` is the listing's own directory (``./shots/back.png``).
@@ -379,8 +380,9 @@ class Workspace:
         return sorted(names)
 
     def remove_listing(self, listing: str) -> None:
-        """Wipe ``listings/{name}/``, ``.cache/renders/{name}/`` (PRD 63) and
-        ``.cache/previews/{name}/`` (A32).
+        """Wipe ``listings/{name}/``, ``.cache/renders/{name}/`` (PRD 63),
+        ``.cache/previews/{name}/`` (A32) and the market snapshot
+        (market-seo.md, *Cache*).
 
         Designs, garment profiles and pricing plans stay -- they are reusable.
         """
@@ -391,6 +393,7 @@ class Workspace:
         ):
             if path.is_dir():
                 remove_tree(path)
+        self.market_snapshot_file(listing).unlink(missing_ok=True)
 
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)
@@ -398,7 +401,7 @@ class Workspace:
     def draft_listing_dir(self) -> Path:
         """A listing directory for a listing that has none yet -- the editor's
         unnamed draft, and the design a brief is drafted from before the
-        listing is named. A workspace-rooted ref (PRD 72) lands on the same file
+        listing is named. A workspace-rooted ref (PRD 73) lands on the same file
         from any listing directory, so this answers for them exactly as a real
         one would; a `./` ref finds nothing here, which is right, since a
         listing with no directory has no files of its own."""
@@ -463,7 +466,7 @@ class Workspace:
         ``size-guide.png``, ``videos/intro.mp4``.
 
         Taken as written, with no extension appended: a shared file may be a
-        JPEG or a video (PRD 71) and may sit in a subdirectory, so the name
+        JPEG or a video (PRD 72) and may sit in a subdirectory, so the name
         has to say which. See :meth:`_media_file_in` for the boundary it
         enforces; it takes names from URLs (A8).
         """
@@ -475,7 +478,7 @@ class Workspace:
         chart, a care card, a size-guide video), as opposed to a rendered
         mockup.
 
-        Only the types ``media:`` accepts (PRD 71), matched case-insensitively
+        Only the types ``media:`` accepts (PRD 72), matched case-insensitively
         as :func:`~etsy_listings.config.media.media_kind` matches them, so
         nothing is offered that a listing would then refuse to load. Sorted
         by path rather than mtime -- unlike a design, a shared asset is
@@ -485,14 +488,14 @@ class Workspace:
 
     def listing_media_file(self, listing: str, path: str) -> Path:
         """One of a listing's own files, by its path under the listing's
-        directory -- what a ``./`` ref names (PRD 72), without the ``./``.
+        directory -- what a ``./`` ref names (PRD 73), without the ``./``.
         The same boundary as :meth:`common_media_file`, which matters more
         here: this directory also holds ``listing.yaml`` and the lockfile."""
         return self._media_file_in(self.listing_dir(listing), path)
 
     def listing_media_files(self, listing: str) -> list[Path]:
         """Every image and video in a listing's own directory, recursively:
-        the *This listing* half of the file locator (PRD 71). Never
+        the *This listing* half of the file locator (PRD 72). Never
         ``listing.yaml``, the lockfile, or anything a symlink reaches outside
         the directory. Empty for a listing with no directory yet."""
         return self._media_files_in(self.listing_dir(listing))
@@ -543,6 +546,12 @@ class Workspace:
         :meth:`seo_prompt_file`: this accessor only names the file."""
         return self.root / layout.PROMPTS_DIR / layout.BRIEF_PROMPT_FILE
 
+    def market_queries_prompt_file(self) -> Path:
+        """``prompts/market-queries.md`` -- the seller-editable prompt that
+        extracts three buyer searches for market research (market-seo.md,
+        *Query extraction*). Same split: this accessor only names the file."""
+        return self.root / layout.PROMPTS_DIR / layout.MARKET_QUERIES_PROMPT_FILE
+
     def common_copy_dir(self) -> Path:
         return self.root / layout.COMMON_COPY_DIR
 
@@ -550,7 +559,7 @@ class Workspace:
         """Verify a `description.ref` and resolve it -- beneath
         `common-copy/` only (PRD's description model).
 
-        Written from the workspace root, as every ref is (PRD 72), but
+        Written from the workspace root, as every ref is (PRD 73), but
         narrower than :meth:`resolve_ref`: it has no `./` form, because
         common copy is shared by definition. It still goes through :meth:`resolve` for
         the general escape checks (absolute paths, `..` past the root,
@@ -654,6 +663,9 @@ class Workspace:
         if not root.is_dir():
             return []
         return sorted(p for p in root.rglob("*.yaml") if p.is_file())
+
+    def settings_file(self) -> Path:
+        return self.root / layout.SETTINGS_FILE
 
     def exceptions_file(self) -> Path:
         return self.root / layout.EXCEPTIONS_FILE
@@ -840,6 +852,20 @@ class Workspace:
     def catalog_cache_dir(self) -> Path:
         return self.cache(layout.CATALOG_DIR)
 
+    def market_search_cache_dir(self) -> Path:
+        return self.cache(layout.MARKET_DIR, layout.MARKET_SEARCH_DIR)
+
+    def market_stats_cache_dir(self) -> Path:
+        return self.cache(layout.MARKET_DIR, layout.MARKET_STATS_DIR)
+
+    def market_snapshot_file(self, listing: str) -> Path:
+        """The listing's latest market research (market-seo.md, *Cache*).
+        Keyed by listing name, like :meth:`renders_dir`, so a rename moves it
+        and :meth:`remove_listing` removes it."""
+        return self.cache(
+            layout.MARKET_DIR, layout.MARKET_SNAPSHOTS_DIR, f"{_segment(listing)}.json"
+        )
+
     def preview_dir(self, listing: str) -> Path:
         """Every preview this listing currently holds, one subdirectory per
         template -- the same split :meth:`renders_dir` uses, since a preview
@@ -890,6 +916,12 @@ class Workspace:
         path is the caller's job, the same point ``design:`` refs are
         resolved. This method only owns "attach currency, wrap load errors"."""
         return PricingPlan.load(path, currency=self.defaults.etsy.currency)
+
+    def load_settings(self) -> Settings:
+        """``settings.yaml``, read on every call rather than at discovery:
+        a seller tuning weights while the UI runs gets them on the next
+        research, and a broken file fails only what reads it."""
+        return Settings.load(self.settings_file())
 
     def load_exceptions(self) -> ColourExceptions:
         return load_exceptions(self.exceptions_file())

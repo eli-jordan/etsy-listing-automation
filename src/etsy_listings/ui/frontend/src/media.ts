@@ -13,7 +13,7 @@ import type { MediaEntry, TemplateSummary } from "./types";
  * `media:` carries two shapes in one list (`config/listing.py`'s `MediaEntry`):
  * a `{template, colour}` entry the tool renders, and a file ref uploaded
  * as-is -- a shared file under `common-media/`, or one of the listing's own
- * spelled `./…` (PRD 72) -- which may be an image or a video (PRD 71). Every
+ * spelled `./…` (PRD 73) -- which may be an image or a video (PRD 72). Every
  * question about either one -- what is it called, what kind is it, is it
  * already in the listing, which picture shows it, which file on disk does it
  * come from -- is answered here.
@@ -53,13 +53,13 @@ export function refName(ref: string): string {
 
 /** A shared ref's path under `common-media/` -- what the picture endpoints
  * take. The whole path, not the stem: a shared file may be a JPEG and may sit
- * in a subdirectory (PRD 71), and only its full path says which file it is. */
+ * in a subdirectory (PRD 72), and only its full path says which file it is. */
 function sharedName(ref: string): string {
   const prefix = "common-media/";
   return ref.startsWith(prefix) ? ref.slice(prefix.length) : ref;
 }
 
-/** A listing's own file (PRD 72's `./` root) rather than a workspace one. */
+/** A listing's own file (PRD 73's `./` root) rather than a workspace one. */
 function isListingLocal(ref: string): boolean {
   return ref.startsWith("./");
 }
@@ -154,7 +154,7 @@ export function pictureFor(
 }
 
 /**
- * The picture for a file ref, from whichever of PRD 72's two roots it names.
+ * The picture for a file ref, from whichever of PRD 73's two roots it names.
  *
  * A `./` ref is one of `listing`'s own files; with no listing -- the editor's
  * unnamed draft, which has no directory -- it names nothing, and the answer is

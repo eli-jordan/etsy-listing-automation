@@ -101,7 +101,7 @@ def test_a_failure_carries_the_message_not_a_stack(workspace_root: Path) -> None
 
 
 def test_an_unmigrated_ref_fails_its_listing_naming_the_migration(workspace_root: Path) -> None:
-    """PRD 72: the old listing-relative form is refused by name -- as that
+    """PRD 73: the old listing-relative form is refused by name -- as that
     listing's failure, so the rest of an `--all` batch still plans."""
     copy_listing(workspace_root, "legacy", design="../../designs/take-a-hike.png")
 

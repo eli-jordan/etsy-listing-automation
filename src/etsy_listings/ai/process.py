@@ -193,7 +193,13 @@ def run_managed(
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            text=True,
+            # UTF-8 both ways, not the locale's code page: the CLIs speak
+            # UTF-8, and a prompt carrying Etsy titles verbatim (the market
+            # block) holds characters cp1252 cannot encode -- which failed the
+            # write and ended the call as "exited None". Undecodable output is
+            # replaced rather than raised; it is validated downstream anyway.
+            encoding="utf-8",
+            errors="replace",
             **_new_process_group_kwargs(),
         )
     except OSError as exc:

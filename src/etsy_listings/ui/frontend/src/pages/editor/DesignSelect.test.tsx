@@ -31,7 +31,7 @@ describe("DesignSelect", () => {
   });
 
   it("picks a design from the recent list and writes a workspace-rooted ref", async () => {
-    /* PRD 72: no prefix is the workspace root -- the same ref `new` writes. */
+    /* PRD 73: no prefix is the workspace root -- the same ref `new` writes. */
     const onPick = vi.fn();
     render(<DesignSelect design={{ default: "designs/take-a-hike.png" }} onPick={onPick} />);
 

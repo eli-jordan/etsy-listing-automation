@@ -112,7 +112,7 @@ describe("StepStrip", () => {
   });
 });
 
-/** `group` is the engine's, never inferred from a name (PRD 71, A2). */
+/** `group` is the engine's, never inferred from a name (PRD 72, A2). */
 describe("StepStrip's grouped stages", () => {
   it("nests etsy_videos under Etsy media, by the group the engine gave it", () => {
     render(

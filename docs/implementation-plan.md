@@ -157,7 +157,7 @@ ships — a calibration target is not a product (A19).
 class Stage(Protocol[D, A, L]):
     name: str
     local: bool                      # True => no remote state, so no drift
-    group: str | None                # the stage a reader shows this one under (PRD 71)
+    group: str | None                # the stage a reader shows this one under (PRD 72)
     applied_model: type[A]           # what this stage's lockfile subtree decodes into
 
     def desired(self, ctx: RunContext, listing, applied: A | None) -> D | Blocked: ...

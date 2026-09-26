@@ -12,6 +12,12 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // `list`, not the default `stack`: setup.ts's `cleanup()` must unmount
+    // before a test file's own `afterEach(() => vi.restoreAllMocks())`.
+    // Unmounting flushes pending effects, and under `stack` those ran against
+    // real, just-restored API functions -- a stray `fetch` of a relative URL
+    // that failed CI as an unhandled error (BatchDeployPage's mark-seen).
+    sequence: { hooks: "list" },
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

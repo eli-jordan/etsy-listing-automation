@@ -153,7 +153,7 @@ export interface Comparison {
   colours: ColoursBlock | null;
   price: PriceBlock | null;
   images: ImagesBlock | null;
-  /** `etsy_videos`, shown under Etsy media (PRD 71); `null` when neither
+  /** `etsy_videos`, shown under Etsy media (PRD 72); `null` when neither
    * side has a video. */
   videos: VideosBlock | null;
   priceRows: PriceRow[];
@@ -340,7 +340,7 @@ const VIDEO_SLOTS = ["videos.featured", "videos.second"] as const;
  * that arrives in a slot without leaving another is new, and one that leaves
  * without arriving is removed -- a swap is neither. New bytes on the same ref
  * (`.contents`) replace its upload, so it is both. A video this tool never
- * uploaded is swept whenever the stage runs (PRD 71), which the outcome says.
+ * uploaded is swept whenever the stage runs (PRD 72), which the outcome says.
  */
 function buildVideos(stagePlan: StagePlanFor<"etsy_videos"> | undefined): VideosBlock | null {
   const snapshot = stagePlan?.snapshot;

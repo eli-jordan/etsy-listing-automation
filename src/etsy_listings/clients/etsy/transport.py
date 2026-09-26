@@ -13,11 +13,17 @@ through here (A23).
 
 The retry policy, the backoff and the "return the last response rather than
 raising" rule are all shared with Printify (A21) -- one `retry.py`, because a
-429 means the same thing to both.
+429 means the same thing to both. Etsy adds one thing Printify does not: every
+response says how many calls are left this second, which :class:`RateGate`
+reads so the next call waits instead of spending a 429 (market-seo.md,
+*Quota*).
 """
 
 from __future__ import annotations
 
+import logging
+import random as _random
+import threading
 import time
 from collections.abc import Callable
 from typing import Any
@@ -44,6 +50,8 @@ connection, and a 5s default turns a slow uplink into an unreadable failure."""
 PING_PATH = "/v3/application/openapi-ping"
 
 HTTP_NOT_FOUND = 404
+
+_log = logging.getLogger(__name__)
 
 BearerSource = Callable[[], str]
 """Resolved per request, never at construction. `plan` builds clients it may
@@ -92,6 +100,67 @@ def decode_error(response: httpx.Response) -> EtsyApiError:
     return EtsyApiError(response.status_code, error=_error_detail(response))
 
 
+class RateGate:
+    """Hold the next call back once Etsy says this second's calls are spent.
+
+    Etsy's limits are per app, set in the developer portal, and change
+    without the tool knowing -- so nothing is stored or configured here. Each
+    response's ``x-remaining-this-second`` is the whole input: at 0, no call
+    is sent until a second has passed since that response (market-seo.md,
+    *Quota*). A second from the response rather than the next wall-clock
+    second, because Etsy does not say whether its window is fixed or sliding,
+    and a full second is right under either.
+
+    **Shared and thread-safe**, because market research keeps five calls in
+    flight on one transport and the budget is theirs jointly. A waiter sleeps
+    once for exactly what is owed while holding ``_waiting``; the others block
+    on that lock -- they do not poll -- and find the second already over when
+    they get it. A deadline only ever moves later: responses from concurrent
+    calls arrive in any order, and one that left the server before the budget
+    ran out must not lift a wait another has just established.
+
+    A missing or unreadable header means "no information", never "stop".
+    This is an optimisation over the 429 retry, not a gate that may wedge a
+    run on a proxy that strips headers.
+    """
+
+    def __init__(
+        self,
+        *,
+        clock: Callable[[], float] = time.monotonic,
+        sleep: Callable[[float], None] = time.sleep,
+    ) -> None:
+        self._clock = clock
+        self._sleep = sleep
+        self._state = threading.Lock()
+        self._waiting = threading.Lock()
+        self._resume_at = 0.0
+
+    def wait(self) -> None:
+        with self._waiting:
+            while (owed := self._owed()) > 0:
+                self._sleep(owed)
+
+    def _owed(self) -> float:
+        with self._state:
+            return self._resume_at - self._clock()
+
+    def observe(self, headers: httpx.Headers) -> None:
+        _log.debug(
+            "Etsy quota: %s remaining today of %s",
+            headers.get("x-remaining-today", "?"),
+            headers.get("x-limit-per-day", "?"),
+        )
+        try:
+            remaining = int(headers.get("x-remaining-this-second", ""))
+        except ValueError:
+            return
+        if remaining > 0:
+            return
+        with self._state:
+            self._resume_at = max(self._resume_at, self._clock() + 1.0)
+
+
 class Transport:
     """Send a request to Etsy and hand back a response worth reading."""
 
@@ -103,12 +172,16 @@ class Transport:
         client: httpx.Client | None = None,
         policy: RetryPolicy = DEFAULT_POLICY,
         sleep: Callable[[float], None] = time.sleep,
+        random: Callable[[], float] = _random.random,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._app_key = app_key
         self._bearer = bearer
         self._client = client or httpx.Client(base_url=BASE_URL, timeout=DEFAULT_TIMEOUT_SECONDS)
         self._policy = policy
         self._sleep = sleep
+        self._random = random
+        self._gate = RateGate(clock=clock, sleep=sleep)
 
     def request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
         headers = {"x-api-key": self._app_key.header()}
@@ -116,12 +189,16 @@ class Transport:
             headers["Authorization"] = f"Bearer {self._bearer()}"
 
         def send() -> httpx.Response:
-            return self._client.request(method, path, headers=headers, **kwargs)
+            # Paced per attempt, so a retry waits its turn like any call.
+            self._gate.wait()
+            response = self._client.request(method, path, headers=headers, **kwargs)
+            self._gate.observe(response.headers)
+            return response
 
         # Retries first, so a 429 that clears never becomes an exception, and
         # one that does not surfaces as the real decoded error rather than a
         # wrapper's summary of it (A21).
-        response = with_retries(send, method, self._policy, sleep=self._sleep)
+        response = with_retries(send, method, self._policy, sleep=self._sleep, random=self._random)
 
         if response.status_code in (401, 403):
             raise EtsyAuthError(

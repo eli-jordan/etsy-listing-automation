@@ -61,7 +61,7 @@ describe("MediaReel", () => {
     expect(screen.getByText("0 of 2 videos")).toBeTruthy();
   });
 
-  it("counts images and videos apart, as Etsy caps them (PRD 71)", () => {
+  it("counts images and videos apart, as Etsy caps them (PRD 72)", () => {
     reel({ media: [THREE[0] as MediaEntry, "common-media/intro.mp4", ...THREE.slice(1)] });
     expect(screen.getByText("3 of 20 images")).toBeTruthy();
     expect(screen.getByText("1 of 2 videos")).toBeTruthy();
@@ -93,7 +93,7 @@ describe("MediaReel", () => {
 });
 
 /** Videos sit inline in the one reel, because `media:` is the gallery
- * (PRD 71): a muted clip showing its own frame, marked as a clip. */
+ * (PRD 72): a muted clip showing its own frame, marked as a clip. */
 describe("MediaReel's videos", () => {
   const GALLERY: MediaEntry[] = ["a.png", INTRO.ref, "b.png", "./close-up.mov"];
 

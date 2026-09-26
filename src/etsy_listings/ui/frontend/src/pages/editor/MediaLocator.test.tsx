@@ -4,7 +4,7 @@ import type { ListingDetail, MediaFileSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 
 /**
- * The locator's *Files* mode (PRD 71): one list, grouped by the two roots a
+ * The locator's *Files* mode (PRD 72): one list, grouped by the two roots a
  * file ref can name -- *This listing · ./* and *Shared · common-media/* --
  * with images and videos mixed, and a video drawn by the browser from its own
  * first frame.

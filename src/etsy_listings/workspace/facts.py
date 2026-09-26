@@ -27,7 +27,7 @@ Two different costs, so two different strategies:
   wants one or two of them and a workspace may hold many. The listings table
   asks for each row's; the picker asks for all of them; neither pays for the
   other's.
-* **Videos are probed on demand and kept, by file** (PRD 71), for the same
+* **Videos are probed on demand and kept, by file** (PRD 72), for the same
   reason and one more: a shared clip in ``common-media/`` is named by many
   listings, and opening it once per row would be the four-hundred-parses
   mistake again, with FFmpeg doing the parsing.

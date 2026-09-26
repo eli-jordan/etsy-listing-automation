@@ -1,6 +1,6 @@
 # Listing videos implementation plan
 
-**Status:** proposed. Builds [PRD 71 and 72](prd.md) and
+**Status:** proposed. Builds [PRD 72 and 73](prd.md) and
 [phase-3-etsy.md decision 9](phase-3-etsy.md#9-videos-are-placed-by-attach-order--prd-71).
 Like the other implementation plans, it is not an authority: where it disagrees
 with those, they win and this document is wrong.
@@ -24,16 +24,16 @@ grouped *This listing* / *Shared*. There is no separate design pass.
 
 | Topic | Decision | Source |
 |---|---|---|
-| Where videos live | Entries in `media:`, which is the gallery in order. Position 1 is an image. Any video puts one at position 2. At most 2 videos and 20 images | PRD 71 |
-| Refs | No prefix is the workspace root and `./` is the listing directory. Subdirectories are allowed and `..` is refused. Covers `design:`, `pricing_plan:` and `media:` | PRD 72 |
-| Migration | `scripts/migrate_workspace_refs.py`, then `../` is refused and the error names the script. Shared images re-upload once | PRD 72 |
-| File types | Images `.png`, `.jpg`, `.jpeg`. Videos `.mp4`, `.mov` | PRD 71 |
-| Video gate | Block anything that is over 100 MB, outside 3–15 s, has a shorter side under 500 px, or has no decodable video stream. No aspect rule. Audio produces a note, not a warning | PRD 71 |
+| Where videos live | Entries in `media:`, which is the gallery in order. Position 1 is an image. Any video puts one at position 2. At most 2 videos and 20 images | PRD 72 |
+| Refs | No prefix is the workspace root and `./` is the listing directory. Subdirectories are allowed and `..` is refused. Covers `design:`, `pricing_plan:` and `media:` | PRD 73 |
+| Migration | `scripts/migrate_workspace_refs.py`, then `../` is refused and the error names the script. Shared images re-upload once | PRD 73 |
+| File types | Images `.png`, `.jpg`, `.jpeg`. Videos `.mp4`, `.mov` | PRD 72 |
+| Video gate | Block anything that is over 100 MB, outside 3–15 s, has a shorter side under 500 px, or has no decodable video stream. No aspect rule. Audio produces a note, not a warning | PRD 72 |
 | Probe library | PyAV, pinned `av>=15`. It only reads metadata and never produces bytes that get hashed, so a floor pin is enough | grilling |
-| Stage | `etsy_videos`, after `etsy_media`, with its own applied model and `remote.etsy_video_ids`, displayed under "Etsy media" | PRD 71 |
+| Stage | `etsy_videos`, after `etsy_media`, with its own applied model and `remote.etsy_video_ids`, displayed under "Etsy media" | PRD 72 |
 | Placement | Sweep foreign videos → attach the featured one → cut `image_ids`, attach the second, restore → re-assert swatches | decision 9 |
-| Drift | One of ours missing or `inactive` is re-uploaded. Hand-made position changes are invisible and accepted | PRD 71 |
-| Daily budget | Not predicted. The client rewords Etsy's `400` into the per-listing daily limit | PRD 71 |
+| Drift | One of ours missing or `inactive` is re-uploaded. Hand-made position changes are invisible and accepted | PRD 72 |
+| Daily budget | Not predicted. The client rewords Etsy's `400` into the per-listing daily limit | PRD 72 |
 
 ## PR sequence
 
@@ -46,7 +46,7 @@ PR 1 refs ─► PR 2 media kinds + gate ─► PR 3 Etsy client ─► PR 4 sta
 ```
 
 The stack is based on `t3code/support-listing-videos`, which carries the
-documentation (PRD 71/72, decision 9 and this plan). PR 1 targets that branch
+documentation (PRD 72/73, decision 9 and this plan). PR 1 targets that branch
 and each later PR targets the one before it.
 
 ### Definition of done — every PR
@@ -75,7 +75,7 @@ added to this list, not substituted for it.
 6. **Size.** `git diff --shortstat <base>...HEAD` totals under 3,000 lines. The
    number goes in the PR description.
 7. **Decisions cited.** Commit messages and any code comment where a choice
-   would look arbitrary cite PRD 71/72 or decision 9.
+   would look arbitrary cite PRD 72/73 or decision 9.
 
 Local environment note (macOS behind the corporate proxy):
 `UV_NATIVE_TLS=1 uv sync --python /opt/homebrew/bin/python3.13`, and
@@ -117,7 +117,7 @@ that talks to Etsy or Printify.
      ruamel. The result is re-parsed and validated before an atomic
      `os.replace`
    - is idempotent
-   - leaves the lockfile untouched (PRD 72's accepted re-upload)
+   - leaves the lockfile untouched (PRD 73's accepted re-upload)
 5. Convert every tracked fixture (`tests/fixtures/workspace/...`), plus the
    Python and frontend tests that spell `../../`. Import paths are not affected.
 6. Update `getting-started.md`, `multi-placement-rendering.md` and
@@ -134,7 +134,7 @@ that talks to Etsy or Printify.
   changes nothing, a file with nothing to migrate, and comments preserved.
 - After migrating a copy of the fixture workspace, `plan` reports
   `render`, `printify_product` and `publish` unchanged, and `etsy_media`
-  reports only the renamed shared refs. This is PRD 72's cost claim, pinned by
+  reports only the renamed shared refs. This is PRD 73's cost claim, pinned by
   a behaviour test.
 - `grep -rn '\.\./\.\./' tests src --include='*.py' --include='*.ts*'` finds
   no listing refs; import paths are excluded.

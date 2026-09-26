@@ -28,7 +28,8 @@ import yaml
 
 from etsy_listings import connections, credentials, prompts
 from etsy_listings.ai.brief import default_brief_prompt_text
-from etsy_listings.ai.prompt import default_seo_prompt_text, seed_prompt
+from etsy_listings.ai.market_queries import default_market_queries_prompt_text
+from etsy_listings.ai.prompt import backup_path, default_seo_prompt_text, sync_prompt
 from etsy_listings.clients.etsy.models import ReturnPolicy
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
@@ -68,19 +69,41 @@ partner needs the shop's live list, which `setup` may not be able to reach.
 `plan` is where an unresolvable or missing partner blocks."""
 
 
-def _seed_prompt(root: Path, filename: str, text: str, label: str) -> None:
-    """Seed one ``prompts/*.md`` and say which of the two outcomes happened.
+PACKAGED_PROMPTS: tuple[tuple[str, Callable[[], str], str], ...] = (
+    (layout.SEO_PROMPT_FILE, default_seo_prompt_text, "AI SEO"),
+    (layout.BRIEF_PROMPT_FILE, default_brief_prompt_text, "design brief"),
+    (layout.MARKET_QUERIES_PROMPT_FILE, default_market_queries_prompt_text, "market queries"),
+)
+"""Every prompt `setup` ships: its file under ``prompts/``, its packaged
+default, and the name the echo lines give it. A file in ``prompts/`` that is
+not here is the seller's own and `setup` never touches it."""
 
-    Both AI prompt files are seeded the same way (PRD 68), and the echo lines
-    differ only by name -- writing them out twice is how the two come to
-    disagree about what "already exists" means to a reader.
+
+def _sync_prompts(root: Path, *, replace: bool) -> None:
+    """Seed, check or replace each packaged prompt, and say what happened.
+
+    `setup` fills gaps and does not correct answers; prompts are the one
+    opt-in exception (PRD 71), because a workspace would otherwise never
+    receive new instructions such as `seo.md`'s market-data rules. Without
+    ``replace``, a prompt that differs from its default is left byte for byte
+    and earns a warning naming the file and the flag.
     """
-    seeded = seed_prompt(root / layout.PROMPTS_DIR / filename, text)
-    where = f"{layout.PROMPTS_DIR}/{filename}"
-    if seeded.created:
-        typer.echo(f"  seeded {where} with the default {label} prompt")
-    else:
-        typer.echo(f"  {where} already exists -- left it exactly as it is")
+    for filename, default_text, label in PACKAGED_PROMPTS:
+        path = root / layout.PROMPTS_DIR / filename
+        where = f"{layout.PROMPTS_DIR}/{filename}"
+        backup = f"{layout.PROMPTS_DIR}/{backup_path(path).name}"
+        outcome = sync_prompt(path, default_text(), replace=replace)
+        if outcome == "created":
+            typer.echo(f"  seeded {where} with the default {label} prompt")
+        elif outcome == "current":
+            typer.echo(f"  {where} is the packaged default")
+        elif outcome == "replaced":
+            typer.echo(f"  replaced {where} with the default {label} prompt; yours is {backup}")
+        else:
+            typer.echo(
+                f"  warning: {where} differs from the packaged default; "
+                f"`etsy-listings setup --replace-prompts` replaces it and keeps yours as {backup}"
+            )
 
 
 def _default_client_factory(token: str) -> PrintifyClient:
@@ -345,6 +368,7 @@ def run_setup(
     *,
     client_factory: ClientFactory | None = None,
     etsy_access: EtsyAccessFactory | None = None,
+    replace_prompts: bool = False,
 ) -> None:
     factory = client_factory or _default_client_factory
     access_factory = etsy_access or _default_etsy_access
@@ -358,12 +382,7 @@ def run_setup(
     )
     credentials.announce_gitignore(root)
 
-    # AI SEO implementation plan, PR3, item 3: seed each packaged default only
-    # when the seller has no prompt of their own -- a re-run must never
-    # overwrite a customized prompt file, so this is a warn-and-keep, not a
-    # fill-then-report like the directory skeleton above.
-    _seed_prompt(root, layout.SEO_PROMPT_FILE, default_seo_prompt_text(), "AI SEO")
-    _seed_prompt(root, layout.BRIEF_PROMPT_FILE, default_brief_prompt_text(), "design brief")
+    _sync_prompts(root, replace=replace_prompts)
 
     token, shops = _verified_token(root, factory)
     shop = _pick_shop(shops)

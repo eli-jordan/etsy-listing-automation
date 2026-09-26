@@ -188,7 +188,7 @@ def _pick_or_create_pricing_plan(
     sizes: list[str],
 ) -> Path:
     """Returns the chosen/generated plan's absolute path -- turning that into
-    a ref is the caller's job (`pricing_plan_ref`, PRD 72)."""
+    a ref is the caller's job (`pricing_plan_ref`, PRD 73)."""
     candidates = load_candidate_pricing_plans(workspace)
     choices = build_pricing_plan_choices(candidates, garment_profile_slug)
     rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]

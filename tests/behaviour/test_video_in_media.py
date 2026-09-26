@@ -1,4 +1,4 @@
-"""A video in `media:` is `etsy_videos`' business alone (PRD 71).
+"""A video in `media:` is `etsy_videos`' business alone (PRD 72).
 
 `media:` is the gallery, so a video sits between images -- at position 2,
 where Etsy features it. Nothing else may read that entry as an image:

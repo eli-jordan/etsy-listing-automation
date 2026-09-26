@@ -49,7 +49,7 @@ __all__ = [
     "MediaEntry",
     "TemplateMediaEntry",
     "PrintArea",
-    # What a media: entry is, and the gallery's caps (PRD 71).
+    # What a media: entry is, and the gallery's caps (PRD 72).
     "MediaKind",
     "media_kind",
     "UnknownMediaTypeError",

@@ -172,7 +172,7 @@ def test_swapping_the_videos_re_attaches_both_without_an_upload(ctx, etsy, works
     changes = _changes(_videos_plan(ctx, lock))
     lock = _apply(ctx, lock)
 
-    # Refs, not prose: the deploy review reads New/Removed off these (PRD 71).
+    # Refs, not prose: the deploy review reads New/Removed off these (PRD 72).
     assert changes == [("videos.featured", FEATURED, SECOND), ("videos.second", SECOND, FEATURED)]
 
     assert len(etsy.video_uploads) == 2, "a swap re-sends no bytes"

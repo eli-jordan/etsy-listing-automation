@@ -1,4 +1,4 @@
-"""Behaviour tests for the file locator's endpoints (PRD 71, 72): the two
+"""Behaviour tests for the file locator's endpoints (PRD 72, 73): the two
 places a `media:` file ref can point -- `common-media/` and the listing's own
 directory -- listed with their kind and served with their real type.
 
@@ -53,10 +53,10 @@ class TestCommonMedia:
         self, client: TestClient, shared: Path
     ) -> None:
         """The picker hands back the ref ready to write. A shared file's ref is
-        its workspace-relative path (PRD 72), and its name is its path under
+        its workspace-relative path (PRD 73), and its name is its path under
         `common-media/` -- what the picture endpoints take. Videos are listed
         too, told apart by `kind` rather than by the browser reading an
-        extension (PRD 71)."""
+        extension (PRD 72)."""
         (shared / "charts").mkdir()
         (shared / "size-guide.png").write_bytes(b"")
         (shared / "charts" / "care.jpg").write_bytes(b"")
@@ -168,7 +168,7 @@ class TestListingMediaFiles:
     def test_lists_the_listings_own_files_with_the_ref_it_stores(
         self, client: TestClient, listing: Path
     ) -> None:
-        """The *This listing* group: a `./` ref (PRD 72), and never the two
+        """The *This listing* group: a `./` ref (PRD 73), and never the two
         files that sit beside the pictures."""
         (listing / "shots").mkdir()
         (listing / "shots" / "back.png").write_bytes(b"")

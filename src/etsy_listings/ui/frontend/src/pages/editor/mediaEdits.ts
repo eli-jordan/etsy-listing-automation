@@ -28,7 +28,7 @@ export interface MediaState {
 }
 
 /** Etsy's ceiling on listing images, mirrored from `config/media.py`'s
- * `MAX_IMAGES`. Videos are counted apart (PRD 71): a listing may hold twenty
+ * `MAX_IMAGES`. Videos are counted apart (PRD 72): a listing may hold twenty
  * images *and* two videos. */
 export const MAX_IMAGES = 20;
 
@@ -70,7 +70,7 @@ export function toggleEntry(
  * colour}` entry: the same list, two shapes (`config/listing.py`'s
  * `MediaEntry`).
  *
- * An image goes on the end. A video goes where PRD 71's gallery rules put it:
+ * An image goes on the end. A video goes where PRD 72's gallery rules put it:
  * the first one at position 2, where Etsy pins the featured video, and the
  * second on the end, since it may sit anywhere after that. A video with no
  * image yet to be the thumbnail, a third video and a twenty-first image are
@@ -126,7 +126,7 @@ export function removeAt(detail: MediaState, index: number): Patch | null {
  * so this is a product decision the user makes by dragging, not a display
  * detail.
  *
- * Inside PRD 71's gallery rules. The featured video holds position 2 while
+ * Inside PRD 72's gallery rules. The featured video holds position 2 while
  * images move around it, so an image dropped on the thumbnail becomes the
  * thumbnail without pushing the video to 3. The second video may go anywhere
  * after the featured one, and dropping it on position 2 swaps them. A move
@@ -190,7 +190,7 @@ function count(media: readonly MediaEntry[], kind: "image" | "video"): number {
 }
 
 /**
- * What is left after a removal, put back inside PRD 71's gallery rules -- or
+ * What is left after a removal, put back inside PRD 72's gallery rules -- or
  * `null` when nothing can be.
  *
  * Removing the thumbnail brings the next image forward; removing the featured

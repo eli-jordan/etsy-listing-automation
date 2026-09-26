@@ -1,4 +1,4 @@
-"""`config/media.py`: what kind of thing each `media:` entry is (PRD 71).
+"""`config/media.py`: what kind of thing each `media:` entry is (PRD 72).
 
 The gallery rules and the video gate both start from this one answer, so it
 is tested on its own: a template entry is always an image, and a file ref is

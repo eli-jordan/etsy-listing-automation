@@ -3,6 +3,7 @@ import { listCommonCopy, listEtsySections } from "../../api/listings";
 import type { CommonCopySummary, EtsySectionSummary, ListingDetail } from "../../types";
 import { AiChoiceDrawer } from "./aiSeo/AiChoiceDrawer";
 import { DescriptionSourcePicker } from "./DescriptionSourcePicker";
+import { MarketListingsPanel } from "./market/MarketListingsPanel";
 import { AiSeoControl } from "./aiSeo/AiSeoControl";
 import { AiTagsDrawer } from "./aiSeo/AiTagsDrawer";
 import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
@@ -139,7 +140,7 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
     onUpdate({ etsy: { tags: tags.filter((t) => t !== tag) } });
   }
 
-  return (
+  const fields = (
     <div className="details-tab">
       <fieldset className="seo-details-fieldset">
         <legend className="seo-details-legend">Listing details</legend>
@@ -381,6 +382,21 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
           <span className="field__hint">Set by the selected garment profile.</span>
         </div>
       </fieldset>
+    </div>
+  );
+
+  // The top listings panel sits beside the fields once there is a search to
+  // show (docs/ui-market-seo-interactions.md, section 3). Without one the
+  // fields keep their own width: an empty "run AI Mode" card would be noise
+  // on every new listing. The wrapper is there either way, so the fields are
+  // never remounted -- losing the seller's focus and caret -- when research
+  // starts mid-edit and the panel appears.
+  return (
+    <div className={aiSeo.market === null ? undefined : "mkt-layout"}>
+      {fields}
+      {aiSeo.market !== null && (
+        <MarketListingsPanel state={aiSeo.market} proposal={aiSeo.proposal?.proposal ?? null} />
+      )}
     </div>
   );
 }

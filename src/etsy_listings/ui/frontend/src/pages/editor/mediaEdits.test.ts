@@ -201,11 +201,11 @@ describe("roomLeft", () => {
 
 /**
  * The gallery rules, as `config/listing.py`'s `_check_gallery` states them
- * (PRD 71): position 1 is an image, any video puts one at position 2, at most
+ * (PRD 72): position 1 is an image, any video puts one at position 2, at most
  * two videos, and images and videos have separate caps. A click never writes
  * a gallery the server would refuse.
  */
-describe("the gallery rules (PRD 71)", () => {
+describe("the gallery rules (PRD 72)", () => {
   const IMG = "common-media/sizing.png";
   const CLIP = "common-media/intro.mp4";
   const LOCAL = "./close-up.MOV";
@@ -286,7 +286,7 @@ describe("the gallery rules (PRD 71)", () => {
  * A drag inside the same rules. A move either lands a gallery
  * `_check_gallery` accepts or is no move at all -- the tile snaps back.
  */
-describe("reorder, within the gallery rules (PRD 71)", () => {
+describe("reorder, within the gallery rules (PRD 72)", () => {
   const CLIP = "common-media/intro.mp4";
   const LOCAL = "./close-up.MOV";
 

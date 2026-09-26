@@ -165,7 +165,7 @@ than relying on shape-sniffing across all three."""
 # ──────────────────────────────────────────────────────────────────────────
 
 IssueSeverity = Literal["block", "warn", "info"]
-"""`listing_validation.Severity` on the wire. ``info`` (PRD 71's stripped
+"""`listing_validation.Severity` on the wire. ``info`` (PRD 72's stripped
 audio) is shown quietly and counted nowhere: `IssueCounts` stays blocks and
 warnings, the two a seller has to act on."""
 IssueTab = Literal["variants", "pricing", "images", "details"]
@@ -300,7 +300,7 @@ class PricingPlanSummary(BaseModel):
     """Whether this plan declares the exact garment profile asked for --
     mirrors `newcmd.logic.build_pricing_plan_choices`'s marker."""
     ref: str
-    """Workspace-rooted (PRD 72), ready to PATCH straight into `pricing_plan:`
+    """Workspace-rooted (PRD 73), ready to PATCH straight into `pricing_plan:`
     unchanged -- `newcmd.logic.pricing_plan_ref`'s write-side form, the same
     rule `MediaFileSummary.ref` follows for a shared image."""
 
@@ -313,7 +313,7 @@ class ListingDesignSummary(BaseModel):
 
 
 class MediaFileSummary(BaseModel):
-    """One file a listing can put in `media:` as a file ref (PRD 71, 72): a
+    """One file a listing can put in `media:` as a file ref (PRD 72, 73): a
     shared one under ``common-media/``, or one of the listing's own. A bare
     file uploaded as-is, rather than a rendered mockup."""
 
@@ -326,7 +326,7 @@ class MediaFileSummary(BaseModel):
     ref: str
     """The ref to write into `media:` unchanged. A shared file's ref is its
     workspace-relative path, so it equals ``file``; a listing's own file is
-    spelled ``./close-up.mp4`` (PRD 72), which is why this is a field of its
+    spelled ``./close-up.mp4`` (PRD 73), which is why this is a field of its
     own rather than something callers build."""
     kind: MediaKind
     """``image`` or ``video``, as `config.media.media_kind` classifies it --
@@ -337,7 +337,7 @@ class MediaFileSummary(BaseModel):
 class CommonCopySummary(BaseModel):
     """One `common-copy/*.md` file, for the Description tab's body-source
     selector (AI SEO implementation plan, PR6). A common-copy ref is
-    workspace-relative, like every other ref (PRD 72), so it is exactly what
+    workspace-relative, like every other ref (PRD 73), so it is exactly what
     `description.ref` stores, already usable as-is."""
 
     ref: str
@@ -486,49 +486,15 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# AI SEO (AI SEO implementation plan, PR5). Deliberately outside `ui/runs`:
-# there is no run, SQLite record, lockfile, or server-side proposal cache
-# behind these two shapes -- `ui/api/seo.py`'s own docstring says why. The
+# AI SEO (AI SEO implementation plan, PR5). The proposal reaches the browser
+# as an AI run's `proposal` event (`ui/airuns/events.py`) and is kept there,
+# in local storage -- never in a lockfile or a server-side cache. The
 # proposal's own field shapes mirror `ai/models.py.SeoProposal` field for
 # field, the same "wire shape *is* the domain shape" rule `ListingDetail`
 # follows for `Listing` above, rather than reusing those frozen dataclasses
 # directly -- pydantic, not a dataclass, is what FastAPI serialises a
 # response with.
 # ──────────────────────────────────────────────────────────────────────────
-
-
-class DesignBriefRequest(BaseModel):
-    """What drafting a brief actually needs (PRD 68): the design, and nothing
-    else.
-
-    Not a listing, and not a garment profile. A brief describes the
-    *artwork*, and the one moment it is most wanted is the moment a design is
-    attached -- which, when a seller is creating a listing, is usually before
-    it has a name, a file, or a garment chosen. Asking only for the design is
-    what lets the request go out then (see `ai/brief.py.BriefRequest` for why
-    the garment context was dropped rather than made optional).
-
-    ``design`` is workspace-relative and POSIX (``designs/take-a-hike.png``),
-    resolved through `Workspace.resolve`, which is what refuses anything
-    pointing outside the workspace (`A8`) -- this value arrives from a
-    browser, so that check is the security boundary, not a tidiness rule.
-    """
-
-    design: str
-
-
-class DesignBriefResponse(BaseModel):
-    """One drafted listing brief (PRD 68).
-
-    Deliberately thinner than `SeoProposalResponse`: no snapshot and no
-    expiry, because there is nothing here to keep. The browser writes
-    ``brief`` straight into the ordinary Brief field through the existing
-    autosave path, at which point it is seller-owned listing content like
-    any other -- so there is no pending state to go stale, nothing to
-    restore after a refresh, and nothing to retain past this response.
-    """
-
-    brief: str
 
 
 class SeoReadinessResponse(BaseModel):

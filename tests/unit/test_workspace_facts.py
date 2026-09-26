@@ -136,7 +136,7 @@ def _video_listing(workspace: Workspace, media: list[object]) -> Listing:
 
 
 class TestVideos:
-    """PRD 71's gate reads a probe, and a probe opens a file: the listings
+    """PRD 72's gate reads a probe, and a probe opens a file: the listings
     table asks for every row, so each clip is opened once per request."""
 
     @pytest.fixture
@@ -204,7 +204,7 @@ class TestVideos:
     def test_a_ref_that_will_not_resolve_is_a_probe_failure_not_a_raise(
         self, workspace: Workspace
     ) -> None:
-        """A `../` ref (PRD 72) still loads as a string; the banner has to be
+        """A `../` ref (PRD 73) still loads as a string; the banner has to be
         able to say so rather than 500."""
         thumb = TemplateMediaEntry(template="flat-lay-01", colour="black")
         listing = _video_listing(workspace, [thumb, "../../common-media/size-guide.mp4"])

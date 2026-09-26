@@ -90,7 +90,7 @@ IMAGES_IN_ORDER = [
 
 
 def _with_videos(*, second_after: int) -> list[object]:
-    """The images, with the featured video at position 2 (PRD 71) and the
+    """The images, with the featured video at position 2 (PRD 72) and the
     second anchored after ``second_after`` of them."""
     head, rest = IMAGES_IN_ORDER[:1], IMAGES_IN_ORDER[1:]
     media: list[object] = [*head, FEATURED_VIDEO, *rest]
@@ -456,7 +456,7 @@ class TestTheFullCycle:
         image_ids = set(written.remote["etsy_image_ids"].values())
         assert {link.image_id for link in links} <= image_ids
 
-    # -------------------------------------------------- videos (PRD 71)
+    # -------------------------------------------------- videos (PRD 72)
 
     def test_two_videos_are_placed_and_their_ids_recorded(
         self, ctx: RunContext, workspace: Workspace

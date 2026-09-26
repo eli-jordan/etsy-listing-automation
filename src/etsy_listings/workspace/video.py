@@ -1,4 +1,4 @@
-"""Reading a video file's facts, through PyAV (PRD 71).
+"""Reading a video file's facts, through PyAV (PRD 72).
 
 The video gate (`config/listing_validation.check_videos`) is pure, so
 something has to open the file first; this is that something, and the only

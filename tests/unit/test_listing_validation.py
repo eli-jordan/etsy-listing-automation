@@ -463,7 +463,7 @@ def _blocks(issues: list[Issue]) -> list[Issue]:
 
 
 class TestVideos:
-    """Etsy's help page is the gate (PRD 71): the API itself took a 20 s
+    """Etsy's help page is the gate (PRD 72): the API itself took a 20 s
     clip, so nothing past this point would catch one."""
 
     def test_a_clip_inside_every_limit_has_no_issue(self) -> None:

@@ -348,6 +348,102 @@ describe("useAutosave", () => {
   });
 });
 
+describe("useAutosave adopting what the server wrote", () => {
+  it("shows the value without saving it again", async () => {
+    const patch = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+    const before = result.current.save;
+
+    act(() => result.current.adopt({ brief: "Drafted by the AI run." }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(result.current.detail.brief).toBe("Drafted by the AI run.");
+    expect(result.current.save).toBe(before);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("leaves an edit that is still pending to be sent as it was", async () => {
+    const patch = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    act(() => result.current.adopt({ brief: "Drafted by the AI run." }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(patch).toHaveBeenCalledWith("take-a-hike", { colors: ["white"] });
+  });
+
+  it("keeps the value when a save sent before it was written answers without it", async () => {
+    // The PATCH reached the server before the AI run wrote the brief, so its
+    // response describes a file with no brief -- older than what was adopted.
+    let answer!: (fresh: ListingDetail) => void;
+    vi.spyOn(listingsApi, "patchListing").mockImplementation(
+      () => new Promise((resolve) => (answer = resolve)),
+    );
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.adopt({ brief: "Drafted by the AI run." }));
+    await act(async () => {
+      answer(detail({ colors: ["white"] }));
+      await vi.advanceTimersByTimeAsync(0);
+    });
+
+    expect(result.current.detail.brief).toBe("Drafted by the AI run.");
+    expect(result.current.detail.colors).toEqual(["white"]);
+    expect(result.current.save.kind).toBe("saved");
+  });
+
+  it("takes the server's word again once a save sent after it answers", async () => {
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockResolvedValueOnce(detail({ colors: ["white"], brief: "Drafted by the AI run." }))
+      .mockResolvedValueOnce(detail({ colors: ["red"], brief: "Changed in another tab." }));
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.adopt({ brief: "Drafted by the AI run." }));
+    for (const colors of [["white"], ["red"]]) {
+      act(() => result.current.update({ colors }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+      });
+    }
+
+    expect(patch).toHaveBeenCalledTimes(2);
+    expect(result.current.detail.brief).toBe("Changed in another tab.");
+  });
+
+  it("lets the seller's own edit of the field win over the adopted value", async () => {
+    let answer!: (fresh: ListingDetail) => void;
+    const patch = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockImplementationOnce(() => new Promise((resolve) => (answer = resolve)))
+      .mockResolvedValue(detail({ colors: ["white"], brief: "Mine." }));
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.adopt({ brief: "Drafted by the AI run." }));
+    act(() => result.current.update({ brief: "Mine." }));
+    await act(async () => {
+      answer(detail({ colors: ["white"] }));
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(result.current.detail.brief).toBe("Mine.");
+    expect(patch).toHaveBeenLastCalledWith("take-a-hike", { brief: "Mine." });
+  });
+});
+
 describe("useAutosave before the listing exists", () => {
   const draft = () =>
     detail({ name: "", garment_profile: "", design: {}, colors: [], prices: {}, media: [] });

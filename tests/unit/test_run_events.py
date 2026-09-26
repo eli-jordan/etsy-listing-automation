@@ -158,7 +158,7 @@ def test_a_stage_plan_with_no_snapshot_carries_none() -> None:
 
 
 def test_a_stage_plan_carries_the_group_the_engine_gave_it() -> None:
-    """PRD 71: the review nests one stage under another by the engine's
+    """PRD 72: the review nests one stage under another by the engine's
     answer, never by inferring it from a name."""
     assert stage_plan_dto(StagePlan.block("etsy_media", "no shop", group="parent")).group == (
         "parent"

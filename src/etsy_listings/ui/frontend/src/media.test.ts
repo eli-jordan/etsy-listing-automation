@@ -148,7 +148,7 @@ describe("pictureFor", () => {
   });
 
   it("addresses a shared asset by its full path under common-media/, extension and all", () => {
-    /* A shared file may be a JPEG, and may sit in a subdirectory (PRD 71):
+    /* A shared file may be a JPEG, and may sit in a subdirectory (PRD 72):
        the stem alone cannot say which file it is. */
     expect(pictureFor("common-media/charts/care.jpg", null)).toBe(
       "/api/common-media/charts/care.jpg/file",

@@ -1,83 +1,46 @@
-"""``ui/api/seo.py``'s HTTP surface (AI SEO implementation plan, PR5):
-payload shape, status codes and the settled behaviours the plan's PR5
-section names outright -- saved-only access, hidden readiness, concurrent
-listing behaviour, provider-failure mapping, and no-write behaviour.
+"""``GET /api/listings/{name}/ai-seo/readiness``: whether the **AI Mode**
+button may start a run (market-seo.md, *AI runs*; implementation plan, PR 6).
 
-Every test drives `create_app` with a ``seo_provider_factory`` -- the same
-injection seam `context_factory` already is for `ui/runs` -- wired to
-`FakeAiProvider` doubles or small local test doubles, never a real Codex or
-Claude adapter (PR4's own rule: CI stays fake-provider-only).
+The button drafts a brief when the saved one is empty, so readiness answers
+with the rules ``POST /api/ai/runs`` applies to ``draft_brief=true``: a
+design, a usable garment profile, ``prompts/seo.md`` and
+``prompts/market-queries.md``, a ready provider, and -- only while the brief
+is empty -- ``prompts/brief.md``. A button that lit up for a run the server
+would then refuse was the gap this closes.
 
-Cancellation itself (the disconnect-to-`threading.Event` wiring) is unit
-tested directly in `tests/unit/test_ai_seo_service.py` against
-`generate_with_cancellation`, not here -- there is no way to make an
-in-process ASGI transport simulate a genuinely dropped connection, and that
-file's own docstring explains the seam split.
+The two generation endpoints that used to live beside it are retired; AI
+runs replaced both (``test_ai_runs_api.py``).
 """
 
 from __future__ import annotations
 
-import json
-import threading
-import time
 from collections.abc import Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
 
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings.ai.models import ProviderReadiness, RawProviderResult, SeoRequest
+from etsy_listings.ai.models import ProviderReadiness
 from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.layout import COMMON_COPY_DIR, PROMPTS_DIR, SEO_PROMPT_FILE
+from etsy_listings.workspace.layout import (
+    BRIEF_PROMPT_FILE,
+    MARKET_QUERIES_PROMPT_FILE,
+    PROMPTS_DIR,
+    SEO_PROMPT_FILE,
+)
 from etsy_listings.workspace.workspace import Workspace
 
+from tests.support.ai_runs import seed_prompts
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import copy_listing, edit_listing
+from tests.support.builders import edit_listing
 
-_GARMENT_TITLE = "Unisex Garment-Dyed T-shirt"
-"""`tests/fixtures/workspace/garment-profiles/comfort-colors-1717.yaml`'s
-``blueprint.title`` -- the fixture value `_build_request`'s
-``product_type`` fallback reads."""
+READINESS = f"/api/listings/{LISTING}/ai-seo/readiness"
 
 
-def _valid_payload() -> str:
-    return json.dumps(
-        {
-            "titles": ["Retro Sunset Hike Tee", "Take A Hike Graphic Shirt", "Mountain Trail Tee"],
-            "tags": [f"tag{i}" for i in range(20)],
-            "description_leads": ["lead one", "lead two", "lead three"],
-            "rationale": [
-                {
-                    "phrase": f"phrase {i}",
-                    "intent": "core_product",
-                    "reason": "because",
-                    "used_in": ["title"],
-                }
-                for i in range(7)
-            ],
-            "warnings": ["a non-blocking quality note"],
-            "observed_text": "TAKE A HIKE",
-        }
-    )
-
-
-def _seed_prompt(workspace_root: Path) -> Path:
-    path = workspace_root / PROMPTS_DIR / SEO_PROMPT_FILE
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text("Write great Etsy SEO copy.\n", encoding="utf-8")
-    return path
-
-
-def _ready_provider(name: str = "codex", *, responses: list[str] | None = None) -> FakeAiProvider:
-    return FakeAiProvider(
-        name=name,
-        ready=ProviderReadiness(ready=True),
-        responses=responses if responses is not None else [_valid_payload()],
-    )
+def _ready_provider(name: str = "codex") -> FakeAiProvider:
+    return FakeAiProvider(name=name, ready=ProviderReadiness(ready=True))
 
 
 def _unready_provider(name: str, reason: str) -> FakeAiProvider:
@@ -85,555 +48,95 @@ def _unready_provider(name: str, reason: str) -> FakeAiProvider:
 
 
 @contextmanager
-def _client(
-    workspace_root: Path, *, providers: list[AiProvider] | None = None
-) -> Iterator[TestClient]:
+def _client(workspace_root: Path, providers: list[AiProvider]) -> Iterator[TestClient]:
     workspace = Workspace.discover(root_override=workspace_root)
-    kwargs: dict[str, Any] = {}
-    if providers is not None:
-        kwargs["seo_provider_factory"] = lambda _workspace: providers
-    app = create_app(workspace, **kwargs)
+    app = create_app(workspace, seo_provider_factory=lambda _workspace: providers)
     with TestClient(app) as test_client:
         yield test_client
 
 
-@pytest.fixture
-def ready_provider() -> FakeAiProvider:
-    return _ready_provider()
+def _readiness(
+    workspace_root: Path, providers: list[AiProvider] | None = None
+) -> dict[str, object]:
+    with _client(workspace_root, providers or [_ready_provider()]) as c:
+        response = c.get(READINESS)
+    assert response.status_code == 200
+    body: dict[str, object] = response.json()
+    return body
 
 
-@pytest.fixture
-def client(workspace_root: Path, ready_provider: FakeAiProvider) -> Iterator[TestClient]:
-    """A client wired to one always-ready `FakeAiProvider`, with
-    ``prompts/seo.md`` already seeded -- the state every test starts from
-    unless it is specifically testing a missing prerequisite."""
-    _seed_prompt(workspace_root)
-    with _client(workspace_root, providers=[ready_provider]) as test_client:
-        yield test_client
+@pytest.fixture(autouse=True)
+def _prompts(workspace_root: Path) -> None:
+    seed_prompts(workspace_root)
 
 
-# ------------------------------------------------------------------ readiness
-
-
-def test_readiness_404s_for_a_listing_that_was_never_saved(client: TestClient) -> None:
-    response = client.get("/api/listings/never-saved/ai-seo/readiness")
+def test_readiness_404s_for_a_listing_that_was_never_saved(workspace_root: Path) -> None:
+    with _client(workspace_root, [_ready_provider()]) as c:
+        response = c.get("/api/listings/never-saved/ai-seo/readiness")
 
     assert response.status_code == 404
 
 
-def test_readiness_is_hidden_without_prompts_seo_md(workspace_root: Path) -> None:
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        response = c.get(f"/api/listings/{LISTING}/ai-seo/readiness")
+def test_readiness_is_ready_when_one_provider_is_ready(workspace_root: Path) -> None:
+    providers: list[AiProvider] = [
+        _unready_provider("codex", "not signed in"),
+        _ready_provider("claude"),
+    ]
 
-        assert response.status_code == 200
-        body = response.json()
-        assert body["ready"] is False
-        assert "seo.md" in body["reason"]
+    assert _readiness(workspace_root, providers) == {"ready": True, "reason": None}
+
+
+@pytest.mark.parametrize("prompt", [SEO_PROMPT_FILE, MARKET_QUERIES_PROMPT_FILE])
+def test_readiness_needs_both_prompts_the_run_reads(workspace_root: Path, prompt: str) -> None:
+    (workspace_root / PROMPTS_DIR / prompt).unlink()
+
+    body = _readiness(workspace_root)
+
+    assert body["ready"] is False
+    assert prompt in str(body["reason"])
 
 
 def test_readiness_is_hidden_without_a_selected_design(workspace_root: Path) -> None:
-    _seed_prompt(workspace_root)
     edit_listing(workspace_root, design={})
 
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        body = c.get(f"/api/listings/{LISTING}/ai-seo/readiness").json()
+    body = _readiness(workspace_root)
 
-        assert body["ready"] is False
-        assert "design" in body["reason"]
+    assert body["ready"] is False
+    assert "design" in str(body["reason"])
 
 
-def test_readiness_is_hidden_with_an_empty_brief(workspace_root: Path) -> None:
-    _seed_prompt(workspace_root)
+def test_an_empty_brief_is_ready_because_the_button_drafts_it(workspace_root: Path) -> None:
     edit_listing(workspace_root, brief="   ")
 
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        body = c.get(f"/api/listings/{LISTING}/ai-seo/readiness").json()
+    assert _readiness(workspace_root) == {"ready": True, "reason": None}
 
-        assert body["ready"] is False
-        assert "brief" in body["reason"]
+
+def test_an_empty_brief_needs_the_brief_prompt(workspace_root: Path) -> None:
+    edit_listing(workspace_root, brief="")
+    (workspace_root / PROMPTS_DIR / BRIEF_PROMPT_FILE).unlink()
+
+    body = _readiness(workspace_root)
+
+    assert body["ready"] is False
+    assert BRIEF_PROMPT_FILE in str(body["reason"])
+
+
+def test_readiness_is_hidden_without_a_usable_garment_profile(workspace_root: Path) -> None:
+    edit_listing(workspace_root, garment_profile="no-such-profile")
+
+    body = _readiness(workspace_root)
+
+    assert body == {"ready": False, "reason": "the listing has no usable garment profile"}
 
 
 def test_readiness_is_hidden_when_no_provider_is_ready(workspace_root: Path) -> None:
-    _seed_prompt(workspace_root)
-    providers = [
+    providers: list[AiProvider] = [
         _unready_provider("codex", "codex is not authenticated"),
         _unready_provider("claude", "claude was not found on PATH"),
     ]
 
-    with _client(workspace_root, providers=providers) as c:
-        body = c.get(f"/api/listings/{LISTING}/ai-seo/readiness").json()
-
-        assert body["ready"] is False
-        assert "codex is not authenticated" in body["reason"]
-        assert "claude was not found on PATH" in body["reason"]
-
-
-def test_readiness_is_ready_when_one_provider_is_ready(workspace_root: Path) -> None:
-    _seed_prompt(workspace_root)
-    providers = [_unready_provider("codex", "not signed in"), _ready_provider("claude")]
-
-    with _client(workspace_root, providers=providers) as c:
-        body = c.get(f"/api/listings/{LISTING}/ai-seo/readiness").json()
-
-        assert body == {"ready": True, "reason": None}
-
-
-# ------------------------------------------------------------------- proposal
-
-
-def test_proposal_404s_for_a_listing_that_was_never_saved(client: TestClient) -> None:
-    response = client.post("/api/listings/never-saved/ai-seo/proposal")
-
-    assert response.status_code == 404
-
-
-def test_proposal_409s_when_not_ready(workspace_root: Path) -> None:
-    # No prompts/seo.md seeded.
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-        assert response.status_code == 409
-        assert "seo.md" in response.json()["detail"]
-
-
-def test_proposal_returns_the_validated_payload_snapshot_and_expiry(client: TestClient) -> None:
-    response = client.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 200
-    body = response.json()
-
-    assert body["titles"] == [
-        "Retro Sunset Hike Tee",
-        "Take A Hike Graphic Shirt",
-        "Mountain Trail Tee",
-    ]
-    assert len(body["tags"]) == 20
-    assert body["description_leads"] == ["lead one", "lead two", "lead three"]
-    assert len(body["rationale"]) == 7
-    assert body["rationale"][0] == {
-        "phrase": "phrase 0",
-        "intent": "core_product",
-        "reason": "because",
-        "used_in": ["title"],
-    }
-    assert body["warnings"] == [{"message": "a non-blocking quality note", "kind": "general"}]
-    assert body["observed_text"] == "TAKE A HIKE"
-
-    snapshot = body["snapshot"]
-    assert snapshot["product_type"] == _GARMENT_TITLE
-    assert snapshot["etsy_category"] == ""
-    assert snapshot["materials"] == ["cotton"]
-    assert snapshot["colors"] == ["black", "blue-jean", "ivory", "moss"]
-    assert snapshot["garment_brand"] == "Comfort Colors"
-    assert snapshot["garment_model"] == "1717"
-    assert snapshot["garment_profile"] == "comfort-colors-1717"
-    assert snapshot["design"] == {"default": "designs/take-a-hike.png"}
-    assert (
-        snapshot["design_content_hash"]
-        == client.get(f"/api/listings/{LISTING}").json()["design_content_hash"]
-    )
-    assert snapshot["design_content_hash"] is not None
-    assert "Retro 70s sunset mountain scene" in snapshot["brief"]
-
-    from datetime import datetime
-
-    generated_at = datetime.fromisoformat(body["generated_at"])
-    expires_at = datetime.fromisoformat(body["expires_at"])
-    assert (expires_at - generated_at).total_seconds() == pytest.approx(86400, abs=1)
-
-
-def test_unconventional_design_keys_pick_the_same_image_after_reordering(
-    workspace_root: Path,
-) -> None:
-    _seed_prompt(workspace_root)
-    primary_ref = "designs/take-a-hike.png"
-    secondary_ref = "designs/alternate.png"
-    (workspace_root / "designs" / "alternate.png").write_bytes(b"alternate")
-    provider = _ready_provider(responses=[_valid_payload(), _valid_payload()])
-
-    with _client(workspace_root, providers=[provider]) as c:
-        edit_listing(workspace_root, design={"z": secondary_ref, "a": primary_ref})
-        assert c.post(f"/api/listings/{LISTING}/ai-seo/proposal").status_code == 200
-        edit_listing(workspace_root, design={"a": primary_ref, "z": secondary_ref})
-        assert c.post(f"/api/listings/{LISTING}/ai-seo/proposal").status_code == 200
-
-    assert provider.tasks[0].design_image == provider.tasks[1].design_image
-    assert provider.tasks[0].design_image.name == "take-a-hike.png"
-
-
-def test_proposal_surfaces_a_trademark_warning_from_hard_validation(
-    workspace_root: Path,
-) -> None:
-    payload = json.loads(_valid_payload())
-    payload["titles"][0] = "Nike-Inspired Take a Hike Tee"
-    provider = _ready_provider(responses=[json.dumps(payload)])
-    _seed_prompt(workspace_root)
-
-    with _client(workspace_root, providers=[provider]) as c:
-        body = c.post(f"/api/listings/{LISTING}/ai-seo/proposal").json()
-
-    kinds = {w["kind"] for w in body["warnings"]}
-    assert "trademark" in kinds
-
-
-def test_proposal_502s_when_every_response_is_malformed(workspace_root: Path) -> None:
-    provider = _ready_provider(responses=["not json", "still not json"])
-    _seed_prompt(workspace_root)
-
-    with _client(workspace_root, providers=[provider]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 502
-
-
-def test_proposal_503s_when_every_provider_is_unavailable(workspace_root: Path) -> None:
-    from etsy_listings.ai.errors import ProviderUnavailableError
-
-    provider = _ready_provider()
-
-    def _raise_unavailable(
-        request: SeoRequest, deadline: Any, *, repair: Any = None, cancel_event: Any = None
-    ) -> RawProviderResult:
-        raise ProviderUnavailableError("codex", "not authenticated")
-
-    provider.generate = _raise_unavailable  # type: ignore[method-assign]
-    _seed_prompt(workspace_root)
-
-    with _client(workspace_root, providers=[provider]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 503
-
-
-def test_proposal_499s_when_generation_is_cancelled(workspace_root: Path) -> None:
-    from etsy_listings.ai.errors import ProviderCancelledError
-
-    provider = _ready_provider()
-
-    def _raise_cancelled(
-        request: SeoRequest, deadline: Any, *, repair: Any = None, cancel_event: Any = None
-    ) -> RawProviderResult:
-        raise ProviderCancelledError("codex")
-
-    provider.generate = _raise_cancelled  # type: ignore[method-assign]
-    _seed_prompt(workspace_root)
-
-    with _client(workspace_root, providers=[provider]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 499
-
-
-def test_proposal_502s_when_the_provider_process_cannot_even_start(
-    workspace_root: Path,
-) -> None:
-    """`CliProcessError` (`ai/process.py.run_managed`'s own report that
-    `subprocess.Popen` itself failed -- e.g. a binary readiness confirmed
-    present and then removed before this call) is not a `SeoGenerationError`
-    subclass, so it falls to `request_seo_proposal`'s catch-all rather than
-    one of the named `except` clauses. Without that catch-all this would
-    escape as FastAPI's unmapped, plain-text 500 instead of the "Try again"
-    outcome the settled "Timeout and retries" decision promises for every
-    failure that is not a recognised availability failure or a
-    cancellation."""
-    from etsy_listings.ai.process import CliProcessError
-
-    provider = _ready_provider()
-
-    def _raise_cli_process_error(
-        request: SeoRequest, deadline: Any, *, repair: Any = None, cancel_event: Any = None
-    ) -> RawProviderResult:
-        raise CliProcessError("could not start ['codex', 'exec']: [WinError 2]")
-
-    provider.generate = _raise_cli_process_error  # type: ignore[method-assign]
-    _seed_prompt(workspace_root)
-
-    with _client(workspace_root, providers=[provider]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 502
-    assert "could not start" in response.json()["detail"]
-
-
-def test_proposal_502s_with_the_usual_json_shape_for_any_unrecognised_adapter_bug(
-    workspace_root: Path,
-) -> None:
-    """The catch-all in `request_seo_proposal` exists for exactly this case:
-    an adapter bug this module cannot enumerate in advance (not a
-    `SeoGenerationError` subclass at all, unlike every other error test in
-    this file). It must still come back as this module's own
-    ``{"detail": ...}`` JSON convention -- the same shape every other status
-    code here uses -- rather than FastAPI's plain-text "Internal Server
-    Error", which a future frontend (PR7) would have to special-case."""
-    provider = _ready_provider()
-
-    def _raise_unexpected(
-        request: SeoRequest, deadline: Any, *, repair: Any = None, cancel_event: Any = None
-    ) -> RawProviderResult:
-        raise ZeroDivisionError("division by zero")
-
-    provider.generate = _raise_unexpected  # type: ignore[method-assign]
-    _seed_prompt(workspace_root)
-
-    with _client(workspace_root, providers=[provider]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 502
-    assert response.json() == {"detail": "division by zero"}
-
-
-def test_proposal_frees_the_listing_after_an_unrecognised_adapter_bug(
-    workspace_root: Path,
-) -> None:
-    """The catch-all must not bypass the ``finally`` -- an adapter bug on one
-    request must not permanently strand the listing's
-    :class:`~etsy_listings.ui.api.seo.ActiveSeoRequests` claim, the same
-    property :func:`test_a_failed_request_still_frees_the_listing` proves
-    for the named `SeoGenerationError` outcomes."""
-    provider = _ready_provider(responses=[_valid_payload()])
-    original_generate = provider.generate
-    calls = {"count": 0}
-
-    def _flaky_once(
-        request: SeoRequest, deadline: Any, *, repair: Any = None, cancel_event: Any = None
-    ) -> RawProviderResult:
-        calls["count"] += 1
-        if calls["count"] == 1:
-            raise ZeroDivisionError("division by zero")
-        return original_generate(request, deadline, repair=repair, cancel_event=cancel_event)
-
-    provider.generate = _flaky_once  # type: ignore[method-assign]
-    _seed_prompt(workspace_root)
-
-    with _client(workspace_root, providers=[provider]) as c:
-        failed = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-        assert failed.status_code == 502
-
-        retried = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert retried.status_code == 200
-
-
-def test_proposal_409s_for_a_listing_with_no_usable_garment_profile(
-    workspace_root: Path,
-) -> None:
-    _seed_prompt(workspace_root)
-    edit_listing(workspace_root, garment_profile="does-not-exist")
-
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 409
-    assert "garment profile" in response.json()["detail"]
-
-
-def test_proposal_409s_for_a_legacy_design_ref_naming_the_migration(
-    workspace_root: Path,
-) -> None:
-    """PRD 72: an unmigrated `design:` is the seller's to fix, not a 500."""
-    _seed_prompt(workspace_root)
-    edit_listing(workspace_root, design="../../designs/take-a-hike.png")
-
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 409
-    assert "scripts/migrate_workspace_refs.py" in response.json()["detail"]
-
-
-def test_proposal_leaves_the_workspace_unwritten(workspace_root: Path) -> None:
-    _seed_prompt(workspace_root)
-    listing_path = workspace_root / "listings" / LISTING / "listing.yaml"
-    before_bytes = listing_path.read_bytes()
-    before_tree = sorted(p.relative_to(workspace_root) for p in workspace_root.rglob("*"))
-
-    with _client(workspace_root, providers=[_ready_provider()]) as c:
-        response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert response.status_code == 200
-    assert listing_path.read_bytes() == before_bytes
-    after_tree = sorted(p.relative_to(workspace_root) for p in workspace_root.rglob("*"))
-    assert after_tree == before_tree
-    assert not (workspace_root / "listings" / LISTING / "state.lock.json").exists()
-    assert not (workspace_root / COMMON_COPY_DIR / "ai-seo").exists()
-
-
-# --------------------------------------------------------------- concurrency
-
-
-@dataclass
-class _BlockingProvider:
-    """Blocks inside `generate()` until released -- so a test can prove a
-    request is genuinely in flight (`started` fires) before deciding what a
-    second, overlapping request sees."""
-
-    ready: ProviderReadiness = field(default_factory=lambda: ProviderReadiness(ready=True))
-    started: threading.Event = field(default_factory=threading.Event)
-    release: threading.Event = field(default_factory=threading.Event)
-
-    def readiness(self) -> ProviderReadiness:
-        return self.ready
-
-    def generate(
-        self,
-        request: SeoRequest,
-        deadline: Any,
-        *,
-        repair: Any = None,
-        cancel_event: Any = None,
-    ) -> RawProviderResult:
-        self.started.set()
-        self.release.wait(timeout=10)
-        return RawProviderResult(provider="codex", raw_output=_valid_payload())
-
-
-@dataclass
-class _ConcurrencyProbeProvider:
-    """Records the highest number of ``generate()`` calls it ever saw in
-    flight at once, then blocks every call on one shared ``release`` gate --
-    proof that two overlapping requests were never serialised through this
-    provider, whatever :class:`~etsy_listings.ui.api.seo.ActiveSeoRequests`
-    otherwise refuses."""
-
-    ready: ProviderReadiness = field(default_factory=lambda: ProviderReadiness(ready=True))
-    release: threading.Event = field(default_factory=threading.Event)
-    _lock: threading.Lock = field(default_factory=threading.Lock, init=False)
-    concurrent_calls: int = field(default=0, init=False)
-    max_concurrent: int = field(default=0, init=False)
-
-    def readiness(self) -> ProviderReadiness:
-        return self.ready
-
-    def generate(
-        self,
-        request: SeoRequest,
-        deadline: Any,
-        *,
-        repair: Any = None,
-        cancel_event: Any = None,
-    ) -> RawProviderResult:
-        with self._lock:
-            self.concurrent_calls += 1
-            self.max_concurrent = max(self.max_concurrent, self.concurrent_calls)
-        self.release.wait(timeout=10)
-        with self._lock:
-            self.concurrent_calls -= 1
-        return RawProviderResult(provider="codex", raw_output=_valid_payload())
-
-
-def test_proposal_snapshot_keeps_inputs_from_before_generation(workspace_root: Path) -> None:
-    _seed_prompt(workspace_root)
-    provider = _BlockingProvider()
-    responses: list[dict[str, Any]] = []
-
-    with _client(workspace_root, providers=[provider]) as c:
-
-        def request_proposal() -> None:
-            responses.append(c.post(f"/api/listings/{LISTING}/ai-seo/proposal").json())
-
-        thread = threading.Thread(target=request_proposal)
-        thread.start()
-        try:
-            assert provider.started.wait(timeout=5)
-            original = c.get(f"/api/listings/{LISTING}").json()
-            edit_listing(workspace_root, brief="A different brief saved during generation")
-            updated = c.get(f"/api/listings/{LISTING}").json()
-            assert updated["brief"] != original["brief"]
-        finally:
-            provider.release.set()
-            thread.join(timeout=10)
-
-    assert len(responses) == 1
-    assert responses[0]["snapshot"]["brief"] == original["brief"]
-
-
-def test_a_second_request_for_the_same_listing_is_refused_while_the_first_is_active(
-    workspace_root: Path,
-) -> None:
-    _seed_prompt(workspace_root)
-    provider = _BlockingProvider()
-
-    results: dict[str, int] = {}
-    with _client(workspace_root, providers=[provider]) as c:
-        thread = threading.Thread(
-            target=lambda: results.__setitem__(
-                "first", c.post(f"/api/listings/{LISTING}/ai-seo/proposal").status_code
-            )
-        )
-        thread.start()
-        assert provider.started.wait(timeout=5)
-
-        second_response = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-        provider.release.set()
-        thread.join(timeout=10)
-
-    assert second_response.status_code == 409
-    assert "already running" in second_response.json()["detail"]
-    assert results["first"] == 200
-
-
-def test_different_listings_run_concurrently(workspace_root: Path) -> None:
-    _seed_prompt(workspace_root)
-    copy_listing(workspace_root, "second-listing")
-    provider = _ConcurrencyProbeProvider()
-
-    results: dict[str, int] = {}
-    with _client(workspace_root, providers=[provider]) as c:
-        first = threading.Thread(
-            target=lambda: results.__setitem__(
-                "first", c.post(f"/api/listings/{LISTING}/ai-seo/proposal").status_code
-            )
-        )
-        second = threading.Thread(
-            target=lambda: results.__setitem__(
-                "second",
-                c.post("/api/listings/second-listing/ai-seo/proposal").status_code,
-            )
-        )
-        first.start()
-        second.start()
-
-        deadline = time.monotonic() + 5
-        while provider.max_concurrent < 2 and time.monotonic() < deadline:
-            time.sleep(0.01)
-
-        provider.release.set()
-        first.join(timeout=10)
-        second.join(timeout=10)
-
-    assert provider.max_concurrent == 2
-    assert results["first"] == 200
-    assert results["second"] == 200
-
-
-def test_ending_a_request_frees_the_listing_for_a_later_request(workspace_root: Path) -> None:
-    """Not a concurrency test: proves the registry entry is released after a
-    request finishes, so a *later*, non-overlapping request for the same
-    listing is never permanently locked out by an earlier one."""
-    _seed_prompt(workspace_root)
-    provider = _ready_provider(responses=[_valid_payload(), _valid_payload()])
-
-    with _client(workspace_root, providers=[provider]) as c:
-        first = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-        second = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert first.status_code == 200
-    assert second.status_code == 200
-
-
-def test_a_failed_request_still_frees_the_listing(workspace_root: Path) -> None:
-    """A provider failure must release the active-request claim in its
-    ``finally`` -- otherwise one failed generation would strand a listing
-    refusing every later request forever."""
-    provider = _ready_provider(responses=["not json", "still not json"])
-    _seed_prompt(workspace_root)
-
-    with _client(workspace_root, providers=[provider]) as c:
-        failed = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-        assert failed.status_code == 502
-
-        provider.responses = [_valid_payload()]
-        retried = c.post(f"/api/listings/{LISTING}/ai-seo/proposal")
-
-    assert retried.status_code == 200
+    body = _readiness(workspace_root, providers)
+
+    assert body["ready"] is False
+    assert "codex is not authenticated" in str(body["reason"])
+    assert "claude was not found on PATH" in str(body["reason"])

@@ -1,4 +1,4 @@
-"""Browser test for videos in the listing gallery (PRD 71, 72): that the
+"""Browser test for videos in the listing gallery (PRD 72, 73): that the
 React reel, the media-files endpoints and the real `listing.yaml` agree about
 where a video sits, and that the browser really decodes the file the API
 serves.
@@ -67,7 +67,7 @@ def test_add_two_videos_drag_the_second_and_autosave_the_gallery(
     black, blue_jean, ivory, moss = (_image(c) for c in ("black", "blue-jean", "ivory", "moss"))
     _wait_for_media(page, workspace_root, [black, SHARED, blue_jean, ivory, moss])
 
-    # The second goes on the end, from the listing's own directory (PRD 72).
+    # The second goes on the end, from the listing's own directory (PRD 73).
     page.get_by_role("button", name="how-it-fits.mp4").click()
     _wait_for_media(page, workspace_root, [black, SHARED, blue_jean, ivory, moss, OWN])
 

@@ -9,7 +9,7 @@ import type { Focus } from "./focus";
 /**
  * The listing's gallery, in the order Etsy will show it, reorderable by drag.
  *
- * Videos sit inline, because `media:` is the gallery (PRD 71): a muted clip
+ * Videos sit inline, because `media:` is the gallery (PRD 72): a muted clip
  * on its own frame with a play badge, playing on hover. Position 2 is where
  * Etsy pins the featured video, and is labelled so. Which drops the gallery
  * rules allow is `mediaEdits`' answer, asked while a tile is carried so a
@@ -54,7 +54,7 @@ export function MediaReel({
 }: Props) {
   const [dragIndex, setDragIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
-  // Images are what Etsy caps at twenty; videos are counted apart (PRD 71).
+  // Images are what Etsy caps at twenty; videos are counted apart (PRD 72).
   const images = media.filter((entry) => mediaKind(entry) === "image").length;
   const videos = media.length - images;
 

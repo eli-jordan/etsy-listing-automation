@@ -74,7 +74,7 @@ too."""
 
 
 def _check_gallery(media: list[MediaEntry]) -> None:
-    """`media:` is the gallery in order (PRD 71), and these are the layouts
+    """`media:` is the gallery in order (PRD 72), and these are the layouts
     Etsy cannot show at all -- malformed rather than incomplete (PRD 70), so
     they refuse the write instead of waiting in the issues banner.
 

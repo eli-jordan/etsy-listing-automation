@@ -95,7 +95,7 @@ def test_resolve_rejects_symlink_escape(workspace_root: Path, tmp_path: Path) ->
 
 
 class TestResolveRef:
-    """PRD 72: every path in `listing.yaml` is a ref with two roots."""
+    """PRD 73: every path in `listing.yaml` is a ref with two roots."""
 
     @pytest.fixture
     def ws(self, workspace_root: Path) -> Workspace:
@@ -221,7 +221,7 @@ def test_common_media_files_lists_every_image_and_video_recursively(
 ) -> None:
     """The other half of `media:` -- a file ref to something shared across
     listings, rather than a rendered mockup. Every type `media:` accepts
-    (PRD 71), in subdirectories too, sorted by path."""
+    (PRD 72), in subdirectories too, sorted by path."""
     shared = workspace_root / "common-media"
     (shared / "videos").mkdir(parents=True)
     for name in ("size-guide.png", "care.JPG", "photo.jpeg", "videos/intro.mp4", "clip.MOV"):
@@ -284,7 +284,7 @@ def test_common_media_files_is_empty_when_the_directory_is_absent(workspace_root
 
 
 class TestListingMediaFiles:
-    """A listing's own files, the `./` half of `media:` (PRD 71, 72).
+    """A listing's own files, the `./` half of `media:` (PRD 72, 73).
 
     A security boundary (A8): the listing name and the path both arrive from
     URLs, and the directory also holds `listing.yaml` and the lockfile, which
@@ -730,3 +730,27 @@ def test_remove_listing_wipes_its_previews_too(workspace_root: Path) -> None:
     ws.remove_listing("take-a-hike")
 
     assert not ws.preview_dir("take-a-hike").exists()
+
+
+def test_remove_listing_removes_its_market_snapshot_and_no_other(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    mine = ws.market_snapshot_file("take-a-hike")
+    other = ws.market_snapshot_file("another-listing")
+    mine.parent.mkdir(parents=True)
+    mine.write_text("{}", encoding="utf-8")
+    other.write_text("{}", encoding="utf-8")
+
+    ws.remove_listing("take-a-hike")
+
+    assert not mine.exists()
+    assert other.exists()
+
+
+def test_market_caches_live_under_the_cache_directory(workspace_root: Path) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    market = ws.root / ".cache" / "market"
+    assert ws.market_search_cache_dir() == market / "search"
+    assert ws.market_stats_cache_dir() == market / "stats"
+    assert ws.market_snapshot_file("take-a-hike") == market / "snapshots" / "take-a-hike.json"
+    with pytest.raises(InvalidNameError):
+        ws.market_snapshot_file("../escape")

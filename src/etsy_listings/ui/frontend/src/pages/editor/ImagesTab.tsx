@@ -61,7 +61,7 @@ export function ImagesTab({ detail, onUpdate }: Props) {
       .catch(() => setStatus("failed to load shared files"));
   }, []);
 
-  // A draft has no directory, so nothing of its own to list (PRD 72).
+  // A draft has no directory, so nothing of its own to list (PRD 73).
   const listing = detail.name || null;
   useEffect(() => {
     if (listing === null) return;
@@ -123,7 +123,7 @@ export function ImagesTab({ detail, onUpdate }: Props) {
             )}
             {view?.kind === "video" && (
               /* Its own controls, not the carousel button: a click on a
-                  clip is play or seek (PRD 71). Keyed by the file, so
+                  clip is play or seek (PRD 72). Keyed by the file, so
                   pointing at another clip starts that one afresh. */
               <video
                 key={view.picture}

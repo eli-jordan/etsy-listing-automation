@@ -20,7 +20,7 @@ its own ``yaml.safe_load`` against a path it assembled.
 :class:`WorkspaceFacts` is the same rule applied to *repeated* reading: the
 garment profiles and template configs a listing check needs, gathered once for
 a request rather than re-parsed inside every check of every row -- and the
-videos `media:` names, each probed once (PRD 71). :func:`probe_video` is the
+videos `media:` names, each probed once (PRD 72). :func:`probe_video` is the
 probe itself, the one reader of a clip's facts.
 """
 
@@ -45,12 +45,12 @@ __all__ = [
     "ScenePhoto",
     # What a listing check reads off the tree, gathered once per request.
     "WorkspaceFacts",
-    # A video file's facts, never an exception (PRD 71).
+    # A video file's facts, never an exception (PRD 72).
     "probe_video",
     # The five refusals, each naming what it refused and why.
     "WorkspaceNotFoundError",
     "PathEscapesWorkspaceError",
-    # A `listing.yaml` path that is not a two-root ref (PRD 72).
+    # A `listing.yaml` path that is not a two-root ref (PRD 73).
     "InvalidRefError",
     "InvalidNameError",
     "AmbiguousColourSuffixError",

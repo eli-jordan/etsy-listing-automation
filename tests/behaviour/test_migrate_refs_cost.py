@@ -1,4 +1,4 @@
-"""PRD 72's cost claim, pinned: migrating a workspace's refs re-uploads its
+"""PRD 73's cost claim, pinned: migrating a workspace's refs re-uploads its
 shared images once, and nothing else.
 
 A workspace is applied end to end against in-memory clients, then put back

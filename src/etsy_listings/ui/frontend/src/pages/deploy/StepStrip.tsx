@@ -10,7 +10,7 @@ import { STAGE_LABELS, stageActions, stageBlocked, stageReason, stageWillRun } f
  * plan draws one cell and an `_all_blocked` listing draws every stage red).
  *
  * A stage the engine puts under another by `group` (`etsy_videos` under
- * `etsy_media`, PRD 71) is drawn beside it inside one labelled group, so the
+ * `etsy_media`, PRD 72) is drawn beside it inside one labelled group, so the
  * strip reads as the CLI's `etsy_media/etsy_videos` does. The grouping is the
  * engine's data, never inferred here from a name.
  */

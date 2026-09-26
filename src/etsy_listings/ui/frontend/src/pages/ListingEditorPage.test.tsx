@@ -3,6 +3,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as calibrator from "../api/calibrator";
 import * as listingsApi from "../api/listings";
+import * as seoApi from "../api/seo";
+import { briefEvent, type FakeAiRuns, fakeAiRuns, stepEvent } from "../test/aiRuns";
 import type { ListingDetail } from "../types";
 import { ListingEditorPage } from "./ListingEditorPage";
 
@@ -52,10 +54,20 @@ function renderAt(path: string) {
   );
 }
 
+let runs: FakeAiRuns;
+
 beforeEach(() => {
+  runs = fakeAiRuns();
   vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
   vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([]);
   vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([]);
+  // The editor asks these as soon as a saved listing has a design, brief or
+  // not. A fixture that never opens Listing Details still mounts the hook.
+  vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+    shop_name: "Pine & Thread",
+    storage_id: "workspace-1",
+  });
+  vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -179,7 +191,7 @@ describe("ListingEditorPage", () => {
   });
 
   it("shows an info note quietly: no warning icon, and never counted as a warning", async () => {
-    /* PRD 71: Etsy strips a video's sound. Worth saying, nothing to fix. */
+    /* PRD 72: Etsy strips a video's sound. Worth saying, nothing to fix. */
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
       detail({
         issues: [
@@ -292,6 +304,54 @@ describe("ListingEditorPage", () => {
         design: "designs/cosmic-cat.png",
       }),
     );
+  });
+
+  it("runs the AI chain once the picked design is saved, and fills in the brief it drafts", async () => {
+    /* PRD 68: a pick on a listing whose brief is empty arms the chain; the
+       save that follows fires it. The server writes the drafted brief, so
+       the field fills in without another save. */
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "take-a-hike", file: "designs/take-a-hike.png" },
+      { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
+    ]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const patchSpy = vi
+      .spyOn(listingsApi, "patchListing")
+      .mockResolvedValue(detail({ design: { default: "designs/cosmic-cat.png" } }));
+    renderAt("/listings/take-a-hike");
+    await screen.findByText("designs/take-a-hike.png");
+
+    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+
+    await waitFor(() =>
+      expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true }),
+    );
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(stepEvent("brief", "active", "Reading cosmic-cat.png"));
+    expect(screen.getByText("Drafting brief…")).toBeInTheDocument();
+    // Still on Variants: the details tab is unmounted, and the notice has to
+    // be up anyway, at the moment the run starts. It is portaled to the
+    // document, so leaving Variants does not take it with the tab.
+    const notice = "AI Mode is writing a title, tags and a description from this design.";
+    expect(screen.queryByLabelText("Brief")).not.toBeInTheDocument();
+    const toast = screen.getByText(notice).closest(".ai-auto-toast");
+    expect(toast?.parentElement).toBe(document.body);
+    expect(document.querySelector(".editor .ai-auto-toast")).toBeNull();
+
+    vi.spyOn(listingsApi, "listPricingPlans").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
+    for (const tab of ["Pricing", "Listing Images", "Listing Details"]) {
+      fireEvent.click(screen.getByText(tab));
+      expect(screen.getByText(notice)).toBeInTheDocument();
+      expect(screen.getByText(notice).closest(".details-tab")).toBeNull();
+    }
+
+    fireEvent.click(screen.getByText("Listing Details"));
+    runs.emit(briefEvent("A cat in a spacesuit."), stepEvent("brief", "done"));
+
+    expect(screen.getByLabelText("Brief")).toHaveValue("A cat in a spacesuit.");
+    expect(patchSpy).toHaveBeenCalledTimes(1);
   });
 
   it("does not rename a listing that already has a name when its design changes", async () => {

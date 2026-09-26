@@ -7,7 +7,7 @@ Subsidiary to [prd.md](prd.md) and [implementation-plan.md](implementation-plan.
 in the way [multi-placement-rendering.md](multi-placement-rendering.md) is —
 detail those two point at rather than a third authority. Where it disagrees
 with the PRD, the PRD wins. Its decisions are recorded there as **PRD 52–59**
-and **A24–A28**, and listing videos as **PRD 71**; what this document adds is
+and **A24–A28**, and listing videos as **PRD 72**; what this document adds is
 the reasoning and the measurements behind them, which a one-row summary in a
 decision log cannot carry.
 
@@ -455,7 +455,7 @@ media stage's desired document carries a hash where the file exists and a
 pending marker where it does not, `plan` renders "4 images (pending render)",
 and `apply` hashes at upload time and records what it actually sent.
 
-### 9. Videos are placed by attach order — PRD 71
+### 9. Videos are placed by attach order — PRD 72
 
 Etsy's video surface is two calls. `uploadListingVideo` takes a file or the
 `video_id` of one the shop already has, and `deleteListingVideo` removes one.
@@ -510,7 +510,7 @@ the first:
 
 #### How the stage places them
 
-`media:` is the gallery (PRD 71), so the desired layout reads straight off it:
+`media:` is the gallery (PRD 72), so the desired layout reads straight off it:
 the featured video is the one at position 2, and the second video's anchor is
 the number of images before it. `etsy_videos` runs after `etsy_media`, once
 the images are uploaded and ordered, and brings the listing to that layout:
@@ -740,7 +740,7 @@ count in the findings document came from.
 The image count gate (≤20, PRD) stays a plan-time validation over the
 manifest, not a check against what Etsy currently holds — Printify's stragglers
 would otherwise make a valid listing look over the cap. It counts images only;
-videos are PRD 71's, and have a cap of their own.
+videos are PRD 72's, and have a cap of their own.
 
 ### `etsy_videos`
 
