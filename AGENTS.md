@@ -188,6 +188,11 @@ src/etsy_listings/
                   share one fallback order, one repair rule and one deadline
                 brief.py -- everything drafting-specific in one small module:
                   request, schema, packaged prompt, validation
+  market/       market-informed SEO's research, in memory: `research()` turns
+                three queries into at most 20 scored listings (percentiles,
+                top-20 review rationing, 5 calls in flight), the ranked
+                phrase list, and `market_block()`, the delimited data the
+                proposal prompt gets (market-seo.md). No files, no cache  [done]
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
                 frontend/ -- AppShell/DashboardPage/ListingsPage/
