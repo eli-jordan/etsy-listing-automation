@@ -121,6 +121,27 @@ class ListingImage(BaseModel):
     asked for images (`include_images=True`), same as `rank`."""
 
 
+class ListingVideo(BaseModel):
+    """One video on a listing, as `getListing?includes=Videos`,
+    `uploadListingVideo` and a re-attach by id all return it (decision 9).
+
+    `video_state` is carried because an `inactive` video stays in every list
+    Etsy returns -- a caller that took presence for "on the listing" would
+    miss one that no longer shows. The dimensions are Etsy's transcode, not
+    the file's: a 1440 px upload came back 1440, a 540 px one 540, and
+    neither says where in the gallery the video sits; nothing does.
+    """
+
+    model_config = ConfigDict(extra="ignore")
+
+    video_id: int
+    video_state: str | None = None
+    width: int | None = None
+    height: int | None = None
+    video_url: str | None = None
+    thumbnail_url: str | None = None
+
+
 class VariationImageLink(BaseModel):
     """One `(property, value) -> image` swatch binding (PRD 56).
 
@@ -209,15 +230,19 @@ class Listing(BaseModel):
     processing_min: int | None = None
     processing_max: int | None = None
     images: tuple[ListingImage, ...] = ()
+    videos: tuple[ListingVideo, ...] = ()
+    """Newest *upload* first, inactive ones included (measured). An ordering
+    of the response, not of the gallery -- which the API never reports."""
 
-    @field_validator("images", mode="before")
+    @field_validator("images", "videos", mode="before")
     @classmethod
     def _null_images_is_none_requested(cls, value: object) -> object:
         """``getListing`` sends ``images: null``, not an omitted key or ``[]``,
         when called without ``includes=Images`` (measured) -- the default
         every ``read_live()`` but ``etsy_media``'s asks for. The field default
         only covers a *missing* key, so without this a plain re-plan of an
-        existing listing fails validation on every run."""
+        existing listing fails validation on every run. ``videos`` has the
+        same shape without ``includes=Videos`` (PRD 72)."""
         return () if value is None else value
 
 

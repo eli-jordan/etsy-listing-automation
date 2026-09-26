@@ -45,8 +45,12 @@ from PIL import Image, UnidentifiedImageError
 
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing, TemplateMediaEntry
+from etsy_listings.config.media import ProbeFailure, VideoFacts
 
-Severity = Literal["block", "warn"]
+Severity = Literal["block", "warn", "info"]
+"""``info`` is a note about what Etsy will do, not a problem with the listing
+-- the one today is that Etsy strips a video's sound (PRD 72). The banner shows
+it quietly and `engine/stages/gates.py` never refuses on it."""
 Tab = Literal["variants", "pricing", "images", "details"]
 
 
@@ -448,6 +452,66 @@ def _check_colours_in_garment_profile(
     ]
 
 
+MAX_VIDEO_BYTES = 100_000_000
+"""Etsy's help page: "max 100 MB". Read as decimal megabytes, the stricter of
+the two readings, so a file this passes is one Etsy accepts either way."""
+MIN_VIDEO_SECONDS = 3.0
+MAX_VIDEO_SECONDS = 15.0
+MIN_VIDEO_SHORT_SIDE = 500
+"""The help page's "minimum 500px", applied to the shorter side: it gives no
+axis, and a clip whose shorter side reaches 500 reaches it on both."""
+
+
+def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> list[Issue]:
+    """Refuse a video Etsy's help page would reject (PRD 72).
+
+    The help page, not the API, because the API is no guide: it accepted a
+    3 s and a 20 s clip and answered a non-video with a bare ``500``
+    (decision 9). Keyed by the ref ``media:`` names it by, so every message
+    names the file the seller has to go and fix. No aspect rule -- the help
+    page states none.
+
+    The extension is not checked here: `Listing` refuses a ref that is neither
+    an image nor a video when it loads, and the probe refuses a file whose
+    contents are not MP4/MOV whatever it is called.
+    """
+    issues: list[Issue] = []
+    for ref, facts in videos.items():
+        where = f"Listing Images › {ref}"
+
+        def block(message: str, where: str = where) -> None:
+            issues.append(Issue("block", "images", where, message))
+
+        if isinstance(facts, ProbeFailure):
+            block(f"{ref} {facts.reason}. Etsy takes an MP4 or MOV video with a picture.")
+            continue
+        if facts.size_bytes > MAX_VIDEO_BYTES:
+            block(
+                f"{ref} is {facts.size_bytes / 1_000_000:.1f} MB, over Etsy's "
+                f"{MAX_VIDEO_BYTES // 1_000_000} MB limit for a video."
+            )
+        if not MIN_VIDEO_SECONDS <= facts.duration_seconds <= MAX_VIDEO_SECONDS:
+            block(
+                f"{ref} runs {facts.duration_seconds:.1f} s; Etsy takes videos of "
+                f"{MIN_VIDEO_SECONDS:g}–{MAX_VIDEO_SECONDS:g} seconds."
+            )
+        if min(facts.width, facts.height) < MIN_VIDEO_SHORT_SIDE:
+            block(
+                f"{ref} is {facts.width}x{facts.height}; Etsy needs at least "
+                f"{MIN_VIDEO_SHORT_SIDE} px on the shorter side."
+            )
+        if facts.has_audio:
+            issues.append(
+                Issue(
+                    "info",
+                    "images",
+                    where,
+                    f"{ref} has a sound track; Etsy strips the sound, so buyers see it silent.",
+                )
+            )
+    return issues
+
+
 def check_lifecycle_verb(lifecycle: str | None, *, published: bool) -> list[Issue]:
     """Refuse the wrong end-of-life verb (PRD 62).
 
@@ -487,6 +551,7 @@ def check_listing(
     templates: Mapping[str, TemplateInfo],
     published: bool | None = None,
     description_ref_error: str | None = None,
+    videos: Mapping[str, VideoFacts | ProbeFailure] | None = None,
 ) -> list[Issue]:
     """Every business-level issue with ``listing``, assuming it already passed
     `Listing.model_validate` -- structural failures are the API layer's to
@@ -502,6 +567,10 @@ def check_listing(
     ``Workspace.load_common_copy(listing.etsy.description.ref)`` attempt,
     pre-resolved the same way ``design_paths`` is -- ``None`` when there is no
     ref to check, or when it resolved fine.
+
+    ``videos`` is every video ``media:`` names, probed by the caller --
+    `WorkspaceFacts.videos` -- and keyed by its ref, for the same reason: this
+    module opens no file.
     """
     issues: list[Issue] = []
     issues += _check_garment_profile_exists(listing, garment_profile_names)
@@ -515,6 +584,7 @@ def check_listing(
         issues += _check_colours_in_garment_profile(listing, garment_profile)
     issues += _check_template_kind_colour_match(listing, templates)
     issues += _check_variation_images(listing, templates)
+    issues += check_videos(videos or {})
     issues += _check_tags(listing)
     if published is not None:
         issues += check_lifecycle_verb(listing.lifecycle, published=published)

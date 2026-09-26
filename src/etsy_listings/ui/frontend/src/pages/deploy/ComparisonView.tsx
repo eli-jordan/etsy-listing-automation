@@ -1,6 +1,13 @@
+import { MutedClip } from "../../components/MutedClip";
 import { pictureFor, singleDesignName } from "../../media";
 import type { ListingDetail, RenderSnapshot } from "../../types";
-import type { AfterImageTile, BeforeImageTile, Comparison as ComparisonData } from "./comparison";
+import type {
+  AfterImageTile,
+  AfterVideoTile,
+  BeforeImageTile,
+  BeforeVideoTile,
+  Comparison as ComparisonData,
+} from "./comparison";
 import { wordDiff } from "./wordDiff";
 
 /**
@@ -31,6 +38,9 @@ import { wordDiff } from "./wordDiff";
  *   shows today's picture directly -- there is nothing new to wait for.
  *   Neither of those endpoints exists for a bare shared-media ref, which
  *   renders through `pictureFor` like the editor's own reel does.
+ * - A video (PRD 72) is drawn "after" from its own file, as a muted clip the
+ *   browser gives a poster frame, and "now" from Etsy's `thumbnail_url` --
+ *   the one picture of it the API offers.
  */
 
 export interface ListingMediaContext {
@@ -80,7 +90,7 @@ function AfterTile({
   if (imageUrlForRef !== undefined) {
     src = imageUrlForRef(tile.ref);
   } else if (parsed === null) {
-    src = pictureFor(tile.ref, design, "full");
+    src = pictureFor(tile.ref, design, "full", listing.name || null);
   } else {
     const scene = sceneState(renderSnapshot, parsed.template, parsed.colour);
     const key = `${parsed.template}|${parsed.colour ?? ""}`;
@@ -135,6 +145,41 @@ function BeforeTile({ tile }: { tile: BeforeImageTile }) {
   );
 }
 
+function AfterVideo({ tile, listing }: { tile: AfterVideoTile; listing: string }) {
+  const isNew = tile.badge === "new";
+  return (
+    <figure className="dv-thumb-wrap">
+      <div className={`dv-thumb${isNew ? " dv-thumb--new" : ""}`}>
+        <MutedClip src={pictureFor(tile.ref, null, "full", listing || null)} label={tile.ref} />
+        {isNew && <span className="dv-thumb__badge dv-thumb__badge--new">New</span>}
+      </div>
+      <figcaption className="dv-thumb__caption">
+        {tile.slot === "featured" ? "Featured · 2nd" : `After ${tile.afterImages ?? 0} images`}
+      </figcaption>
+    </figure>
+  );
+}
+
+function BeforeVideo({ tile }: { tile: BeforeVideoTile }) {
+  const gone = tile.badge === "removed";
+  return (
+    <figure className="dv-thumb-wrap">
+      <div className={`dv-thumb${gone ? " dv-thumb--gone" : ""}`}>
+        {tile.url !== null ? (
+          <img alt={tile.ref ?? "listing video"} src={tile.url} />
+        ) : (
+          <span className="dv-thumb--empty" aria-hidden="true" />
+        )}
+        {gone && <span className="dv-thumb__badge dv-thumb__badge--gone">Removed</span>}
+      </div>
+      <figcaption className="dv-thumb__caption">
+        {tile.ref === null ? "Not uploaded by this tool" : tile.ref.split("/").pop()}
+        {tile.inactive && " · Not playing on Etsy"}
+      </figcaption>
+    </figure>
+  );
+}
+
 function Block({
   label,
   changed,
@@ -180,7 +225,7 @@ function Column({
   imageUrlForRef: ((ref: string) => string | null) | undefined;
 }) {
   const isAfter = side === "after";
-  const { title, description, tags, materials, colours, price, images } = comparison;
+  const { title, description, tags, materials, colours, price, images, videos } = comparison;
 
   return (
     <div className="dv-col">
@@ -204,6 +249,18 @@ function Column({
                   />
                 ))
               : images.before.map((tile) => <BeforeTile key={tile.rank} tile={tile} />)}
+          </div>
+        </Block>
+      )}
+
+      {videos && (
+        <Block label="Videos" changed={videos.changed} side={side}>
+          <div className="dv-gallery dv-gallery--videos">
+            {isAfter
+              ? videos.after.map((tile) => (
+                  <AfterVideo key={tile.ref} tile={tile} listing={listing.name} />
+                ))
+              : videos.before.map((tile) => <BeforeVideo key={tile.videoId} tile={tile} />)}
           </div>
         </Block>
       )}

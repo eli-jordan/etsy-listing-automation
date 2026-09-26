@@ -9,6 +9,7 @@ a real file on disk (design resolution) uses `tmp_path` the same way
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from PIL import Image
@@ -22,7 +23,9 @@ from etsy_listings.config.listing_validation import (
     check_lifecycle_verb,
     check_listing,
     check_listing_yaml_present,
+    check_videos,
 )
+from etsy_listings.config.media import ProbeFailure, VideoFacts
 
 PROFILE = GarmentProfile(
     blueprint=BlueprintRef(brand="Comfort Colors", model="1717"),
@@ -83,6 +86,7 @@ def _check(
     templates: dict[str, TemplateInfo] | None = None,
     published: bool | None = None,
     description_ref_error: str | None = None,
+    videos: dict[str, VideoFacts | ProbeFailure] | None = None,
 ) -> list[Issue]:
     return check_listing(
         listing,
@@ -94,6 +98,7 @@ def _check(
         templates=templates if templates is not None else {"flat-lay-01": FLAT_LAY},
         published=published,
         description_ref_error=description_ref_error,
+        videos=videos if videos is not None else {},
     )
 
 
@@ -387,7 +392,7 @@ class TestNothingChosenYet:
 
     def test_a_pricing_plan_alone_satisfies_it(self) -> None:
         listing = _listing().model_copy(
-            update={"prices": {}, "pricing_plan": "../../pricing-plans/tee.yaml"}
+            update={"prices": {}, "pricing_plan": "pricing-plans/tee.yaml"}
         )
         assert not [i for i in _check(listing) if "Pricing" in i.where]
 
@@ -441,3 +446,80 @@ class TestMissingListingYaml:
 
     def test_a_present_file_is_silent(self) -> None:
         assert check_listing_yaml_present(present=True) == []
+
+
+GOOD_VIDEO = VideoFacts(
+    size_bytes=8_366_289, duration_seconds=5.73, width=1440, height=1440, has_audio=False
+)
+CLIP = "common-media/size-guide.mp4"
+
+
+def _video_issues(facts: VideoFacts | ProbeFailure, ref: str = CLIP) -> list[Issue]:
+    return check_videos({ref: facts})
+
+
+def _blocks(issues: list[Issue]) -> list[Issue]:
+    return [i for i in issues if i.severity == "block"]
+
+
+class TestVideos:
+    """Etsy's help page is the gate (PRD 72): the API itself took a 20 s
+    clip, so nothing past this point would catch one."""
+
+    def test_a_clip_inside_every_limit_has_no_issue(self) -> None:
+        assert _video_issues(GOOD_VIDEO) == []
+
+    def test_a_clip_at_the_edges_of_every_limit_has_no_issue(self) -> None:
+        edge = VideoFacts(
+            size_bytes=100_000_000, duration_seconds=3.0, width=500, height=900, has_audio=False
+        )
+        assert _video_issues(edge) == []
+
+    def test_over_100_mb_blocks_naming_the_file_and_the_limit(self) -> None:
+        [issue] = _video_issues(replace(GOOD_VIDEO, size_bytes=100_000_001))
+        assert issue.severity == "block"
+        assert CLIP in issue.message and "100 MB" in issue.message
+
+    def test_under_3_seconds_blocks_naming_the_file_and_the_limit(self) -> None:
+        [issue] = _video_issues(replace(GOOD_VIDEO, duration_seconds=2.0))
+        assert issue.severity == "block"
+        assert CLIP in issue.message and "2.0 s" in issue.message and "3–15" in issue.message
+
+    def test_over_15_seconds_blocks_naming_the_file_and_the_limit(self) -> None:
+        [issue] = _video_issues(replace(GOOD_VIDEO, duration_seconds=20.0))
+        assert CLIP in issue.message and "20.0 s" in issue.message and "3–15" in issue.message
+
+    def test_a_short_side_under_500_px_blocks_naming_the_file_and_the_limit(self) -> None:
+        """The shorter side, whichever it is: a 1920x400 banner is refused as
+        surely as a 400x400 square."""
+        [issue] = _video_issues(replace(GOOD_VIDEO, width=1920, height=400))
+        assert issue.severity == "block"
+        assert CLIP in issue.message and "1920x400" in issue.message and "500" in issue.message
+
+    def test_no_aspect_rule_applies(self) -> None:
+        assert _video_issues(replace(GOOD_VIDEO, width=2000, height=500)) == []
+
+    def test_every_broken_limit_is_its_own_block(self) -> None:
+        bad = VideoFacts(
+            size_bytes=200_000_000, duration_seconds=1.0, width=320, height=240, has_audio=False
+        )
+        assert len(_blocks(_video_issues(bad))) == 3
+
+    def test_an_unreadable_file_blocks_with_the_probe_s_reason(self) -> None:
+        [issue] = _video_issues(ProbeFailure("has no video stream"))
+        assert issue.severity == "block"
+        assert f"{CLIP} has no video stream" in issue.message
+
+    def test_audio_is_an_info_note_not_a_block(self) -> None:
+        [issue] = _video_issues(replace(GOOD_VIDEO, has_audio=True))
+        assert issue.severity == "info"
+        assert CLIP in issue.message and "sound" in issue.message
+
+    def test_issues_point_at_the_images_tab_and_the_file(self) -> None:
+        [issue] = _video_issues(ProbeFailure("was not found"), ref="./close-up.mov")
+        assert (issue.tab, issue.where) == ("images", "Listing Images › ./close-up.mov")
+
+    def test_check_listing_reports_the_videos_it_is_handed(self) -> None:
+        listing = _listing(media=[TemplateMediaEntry(template="flat-lay-01", colour="black"), CLIP])
+        issues = _check(listing, videos={CLIP: replace(GOOD_VIDEO, duration_seconds=2.0)})
+        assert any(CLIP in i.message for i in _blocks(issues))

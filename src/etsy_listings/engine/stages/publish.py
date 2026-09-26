@@ -201,6 +201,7 @@ class PublishLive:
 class PublishStage:
     name = "publish"
     local = False
+    group: str | None = None
     applied_model = PublishApplied
 
     def __init__(

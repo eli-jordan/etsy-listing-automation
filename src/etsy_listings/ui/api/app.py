@@ -32,6 +32,7 @@ from etsy_listings.ui.api.airuns import router as ai_runs_router
 from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.listings import router as listings_router
 from etsy_listings.ui.api.listings import support_router as listings_support_router
+from etsy_listings.ui.api.media_files import router as media_files_router
 from etsy_listings.ui.api.runs import router as runs_router
 from etsy_listings.ui.api.seo import AiProviderFactory, default_ai_providers
 from etsy_listings.ui.api.seo import router as seo_router
@@ -135,6 +136,7 @@ def create_app(
     app.include_router(designs_router)
     app.include_router(listings_router)
     app.include_router(listings_support_router)
+    app.include_router(media_files_router)
     app.include_router(runs_router)
     app.include_router(ai_runs_router)
     app.include_router(seo_router)

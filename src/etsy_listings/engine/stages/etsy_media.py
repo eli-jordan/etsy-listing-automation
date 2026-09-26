@@ -2,8 +2,12 @@
 ``image_ids`` PATCH, then the per-colour variation-image links (decisions 5
 and 6).
 
-**The manifest is `listing.media`, in order** -- PRD 12's full-replacement
-media sync retained, ids now surviving a reorder (decision 5). Each entry's
+**The manifest is `listing.media`'s images, in order** -- PRD 12's
+full-replacement media sync retained, ids now surviving a reorder (decision
+5). Videos share `media:` because it is the gallery (PRD 72), but Etsy ranks
+images among images and places videos by a separate mechanism (decision 9),
+so this stage never sees one: ranks, `MediaChange`s and the snapshot count
+images only, and adding a video is not a reason for this stage to run. Each entry's
 ``ref`` is ``"{template}:{colour}"`` for a colour-matrix entry, the bare
 template name for a `single`/`multiple` one, or the entry's own
 workspace-relative path for a shared ``common-media/`` asset -- stable across
@@ -41,19 +45,18 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.clients.etsy.listings import EtsyListingClient
-from etsy_listings.clients.etsy.models import VariationImageLink
-from etsy_listings.config.listing import MAX_MEDIA_ENTRIES, TemplateMediaEntry
+from etsy_listings.config.listing import TemplateMediaEntry
+from etsy_listings.config.media import media_kind
 from etsy_listings.engine.change import Action, Drift, MediaChange, Verdict
 from etsy_listings.engine.context import RunContext
 from etsy_listings.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
 from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.colour_property import resolve_colour_property
 from etsy_listings.engine.stages.etsy_target import (
     check_etsy_shop,
     etsy_listing_id,
     require_etsy_listing_id,
 )
+from etsy_listings.engine.stages.variation_links import manifest_ref, set_variation_images
 
 IMAGE_IDS_KEY = "etsy_image_ids"
 """This stage's key in ``lock.remote`` (A20) -- keyed by manifest ref, so a
@@ -195,10 +198,6 @@ class EtsyMediaLive:
     real `read_live`."""
 
 
-def _ref(template: str, colour: str | None) -> str:
-    return f"{template}:{colour}" if colour is not None else template
-
-
 def _manifest_entry(
     ctx: RunContext,
     listing: str,
@@ -208,27 +207,25 @@ def _manifest_entry(
 ) -> ManifestEntry:
     workspace = ctx.workspace
     if isinstance(entry, str):
-        # A bare string is a shared asset under `common-media/`, resolved the
-        # same way `design:` is -- relative to the listing's own directory
-        # (PRD 8a's convention, not re-invented here).
-        source = workspace.resolve(entry, relative_to=workspace.listing_dir(listing))
-        ref = entry
+        # A bare string is a file ref, resolved the same way `design:` is:
+        # PRD 73's two roots, the workspace or `./` for the listing's own.
+        source = workspace.resolve_ref(entry, listing_dir=workspace.listing_dir(listing))
         colour = None
     else:
         source = workspace.render_file(listing, entry.template, entry.colour)
-        ref = _ref(entry.template, entry.colour)
         colour = entry.colour if entry.template == variation_template else None
 
     content_hash = hash_file(source) if source.is_file() else PENDING
     file = to_workspace_relative_posix(workspace.root, source)
     return ManifestEntry(
-        ref=ref, source=source, content_hash=content_hash, file=file, colour=colour
+        ref=manifest_ref(entry), source=source, content_hash=content_hash, file=file, colour=colour
     )
 
 
 class EtsyMediaStage:
     name = "etsy_media"
     local = False
+    group: str | None = None
     applied_model = AppliedEtsyMedia
 
     def desired(
@@ -239,12 +236,9 @@ class EtsyMediaStage:
         if blocked is not None:
             return blocked
 
+        # No image-count gate here: `Listing` refuses a gallery over Etsy's
+        # caps when it loads (PRD 72), so a second copy could never fire.
         config = ctx.workspace.load_listing(listing)
-        if len(config.media) > MAX_MEDIA_ENTRIES:
-            return Blocked(
-                f"media has {len(config.media)} entries, over Etsy's "
-                f"{MAX_MEDIA_ENTRIES}-image limit."
-            )
 
         variation_template = config.etsy.variation_images
         if variation_template is not None and not any(
@@ -259,6 +253,7 @@ class EtsyMediaStage:
         manifest = tuple(
             _manifest_entry(ctx, listing, entry, variation_template=variation_template)
             for entry in config.media
+            if media_kind(entry) == "image"
         )
         return EtsyMediaDesired(
             manifest=manifest,
@@ -406,7 +401,16 @@ class EtsyMediaStage:
         )
 
         if desired.variation_images_template is not None:
-            self._apply_variation_images(ctx, client, shop_id, listing_id, desired, image_ids)
+            set_variation_images(
+                ctx,
+                client,
+                shop_id=shop_id,
+                listing_id=listing_id,
+                colours=desired.colours,
+                image_id_by_colour={
+                    e.colour: image_ids[e.ref] for e in desired.manifest if e.colour is not None
+                },
+            )
 
         applied_doc = AppliedEtsyMedia(
             manifest=tuple(
@@ -418,34 +422,6 @@ class EtsyMediaStage:
         return StageApplyResult(
             applied=applied_doc.model_dump(mode="json"), remote={IMAGE_IDS_KEY: image_ids}
         )
-
-    def _apply_variation_images(
-        self,
-        ctx: RunContext,
-        client: EtsyListingClient,
-        shop_id: int,
-        listing_id: int,
-        desired: EtsyMediaDesired,
-        image_ids: dict[str, int],
-    ) -> None:
-        inventory = client.get_listing_inventory(listing_id)
-        exceptions = ctx.workspace.load_exceptions()
-        colour_property = resolve_colour_property(inventory, desired.colours, exceptions)
-        if colour_property is None:
-            ctx.emit("variation_images: no single matching colour property on Etsy -- skipped")
-            return
-
-        links = [
-            VariationImageLink(
-                property_id=colour_property.property_id,
-                value_id=colour_property.value_id_by_slug[entry.colour],
-                image_id=image_ids[entry.ref],
-            )
-            for entry in desired.manifest
-            if entry.colour is not None and entry.colour in colour_property.value_id_by_slug
-        ]
-        ctx.emit(f"setting {len(links)} variation image link(s)")
-        client.update_variation_images(shop_id, listing_id, links)
 
 
 class MediaNotRenderedError(RuntimeError):

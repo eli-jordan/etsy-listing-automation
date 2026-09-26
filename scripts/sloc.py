@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import ast
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parent.parent
@@ -98,7 +99,7 @@ def measure(path: Path) -> int:
     return python_sloc(source) if path.suffix == ".py" else typescript_sloc(source)
 
 
-def files(roots: list[Path]):  # noqa: ANN201 - a generator of paths
+def files(roots: list[Path]) -> Iterator[Path]:
     for root in roots:
         if root.is_file():
             yield root

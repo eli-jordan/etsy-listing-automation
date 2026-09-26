@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { listingDesignThumbnailUrl, listListingDesigns } from "../../api/listings";
-import { refName, workspacePath } from "../../media";
+import { refName } from "../../media";
 import type { ListingDesignSummary } from "../../types";
 
 /**
@@ -20,22 +20,15 @@ import type { ListingDesignSummary } from "../../types";
  */
 
 interface Props {
-  /** `Listing.design` verbatim: artwork key -> listing-relative path. */
+  /** `Listing.design` verbatim: artwork key -> ref (PRD 73). */
   design: Record<string, string>;
-  /** The new listing-relative ref, ready to PATCH as `{ design: ref }`. */
+  /** The new ref, ready to PATCH as `{ design: ref }`. */
   onPick: (ref: string) => void;
 }
 
 /** How many the strip offers before the modal is needed. Four fills one row
  * of the picker grid; the rest are a search away. */
 const RECENT = 4;
-
-/** Listing-relative, matching what `newcmd.logic.build_listing_stub` writes --
- * `Listing.design` is resolved against the listing's own directory, not
- * against a fixed root (PRD 34's rule, shared with `pricing_plan`). */
-function refFor(design: ListingDesignSummary): string {
-  return `../../${design.file}`;
-}
 
 export function DesignSelect({ design, onPick }: Props) {
   const [designs, setDesigns] = useState<ListingDesignSummary[]>([]);
@@ -54,7 +47,9 @@ export function DesignSelect({ design, onPick }: Props) {
   const multi = keys.length > 1;
 
   function pick(chosen: ListingDesignSummary) {
-    onPick(refFor(chosen));
+    // PRD 73: a ref with no prefix is the workspace root, so the design's
+    // workspace-relative path is already the ref `new` writes.
+    onPick(chosen.file);
     setPicking(false);
     setSearching(false);
     setQuery("");
@@ -85,7 +80,7 @@ export function DesignSelect({ design, onPick }: Props) {
           ) : single !== null ? (
             <>
               <div className="design-row__name">{refName(single)}</div>
-              <div className="design-row__file">{workspacePath(single)}</div>
+              <div className="design-row__file">{single}</div>
             </>
           ) : (
             <>

@@ -35,13 +35,13 @@ def format_plan(plan: Plan) -> str:
 
     for stage_plan in runs:
         reason = f" ({stage_plan.reason})" if stage_plan.reason else ""
-        lines.append(f"  + {stage_plan.stage}{reason}")
+        lines.append(f"  + {_name(stage_plan)}{reason}")
         lines.extend(_format_actions(stage_plan))
     for stage_plan, change in changes:
-        lines.append(f"  ~ {stage_plan.stage}: {change}")
+        lines.append(f"  ~ {_name(stage_plan)}: {change}")
     for stage_plan, drift in drifts:
         lines.append(
-            f"  ! drift  {stage_plan.stage}.{drift.path} was edited outside this "
+            f"  ! drift  {_name(stage_plan)}.{drift.path} was edited outside this "
             f"tool{_drift_detail(drift)}"
         )
 
@@ -76,8 +76,16 @@ def format_blocked(stage_plan: StagePlan) -> list[str]:
     head, *rest = message or [""]
     lines = [f"  ! {head}"]
     lines.extend(f"      {line}" for line in rest)
-    lines.append(f"      ({stage_plan.stage} will not run)")
+    lines.append(f"      ({_name(stage_plan)} will not run)")
     return lines
+
+
+def _name(stage_plan: StagePlan) -> str:
+    """``etsy_media/etsy_videos``: a stage shown under the one the engine
+    groups it with (PRD 72: one gallery, two stages), else its own name."""
+    if stage_plan.group is None:
+        return stage_plan.stage
+    return f"{stage_plan.group}/{stage_plan.stage}"
 
 
 def _drift_detail(drift: Drift) -> str:

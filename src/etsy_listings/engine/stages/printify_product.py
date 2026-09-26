@@ -120,6 +120,7 @@ that could exist.
 class PrintifyProductStage:
     name = "printify_product"
     local = False
+    group: str | None = None
     applied_model = AppliedProduct
 
     def desired(
@@ -361,7 +362,7 @@ def resolve_variant_pricing(ctx: RunContext, listing: str) -> ResolvedVariantPri
     plan_file = config.pricing_plan
     pricing_plan = (
         workspace.load_pricing_plan(
-            workspace.resolve(plan_file, relative_to=workspace.listing_dir(listing))
+            workspace.resolve_ref(plan_file, listing_dir=workspace.listing_dir(listing))
         )
         if plan_file
         else None

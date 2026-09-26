@@ -11,7 +11,7 @@ import { ListingEditorPage } from "./ListingEditorPage";
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
     garment_profile: "comfort-colors-1717",
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black"],
     brief: "",
     prices: {},
@@ -190,6 +190,50 @@ describe("ListingEditorPage", () => {
     await screen.findByText("1 warning");
   });
 
+  it("shows an info note quietly: no warning icon, and never counted as a warning", async () => {
+    /* PRD 72: Etsy strips a video's sound. Worth saying, nothing to fix. */
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [
+          { severity: "warn", tab: "details", where: "Tags", message: "no tags" },
+          { severity: "info", tab: "images", where: "Clip", message: "sound is stripped" },
+        ],
+      }),
+    );
+    const { container } = renderAt("/listings/take-a-hike");
+
+    await screen.findByText("1 warning · 1 note");
+    const note = screen.getByText("sound is stripped").closest(".issue");
+    expect(note).toHaveClass("issue--info");
+    expect(note?.querySelector(".issue__icon svg")).toBeNull();
+    expect(container.querySelectorAll(".issue--warn")).toHaveLength(1);
+  });
+
+  it("summarises a note alone as a note, not a warning", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [{ severity: "info", tab: "images", where: "Clip", message: "sound is stripped" }],
+      }),
+    );
+    renderAt("/listings/take-a-hike");
+
+    await screen.findByText("1 note");
+  });
+
+  it("pluralises notes", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [
+          { severity: "info", tab: "images", where: "A", message: "a is silent" },
+          { severity: "info", tab: "images", where: "B", message: "b is silent" },
+        ],
+      }),
+    );
+    renderAt("/listings/take-a-hike");
+
+    await screen.findByText("2 notes");
+  });
+
   it("pluralises blocking problems", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
       detail({
@@ -257,7 +301,7 @@ describe("ListingEditorPage", () => {
 
     await waitFor(() =>
       expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
-        design: "../../designs/cosmic-cat.png",
+        design: "designs/cosmic-cat.png",
       }),
     );
   });
@@ -273,7 +317,7 @@ describe("ListingEditorPage", () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const patchSpy = vi
       .spyOn(listingsApi, "patchListing")
-      .mockResolvedValue(detail({ design: { default: "../../designs/cosmic-cat.png" } }));
+      .mockResolvedValue(detail({ design: { default: "designs/cosmic-cat.png" } }));
     renderAt("/listings/take-a-hike");
     await screen.findByText("designs/take-a-hike.png");
 
@@ -477,7 +521,7 @@ describe("ListingEditorPage at /listings/new", () => {
     // in a follow-up patch: `useAutosave` merges what is pending into the
     // create candidate.
     expect(create.mock.calls[0]?.[0].document).toMatchObject({
-      design: "../../designs/cosmic-cat.png",
+      design: "designs/cosmic-cat.png",
     });
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "cosmic-cat" })).toBeInTheDocument(),
@@ -520,7 +564,7 @@ describe("ListingEditorPage at /listings/new", () => {
     const create = vi.spyOn(listingsApi, "createListing");
     const describe = vi
       .spyOn(listingsApi, "describeListingDraft")
-      .mockResolvedValue({ ...draft(), design: { default: "../../designs/cosmic-cat.png" } });
+      .mockResolvedValue({ ...draft(), design: { default: "designs/cosmic-cat.png" } });
     renderAt("/listings/new");
 
     const input = await screen.findByLabelText("Listing name");

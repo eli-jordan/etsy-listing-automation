@@ -9,24 +9,31 @@ transport.py  Transport (both credentials, every API call, paced by the
               endpoint, which carries neither)
 shops.py      EtsyShopClient -- setup's four unscoped reads
 listings.py   EtsyListingClient -- Phase 3's stages: publish's poll target,
-              the copy PATCH, media upload/reorder/variation-images
+              the copy PATCH, media upload/reorder/variation-images, and
+              video upload/attach/delete with its two refusals (PRD 72)
 market.py     EtsyMarketClient -- market-informed SEO's three unscoped
               reads: search, batch stats, review counts (market-seo.md)
 models.py     what every endpoint above returns
-fakes.py      in-memory doubles for the behaviour layer (A4)
+fakes.py      in-memory doubles for the behaviour layer (A4), including the
+              video gallery decision 9 measured
 ```
 
 What is here (`oauth.py`, `callback.py`, `tokens.py`, `transport.py`) is the
 authentication half, which everything else waits on (A23).
 
 Exported below is what the rest of the codebase should need: a transport, the
-two errors worth catching by type, and the store that keeps a bearer coming.
+errors worth catching by type, and the store that keeps a bearer coming.
 Deliberately withheld: `callback.wait_for_redirect`, which only `auth` has any
 business calling -- a command that finds itself opening a browser mid-run is a
 command that should have failed with :class:`EtsyAuthError` instead.
 """
 
-from etsy_listings.clients.etsy.listings import EtsyListingClient, HttpEtsyListingClient
+from etsy_listings.clients.etsy.listings import (
+    EtsyListingClient,
+    HttpEtsyListingClient,
+    VideoBudgetExhaustedError,
+    VideoSlotsFullError,
+)
 from etsy_listings.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
 from etsy_listings.clients.etsy.oauth import OAuthError, Pkce, TokenResponse
 from etsy_listings.clients.etsy.tokens import EtsyAuthError, StoredTokens, TokenStore
@@ -46,4 +53,6 @@ __all__ = [
     "TokenResponse",
     "TokenStore",
     "Transport",
+    "VideoBudgetExhaustedError",
+    "VideoSlotsFullError",
 ]

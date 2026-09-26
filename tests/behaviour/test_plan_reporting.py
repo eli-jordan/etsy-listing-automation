@@ -18,6 +18,7 @@ the report is for.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
 from pydantic import BaseModel
@@ -239,6 +240,7 @@ class _RefusingStage:
 
     name = "refuser"
     local = True
+    group: str | None = None
     applied_model = _Empty
 
     def desired(self, ctx, listing, applied):  # noqa: ANN001, ANN201, ARG002
@@ -326,6 +328,25 @@ def test_a_drift_with_no_label_still_shows_the_raw_values(workspace_root: Path) 
 
     assert "etsy_listing.title was edited outside this tool" in output
     assert "(was" not in output
+
+
+def test_a_grouped_stage_is_named_under_its_group(workspace_root: Path) -> None:
+    """PRD 72: one gallery, two stages -- a stage the engine groups under
+    another is shown under it on every line that names it."""
+    grouped = replace(
+        StagePlan.work(
+            "etsy_videos",
+            "the videos in media: changed",
+            drift=(Drift(path="videos", last_applied=["a.mp4"], live="missing"),),
+        ),
+        group="etsy_media",
+    )
+    plan = Plan(listing=LISTING, is_live=False, etsy_listing_id=None, stage_plans=(grouped,))
+
+    output = format_plan(plan)
+
+    assert "  + etsy_media/etsy_videos (the videos in media: changed)" in output
+    assert "! drift  etsy_media/etsy_videos.videos was edited" in output
 
 
 def test_a_refused_stage_is_not_executed(workspace_root: Path) -> None:

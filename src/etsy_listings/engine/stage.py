@@ -80,6 +80,14 @@ class Stage(Protocol[D, A, L]):
     name: str
     local: bool  # True => no remote state; differences are work, not drift
 
+    group: str | None
+    """The stage a reader shows this one under, or ``None`` for a stage of
+    its own. ``etsy_videos`` is ``"etsy_media"``'s: one gallery, two stages
+    (PRD 72). Data the engine hands out on every
+    :class:`~etsy_listings.engine.change.StagePlan`, so the CLI and the UI
+    group by the same answer rather than each inferring one from a name.
+    """
+
     applied_model: type[A]
     """The type this stage's lockfile subtree decodes into.
 

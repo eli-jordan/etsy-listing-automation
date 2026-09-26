@@ -34,6 +34,8 @@ from tests.support.builders import (
     set_etsy_shop_id,
 )
 
+VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+
 
 @pytest.fixture
 def client(workspace_root: Path) -> TestClient:
@@ -160,7 +162,7 @@ class TestListListings:
     def test_a_row_names_the_design_its_thumbnail_is_addressed_by(self, client: TestClient) -> None:
         """The table shows the artwork, so a row has to carry the name
         `GET /api/listing-designs/{name}/thumbnail` takes -- the stem, not
-        the ``../../designs/take-a-hike.png`` ref stored in listing.yaml."""
+        the ``designs/take-a-hike.png`` ref stored in listing.yaml."""
         row = {r["name"]: r for r in client.get("/api/listings").json()}["take-a-hike"]
         assert row["design"] == "take-a-hike"
         assert client.get(f"/api/listing-designs/{row['design']}/thumbnail").status_code == 200
@@ -175,8 +177,8 @@ class TestListListings:
         path = workspace_root / "listings" / "take-a-hike" / "listing.yaml"
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         raw["design"] = {
-            "on-light": "../../designs/take-a-hike.png",
-            "on-dark": "../../designs/take-a-hike.png",
+            "on-light": "designs/take-a-hike.png",
+            "on-dark": "designs/take-a-hike.png",
         }
         path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
 
@@ -240,8 +242,8 @@ class TestGetListingDetail:
         edit_listing(
             workspace_root,
             design={
-                "default": "../../designs/take-a-hike.png",
-                "alternate": "../../designs/missing.png",
+                "default": "designs/take-a-hike.png",
+                "alternate": "designs/missing.png",
             },
         )
         first = client.get("/api/listings/take-a-hike").json()["design_content_hash"]
@@ -419,6 +421,45 @@ class TestGetListingDetail:
         issues = client.get("/api/listings/take-a-hike").json()["issues"]
         matches = [i for i in issues if i["tab"] == "variants" and i["severity"] == "block"]
         assert any("360" in i["message"] for i in matches)
+
+    def test_reports_a_too_short_video_as_an_images_block_naming_it(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """PRD 72's gate, read through `WorkspaceFacts` off the real file."""
+        shutil.copy(
+            VIDEOS / "short-2s-512.mp4", workspace_root / "listings" / "take-a-hike" / "clip.mp4"
+        )
+        edit_listing(
+            workspace_root, media=[{"template": "flat-lay-01", "colour": "black"}, "./clip.mp4"]
+        )
+
+        issues = client.get("/api/listings/take-a-hike").json()["issues"]
+
+        [block] = [i for i in issues if "./clip.mp4" in i["message"]]
+        assert (block["severity"], block["tab"]) == ("block", "images")
+        assert "3–15 seconds" in block["message"]
+
+    def test_a_video_s_audio_is_a_note_the_table_does_not_count(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        before = next(r for r in client.get("/api/listings").json() if r["name"] == "take-a-hike")[
+            "issue_counts"
+        ]
+        shutil.copy(
+            VIDEOS / "with-audio-3s-512.mp4",
+            workspace_root / "listings" / "take-a-hike" / "clip.mp4",
+        )
+        edit_listing(
+            workspace_root, media=[{"template": "flat-lay-01", "colour": "black"}, "./clip.mp4"]
+        )
+
+        issues = client.get("/api/listings/take-a-hike").json()["issues"]
+        after = next(r for r in client.get("/api/listings").json() if r["name"] == "take-a-hike")[
+            "issue_counts"
+        ]
+
+        assert [i["severity"] for i in issues if "./clip.mp4" in i["message"]] == ["info"]
+        assert after == before
 
     def test_warns_about_colours_the_garment_profile_does_not_classify(
         self, client: TestClient
@@ -637,7 +678,7 @@ class TestCreateListing:
     def _document(self, **over: object) -> dict[str, object]:
         document: dict[str, object] = {
             "garment_profile": "comfort-colors-1717",
-            "design": "../../designs/take-a-hike.png",
+            "design": "designs/take-a-hike.png",
             "colors": ["black"],
             "brief": "",
             "prices": {"S": "349 NOK"},
@@ -655,7 +696,7 @@ class TestCreateListing:
         assert response.status_code == 200
         body = response.json()
         assert body["name"] == "my-new-shirt"
-        assert body["design"] == {"default": "../../designs/take-a-hike.png"}
+        assert body["design"] == {"default": "designs/take-a-hike.png"}
         assert body["colors"] == ["black"]
 
         written = workspace_root / "listings" / "my-new-shirt" / "listing.yaml"
@@ -782,7 +823,7 @@ class TestListingDraft:
         an unsaved listing has for being told what it needs is lying to it."""
         document = {
             "garment_profile": "comfort-colors-1717",
-            "design": "../../designs/take-a-hike.png",
+            "design": "designs/take-a-hike.png",
             "colors": ["black"],
             "brief": "",
             "media": [],
@@ -815,7 +856,7 @@ class TestListingDraft:
             json={
                 "document": {
                     "garment_profile": "comfort-colors-1717",
-                    "design": "../../designs/take-a-hike.png",
+                    "design": "designs/take-a-hike.png",
                     "colors": ["black"],
                     "brief": "",
                     "media": [],
@@ -938,9 +979,9 @@ class TestSupportingEndpoints:
         assert by_name["tee-basic"]["compatible"] is True
         assert by_name["other-garment"]["compatible"] is False
         # `ref` is what a PATCH writes straight into `pricing_plan:` --
-        # listing-relative, ready to use unchanged (mirrors
-        # `CommonMediaSummary.ref`).
-        assert by_name["tee-basic"]["ref"] == "../../pricing-plans/tee-basic.yaml"
+        # workspace-rooted (PRD 73), ready to use unchanged (mirrors
+        # `MediaFileSummary.ref`).
+        assert by_name["tee-basic"]["ref"] == "pricing-plans/tee-basic.yaml"
 
     def test_lists_listing_designs(self, client: TestClient) -> None:
         response = client.get("/api/listing-designs")
@@ -965,60 +1006,6 @@ class TestSupportingEndpoints:
 
     def test_a_design_thumbnail_404s_for_an_unknown_design(self, client: TestClient) -> None:
         assert client.get("/api/listing-designs/no-such-art/thumbnail").status_code == 404
-
-    def test_lists_common_media_with_the_ref_a_listing_stores(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """A bare media entry resolves relative to the listing's own directory
-        (PRD 8a), the same as `design:` -- so the picker hands back the ref
-        ready to write, not a workspace-relative path the caller must fix up."""
-        shared = workspace_root / "common-media"
-        shared.mkdir(exist_ok=True)
-        (shared / "size-guide.png").write_bytes(b"")
-
-        response = client.get("/api/common-media")
-        assert response.status_code == 200
-        by_name = {row["name"]: row for row in response.json()}
-        assert by_name["size-guide"]["ref"] == "../../common-media/size-guide.png"
-        assert by_name["size-guide"]["file"] == "common-media/size-guide.png"
-
-    def test_common_media_is_empty_on_a_workspace_that_has_none(self, client: TestClient) -> None:
-        assert client.get("/api/common-media").json() == []
-
-    def test_serves_a_common_media_thumbnail(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        shared = workspace_root / "common-media"
-        shared.mkdir(exist_ok=True)
-        Image.new("RGB", (900, 700), (210, 180, 140)).save(shared / "size-guide.png")
-
-        response = client.get("/api/common-media/size-guide/thumbnail")
-        assert response.status_code == 200
-        assert response.headers["content-type"] == "image/png"
-        with Image.open(BytesIO(response.content)) as img:
-            assert max(img.size) <= 160
-
-    def test_a_common_media_thumbnail_404s_for_an_unknown_asset(self, client: TestClient) -> None:
-        assert client.get("/api/common-media/no-such-asset/thumbnail").status_code == 404
-
-    def test_serves_a_common_media_file_at_its_own_size(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """The other half of the pair: the thumbnail is a picture to *pick*
-        out of a list, this is the one the editor's preview pane and its
-        lightbox show -- and it is the file Etsy would actually receive,
-        byte for byte, not a re-encode."""
-        shared = workspace_root / "common-media"
-        shared.mkdir(exist_ok=True)
-        source = shared / "size-guide.png"
-        Image.new("RGB", (900, 700), (210, 180, 140)).save(source)
-
-        response = client.get("/api/common-media/size-guide/file")
-        assert response.status_code == 200
-        assert response.content == source.read_bytes()
-
-    def test_a_common_media_file_404s_for_an_unknown_asset(self, client: TestClient) -> None:
-        assert client.get("/api/common-media/no-such-asset/file").status_code == 404
 
     def test_lists_common_copy_files_with_their_front_matter(
         self, client: TestClient, workspace_root: Path

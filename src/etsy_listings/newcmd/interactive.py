@@ -15,7 +15,7 @@ import typer
 from etsy_listings import prompts, terminal
 from etsy_listings.clients.printify.models import Blueprint, PrintProvider, VariantSet
 from etsy_listings.clients.printify.protocol import CatalogClient
-from etsy_listings.config.listing import MAX_MEDIA_ENTRIES
+from etsy_listings.config.media import MAX_IMAGES
 from etsy_listings.config.slug import SlugCollisionError
 from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
 from etsy_listings.newcmd.logic import (
@@ -156,7 +156,7 @@ def _report_media_choice(
         return
     if len(media) < len(colours):
         typer.echo(
-            f"{len(colours)} colours offered, but Etsy allows {MAX_MEDIA_ENTRIES} images: "
+            f"{len(colours)} colours offered, but Etsy allows {MAX_IMAGES} images: "
             f"media covers the first {len(media)}. All {len(colours)} stay in colors: "
             f"(they decide which variants sell) -- edit media: to choose which get photos."
         )
@@ -188,8 +188,7 @@ def _pick_or_create_pricing_plan(
     sizes: list[str],
 ) -> Path:
     """Returns the chosen/generated plan's absolute path -- turning that into
-    a listing-relative ref is the caller's job (`run_new` has `design_name`,
-    this function doesn't need it)."""
+    a ref is the caller's job (`pricing_plan_ref`, PRD 73)."""
     candidates = load_candidate_pricing_plans(workspace)
     choices = build_pricing_plan_choices(candidates, garment_profile_slug)
     rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]
@@ -286,7 +285,7 @@ def run_new(
     plan_path = _pick_or_create_pricing_plan(
         workspace, catalog, slug, blueprint, provider, variant_set, garment_profile.sizes
     )
-    plan_ref = make_pricing_plan_ref(plan_path, listing_dir=workspace.listing_dir(design_name))
+    plan_ref = make_pricing_plan_ref(plan_path, root=workspace.root)
 
     # A new listing enables whatever colours the garment profile already
     # lists -- reflecting any hand-editing since it was written -- falling
@@ -299,7 +298,7 @@ def run_new(
     _report_media_choice(mockup_template, template_kind, colours, media)
     listing_data = build_listing_stub(
         garment_profile_slug=slug,
-        design_ref=f"../../designs/{design_name}.png",
+        design_ref=workspace.design_file(design_name).relative_to(workspace.root).as_posix(),
         colours=colours,
         pricing_plan_ref=plan_ref,
         brief="",

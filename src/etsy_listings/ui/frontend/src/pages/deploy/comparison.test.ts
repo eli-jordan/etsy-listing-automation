@@ -3,6 +3,7 @@ import { buildComparison } from "./comparison";
 import type {
   EtsyListingSnapshot,
   EtsyMediaSnapshot,
+  EtsyVideosSnapshot,
   PlanDTO,
   ProductSnapshot,
   PublishSnapshot,
@@ -409,5 +410,133 @@ describe("buildComparison: no Etsy listing yet", () => {
     );
 
     expect(buildComparison(draft).hasEtsyListing).toBe(false);
+  });
+});
+
+/**
+ * The `etsy_videos` block (PRD 72). Its badges come from the stage's own
+ * changes -- a slot change names the ref before and after -- never from
+ * comparing the snapshot's two sides here (A2).
+ */
+describe("buildComparison: videos", () => {
+  const FEATURED = "common-media/size-guide.mp4";
+  const SECOND = "./how-it-fits.mp4";
+
+  const SNAPSHOT: EtsyVideosSnapshot = {
+    desired: [
+      { ref: FEATURED, file: "common-media/size-guide.mp4", after_images: null },
+      { ref: SECOND, file: "listings/x/how-it-fits.mp4", after_images: 2 },
+    ],
+    live: [
+      {
+        video_id: 11,
+        state: "active",
+        ref: "./old.mp4",
+        thumbnail_url: "https://etsy.cdn/v11.jpg",
+      },
+      { video_id: 12, state: "active", ref: FEATURED, thumbnail_url: "https://etsy.cdn/v12.jpg" },
+    ],
+  };
+
+  function videosPlan(
+    changes: Extract<StagePlanDTO["outcome"], { type: "work" }>["changes"],
+    snapshot: EtsyVideosSnapshot = SNAPSHOT,
+  ): PlanDTO {
+    return plan([
+      stage({ stage: "etsy_media", snapshot: { desired: [], live: [] } }),
+      stage({ stage: "etsy_videos", group: "etsy_media", snapshot, changes }),
+    ]);
+  }
+
+  it("lays out the desired videos by slot and the live ones by Etsy's thumbnail", () => {
+    const { videos } = buildComparison(videosPlan([]));
+
+    expect(videos?.after).toEqual([
+      { ref: FEATURED, slot: "featured", afterImages: null, badge: null },
+      { ref: SECOND, slot: "second", afterImages: 2, badge: null },
+    ]);
+    expect(videos?.before.map((t) => [t.videoId, t.url, t.badge])).toEqual([
+      [11, "https://etsy.cdn/v11.jpg", null],
+      [12, "https://etsy.cdn/v12.jpg", null],
+    ]);
+    expect(videos?.changed).toBe(false);
+  });
+
+  it("marks a video new, and the one it replaces removed, from the slot change's refs", () => {
+    const { videos, impacts } = buildComparison(
+      videosPlan([{ kind: "field", path: "videos.second", before: "./old.mp4", after: SECOND }]),
+    );
+
+    expect(videos?.after.map((t) => t.badge)).toEqual([null, "new"]);
+    expect(videos?.before.map((t) => t.badge)).toEqual(["removed", null]);
+    expect(videos?.changed).toBe(true);
+    expect(impacts).toEqual(["Videos"]);
+  });
+
+  it("marks nothing for a swap, where both refs only change slot", () => {
+    const { videos } = buildComparison(
+      videosPlan([
+        { kind: "field", path: "videos.featured", before: SECOND, after: FEATURED },
+        { kind: "field", path: "videos.second", before: FEATURED, after: SECOND },
+      ]),
+    );
+
+    expect(videos?.after.map((t) => t.badge)).toEqual([null, null]);
+    expect(videos?.before.map((t) => t.badge)).toEqual([null, null]);
+    expect(videos?.changed).toBe(true);
+  });
+
+  it("marks a file with new bytes new, and its upload on Etsy removed", () => {
+    const { videos } = buildComparison(
+      videosPlan([
+        {
+          kind: "field",
+          path: "videos.featured.contents",
+          before: "sha256:aaa",
+          after: "sha256:bbb",
+        },
+      ]),
+    );
+
+    expect(videos?.after.map((t) => t.badge)).toEqual(["new", null]);
+    expect(videos?.before.map((t) => t.badge)).toEqual([null, "removed"]);
+  });
+
+  it("marks nothing for the second video moved among the images", () => {
+    const { videos } = buildComparison(
+      videosPlan([{ kind: "field", path: "videos.second.after_images", before: 1, after: 2 }]),
+    );
+
+    expect(videos?.after.map((t) => t.badge)).toEqual([null, null]);
+    expect(videos?.changed).toBe(true);
+  });
+
+  it("marks a foreign video removed when the stage runs, since the run sweeps it", () => {
+    const foreign: EtsyVideosSnapshot = {
+      ...SNAPSHOT,
+      live: [{ video_id: 9, state: "inactive", ref: null, thumbnail_url: null }],
+    };
+
+    const running = buildComparison(
+      videosPlan(
+        [{ kind: "field", path: "videos.featured", before: null, after: FEATURED }],
+        foreign,
+      ),
+    );
+    const idle = buildComparison(videosPlan([], foreign));
+
+    expect(running.videos?.before).toEqual([
+      { videoId: 9, ref: null, url: null, inactive: true, badge: "removed" },
+    ]);
+    expect(idle.videos?.before.map((t) => t.badge)).toEqual([null]);
+  });
+
+  it("is null for a listing with no video on either side", () => {
+    const { videos } = buildComparison(videosPlan([], { desired: [], live: [] }));
+    expect(videos).toBeNull();
+  });
+
+  it("is null when the stage was not in the plan", () => {
+    expect(buildComparison(fullPlan()).videos).toBeNull();
   });
 });

@@ -33,17 +33,22 @@ stage, which is the half that has to stay hard.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from pathlib import Path
 
 from etsy_listings.config import listing_validation as rules
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing_validation import Issue
+from etsy_listings.config.media import ProbeFailure, VideoFacts
 from etsy_listings.engine.stage import Blocked
 
 
 def _refuse(issues: Sequence[Issue]) -> Blocked | None:
-    """The first issue, as a refusal.
+    """The first *blocking* issue, as a refusal.
+
+    A ``warn`` or ``info`` is something the banner shows and a deploy goes
+    ahead past -- a video's stripped sound (PRD 72) is the case that made a
+    rule return both kinds from one call.
 
     A stage refuses or it does not, so only the first message can be shown --
     the banner is what wants the whole list. ``where`` and ``tab`` are dropped
@@ -51,7 +56,8 @@ def _refuse(issues: Sequence[Issue]) -> Blocked | None:
     attributed to the stage that returned it, and "Variants › Garment profile"
     names a tab a CLI user is not looking at.
     """
-    return Blocked(issues[0].message) if issues else None
+    blocking = [issue for issue in issues if issue.severity == "block"]
+    return Blocked(blocking[0].message) if blocking else None
 
 
 def check_design_resolution(design: Path, profile: GarmentProfile) -> Blocked | None:
@@ -84,3 +90,9 @@ def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> Block
     shape of failure this vocabulary exists to replace.
     """
     return _refuse(rules.check_price_source(pricing_plan=pricing_plan, priced_sizes=priced_sizes))
+
+
+def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> Blocked | None:
+    """A video Etsy's help page would reject (PRD 72). Its audio note is not
+    a refusal, which is why `_refuse` reads severity."""
+    return _refuse(rules.check_videos(videos))

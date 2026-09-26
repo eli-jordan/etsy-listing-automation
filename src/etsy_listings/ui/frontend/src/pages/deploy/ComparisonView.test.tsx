@@ -31,7 +31,7 @@ function plan(stagePlans: StagePlanDTO[], etsyListingId: number | null = 1): Pla
 function detail(): ListingDetail {
   return {
     garment_profile: "comfort-colors-1717",
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black"],
     brief: "",
     prices: {},
@@ -145,5 +145,113 @@ describe("ComparisonView", () => {
 
     expect(screen.getByText("On Etsy now")).toBeInTheDocument();
     expect(screen.queryByText("After apply")).not.toBeInTheDocument();
+  });
+
+  it("draws one of the listing's own images from under that listing (PRD 73)", () => {
+    const p = plan([
+      stage({
+        stage: "etsy_media",
+        snapshot: {
+          desired: [
+            { rank: 1, ref: "./shots/back.png", file: "listings/take-a-hike/shots/back.png" },
+          ],
+          live: [],
+        },
+      }),
+    ]);
+    render(
+      <ComparisonView
+        comparison={buildComparison(p)}
+        listing={{ name: detail().name, design: detail().design }}
+        renderSnapshot={null}
+        previewsRendered={new Set()}
+        collapsed={false}
+        etsyListingId={1698234512}
+      />,
+    );
+
+    expect(
+      document.querySelector(
+        'img[src="/api/listings/take-a-hike/media-files/shots/back.png/file"]',
+      ),
+    ).not.toBeNull();
+  });
+});
+
+describe("ComparisonView's videos (PRD 72)", () => {
+  const FEATURED = "common-media/size-guide.mp4";
+  const SECOND = "./how-it-fits.mp4";
+
+  function renderVideos(collapsed = false) {
+    const p = plan([
+      stage({
+        stage: "etsy_videos",
+        group: "etsy_media",
+        snapshot: {
+          desired: [
+            { ref: FEATURED, file: FEATURED, after_images: null },
+            { ref: SECOND, file: "listings/take-a-hike/how-it-fits.mp4", after_images: 2 },
+          ],
+          live: [
+            {
+              video_id: 11,
+              state: "active",
+              ref: "./old.mp4",
+              thumbnail_url: "https://etsy/11.jpg",
+            },
+            { video_id: 12, state: "inactive", ref: null, thumbnail_url: null },
+          ],
+        },
+        changes: [{ kind: "field", path: "videos.second", before: "./old.mp4", after: SECOND }],
+      }),
+    ]);
+    render(
+      <ComparisonView
+        comparison={buildComparison(p)}
+        listing={{ name: detail().name, design: detail().design }}
+        renderSnapshot={null}
+        previewsRendered={new Set()}
+        collapsed={collapsed}
+        etsyListingId={1698234512}
+      />,
+    );
+  }
+
+  function block(side: "On Etsy now" | "After apply"): HTMLElement {
+    const column = screen.getByText(side).closest(".dv-col") as HTMLElement;
+    const label = Array.from(column.querySelectorAll(".dv-eyebrow")).find(
+      (e) => e.textContent === "Videos",
+    );
+    return label?.closest(".dv-block") as HTMLElement;
+  }
+
+  it("draws the videos this run places as muted clips of the files, by slot", () => {
+    renderVideos();
+    const after = block("After apply");
+    const clips = after.querySelectorAll("video");
+    expect(Array.from(clips).map((c) => c.getAttribute("src"))).toEqual([
+      "/api/common-media/size-guide.mp4/file#t=0.5",
+      "/api/listings/take-a-hike/media-files/how-it-fits.mp4/file#t=0.5",
+    ]);
+    expect(after).toHaveTextContent("Featured · 2nd");
+    expect(after).toHaveTextContent("After 2 images");
+  });
+
+  it("marks a new video New, from the engine's change", () => {
+    renderVideos();
+    const after = block("After apply");
+    expect(after.querySelectorAll(".dv-thumb__badge--new")).toHaveLength(1);
+    expect(after.querySelectorAll(".dv-thumb--new video")[0]).toHaveAttribute(
+      "src",
+      "/api/listings/take-a-hike/media-files/how-it-fits.mp4/file#t=0.5",
+    );
+  });
+
+  it("draws Etsy's videos from Etsy's own thumbnail, and marks what the run removes", () => {
+    renderVideos();
+    const before = block("On Etsy now");
+    expect(before.querySelector("img")).toHaveAttribute("src", "https://etsy/11.jpg");
+    expect(before.querySelectorAll(".dv-thumb__badge--gone")).toHaveLength(2);
+    expect(before).toHaveTextContent("Not playing on Etsy");
   });
 });

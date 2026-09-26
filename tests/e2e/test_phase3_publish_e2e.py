@@ -45,6 +45,7 @@ from __future__ import annotations
 import os
 import shutil
 from collections.abc import Callable, Iterator
+from pathlib import Path
 from typing import NoReturn
 
 import pytest
@@ -77,6 +78,33 @@ from tests.support.builders import (
 )
 
 pytestmark = pytest.mark.e2e
+
+VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+FEATURED_VIDEO = "common-media/size-guide.mp4"
+SECOND_VIDEO = "./how-it-fits.mp4"
+IMAGES_IN_ORDER = [
+    {"template": "flat-lay-01", "colour": colour}
+    for colour in ("moss", "black", "blue-jean", "ivory")
+]
+"""The order the reorder test below leaves `media:` in."""
+
+
+def _with_videos(*, second_after: int) -> list[object]:
+    """The images, with the featured video at position 2 (PRD 72) and the
+    second anchored after ``second_after`` of them."""
+    head, rest = IMAGES_IN_ORDER[:1], IMAGES_IN_ORDER[1:]
+    media: list[object] = [*head, FEATURED_VIDEO, *rest]
+    media.insert(second_after + 1, SECOND_VIDEO)
+    return media
+
+
+def _live_videos(ctx: RunContext, lock: Lockfile) -> dict[int, str | None]:
+    """video_id -> state, for every video Etsy lists on the listing."""
+    live = ctx.require_etsy().get_listing(
+        int(lock.remote[ETSY_LISTING_ID_KEY]), include_videos=True
+    )
+    assert live is not None
+    return {video.video_id: video.video_state for video in live.videos}
 
 
 # ------------------------------------------------------- credentials workspace
@@ -290,7 +318,10 @@ class TestTheFullCycle:
         assert written.remote.get(ETSY_LISTING_ID_KEY)
 
         # Every stage wrote a document, which is the only proof that every
-        # stage ran: a refusal writes nothing and fails nothing.
+        # stage ran: a refusal writes nothing and fails nothing. `etsy_videos`
+        # is the exception by design -- this listing has no video yet, and a
+        # stage with nothing to place records nothing (the video tests below
+        # are where it runs).
         assert set(written.applied) == {
             "render",
             "printify_product",
@@ -424,3 +455,64 @@ class TestTheFullCycle:
             )
         image_ids = set(written.remote["etsy_image_ids"].values())
         assert {link.image_id for link in links} <= image_ids
+
+    # -------------------------------------------------- videos (PRD 72)
+
+    def test_two_videos_are_placed_and_their_ids_recorded(
+        self, ctx: RunContext, workspace: Workspace
+    ) -> None:
+        """decision 9 against the real API: both uploaded with
+        `is_multi_video=true`, both `active`. Where each sits in the gallery
+        cannot be read back through any API -- the fake's `gallery()` is what
+        the behaviour layer asserts; here it is what Etsy accepted."""
+        shared = workspace.root / "common-media"
+        shared.mkdir(exist_ok=True)
+        shutil.copy(VIDEOS / "valid-3s-512.mp4", workspace.root / FEATURED_VIDEO)
+        shutil.copy(
+            VIDEOS / "with-audio-3s-512.mp4", workspace.listing_dir(LISTING) / "how-it-fits.mp4"
+        )
+        edit_listing(workspace.root, media=_with_videos(second_after=2))
+
+        apply_everything(ctx)
+
+        written = Lockfile.read(workspace.lock_file(LISTING))
+        assert written is not None
+        video_ids = written.remote["etsy_video_ids"]
+        assert set(video_ids) == {FEATURED_VIDEO, SECOND_VIDEO}
+        assert _live_videos(ctx, written) == dict.fromkeys(video_ids.values(), "active")
+
+    def test_moving_the_second_video_re_attaches_it_without_an_upload(
+        self, ctx: RunContext, workspace: Workspace
+    ) -> None:
+        """One image later: the same `video_id`s, so no bytes were re-sent,
+        and the swatch links the cut detached are set again (decision 9's
+        "What it costs")."""
+        before = Lockfile.read(workspace.lock_file(LISTING))
+        assert before is not None
+        shop_id = workspace.defaults.etsy.require_shop_id()
+        listing_id = int(before.remote[ETSY_LISTING_ID_KEY])
+        links_before = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
+        edit_listing(workspace.root, media=_with_videos(second_after=3))
+
+        report = apply_everything(ctx)
+
+        planned = report.outcomes[0].planned
+        assert planned is not None
+        running = [sp.stage for sp in planned.plan.stage_plans if sp.will_run]
+        assert running == ["etsy_videos"], "a video move is no image's business"
+        written = Lockfile.read(workspace.lock_file(LISTING))
+        assert written is not None
+        assert written.remote["etsy_video_ids"] == before.remote["etsy_video_ids"]
+        assert set(_live_videos(ctx, written).values()) == {"active"}
+        links = ctx.require_etsy().get_listing_variation_images(shop_id, listing_id)
+        assert len(links) == len(links_before)
+        assert {link.image_id for link in links} <= set(written.remote["etsy_image_ids"].values())
+
+    def test_re_applying_the_videos_unchanged_writes_nothing(
+        self, ctx: RunContext, workspace: Workspace
+    ) -> None:
+        report = apply_everything(ctx)
+
+        planned = report.outcomes[0].planned
+        assert planned is not None
+        assert not planned.plan.has_changes

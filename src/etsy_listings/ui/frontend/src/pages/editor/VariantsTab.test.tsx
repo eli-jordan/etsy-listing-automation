@@ -116,7 +116,7 @@ describe("VariantsTab's preview", () => {
   });
 
   it("overlays the listing's real design once it has exactly one", async () => {
-    renderWithFlatLay({ design: { default: "../../designs/take-a-hike.png" } });
+    renderWithFlatLay({ design: { default: "designs/take-a-hike.png" } });
     const preview = await screen.findByAltText("black on flat-lay-01");
     expect(preview).toHaveAttribute(
       "src",
@@ -127,8 +127,8 @@ describe("VariantsTab's preview", () => {
   it("falls back to the bare photo for a multi-artwork design", async () => {
     renderWithFlatLay({
       design: {
-        "on-light": "../../designs/take-a-hike-light.png",
-        "on-dark": "../../designs/take-a-hike-dark.png",
+        "on-light": "designs/take-a-hike-light.png",
+        "on-dark": "designs/take-a-hike-dark.png",
       },
     });
     const preview = await screen.findByAltText("black on flat-lay-01");
@@ -293,7 +293,7 @@ describe("VariantsTab", () => {
           media: [
             { template: "flat-lay-01", colour: "black" },
             { template: "flat-lay-01", colour: "white" },
-            "../../common-media/size-guide.png",
+            "common-media/size-guide.png",
           ],
           artwork: { white: "on-light" },
           price_overrides: { white: { S: "399 NOK" } },
@@ -306,7 +306,7 @@ describe("VariantsTab", () => {
 
     expect(onUpdate).toHaveBeenCalledWith({
       colors: ["black"],
-      media: [{ template: "flat-lay-01", colour: "black" }, "../../common-media/size-guide.png"],
+      media: [{ template: "flat-lay-01", colour: "black" }, "common-media/size-guide.png"],
       artwork: {},
       price_overrides: {},
     });

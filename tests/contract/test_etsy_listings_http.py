@@ -549,3 +549,293 @@ def test_return_policies_are_also_reachable_over_the_signed_in_connection() -> N
     policies = _client(handler).return_policies(SHOP_ID)
 
     assert policies[0].describe() == "returns and exchanges within 30 days"
+
+
+# ------------------------------------------------------------------ videos
+#
+# Every payload and error text below is transcribed from the video recon of
+# 2026-09-25 (phase-3-etsy.md decision 9), against `duke-java-developer`'s
+# draft and the throwaway "ZZ video probe" draft.
+
+VIDEO_PAYLOAD = {
+    "video_id": 844256454,
+    "video_url": (
+        "https://v.etsystatic.com/e/videos/b159/c23d4845-33b5-43d3-953a-85e02c8050f6/vid_v1.mp4"
+    ),
+    "thumbnail_url": (
+        "https://v.etsystatic.com/e/videos/b159/c23d4845-33b5-43d3-953a-85e02c8050f6/"
+        "listing_thumbnail_v1.jpg"
+    ),
+    "height": 1440,
+    "width": 1440,
+    "video_state": "active",
+}
+
+MAX_VIDEOS = "The listing already has the maximum number of videos allowed."
+
+
+def test_images_and_videos_are_composed_into_one_includes_param() -> None:
+    """Two `includes` keys would leave Etsy to pick one; the client joins
+    them into the single comma-separated value the recon read with."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["includes"] = request.url.params.get_list("includes")
+        return httpx.Response(
+            200,
+            json={
+                **LISTING_PAYLOAD,
+                "images": [],
+                "videos": [
+                    VIDEO_PAYLOAD,
+                    {**VIDEO_PAYLOAD, "video_id": 1, "video_state": "inactive"},
+                ],
+            },
+        )
+
+    listing = _client(handler).get_listing(LISTING_ID, include_images=True, include_videos=True)
+
+    assert seen["includes"] == ["Images,Videos"]
+    assert listing is not None
+    assert [(v.video_id, v.video_state) for v in listing.videos] == [
+        (844256454, "active"),
+        (1, "inactive"),
+    ], "an inactive video stays in the list, and so in the model (decision 9)"
+    video = listing.videos[0]
+    assert (video.width, video.height) == (1440, 1440)
+    assert video.thumbnail_url == VIDEO_PAYLOAD["thumbnail_url"]
+    assert video.video_url == VIDEO_PAYLOAD["video_url"]
+
+
+def test_videos_alone_asks_for_videos_alone() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["includes"] = request.url.params.get_list("includes")
+        return httpx.Response(200, json={**LISTING_PAYLOAD, "videos": [VIDEO_PAYLOAD]})
+
+    _client(handler).get_listing(LISTING_ID, include_videos=True)
+
+    assert seen["includes"] == ["Videos"]
+
+
+def test_videos_is_null_when_not_requested_and_reads_as_empty() -> None:
+    """The same `null`-not-omitted shape `images` has, for the same reason."""
+    listing = _client(
+        lambda _: httpx.Response(200, json={**LISTING_PAYLOAD, "videos": None})
+    ).get_listing(LISTING_ID)
+
+    assert listing is not None
+    assert listing.videos == ()
+
+
+def _multipart_files(request: httpx.Request) -> dict[str, tuple[str, str, bytes]]:
+    """Decode the file parts of a multipart body: name -> (filename,
+    content type, bytes)."""
+    boundary = request.headers["content-type"].split("boundary=")[1].encode()
+    files: dict[str, tuple[str, str, bytes]] = {}
+    for part in request.read().split(b"--" + boundary):
+        if b"filename=" not in part:
+            continue
+        head, body = part.split(b"\r\n\r\n", 1)
+        name = head.split(b'name="')[1].split(b'"')[0].decode()
+        filename = head.split(b'filename="')[1].split(b'"')[0].decode()
+        content_type = head.split(b"Content-Type: ")[1].split(b"\r\n")[0].decode()
+        files[name] = (filename, content_type, body.rsplit(b"\r\n", 1)[0])
+    return files
+
+
+def test_a_video_upload_is_multipart_with_the_multi_video_flag() -> None:
+    """Without `is_multi_video=true` Etsy's legacy mode makes every other
+    video on the listing `inactive` (measured) -- so no upload may omit it."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["multi"] = request.url.params.get_list("is_multi_video")
+        seen["fields"] = _multipart_fields(request)
+        seen["files"] = _multipart_files(request)
+        return httpx.Response(201, json=VIDEO_PAYLOAD)
+
+    video = _client(handler).upload_listing_video(
+        SHOP_ID, LISTING_ID, file_name="size-guide.mp4", contents=b"\x00\x00\x00\x18ftypmp42"
+    )
+
+    assert (seen["method"], seen["path"]) == (
+        "POST",
+        f"/v3/application/shops/{SHOP_ID}/listings/{LISTING_ID}/videos",
+    )
+    assert seen["multi"] == ["true"]
+    assert seen["fields"] == {"name": "size-guide.mp4"}
+    assert seen["files"] == {"video": ("size-guide.mp4", "video/mp4", b"\x00\x00\x00\x18ftypmp42")}
+    assert (video.video_id, video.video_state) == (844256454, "active")
+
+
+def test_a_mov_upload_is_sent_as_quicktime() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["files"] = _multipart_files(request)
+        return httpx.Response(201, json=VIDEO_PAYLOAD)
+
+    _client(handler).upload_listing_video(
+        SHOP_ID, LISTING_ID, file_name="Close Up.MOV", contents=b"moov"
+    )
+
+    assert seen["files"]["video"][1] == "video/quicktime"
+
+
+def test_a_file_that_is_neither_mp4_nor_mov_is_refused_before_sending() -> None:
+    """PRD 72 allows only the two a browser previews; anything else reaching
+    the client is a caller's bug, and sending it would spend an association."""
+    sent: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        sent.append(request)
+        return httpx.Response(201, json=VIDEO_PAYLOAD)
+
+    with pytest.raises(ValueError, match="webm"):
+        _client(handler).upload_listing_video(
+            SHOP_ID, LISTING_ID, file_name="clip.webm", contents=b"x"
+        )
+    assert sent == []
+
+
+def test_a_video_is_re_attached_by_id_with_the_multi_video_flag_and_no_file() -> None:
+    """Etsy keeps a deleted video's file, so moving one costs no bytes: the
+    same POST with `video_id` instead of a file (decision 9)."""
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        seen["multi"] = request.url.params.get_list("is_multi_video")
+        seen["content_type"] = request.headers.get("content-type", "")
+        seen["body"] = request.read().decode()
+        return httpx.Response(201, json=VIDEO_PAYLOAD)
+
+    video = _client(handler).attach_listing_video(SHOP_ID, LISTING_ID, 844256454)
+
+    assert (seen["method"], seen["path"]) == (
+        "POST",
+        f"/v3/application/shops/{SHOP_ID}/listings/{LISTING_ID}/videos",
+    )
+    assert seen["multi"] == ["true"]
+    assert seen["content_type"].startswith("application/x-www-form-urlencoded")
+    assert seen["body"] == "video_id=844256454"
+    assert video.video_state == "active"
+
+
+def test_a_video_is_deleted_from_the_shop_scoped_path() -> None:
+    seen: dict = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen["method"] = request.method
+        seen["path"] = request.url.path
+        return httpx.Response(204)
+
+    result = _client(handler).delete_listing_video(SHOP_ID, LISTING_ID, 844256464)
+
+    assert (seen["method"], seen["path"]) == (
+        "DELETE",
+        f"/v3/application/shops/{SHOP_ID}/listings/{LISTING_ID}/videos/844256464",
+    )
+    assert result is None
+
+
+def _refusing(status: int, error: str, calls: list[httpx.Request]):  # noqa: ANN202 - a handler
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(status, json={"error": error})
+
+    return handler
+
+
+def _upload(client: HttpEtsyListingClient) -> None:
+    client.upload_listing_video(SHOP_ID, LISTING_ID, file_name="a.mp4", contents=b"x")
+
+
+def _attach(client: HttpEtsyListingClient) -> None:
+    client.attach_listing_video(SHOP_ID, LISTING_ID, 844256454)
+
+
+@pytest.mark.parametrize("send", [_upload, _attach], ids=["upload", "attach"])
+def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:  # noqa: ANN001
+    """Measured on a listing holding **no** videos: the eleventh association
+    within 24 h, upload or re-attach alike, answers `400` with the same text
+    a full listing gets. Shown verbatim it would send the seller looking for
+    videos that are not there."""
+    from etsy_listings.clients.etsy.listings import VideoBudgetExhaustedError
+    from etsy_listings.errors import UserFacingError
+
+    calls: list[httpx.Request] = []
+
+    with pytest.raises(VideoBudgetExhaustedError) as caught:
+        send(_client(_refusing(400, MAX_VIDEOS, calls)))
+
+    assert isinstance(caught.value, UserFacingError), "one listing reported, not a batch ended"
+    assert isinstance(caught.value, EtsyApiError)
+    assert caught.value.status_code == 400
+    message = str(caught.value)
+    assert "10" in message
+    assert "24 hours" in message
+    assert "per listing" in message
+    assert len(calls) == 1
+
+
+@pytest.mark.parametrize("send", [_upload, _attach], ids=["upload", "attach"])
+def test_a_full_listing_409_is_its_own_error(send) -> None:  # noqa: ANN001
+    """Measured: a third upload with `is_multi_video=true` against two active
+    videos answers `409`, after the bytes had been sent."""
+    from etsy_listings.clients.etsy.listings import (
+        VideoBudgetExhaustedError,
+        VideoSlotsFullError,
+    )
+
+    with pytest.raises(VideoSlotsFullError) as caught:
+        send(_client(_refusing(409, MAX_VIDEOS, [])))
+
+    assert not isinstance(caught.value, VideoBudgetExhaustedError)
+    assert caught.value.status_code == 409
+    assert "2" in str(caught.value)
+
+
+def test_any_other_400_stays_etsys_own_words() -> None:
+    from etsy_listings.clients.etsy.listings import (
+        VideoBudgetExhaustedError,
+        VideoSlotsFullError,
+    )
+
+    with pytest.raises(EtsyApiError) as caught:
+        _attach(_client(_refusing(400, "Invalid video_id.", [])))
+
+    assert not isinstance(caught.value, (VideoBudgetExhaustedError, VideoSlotsFullError))
+    assert caught.value.error == "Invalid video_id."
+
+
+def test_a_non_video_upload_500_is_sent_once_and_not_retried() -> None:
+    """A PNG renamed `.mp4` is a bare `500 Server Error` (measured). A 5xx on
+    a POST may have landed, so the 429-only retry rule holds here too: a
+    resend would be a second association spent."""
+    calls: list[httpx.Request] = []
+
+    with pytest.raises(EtsyApiError) as caught:
+        _upload(_client(_refusing(500, "Server Error", calls)))
+
+    assert caught.value.status_code == 500
+    assert len(calls) == 1
+
+
+def test_an_upload_refused_with_429_is_retried() -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        if len(calls) == 1:
+            return httpx.Response(429, json={"error": "Too many requests"})
+        return httpx.Response(201, json=VIDEO_PAYLOAD)
+
+    _upload(_client(handler))
+
+    assert len(calls) == 2

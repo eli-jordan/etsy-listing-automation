@@ -194,7 +194,7 @@ def test_unconventional_design_keys_send_the_same_image_whatever_their_order(
 ) -> None:
     root = chain.workspace.root
     (root / "designs" / "alternate.png").write_bytes(b"alternate")
-    primary, secondary = "../../designs/take-a-hike.png", "../../designs/alternate.png"
+    primary, secondary = "designs/take-a-hike.png", "designs/alternate.png"
 
     edit_listing(root, design={"z": secondary, "a": primary})
     chain.run(draft_brief=False)

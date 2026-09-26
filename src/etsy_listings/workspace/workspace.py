@@ -28,6 +28,7 @@ from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.settings import Settings
 from etsy_listings.config.slug import ColourExceptions
@@ -61,6 +62,24 @@ class PathEscapesWorkspaceError(ValueError):
         super().__init__(f"path {ref!r} escapes the workspace root ({root})")
 
 
+MIGRATION_SCRIPT = "scripts/migrate_workspace_refs.py"
+"""PRD 73's one-off rewrite, named by every refusal of the form it replaces."""
+
+
+class InvalidRefError(ConfigLoadError):
+    """A path in ``listing.yaml`` that is not a two-root ref (PRD 73).
+
+    A :class:`ConfigLoadError`, so a stage that meets one fails that listing
+    with a sentence rather than a traceback, and the rest of an ``--all``
+    batch carries on (PRD 16).
+    """
+
+    def __init__(self, listing_dir: Path, ref: str, detail: str) -> None:
+        self.ref = ref
+        self.detail = detail
+        super().__init__(listing_dir / layout.LISTING_FILE, f"ref {ref!r}: {detail}")
+
+
 @dataclass(frozen=True)
 class DescriptionResolution:
     """One common-copy read, shared by the editor's preview and its issue check."""
@@ -85,6 +104,39 @@ def _segment(name: str) -> str:
     if not name or name in (".", "..") or "/" in name or "\\" in name or ":" in name:
         raise InvalidNameError(name)
     return name
+
+
+class NotAMediaFileError(InvalidNameError):
+    """A path, from a URL, that does not name an image or video in the
+    directory it was asked of (PRD 72).
+
+    An :class:`InvalidNameError`, so the UI's one handler turns it into a
+    ``400`` like any other name it cannot use."""
+
+    def __init__(self, path: str, directory: Path) -> None:
+        ValueError.__init__(self, f"{path!r} is not a media file in {directory.name}/")
+
+
+_MEDIA_EXTENSIONS: tuple[str, ...] = (*IMAGE_EXTENSIONS, *VIDEO_EXTENSIONS)
+
+
+def _is_media_file_in(path: Path, directory: Path) -> bool:
+    """Is ``path`` an image or video that really sits inside ``directory``?
+
+    Judged on the *resolved* path, both halves: a symlink inside the directory
+    may point at another listing's files, or at ``shop.yaml`` behind a ``.png``
+    name. Inside the workspace root is not enough -- these directories are
+    what a picture endpoint serves, and they hold ``listing.yaml`` and the
+    lockfile beside the pictures. The extension is matched case-insensitively,
+    as :func:`~etsy_listings.config.media.media_kind` matches it, and it is
+    also what keeps those two files out.
+    """
+    if not path.is_file():
+        return False
+    target = path.resolve()
+    if not target.is_relative_to(directory.resolve()):
+        return False
+    return path.suffix.lower() in _MEDIA_EXTENSIONS and target.suffix.lower() in _MEDIA_EXTENSIONS
 
 
 class AmbiguousColourSuffixError(ValueError):
@@ -245,11 +297,11 @@ class Workspace:
         raise WorkspaceNotFoundError(search_start)
 
     def resolve(self, ref: str, relative_to: Path) -> Path:
-        """Resolve ``ref`` (as written in a config file) to an absolute path.
+        """Resolve ``ref`` against ``relative_to`` to an absolute path.
 
-        ``relative_to`` is the directory the reference is written relative to
-        (typically the config file's own directory), matching how the PRD's
-        example configs use ``../../designs/take-a-hike.png``-style paths.
+        The escape check every path goes through (A8). A path written in
+        ``listing.yaml`` does not come here directly: :meth:`resolve_ref`
+        interprets its two roots first, then calls this.
         Raises :class:`PathEscapesWorkspaceError` if the result would fall
         outside :attr:`root`.
         """
@@ -262,6 +314,41 @@ class Workspace:
         except ValueError as exc:
             raise PathEscapesWorkspaceError(ref, self.root) from exc
         return candidate
+
+    def resolve_ref(self, ref: str, *, listing_dir: Path) -> Path:
+        """The one interpreter of a path written in ``listing.yaml`` (PRD 73).
+
+        Two roots: no prefix is the workspace root (``designs/x.png``), and
+        ``./`` is the listing's own directory (``./shots/back.png``).
+        Subdirectories are fine under either; ``..`` is refused anywhere, so a
+        ref says where its file is without a reader having to count levels.
+        The result still goes through :meth:`resolve`'s escape check (A8), which
+        is what catches a symlink out of the root.
+
+        ``listing_dir`` rather than a name, because the editor's unnamed draft
+        has no directory of its own and resolves against a stand-in at the
+        same depth. Every refusal is an :class:`InvalidRefError`.
+        """
+        if Path(ref).is_absolute() or _looks_like_windows_absolute(ref):
+            raise InvalidRefError(listing_dir, ref, "an absolute path is not a ref")
+        if "\\" in ref:
+            raise InvalidRefError(listing_dir, ref, "use '/' between directories, not a backslash")
+        if ref.startswith("../"):
+            raise InvalidRefError(
+                listing_dir,
+                ref,
+                "'..' refs are the old listing-relative form; write it from the workspace "
+                f"root instead (run {MIGRATION_SCRIPT} to rewrite a whole workspace)",
+            )
+        if ".." in ref.split("/"):
+            raise InvalidRefError(listing_dir, ref, "'..' is not allowed in a ref")
+        base, rest = (listing_dir, ref[2:]) if ref.startswith("./") else (self.root, ref)
+        if all(segment in ("", ".") for segment in rest.split("/")):
+            raise InvalidRefError(listing_dir, ref, "the ref is empty")
+        try:
+            return self.resolve(rest, relative_to=base)
+        except PathEscapesWorkspaceError as exc:
+            raise InvalidRefError(listing_dir, ref, str(exc)) from exc
 
     def cache(self, *parts: str) -> Path:
         return self.root.joinpath(layout.CACHE_DIR, *parts)
@@ -311,6 +398,15 @@ class Workspace:
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)
 
+    def draft_listing_dir(self) -> Path:
+        """A listing directory for a listing that has none yet -- the editor's
+        unnamed draft, and the design a brief is drafted from before the
+        listing is named. A workspace-rooted ref (PRD 73) lands on the same file
+        from any listing directory, so this answers for them exactly as a real
+        one would; a `./` ref finds nothing here, which is right, since a
+        listing with no directory has no files of its own."""
+        return self.root / layout.LISTINGS_DIR / "_"
+
     def listing_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LISTING_FILE
 
@@ -327,13 +423,13 @@ class Workspace:
         for key, ref in sorted(design.items()):
             content_hash: str | None = None
             try:
-                path = self.resolve(ref, relative_to=listing_dir)
+                path = self.resolve_ref(ref, listing_dir=listing_dir)
                 file_digest = hashlib.sha256()
                 with path.open("rb") as source:
                     for chunk in iter(lambda: source.read(1024 * 1024), b""):
                         file_digest.update(chunk)
                 content_hash = file_digest.hexdigest()
-            except (OSError, PathEscapesWorkspaceError):
+            except (OSError, InvalidRefError):
                 pass
             entry = json.dumps((key, ref, content_hash), ensure_ascii=False)
             digest.update(entry.encode("utf-8"))
@@ -365,24 +461,76 @@ class Workspace:
     def common_media_dir(self) -> Path:
         return self.root / layout.COMMON_MEDIA_DIR
 
-    def common_media_file(self, asset: str) -> Path:
-        return self.common_media_dir() / f"{_segment(asset)}.png"
+    def common_media_file(self, path: str) -> Path:
+        """One shared file, named by its path under ``common-media/`` --
+        ``size-guide.png``, ``videos/intro.mp4``.
+
+        Taken as written, with no extension appended: a shared file may be a
+        JPEG or a video (PRD 72) and may sit in a subdirectory, so the name
+        has to say which. See :meth:`_media_file_in` for the boundary it
+        enforces; it takes names from URLs (A8).
+        """
+        return self._media_file_in(self.common_media_dir(), path)
 
     def common_media_files(self) -> list[Path]:
-        """Every ``common-media/*.png``: the shared assets a listing can put in
-        ``media:`` as a bare path (a sizing chart, care instructions), as
-        opposed to a rendered mockup.
+        """Every image and video under ``common-media/``, recursively: the
+        shared files a listing can put in ``media:`` as a file ref (a sizing
+        chart, a care card, a size-guide video), as opposed to a rendered
+        mockup.
 
-        PNG only and flat, for the same reason :meth:`design_files` is:
-        :meth:`common_media_file` derives one fixed path per name, so anything
-        listed here that it could not resolve would be offered and then fail.
-        Sorted by name rather than mtime -- unlike a design, a shared asset is
+        Only the types ``media:`` accepts (PRD 72), matched case-insensitively
+        as :func:`~etsy_listings.config.media.media_kind` matches them, so
+        nothing is offered that a listing would then refuse to load. Sorted
+        by path rather than mtime -- unlike a design, a shared asset is
         written once and reused for years, so recency says nothing useful.
         """
-        shared = self.common_media_dir()
-        if not shared.is_dir():
+        return self._media_files_in(self.common_media_dir())
+
+    def listing_media_file(self, listing: str, path: str) -> Path:
+        """One of a listing's own files, by its path under the listing's
+        directory -- what a ``./`` ref names (PRD 73), without the ``./``.
+        The same boundary as :meth:`common_media_file`, which matters more
+        here: this directory also holds ``listing.yaml`` and the lockfile."""
+        return self._media_file_in(self.listing_dir(listing), path)
+
+    def listing_media_files(self, listing: str) -> list[Path]:
+        """Every image and video in a listing's own directory, recursively:
+        the *This listing* half of the file locator (PRD 72). Never
+        ``listing.yaml``, the lockfile, or anything a symlink reaches outside
+        the directory. Empty for a listing with no directory yet."""
+        return self._media_files_in(self.listing_dir(listing))
+
+    def _media_file_in(self, directory: Path, path: str) -> Path:
+        """``path`` under ``directory``, refused unless it names an image or
+        video there.
+
+        Every segment goes through the single-segment rule every other layout
+        accessor applies, which is what stops ``..``. The escape check is then
+        tighter than :meth:`resolve`'s: the resolved file has to be inside
+        *this directory*, not merely inside the root, so a symlink to another
+        listing or to ``shop.yaml`` is refused. The file need not exist -- a
+        missing one is the caller's ``404``, not a refusal.
+        """
+        joined = "/".join(_segment(segment) for segment in path.split("/"))
+        if Path(joined).suffix.lower() not in _MEDIA_EXTENSIONS:
+            raise NotAMediaFileError(path, directory)
+        try:
+            candidate = self.resolve(joined, relative_to=directory)
+        except PathEscapesWorkspaceError as exc:
+            raise NotAMediaFileError(path, directory) from exc
+        if not candidate.is_relative_to(directory.resolve()):
+            raise NotAMediaFileError(path, directory)
+        if candidate.suffix.lower() not in _MEDIA_EXTENSIONS:
+            raise NotAMediaFileError(path, directory)
+        return candidate
+
+    def _media_files_in(self, directory: Path) -> list[Path]:
+        if not directory.is_dir():
             return []
-        return sorted((p for p in shared.glob("*.png") if p.is_file()), key=lambda p: p.name)
+        return sorted(
+            (p for p in directory.rglob("*") if _is_media_file_in(p, directory)),
+            key=lambda p: p.relative_to(directory).as_posix(),
+        )
 
     def seo_prompt_file(self) -> Path:
         """``prompts/seo.md`` -- the seller-editable AI SEO prompt (AI SEO
@@ -411,11 +559,9 @@ class Workspace:
         """Verify a `description.ref` and resolve it -- beneath
         `common-copy/` only (PRD's description model).
 
-        Unlike `design:`/`pricing_plan:` refs, which are written relative to
-        the listing's own directory, a common-copy ref is portable: written
-        once, relative to the workspace root, the same wherever it is
-        referenced from (`common-copy/comfort-colors.md`, never
-        `../../common-copy/...`). It still goes through :meth:`resolve` for
+        Written from the workspace root, as every ref is (PRD 73), but
+        narrower than :meth:`resolve_ref`: it has no `./` form, because
+        common copy is shared by definition. It still goes through :meth:`resolve` for
         the general escape checks (absolute paths, `..` past the root,
         Windows drive forms), plus one more: the result must actually land
         inside :meth:`common_copy_dir`, so `common-copy/../listings/x` -- inside
@@ -435,10 +581,9 @@ class Workspace:
     def common_copy_files(self) -> list[Path]:
         """Every ``common-copy/*.md``: the reusable description bodies a
         listing can point ``description.ref`` at (AI SEO implementation plan,
-        PR6's common-copy selector). Flat and Markdown-only, for the same
-        reason :meth:`common_media_files` is -- :meth:`common_copy_file`
-        derives one fixed path per name, so anything listed here that it
-        could not resolve would be offered and then fail. Sorted by name: a
+        PR6's common-copy selector). Flat and Markdown-only, so that
+        everything listed is something :meth:`common_copy_file` resolves --
+        anything it could not would be offered and then fail. Sorted by name: a
         common-copy file, like a shared image, is written once and reused for
         years, so recency says nothing useful about it.
         """

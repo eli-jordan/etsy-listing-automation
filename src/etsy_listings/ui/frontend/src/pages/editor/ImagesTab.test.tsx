@@ -2,7 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
-import type { ListingDetail, TemplateSummary } from "../../types";
+import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import { ImagesTab } from "./ImagesTab";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
@@ -55,6 +55,7 @@ function summary(over: Partial<TemplateSummary> & { name: string }): TemplateSum
 
 beforeEach(() => {
   vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
+  vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([]);
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -200,7 +201,7 @@ describe("ImagesTab", () => {
         onUpdate={vi.fn()}
       />,
     );
-    expect(screen.getByText("1 of 20")).toBeInTheDocument();
+    expect(screen.getByText("1 of 20 images")).toBeInTheDocument();
   });
 
   it("says what to do at the limit instead of how to reorder", async () => {
@@ -435,16 +436,18 @@ describe("ImagesTab's Etsy colour-swatch toggle (PRD 56)", () => {
 });
 
 describe("ImagesTab's shared images (common-media/)", () => {
-  const SHARED = [
+  const SHARED: MediaFileSummary[] = [
     {
-      name: "size-guide",
+      name: "size-guide.png",
       file: "common-media/size-guide.png",
-      ref: "../../common-media/size-guide.png",
+      ref: "common-media/size-guide.png",
+      kind: "image",
     },
     {
-      name: "care-instructions",
+      name: "care-instructions.png",
       file: "common-media/care-instructions.png",
-      ref: "../../common-media/care-instructions.png",
+      ref: "common-media/care-instructions.png",
+      kind: "image",
     },
   ];
 
@@ -455,30 +458,30 @@ describe("ImagesTab's shared images (common-media/)", () => {
     return onUpdate;
   }
 
-  it("browses templates until you ask for images", async () => {
+  it("browses templates until you ask for files", async () => {
     renderShared();
     await screen.findByText("flat-lay-01");
     expect(screen.queryByText("size-guide.png")).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: "Images" }));
+    fireEvent.click(screen.getByRole("button", { name: "Files" }));
 
     expect(await screen.findByText("size-guide.png")).toBeInTheDocument();
     expect(screen.queryByText("flat-lay-01")).not.toBeInTheDocument();
   });
 
-  it("adds one as the listing-relative bare path a listing stores", async () => {
-    /* `media:` holds these as a plain string resolved against the listing's
-       own directory, not as a {template, colour} entry. */
+  it("adds one as the workspace-rooted ref a listing stores", async () => {
+    /* `media:` holds these as a plain string ref (PRD 73), not as a
+       {template, colour} entry. */
     const onUpdate = renderShared();
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
     fireEvent.click(await screen.findByRole("button", { name: "size-guide.png" }));
 
-    expect(onUpdate).toHaveBeenCalledWith({ media: ["../../common-media/size-guide.png"] });
+    expect(onUpdate).toHaveBeenCalledWith({ media: ["common-media/size-guide.png"] });
   });
 
   it("takes one back out when it is already in the listing", async () => {
-    const onUpdate = renderShared({ media: ["../../common-media/size-guide.png"] });
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    const onUpdate = renderShared({ media: ["common-media/size-guide.png"] });
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
     fireEvent.click(await screen.findByRole("button", { name: "size-guide.png" }));
 
     expect(onUpdate).toHaveBeenCalledWith({ media: [] });
@@ -486,30 +489,30 @@ describe("ImagesTab's shared images (common-media/)", () => {
 
   it("previews one, naming the file it would upload", async () => {
     renderShared();
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
     fireEvent.mouseEnter(await screen.findByRole("button", { name: "care-instructions.png" }));
 
     expect(screen.getByAltText("care-instructions")).toHaveAttribute(
       "src",
-      "/api/common-media/care-instructions/file",
+      "/api/common-media/care-instructions.png/file",
     );
     expect(screen.getByText("common-media/care-instructions.png")).toBeInTheDocument();
   });
 
   it("draws a shared asset in the reel as a picture, not as its raw path", async () => {
-    renderShared({ media: ["../../common-media/size-guide.png"] });
+    renderShared({ media: ["common-media/size-guide.png"] });
     await screen.findByText("flat-lay-01");
 
     expect(screen.getByAltText("size-guide")).toHaveAttribute(
       "src",
-      "/api/common-media/size-guide/thumbnail",
+      "/api/common-media/size-guide.png/thumbnail",
     );
   });
 
   it("searches shared assets by name", async () => {
     renderShared();
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
-    fireEvent.change(screen.getByPlaceholderText("Search common-media…"), {
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.change(screen.getByPlaceholderText("Search files…"), {
       target: { value: "care" },
     });
 
@@ -522,8 +525,144 @@ describe("ImagesTab's shared images (common-media/)", () => {
     vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
     render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Images" }));
-    expect(await screen.findByText(/common-media\//)).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    expect(await screen.findByText(/Nothing in common-media\//)).toBeInTheDocument();
+  });
+});
+
+describe("ImagesTab's own files (./) and videos (PRD 72, 73)", () => {
+  const CLOSE_UP: MediaFileSummary = {
+    name: "close-up.mp4",
+    file: "listings/take-a-hike/close-up.mp4",
+    ref: "./close-up.mp4",
+    kind: "video",
+  };
+
+  it("lists the listing's own files, asked for by the listing's name", async () => {
+    const list = vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+
+    expect(await screen.findByRole("button", { name: "close-up.mp4" })).toBeInTheDocument();
+    expect(list).toHaveBeenCalledWith("take-a-hike");
+  });
+
+  it("asks nothing for a draft, which has no directory of its own", async () => {
+    const list = vi.spyOn(listingsApi, "listListingMediaFiles");
+    render(<ImagesTab detail={detail({ name: "" })} onUpdate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+
+    expect(screen.queryByRole("group", { name: /This listing/ })).not.toBeInTheDocument();
+    expect(list).not.toHaveBeenCalled();
+  });
+
+  it("puts a first video at position 2, behind the thumbnail", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    const onUpdate = vi.fn();
+    render(<ImagesTab detail={detail({ media: ["a.png", "b.png"] })} onUpdate={onUpdate} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.click(await screen.findByRole("button", { name: "close-up.mp4" }));
+
+    expect(onUpdate).toHaveBeenCalledWith({ media: ["a.png", "./close-up.mp4", "b.png"] });
+  });
+
+  it("writes nothing for a video there is no thumbnail to go behind", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    const onUpdate = vi.fn();
+    render(<ImagesTab detail={detail()} onUpdate={onUpdate} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.click(await screen.findByRole("button", { name: "close-up.mp4" }));
+
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("previews a hovered video with a playable <video>, not an <img>", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    render(
+      <ImagesTab detail={detail({ media: ["a.png", "./close-up.mp4"] })} onUpdate={vi.fn()} />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "close-up.mp4" }));
+
+    const stage = document.querySelector(".preview-stage") as HTMLElement;
+    const clip = stage.querySelector("video");
+    expect(clip).toHaveAttribute("src", "/api/listings/take-a-hike/media-files/close-up.mp4/file");
+    expect(clip).toHaveAttribute("controls");
+    expect(stage.querySelector("img")).toBeNull();
+  });
+
+  it("goes back to an <img> when an image is hovered after a video", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([
+      CLOSE_UP,
+      { name: "back.png", file: "listings/take-a-hike/back.png", ref: "./back.png", kind: "image" },
+    ]);
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "close-up.mp4" }));
+    fireEvent.mouseEnter(screen.getByRole("button", { name: "back.png" }));
+
+    const stage = document.querySelector(".preview-stage") as HTMLElement;
+    expect(stage.querySelector("video")).toBeNull();
+    expect(stage.querySelector("img")).toHaveAttribute(
+      "src",
+      "/api/listings/take-a-hike/media-files/back.png/file",
+    );
+  });
+
+  it("shows the focused video's own notes under the preview -- Etsy strips its sound", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    const note =
+      "./close-up.mp4 has a sound track; Etsy strips the sound, so buyers see it silent.";
+    render(
+      <ImagesTab
+        detail={detail({
+          media: ["a.png", "./close-up.mp4"],
+          issues: [
+            {
+              severity: "info",
+              tab: "images",
+              where: "Listing Images › ./close-up.mp4",
+              message: note,
+            },
+            { severity: "warn", tab: "images", where: "Listing Images › a.png", message: "other" },
+          ],
+        })}
+        onUpdate={vi.fn()}
+      />,
+    );
+
+    fireEvent.click(await screen.findByRole("button", { name: "Files" }));
+    fireEvent.mouseEnter(await screen.findByRole("button", { name: "close-up.mp4" }));
+
+    const foot = document.querySelector(".preview-foot") as HTMLElement;
+    expect(foot).toHaveTextContent(note);
+    expect(foot).not.toHaveTextContent("other");
+  });
+
+  it("opens a video from the reel in the lightbox as a playable clip", async () => {
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockResolvedValue([CLOSE_UP]);
+    render(
+      <ImagesTab detail={detail({ media: ["a.png", "./close-up.mp4"] })} onUpdate={vi.fn()} />,
+    );
+
+    fireEvent.click(document.querySelectorAll(".rtile__face")[1] as HTMLElement);
+
+    const dialog = await screen.findByRole("dialog");
+    expect(dialog.querySelector("video")).toHaveAttribute("controls");
+  });
+
+  it("says so when the listing's files cannot be loaded", async () => {
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listListingMediaFiles").mockRejectedValue(new Error("boom"));
+    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
+
+    expect(await screen.findByText("failed to load this listing's files")).toBeInTheDocument();
   });
 });
 
@@ -546,12 +685,12 @@ describe("ImagesTab's search", () => {
 
 describe("ImagesTab's full-size carousel", () => {
   const reel = detail({
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black", "white"],
     media: [
       { template: "flat-lay-01", colour: "black" },
       { template: "flat-lay-01", colour: "white" },
-      "../../common-media/size-guide.png",
+      "common-media/size-guide.png",
     ],
   });
 
@@ -622,7 +761,7 @@ describe("ImagesTab's full-size carousel", () => {
 
     expect(screen.getByRole("dialog")).toHaveAccessibleName("size-guide, preview 3 of 3");
     const stage = screen.getByRole("dialog").querySelector(".lightbox__image");
-    expect(stage).toHaveAttribute("src", "/api/common-media/size-guide/file");
+    expect(stage).toHaveAttribute("src", "/api/common-media/size-guide.png/file");
   });
 
   it("removing a tile does not also open the one that slides into its place", async () => {

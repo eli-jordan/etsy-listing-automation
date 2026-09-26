@@ -62,6 +62,7 @@ class RetractLive:
 class RetractStage:
     name = "retract"
     local = False
+    group: str | None = None
     applied_model = AppliedRetract
 
     def __init__(

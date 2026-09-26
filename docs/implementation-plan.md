@@ -157,6 +157,7 @@ ships — a calibration target is not a product (A19).
 class Stage(Protocol[D, A, L]):
     name: str
     local: bool                      # True => no remote state, so no drift
+    group: str | None                # the stage a reader shows this one under (PRD 72)
     applied_model: type[A]           # what this stage's lockfile subtree decodes into
 
     def desired(self, ctx: RunContext, listing, applied: A | None) -> D | Blocked: ...
@@ -164,7 +165,7 @@ class Stage(Protocol[D, A, L]):
     def plan(self, desired: D, applied: A | None, live: L | None) -> Verdict: ...
     def apply(self, ctx, desired: D, applied: A | None, live, lock) -> StageApplyResult: ...
 
-STAGES = [Render(), PrintifyProduct(), Publish(), EtsyListing(), EtsyMedia()]
+STAGES = [Render(), PrintifyProduct(), Publish(), EtsyListing(), EtsyMedia(), EtsyVideos()]
 ```
 
 `applied` is the stage's **own subtree** of the lockfile, and every question
