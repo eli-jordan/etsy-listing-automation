@@ -239,3 +239,15 @@ export async function listEtsySections(): Promise<EtsySectionSummary[]> {
     return [];
   }
 }
+
+/** Create a live Etsy shop section. Unlike the list above, this needs the
+ * workspace's signed-in Etsy connection because Etsy requires `shops_w`.
+ * The caller adds the returned row to its picker and saves its title into the
+ * listing through normal autosave. */
+export async function createEtsySection(title: string): Promise<EtsySectionSummary> {
+  const { data, error } = await api.POST("/api/etsy/sections", {
+    body: { title },
+  });
+  if (error || !data) throw new ListingsApiError("could not create Etsy section");
+  return data;
+}

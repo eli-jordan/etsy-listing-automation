@@ -1127,6 +1127,22 @@ class TestEtsySections:
             {"id": 2, "title": "Hoodies"},
         ]
 
+    def test_creates_a_section_through_the_signed_in_client(
+        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        set_etsy_shop_id(workspace_root, 12345678)
+        etsy = FakeEtsyListingClient(sections=[ShopSection(shop_section_id=1, title="Tees")])
+        monkeypatch.setattr(connections, "etsy_listing_client", lambda root: etsy)
+        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+
+        response = sectioned.post("/api/etsy/sections", json={"title": "Trail Gear"})
+
+        assert response.status_code == 200
+        assert response.json() == {"id": 2, "title": "Trail Gear"}
+        assert [(section.shop_section_id, section.title) for section in etsy.created_sections] == [
+            (2, "Trail Gear")
+        ]
+
 
 class TestLifecycle:
     def _row(self, client: TestClient, name: str = "take-a-hike") -> dict:

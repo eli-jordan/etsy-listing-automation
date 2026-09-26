@@ -466,18 +466,15 @@ describe("DetailsTab", () => {
     expect(screen.getByText("0 / 140")).toBeInTheDocument();
   });
 
-  it("shows garment materials as read-only text", () => {
-    const onUpdate = vi.fn();
+  it("does not show garment materials in listing details", () => {
     render(
       <DetailsTab
         detail={detail({ garment_materials: ["cotton", "水性インク"] })}
-        onUpdate={onUpdate}
+        onUpdate={vi.fn()}
         onFlush={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("Materials")).toHaveValue("cotton, 水性インク");
-    expect(screen.getByLabelText("Materials")).toHaveAttribute("readonly");
-    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Materials")).not.toBeInTheDocument();
   });
 
   it("shows a section dropdown once the shop's sections are known", async () => {
@@ -497,6 +494,36 @@ describe("DetailsTab", () => {
     expect(screen.getByLabelText("Section")).toHaveValue("Tees");
     fireEvent.change(screen.getByLabelText("Section"), { target: { value: "Hoodies" } });
     expect(onUpdate).toHaveBeenCalledWith({ etsy: { section: "Hoodies" } });
+  });
+
+  it("creates and selects a new shop section from the dropdown", async () => {
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([
+      { id: 1, title: "Tees" },
+      { id: 2, title: "Hoodies" },
+    ]);
+    const create = vi
+      .spyOn(listingsApi, "createEtsySection")
+      .mockResolvedValue({ id: 3, title: "Trail Gear" });
+    const onUpdate = vi.fn();
+    const onFlush = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <DetailsTab
+        detail={detail({ etsy: { ...detail().etsy, section: "Tees" } })}
+        onUpdate={onUpdate}
+        onFlush={onFlush}
+      />,
+    );
+
+    await screen.findByRole("option", { name: "Hoodies" });
+    await user.selectOptions(screen.getByLabelText("Section"), "__create_section__");
+    await user.type(screen.getByLabelText("New section name"), "  Trail Gear  ");
+    await user.click(screen.getByRole("button", { name: "Create section" }));
+
+    expect(create).toHaveBeenCalledWith("Trail Gear");
+    expect(onUpdate).toHaveBeenCalledWith({ etsy: { section: "Trail Gear" } });
+    expect(onFlush).toHaveBeenCalled();
+    expect(screen.queryByLabelText("New section name")).not.toBeInTheDocument();
   });
 
   it("falls back to a text field when no shop sections are available", async () => {

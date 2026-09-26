@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { listCommonCopy, listEtsySections } from "../../api/listings";
+import { createEtsySection, listCommonCopy, listEtsySections } from "../../api/listings";
 import type { CommonCopySummary, EtsySectionSummary, ListingDetail } from "../../types";
 import { AiChoiceDrawer } from "./aiSeo/AiChoiceDrawer";
 import { DescriptionSourcePicker } from "./DescriptionSourcePicker";
@@ -12,8 +12,9 @@ import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
  *
  * Section is a dropdown of the live shop's sections (`GET /api/etsy/sections`,
  * `EtsyShopClient.shop_sections` -- unscoped, needs only the workspace's app
- * key pair) when that list is available, falling back to the original free
- * text field for a workspace that hasn't configured a shop id or Etsy
+ * key pair) when that list is available. Its inline create action uses the
+ * signed-in client because Etsy requires `shops_w`. The field falls back to
+ * free text for a workspace that hasn't configured a shop id or Etsy
  * credentials yet -- an ordinary state short of `setup`/`auth etsy`, not an
  * error. Pricing lives on its own tab. */
 
@@ -23,6 +24,7 @@ import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
  * truncates what you paste is worse than one that tells you it is over. */
 const MAX_TITLE_LENGTH = 140;
 const MAX_TAGS = 13;
+const CREATE_SECTION_VALUE = "__create_section__";
 
 /** `check_copy_is_concrete`/`check_description_ref`
  * (`config/listing_validation.py`) file every description issue -- the empty
@@ -45,6 +47,10 @@ interface Props {
 export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
+  const [creatingSection, setCreatingSection] = useState(false);
+  const [sectionDraft, setSectionDraft] = useState("");
+  const [sectionCreating, setSectionCreating] = useState(false);
+  const [sectionCreateError, setSectionCreateError] = useState<string | null>(null);
   const [commonCopy, setCommonCopy] = useState<CommonCopySummary[]>([]);
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
@@ -65,7 +71,6 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   const titleError = detail.field_errors["etsy.title"];
   const sectionError = detail.field_errors["etsy.section"];
   const title = detail.etsy.title;
-  const materials = detail.garment_materials ?? [];
   const description = detail.etsy.description;
   const descriptionIssues = detail.issues.filter((i) => i.where === DESCRIPTION_ISSUE_WHERE);
 
@@ -138,6 +143,25 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
 
   function removeTag(tag: string) {
     onUpdate({ etsy: { tags: tags.filter((t) => t !== tag) } });
+  }
+
+  async function commitSection() {
+    const title = sectionDraft.trim();
+    if (title === "") return;
+    setSectionCreating(true);
+    setSectionCreateError(null);
+    try {
+      const created = await createEtsySection(title);
+      setSections((current) => [...current, created]);
+      setCreatingSection(false);
+      setSectionDraft("");
+      onUpdate({ etsy: { section: created.title } });
+      onFlush();
+    } catch {
+      setSectionCreateError("Could not create the section on Etsy. Check your Etsy sign-in.");
+    } finally {
+      setSectionCreating(false);
+    }
   }
 
   const fields = (
@@ -341,8 +365,14 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
             <select
               id="details-section"
               className="input"
-              value={detail.etsy.section ?? ""}
+              value={creatingSection ? CREATE_SECTION_VALUE : (detail.etsy.section ?? "")}
               onChange={(event) => {
+                if (event.target.value === CREATE_SECTION_VALUE) {
+                  setCreatingSection(true);
+                  setSectionCreateError(null);
+                  return;
+                }
+                setCreatingSection(false);
                 onUpdate({ etsy: { section: event.target.value || null } });
                 onFlush();
               }}
@@ -353,6 +383,7 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
                   {s.title}
                 </option>
               ))}
+              <option value={CREATE_SECTION_VALUE}>Create new section…</option>
             </select>
           ) : (
             <input
@@ -364,22 +395,50 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
               onBlur={onFlush}
             />
           )}
+          {creatingSection && (
+            <form
+              className="section-create"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void commitSection();
+              }}
+            >
+              <label htmlFor="details-new-section">New section name</label>
+              <input
+                id="details-new-section"
+                className="input"
+                type="text"
+                autoFocus
+                value={sectionDraft}
+                onChange={(event) => setSectionDraft(event.target.value)}
+              />
+              <button
+                className="btn btn-primary"
+                type="submit"
+                disabled={sectionCreating || sectionDraft.trim() === ""}
+              >
+                {sectionCreating ? "Creating…" : "Create section"}
+              </button>
+              <button
+                className="btn btn-ghost"
+                type="button"
+                disabled={sectionCreating}
+                onClick={() => {
+                  setCreatingSection(false);
+                  setSectionDraft("");
+                  setSectionCreateError(null);
+                }}
+              >
+                Cancel
+              </button>
+              {sectionCreateError && (
+                <span className="field__error" role="alert">
+                  {sectionCreateError}
+                </span>
+              )}
+            </form>
+          )}
           {sectionError && <span className="field__error">{sectionError}</span>}
-        </div>
-
-        {/* Materials belong to the chosen garment. The listing can show the
-            Etsy-facing value but must not let one listing contradict its
-            shared garment profile. */}
-        <div className="field">
-          <label htmlFor="details-materials">Materials</label>
-          <input
-            id="details-materials"
-            className="input"
-            type="text"
-            value={materials.join(", ")}
-            readOnly
-          />
-          <span className="field__hint">Set by the selected garment profile.</span>
         </div>
       </fieldset>
     </div>

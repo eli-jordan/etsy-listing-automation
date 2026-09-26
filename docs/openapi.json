@@ -948,6 +948,21 @@
         "title": "CreateAiRunRequest",
         "type": "object"
       },
+      "CreateEtsySectionRequest": {
+        "description": "The title Etsy should give a newly created shop section.",
+        "properties": {
+          "title": {
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "title": "CreateEtsySectionRequest",
+        "type": "object"
+      },
       "CreateListingRequest": {
         "description": "The whole document, not a handful of fields to build one from.\n\nThe editor is the create form, so by the time a name is typed the user may\nhave chosen a design, colours and images -- and the shape they edited is the\nshape that should be written. A server-built stub here would be a second\nopinion about what a new listing starts as.",
         "properties": {
@@ -5121,6 +5136,46 @@
           }
         },
         "summary": "List Etsy Sections",
+        "tags": [
+          "listings-support"
+        ]
+      },
+      "post": {
+        "description": "Create a shop section from the Details tab's inline picker.\n\nUnlike the list beside it, creation is scoped and therefore goes through\nthe signed-in Etsy client. The listing document is updated separately by\nthe editor's normal autosave after this returns successfully.",
+        "operationId": "create_etsy_section_api_etsy_sections_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateEtsySectionRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EtsySectionSummary"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Etsy Section",
         "tags": [
           "listings-support"
         ]

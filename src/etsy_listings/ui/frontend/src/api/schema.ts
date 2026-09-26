@@ -199,7 +199,15 @@ export interface paths {
      */
     get: operations["list_etsy_sections_api_etsy_sections_get"];
     put?: never;
-    post?: never;
+    /**
+     * Create Etsy Section
+     * @description Create a shop section from the Details tab's inline picker.
+     *
+     *     Unlike the list beside it, creation is scoped and therefore goes through
+     *     the signed-in Etsy client. The listing document is updated separately by
+     *     the editor's normal autosave after this returns successfully.
+     */
+    post: operations["create_etsy_section_api_etsy_sections_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -1395,6 +1403,14 @@ export interface components {
       draft_brief: boolean;
       /** Listing */
       listing: string;
+    };
+    /**
+     * CreateEtsySectionRequest
+     * @description The title Etsy should give a newly created shop section.
+     */
+    CreateEtsySectionRequest: {
+      /** Title */
+      title: string;
     };
     /**
      * CreateListingRequest
@@ -3413,6 +3429,39 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["EtsySectionSummary"][];
+        };
+      };
+    };
+  };
+  create_etsy_section_api_etsy_sections_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateEtsySectionRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["EtsySectionSummary"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

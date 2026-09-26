@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.media import MediaKind
@@ -351,12 +351,25 @@ class CommonCopySummary(BaseModel):
 
 
 class EtsySectionSummary(BaseModel):
-    """One row for the Details tab's Section dropdown, from
-    `EtsyShopClient.shop_sections` -- unscoped, so this needs only the
-    workspace's app key pair, never a signed-in Etsy session."""
+    """One row for the Details tab's Section dropdown.
+
+    Existing rows come from the unscoped `EtsyShopClient.shop_sections`;
+    creating one returns the same shape through the signed-in client.
+    """
 
     id: int
     title: str
+
+
+class CreateEtsySectionRequest(BaseModel):
+    """The title Etsy should give a newly created shop section."""
+
+    title: str = Field(min_length=1)
+
+    @field_validator("title", mode="before")
+    @classmethod
+    def strip_title(cls, value: object) -> object:
+        return value.strip() if isinstance(value, str) else value
 
 
 class WorkspaceSummary(BaseModel):

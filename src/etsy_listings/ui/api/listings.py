@@ -73,6 +73,7 @@ from etsy_listings.newcmd.logic import (
 from etsy_listings.ui.api.etsystate import etsy_states
 from etsy_listings.ui.api.schemas import (
     CommonCopySummary,
+    CreateEtsySectionRequest,
     CreateListingRequest,
     DraftListingRequest,
     EtsySectionSummary,
@@ -794,6 +795,34 @@ def list_etsy_sections(request: Request) -> list[EtsySectionSummary]:
     except (EtsyApiError, EtsyAuthError):
         return []
     return [EtsySectionSummary(id=s.shop_section_id, title=s.title) for s in sections]
+
+
+@support_router.post("/api/etsy/sections", response_model=EtsySectionSummary)
+def create_etsy_section(request: Request, body: CreateEtsySectionRequest) -> EtsySectionSummary:
+    """Create a shop section from the Details tab's inline picker.
+
+    Unlike the list beside it, creation is scoped and therefore goes through
+    the signed-in Etsy client. The listing document is updated separately by
+    the editor's normal autosave after this returns successfully.
+    """
+    workspace = _workspace(request)
+    shop_id = workspace.defaults.etsy.shop_id
+    if shop_id is None:
+        raise HTTPException(
+            status_code=409, detail="Configure an Etsy shop before adding a section."
+        )
+    client = connections.etsy_listing_client(workspace.root)
+    if client is None:
+        raise HTTPException(
+            status_code=409, detail="Configure Etsy credentials before adding a section."
+        )
+    try:
+        section = client.create_shop_section(shop_id, body.title)
+    except EtsyAuthError as exc:
+        raise HTTPException(status_code=401, detail=str(exc)) from exc
+    except EtsyApiError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return EtsySectionSummary(id=section.shop_section_id, title=section.title)
 
 
 @support_router.get("/api/common-copy", response_model=list[CommonCopySummary])
