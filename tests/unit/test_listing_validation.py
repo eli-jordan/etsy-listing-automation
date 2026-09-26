@@ -436,6 +436,41 @@ class TestLifecycleVerb:
         assert blocking
 
 
+class TestPrintifyVariantLimit:
+    def test_more_than_100_configured_variants_warns_on_the_variants_tab(self) -> None:
+        colours = ["black", *(f"colour-{number}" for number in range(2, 19))]
+        profile = PROFILE.model_copy(
+            update={
+                "sizes": ["S", "M", "L", "XL", "2XL", "3XL"],
+                "colors": dict.fromkeys(colours, "dark"),
+            }
+        )
+
+        issues = _check(_listing(colors=colours), garment_profile=profile)
+
+        [warning] = [issue for issue in issues if "108 variants" in issue.message]
+        assert warning == Issue(
+            "warn",
+            "variants",
+            "Variants › Colours",
+            "18 colours × 6 sizes configures 108 variants; Printify allows at most 100 "
+            "per product. Disable at least 2 colours or reduce the garment profile's sizes.",
+        )
+
+    def test_exactly_100_configured_variants_does_not_warn(self) -> None:
+        colours = ["black", *(f"colour-{number}" for number in range(2, 21))]
+        profile = PROFILE.model_copy(
+            update={
+                "sizes": ["S", "M", "L", "XL", "2XL"],
+                "colors": dict.fromkeys(colours, "dark"),
+            }
+        )
+
+        issues = _check(_listing(colors=colours), garment_profile=profile)
+
+        assert not [issue for issue in issues if "Printify allows at most" in issue.message]
+
+
 class TestMissingListingYaml:
     def test_a_missing_file_is_not_consent(self) -> None:
         issues = check_listing_yaml_present(present=False)

@@ -25,10 +25,10 @@ import type { Issue, IssueTab } from "../../types";
  * before deploying" from a `warn` that is only advice (no tags, say), now
  * that both wear the same icon.
  *
- * An `info` row is neither: a note about what Etsy will do (it strips a
- * video's sound, PRD 72), with nothing for the seller to fix. It wears no
- * warning icon and is counted as a note, never as a warning -- a banner that
- * called it one would train a seller to skim past the real ones.
+ * Informational notes are not global editor issues. For example, PRD 72's
+ * stripped-audio note remains available beside the focused clip (and may be
+ * reported by a plan), but putting it over every editor tab reads as a
+ * warning about something the seller cannot fix.
  */
 
 interface Props {
@@ -40,14 +40,12 @@ interface Props {
 function summarise(issues: Issue[]): string {
   const blocks = issues.filter((i) => i.severity === "block").length;
   const warns = issues.filter((i) => i.severity === "warn").length;
-  const notes = issues.length - blocks - warns;
   const parts: string[] = [];
   if (blocks > 0) parts.push(`${blocks} to fix before deploying`);
   // "Other" only beside a blocker count, where it says these are the ones
   // that do not stop a deploy; on its own it would be other than nothing.
   const other = blocks > 0 ? "other " : "";
   if (warns > 0) parts.push(warns === 1 ? `1 ${other}warning` : `${warns} ${other}warnings`);
-  if (notes > 0) parts.push(notes === 1 ? "1 note" : `${notes} notes`);
   return parts.join(" · ");
 }
 
@@ -75,21 +73,19 @@ function WarnIcon() {
 }
 
 export function IssuesBanner({ issues, activeTab, onJumpTo }: Props) {
-  if (issues.length === 0) return null;
+  const visible = issues.filter((issue) => issue.severity !== "info");
+  if (visible.length === 0) return null;
 
   return (
     <div className="issues">
       <div className="issues__head">
-        <span className="issues__summary issues__summary--warn">{summarise(issues)}</span>
+        <span className="issues__summary issues__summary--warn">{summarise(visible)}</span>
         <span className="issues__when">Checked against this listing&rsquo;s own configuration</span>
       </div>
-      {issues.map((issue, index) => (
-        <div
-          key={`${issue.tab}-${issue.where}-${index}`}
-          className={`issue ${issue.severity === "info" ? "issue--info" : "issue--warn"}`}
-        >
+      {visible.map((issue, index) => (
+        <div key={`${issue.tab}-${issue.where}-${index}`} className="issue issue--warn">
           <span className="issue__icon" aria-hidden="true">
-            {issue.severity !== "info" && <WarnIcon />}
+            <WarnIcon />
           </span>
           <span className="issue__body">
             <span className="issue__text">{issue.message}</span>

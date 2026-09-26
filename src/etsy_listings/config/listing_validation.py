@@ -109,6 +109,15 @@ exactly 100% rejects a 4000x4800 file for a 4200x4800 area -- a rule that
 fires on work nobody would call wrong is a rule that gets switched off.
 """
 
+PRINTIFY_MAX_VARIANTS = 100
+"""Printify's per-product ceiling for enabled variants.
+
+The editor can predict the configured matrix without a catalog request: every
+selected colour asks for every size in the garment profile. Printify may offer
+fewer cells than that (PRD 46), so this is advice rather than a deployment
+refusal; the live catalog remains the authority on what can actually be sent.
+"""
+
 
 def _required_pixels(profile: GarmentProfile) -> tuple[int, int]:
     return (
@@ -280,6 +289,29 @@ def _check_colours_enabled(listing: Listing) -> list[Issue]:
             "variants",
             "Variants › Colours",
             "No colours enabled -- the product would have no variants to sell.",
+        )
+    ]
+
+
+def _check_printify_variant_limit(listing: Listing, profile: GarmentProfile) -> list[Issue]:
+    colour_count = len(listing.colors)
+    size_count = len(profile.sizes)
+    variant_count = colour_count * size_count
+    if variant_count <= PRINTIFY_MAX_VARIANTS:
+        return []
+
+    maximum_colours = PRINTIFY_MAX_VARIANTS // size_count
+    colours_to_disable = colour_count - maximum_colours
+    colour_word = "colour" if colours_to_disable == 1 else "colours"
+    return [
+        Issue(
+            "warn",
+            "variants",
+            "Variants › Colours",
+            f"{colour_count} colours × {size_count} sizes configures {variant_count} variants; "
+            f"Printify allows at most {PRINTIFY_MAX_VARIANTS} per product. "
+            f"Disable at least {colours_to_disable} {colour_word} or reduce the garment "
+            "profile's sizes.",
         )
     ]
 
@@ -582,6 +614,7 @@ def check_listing(
     if garment_profile is not None:
         issues += _check_design(design_paths, garment_profile)
         issues += _check_colours_in_garment_profile(listing, garment_profile)
+        issues += _check_printify_variant_limit(listing, garment_profile)
     issues += _check_template_kind_colour_match(listing, templates)
     issues += _check_variation_images(listing, templates)
     issues += check_videos(videos or {})

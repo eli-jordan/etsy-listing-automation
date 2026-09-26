@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
@@ -520,13 +520,16 @@ describe("ImagesTab's shared images (common-media/)", () => {
     expect(screen.queryByText("size-guide.png")).not.toBeInTheDocument();
   });
 
-  it("says where to put one when the workspace has none", async () => {
+  it("omits the Shared section when the workspace has no shared media", async () => {
     vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
     vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
     render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
 
     fireEvent.click(await screen.findByRole("button", { name: "Files" }));
-    expect(await screen.findByText(/Nothing in common-media\//)).toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("group", { name: "Shared" })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByText(/Nothing in common-media\//)).not.toBeInTheDocument();
   });
 });
 

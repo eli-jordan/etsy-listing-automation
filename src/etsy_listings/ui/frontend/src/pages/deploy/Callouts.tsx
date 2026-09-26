@@ -1,5 +1,5 @@
 import type { Comparison } from "./comparison";
-import { stageBlocked, stageWillRun, type PlanDTO } from "../../types";
+import { stageBlocked, stageWillRun, type DriftDTO, type PlanDTO } from "../../types";
 
 /**
  * The headline, impact tags, and the blocked/drift/ok callouts above the
@@ -62,6 +62,36 @@ function DriftIcon() {
   );
 }
 
+type SourcedDrift = DriftDTO & { stage: PlanDTO["stage_plans"][number]["stage"] };
+
+function driftKey(drift: SourcedDrift): string {
+  return JSON.stringify([
+    drift.path,
+    drift.last_applied,
+    drift.live,
+    drift.last_applied_label,
+    drift.live_label,
+  ]);
+}
+
+/** Printify republishes linked copy onto Etsy, so the same external edit can
+ * appear in both stages. Show that event once, preferring the buyer-facing
+ * Etsy observation when both sides are byte-for-byte identical. */
+function uniqueDrifts(plan: PlanDTO): SourcedDrift[] {
+  const found = new Map<string, SourcedDrift>();
+  for (const stagePlan of plan.stage_plans) {
+    for (const drift of stagePlan.drift) {
+      const sourced = { ...drift, stage: stagePlan.stage };
+      const key = driftKey(sourced);
+      const previous = found.get(key);
+      if (previous === undefined || previous.stage === "printify_product") {
+        found.set(key, sourced);
+      }
+    }
+  }
+  return [...found.values()];
+}
+
 export function Callouts({
   plan,
   comparison,
@@ -75,7 +105,7 @@ export function Callouts({
 }) {
   const hasWork = plan.stage_plans.some(stageWillRun);
   const blocked = plan.stage_plans.filter((stage) => stageBlocked(stage) !== null);
-  const drifts = plan.stage_plans.flatMap((s) => s.drift.map((d) => ({ ...d, stage: s.stage })));
+  const drifts = uniqueDrifts(plan);
 
   if (applied) {
     return (
@@ -139,11 +169,17 @@ export function Callouts({
         <div key={`${drift.stage}-${drift.path}-${index}`} className="dv-callout dv-callout--drift">
           <DriftIcon />
           <div>
-            <strong>Changed on Etsy since your last apply:</strong> the{" "}
-            {drift.path.replace(/_/g, " ")} is now &ldquo;{drift.live_label ?? String(drift.live)}
+            <strong>
+              Changed {drift.stage === "printify_product" ? "in Printify" : "on Etsy"} since your
+              last apply:
+            </strong>{" "}
+            the {drift.path.replace(/_/g, " ")} is now &ldquo;
+            {drift.live_label ?? String(drift.live)}
             &rdquo;, not &ldquo;
-            {drift.last_applied_label ?? String(drift.last_applied)}&rdquo;. Printify re-attaches
-            its own settings when it republishes. Apply will set it back.
+            {drift.last_applied_label ?? String(drift.last_applied)}&rdquo;.
+            {drift.stage !== "printify_product" &&
+              " Printify re-attaches its own settings when it republishes."}{" "}
+            Apply will set it back.
           </div>
         </div>
       ))}

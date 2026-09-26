@@ -74,14 +74,11 @@ function group(label: RegExp): HTMLElement {
 afterEach(() => vi.restoreAllMocks());
 
 describe("MediaLocator's file list", () => {
-  it("groups the listing's own files before the shared ones, each under its root", () => {
+  it("groups the listing's own files before the shared ones without exposing ref roots", () => {
     locator();
 
     const groups = screen.getAllByRole("group");
-    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual([
-      "This listing · ./",
-      "Shared · common-media/",
-    ]);
+    expect(groups.map((g) => g.getAttribute("aria-label"))).toEqual(["This listing", "Shared"]);
     expect(within(group(/This listing/)).getByText("shots/back.png")).toBeInTheDocument();
     expect(within(group(/This listing/)).getByText("close-up.mp4")).toBeInTheDocument();
     expect(within(group(/Shared/)).getByText("size-guide.png")).toBeInTheDocument();
@@ -155,13 +152,10 @@ describe("MediaLocator's file list", () => {
     expect(screen.getByText("No file matches that search.")).toBeInTheDocument();
   });
 
-  it("says where to put files when a group has none", () => {
+  it("omits empty groups instead of showing file-system instructions", () => {
     locator({ local: [], shared: [] });
 
-    expect(
-      within(group(/This listing/)).getByText(/Nothing in listings\/take-a-hike\//),
-    ).toBeInTheDocument();
-    expect(within(group(/Shared/)).getByText(/Nothing in common-media\//)).toBeInTheDocument();
+    expect(document.querySelectorAll(".loc-group")).toHaveLength(0);
   });
 
   it("has no This listing group for a draft, which has no directory yet", () => {
@@ -169,6 +163,13 @@ describe("MediaLocator's file list", () => {
 
     expect(screen.queryByRole("group", { name: /This listing/ })).not.toBeInTheDocument();
     expect(group(/Shared/)).toBeInTheDocument();
+  });
+
+  it("marks its two modes as a control that fills the locator width", () => {
+    locator();
+
+    const files = screen.getByRole("button", { name: "Files" });
+    expect(files.parentElement).toHaveClass("locator__modes");
   });
 });
 

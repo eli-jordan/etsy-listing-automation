@@ -190,8 +190,9 @@ describe("ListingEditorPage", () => {
     await screen.findByText("1 warning");
   });
 
-  it("shows an info note quietly: no warning icon, and never counted as a warning", async () => {
-    /* PRD 72: Etsy strips a video's sound. Worth saying, nothing to fix. */
+  it("does not show a video's audio note in the editor's global issues banner", async () => {
+    /* The plan may mention Etsy stripping audio, and ImagesTab can show the
+       note beside the focused clip. It is not an editor-wide warning. */
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
       detail({
         issues: [
@@ -200,38 +201,22 @@ describe("ListingEditorPage", () => {
         ],
       }),
     );
-    const { container } = renderAt("/listings/take-a-hike");
+    renderAt("/listings/take-a-hike");
 
-    await screen.findByText("1 warning · 1 note");
-    const note = screen.getByText("sound is stripped").closest(".issue");
-    expect(note).toHaveClass("issue--info");
-    expect(note?.querySelector(".issue__icon svg")).toBeNull();
-    expect(container.querySelectorAll(".issue--warn")).toHaveLength(1);
+    await screen.findByText("1 warning");
+    expect(screen.queryByText("sound is stripped")).not.toBeInTheDocument();
   });
 
-  it("summarises a note alone as a note, not a warning", async () => {
+  it("omits the global issues banner when audio is the only note", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
       detail({
         issues: [{ severity: "info", tab: "images", where: "Clip", message: "sound is stripped" }],
       }),
     );
-    renderAt("/listings/take-a-hike");
+    const { container } = renderAt("/listings/take-a-hike");
 
-    await screen.findByText("1 note");
-  });
-
-  it("pluralises notes", async () => {
-    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
-      detail({
-        issues: [
-          { severity: "info", tab: "images", where: "A", message: "a is silent" },
-          { severity: "info", tab: "images", where: "B", message: "b is silent" },
-        ],
-      }),
-    );
-    renderAt("/listings/take-a-hike");
-
-    await screen.findByText("2 notes");
+    await screen.findByRole("heading", { name: "take-a-hike" });
+    expect(container.querySelector(".issues")).toBeNull();
   });
 
   it("pluralises blocking problems", async () => {

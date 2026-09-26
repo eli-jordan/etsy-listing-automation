@@ -3778,6 +3778,19 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 48%, transparent);
 }
 
+/* A flex-column child stretches by default. Without an explicit two-column
+   grid the segmented-control border filled the locator while its intrinsic
+   buttons did not, leaving a blank region that looked like a third tab. */
+.locator__modes {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  width: 100%;
+}
+
+.locator__modes .seg-opt {
+  justify-content: center;
+}
+
 .locator__search {
   position: relative;
   display: flex;

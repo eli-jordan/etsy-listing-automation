@@ -68,6 +68,37 @@ describe("Callouts", () => {
     expect(screen.queryByText(/19283/)).not.toBeInTheDocument();
   });
 
+  it("shows identical Printify and Etsy drift once, attributed to Etsy", () => {
+    const sameTitleDrift = {
+      path: "title",
+      last_applied: "Old title",
+      live: "Changed title",
+      last_applied_label: null,
+      live_label: null,
+    };
+    const p = plan([
+      stage({ stage: "printify_product", will_run: true, drift: [sameTitleDrift] }),
+      stage({ stage: "etsy_listing", will_run: true, drift: [sameTitleDrift] }),
+    ]);
+    render(<Callouts plan={p} comparison={buildComparison(p)} applied={false} />);
+
+    expect(screen.getAllByText(/Changed on Etsy since your last apply/)).toHaveLength(1);
+    expect(screen.queryByText(/Changed in Printify since your last apply/)).not.toBeInTheDocument();
+  });
+
+  it("attributes Printify-only drift to Printify rather than Etsy", () => {
+    const p = plan([
+      stage({
+        stage: "printify_product",
+        will_run: true,
+        drift: [{ path: "visible", last_applied: false, live: true }],
+      }),
+    ]);
+    render(<Callouts plan={p} comparison={buildComparison(p)} applied={false} />);
+
+    expect(screen.getByText(/Changed in Printify since your last apply/)).toBeInTheDocument();
+  });
+
   it("collapses to a single Deployed callout once applied", () => {
     const p = plan([stage({ stage: "render", will_run: true, reason: "x" })]);
     render(<Callouts plan={p} comparison={buildComparison(p)} applied />);

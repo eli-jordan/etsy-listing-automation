@@ -17,8 +17,9 @@ import { MAX_VIDEOS } from "./mediaEdits";
  * One control rather than two panels because they fill the same gallery.
  *
  * *Files* is one list in two groups, one per root a ref can name (PRD 73):
- * *This listing · ./* for the listing's own directory and *Shared ·
- * common-media/*. Images and videos sit together, because `media:` is one
+ * *This listing* for the listing's own directory and *Shared* for
+ * `common-media/`. The ref roots are an implementation detail rather than
+ * useful navigation, and an empty root is omitted. Images and videos sit together, because `media:` is one
  * gallery (PRD 72); a video is drawn by a muted `<video>` from its own first
  * frame, carries its length, and plays on hover.
  *
@@ -137,18 +138,15 @@ export function MediaLocator({
       ? []
       : [
           {
-            label: "This listing · ./",
+            label: "This listing",
             files: local,
-            empty: `Nothing in listings/${detail.name}/ yet — a close-up or a clip saved there appears here.`,
           },
         ]),
     {
-      label: "Shared · common-media/",
+      label: "Shared",
       files: shared,
-      empty:
-        "Nothing in common-media/ yet — drop a sizing chart or a size-guide video there and it appears here.",
     },
-  ];
+  ].filter((group) => group.files.length > 0);
   const nothingMatches =
     groups.some((g) => g.files.length > 0) && groups.every((g) => !g.files.some(matches));
   const swatchTemplate = detail.etsy.variation_images ?? null;
@@ -166,7 +164,7 @@ export function MediaLocator({
         <span className="locator__hint">Hover to preview · click to add</span>
       </div>
 
-      <div className="seg">
+      <div className="seg locator__modes">
         {(["templates", "files"] as LocatorMode[]).map((m) => (
           <button
             key={m}
@@ -209,6 +207,7 @@ export function MediaLocator({
           )}
           {groups.map((g) => {
             const visible = g.files.filter(matches);
+            if (visible.length === 0) return null;
             return (
               <div key={g.label} role="group" aria-label={g.label} className="loc-group">
                 <span className="loc-group__label">{g.label}</span>
@@ -233,7 +232,6 @@ export function MediaLocator({
                     ))}
                   </div>
                 )}
-                {g.files.length === 0 && <p className="locator__empty">{g.empty}</p>}
               </div>
             );
           })}
