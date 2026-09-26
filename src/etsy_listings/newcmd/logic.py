@@ -21,7 +21,8 @@ from etsy_listings.clients.printify.models import Blueprint, ShippingRates, Vari
 from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
-from etsy_listings.config.listing import MAX_MEDIA_ENTRIES, Listing
+from etsy_listings.config.listing import Listing
+from etsy_listings.config.media import MAX_IMAGES
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.slug import ColourExceptions, slug_map, slugify
@@ -320,7 +321,7 @@ def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list
     each produces one output, so there is nothing to disambiguate (PRD 28).
     """
     if kind == "colour-matrix":
-        return [{"template": template, "colour": colour} for colour in colours[:MAX_MEDIA_ENTRIES]]
+        return [{"template": template, "colour": colour} for colour in colours[:MAX_IMAGES]]
     return [{"template": template}]
 
 
@@ -374,14 +375,13 @@ def build_pricing_plan_choices(
     )
 
 
-def pricing_plan_ref(plan_path: Path, *, listing_dir: Path) -> str:
-    """The write-side counterpart to :meth:`Workspace.resolve` -- a
-    ``listing_dir``-relative POSIX ref, e.g.
-    ``'../../pricing-plans/tee-basic.yaml'``. Needed because (unlike
-    ``design``/``garment_profile``, which have one fixed depth) discovery under
-    ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the way
-    ``../../designs/{name}.png`` is."""
-    return plan_path.resolve().relative_to(listing_dir.resolve(), walk_up=True).as_posix()
+def pricing_plan_ref(plan_path: Path, *, root: Path) -> str:
+    """The write-side counterpart to :meth:`Workspace.resolve_ref` -- a
+    workspace-rooted POSIX ref (PRD 73), e.g. ``'pricing-plans/tee-basic.yaml'``.
+    Needed because (unlike ``design``, which has one fixed directory) discovery
+    under ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the
+    way ``designs/{name}.png`` is."""
+    return plan_path.resolve().relative_to(root.resolve()).as_posix()
 
 
 def compute_starting_prices(

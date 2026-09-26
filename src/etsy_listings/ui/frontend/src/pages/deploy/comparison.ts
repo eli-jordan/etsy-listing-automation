@@ -1,5 +1,6 @@
 import {
   stageChanges,
+  stageWillRun,
   type BelowCostRow,
   type ChangeDTO,
   type PlanDTO,
@@ -29,7 +30,7 @@ import {
  */
 
 export type ImpactTag =
-  "Images" | "Title" | "Description" | "Prices" | "Colours" | "Tags" | "Materials";
+  "Images" | "Videos" | "Title" | "Description" | "Prices" | "Colours" | "Tags" | "Materials";
 
 export interface TitleBlock {
   before: string | null;
@@ -103,6 +104,31 @@ export interface ImagesBlock {
   changed: boolean;
 }
 
+/** One video as this run will place it. `featured` is position 2; the
+ * second sits after `afterImages` images (decision 9). */
+export interface AfterVideoTile {
+  ref: string;
+  slot: "featured" | "second";
+  afterImages: number | null;
+  badge: "new" | null;
+}
+
+/** One video Etsy has now, drawn from its own `thumbnail_url`. `ref` is
+ * `null` for one this tool never uploaded. */
+export interface BeforeVideoTile {
+  videoId: number;
+  ref: string | null;
+  url: string | null;
+  inactive: boolean;
+  badge: "removed" | null;
+}
+
+export interface VideosBlock {
+  before: BeforeVideoTile[];
+  after: AfterVideoTile[];
+  changed: boolean;
+}
+
 export interface PriceRow {
   size: string;
   before: string | null;
@@ -127,6 +153,9 @@ export interface Comparison {
   colours: ColoursBlock | null;
   price: PriceBlock | null;
   images: ImagesBlock | null;
+  /** `etsy_videos`, shown under Etsy media (PRD 72); `null` when neither
+   * side has a video. */
+  videos: VideosBlock | null;
   priceRows: PriceRow[];
   /** `publish`'s own below-cost rows, verbatim -- never re-derived by
    * comparing a row's price against its cost here, which is exactly the
@@ -303,6 +332,67 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
   };
 }
 
+const VIDEO_SLOTS = ["videos.featured", "videos.second"] as const;
+
+/**
+ * The videos block. Every badge reads the stage's own changes (A2): a slot
+ * change names the ref before and after (`etsy_videos._changes`), so a ref
+ * that arrives in a slot without leaving another is new, and one that leaves
+ * without arriving is removed -- a swap is neither. New bytes on the same ref
+ * (`.contents`) replace its upload, so it is both. A video this tool never
+ * uploaded is swept whenever the stage runs (PRD 72), which the outcome says.
+ */
+function buildVideos(stagePlan: StagePlanFor<"etsy_videos"> | undefined): VideosBlock | null {
+  const snapshot = stagePlan?.snapshot;
+  if (!stagePlan || !snapshot) return null;
+  if (snapshot.desired.length === 0 && snapshot.live.length === 0) return null;
+
+  const changes = stageChanges(stagePlan).filter(
+    (c): c is Extract<ChangeDTO, { kind: "field" }> =>
+      c.kind === "field" && c.path.startsWith("videos."),
+  );
+  const slotRefs = (side: "before" | "after") =>
+    new Set(
+      changes
+        .filter((c) => (VIDEO_SLOTS as readonly string[]).includes(c.path))
+        .map((c) => c[side])
+        .filter((ref): ref is string => typeof ref === "string"),
+    );
+  const arriving = slotRefs("after");
+  const leaving = slotRefs("before");
+  const replaced = new Set(
+    VIDEO_SLOTS.flatMap((slot, index) =>
+      changes.some((c) => c.path === `${slot}.contents`) ? [snapshot.desired[index]?.ref] : [],
+    ).filter((ref): ref is string => ref !== undefined),
+  );
+  const sweeps = stageWillRun(stagePlan);
+
+  return {
+    after: snapshot.desired.map((video, index) => ({
+      ref: video.ref,
+      slot: index === 0 ? "featured" : "second",
+      afterImages: video.after_images ?? null,
+      badge:
+        (arriving.has(video.ref) && !leaving.has(video.ref)) || replaced.has(video.ref)
+          ? "new"
+          : null,
+    })),
+    before: snapshot.live.map((video) => {
+      const ref = video.ref ?? null;
+      const removed =
+        ref === null ? sweeps : (leaving.has(ref) && !arriving.has(ref)) || replaced.has(ref);
+      return {
+        videoId: video.video_id,
+        ref,
+        url: video.thumbnail_url ?? null,
+        inactive: video.state !== "active",
+        badge: removed ? "removed" : null,
+      };
+    }),
+    changed: changes.length > 0,
+  };
+}
+
 function impactsFor(
   colours: ColoursBlock | null,
   title: TitleBlock | null,
@@ -311,10 +401,12 @@ function impactsFor(
   tags: TagsBlock | null,
   materials: MaterialsBlock | null,
   images: ImagesBlock | null,
+  videos: VideosBlock | null,
 ): ImpactTag[] {
   // Reading order (decision 3's gallery-first order), not emission order.
   const impacts: ImpactTag[] = [];
   if (images?.changed) impacts.push("Images");
+  if (videos?.changed) impacts.push("Videos");
   if (title?.changed) impacts.push("Title");
   if (description?.changed) impacts.push("Description");
   if (price?.changed) impacts.push("Prices");
@@ -339,9 +431,10 @@ export function buildComparison(plan: PlanDTO): Comparison {
   const colours = buildColours(productPlan);
   const price = buildPrice(productPlan);
   const images = buildImages(etsyMediaPlan);
+  const videos = buildVideos(findStage(plan, "etsy_videos"));
 
   return {
-    impacts: impactsFor(colours, title, description, price, tags, materials, images),
+    impacts: impactsFor(colours, title, description, price, tags, materials, images, videos),
     hasEtsyListing: plan.etsy_listing_id !== null,
     title,
     description,
@@ -350,6 +443,7 @@ export function buildComparison(plan: PlanDTO): Comparison {
     colours,
     price,
     images,
+    videos,
     priceRows: buildPriceRows(productPlan, belowCost),
     belowCost,
   };

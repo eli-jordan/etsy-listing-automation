@@ -24,6 +24,11 @@ import type { Issue, IssueTab } from "../../types";
  * row rather than through colour alone: the tag is what separates "fix this
  * before deploying" from a `warn` that is only advice (no tags, say), now
  * that both wear the same icon.
+ *
+ * Informational notes are not global editor issues. For example, PRD 72's
+ * stripped-audio note remains available beside the focused clip (and may be
+ * reported by a plan), but putting it over every editor tab reads as a
+ * warning about something the seller cannot fix.
  */
 
 interface Props {
@@ -34,7 +39,7 @@ interface Props {
 
 function summarise(issues: Issue[]): string {
   const blocks = issues.filter((i) => i.severity === "block").length;
-  const warns = issues.length - blocks;
+  const warns = issues.filter((i) => i.severity === "warn").length;
   const parts: string[] = [];
   if (blocks > 0) parts.push(`${blocks} to fix before deploying`);
   // "Other" only beside a blocker count, where it says these are the ones
@@ -68,15 +73,16 @@ function WarnIcon() {
 }
 
 export function IssuesBanner({ issues, activeTab, onJumpTo }: Props) {
-  if (issues.length === 0) return null;
+  const visible = issues.filter((issue) => issue.severity !== "info");
+  if (visible.length === 0) return null;
 
   return (
     <div className="issues">
       <div className="issues__head">
-        <span className="issues__summary issues__summary--warn">{summarise(issues)}</span>
+        <span className="issues__summary issues__summary--warn">{summarise(visible)}</span>
         <span className="issues__when">Checked against this listing&rsquo;s own configuration</span>
       </div>
-      {issues.map((issue, index) => (
+      {visible.map((issue, index) => (
         <div key={`${issue.tab}-${issue.where}-${index}`} className="issue issue--warn">
           <span className="issue__icon" aria-hidden="true">
             <WarnIcon />

@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { listTemplates } from "../../api/calibrator";
-import { listCommonMedia } from "../../api/listings";
+import { listCommonMedia, listListingMediaFiles } from "../../api/listings";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
-import { mediaLabel, pictureFor, singleDesignName } from "../../media";
-import type { CommonMediaSummary, ListingDetail, TemplateSummary } from "../../types";
+import { mediaKind, mediaLabel, pictureFor, singleDesignName } from "../../media";
+import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
 import { type Focus, viewFocus } from "./focus";
@@ -44,7 +44,8 @@ interface Props {
 
 export function ImagesTab({ detail, onUpdate }: Props) {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
-  const [shared, setShared] = useState<CommonMediaSummary[]>([]);
+  const [shared, setShared] = useState<MediaFileSummary[]>([]);
+  const [local, setLocal] = useState<MediaFileSummary[]>([]);
   const [status, setStatus] = useState("");
   const [focus, setFocus] = useState<Focus | null>(null);
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -57,8 +58,17 @@ export function ImagesTab({ detail, onUpdate }: Props) {
       .catch(() => setStatus("failed to load templates"));
     listCommonMedia()
       .then(setShared)
-      .catch(() => setStatus("failed to load shared images"));
+      .catch(() => setStatus("failed to load shared files"));
   }, []);
+
+  // A draft has no directory, so nothing of its own to list (PRD 73).
+  const listing = detail.name || null;
+  useEffect(() => {
+    if (listing === null) return;
+    listListingMediaFiles(listing)
+      .then(setLocal)
+      .catch(() => setStatus("failed to load this listing's files"));
+  }, [listing]);
 
   const design = singleDesignName(detail.design);
 
@@ -74,7 +84,8 @@ export function ImagesTab({ detail, onUpdate }: Props) {
   const lightboxItems: LightboxItem[] = detail.media.map((entry, index) => ({
     id: `${mediaLabel(entry)}-${index}`,
     label: mediaLabel(entry),
-    url: pictureFor(entry, design),
+    url: pictureFor(entry, design, "full", listing),
+    kind: mediaKind(entry),
   }));
 
   const view = focus === null ? null : viewFocus(focus, detail, templates, design);
@@ -82,8 +93,8 @@ export function ImagesTab({ detail, onUpdate }: Props) {
   function toggleFocused() {
     if (focus === null) return;
     apply(
-      focus.kind === "shared"
-        ? edits.toggleShared(detail, focus.asset.ref)
+      focus.kind === "file"
+        ? edits.toggleFile(detail, focus.asset.ref)
         : edits.toggleEntry(detail, focus.template, focus.colour),
     );
   }
@@ -93,9 +104,10 @@ export function ImagesTab({ detail, onUpdate }: Props) {
       <MediaLocator
         detail={detail}
         templates={templates}
+        local={listing === null ? null : local}
         shared={shared}
         onToggleTemplate={(template, colour) => apply(edits.toggleEntry(detail, template, colour))}
-        onToggleShared={(ref) => apply(edits.toggleShared(detail, ref))}
+        onToggleFile={(ref) => apply(edits.toggleFile(detail, ref))}
         onAddMissingColours={(template) => apply(edits.addEveryMissingColour(detail, template))}
         onToggleSwatchSource={(template) => apply(edits.toggleSwatchSource(detail, template))}
         onFocus={setFocus}
@@ -109,7 +121,21 @@ export function ImagesTab({ detail, onUpdate }: Props) {
                 <span>Point at something on the left</span>
               </div>
             )}
-            {view !== null && (
+            {view?.kind === "video" && (
+              /* Its own controls, not the carousel button: a click on a
+                  clip is play or seek (PRD 72). Keyed by the file, so
+                  pointing at another clip starts that one afresh. */
+              <video
+                key={view.picture}
+                className="preview-stage__video"
+                src={view.picture}
+                aria-label={view.title}
+                controls
+                playsInline
+                preload="metadata"
+              />
+            )}
+            {view?.kind === "image" && (
               /* A button, not a bare `<img onClick>`: opening the carousel
                   is an action, and the keyboard has to be able to take it. */
               <button
@@ -134,6 +160,14 @@ export function ImagesTab({ detail, onUpdate }: Props) {
               <span className="preview-meta">
                 <span className="preview-meta__title">{view.title}</span>
                 <span className="preview-meta__path">{view.path}</span>
+                {view.notes.map((note) => (
+                  <span
+                    key={note.message}
+                    className={`preview-meta__note preview-meta__note--${note.severity}`}
+                  >
+                    {note.message}
+                  </span>
+                ))}
               </span>
               <span className="preview-actions">
                 <button
@@ -157,7 +191,8 @@ export function ImagesTab({ detail, onUpdate }: Props) {
           design={design}
           swatchTemplate={detail.etsy.variation_images ?? null}
           selectedIndex={selectedIndex}
-          shared={shared}
+          listing={listing}
+          files={listing === null ? shared : [...local, ...shared]}
           onOpen={(index) => {
             setSelectedIndex(index);
             setLightboxIndex(index);

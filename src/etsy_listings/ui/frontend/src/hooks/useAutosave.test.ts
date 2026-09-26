@@ -7,7 +7,7 @@ import { AUTOSAVE_DEBOUNCE_MS, useAutosave } from "./useAutosave";
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
     garment_profile: "comfort-colors-1717",
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black"],
     brief: "",
     prices: {},
@@ -550,14 +550,14 @@ describe("useAutosave before the listing exists", () => {
 
     // The edit that supplies what was missing is the retry -- the user does
     // not have to type the name again.
-    act(() => result.current.update({ pricing_plan: "../../pricing-plans/tee.yaml" }));
+    act(() => result.current.update({ pricing_plan: "pricing-plans/tee.yaml" }));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
     });
 
     expect(create).toHaveBeenCalledTimes(2);
     expect(create.mock.calls[1]?.[0].document).toMatchObject({
-      pricing_plan: "../../pricing-plans/tee.yaml",
+      pricing_plan: "pricing-plans/tee.yaml",
     });
     expect(onNamed).toHaveBeenCalledWith("my-shirt", expect.objectContaining({ name: "my-shirt" }));
   });
@@ -586,9 +586,9 @@ describe("useAutosave before the listing exists", () => {
 
     // What `DesignSelect` sends. Held as a string, `Object.keys` on it reports
     // one "artwork" per character.
-    act(() => result.current.update({ design: "../../designs/take-a-hike.png" }));
+    act(() => result.current.update({ design: "designs/take-a-hike.png" }));
 
-    expect(result.current.detail.design).toEqual({ default: "../../designs/take-a-hike.png" });
+    expect(result.current.detail.design).toEqual({ default: "designs/take-a-hike.png" });
     unmount();
   });
 });

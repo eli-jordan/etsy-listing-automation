@@ -1,15 +1,22 @@
 import { templateDesignPreviewUrl, templatePhotoUrl, templateThumbnailUrl } from "./api/calibrator";
-import { commonMediaFileUrl, commonMediaThumbnailUrl } from "./api/listings";
+import {
+  commonMediaFileUrl,
+  commonMediaThumbnailUrl,
+  listingMediaFileUrl,
+  listingMediaThumbnailUrl,
+} from "./api/listings";
 import type { MediaEntry, TemplateSummary } from "./types";
 
 /**
  * What `media:` holds, and what it looks like.
  *
  * `media:` carries two shapes in one list (`config/listing.py`'s `MediaEntry`):
- * a `{template, colour}` entry the tool renders, and a bare path to a shared
- * asset under `common-media/` that is uploaded as-is. Every question about
- * either one -- what is it called, is it already in the listing, which picture
- * shows it, which file on disk does it come from -- is answered here.
+ * a `{template, colour}` entry the tool renders, and a file ref uploaded
+ * as-is -- a shared file under `common-media/`, or one of the listing's own
+ * spelled `./…` (PRD 73) -- which may be an image or a video (PRD 72). Every
+ * question about either one -- what is it called, what kind is it, is it
+ * already in the listing, which picture shows it, which file on disk does it
+ * come from -- is answered here.
  *
  * It exists because those answers were spread across whichever tab first
  * needed them. Six near-identical URL builders lived in two api modules;
@@ -44,18 +51,30 @@ export function refName(ref: string): string {
   return file.replace(/\.[^.]+$/, "");
 }
 
-/** The same file as a *workspace*-relative POSIX path.
+/** A shared ref's path under `common-media/` -- what the picture endpoints
+ * take. The whole path, not the stem: a shared file may be a JPEG and may sit
+ * in a subdirectory (PRD 72), and only its full path says which file it is. */
+function sharedName(ref: string): string {
+  const prefix = "common-media/";
+  return ref.startsWith(prefix) ? ref.slice(prefix.length) : ref;
+}
+
+/** A listing's own file (PRD 73's `./` root) rather than a workspace one. */
+function isListingLocal(ref: string): boolean {
+  return ref.startsWith("./");
+}
+
+/** Whether an entry is a picture or a clip -- `config/media.py`'s
+ * `media_kind`, mirrored.
  *
- * A listing stores its refs relative to its own directory
- * (`../../designs/take-a-hike.png`, PRD 34), which is the right thing for a
- * file that lives beside a listing and the wrong thing for anything that has
- * to name the file without one -- the Design strip's caption, for one.
- *
- * Only leading `../` segments are removed; a ref that is already
- * workspace-relative passes through unchanged.
+ * A template entry is always an image (a render is a PNG) and a file ref is a
+ * video by its extension alone, case-insensitively, since a phone names its
+ * clips `IMG_1234.MOV`. Every other ref is an image: a listing whose `media:`
+ * names an unknown type is refused on load, so it never reaches the browser.
  */
-export function workspacePath(ref: string): string {
-  return ref.replace(/^(\.\.\/)+/, "");
+export function mediaKind(entry: MediaEntry): "image" | "video" {
+  if (typeof entry !== "string") return "image";
+  return /\.(mp4|mov)$/i.test(entry) ? "video" : "image";
 }
 
 /**
@@ -128,12 +147,30 @@ export function pictureFor(
   entry: MediaEntry,
   design: string | null,
   size: PictureSize = "full",
+  listing: string | null = null,
 ): string {
-  if (typeof entry === "string") {
-    const name = refName(entry);
-    return size === "tile" ? commonMediaThumbnailUrl(name) : commonMediaFileUrl(name);
-  }
+  if (typeof entry === "string") return filePicture(entry, size, listing);
   return templatePicture(entry.template, entry.colour ?? null, design, size);
+}
+
+/**
+ * The picture for a file ref, from whichever of PRD 73's two roots it names.
+ *
+ * A `./` ref is one of `listing`'s own files; with no listing -- the editor's
+ * unnamed draft, which has no directory -- it names nothing, and the answer is
+ * the empty string rather than a URL that would `404`. A video is served as
+ * its file at either size: the thumbnail endpoint answers `415` for one,
+ * because a muted `<video preload="metadata">` draws its own first frame.
+ */
+function filePicture(ref: string, size: PictureSize, listing: string | null): string {
+  const tile = size === "tile" && mediaKind(ref) === "image";
+  if (isListingLocal(ref)) {
+    if (listing === null) return "";
+    const name = ref.slice(2);
+    return tile ? listingMediaThumbnailUrl(listing, name) : listingMediaFileUrl(listing, name);
+  }
+  const name = sharedName(ref);
+  return tile ? commonMediaThumbnailUrl(name) : commonMediaFileUrl(name);
 }
 
 /** The same, for a template/colour the locator is offering but the listing has

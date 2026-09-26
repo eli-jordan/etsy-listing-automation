@@ -9,7 +9,6 @@ from pydantic import ValidationError
 from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.listing import (
     EMPTY_DRAFT,
-    MAX_MEDIA_ENTRIES,
     EtsyListingConfig,
     Listing,
     TemplateMediaEntry,
@@ -19,7 +18,7 @@ from etsy_listings.config.pricing_plan import PricingPlan
 
 BASE: dict[str, object] = {
     "garment_profile": "comfort-colors-1717",
-    "design": "../../designs/take-a-hike.png",
+    "design": "designs/take-a-hike.png",
     "colors": ["black"],
     "brief": "test brief",
     "prices": {"S": "349 NOK"},
@@ -70,21 +69,21 @@ def test_listing_materials_explains_the_garment_profile_migration() -> None:
 
 def test_bare_design_string_normalises_to_default_key() -> None:
     listing = Listing.model_validate(BASE, context={"currency": "NOK"})
-    assert listing.design == {"default": "../../designs/take-a-hike.png"}
+    assert listing.design == {"default": "designs/take-a-hike.png"}
 
 
 def test_design_map_is_kept_as_is() -> None:
     data = {
         **BASE,
         "design": {
-            "on-light": "../../designs/take-a-hike-dark-ink.png",
-            "on-dark": "../../designs/take-a-hike-light-ink.png",
+            "on-light": "designs/take-a-hike-dark-ink.png",
+            "on-dark": "designs/take-a-hike-light-ink.png",
         },
     }
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     assert listing.design == {
-        "on-light": "../../designs/take-a-hike-dark-ink.png",
-        "on-dark": "../../designs/take-a-hike-light-ink.png",
+        "on-light": "designs/take-a-hike-dark-ink.png",
+        "on-dark": "designs/take-a-hike-light-ink.png",
     }
 
 
@@ -133,18 +132,74 @@ def test_media_entry_without_colour_is_valid_for_non_colour_matrix_templates() -
 
 
 def test_media_shared_asset_path_still_works() -> None:
-    data = {**BASE, "media": [*BASE["media"], "../../common-media/sizing-chart.png"]}
+    data = {**BASE, "media": [*BASE["media"], "common-media/sizing-chart.png"]}
     listing = Listing.model_validate(data, context={"currency": "NOK"})
-    assert listing.media[1] == "../../common-media/sizing-chart.png"
+    assert listing.media[1] == "common-media/sizing-chart.png"
 
 
-def test_rejects_more_than_max_media_entries() -> None:
-    data = {
-        **BASE,
-        "media": [f"common-media/asset-{i}.png" for i in range(MAX_MEDIA_ENTRIES + 1)],
-    }
-    with pytest.raises(ValidationError, match=f"{MAX_MEDIA_ENTRIES}-image limit"):
+def test_rejects_more_than_twenty_images() -> None:
+    data = {**BASE, "media": [f"common-media/asset-{i}.png" for i in range(21)]}
+    with pytest.raises(ValidationError, match="21 images, over Etsy's 20-image limit"):
         Listing.model_validate(data, context={"currency": "NOK"})
+
+
+# ------------------------------------------------ the gallery's rules (PRD 72)
+
+THUMB = {"template": "flat-lay-01", "colour": "black"}
+FEATURED = "common-media/size-guide.mp4"
+SECOND = "./close-up.mov"
+
+
+def _media(*entries: object) -> Listing:
+    return Listing.model_validate({**BASE, "media": list(entries)}, context={"currency": "NOK"})
+
+
+def test_a_file_ref_with_an_unknown_extension_is_malformed() -> None:
+    with pytest.raises(ValidationError, match="common-media/size-guide.gif"):
+        _media(THUMB, "common-media/size-guide.gif")
+
+
+def test_a_gallery_without_a_video_is_valid() -> None:
+    assert len(_media(THUMB, "common-media/size-guide.png").media) == 2
+
+
+def test_one_video_at_position_two_is_valid() -> None:
+    assert _media(THUMB, FEATURED, "common-media/care.png").media[1] == FEATURED
+
+
+def test_two_videos_side_by_side_after_the_thumbnail_are_valid() -> None:
+    assert _media(THUMB, FEATURED, SECOND).media[2] == SECOND
+
+
+def test_the_second_video_may_sit_at_the_end_of_the_gallery() -> None:
+    images = [f"common-media/{i}.png" for i in range(5)]
+    assert _media(THUMB, FEATURED, *images, SECOND).media[-1] == SECOND
+
+
+def test_twenty_images_and_two_videos_are_both_within_their_own_caps() -> None:
+    images = [f"common-media/{i}.png" for i in range(19)]
+    assert len(_media(THUMB, FEATURED, *images, SECOND).media) == 22
+
+
+def test_position_one_may_not_be_a_video() -> None:
+    with pytest.raises(ValidationError, match="position 1 is the thumbnail"):
+        _media(FEATURED, THUMB)
+
+
+def test_a_sole_video_is_refused_as_the_thumbnail() -> None:
+    with pytest.raises(ValidationError, match="position 1 is the thumbnail"):
+        _media(FEATURED)
+
+
+def test_a_listing_with_a_video_needs_one_at_position_two() -> None:
+    with pytest.raises(ValidationError, match="position 2") as exc_info:
+        _media(THUMB, "common-media/care.png", FEATURED)
+    assert FEATURED in str(exc_info.value)
+
+
+def test_more_than_two_videos_are_refused() -> None:
+    with pytest.raises(ValidationError, match="3 videos, over Etsy's 2-video limit"):
+        _media(THUMB, FEATURED, SECOND, "./third.mp4")
 
 
 def test_etsy_defaults_to_empty_ordinary_values_not_a_sentinel() -> None:
@@ -242,7 +297,7 @@ def test_a_listing_with_neither_pricing_plan_nor_prices_still_parses() -> None:
 def test_a_pricing_plan_reference_alone_leaves_prices_empty() -> None:
     data = {**BASE}
     del data["prices"]
-    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    data["pricing_plan"] = "pricing-plans/launch-low.yaml"
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     assert listing.prices == {}
 
@@ -269,7 +324,7 @@ def test_resolved_price_prefers_listing_prices_over_the_plan() -> None:
 def test_resolved_price_falls_back_to_the_plan_when_listing_has_no_price() -> None:
     data = {**BASE}
     del data["prices"]
-    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    data["pricing_plan"] = "pricing-plans/launch-low.yaml"
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     plan = PricingPlan(garment_profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
     assert listing.resolved_price("black", "S", pricing_plan=plan) == Money.parse("100 NOK")
@@ -278,7 +333,7 @@ def test_resolved_price_falls_back_to_the_plan_when_listing_has_no_price() -> No
 def test_resolved_price_uses_the_plans_own_colour_override() -> None:
     data = {**BASE}
     del data["prices"]
-    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    data["pricing_plan"] = "pricing-plans/launch-low.yaml"
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     plan = PricingPlan(
         garment_profile="comfort-colors-1717",
@@ -291,7 +346,7 @@ def test_resolved_price_uses_the_plans_own_colour_override() -> None:
 def test_resolved_price_raises_when_nothing_covers_the_size() -> None:
     data = {**BASE}
     del data["prices"]
-    data["pricing_plan"] = "../../pricing-plans/launch-low.yaml"
+    data["pricing_plan"] = "pricing-plans/launch-low.yaml"
     listing = Listing.model_validate(data, context={"currency": "NOK"})
     plan = PricingPlan(garment_profile="comfort-colors-1717", prices={"S": Money.parse("100 NOK")})
     with pytest.raises(KeyError):

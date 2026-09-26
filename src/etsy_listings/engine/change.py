@@ -250,6 +250,9 @@ class StagePlan:
     outcome: StageOutcome
     drift: tuple[Drift, ...] = field(default_factory=tuple)
     snapshot: BaseModel | None = None
+    group: str | None = None
+    """The stage this one is shown under (``Stage.group``), stamped by the
+    engine like ``stage`` itself."""
 
     @classmethod
     def no_work(
@@ -280,8 +283,8 @@ class StagePlan:
         )
 
     @classmethod
-    def block(cls, stage: str, message: str) -> StagePlan:
-        return cls(stage=stage, outcome=StageBlocked(message=message))
+    def block(cls, stage: str, message: str, *, group: str | None = None) -> StagePlan:
+        return cls(stage=stage, outcome=StageBlocked(message=message), group=group)
 
     @property
     def will_run(self) -> bool:

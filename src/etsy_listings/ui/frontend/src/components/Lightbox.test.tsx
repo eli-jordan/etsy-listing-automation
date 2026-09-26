@@ -94,3 +94,16 @@ describe("Lightbox", () => {
     expect(container.querySelector(".lightbox")).toBeNull();
   });
 });
+
+describe("Lightbox, for a video (PRD 72)", () => {
+  it("plays a video item with the browser's own controls instead of drawing a picture", () => {
+    setup({
+      items: [...ITEMS, { id: "intro", label: "intro", url: "/intro.mp4", kind: "video" }],
+      index: 3,
+    });
+    const clip = screen.getByLabelText("intro", { selector: "video" });
+    expect(clip).toHaveAttribute("src", "/intro.mp4");
+    expect(clip).toHaveAttribute("controls");
+    expect(screen.queryByAltText("intro")).not.toBeInTheDocument();
+  });
+});

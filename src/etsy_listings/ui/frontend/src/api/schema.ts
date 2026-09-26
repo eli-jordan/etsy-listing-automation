@@ -109,12 +109,12 @@ export interface paths {
     };
     /**
      * List Common Media
-     * @description The shared assets a listing can add to `media:` as a bare path.
+     * @description The *Shared* group: files every listing can use -- a sizing chart,
+     *     care instructions, a size-guide video.
      *
      *     Distinct from both design endpoints: ``designs/`` is the artwork that gets
      *     printed, ``test-designs/`` is calibration targets, and these are finished
-     *     pictures (a sizing chart, care instructions) uploaded to Etsy as-is,
-     *     never rendered onto a garment.
+     *     files uploaded to Etsy as-is, never rendered onto a garment.
      */
     get: operations["list_common_media_api_common_media_get"];
     put?: never;
@@ -134,14 +134,9 @@ export interface paths {
     };
     /**
      * Common Media File
-     * @description The shared asset at its own size, for the editor's preview pane and its
-     *     lightbox -- the two places a picture is *judged* rather than picked out of
-     *     a list.
-     *
-     *     The bytes as they sit on disk, not a re-encode: a mockup template's
-     *     counterpart (`GET .../design-preview`) has to run the real pipeline to
-     *     exist at all, but this file is already exactly what would be uploaded to
-     *     Etsy, and the one thing worth seeing full-size is what Etsy will get.
+     * @description The shared file at its own size, for the preview pane and the
+     *     lightbox -- the bytes as they sit on disk, which are exactly what Etsy
+     *     would receive.
      */
     get: operations["common_media_file_api_common_media__name__file_get"];
     put?: never;
@@ -159,11 +154,7 @@ export interface paths {
       path?: never;
       cookie?: never;
     };
-    /**
-     * Common Media Thumbnail
-     * @description An unusable *name* needs nothing here: ``InvalidNameError`` out of
-     *     ``common_media_file`` becomes a 400 through the app-wide handler.
-     */
+    /** Common Media Thumbnail */
     get: operations["common_media_thumbnail_api_common_media__name__thumbnail_get"];
     put?: never;
     post?: never;
@@ -367,6 +358,63 @@ export interface paths {
      *     ``etsy_listing_id``.
      */
     post: operations["create_listing_api_listings_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{listing}/media-files": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Listing Media Files
+     * @description The *This listing* group: the listing's own files, each with the
+     *     ``./`` ref that names it (PRD 73). A ``404`` for a listing that does not
+     *     exist, rather than an empty group that would look like one with nothing
+     *     in it.
+     */
+    get: operations["list_listing_media_files_api_listings__listing__media_files_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{listing}/media-files/{path}/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listing Media File */
+    get: operations["listing_media_file_api_listings__listing__media_files__path__file_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{listing}/media-files/{path}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listing Media Thumbnail */
+    get: operations["listing_media_thumbnail_api_listings__listing__media_files__path__thumbnail_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -1326,10 +1374,9 @@ export interface components {
     /**
      * CommonCopySummary
      * @description One `common-copy/*.md` file, for the Description tab's body-source
-     *     selector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s
-     *     ref, a common-copy ref is portable -- workspace-relative, not
-     *     listing-relative -- so it is exactly what `description.ref` stores,
-     *     already usable as-is.
+     *     selector (AI SEO implementation plan, PR6). A common-copy ref is
+     *     workspace-relative, like every other ref (PRD 73), so it is exactly what
+     *     `description.ref` stores, already usable as-is.
      */
     CommonCopySummary: {
       /** Ref */
@@ -1338,19 +1385,6 @@ export interface components {
       summary?: string | null;
       /** Title */
       title: string;
-    };
-    /**
-     * CommonMediaSummary
-     * @description One shared asset under ``common-media/`` -- the other half of `media:`,
-     *     a bare path rather than a rendered mockup.
-     */
-    CommonMediaSummary: {
-      /** File */
-      file: string;
-      /** Name */
-      name: string;
-      /** Ref */
-      ref: string;
     };
     /** CreateAiRunRequest */
     CreateAiRunRequest: {
@@ -1422,6 +1456,18 @@ export interface components {
       file: string;
       /** Rank */
       rank: number;
+      /** Ref */
+      ref: string;
+    };
+    /**
+     * DesiredVideoSnapshot
+     * @description One video as this run wants to place it (A30).
+     */
+    DesiredVideoSnapshot: {
+      /** After Images */
+      after_images?: number | null;
+      /** File */
+      file: string;
       /** Ref */
       ref: string;
     };
@@ -1539,6 +1585,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -1571,6 +1619,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -1594,6 +1644,38 @@ export interface components {
       id: number;
       /** Title */
       title: string;
+    };
+    /**
+     * EtsyVideosSnapshot
+     * @description Both sides for the deploy review (A30). The live side comes in Etsy's
+     *     response order, which says nothing about the gallery (decision 9).
+     */
+    EtsyVideosSnapshot: {
+      /** Desired */
+      desired: components["schemas"]["DesiredVideoSnapshot"][];
+      /** Live */
+      live: components["schemas"]["LiveVideoSnapshot"][];
+    };
+    /** EtsyVideosStagePlanDTO */
+    EtsyVideosStagePlanDTO: {
+      /**
+       * Drift
+       * @default []
+       */
+      drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
+      /** Outcome */
+      outcome:
+        | components["schemas"]["IdleOutcomeDTO"]
+        | components["schemas"]["WorkOutcomeDTO"]
+        | components["schemas"]["BlockedOutcomeDTO"];
+      snapshot?: components["schemas"]["EtsyVideosSnapshot"] | null;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      stage: "etsy_videos";
     };
     /** FieldChangeDTO */
     FieldChangeDTO: {
@@ -1645,7 +1727,7 @@ export interface components {
        * Severity
        * @enum {string}
        */
-      severity: "block" | "warn";
+      severity: "block" | "warn" | "info";
       /**
        * Tab
        * @enum {string}
@@ -1916,6 +1998,21 @@ export interface components {
       url?: string | null;
     };
     /**
+     * LiveVideoSnapshot
+     * @description One video Etsy has on the listing (A30); ``ref`` is ``None`` for one
+     *     this tool never uploaded.
+     */
+    LiveVideoSnapshot: {
+      /** Ref */
+      ref?: string | null;
+      /** State */
+      state?: string | null;
+      /** Thumbnail Url */
+      thumbnail_url?: string | null;
+      /** Video Id */
+      video_id: number;
+    };
+    /**
      * MarketSnapshot
      * @description One research, as the panel reads it back: the result's fields, when
      *     the search ran, and the exact block the proposal was given. Holds each
@@ -1958,6 +2055,25 @@ export interface components {
       kind: "media";
       /** Rank */
       rank: number;
+    };
+    /**
+     * MediaFileSummary
+     * @description One file a listing can put in `media:` as a file ref (PRD 72, 73): a
+     *     shared one under ``common-media/``, or one of the listing's own. A bare
+     *     file uploaded as-is, rather than a rendered mockup.
+     */
+    MediaFileSummary: {
+      /** File */
+      file: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "image" | "video";
+      /** Name */
+      name: string;
+      /** Ref */
+      ref: string;
     };
     /** MultiplePreviewRequest */
     MultiplePreviewRequest: {
@@ -2089,6 +2205,7 @@ export interface components {
         | components["schemas"]["PublishStagePlanDTO"]
         | components["schemas"]["EtsyListingStagePlanDTO"]
         | components["schemas"]["EtsyMediaStagePlanDTO"]
+        | components["schemas"]["EtsyVideosStagePlanDTO"]
         | components["schemas"]["RetractStagePlanDTO"]
       )[];
     };
@@ -2236,6 +2353,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -2307,6 +2426,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -2368,6 +2489,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -2394,6 +2517,8 @@ export interface components {
        * @default []
        */
       drift: components["schemas"]["DriftDTO"][];
+      /** Group */
+      group?: string | null;
       /** Outcome */
       outcome:
         | components["schemas"]["IdleOutcomeDTO"]
@@ -2716,6 +2841,7 @@ export interface components {
         | components["schemas"]["PublishStagePlanDTO"]
         | components["schemas"]["EtsyListingStagePlanDTO"]
         | components["schemas"]["EtsyMediaStagePlanDTO"]
+        | components["schemas"]["EtsyVideosStagePlanDTO"]
         | components["schemas"]["RetractStagePlanDTO"];
       /**
        * @description discriminator enum property added by openapi-typescript
@@ -3151,7 +3277,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["CommonMediaSummary"][];
+          "application/json": components["schemas"]["MediaFileSummary"][];
         };
       };
     };
@@ -3477,6 +3603,101 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_listing_media_files_api_listings__listing__media_files_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        listing: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MediaFileSummary"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_media_file_api_listings__listing__media_files__path__file_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        listing: string;
+        path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_media_thumbnail_api_listings__listing__media_files__path__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        listing: string;
+        path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

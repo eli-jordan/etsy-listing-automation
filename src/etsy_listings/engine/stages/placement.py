@@ -92,7 +92,8 @@ class DesignPlacement:
     profile: GarmentProfile
     paths: dict[str, Path]
     """Artwork key -> the design file it names, resolved through
-    :meth:`Workspace.resolve` (so a ``design:`` ref cannot escape the root)."""
+    :meth:`Workspace.resolve_ref` (PRD 73), so a ``design:`` ref cannot escape
+    the root."""
 
     @classmethod
     def resolve(
@@ -103,7 +104,7 @@ class DesignPlacement:
             listing=listing,
             profile=profile,
             paths={
-                artwork: workspace.resolve(ref, relative_to=listing_dir)
+                artwork: workspace.resolve_ref(ref, listing_dir=listing_dir)
                 for artwork, ref in listing.design.items()
             },
         )

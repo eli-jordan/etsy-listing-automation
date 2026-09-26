@@ -27,6 +27,10 @@ dependencies = [
     # Native window around the calibrator SPA. Imported only when
     # `etsy-listings ui` opens a window, not on `--browser` or at package import.
     "pywebview>=6,<7",
+    # PRD 72's video gate reads a clip's duration, size and streams through
+    # PyAV. Unlike OpenCV/Pillow it never produces bytes that get hashed, so a
+    # floor pin is enough; its wheels bundle FFmpeg on every CI platform.
+    "av>=15",
 ]
 
 [project.scripts]

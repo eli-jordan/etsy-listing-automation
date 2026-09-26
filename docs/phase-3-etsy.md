@@ -7,8 +7,9 @@ Subsidiary to [prd.md](prd.md) and [implementation-plan.md](implementation-plan.
 in the way [multi-placement-rendering.md](multi-placement-rendering.md) is —
 detail those two point at rather than a third authority. Where it disagrees
 with the PRD, the PRD wins. Its decisions are recorded there as **PRD 52–59**
-and **A24–A28**; what this document adds is the reasoning and the measurements
-behind them, which a one-row summary in a decision log cannot carry.
+and **A24–A28**, and listing videos as **PRD 72**; what this document adds is
+the reasoning and the measurements behind them, which a one-row summary in a
+decision log cannot carry.
 
 Built on [printify-etsy-integration.md](printify-etsy-integration.md), which
 measured the publish path against the real shops, and on Etsy's own API
@@ -31,6 +32,8 @@ remembered, because two of the answers are not the obvious ones.
 | image upload, at a rank, with `alt_text` | `uploadListingImage` | `listings_w` | Alt text is set **at upload**; there is no image-update endpoint, so changing it means re-uploading that image |
 | image order and membership | `updateListing` `image_ids` | `listings_w` | Ordered full-replacement set — see PRD 57 |
 | per-colour swatch images | `updateVariationImages` | `listings_w` | Overwrites all of them per call, and permits exactly **one** property |
+| video upload, or re-attach by `video_id` | `uploadListingVideo` `?is_multi_video=true` | `listings_w` | No rank and no position parameter; placement follows attach order (decision 9) |
+| video removal | `deleteListingVideo` | `listings_w` | Etsy keeps the file, so a deleted video can be re-attached by id |
 | — | `updateListingInventory` | `listings_w` | **Never called.** PRD 55 |
 
 Everything here fits inside the scopes already granted — `listings_r
@@ -452,6 +455,128 @@ media stage's desired document carries a hash where the file exists and a
 pending marker where it does not, `plan` renders "4 images (pending render)",
 and `apply` hashes at upload time and records what it actually sent.
 
+### 9. Videos are placed by attach order — PRD 72
+
+Etsy's video surface is two calls. `uploadListingVideo` takes a file or the
+`video_id` of one the shop already has, and `deleteListingVideo` removes one.
+There is no rank, no position field on the video, the listing or any other
+schema in the OpenAPI document, and no ordering call. Etsy's own tutorial
+describes a fixed layout, and a developer who asked in
+[open-api#1714](https://github.com/etsy/open-api/discussions/1714) how to
+place a video among images got no answer. Everything below was measured on
+2026-09-25, against the `duke-java-developer` draft and a throwaway draft
+built for it. That draft carried images labelled IMG 1–5 and videos labelled
+VIDEO A and B, and its gallery was read **by eye in Shop Manager**, because
+nothing in the API reports where a video sits.
+
+#### What the API does
+
+| Probe | Result |
+|---|---|
+| Upload an 8 MB, 1440×1440 MP4 | `201`, `active` immediately. There is no processing state to poll. Etsy transcodes it to 1280 px and strips the audio |
+| Upload a third with `is_multi_video=true` | `409` "maximum number of videos", after the bytes had been sent |
+| Upload a third *without* the flag | The new one goes active and the others turn `inactive` **but stay in every list**. Re-attaching one by id reactivates it |
+| `PATCH image_ids`, and a Printify republish with the publish stage's flags | Videos untouched. The listing stayed a draft |
+| A 3 s and a 20 s clip | Both accepted. The documented 3–15 s is not enforced here |
+| The test suite's 3.2 s, 512×512 H.264 fixtures, 2–4 KB each, one carrying audio (the e2e layer, [2026-09-25](https://github.com/eli-jordan/etsy-listing-automation/actions/runs/36159006791)) | Both `active` straight after upload. Deleting the second, cutting `image_ids` to three images, re-attaching it by id and restoring all four kept its `video_id` and left it `active`. Nothing about the file's size or bitrate was refused |
+| A PNG renamed `.mp4` | A bare `500` |
+| A video id inside `image_ids` | `400` "That ListingImage does not exist". Nothing changed |
+| An undocumented `rank`, as form field and query | Silently ignored |
+| An 11th association within 24 h, fresh upload or re-attach | `400` "maximum number of videos", on a listing holding none. A genuinely full listing answers `409` with the same text. Per listing, not per shop: a second draft accepted uploads at the same moment |
+
+The list endpoints return videos newest-upload first. That is an ordering of
+the *response*, and it says nothing about the gallery.
+
+#### Where a video appears
+
+| Step | Gallery, as Shop Manager showed it |
+|---|---|
+| IMG 1–4, then VIDEO A, then VIDEO B, then IMG 5 | 1, A, 2, 3, 4, **B**, 5 |
+| `image_ids` reversed to 5…1 | 5, A, 4, 3, 2, **B**, 1 |
+| B deleted, `image_ids` cut to IMG 5 alone, B re-attached, all five restored | 5, A, **B**, 4, 3, 2, 1 |
+| A deleted | 5, **B**, 4, 3, 2, 1 |
+| A re-attached | 5, B, 4, 3, 2, 1, **A** |
+
+Three rules come out of that, and the tutorial states only the first half of
+the first:
+
+- **The video attached longest is featured**, pinned at position 2 behind
+  the thumbnail. Delete it and the other is promoted.
+- **Any other video is anchored "after *n* images"**, *n* being the number
+  of images on the listing when it was attached. Reordering the images
+  leaves it at that count. Adding images after it does too.
+- **Re-attaching counts as attaching.** A video brought back by id is
+  anchored afresh, so position can change without re-sending a byte.
+
+#### How the stage places them
+
+`media:` is the gallery (PRD 72), so the desired layout reads straight off it:
+the featured video is the one at position 2, and the second video's anchor is
+the number of images before it. `etsy_videos` runs after `etsy_media`, once
+the images are uploaded and ordered, and brings the listing to that layout:
+
+1. Delete every video on the listing that is not one of ours, `active` or
+   `inactive`. This happens first because a stranger may be holding one of
+   the two slots. Foreign videos are swept when the stage runs; they never
+   make it run, which is how `image_ids` already treats foreign images.
+2. If the featured video differs from the one last applied, delete **both**
+   of ours, because a survivor would be promoted to featured. Then attach the
+   featured one: uploaded if its bytes are new, re-attached by id if Etsy
+   already has it. The second video then goes through step 3 regardless.
+3. If the second video, or its anchor, differs from what was last applied,
+   delete it. Then cut `image_ids` to the first *n* image ids, attach it, and
+   `PATCH` the full list back.
+4. Re-assert the swatch links through the helper `etsy_media` uses, whenever
+   step 3 ran.
+
+Drift is handled as for images: one of ours missing or `inactive` on the
+listing is reported by `plan`, and `apply` uploads it again.
+
+#### What it costs
+
+- **Detaching an image deletes its swatch link, permanently.** Measured on
+  duke: after cutting `image_ids` to one image and restoring all five, one of
+  the five links survived. Restoring the images restores nothing else. This
+  is why step 4 exists, and why it cannot be skipped because "the image ids
+  did not change". The link-setting helper therefore has two callers and one
+  implementation.
+- **For about a second the listing shows only the images before the
+  video.** On a live listing, a buyer could see that. Accepted: positioning is
+  the point of the feature, and the window is one round trip.
+- **A crash between the cut and the restore leaves the listing short.** It
+  heals on the next run without new code, because `etsy_media` already
+  reports "one of our images is gone" as drift, re-asserts `image_ids`, and
+  re-sets the swatches.
+- **Ten associations per listing per day**, re-attaches included. Etsy's
+  refusal says "maximum number of videos". The client re-words it into what
+  it is, the daily budget, rather than the tool predicting it.
+- **A position changed by hand in Shop Manager is invisible.** The API cannot
+  report positions, so `plan` has nothing to compare against. The stage
+  re-asserts only when its own desired layout changes, and says so.
+
+Two things worth knowing about Shop Manager. Saving the listing editor
+replaced the videos on the listing, which is how two API uploads disappeared
+during the probe. And before multi-video was switched on, its gallery showed
+only the latest video
+([open-api#1670](https://github.com/etsy/open-api/discussions/1670)).
+
+#### Local checks
+
+The help page
+([How to Add Listing Videos](https://help.etsy.com/hc/en-us/articles/360053206073-How-to-Add-Listing-Videos))
+is the specification, and anything outside it is blocked before an upload is
+spent on it:
+- `.mp4` or `.mov`: of Etsy's seven listed types, the two a browser previews
+- at most 100 MB
+- 3–15 seconds
+- a shorter side of at least 500 px
+- a file PyAV can open that contains a video stream
+
+The last check is there because a non-video is otherwise a bare `500`. The
+page's "aspect ratio should be 2:1 or 1:2" is not enforced: a 1:1 video
+uploaded every time. That Etsy strips audio is stated as a note on the video,
+not as a warning.
+
 ---
 
 ## Config, after this phase
@@ -612,9 +737,26 @@ activate a listing (PRD non-goal 1).
 with `includes=Images` is the only working route, and it is the one every
 count in the findings document came from.
 
-The image count gate (≤10, PRD) stays a plan-time validation over the
+The image count gate (≤20, PRD) stays a plan-time validation over the
 manifest, not a check against what Etsy currently holds — Printify's stragglers
-would otherwise make a valid listing look over the cap.
+would otherwise make a valid listing look over the cap. It counts images only;
+videos are PRD 72's, and have a cap of their own.
+
+### `etsy_videos`
+
+Its own stage, so its lockfile entry, its progress events and its failure are
+its own. A video upload is the slow, large, fragile part of a media sync, and
+a failure there must not cost the images a re-upload. It carries a display
+group of `etsy_media`, so the CLI plan, the API and the editor show it under
+the one "Etsy media" heading.
+
+| | |
+|---|---|
+| `desired` | the videos in `media:` in gallery order — `(ref, content hash, anchor)` — where the anchor is the number of images before the second video |
+| `read_live` | `getListing?includes=Videos`, filtered to ours by `etsy_video_ids`, with each one's `video_state`; foreign videos counted separately |
+| `plan` | work when the featured ref, the second ref, either hash or the anchor differs from the last applied; drift when one of ours is missing or `inactive` |
+| `apply` | sweep foreign → attach featured → cut `image_ids`, attach second, restore → re-assert swatches (decision 9) |
+| `remote` | `etsy_video_ids`, keyed by media ref |
 
 ---
 
@@ -640,11 +782,16 @@ would otherwise make a valid listing look over the cap.
                       "production_partner_ids": [12345],
                       "should_auto_renew": false },
     "etsy_media": { "manifest": [{"ref": "flat-lay-01:black", "hash": "sha256:..."}],
-                    "variation_images": {"black": "flat-lay-01:black"} }
+                    "variation_images": {"black": "flat-lay-01:black"} },
+    "etsy_videos": { "videos": [{"ref": "common-media/size-guide.mp4", "hash": "sha256:..."},
+                                {"ref": "./close-up.mp4", "hash": "sha256:...",
+                                 "after_images": 2}] }
   },
   "remote": { "etsy_listing_id": 4572550919,
               "etsy_listing_handle": "https://www.etsy.com/listing/...",
               "etsy_image_ids": {"flat-lay-01:black": 6234},
+              "etsy_video_ids": {"common-media/size-guide.mp4": 844252820,
+                                 "./close-up.mp4": 844278141},
               "etsy_listing_state": "draft",
               "printify_publish_locked": false }
 }
@@ -718,6 +865,16 @@ reproduce an answer we already have.
 They unblock the moment an NOK profile exists, and then ride along with one
 publish — the same run that exercises the media stage end to end.
 
+### Video recon, 2026-09-25
+
+Written up in decision 9. It ran against `duke-java-developer`'s draft
+(4572960161) until that listing's daily video budget ran out, which is how the
+budget was found. It then moved to a throwaway draft created for the purpose
+("ZZ video probe - delete me", 4582417670), which needs deleting in Shop
+Manager because `listings_d` is outside `SCOPES`. One side effect, repaired
+the same day: the swatch probe on duke deleted four of its five links, and
+they were re-set from the recorded triples.
+
 ### Shop Manager work this uncovered
 
 Three of the four things a listing must reference do not exist in this shop
@@ -769,6 +926,15 @@ The behaviour layer needs a fake listing client that reproduces two measured
 behaviours or it will bless a broken stage: `image_ids` as a full-replacement
 set that detaches omissions, and a refusal to delete the last remaining image.
 
+`etsy_videos` adds four more to that fake, each measured in decision 9:
+- a gallery that promotes the survivor when the featured video goes
+- a second video anchored by the image count at attach time
+- swatch links deleted when their image is detached
+- the eleventh association in a day refused with a `400`
+
+The fake is also the only place the gallery *can* be asserted, since the real
+API never reports it.
+
 ---
 
 ## What stays open
@@ -784,3 +950,12 @@ set that detaches omissions, and a refusal to delete the last remaining image.
    path and never unpublishes first. `listings_d` stays outside `SCOPES`; live
    listings are never deleted this way. PRD 63,
    [listing-lifecycle.md](listing-lifecycle.md).
+4. **Where does a second video go when the images before it drop below its
+   anchor?** Untested. It only arises for a moment: `etsy_media` removes the
+   images, and `etsy_videos`, which runs next, re-anchors to the new count.
+   Only a hand edit in Shop Manager could leave it standing, and that is
+   invisible anyway.
+5. **Does the layout survive Etsy's 2026-10-21 cut-over?** Etsy says only
+   that the legacy replace mode goes away, and this tool never uses it. Since
+   `plan` cannot see positions, the check is decision 9's labelled probe, run
+   once more after that date and read by eye.

@@ -11,7 +11,7 @@ import { ListingEditorPage } from "./ListingEditorPage";
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
     garment_profile: "comfort-colors-1717",
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black"],
     brief: "",
     prices: {},
@@ -190,6 +190,35 @@ describe("ListingEditorPage", () => {
     await screen.findByText("1 warning");
   });
 
+  it("does not show a video's audio note in the editor's global issues banner", async () => {
+    /* The plan may mention Etsy stripping audio, and ImagesTab can show the
+       note beside the focused clip. It is not an editor-wide warning. */
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [
+          { severity: "warn", tab: "details", where: "Tags", message: "no tags" },
+          { severity: "info", tab: "images", where: "Clip", message: "sound is stripped" },
+        ],
+      }),
+    );
+    renderAt("/listings/take-a-hike");
+
+    await screen.findByText("1 warning");
+    expect(screen.queryByText("sound is stripped")).not.toBeInTheDocument();
+  });
+
+  it("omits the global issues banner when audio is the only note", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        issues: [{ severity: "info", tab: "images", where: "Clip", message: "sound is stripped" }],
+      }),
+    );
+    const { container } = renderAt("/listings/take-a-hike");
+
+    await screen.findByRole("heading", { name: "take-a-hike" });
+    expect(container.querySelector(".issues")).toBeNull();
+  });
+
   it("pluralises blocking problems", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(
       detail({
@@ -257,7 +286,7 @@ describe("ListingEditorPage", () => {
 
     await waitFor(() =>
       expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
-        design: "../../designs/cosmic-cat.png",
+        design: "designs/cosmic-cat.png",
       }),
     );
   });
@@ -273,7 +302,7 @@ describe("ListingEditorPage", () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const patchSpy = vi
       .spyOn(listingsApi, "patchListing")
-      .mockResolvedValue(detail({ design: { default: "../../designs/cosmic-cat.png" } }));
+      .mockResolvedValue(detail({ design: { default: "designs/cosmic-cat.png" } }));
     renderAt("/listings/take-a-hike");
     await screen.findByText("designs/take-a-hike.png");
 
@@ -477,7 +506,7 @@ describe("ListingEditorPage at /listings/new", () => {
     // in a follow-up patch: `useAutosave` merges what is pending into the
     // create candidate.
     expect(create.mock.calls[0]?.[0].document).toMatchObject({
-      design: "../../designs/cosmic-cat.png",
+      design: "designs/cosmic-cat.png",
     });
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "cosmic-cat" })).toBeInTheDocument(),
@@ -520,7 +549,7 @@ describe("ListingEditorPage at /listings/new", () => {
     const create = vi.spyOn(listingsApi, "createListing");
     const describe = vi
       .spyOn(listingsApi, "describeListingDraft")
-      .mockResolvedValue({ ...draft(), design: { default: "../../designs/cosmic-cat.png" } });
+      .mockResolvedValue({ ...draft(), design: { default: "designs/cosmic-cat.png" } });
     renderAt("/listings/new");
 
     const input = await screen.findByLabelText("Listing name");

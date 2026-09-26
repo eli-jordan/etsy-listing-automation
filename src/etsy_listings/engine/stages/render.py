@@ -471,6 +471,7 @@ def _resolve_scene(
 class RenderStage:
     name = "render"
     local = True
+    group: str | None = None
     applied_model = RenderApplied
 
     def desired(

@@ -244,12 +244,28 @@ def _drift(was: AppliedProduct | None, live: Product | None) -> tuple[Drift, ...
             found.append(change)
 
     ours_prices = was.prices
-    if live.enabled_variants() != ours_prices:
+    live_prices = live.enabled_variants()
+    if live_prices != ours_prices:
+        last_applied = f"{len(ours_prices)} enabled"
+        live_description = f"{len(live_prices)} enabled"
+        if len(live_prices) == len(ours_prices):
+            selection_changed = set(live_prices) != set(ours_prices)
+            prices_changed = sum(
+                live_prices[variant_id] != ours_prices[variant_id]
+                for variant_id in set(live_prices) & set(ours_prices)
+            )
+            details: list[str] = []
+            if selection_changed:
+                details.append("selection changed")
+            if prices_changed:
+                noun = "price" if prices_changed == 1 else "prices"
+                details.append(f"{prices_changed} {noun} changed")
+            live_description += f" ({' and '.join(details)})"
         found.append(
             Drift(
                 path="variants",
-                last_applied=f"{len(ours_prices)} enabled",
-                live=f"{len(live.enabled_variants())} enabled",
+                last_applied=last_applied,
+                live=live_description,
             )
         )
 

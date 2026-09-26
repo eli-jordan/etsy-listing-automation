@@ -54,7 +54,7 @@ from etsy_listings.ui.api.schemas import (
     SeoWarningEntry,
 )
 from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.workspace.workspace import InvalidRefError, Workspace
 
 router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
 
@@ -119,7 +119,12 @@ def _providers(request: Request, workspace: Workspace) -> Sequence[AiProvider]:
 def primary_design_image(workspace: Workspace, name: str, listing: Listing) -> Path:
     listing_dir = workspace.listing_dir(name)
     key = next((k for k in _PREFERRED_DESIGN_KEYS if k in listing.design), min(listing.design))
-    return workspace.resolve(listing.design[key], relative_to=listing_dir)
+    try:
+        return workspace.resolve_ref(listing.design[key], listing_dir=listing_dir)
+    except InvalidRefError as exc:
+        # A seller's file to fix (PRD 73's legacy form, most likely), so a
+        # 409 naming it, the way a missing garment profile is answered.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def readiness(

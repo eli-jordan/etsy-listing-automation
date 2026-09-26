@@ -13,6 +13,7 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.media import MediaKind
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -163,7 +164,10 @@ than relying on shape-sniffing across all three."""
 # TemplateSummary above follows for template.yaml.
 # ──────────────────────────────────────────────────────────────────────────
 
-IssueSeverity = Literal["block", "warn"]
+IssueSeverity = Literal["block", "warn", "info"]
+"""`listing_validation.Severity` on the wire. ``info`` (PRD 72's stripped
+audio) is shown quietly and counted nowhere: `IssueCounts` stays blocks and
+warnings, the two a seller has to act on."""
 IssueTab = Literal["variants", "pricing", "images", "details"]
 
 
@@ -296,9 +300,9 @@ class PricingPlanSummary(BaseModel):
     """Whether this plan declares the exact garment profile asked for --
     mirrors `newcmd.logic.build_pricing_plan_choices`'s marker."""
     ref: str
-    """Listing-relative, ready to PATCH straight into `pricing_plan:`
+    """Workspace-rooted (PRD 73), ready to PATCH straight into `pricing_plan:`
     unchanged -- `newcmd.logic.pricing_plan_ref`'s write-side form, the same
-    rule `CommonMediaSummary.ref` follows for a shared image."""
+    rule `MediaFileSummary.ref` follows for a shared image."""
 
 
 class ListingDesignSummary(BaseModel):
@@ -308,31 +312,37 @@ class ListingDesignSummary(BaseModel):
     ``designs/take-a-hike.png``."""
 
 
-class CommonMediaSummary(BaseModel):
-    """One shared asset under ``common-media/`` -- the other half of `media:`,
-    a bare path rather than a rendered mockup."""
+class MediaFileSummary(BaseModel):
+    """One file a listing can put in `media:` as a file ref (PRD 72, 73): a
+    shared one under ``common-media/``, or one of the listing's own. A bare
+    file uploaded as-is, rather than a rendered mockup."""
 
     name: str
+    """Its path under the directory it was listed from -- ``common-media/``
+    or the listing's own -- which is what the picture endpoints take."""
     file: str
-    """Workspace-relative, for display: ``common-media/size-guide.png``."""
+    """Workspace-relative, for display: ``common-media/size-guide.png``,
+    ``listings/take-a-hike/close-up.mp4``."""
     ref: str
-    """Listing-relative, ready to write into `media:` unchanged. A bare media
-    entry resolves against the listing's own directory (PRD 8a), the same rule
-    `design:` follows, so the picker hands back the stored form rather than
-    leaving every caller to rebuild it."""
+    """The ref to write into `media:` unchanged. A shared file's ref is its
+    workspace-relative path, so it equals ``file``; a listing's own file is
+    spelled ``./close-up.mp4`` (PRD 73), which is why this is a field of its
+    own rather than something callers build."""
+    kind: MediaKind
+    """``image`` or ``video``, as `config.media.media_kind` classifies it --
+    served rather than re-derived in the browser, so the locator and the
+    gallery rules cannot disagree about a ``.MOV``."""
 
 
 class CommonCopySummary(BaseModel):
     """One `common-copy/*.md` file, for the Description tab's body-source
-    selector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s
-    ref, a common-copy ref is portable -- workspace-relative, not
-    listing-relative -- so it is exactly what `description.ref` stores,
-    already usable as-is."""
+    selector (AI SEO implementation plan, PR6). A common-copy ref is
+    workspace-relative, like every other ref (PRD 73), so it is exactly what
+    `description.ref` stores, already usable as-is."""
 
     ref: str
     """Workspace-relative, e.g. ``common-copy/comfort-colors.md`` -- what
-    `description.ref` stores unchanged (unlike `CommonMediaSummary.ref`,
-    which is listing-relative)."""
+    `description.ref` stores unchanged."""
     title: str
     """The file's front-matter title, for the picker's option label."""
     summary: str | None = None

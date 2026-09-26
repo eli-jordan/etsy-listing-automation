@@ -19,7 +19,7 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 70 numbered product decisions in its appendix. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 72 numbered product decisions in its appendix. |
 | [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
 
 Four subsidiary documents carry detail those two point at rather than repeat:
@@ -141,6 +141,8 @@ src/etsy_listings/
                 facts.py — the garment profiles and template configs a listing
                   check reads, gathered once per request instead of re-parsed
                   inside every check of every row
+                video.py — `probe_video`, the one reader of a clip's facts (PRD
+                  71), through PyAV; answers a `ProbeFailure`, never raises
                 common_copy.py — `common-copy/*.md` front-matter parsing, pure;
                   `Workspace.load_common_copy`/`compose_description` are the
                   I/O and the one shared resolver around it (AI SEO plan PR2)
@@ -148,6 +150,9 @@ src/etsy_listings/
                 description.py — `etsy.description`'s lead/text/ref model and
                   the pure `compose_description(lead, text)` join rule every
                   deployment reader shares (AI SEO plan PR2)
+                media.py — what a `media:` entry is: image or video by
+                  extension, the gallery's caps, and the video facts the gate
+                  checks (PRD 72)
                 listing_validation.py — every reason a listing cannot run, as
                   far as its own files can tell. One module, two readers: the
                   editor's issues banner and (through `engine/stages/gates.py`)
@@ -155,7 +160,8 @@ src/etsy_listings/
   engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run,
                   lifecycle (PRD 61–67), preview (A32), stages/
                    [done; STAGES = [Render(), PrintifyProduct(), Publish(),
-                   EtsyListing(), EtsyMedia()], Generate() in Phase 4]
+                   EtsyListing(), EtsyMedia(), EtsyVideos()], Generate() in
+                   Phase 4]
                 stages/ splits the product stage three ways: the stage itself
                   (needs a context), product_document (the two documents and
                   the garment gate) and product_diff (the comparison — pure,
@@ -167,6 +173,9 @@ src/etsy_listings/
                   not-minted error, shared by all three Etsy stages) and
                   colour_property (Etsy's inventory property matched onto this
                   listing's colours — pure, same reasoning as product_diff)
+                  and variation_links (the swatch links and manifest refs both
+                  Etsy media stages set — `etsy_videos` cuts `image_ids` to
+                  place a video, which deletes swatches, decision 9)
   render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
   newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
   setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]

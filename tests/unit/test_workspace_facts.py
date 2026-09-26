@@ -7,10 +7,14 @@ lives with them (`tests/behaviour/test_listings_api.py`).
 
 from __future__ import annotations
 
+import shutil
 from pathlib import Path
 
 import pytest
 
+from etsy_listings.config.listing import Listing, TemplateMediaEntry
+from etsy_listings.config.media import ProbeFailure, VideoFacts
+from etsy_listings.workspace import facts as facts_module
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import Workspace
 
@@ -121,3 +125,93 @@ class TestTemplates:
 
         assert "uncalibrated-one" not in facts.templates
         assert facts.templates, "the calibrated ones are still there"
+
+
+VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+
+
+def _video_listing(workspace: Workspace, media: list[object]) -> Listing:
+    listing = workspace.load_listing("take-a-hike")
+    return listing.model_copy(update={"media": media})
+
+
+class TestVideos:
+    """PRD 72's gate reads a probe, and a probe opens a file: the listings
+    table asks for every row, so each clip is opened once per request."""
+
+    @pytest.fixture
+    def workspace(self, workspace_root: Path) -> Workspace:
+        shared = workspace_root / "common-media"
+        shared.mkdir()
+        shutil.copy(VIDEOS / "valid-3s-512.mp4", shared / "size-guide.mp4")
+        shutil.copy(
+            VIDEOS / "with-audio-3s-512.mp4",
+            workspace_root / "listings" / "take-a-hike" / "close-up.mov",
+        )
+        return Workspace.discover(root_override=workspace_root)
+
+    def test_every_video_the_listing_names_is_probed_and_keyed_by_its_ref(
+        self, workspace: Workspace
+    ) -> None:
+        thumb = TemplateMediaEntry(template="flat-lay-01", colour="black")
+        listing = _video_listing(
+            workspace, [thumb, "common-media/size-guide.mp4", "./close-up.mov"]
+        )
+        videos = WorkspaceFacts.gather(workspace).videos(
+            listing, workspace.listing_dir("take-a-hike")
+        )
+
+        assert set(videos) == {"common-media/size-guide.mp4", "./close-up.mov"}
+        shared, local = videos["common-media/size-guide.mp4"], videos["./close-up.mov"]
+        assert isinstance(shared, VideoFacts) and shared.has_audio is False
+        assert isinstance(local, VideoFacts) and local.has_audio is True
+
+    def test_images_are_not_probed(self, workspace: Workspace) -> None:
+        listing = workspace.load_listing("take-a-hike")
+        assert WorkspaceFacts.gather(workspace).videos(listing, workspace.listing_dir("x")) == {}
+
+    def test_a_clip_is_probed_once_however_many_listings_name_it(
+        self, workspace: Workspace, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        probed: list[Path] = []
+        real = facts_module.probe_video
+
+        def counting(path: Path) -> VideoFacts | ProbeFailure:
+            probed.append(path)
+            return real(path)
+
+        monkeypatch.setattr(facts_module, "probe_video", counting)
+        thumb = TemplateMediaEntry(template="flat-lay-01", colour="black")
+        listing = _video_listing(workspace, [thumb, "common-media/size-guide.mp4"])
+        facts = WorkspaceFacts.gather(workspace)
+
+        for name in ("take-a-hike", "another", "a-third"):
+            facts.videos(listing, workspace.listing_dir(name))
+
+        assert len(probed) == 1
+
+    def test_a_missing_clip_is_a_probe_failure(self, workspace: Workspace) -> None:
+        thumb = TemplateMediaEntry(template="flat-lay-01", colour="black")
+        listing = _video_listing(workspace, [thumb, "./gone.mp4"])
+        [failure] = (
+            WorkspaceFacts.gather(workspace)
+            .videos(listing, workspace.listing_dir("take-a-hike"))
+            .values()
+        )
+        assert isinstance(failure, ProbeFailure)
+        assert "not found" in failure.reason
+
+    def test_a_ref_that_will_not_resolve_is_a_probe_failure_not_a_raise(
+        self, workspace: Workspace
+    ) -> None:
+        """A `../` ref (PRD 73) still loads as a string; the banner has to be
+        able to say so rather than 500."""
+        thumb = TemplateMediaEntry(template="flat-lay-01", colour="black")
+        listing = _video_listing(workspace, [thumb, "../../common-media/size-guide.mp4"])
+        [failure] = (
+            WorkspaceFacts.gather(workspace)
+            .videos(listing, workspace.listing_dir("take-a-hike"))
+            .values()
+        )
+        assert isinstance(failure, ProbeFailure)
+        assert "migrate_workspace_refs" in failure.reason

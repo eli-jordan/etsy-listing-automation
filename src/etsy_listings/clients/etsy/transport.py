@@ -69,13 +69,15 @@ class EtsyApiError(UserFacingError, RuntimeError):
 
     Etsy's error envelope is a single ``{"error": "..."}`` string -- no code,
     no field name -- so there is nothing to branch on and the whole value is
-    worth showing.
+    worth showing. ``message`` replaces that default wording for the few
+    refusals whose own text misdescribes them (the video budget, decision 9);
+    ``error`` still carries Etsy's words.
     """
 
-    def __init__(self, status_code: int, *, error: str) -> None:
+    def __init__(self, status_code: int, *, error: str, message: str | None = None) -> None:
         self.status_code = status_code
         self.error = error
-        super().__init__(f"Etsy refused the request with {status_code}: {error}")
+        super().__init__(message or f"Etsy refused the request with {status_code}: {error}")
 
 
 def _error_detail(response: httpx.Response) -> str:

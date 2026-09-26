@@ -901,7 +901,7 @@
         "type": "object"
       },
       "CommonCopySummary": {
-        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s\nref, a common-copy ref is portable -- workspace-relative, not\nlisting-relative -- so it is exactly what `description.ref` stores,\nalready usable as-is.",
+        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). A common-copy ref is\nworkspace-relative, like every other ref (PRD 73), so it is exactly what\n`description.ref` stores, already usable as-is.",
         "properties": {
           "ref": {
             "title": "Ref",
@@ -928,30 +928,6 @@
           "title"
         ],
         "title": "CommonCopySummary",
-        "type": "object"
-      },
-      "CommonMediaSummary": {
-        "description": "One shared asset under ``common-media/`` -- the other half of `media:`,\na bare path rather than a rendered mockup.",
-        "properties": {
-          "file": {
-            "title": "File",
-            "type": "string"
-          },
-          "name": {
-            "title": "Name",
-            "type": "string"
-          },
-          "ref": {
-            "title": "Ref",
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "file",
-          "ref"
-        ],
-        "title": "CommonMediaSummary",
         "type": "object"
       },
       "CreateAiRunRequest": {
@@ -1076,6 +1052,36 @@
           "file"
         ],
         "title": "DesiredImageSnapshot",
+        "type": "object"
+      },
+      "DesiredVideoSnapshot": {
+        "description": "One video as this run wants to place it (A30).",
+        "properties": {
+          "after_images": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "After Images"
+          },
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "file"
+        ],
+        "title": "DesiredVideoSnapshot",
         "type": "object"
       },
       "DisplaceConfig": {
@@ -1326,6 +1332,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -1407,6 +1424,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -1469,6 +1497,98 @@
           "title"
         ],
         "title": "EtsySectionSummary",
+        "type": "object"
+      },
+      "EtsyVideosSnapshot": {
+        "description": "Both sides for the deploy review (A30). The live side comes in Etsy's\nresponse order, which says nothing about the gallery (decision 9).",
+        "properties": {
+          "desired": {
+            "items": {
+              "$ref": "#/components/schemas/DesiredVideoSnapshot"
+            },
+            "title": "Desired",
+            "type": "array"
+          },
+          "live": {
+            "items": {
+              "$ref": "#/components/schemas/LiveVideoSnapshot"
+            },
+            "title": "Live",
+            "type": "array"
+          }
+        },
+        "required": [
+          "desired",
+          "live"
+        ],
+        "title": "EtsyVideosSnapshot",
+        "type": "object"
+      },
+      "EtsyVideosStagePlanDTO": {
+        "additionalProperties": false,
+        "properties": {
+          "drift": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/DriftDTO"
+            },
+            "title": "Drift",
+            "type": "array"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
+          "outcome": {
+            "discriminator": {
+              "mapping": {
+                "blocked": "#/components/schemas/BlockedOutcomeDTO",
+                "idle": "#/components/schemas/IdleOutcomeDTO",
+                "work": "#/components/schemas/WorkOutcomeDTO"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IdleOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/WorkOutcomeDTO"
+              },
+              {
+                "$ref": "#/components/schemas/BlockedOutcomeDTO"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "snapshot": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/EtsyVideosSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "stage": {
+            "const": "etsy_videos",
+            "default": "etsy_videos",
+            "title": "Stage",
+            "type": "string"
+          }
+        },
+        "required": [
+          "outcome"
+        ],
+        "title": "EtsyVideosStagePlanDTO",
         "type": "object"
       },
       "FieldChangeDTO": {
@@ -1591,7 +1711,8 @@
           "severity": {
             "enum": [
               "block",
-              "warn"
+              "warn",
+              "info"
             ],
             "title": "Severity",
             "type": "string"
@@ -2246,6 +2367,53 @@
         "title": "LiveImageSnapshot",
         "type": "object"
       },
+      "LiveVideoSnapshot": {
+        "description": "One video Etsy has on the listing (A30); ``ref`` is ``None`` for one\nthis tool never uploaded.",
+        "properties": {
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          },
+          "thumbnail_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Thumbnail Url"
+          },
+          "video_id": {
+            "title": "Video Id",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "video_id"
+        ],
+        "title": "LiveVideoSnapshot",
+        "type": "object"
+      },
       "MarketSnapshot": {
         "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (market-seo.md, *What the\nproposal sees*).",
         "properties": {
@@ -2351,6 +2519,39 @@
           "after"
         ],
         "title": "MediaChangeDTO",
+        "type": "object"
+      },
+      "MediaFileSummary": {
+        "description": "One file a listing can put in `media:` as a file ref (PRD 72, 73): a\nshared one under ``common-media/``, or one of the listing's own. A bare\nfile uploaded as-is, rather than a rendered mockup.",
+        "properties": {
+          "file": {
+            "title": "File",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "image",
+              "video"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "file",
+          "ref",
+          "kind"
+        ],
+        "title": "MediaFileSummary",
         "type": "object"
       },
       "MultiplePreviewRequest": {
@@ -2586,6 +2787,7 @@
                 "mapping": {
                   "etsy_listing": "#/components/schemas/EtsyListingStagePlanDTO",
                   "etsy_media": "#/components/schemas/EtsyMediaStagePlanDTO",
+                  "etsy_videos": "#/components/schemas/EtsyVideosStagePlanDTO",
                   "printify_product": "#/components/schemas/ProductStagePlanDTO",
                   "publish": "#/components/schemas/PublishStagePlanDTO",
                   "render": "#/components/schemas/RenderStagePlanDTO",
@@ -2608,6 +2810,9 @@
                 },
                 {
                   "$ref": "#/components/schemas/EtsyMediaStagePlanDTO"
+                },
+                {
+                  "$ref": "#/components/schemas/EtsyVideosStagePlanDTO"
                 },
                 {
                   "$ref": "#/components/schemas/RetractStagePlanDTO"
@@ -2974,6 +3179,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -3128,6 +3344,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -3260,6 +3487,17 @@
             "title": "Drift",
             "type": "array"
           },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
+          },
           "outcome": {
             "discriminator": {
               "mapping": {
@@ -3333,6 +3571,17 @@
             },
             "title": "Drift",
             "type": "array"
+          },
+          "group": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Group"
           },
           "outcome": {
             "discriminator": {
@@ -3975,6 +4224,7 @@
               "mapping": {
                 "etsy_listing": "#/components/schemas/EtsyListingStagePlanDTO",
                 "etsy_media": "#/components/schemas/EtsyMediaStagePlanDTO",
+                "etsy_videos": "#/components/schemas/EtsyVideosStagePlanDTO",
                 "printify_product": "#/components/schemas/ProductStagePlanDTO",
                 "publish": "#/components/schemas/PublishStagePlanDTO",
                 "render": "#/components/schemas/RenderStagePlanDTO",
@@ -3997,6 +4247,9 @@
               },
               {
                 "$ref": "#/components/schemas/EtsyMediaStagePlanDTO"
+              },
+              {
+                "$ref": "#/components/schemas/EtsyVideosStagePlanDTO"
               },
               {
                 "$ref": "#/components/schemas/RetractStagePlanDTO"
@@ -4678,7 +4931,7 @@
     },
     "/api/common-media": {
       "get": {
-        "description": "The shared assets a listing can add to `media:` as a bare path.\n\nDistinct from both design endpoints: ``designs/`` is the artwork that gets\nprinted, ``test-designs/`` is calibration targets, and these are finished\npictures (a sizing chart, care instructions) uploaded to Etsy as-is,\nnever rendered onto a garment.",
+        "description": "The *Shared* group: files every listing can use -- a sizing chart,\ncare instructions, a size-guide video.\n\nDistinct from both design endpoints: ``designs/`` is the artwork that gets\nprinted, ``test-designs/`` is calibration targets, and these are finished\nfiles uploaded to Etsy as-is, never rendered onto a garment.",
         "operationId": "list_common_media_api_common_media_get",
         "responses": {
           "200": {
@@ -4686,7 +4939,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "$ref": "#/components/schemas/CommonMediaSummary"
+                    "$ref": "#/components/schemas/MediaFileSummary"
                   },
                   "title": "Response List Common Media Api Common Media Get",
                   "type": "array"
@@ -4698,13 +4951,13 @@
         },
         "summary": "List Common Media",
         "tags": [
-          "listings-support"
+          "media-files"
         ]
       }
     },
     "/api/common-media/{name}/file": {
       "get": {
-        "description": "The shared asset at its own size, for the editor's preview pane and its\nlightbox -- the two places a picture is *judged* rather than picked out of\na list.\n\nThe bytes as they sit on disk, not a re-encode: a mockup template's\ncounterpart (`GET .../design-preview`) has to run the real pipeline to\nexist at all, but this file is already exactly what would be uploaded to\nEtsy, and the one thing worth seeing full-size is what Etsy will get.",
+        "description": "The shared file at its own size, for the preview pane and the\nlightbox -- the bytes as they sit on disk, which are exactly what Etsy\nwould receive.",
         "operationId": "common_media_file_api_common_media__name__file_get",
         "parameters": [
           {
@@ -4739,13 +4992,12 @@
         },
         "summary": "Common Media File",
         "tags": [
-          "listings-support"
+          "media-files"
         ]
       }
     },
     "/api/common-media/{name}/thumbnail": {
       "get": {
-        "description": "An unusable *name* needs nothing here: ``InvalidNameError`` out of\n``common_media_file`` becomes a 400 through the app-wide handler.",
         "operationId": "common_media_thumbnail_api_common_media__name__thumbnail_get",
         "parameters": [
           {
@@ -4780,7 +5032,7 @@
         },
         "summary": "Common Media Thumbnail",
         "tags": [
-          "listings-support"
+          "media-files"
         ]
       }
     },
@@ -5112,6 +5364,151 @@
         "summary": "Create Listing",
         "tags": [
           "listings"
+        ]
+      }
+    },
+    "/api/listings/{listing}/media-files": {
+      "get": {
+        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it (PRD 73). A ``404`` for a listing that does not\nexist, rather than an empty group that would look like one with nothing\nin it.",
+        "operationId": "list_listing_media_files_api_listings__listing__media_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing",
+            "required": true,
+            "schema": {
+              "title": "Listing",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaFileSummary"
+                  },
+                  "title": "Response List Listing Media Files Api Listings  Listing  Media Files Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Listing Media Files",
+        "tags": [
+          "media-files"
+        ]
+      }
+    },
+    "/api/listings/{listing}/media-files/{path}/file": {
+      "get": {
+        "operationId": "listing_media_file_api_listings__listing__media_files__path__file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing",
+            "required": true,
+            "schema": {
+              "title": "Listing",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Media File",
+        "tags": [
+          "media-files"
+        ]
+      }
+    },
+    "/api/listings/{listing}/media-files/{path}/thumbnail": {
+      "get": {
+        "operationId": "listing_media_thumbnail_api_listings__listing__media_files__path__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "listing",
+            "required": true,
+            "schema": {
+              "title": "Listing",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Media Thumbnail",
+        "tags": [
+          "media-files"
         ]
       }
     },

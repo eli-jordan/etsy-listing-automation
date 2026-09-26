@@ -101,7 +101,7 @@ def test_create_name_and_autosave_a_listing(page, workspace_root: Path) -> None:
         page,
         workspace_root,
         "wildflower-crew",
-        pricing_plan="../../pricing-plans/tee-basic.yaml",
+        pricing_plan="pricing-plans/tee-basic.yaml",
     )
 
     # And from here it is an ordinary listing: autosave patches it.

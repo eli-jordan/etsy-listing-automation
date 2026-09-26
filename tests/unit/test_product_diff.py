@@ -294,6 +294,56 @@ def test_a_pending_local_colour_addition_is_not_variant_drift() -> None:
     assert comparison.drift == ()
 
 
+def test_same_count_variant_drift_names_what_changed() -> None:
+    """Two maps can both contain 2 enabled variants and still differ. Their
+    human labels must not collapse a real drift to "2 enabled" vs
+    "2 enabled"."""
+    desired = _desired(BLACK_M, BLACK_S)
+    live = _live(
+        desired,
+        variants=(
+            ProductVariant(id=BLACK_M.id, price=39900, is_enabled=True),
+            ProductVariant(id=BLACK_S.id, price=BLACK_S.price, is_enabled=True),
+        ),
+    )
+
+    [variant_drift] = compare(desired, desired.applied(), live).drift
+
+    assert variant_drift.path == "variants"
+    assert variant_drift.last_applied == "2 enabled"
+    assert variant_drift.live == "2 enabled (1 price changed)"
+
+
+def test_same_count_variant_drift_names_a_selection_change() -> None:
+    desired = _desired(BLACK_M, BLACK_S)
+    live = _live(
+        desired,
+        variants=(
+            ProductVariant(id=BLACK_M.id, price=BLACK_M.price, is_enabled=True),
+            ProductVariant(id=WHITE_M.id, price=WHITE_M.price, is_enabled=True),
+        ),
+    )
+
+    [variant_drift] = compare(desired, desired.applied(), live).drift
+
+    assert variant_drift.live == "2 enabled (selection changed)"
+
+
+def test_same_count_variant_drift_names_selection_and_price_changes() -> None:
+    desired = _desired(BLACK_M, BLACK_S)
+    live = _live(
+        desired,
+        variants=(
+            ProductVariant(id=BLACK_M.id, price=39900, is_enabled=True),
+            ProductVariant(id=WHITE_M.id, price=WHITE_M.price, is_enabled=True),
+        ),
+    )
+
+    [variant_drift] = compare(desired, desired.applied(), live).drift
+
+    assert variant_drift.live == "2 enabled (selection changed and 1 price changed)"
+
+
 # ----------------------------------------------------------------- actions
 
 

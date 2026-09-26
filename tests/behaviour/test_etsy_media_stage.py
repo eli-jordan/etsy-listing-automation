@@ -398,3 +398,68 @@ def test_no_matching_colour_property_skips_the_feature_without_failing(
     _apply(ctx, _lock_with_listing_id())
 
     assert etsy.get_listing_variation_images(SHOP_ID, ETSY_LISTING_ID) == []
+
+
+# ------------------------------------------------ videos and JPEGs (PRD 72)
+
+VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+ALL_COLOURS_MEDIA = [{"template": TEMPLATE, "colour": c} for c in COLOURS]
+
+
+def _add_featured_video(root: Path) -> list[object]:
+    """The fixture gallery with a video at position 2, where Etsy features it."""
+    shared = root / "common-media"
+    shared.mkdir(exist_ok=True)
+    (shared / "size-guide.mp4").write_bytes((VIDEOS / "valid-3s-512.mp4").read_bytes())
+    media: list[object] = [ALL_COLOURS_MEDIA[0], "common-media/size-guide.mp4"]
+    return [*media, *ALL_COLOURS_MEDIA[1:]]
+
+
+def test_a_video_in_media_is_not_part_of_the_image_manifest(workspace_root: Path, etsy) -> None:
+    _write_renders(workspace_root)
+    edit_listing(workspace_root, media=_add_featured_video(workspace_root))
+
+    stage_plan = _stage_plan(_ctx(workspace_root, etsy), a_lock())
+
+    assert "4 images" in (stage_plan.reason or "")
+    assert [c.after for c in stage_plan.changes if isinstance(c, MediaChange)] == [
+        f"{TEMPLATE}:{c}" for c in COLOURS
+    ]
+    assert stage_plan.snapshot is not None
+    assert [row.rank for row in stage_plan.snapshot.desired] == [1, 2, 3, 4]
+
+
+def test_adding_a_video_leaves_an_applied_image_manifest_unchanged(
+    workspace_root: Path, etsy
+) -> None:
+    """Images are ranked among images: a video at position 2 is not a reason
+    to re-order, re-upload or even re-send `image_ids`."""
+    _write_renders(workspace_root)
+    ctx = _ctx(workspace_root, etsy)
+    lock = _apply(ctx, _lock_with_listing_id())
+    uploads_before = len(etsy.uploads)
+
+    edit_listing(workspace_root, media=_add_featured_video(workspace_root))
+    stage_plan = _stage_plan(ctx, lock)
+
+    assert stage_plan.will_run is False
+    assert stage_plan.changes == ()
+    _apply(ctx, lock)
+    assert len(etsy.uploads) == uploads_before
+
+
+@pytest.mark.parametrize("name", ["care.jpg", "care.jpeg"])
+def test_a_shared_jpeg_uploads_like_a_png(workspace_root: Path, etsy, name: str) -> None:
+    _write_renders(workspace_root, colours=["black"])
+    shared = workspace_root / "common-media"
+    shared.mkdir()
+    (shared / name).write_bytes(b"jpeg-bytes")
+    edit_listing(workspace_root, media=[ALL_COLOURS_MEDIA[0], f"common-media/{name}"])
+
+    result = _apply(_ctx(workspace_root, etsy), _lock_with_listing_id())
+
+    assert [e["ref"] for e in result.applied["etsy_media"]["manifest"]] == [
+        f"{TEMPLATE}:black",
+        f"common-media/{name}",
+    ]
+    assert b"jpeg-bytes" in etsy.uploads

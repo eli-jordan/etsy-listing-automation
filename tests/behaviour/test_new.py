@@ -229,7 +229,7 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     listing = Listing.load(
         workspace_root / "listings" / "priced-design" / "listing.yaml", currency="NOK"
     )
-    assert listing.pricing_plan == "../../pricing-plans/computed-plan.yaml"
+    assert listing.pricing_plan == "pricing-plans/computed-plan.yaml"
 
 
 def test_new_offers_an_existing_compatible_pricing_plan(
@@ -256,7 +256,7 @@ def test_new_offers_an_existing_compatible_pricing_plan(
     listing = Listing.load(
         workspace_root / "listings" / "reuses-a-plan" / "listing.yaml", currency="NOK"
     )
-    assert listing.pricing_plan == "../../pricing-plans/existing.yaml"
+    assert listing.pricing_plan == "pricing-plans/existing.yaml"
     assert not (plans_dir / "reuses-a-plan.yaml").exists()  # nothing new was written
     # It was offered as a *compatible* plan, marked and sorted above the
     # create-new row -- which is what makes reusing it the obvious answer.

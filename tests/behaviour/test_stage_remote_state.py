@@ -32,6 +32,7 @@ class RecordingStage:
 
     name: str = "printify_product"
     local: bool = False
+    group: str | None = None
     applied: dict[str, Any] | None = None
     outputs: dict[str, str] | None = None
     remote: dict[str, Any] | None = None

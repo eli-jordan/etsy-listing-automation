@@ -127,7 +127,7 @@ def _all_blocked(
             desired=Blocked(message),
             applied=None,
             live=None,
-            stage_plan=StagePlan.block(stage.name, message),
+            stage_plan=StagePlan.block(stage.name, message, group=stage.group),
         )
         for stage in stages
     )
@@ -160,7 +160,7 @@ def _walk(
             desired=desired,
             applied=applied,
             live=None,
-            stage_plan=StagePlan.block(stage.name, desired.message),
+            stage_plan=StagePlan.block(stage.name, desired.message, group=stage.group),
         )
         on_event(EngineStagePlanned(listing, state.stage_plan))
         return state
@@ -172,6 +172,7 @@ def _walk(
         outcome=verdict.outcome,
         drift=verdict.drift,
         snapshot=_snapshot(stage, desired, live),
+        group=stage.group,
     )
     state = StageState(
         stage=stage, desired=desired, applied=applied, live=live, stage_plan=stage_plan

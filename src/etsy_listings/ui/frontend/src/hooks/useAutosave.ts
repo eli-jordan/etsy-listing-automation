@@ -59,7 +59,7 @@ function mergePatch(base: Patch, patch: Patch): Patch {
  * The editor sends the bare ref a human writes in `listing.yaml`, and the
  * server normalises it to `{default: ref}` -- so between the edit and the
  * response, local state held a *string* where every consumer expects the map,
- * and `Object.keys("../../designs/x.png")` made the design strip report "45
+ * and `Object.keys("designs/x.png")` made the design strip report "45
  * artworks". On a saved listing the response healed it 800ms later, which is
  * why it went unnoticed; on a draft there is no response to heal it.
  *

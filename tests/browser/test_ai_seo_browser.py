@@ -34,7 +34,7 @@ from typing import Any
 import pytest
 import uvicorn
 import yaml
-from playwright.sync_api import Page
+from playwright.sync_api import Page, expect
 
 from etsy_listings.ai.errors import (
     ProviderCancelledError,
@@ -723,11 +723,12 @@ def test_a_changed_editor_input_stales_unresolved_choices_until_regenerated(
 
         # Regenerate: the AI Mode control itself doubles as Regenerate
         # once a proposal is stale, and is not disabled by staleness
-        # (only by a run in flight). It *is* disabled until the
-        # Section blur's autosave lands, so wait for that rather than
-        # sampling once -- the stale badges above appear before it does.
-        page.wait_for_function("document.querySelector('.seo-ai-mode')?.disabled === false")
-        assert ai_mode.is_enabled()
+        # (only by an in-flight request). It *is* disabled until the
+        # Section edit's autosave lands -- a proposal describes the saved
+        # listing, so `useAiSeoMode` waits for `saved` -- which is why this
+        # waits rather than reading the state once: the stale badges above
+        # are local and appear before that PATCH has answered.
+        expect(ai_mode).to_be_enabled()
         ai_mode.click()
 
         fresh_title_drawer = page.get_by_role("region", name="title AI suggestions")

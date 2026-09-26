@@ -99,6 +99,7 @@ def test_a_plan_run_reaches_ready_and_streams_the_full_sequence(executor: RunExe
         "publish",
         "etsy_listing",
         "etsy_media",
+        "etsy_videos",
     ]
 
     listing_planned = next(e for e in run.events if e.type == "listing_planned")

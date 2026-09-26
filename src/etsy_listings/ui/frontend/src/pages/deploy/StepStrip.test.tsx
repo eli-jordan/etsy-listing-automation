@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { StepStrip } from "./StepStrip";
 import type { StageRuntimeStatus } from "./deployState";
@@ -109,5 +109,63 @@ describe("StepStrip", () => {
     act(() => vi.advanceTimersByTime(5_000));
     expect(screen.getByLabelText("Elapsed 1s")).toBeInTheDocument();
     vi.useRealTimers();
+  });
+});
+
+/** `group` is the engine's, never inferred from a name (PRD 72, A2). */
+describe("StepStrip's grouped stages", () => {
+  it("nests etsy_videos under Etsy media, by the group the engine gave it", () => {
+    render(
+      <StepStrip
+        plan={plan([
+          stage({ stage: "etsy_listing" }),
+          stage({ stage: "etsy_media", will_run: true, reason: "the media manifest changed" }),
+          stage({
+            stage: "etsy_videos",
+            group: "etsy_media",
+            will_run: true,
+            reason: "2 video(s)",
+          }),
+        ])}
+        stageRuntime={{}}
+        heading="What apply will do"
+      />,
+    );
+
+    const group = screen.getByRole("group", { name: "Etsy media" });
+    expect(within(group).getByText("Etsy media")).toBeInTheDocument();
+    expect(within(group).getByText("Etsy videos")).toBeInTheDocument();
+    expect(within(group).getByText("2 video(s)")).toBeInTheDocument();
+    expect(within(group).queryByText("Etsy listing")).not.toBeInTheDocument();
+  });
+
+  it("draws a grouped stage on its own when the stage it belongs under is not in the plan", () => {
+    render(
+      <StepStrip
+        plan={plan([stage({ stage: "etsy_videos", group: "etsy_media" })])}
+        stageRuntime={{}}
+        heading="What apply will do"
+      />,
+    );
+
+    expect(screen.queryByRole("group")).not.toBeInTheDocument();
+    expect(screen.getByText("Etsy videos")).toBeInTheDocument();
+  });
+
+  it("marks a grouped stage after a failed one as not reached", () => {
+    render(
+      <StepStrip
+        plan={plan([
+          stage({ stage: "etsy_media", will_run: true }),
+          stage({ stage: "etsy_videos", group: "etsy_media", will_run: true }),
+        ])}
+        stageRuntime={{
+          etsy_media: { kind: "failed", startedAt: 0, finishedAt: 1, message: "boom" },
+        }}
+        heading="What apply did"
+      />,
+    );
+
+    expect(screen.getByText("Not reached")).toBeInTheDocument();
   });
 });

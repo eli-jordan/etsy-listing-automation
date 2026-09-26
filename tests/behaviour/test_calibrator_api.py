@@ -390,6 +390,15 @@ class TestAssigningAKind:
         by_name = {t["name"]: t for t in client.get("/api/templates").json()}
         assert by_name["fresh"]["status_reason"] == "no kind set"
 
+    def test_a_folder_with_no_config_answers_404_for_its_config(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        """The normal state of a folder nobody has given a kind yet -- absent,
+        not broken. It was a 500: the Last-Modified header stat()ed
+        template.yaml before the load that turns a missing one into a 404."""
+        _template_folder(workspace_root, "fresh", "black.png")
+        assert client.get("/api/templates/fresh/config").status_code == 404
+
     def test_assigning_colour_matrix_writes_a_config_with_a_starting_box(
         self, client: TestClient, workspace_root: Path
     ) -> None:

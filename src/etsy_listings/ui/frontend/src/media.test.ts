@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   isInMedia,
+  mediaKind,
   mediaLabel,
   missingColours,
   pictureFor,
@@ -35,8 +36,8 @@ const FLAT_LAY: TemplateSummary = {
 };
 
 describe("refName", () => {
-  it("takes the stem of a listing-relative ref", () => {
-    expect(refName("../../common-media/sizing-chart.png")).toBe("sizing-chart");
+  it("takes the stem of a ref", () => {
+    expect(refName("common-media/sizing-chart.png")).toBe("sizing-chart");
   });
 
   it("takes the stem of a bare filename", () => {
@@ -44,7 +45,7 @@ describe("refName", () => {
   });
 
   it("keeps a name with no extension", () => {
-    expect(refName("../../common-media/README")).toBe("README");
+    expect(refName("common-media/README")).toBe("README");
   });
 
   it("strips only the last extension, so a dotted name survives", () => {
@@ -54,12 +55,12 @@ describe("refName", () => {
 
 describe("singleDesignName", () => {
   it("names the one design", () => {
-    expect(singleDesignName({ default: "../../designs/take-a-hike.png" })).toBe("take-a-hike");
+    expect(singleDesignName({ default: "designs/take-a-hike.png" })).toBe("take-a-hike");
   });
 
   it("answers null for a multi-artwork listing, which has no single design", () => {
     expect(
-      singleDesignName({ "on-light": "../../designs/a.png", "on-dark": "../../designs/b.png" }),
+      singleDesignName({ "on-light": "designs/a.png", "on-dark": "designs/b.png" }),
     ).toBeNull();
   });
 
@@ -78,13 +79,13 @@ describe("mediaLabel", () => {
   });
 
   it("labels a shared asset by its filename", () => {
-    expect(mediaLabel("../../common-media/sizing.png")).toBe("sizing");
+    expect(mediaLabel("common-media/sizing.png")).toBe("sizing");
   });
 });
 
 describe("isInMedia", () => {
   const media: MediaEntry[] = [
-    "../../common-media/sizing.png",
+    "common-media/sizing.png",
     { template: "flat-lay-01", colour: "black" },
     { template: "rack-shot", colour: null },
   ];
@@ -102,7 +103,7 @@ describe("isInMedia", () => {
   });
 
   it("never matches a shared asset", () => {
-    expect(isInMedia(media, "../../common-media/sizing.png", null)).toBe(false);
+    expect(isInMedia(media, "common-media/sizing.png", null)).toBe(false);
   });
 });
 
@@ -141,14 +142,28 @@ describe("pictureFor", () => {
   });
 
   it("serves a shared asset as-is at full size -- it is already what Etsy gets", () => {
-    expect(pictureFor("../../common-media/sizing.png", "take-a-hike")).toBe(
-      "/api/common-media/sizing/file",
+    expect(pictureFor("common-media/sizing.png", "take-a-hike")).toBe(
+      "/api/common-media/sizing.png/file",
+    );
+  });
+
+  it("addresses a shared asset by its full path under common-media/, extension and all", () => {
+    /* A shared file may be a JPEG, and may sit in a subdirectory (PRD 72):
+       the stem alone cannot say which file it is. */
+    expect(pictureFor("common-media/charts/care.jpg", null)).toBe(
+      "/api/common-media/charts/care.jpg/file",
+    );
+  });
+
+  it("escapes each segment of a shared asset's path, but not the slashes between", () => {
+    expect(pictureFor("common-media/a b/c#d.png", null, "tile")).toBe(
+      "/api/common-media/a%20b/c%23d.png/thumbnail",
     );
   });
 
   it("serves a shared asset's thumbnail for a tile", () => {
-    expect(pictureFor("../../common-media/sizing.png", null, "tile")).toBe(
-      "/api/common-media/sizing/thumbnail",
+    expect(pictureFor("common-media/sizing.png", null, "tile")).toBe(
+      "/api/common-media/sizing.png/thumbnail",
     );
   });
 
@@ -160,6 +175,44 @@ describe("pictureFor", () => {
 
   it("encodes a name that would otherwise break the path", () => {
     expect(pictureFor({ template: "a/b", colour: null }, null)).toContain("a%2Fb");
+  });
+});
+
+describe("pictureFor a video or a listing's own file", () => {
+  it("serves a video's file even for a tile -- the browser draws its poster, there is no thumbnail", () => {
+    expect(pictureFor("common-media/videos/intro.mp4", null, "tile")).toBe(
+      "/api/common-media/videos/intro.mp4/file",
+    );
+  });
+
+  it("addresses a ./ ref under the listing it belongs to", () => {
+    expect(pictureFor("./shots/back.png", null, "tile", "take-a-hike")).toBe(
+      "/api/listings/take-a-hike/media-files/shots/back.png/thumbnail",
+    );
+    expect(pictureFor("./close-up.MOV", null, "full", "take a hike")).toBe(
+      "/api/listings/take%20a%20hike/media-files/close-up.MOV/file",
+    );
+  });
+
+  it("has no picture for a ./ ref when there is no listing directory to find it in", () => {
+    /* The editor's unnamed draft: a `./` ref names nothing yet. */
+    expect(pictureFor("./close-up.mp4", null)).toBe("");
+  });
+});
+
+describe("mediaKind", () => {
+  it("calls a template entry an image: a render is a picture", () => {
+    expect(mediaKind({ template: "flat-lay-01", colour: "black" })).toBe("image");
+  });
+
+  it("calls a file ref a video by its extension, in any case", () => {
+    expect(mediaKind("common-media/intro.mp4")).toBe("video");
+    expect(mediaKind("./IMG_1234.MOV")).toBe("video");
+  });
+
+  it("calls every other file ref an image", () => {
+    expect(mediaKind("common-media/sizing.png")).toBe("image");
+    expect(mediaKind("./shots/back.JPEG")).toBe("image");
   });
 });
 
