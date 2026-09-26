@@ -19,8 +19,10 @@ that to be true.
 
 from __future__ import annotations
 
+import json
 import re
 from collections.abc import Sequence
+from typing import Any
 
 
 class SeoGenerationError(RuntimeError):
@@ -111,6 +113,15 @@ _AVAILABILITY_MARKERS: tuple[str, ...] = (
     "billing",
     "usage limit",
     "credit balance",
+    # Claude Code's subscription-window sentences. They do not say "usage
+    # limit" or "rate limit" -- "You've hit your weekly limit" is the one a
+    # spent Claude subscription actually prints.
+    "weekly limit",
+    "session limit",
+    "spend limit",
+    "usage credits",
+    "opus limit",
+    "sonnet limit",
     # rate limiting
     "rate limit",
     "rate-limited",
@@ -129,12 +140,27 @@ contain a three-digit number (a street address, a model number, a traceback
 line number), and the settled plan is explicit that an unrecognised failure
 must surface as "Try again", not be silently misread as availability because
 a number happened to appear. :data:`_HTTP_STATUS_PATTERN` below still
-recognises a status code when it is actually reported as one."""
+recognises a status code when it is actually reported as one, and a
+structured ``api_error_status`` on a CLI envelope is the other place a bare
+status is trusted -- it is a field, not a number floating in prose."""
 
 _HTTP_STATUS_PATTERN = re.compile(r"\bhttp\D{0,5}(401|403|429)\b", re.IGNORECASE)
+_ERROR_PREFIX = re.compile(r"^error:\s*", re.IGNORECASE)
 """An explicit "HTTP 401"/"HTTP/1.1 403"/"http status 429"-shaped status
-line -- the one place a bare status number is still trusted, because it is
-anchored to the word "http" rather than floating free in the output."""
+line. A bare status number in prose is not trusted; this pattern is, because
+it is anchored to the word "http". A structured ``api_error_status`` is
+trusted separately, in :func:`_api_status`."""
+
+_AUTH_OR_LIMIT_STATUS = frozenset({401, 403, 429})
+"""HTTP statuses that mean sign-in, permission, or a rate/usage limit when a
+CLI reports them as ``api_error_status``. 500 and 529 stay "Try again": they
+are the service failing, not this account being blocked."""
+
+_MAX_DETAIL_CHARS = 500
+"""How much of an unrecognised CLI dump may reach the editor. A Claude
+``--output-format json`` envelope is several kilobytes of session id and
+token counters; past this, the Listing Details failure chip grows to the
+width of that one unbreakable string and paints over the brief."""
 
 
 def classify_process_failure(
@@ -145,15 +171,158 @@ def classify_process_failure(
     through to the next provider), or anything else (surfaces as "Try
     again"). Never raises; the caller decides whether/when to raise the
     result.
+
+    The text classified -- and the text the seller is shown -- is the CLI's
+    own sentence, not its raw stdout. Claude's ``--output-format json``
+    exits 1 with a result envelope whose ``result`` is that sentence
+    ("You've hit your weekly limit · resets …") and whose other fields are
+    telemetry. Codex prints a transcript (banner, session id, the echoed
+    prompt) and then the failure as an ``ERROR:`` line; that line is the
+    sentence, and a word in the prompt is not.
     """
-    combined = f"{stdout}\n{stderr}"
-    folded = combined.casefold()
-    for marker in _AVAILABILITY_MARKERS:
-        if marker in folded:
-            return ProviderUnavailableError(
-                provider, reason=stderr.strip() or stdout.strip() or marker
-            )
-    if _HTTP_STATUS_PATTERN.search(combined):
-        return ProviderUnavailableError(provider, reason=stderr.strip() or stdout.strip())
-    detail = stderr.strip() or stdout.strip()
-    return ProviderGenerationError(provider, returncode, detail)
+    shown, status = _seller_text(stdout, stderr)
+    shown = _clip(shown)
+    if _is_unavailable(shown, status):
+        return ProviderUnavailableError(provider, _as_sentence(shown))
+    return ProviderGenerationError(provider, returncode, shown)
+
+
+def _seller_text(stdout: str, stderr: str) -> tuple[str, int | None]:
+    """The text a seller should read, and a structured HTTP status if that
+    same stream carried one.
+
+    stderr wins when it is prose: that is the CLI's own words, and a JSON
+    envelope on the other stream must not hide them. When the stream we
+    would have shown *is* an envelope (Claude's one JSON object, or Codex's
+    JSONL), the sentence is ``result`` / ``message`` / ``error.message``
+    and the rest -- session ids, token counters -- is dropped. A Codex
+    transcript is the same kind of thing in prose: the ``ERROR:`` line is
+    the sentence, and the banner and the echoed prompt are dropped. The
+    prompt is allowed to say "quota"; that must not read as the account
+    being out of quota.
+    """
+    err = stderr.strip()
+    out = stdout.strip()
+    primary = err or out
+    if not primary:
+        return "", None
+    envelope = _envelope(primary)
+    if envelope is not None:
+        sentence = _sentence(envelope)
+        status = _api_status(envelope)
+        if sentence:
+            return _as_sentence(sentence), status
+        if status in _AUTH_OR_LIMIT_STATUS:
+            return f"HTTP {status}", status
+        return primary, status
+    failure = _failure_lines(primary)
+    if failure:
+        return _as_sentence(failure), None
+    return primary, None
+
+
+def _failure_lines(text: str) -> str | None:
+    """The ``ERROR:`` lines in a CLI transcript, in order, duplicates dropped.
+
+    Codex exits 1 with the whole turn on stderr: a banner, the session id,
+    the prompt it was given, then ``ERROR: You've hit your usage limit. …``
+    twice. The line is the failure. Anything above it, including a prompt
+    that happens to contain the word "quota", is not.
+    """
+    seen: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not _ERROR_PREFIX.match(line):
+            continue
+        body = _ERROR_PREFIX.sub("", line, count=1).strip()
+        if body and body not in seen:
+            seen.append(body)
+    if not seen:
+        return None
+    return " ".join(seen)
+
+
+def _envelope(text: str) -> dict[str, Any] | None:
+    """One JSON object, or the last JSONL object that carries a sentence.
+
+    Mixed prose is not an envelope: one log line beside a JSON object must
+    stay the log line. A JSONL stream is an envelope only when every
+    non-empty line is itself an object.
+    """
+    whole = _parse_object(text)
+    if whole is not None:
+        return whole
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    if len(lines) < 2:
+        return None
+    objects: list[dict[str, Any]] = []
+    for line in lines:
+        obj = _parse_object(line)
+        if obj is None:
+            return None
+        objects.append(obj)
+    for obj in reversed(objects):
+        if _sentence(obj):
+            return obj
+    return objects[-1]
+
+
+def _parse_object(text: str) -> dict[str, Any] | None:
+    try:
+        value = json.loads(text)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(value, dict):
+        return value
+    return None
+
+
+def _sentence(envelope: dict[str, Any]) -> str | None:
+    for key in ("result", "message"):
+        found = _text(envelope.get(key))
+        if found:
+            return found
+    error = envelope.get("error")
+    found = _text(error)
+    if found:
+        return found
+    if isinstance(error, dict):
+        return _text(error.get("message"))
+    return None
+
+
+def _text(value: object) -> str | None:
+    if not isinstance(value, str):
+        return None
+    compact = " ".join(value.split())
+    return compact or None
+
+
+def _api_status(envelope: dict[str, Any]) -> int | None:
+    raw = envelope.get("api_error_status")
+    # bool is an int subclass; a JSON `true` must not read as status 1.
+    if isinstance(raw, bool) or not isinstance(raw, int):
+        return None
+    return raw
+
+
+def _is_unavailable(shown: str, status: int | None) -> bool:
+    if status in _AUTH_OR_LIMIT_STATUS:
+        return True
+    folded = shown.casefold()
+    if any(marker in folded for marker in _AVAILABILITY_MARKERS):
+        return True
+    return _HTTP_STATUS_PATTERN.search(shown) is not None
+
+
+def _as_sentence(text: str) -> str:
+    if text and text[-1] not in ".!?":
+        return text + "."
+    return text
+
+
+def _clip(text: str) -> str:
+    compact = " ".join(text.split())
+    if len(compact) <= _MAX_DETAIL_CHARS:
+        return compact
+    return compact[: _MAX_DETAIL_CHARS - 1].rstrip() + "…"

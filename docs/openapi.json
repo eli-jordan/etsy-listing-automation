@@ -5250,7 +5250,7 @@
     },
     "/api/listings/{name}/ai-seo/readiness": {
       "get": {
-        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button never drafts a brief, so this is\n``POST /api/ai/runs``'s own rule set for ``draft_brief=false``: a lit\nbutton is one the server will not refuse. Read-only: every check here,\nincluding each provider's own `readiness()`, is a local probe (a file's\nexistence, a fast `--help`/`login status` subprocess) that changes\nnothing.",
+        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button drafts a brief when the saved one is\nempty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``: an\nempty brief is allowed, and then ``prompts/brief.md`` is required. A\nfilled brief skips drafting. A lit button is one the server will not\nrefuse. Read-only: every check here, including each provider's own\n`readiness()`, is a local probe (a file's existence, a fast\n`--help`/`login status` subprocess) that changes nothing.",
         "operationId": "get_seo_readiness_api_listings__name__ai_seo_readiness_get",
         "parameters": [
           {

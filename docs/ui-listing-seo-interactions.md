@@ -65,7 +65,7 @@ workspace.
    is saved with a garment profile, the brief is drafted from the artwork and
    generation starts on its own. The seller may go straight to step 4. Steps 2 and 3 are what a seller does when it did not, or when they
    want a different result.
-2. The seller enters a brief in Listing Details and activates the AI Mode button once it is enabled.
+2. The seller activates AI Mode. An empty brief is drafted from the design as the first step; a brief they have written is used as it stands.
 3. The button enters a loading state while the current listing facts are sent
    for generation.
 4. When generation finishes, the title, tags, and description-lead drawers
@@ -84,20 +84,23 @@ button has a purple and pink sparkle and remains secondary to **Deploy changes**
 
 | Interaction                      | What happens                                                                                                                                                  | Why it is important                                                                                                |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Hover or focus **AI Mode** when it cannot run | Show a small card listing the saved listing, design, brief, prompt, and provider requirements, with the current readiness reason when available. | A disabled control explains what the seller can do next. |
-| Hover or focus **AI Mode** when it can run | Show **Generates SEO fields using AI (title, description lead and tags)**. | The ready control needs a description of the action, not a checklist the seller has already satisfied. |
+| Hover or focus **AI Mode** when it cannot run | Show a small card listing the saved listing, design, prompt, and provider requirements, with the current readiness reason when available. | A disabled control explains what the seller can do next. An empty brief is not one of those requirements. |
+| Hover or focus **AI Mode** when it can run and the brief is empty | Show **Writes a brief from this design, then generates title, description and tag recommendations**. | The click is how a draft that failed, or never started, is run again. |
+| Hover or focus **AI Mode** when it can run and the brief has text | Show **Generates SEO fields using AI (title, description lead and tags)**. | The ready control needs a description of the action, not a checklist the seller has already satisfied. |
 | Activate **AI Mode** | Capture the current generation inputs and begin one request for a complete proposal. | A single explicit action keeps model usage predictable and ensures all suggestions share the same listing context. |
 | The listing is unsaved or a prerequisite is unavailable | Keep the control visible and disabled. | Sellers can discover AI Mode while preparing the required inputs; requests still require a saved listing and ready local tooling. |
 
-AI Mode starts an AI run that does not draft the brief, so it requires what
-such a run requires: a saved listing with a selected design, a non-empty
-listing brief, a usable garment profile, `prompts/seo.md` and
-`prompts/market-queries.md`, and at least one ready provider. The brief is
-editable in Listing Details. Garment-profile and other existing listing facts
-are included in the submitted snapshot. The
-client learns availability from the saved-listing readiness endpoint; it never
-guesses from browser state. Readiness is checked again after a successful
-autosave so a newly filled brief can enable the button.
+AI Mode starts an AI run. When the brief is empty, that run drafts one first
+and then continues; when the brief has text, the Brief step is skipped and
+the seller's words are the input. Either way it needs a saved listing with a
+selected design, a usable garment profile, `prompts/seo.md` and
+`prompts/market-queries.md`, and at least one ready provider. Drafting also
+needs `prompts/brief.md`. The brief stays editable in Listing Details.
+Garment-profile and other existing listing facts are included in the
+submitted snapshot. The client learns availability from the saved-listing
+readiness endpoint; it never guesses from browser state. Readiness is
+checked again after a successful autosave, so a brief the seller just wrote,
+or a prompt file that appeared, can enable the button.
 
 ## 1a. Drafting on design attach
 
@@ -114,12 +117,12 @@ because the market queries use its item type.
 
 | Interaction | What happens | Why it is important |
 | --- | --- | --- |
-| Attach or change the design while the brief is empty | Arm the chain. When the listing is next saved with a name, design and garment profile, start one AI run: draft the brief, research the market, then request the proposal. | The seller reaches Listing Details to review suggestions rather than to start a wait. |
+| Attach or change the design while the brief is empty | Arm the chain. When the listing is next saved with a name, design and garment profile, start one AI run: draft the brief, research the market, then request the proposal. A toast at the upper right says the run started, and it stays there on every editor tab for as long as the run is going. Pressing **AI Mode** does not show that toast. | The seller is usually still on Variants when the chain starts. Switching to Pricing, Listing Images or Listing Details must not hide the notice, and they reach Listing Details to review suggestions rather than to start a wait. |
 | Attach or change the design while the brief has text | Do nothing at all. | A brief the seller wrote is the authority on the design; regenerating over it would lose the one input only they have. |
 | No garment profile chosen yet | Stay armed and wait. Nothing runs until the garment is saved. | The queries end in the garment's item type, and the proposal needs its facts. |
 | Type in the Brief field before the chain fires | The run still starts, but it skips drafting: the Brief node shows as skipped. | The seller's brief is used as written. |
 | Type in the Brief field while a draft is in flight | The run writes the draft only if the *saved* brief is still empty, under the listing's write lock. Otherwise it discards the draft, and the seller's text wins. | Two authors of one field is the failure to design out, not to detect afterwards. |
-| The run fails | Stop. A brief already written stays, and nothing starts again on its own. **AI Mode** is the way to retry. | A background attempt that quietly retries spends a subscription budget nobody asked it to. |
+| The run fails | Stop. A brief already written stays, and nothing starts again on its own. **AI Mode** is the way to retry, including when the brief is still empty: that click drafts it. | A background attempt that quietly retries spends a subscription budget nobody asked it to. An empty brief must not be what disables the only retry. |
 | Leave the editor or reload while the run is going | Keep running. Returning to the listing reattaches to the run and replays its progress. Only **Cancel** stops it. Leaving before the chain has fired disarms it. | The work was asked for; walking away from the tab is not a request to throw it away. |
 
 While the run is going, the editor's page head shows it as three nodes (Brief,
@@ -127,7 +130,9 @@ Market research, SEO suggestions) beside the autosave line
 ([ui-market-seo-interactions.md §1](ui-market-seo-interactions.md#1-workflow-indicator)).
 That is where it belongs rather than beside the Brief field: the seller who
 attached a design is normally looking at Variants, and the head is the one
-part of the editor that reads the same on every tab.
+part of the editor that reads the same on every tab. The toast is the same
+kind of notice: it is fixed to the viewport, outside the tab panels, so it
+is on screen whichever tab is open.
 
 The run writes the drafted brief to `listing.yaml` itself, and the editor
 shows it in the Brief field from the run's `brief` event without saving it
@@ -142,8 +147,8 @@ the brief is still empty, which after a successful draft it is not.
 
 Brief drafting has its own prompt, `prompts/brief.md`, seeded exactly as
 `prompts/seo.md` is, and runs through the same provider chain, deadline and
-cancellation machinery. A workspace missing it can still use AI Mode manually;
-only the automatic draft is unavailable.
+cancellation machinery. While the brief is empty, AI Mode needs that file
+too, because the button drafts one. A brief already written does not.
 
 ## 2. Loading and automatic reveal
 
@@ -155,7 +160,7 @@ editing other fields while generation runs.
 | ---------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Generating | Keep **AI Mode** disabled. The sparkle twinkles and the button glows in a pulse. Under the button, **Generating for 0:00 seconds** counts up beside **Cancel**. Hovering the button shows **Generating title, description and tag recommendations for your review**. Motion is still when reduced motion is requested. | The request can take time, so the button itself shows that work is underway, and the seller can see how long it has run and stop it without the card staying open. |
 | Success    | Remove the loading message. If the seller is looking at the page, the suggestion drawers slide out from under Title, Tags, and Description lead, slightly narrower than those fields, headed by the AI Mode sparkle. A proposal restored later appears in place, without the slide. | The drawers should read as coming out of the fields they belong to, and a later visit should not replay that motion. |
-| Failure    | Remove the loading state and show an inline user-facing error with **Try again**. Do not change listing fields. | A model or validation failure must never look like an empty successful result.                       |
+| Failure    | Remove the loading state. **Try again** takes the timer's place under the brief, with no error sentence beside it. The reason pops in as a toast at the upper right, dismissible, and leaves when the next run starts. The top-listings column is not shown for a failure the editor watched. Do not change listing fields. | A model or validation failure must never look like an empty successful result, and the reason must not cover the brief or the market column. |
 | Cancelled  | Remove the loading state and retain no proposal. A brief or market snapshot the run already wrote stays.       | Pressing **Cancel** must not leave a result from an abandoned request. Leaving the editor or losing the connection is not cancelling: the run continues, and the editor reattaches to it. |
 
 The backend tries Codex first. Only recognised provider-unavailable,

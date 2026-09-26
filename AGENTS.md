@@ -478,10 +478,11 @@ checkout) — `scripts/generate_test_assets.py` procedurally generates a
 grid/ruler test design and a tiny synthetic mockup template set, deterministically
 (fixed seed, no clock input), committed as ordinary test fixtures.
 
-The E2E layer talks to the real Printify API. It is never part of a default run
-(`addopts = "-m 'not e2e'"`), and it skips cleanly — every test, no network at
-all — unless the machine has credentials: `PRINTIFY_API_TOKEN`, or
-`ETSY_LISTINGS_ROOT` pointing at a workspace whose `.env` carries it.
+The E2E layer talks to the real Printify and Etsy APIs. It is never part of a
+default run (`addopts = "-m 'not e2e'"`). Printify tests need
+`PRINTIFY_API_TOKEN`, or `ETSY_LISTINGS_ROOT` pointing at a workspace whose
+`.env` carries it; market research tests need that workspace's Etsy app key.
+Tests skip cleanly before making network calls when their prerequisite is absent.
 
 That clean skip is right on a contributor's machine and wrong in CI, where a
 layer that runs nothing still reports green.
@@ -492,6 +493,9 @@ failure naming the prerequisite. Both `main`-tier workflows set it.
 ```
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
 ```
+
+Run the full market AI e2e with signed-in local providers using
+`E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py`.
 
 Phase 1's e2e tests are **read-only** catalog GETs, so they cost no state and
 can be re-run freely. Their job is that the contract layer's transcripts are

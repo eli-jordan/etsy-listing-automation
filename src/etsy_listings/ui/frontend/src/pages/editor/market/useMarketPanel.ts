@@ -7,10 +7,6 @@ import type { MarketPanelState } from "./MarketListingsPanel";
 /** What the panel reads from the listing's AI run. */
 export type MarketRun = Pick<AiRun, "busy" | "steps" | "queries" | "market">;
 
-/** The spec's message for a failed search (market-seo.md, *Failures*). The
- * panel's note has its own heading, so the reason is shown without it. */
-const SEARCH_FAILED = "Etsy market search failed: ";
-
 interface Known {
   listing: string;
   snapshot: MarketSnapshot | null;
@@ -31,9 +27,10 @@ function shown(snapshot: MarketSnapshot): MarketPanelState {
  * - **loading** while the run's market node is active -- even over a saved
  *   snapshot, since a re-run drops to it straight away -- with the searches
  *   once the `queries` event has named them;
- * - **failed** when the market node failed while this editor was watching
- *   the run. The snapshot on disk is untouched by a failed run, so after a
- *   reload -- which only replays the failure -- the panel shows it again;
+ * - **hidden** when the market node failed while this editor was watching
+ *   the run. The reason is a toast, not a note in this column. The snapshot
+ *   on disk is untouched, so a reload -- which only replays the failure --
+ *   shows the previous results again;
  * - otherwise the newest search this editor knows of: the run's `market`
  *   event, or the snapshot `GET …/market` answered on mount. A search that
  *   found nothing is the **empty** note; no search at all is no panel.
@@ -67,13 +64,10 @@ export function useMarketPanel(listing: string, run: MarketRun): MarketPanelStat
 
   const step = run.steps.find((s) => s.id === "market");
   if (step?.state === "active") return { kind: "loading", queries: run.queries };
-  if (step?.state === "failed" && watched) {
-    const detail = step.detail ?? "";
-    return {
-      kind: "failed",
-      reason: detail.startsWith(SEARCH_FAILED) ? detail.slice(SEARCH_FAILED.length) : detail,
-    };
-  }
+  // A failure the editor watched would otherwise become the panel's own
+  // error note. The reason is the toast; this column goes away until a
+  // reload brings the saved snapshot back.
+  if (step?.state === "failed" && watched) return null;
   const snapshot = run.market ?? (known.listing === listing ? known.snapshot : null);
   return snapshot === null ? null : shown(snapshot);
 }

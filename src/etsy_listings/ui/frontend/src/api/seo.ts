@@ -9,8 +9,8 @@ import type { SeoReadinessResponse } from "../types";
 export class SeoApiError extends Error {}
 
 /** Whether the **AI Mode** button can start a run for this saved listing
- * right now -- the server applies `POST /api/ai/runs`'s own rules. The
- * control stays visible and disabled when the response is not ready. */
+ * right now. An empty brief is allowed: the click drafts one. The control
+ * stays visible and disabled when the response is not ready. */
 export async function getSeoReadiness(name: string): Promise<SeoReadinessResponse> {
   const { data, error } = await api.GET("/api/listings/{name}/ai-seo/readiness", {
     params: { path: { name } },

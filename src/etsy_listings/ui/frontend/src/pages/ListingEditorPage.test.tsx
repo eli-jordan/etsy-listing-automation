@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as calibrator from "../api/calibrator";
 import * as listingsApi from "../api/listings";
+import * as seoApi from "../api/seo";
 import { briefEvent, type FakeAiRuns, fakeAiRuns, stepEvent } from "../test/aiRuns";
 import type { ListingDetail } from "../types";
 import { ListingEditorPage } from "./ListingEditorPage";
@@ -60,6 +61,13 @@ beforeEach(() => {
   vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
   vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([]);
   vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([]);
+  // The editor asks these as soon as a saved listing has a design, brief or
+  // not. A fixture that never opens Listing Details still mounts the hook.
+  vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+    shop_name: "Pine & Thread",
+    storage_id: "workspace-1",
+  });
+  vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -278,6 +286,22 @@ describe("ListingEditorPage", () => {
     await waitFor(() => expect(runs.streams).toHaveLength(1));
     runs.emit(stepEvent("brief", "active", "Reading cosmic-cat.png"));
     expect(screen.getByText("Drafting brief…")).toBeInTheDocument();
+    // Still on Variants: the details tab is unmounted, and the notice has to
+    // be up anyway, at the moment the run starts. It is portaled to the
+    // document, so leaving Variants does not take it with the tab.
+    const notice = "AI Mode is writing a title, tags and a description from this design.";
+    expect(screen.queryByLabelText("Brief")).not.toBeInTheDocument();
+    const toast = screen.getByText(notice).closest(".ai-auto-toast");
+    expect(toast?.parentElement).toBe(document.body);
+    expect(document.querySelector(".editor .ai-auto-toast")).toBeNull();
+
+    vi.spyOn(listingsApi, "listPricingPlans").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listCommonMedia").mockResolvedValue([]);
+    for (const tab of ["Pricing", "Listing Images", "Listing Details"]) {
+      fireEvent.click(screen.getByText(tab));
+      expect(screen.getByText(notice)).toBeInTheDocument();
+      expect(screen.getByText(notice).closest(".details-tab")).toBeNull();
+    }
 
     fireEvent.click(screen.getByText("Listing Details"));
     runs.emit(briefEvent("A cat in a spacesuit."), stepEvent("brief", "done"));

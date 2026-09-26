@@ -20,6 +20,9 @@ export function AiSeoControl({
 }) {
   const loading = mode.phase === "loading";
   const elapsed = useElapsed(loading ? mode.startedAt : null);
+  const failure = mode.phase === "failed" ? failureMessage(mode.failure) : null;
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  if (failure === null && dismissed !== null) setDismissed(null);
   return (
     <>
       <div
@@ -51,7 +54,9 @@ export function AiSeoControl({
             </p>
           ) : mode.available ? (
             <p className="seo-ai-mode-tip__note">
-              Generates SEO fields using AI (title, description lead and tags)
+              {mode.draftsBrief
+                ? "Writes a brief from this design, then generates title, description and tag recommendations"
+                : "Generates SEO fields using AI (title, description lead and tags)"}
             </p>
           ) : (
             <>
@@ -84,19 +89,30 @@ export function AiSeoControl({
       )}
 
       {mode.phase === "failed" && (
-        <div className="seo-inline-status" role="status" aria-live="polite">
-          <span>
-            {mode.failure
-              ? `AI Mode couldn’t finish: ${mode.failure}`
-              : "AI Mode couldn’t generate valid suggestions. Nothing changed."}
-          </span>
+        <div className="seo-ai-mode-progress">
           <button type="button" onClick={mode.generate}>
             Try again
           </button>
         </div>
       )}
+
+      {failure !== null && failure !== dismissed && (
+        <div className="ai-failure-toast" role="alert">
+          <p>{failure}</p>
+          <button type="button" aria-label="Dismiss" onClick={() => setDismissed(failure)}>
+            ×
+          </button>
+        </div>
+      )}
     </>
   );
+}
+
+/** The sentence the toast says. The timer row keeps only **Try again**. */
+function failureMessage(failure: string | null): string {
+  return failure
+    ? `AI Mode couldn’t finish: ${failure}`
+    : "AI Mode couldn’t generate valid suggestions. Nothing changed.";
 }
 
 /** Whole seconds since `startedAt` (the run's own start, from the server,

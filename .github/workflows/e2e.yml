@@ -106,6 +106,8 @@ jobs:
       # `etsy-listings auth etsy` locally and update the secret.
       - name: pytest -m e2e
         env:
+          # E2E_REAL_AI is deliberately unset: CI uses FakeAiProvider while
+          # the market tests still search Etsy live. Real AI is a local check.
           ETSY_LISTINGS_REQUIRE_EVERY_LAYER: "1"
           PRINTIFY_API_TOKEN: ${{ secrets.PRINTIFY_API_TOKEN }}
           ETSY_KEYSTRING: ${{ secrets.ETSY_KEYSTRING }}

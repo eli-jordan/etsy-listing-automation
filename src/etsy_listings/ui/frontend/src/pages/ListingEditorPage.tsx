@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
 import { getListing, getListingDraft } from "../api/listings";
 import { EditableName } from "../components/EditableName";
@@ -322,6 +323,20 @@ export function ListingEditorShell({
 
   return (
     <div className="editor">
+      {/* On document.body, not inside a tab: DetailsTab unmounts on every
+          other tab, and the chain starts from the design strip, which is
+          usually Variants. */}
+      {aiSeo.run.autoNotice &&
+        aiSeo.run.busy &&
+        createPortal(
+          <div className="ai-auto-toast" role="status">
+            <p>AI Mode is writing a title, tags and a description from this design.</p>
+            <button type="button" aria-label="Dismiss" onClick={aiSeo.run.dismissAutoNotice}>
+              ×
+            </button>
+          </div>,
+          document.body,
+        )}
       {head}
 
       <IssuesBanner issues={detail.issues} activeTab={tab} onJumpTo={pickTab} />

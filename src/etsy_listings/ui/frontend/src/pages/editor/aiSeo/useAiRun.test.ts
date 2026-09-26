@@ -142,6 +142,7 @@ describe("useAiRun starting and following a run", () => {
     await waitFor(() => expect(view.result.current.phase).toBe("running"));
 
     expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: false });
+    expect(view.result.current.autoNotice).toBe(false);
     expect(runs.stream().runId).toBe("run-1");
     expect(view.result.current.steps.map((s) => [s.id, s.state])).toEqual([
       ["brief", "skipped"],
@@ -395,6 +396,7 @@ describe("useAiRun auto chain (PRD 68)", () => {
     await waitFor(() =>
       expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true }),
     );
+    expect(view.result.current.autoNotice).toBe(true);
   });
 
   it("does not fire on the save that was already showing when the design was picked", async () => {

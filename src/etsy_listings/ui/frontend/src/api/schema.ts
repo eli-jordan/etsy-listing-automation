@@ -413,12 +413,13 @@ export interface paths {
      * Get Seo Readiness
      * @description Whether the **AI Mode** button may start a run for this saved listing
      *     right now -- the call the frontend makes to decide whether to enable the
-     *     always visible control. The button never drafts a brief, so this is
-     *     ``POST /api/ai/runs``'s own rule set for ``draft_brief=false``: a lit
-     *     button is one the server will not refuse. Read-only: every check here,
-     *     including each provider's own `readiness()`, is a local probe (a file's
-     *     existence, a fast `--help`/`login status` subprocess) that changes
-     *     nothing.
+     *     always visible control. The button drafts a brief when the saved one is
+     *     empty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``: an
+     *     empty brief is allowed, and then ``prompts/brief.md`` is required. A
+     *     filled brief skips drafting. A lit button is one the server will not
+     *     refuse. Read-only: every check here, including each provider's own
+     *     `readiness()`, is a local probe (a file's existence, a fast
+     *     `--help`/`login status` subprocess) that changes nothing.
      */
     get: operations["get_seo_readiness_api_listings__name__ai_seo_readiness_get"];
     put?: never;

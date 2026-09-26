@@ -366,9 +366,9 @@ Markup root
 ([`MarketListingsPanel.tsx:171-237`](../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L171)):
 
 ```tsx
-<aside className="mkt-panel" aria-label="Top listings on Etsy">
+<aside className="mkt-panel" aria-label="Similar Etsy Listings">
   <header className="mkt-head">
-    <h2 className="mkt-head__title">Top listings on Etsy</h2>
+    <h2 className="mkt-head__title">Similar Etsy Listings</h2>
     <span className="mkt-head__meta">20 scored from 58 found · searched just now</span>
   </header>
   <Queries queries={…} />
@@ -397,7 +397,7 @@ Lead, where the comparison matters most.
 
 ### Header and searches
 
-- **Title:** *Top listings on Etsy*, in the heading font.
+- **Title:** *Similar Etsy Listings*, in the heading font.
 - **Meta line:** *\<scored\> scored from \<found\> found · searched \<relative
   time\>*, in tabular numbers. It shows how big the sample was and how fresh it
   is, because the snapshot outlives the session.
@@ -585,7 +585,7 @@ AI Mode picked up.
 | `loading` | The market node is active, including on a re-run over an existing snapshot | *Searching Etsy for …* (queries pulsing, filled by the `queries` event) and five shimmering skeleton rows. Until that event arrives, the line reads *Choosing Etsy searches from the brief…* | `researching` |
 | `ready` | A `market` event, or a snapshot loaded on mount | Everything above | `suggesting`, `ready`, `states` |
 | `empty` | The market node ended in `warning` | Searches line and a neutral note: *No comparable listings found. Etsy returned nothing for these searches, even without the age filter. The suggestions were written from the design and brief alone.* | `states` |
-| `failed` | The market node ended in `failed` while the editor was watching the run | A note with a red heading: *Etsy market search failed*, the reason (the step's detail without that prefix), then *Nothing changed. Run AI Mode again to retry.* A failed run doesn't replace the snapshot, so a reload shows the previous results again. The reload replays the failed run, but the panel only shows a failure it watched happen | `states` |
+| `failed` | The market node ended in `failed` while the editor was watching the run | The panel is not rendered. The reason is the AI Mode toast, not a note in this column. A failed run doesn't replace the snapshot, so a reload shows the previous results again. The reload replays the failed run, but it does not put the panel back just to repeat the failure | `states` |
 
 The `PanelState` union is at
 [`MarketListingsPanel.tsx:31-35`](../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L31).
