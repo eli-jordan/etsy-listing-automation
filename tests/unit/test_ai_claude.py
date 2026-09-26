@@ -413,6 +413,50 @@ def test_generate_classifies_an_unrecognised_failure_as_generation_error(
         provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
 
 
+def test_generate_reports_a_weekly_limit_envelope_without_its_telemetry(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # `claude -p --output-format json` exits 1 on a subscription limit and
+    # prints one envelope: the seller-facing sentence is `result`, and the
+    # rest (session id, token counters) must not reach the editor.
+    envelope = json.dumps(
+        {
+            "type": "result",
+            "is_error": True,
+            "api_error_status": 429,
+            "session_id": "23b260fd-9790-4e62-8e60-818834fa4acb",
+            "usage": {"input_tokens": 0, "output_tokens": 0},
+            "result": "You've hit your weekly limit · resets Sep 29, 7am (Europe/Oslo)",
+        }
+    )
+    _patch_run_managed(
+        monkeypatch,
+        ProcessResult(returncode=1, stdout=envelope, stderr="", timed_out=False, cancelled=False),
+    )
+    provider = _provider(tmp_path)
+
+    with pytest.raises(ProviderUnavailableError) as excinfo:
+        provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+
+    message = str(excinfo.value)
+    assert message == "claude: You've hit your weekly limit · resets Sep 29, 7am (Europe/Oslo)."
+    assert "session_id" not in message
+    assert "input_tokens" not in message
+
+
+def test_generate_names_a_bare_is_error_envelope(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    envelope = _completed({"type": "result", "is_error": True})
+    _patch_run_managed(
+        monkeypatch,
+        ProcessResult(returncode=0, stdout=envelope, stderr="", timed_out=False, cancelled=False),
+    )
+
+    with pytest.raises(ProviderGenerationError, match="claude reported is_error"):
+        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+
+
 def test_generate_treats_is_error_envelope_as_generation_error(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
@@ -462,3 +506,20 @@ def test_generate_treats_unparseable_envelope_as_generation_error(
 
     with pytest.raises(ProviderGenerationError):
         provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+
+
+def test_generate_with_no_binary_on_path_is_unavailable_so_the_next_provider_runs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A machine with only one of the two CLIs installed. Launching the bare
+    # name fails with WinError 2, which is not an availability failure the
+    # orchestrator falls through on -- it used to end the whole run.
+    monkeypatch.setattr(claude.shutil, "which", lambda name: None)
+
+    def never_launched(argv: list[str], **kwargs: Any) -> ProcessResult:
+        raise AssertionError("a missing binary must not be launched")
+
+    monkeypatch.setattr(claude, "run_managed", never_launched)
+
+    with pytest.raises(ProviderUnavailableError, match="claude was not found on PATH"):
+        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))

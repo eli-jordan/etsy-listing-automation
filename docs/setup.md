@@ -124,7 +124,7 @@ etsy-listings/
   pricing-plans/
   common-media/
   test-designs/
-  prompts/                 # seo.md and brief.md, each seeded only when absent
+  prompts/                 # seo.md, brief.md and market-queries.md, each seeded only when absent
 ```
 
 `shop.yaml` — everything Phase 2 needs, and nothing it doesn't:

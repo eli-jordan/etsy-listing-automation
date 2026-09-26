@@ -1,21 +1,46 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../api/listings";
 import * as seoApi from "../../api/seo";
 import type { SaveState } from "../../hooks/useAutosave";
+import {
+  type FakeAiRuns,
+  aiRunSummary,
+  fakeAiRuns,
+  marketEvent,
+  phaseEvent,
+  proposalEvent,
+  queriesEvent,
+  stepEvent,
+} from "../../test/aiRuns";
+import { MARKET_QUERIES, marketSnapshot } from "../../test/market";
 import type { ListingDetail, SeoProposalResponse } from "../../types";
 import { DetailsTab as DetailsTabView } from "./DetailsTab";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
+
+let runs: FakeAiRuns;
+
+beforeEach(() => {
+  localStorage.clear();
+  runs = fakeAiRuns();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** What the AI run behind the button sends once it has written the
+ * suggestions: the proposal, then the end of the run. */
+async function runDelivers(body: SeoProposalResponse) {
+  await waitFor(() => expect(runs.streams).toHaveLength(1));
+  runs.emit(proposalEvent(body), phaseEvent("done"));
+}
+
 /** The tab with AI Mode attached, exactly as `ListingEditorShell` mounts it.
  *
  * `useAiSeoMode` moved out of `DetailsTab` and up to the shell (PRD 68): a
- * request has to survive a tab switch, and the chain that starts one begins
+ * run has to survive a tab switch, and the chain that starts one begins
  * at the design strip above the tabs. Every test below is still about what
  * the tab *does* with AI Mode, so the harness supplies the same wiring the
  * real caller does rather than a stub -- a hand-built `AiSeoMode` object
@@ -526,23 +551,19 @@ describe("DetailsTab AI Mode", () => {
     expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
   });
 
-  it("rechecks AI Mode after a new brief is saved", async () => {
+  it("asks readiness with an empty brief, and again after the listing changes", async () => {
     vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
       shop_name: "Pine & Thread",
       storage_id: "workspace-1",
     });
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
-      .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
+      .mockResolvedValueOnce({ ready: false, reason: "prompts/brief.md is missing" })
       .mockResolvedValueOnce({ ready: true });
     const { rerender } = render(
       <DetailsTab detail={readyDetail({ brief: "" })} onUpdate={vi.fn()} onFlush={vi.fn()} />,
     );
 
-    expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
-    expect(readiness).not.toHaveBeenCalled();
-
-    rerender(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     await waitFor(() => expect(readiness).toHaveBeenCalledTimes(1));
     expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
 
@@ -629,11 +650,11 @@ describe("DetailsTab AI Mode", () => {
     });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     const aiModeButton = await screen.findByRole("button", { name: /AI Mode/i });
     await userEvent.click(aiModeButton);
+    await runDelivers(body);
 
     expect(await screen.findByRole("region", { name: "title AI suggestions" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "tag AI suggestions" })).toBeInTheDocument();
@@ -651,11 +672,11 @@ describe("DetailsTab AI Mode", () => {
     });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     const aiModeButton = await screen.findByRole("button", { name: /AI Mode/i });
     await userEvent.click(aiModeButton);
+    await runDelivers(body);
     await screen.findByRole("region", { name: "title AI suggestions" });
 
     await userEvent.click(screen.getByRole("button", { name: /Title A/ }));
@@ -675,15 +696,12 @@ describe("DetailsTab AI Mode", () => {
       storage_id: "workspace-1",
     });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({
-      kind: "success",
-      proposal: proposal(),
-    });
     const onUpdate = vi.fn();
     const onFlush = vi.fn();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={onFlush} />);
     await userEvent.click(await screen.findByRole("button", { name: /AI Mode/i }));
+    await runDelivers(proposal());
     await screen.findByRole("region", { name: "title AI suggestions" });
 
     await userEvent.click(screen.getByRole("button", { name: /Title B/ }));
@@ -698,13 +716,120 @@ describe("DetailsTab AI Mode", () => {
       storage_id: "workspace-1",
     });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "failed" });
     const onUpdate = vi.fn();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
     await userEvent.click(await screen.findByRole("button", { name: /AI Mode/i }));
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(phaseEvent("failed"));
 
     expect(await screen.findByText(/couldn.t generate/i)).toBeInTheDocument();
     expect(onUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("DetailsTab top listings panel", () => {
+  const withDesign = () =>
+    detail({ design: { default: "designs/take-a-hike.png" }, brief: "A relaxed hiking tee." });
+
+  function fieldset() {
+    return screen.getByRole("group", { name: "Listing details" });
+  }
+
+  it("keeps the fields at their own width when there is no search to show", async () => {
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    await waitFor(() => expect(runs.market).toHaveBeenCalledWith("take-a-hike"));
+    expect(screen.queryByRole("complementary", { name: "Similar Etsy Listings" })).toBeNull();
+    expect(fieldset().closest(".mkt-layout")).toBeNull();
+  });
+
+  it("puts the last search beside the fields", async () => {
+    runs.market.mockResolvedValue(marketSnapshot());
+
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    const panel = await screen.findByRole("complementary", { name: "Similar Etsy Listings" });
+    const layout = fieldset().closest(".mkt-layout");
+    expect(layout?.children).toHaveLength(2);
+    expect(layout?.children[0]).toHaveClass("details-tab");
+    expect(layout?.children[0]).toContainElement(fieldset());
+    expect(layout?.children[1]).toBe(panel);
+  });
+
+  it("keeps the seller's place in the fields when the panel appears", async () => {
+    runs.find.mockResolvedValue(aiRunSummary());
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    const title = screen.getByLabelText("Title");
+    title.focus();
+
+    runs.emit(stepEvent("market", "active"));
+
+    expect(screen.getByRole("complementary", { name: "Similar Etsy Listings" })).toBeVisible();
+    expect(screen.getByLabelText("Title")).toBe(title);
+    expect(title).toHaveFocus();
+  });
+
+  it("shows research as the run does it, and what it found", async () => {
+    runs.find.mockResolvedValue(aiRunSummary());
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+
+    runs.emit(stepEvent("market", "active"), queriesEvent(MARKET_QUERIES));
+
+    const panel = screen.getByRole("complementary", { name: "Similar Etsy Listings" });
+    expect(panel).toHaveTextContent("Searching Etsy for “retro sunset hiking shirt”");
+
+    runs.emit(marketEvent(marketSnapshot({ found: 31 })), stepEvent("market", "done"));
+
+    expect(panel).toHaveTextContent("12 scored from 31 found");
+  });
+
+  it("ticks the phrases the pending suggestions use", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
+    runs.market.mockResolvedValue(marketSnapshot());
+    runs.find.mockResolvedValue(aiRunSummary());
+    const user = userEvent.setup();
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    const panel = await screen.findByRole("complementary", { name: "Similar Etsy Listings" });
+    await user.click(within(panel).getByRole("tab", { name: "Phrases" }));
+    expect(within(panel).queryByLabelText("In your suggestions")).toBeNull();
+
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(
+      proposalEvent({
+        titles: ["Retro Hiking Shirt", "Title B", "Title C"],
+        tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
+        description_leads: ["Lead A", "Lead B", "Lead C"],
+        rationale: [],
+        warnings: [],
+        observed_text: "",
+        snapshot: {
+          brief: "A relaxed hiking tee.",
+          product_type: "",
+          etsy_category: "",
+          materials: [],
+          colors: ["black"],
+          garment_brand: "",
+          garment_model: "",
+          garment_profile: "comfort-colors-1717",
+          design: { default: "designs/take-a-hike.png" },
+          design_content_hash: null,
+        },
+        generated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+      }),
+    );
+
+    await waitFor(() =>
+      expect(within(panel).getAllByLabelText("In your suggestions")).toHaveLength(1),
+    );
+    const [ticked] = within(panel).getAllByRole("listitem");
+    expect(ticked).toHaveTextContent("retro hiking shirt");
+    expect(ticked).toContainElement(within(panel).getByLabelText("In your suggestions"));
   });
 });

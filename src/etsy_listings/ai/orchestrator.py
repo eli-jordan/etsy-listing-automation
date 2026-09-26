@@ -58,6 +58,13 @@ from etsy_listings.ai.errors import (
     SeoDeadlineExceededError,
     SeoTryAgainError,
 )
+from etsy_listings.ai.market_queries import (
+    MarketQueries,
+    MarketQueriesRequest,
+    MarketQueriesValidationError,
+    build_market_queries_task,
+    validate_market_queries,
+)
 from etsy_listings.ai.models import Deadline, ProviderTask, RepairContext, SeoProposal, SeoRequest
 from etsy_listings.ai.prompt import build_seo_task
 from etsy_listings.ai.providers import AiProvider
@@ -104,6 +111,13 @@ def _brief_decoder(raw_output: str) -> DesignBrief:
     try:
         return validate_brief(dict(_decoded(raw_output)))
     except BriefValidationError as exc:
+        raise _Malformed(exc.reasons) from exc
+
+
+def _market_queries_decoder(raw_output: str) -> MarketQueries:
+    try:
+        return validate_market_queries(dict(_decoded(raw_output)))
+    except MarketQueriesValidationError as exc:
         raise _Malformed(exc.reasons) from exc
 
 
@@ -154,9 +168,9 @@ def run_task[Result](
     seconds: float = _DEFAULT_SECONDS,
     cancel_event: threading.Event | None = None,
 ) -> Result:
-    """Try ``providers`` in order -- Codex, then Claude, per the settled
-    plan -- against ``task``, within one shared ``deadline`` (a fresh
-    ``seconds``-second one is started if none is given).
+    """Try ``providers`` in order -- Codex, then Claude, then Grok -- against
+    ``task``, within one shared ``deadline`` (a fresh ``seconds``-second one
+    is started if none is given).
 
     ``decode`` takes raw provider text and returns a validated result,
     raising `_Malformed` for anything in between -- the only thing this
@@ -250,6 +264,33 @@ def generate_brief(
     return run_task(
         build_brief_task(seller_prompt, request),
         _brief_decoder,
+        providers,
+        deadline=deadline,
+        seconds=seconds,
+        cancel_event=cancel_event,
+    )
+
+
+def generate_market_queries(
+    request: MarketQueriesRequest,
+    seller_prompt: str,
+    providers: Sequence[AiProvider],
+    *,
+    deadline: Deadline | None = None,
+    seconds: float = _DEFAULT_SECONDS,
+    cancel_event: threading.Event | None = None,
+) -> MarketQueries:
+    """Three buyer search queries for ``request``, using the seller's own
+    ``prompts/market-queries.md`` text (market-seo.md, *Query extraction*).
+
+    The third task over the same chain: Codex, then Claude, then Grok on a
+    recognised unavailable failure, one same-provider repair, and its own 60 seconds
+    (PRD 4's deadline applies to each provider call of an AI run on its own).
+    Never cached -- a second request is free to try different queries.
+    """
+    return run_task(
+        build_market_queries_task(seller_prompt, request),
+        _market_queries_decoder,
         providers,
         deadline=deadline,
         seconds=seconds,

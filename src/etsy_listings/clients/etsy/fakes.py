@@ -7,13 +7,20 @@ job is the mistake that split exists to prevent.
 
 from __future__ import annotations
 
+import threading
 from collections.abc import Sequence
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal, NamedTuple
+
+import httpx
 
 from etsy_listings.clients.etsy.models import (
+    ALREADY_DECODED,
     Inventory,
     Listing,
     ListingImage,
+    MarketCandidate,
+    MarketListing,
     ProductionPartner,
     ReturnPolicy,
     ShippingProfile,
@@ -21,6 +28,7 @@ from etsy_listings.clients.etsy.models import (
     ShopSection,
     VariationImageLink,
 )
+from etsy_listings.clients.etsy.transport import EtsyApiError
 
 
 class FakeEtsyShopClient:
@@ -200,3 +208,146 @@ class FakeEtsyListingClient:
         self, shop_id: int, listing_id: int, links: list[VariationImageLink]
     ) -> None:
         self._variation_images[listing_id] = list(links)
+
+
+# ------------------------------------------------------------------ market
+
+MarketMethod = Literal["search_active", "listings_by_ids", "review_count"]
+
+MARKET_BATCH_LIMIT = 100
+"""The real batch's chunk size, so the fake's call log counts as it does."""
+
+
+class MarketCall(NamedTuple):
+    """One call the fake answered or refused: the method, and what it asked
+    -- the query, the chunk of ids as a tuple, or the listing id."""
+
+    method: MarketMethod
+    argument: object
+
+
+def market_listing(listing_id: int, **fields: Any) -> MarketListing:
+    """A listing with plausible defaults, for seeding. ``shop_id`` defaults to
+    one shop per listing; override any field by name."""
+    defaults: dict[str, Any] = {
+        "shop_id": 1000 + listing_id,
+        "title": f"Listing {listing_id}",
+        "url": f"https://www.etsy.test/listing/{listing_id}",
+        "original_creation_timestamp": 1_700_000_000,
+    }
+    return MarketListing(listing_id=listing_id, **(defaults | fields))
+
+
+def rate_limited() -> EtsyApiError:
+    """What the real client raises once a 429 has outlasted the retries."""
+    return EtsyApiError(429, error="You have exceeded your quota")
+
+
+def server_error(status: int = 503) -> EtsyApiError:
+    """What the real client raises once a 5xx has outlasted the retries."""
+    return EtsyApiError(status, error="upstream unavailable")
+
+
+def network_error() -> httpx.TransportError:
+    """What the real client lets through once a dropped connection has
+    outlasted the retries: the transport error itself, not a wrapper."""
+    return httpx.ConnectError("connection reset by peer")
+
+
+@dataclass
+class _Failure:
+    method: MarketMethod
+    error: Exception
+    times: int
+    argument: object | None
+
+
+class FakeEtsyMarketClient:
+    """The Etsy market, answered from what a test seeded.
+
+    Listings are seeded once with everything the batch returns; a search
+    answers the seeded ids in the order given, narrowed to the candidate
+    fields a real search carries. Every call -- failed ones included, since
+    they cost quota too -- lands in :attr:`calls`, the batch once per chunk
+    of a hundred as the real one is. Failures are injected as what the real
+    client raises *after* its retries, since the retries are the transport's
+    and are tested there. Thread-safe: research calls it from five threads.
+    """
+
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._listings: dict[int, MarketListing] = {}
+        self._reviews: dict[int, int] = {}
+        self._searches: dict[str, list[int]] = {}
+        self._failures: list[_Failure] = []
+        self.calls: list[MarketCall] = []
+
+    # ----------------------------------------------------------- seeding
+
+    def seed_listing(self, listing: MarketListing, *, reviews: int = 0) -> None:
+        with self._lock:
+            self._listings[listing.listing_id] = listing
+            self._reviews[listing.listing_id] = reviews
+
+    def seed_search(self, query: str, listing_ids: Sequence[int]) -> None:
+        """What ``query`` finds, best-ranked first. Every id must be seeded
+        with :meth:`seed_listing`, before or after."""
+        with self._lock:
+            self._searches[query] = list(listing_ids)
+
+    def fail(
+        self,
+        method: MarketMethod,
+        error: Exception,
+        *,
+        times: int = 1,
+        argument: object | None = None,
+    ) -> None:
+        """Make the next ``times`` calls to ``method`` raise ``error`` --
+        only those asking about ``argument``, when one is given."""
+        with self._lock:
+            self._failures.append(_Failure(method, error, times, argument))
+
+    def count(self, method: MarketMethod) -> int:
+        with self._lock:
+            return sum(1 for call in self.calls if call.method == method)
+
+    # ----------------------------------------------------------- the calls
+
+    def search_active(self, query: str, *, limit: int = 25) -> list[MarketCandidate]:
+        self._record("search_active", query)
+        with self._lock:
+            ids = self._searches.get(query, [])[:limit]
+            return [
+                MarketCandidate.model_validate(
+                    self._listings[i].model_dump(include=set(MarketCandidate.model_fields)),
+                    context=ALREADY_DECODED,
+                )
+                for i in ids
+            ]
+
+    def listings_by_ids(self, ids: Sequence[int]) -> list[MarketListing]:
+        wanted = list(ids)
+        found: list[MarketListing] = []
+        for start in range(0, len(wanted), MARKET_BATCH_LIMIT):
+            chunk = tuple(wanted[start : start + MARKET_BATCH_LIMIT])
+            self._record("listings_by_ids", chunk)
+            with self._lock:
+                found.extend(self._listings[i] for i in chunk if i in self._listings)
+        return found
+
+    def review_count(self, listing_id: int) -> int:
+        self._record("review_count", listing_id)
+        with self._lock:
+            return self._reviews.get(listing_id, 0)
+
+    def _record(self, method: MarketMethod, argument: object) -> None:
+        with self._lock:
+            self.calls.append(MarketCall(method, argument))
+            for failure in self._failures:
+                if failure.method != method or failure.times <= 0:
+                    continue
+                if failure.argument is not None and failure.argument != argument:
+                    continue
+                failure.times -= 1
+                raise failure.error

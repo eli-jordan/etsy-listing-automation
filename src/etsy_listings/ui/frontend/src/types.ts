@@ -31,12 +31,27 @@ export type TemplatePhoto = components["schemas"]["TemplatePhoto"];
 
 // ── Listing SEO AI Mode (AI SEO implementation plan, PR7) ───────────────────
 
-export type DesignBriefResponse = components["schemas"]["DesignBriefResponse"];
 export type SeoReadinessResponse = components["schemas"]["SeoReadinessResponse"];
-export type SeoProposalResponse = components["schemas"]["SeoProposalResponse"];
+/** A proposal as the browser keeps it: an AI run's `proposal` event without
+ * the event's own `type` and `seq` (the server sends it flat, so the two
+ * are the same fields). */
+export type SeoProposalResponse = Omit<components["schemas"]["AiProposalEvent"], "type" | "seq">;
 export type SeoProposalSnapshot = components["schemas"]["SeoProposalSnapshot"];
 export type SeoRationaleEntry = components["schemas"]["SeoRationaleEntry"];
 export type SeoWarningEntry = components["schemas"]["SeoWarningEntry"];
+
+// ── AI runs (market-seo.md, *AI runs*; the implementation plan's Run contract) ─
+
+export type AiRunSummary = components["schemas"]["AiRunSummary"];
+export type AiRunDetail = components["schemas"]["AiRunDetail"];
+export type AiRunPhase = AiRunSummary["phase"];
+export type AiRunEvent = AiRunDetail["events"][number];
+/** One node of the chain -- brief, market research, SEO suggestions -- as the
+ * latest `step` event for it left it. */
+export type WorkflowStep = components["schemas"]["WorkflowStep"];
+export type MarketSnapshot = components["schemas"]["MarketSnapshot"];
+export type ScoredListing = components["schemas"]["ScoredListing"];
+export type PhraseScore = components["schemas"]["PhraseScore"];
 
 // ── Listings UI (phase 5) ──────────────────────────────────────────────────
 

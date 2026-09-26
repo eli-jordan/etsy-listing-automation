@@ -5,6 +5,7 @@ import {
   clearStoredProposal,
   isStale,
   loadStoredProposal,
+  receiveProposal,
   saveStoredProposal,
   toStoredProposal,
   updateUnresolved,
@@ -259,5 +260,44 @@ describe("updateUnresolved", () => {
 
   it("returns null and does nothing when there is no stored proposal", () => {
     expect(updateUnresolved(scope, { title: false })).toBeNull();
+  });
+});
+
+describe("receiveProposal", () => {
+  it("stores a new proposal with every drawer open", () => {
+    const body = proposal();
+
+    expect(receiveProposal(scope, body)).toEqual(toStoredProposal(body));
+    expect(loadStoredProposal(scope)).toEqual(toStoredProposal(body));
+  });
+
+  it("does not reopen drawers for a proposal it has already received", () => {
+    // An AI run's events replay on every reattach, proposal included.
+    const body = proposal();
+    receiveProposal(scope, body);
+    updateUnresolved(scope, { title: false });
+
+    expect(receiveProposal(scope, body)?.unresolved).toEqual({
+      title: false,
+      tags: true,
+      lead: true,
+    });
+  });
+
+  it("stays resolved once every drawer was, however often the run replays", () => {
+    const body = proposal();
+    receiveProposal(scope, body);
+    updateUnresolved(scope, { title: false, tags: false, lead: false });
+
+    expect(receiveProposal(scope, body)).toBeNull();
+    expect(loadStoredProposal(scope)).toBeNull();
+  });
+
+  it("replaces an older proposal with a newer run's", () => {
+    receiveProposal(scope, proposal({ generated_at: "2026-09-25T10:00:00Z" }));
+    updateUnresolved(scope, { title: false });
+    const newer = proposal({ generated_at: "2026-09-25T11:00:00Z" });
+
+    expect(receiveProposal(scope, newer)).toEqual(toStoredProposal(newer));
   });
 });

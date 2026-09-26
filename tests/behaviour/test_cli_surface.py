@@ -65,6 +65,7 @@ def test_command_help_documents_the_command_specific_flags() -> None:
     assert "--all" in _help("plan")
     assert "--all" in _help("apply")
     assert "--category" in _help("new")
+    assert "--replace-prompts" in _help("setup")
     ui_help = _help("ui")
     assert "--host" in ui_help
     assert "--port" in ui_help

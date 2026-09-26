@@ -9,7 +9,11 @@ for the rest.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, ConfigDict, field_validator
+import html
+from collections.abc import Mapping
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict, ValidationInfo, field_validator, model_validator
 
 
 class Shop(BaseModel):
@@ -215,3 +219,109 @@ class Listing(BaseModel):
         only covers a *missing* key, so without this a plain re-plan of an
         existing listing fails validation on every run."""
         return () if value is None else value
+
+
+# ------------------------------------------------------------------ market
+
+
+def _drop_nulls(value: object) -> object:
+    """Etsy sends ``null`` for a field it has no value for as readily as it
+    omits the key (``tags`` is documented as defaulting to null). Dropping
+    the nulls lets one set of field defaults answer both shapes."""
+    if isinstance(value, dict):
+        return {key: item for key, item in value.items() if item is not None}
+    return value
+
+
+ALREADY_DECODED: Mapping[str, bool] = {"already_decoded": True}
+"""Validation context for a market model read back from this tool's own
+cache: its text was unescaped when Etsy's answer was first decoded, and a
+second pass would turn a seller's literal ``&amp;`` into ``&``."""
+
+
+class MarketCandidate(BaseModel):
+    """Another seller's active listing, as `findAllListingsActive` returns
+    it: what market research filters, scores and quotes (market-seo.md).
+
+    Every field but the two ids is optional, because one sparse row must not
+    fail a search of twenty-five. The defaults are the values scoring would
+    give an absent signal anyway: no favourites, no views, no tags.
+
+    Text arrives **HTML-escaped** (measured: ``Father&#39;s Day`` in titles,
+    descriptions and tags alike) and is unescaped here, once, so that no
+    phrase count or prompt ever sees an entity a buyer never typed.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    listing_id: int
+    shop_id: int
+    title: str = ""
+    description: str = ""
+    tags: tuple[str, ...] = ()
+    num_favorers: int = 0
+    views: int = 0
+    original_creation_timestamp: int | None = None
+    """Epoch seconds. The listing's *first* creation -- a renewal resets
+    `creation_timestamp` but not this, and a listing's age is what turns
+    favourites and views into per-day rates. Falls back to
+    `creation_timestamp` when Etsy leaves it out."""
+    url: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def _decode(cls, value: Any, info: ValidationInfo) -> Any:
+        value = _drop_nulls(value)
+        if not isinstance(value, dict) or (info.context or {}).get("already_decoded"):
+            return value
+        if "original_creation_timestamp" not in value and "creation_timestamp" in value:
+            value["original_creation_timestamp"] = value["creation_timestamp"]
+        for key in ("title", "description"):
+            if isinstance(value.get(key), str):
+                value[key] = html.unescape(value[key])
+        if isinstance(value.get("tags"), list):
+            value["tags"] = [html.unescape(t) if isinstance(t, str) else t for t in value["tags"]]
+        return value
+
+
+class ShopStats(BaseModel):
+    """The selling shop's signals, from the batch call's ``includes=Shop``.
+
+    `review_average` stays ``None`` when Etsy sends null -- a shop with no
+    reviews in the past year -- because scoring ranks that as the *lowest*
+    rating, which a default of ``0.0`` would merely imitate while claiming a
+    rating that was never given.
+    """
+
+    model_config = ConfigDict(extra="ignore", frozen=True)
+
+    shop_name: str = ""
+    transaction_sold_count: int = 0
+    review_average: float | None = None
+    review_count: int = 0
+
+    @model_validator(mode="before")
+    @classmethod
+    def _decode(cls, value: Any) -> Any:
+        return _drop_nulls(value)
+
+
+class MarketListing(MarketCandidate):
+    """A candidate with the stats `getListingsByListingIds` adds: its shop,
+    and the thumbnail the top listings panel shows."""
+
+    shop: ShopStats | None = None
+    thumbnail_url: str | None = None
+    """``url_170x135`` of the listing's first image by rank -- Etsy's
+    170px thumbnail, the size the panel's 40px tile needs at any density."""
+
+    @model_validator(mode="before")
+    @classmethod
+    def _thumbnail(cls, value: Any) -> Any:
+        if not isinstance(value, dict) or "thumbnail_url" in value:
+            return value
+        images = [image for image in value.get("images") or () if isinstance(image, dict)]
+        if not images:
+            return value
+        first = min(images, key=lambda image: image.get("rank") or 0)
+        return {**value, "thumbnail_url": first.get("url_170x135")}

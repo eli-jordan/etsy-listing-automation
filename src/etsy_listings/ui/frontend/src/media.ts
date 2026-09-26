@@ -49,9 +49,7 @@ export function refName(ref: string): string {
  * A listing stores its refs relative to its own directory
  * (`../../designs/take-a-hike.png`, PRD 34), which is the right thing for a
  * file that lives beside a listing and the wrong thing for anything that has
- * to name the file without one -- the Design strip's caption, and the
- * design-brief request, which is made before a new listing has a directory
- * at all. Both used to strip the prefix themselves.
+ * to name the file without one -- the Design strip's caption, for one.
  *
  * Only leading `../` segments are removed; a ref that is already
  * workspace-relative passes through unchanged.

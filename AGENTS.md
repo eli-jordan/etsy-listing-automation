@@ -175,9 +175,12 @@ src/etsy_listings/
                   transport (token/retry/errors), two protocols (CatalogClient
                   reads, PrintifyClient writes), models, catalog, products,
                   cache, resolve, fakes                                      [done]
-                etsy/ and limiter Phase 3/6; retry.py done
-  ai/           request/task/proposal contracts, the two packaged default
-                prompts, delimited-context assembly, hard validation, the
+                etsy/ — the same shape for Etsy: auth, transport (retry plus
+                  header pacing, `RateGate`), shops, listings, and market
+                  (the read-only search market-informed SEO reads; built
+                  from the key pair alone, never a bearer). retry.py done
+  ai/           request/task/proposal contracts, the three packaged default
+                prompts (seo.md, brief.md, market-queries.md), delimited-context assembly, hard validation, the
                 Codex/Claude adapters and the chain over them  [done]
                 A provider takes a `ProviderTask` -- assembled prompt text, a
                   response schema, one image -- and knows nothing about which
@@ -185,8 +188,36 @@ src/etsy_listings/
                   share one fallback order, one repair rule and one deadline
                 brief.py -- everything drafting-specific in one small module:
                   request, schema, packaged prompt, validation
+                market_queries.py -- the same shape for market-informed SEO's
+                  query extraction (three unique, non-empty buyer searches);
+                  `SeoRequest.market_block` carries market/'s block into the
+                  proposal prompt
+  market/       market-informed SEO's research, in memory: `research()` turns
+                three queries into at most 20 scored listings (percentiles,
+                top-20 review rationing, 5 calls in flight), the ranked
+                phrase list, and `market_block()`, the delimited data the
+                proposal prompt gets (market-seo.md). The maths is in
+                memory; two modules touch disk, imported by their own
+                names (not from `market`, which `config` imports):
+                cache.py -- `CachedEtsyMarketClient`, the 7-day search and
+                  per-listing stats caches under `.cache/market/`
+                snapshot.py -- `MarketSnapshot`, `save`/`load` of the latest
+                  research per listing (moved on rename, removed on delete
+                  by the listings API)                                 [done]
+                `settings.yaml` (config/settings.py, `Workspace.load_settings`)
+                  holds the scoring weights; absent means the defaults
   runs/         SQLite recorder                                           [Phase 6]
   ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
+                workspace_locks.py -- the per-listing write lock
+                  (`app.state.workspace_locks.listing(name)`). Every
+                  read-merge-write of `listing.yaml` in the UI process holds
+                  it: PATCH, DELETE, create, rename, and AI runs' brief write
+                airuns/ -- AI runs (market-seo.md, *AI runs*): brief, market
+                  research and proposal as one run per listing, each on its
+                  own daemon thread (never the plan/apply executor), streamed
+                  by api/airuns.py at /api/ai/runs. Tests inject
+                  `seo_provider_factory` and `market_client_factory` into
+                  `create_app` (tests/support/ai_runs.py has the doubles)
                 frontend/ -- AppShell/DashboardPage/ListingsPage/
                 ListingEditorPage (design strip + Variants/Pricing/Images/Details
                 tabs, and the create form too: it mounts at /listings/new on
@@ -195,6 +226,13 @@ src/etsy_listings/
                 frontend/src/media.ts — what `media:` holds and what it looks
                   like: every picture URL and every ref→name derivation, for
                   both halves of the app
+                frontend/src/pages/editor/aiSeo/useAiRun.ts — the editor's
+                  side of an AI run: start, follow (the SSE reader is
+                  src/api/sse.ts, shared with plan/apply runs), reattach on
+                  mount, cancel, and PRD 68's auto chain (armed by a design
+                  pick, fired by the next save that can run it). Its
+                  `steps`/`queries`/`market` are rebuilt from the events, so a
+                  reload shows the same run again
                 frontend/src/pages/editor/ — the Images tab is four modules:
                   MediaLocator (browse and add), MediaReel (order, by drag),
                   focus (what the preview points at) and mediaEdits (what a
@@ -440,10 +478,11 @@ checkout) — `scripts/generate_test_assets.py` procedurally generates a
 grid/ruler test design and a tiny synthetic mockup template set, deterministically
 (fixed seed, no clock input), committed as ordinary test fixtures.
 
-The E2E layer talks to the real Printify API. It is never part of a default run
-(`addopts = "-m 'not e2e'"`), and it skips cleanly — every test, no network at
-all — unless the machine has credentials: `PRINTIFY_API_TOKEN`, or
-`ETSY_LISTINGS_ROOT` pointing at a workspace whose `.env` carries it.
+The E2E layer talks to the real Printify and Etsy APIs. It is never part of a
+default run (`addopts = "-m 'not e2e'"`). Printify tests need
+`PRINTIFY_API_TOKEN`, or `ETSY_LISTINGS_ROOT` pointing at a workspace whose
+`.env` carries it; market research tests need that workspace's Etsy app key.
+Tests skip cleanly before making network calls when their prerequisite is absent.
 
 That clean skip is right on a contributor's machine and wrong in CI, where a
 layer that runs nothing still reports green.
@@ -454,6 +493,9 @@ failure naming the prerequisite. Both `main`-tier workflows set it.
 ```
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
 ```
+
+Run the full market AI e2e with signed-in local providers using
+`E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py`.
 
 Phase 1's e2e tests are **read-only** catalog GETs, so they cost no state and
 can be re-run freely. Their job is that the contract layer's transcripts are
@@ -590,6 +632,8 @@ assume a command exists because it is listed here.
 ```
 setup              initialise a workspace: skeleton, shop.yaml, ids   [done; its token
                    capture moves to `auth` in Phase 3 — PRD 49]
+                   --replace-prompts: reset prompts/ to the packaged
+                   defaults, keeping each old file as <name>.md.bak (PRD 71)
 new [<design>]     interactive design/garment/provider picker; writes garment profile + listing  [done]
 plan <listing|--all>   three-way diff against live state                          [done]
 apply <listing|--all>  execute every stage the plan identified   [done; render + printify]

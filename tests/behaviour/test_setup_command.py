@@ -18,7 +18,6 @@ import typer
 import yaml
 
 from etsy_listings import prompts
-from etsy_listings.ai.prompt import default_seo_prompt_text
 from etsy_listings.clients.etsy.fakes import FakeEtsyShopClient
 from etsy_listings.clients.etsy.models import ReturnPolicy
 from etsy_listings.clients.etsy.models import Shop as EtsyShop
@@ -111,35 +110,6 @@ def test_it_creates_the_directory_skeleton(tmp_path: Path, scripted) -> None:
 
     for name in (layout.DESIGNS_DIR, layout.LISTINGS_DIR, layout.MOCKUP_TEMPLATES_DIR):
         assert (tmp_path / name).is_dir()
-
-
-def test_it_seeds_the_default_ai_seo_prompt_when_absent(tmp_path: Path, scripted) -> None:
-    """AI SEO implementation plan, PR3, item 3."""
-    scripted(HAPPY_PATH)
-
-    run_setup(
-        tmp_path,
-        client_factory=_factory(FakePrintifyClient(ONE_SHOP)),
-        etsy_access=_etsy(),
-    )
-
-    prompt_file = tmp_path / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE
-    assert prompt_file.read_text(encoding="utf-8") == default_seo_prompt_text()
-
-
-def test_it_never_overwrites_a_sellers_own_ai_seo_prompt(tmp_path: Path, scripted) -> None:
-    prompt_file = tmp_path / layout.PROMPTS_DIR / layout.SEO_PROMPT_FILE
-    prompt_file.parent.mkdir(parents=True)
-    prompt_file.write_text("My own house style.\n", encoding="utf-8")
-    scripted(HAPPY_PATH)
-
-    run_setup(
-        tmp_path,
-        client_factory=_factory(FakePrintifyClient(ONE_SHOP)),
-        etsy_access=_etsy(),
-    )
-
-    assert prompt_file.read_text(encoding="utf-8") == "My own house style.\n"
 
 
 def test_the_token_lands_in_the_workspace_env_file(tmp_path: Path, scripted) -> None:

@@ -4,40 +4,66 @@
  */
 
 export interface paths {
-  "/api/ai/design-brief": {
+  "/api/ai/runs": {
     parameters: {
       query?: never;
       header?: never;
       path?: never;
       cookie?: never;
     };
-    get?: never;
+    /**
+     * Find Ai Run
+     * @description The listing's running or most recent run -- what the editor
+     *     reattaches to after a reload.
+     */
+    get: operations["find_ai_run_api_ai_runs_get"];
     put?: never;
     /**
-     * Request Design Brief
-     * @description Draft a listing brief from a design image (PRD 68).
-     *
-     *     The browser calls this by itself, once, the moment a design is attached
-     *     to a listing whose brief is empty -- including a listing that has no name
-     *     and no file yet, which is the ordinary case while one is being created.
-     *     So every refusal here is one a caller nobody asked to call has to be able
-     *     to live with silently, and the client's reason for calling is re-checked
-     *     rather than trusted: the design has to resolve inside the workspace and
-     *     exist, some provider has to be ready, and `prompts/brief.md` has to be
-     *     readable. Nothing about the listing is asked for -- not its name, and not
-     *     its garment profile, which is usually still unchosen at this point.
-     *
-     *     It deliberately does *not* ask whether any brief is already filled in.
-     *     There is no listing here to ask about, and the browser is the only thing
-     *     that knows whether the seller has typed into the field since the request
-     *     was armed.
-     *
-     *     Never writes the drafted text anywhere. It is returned, the editor puts
-     *     it in the ordinary Brief field, and autosave persists it exactly as it
-     *     persists a typed one -- which is what keeps "the model never writes
-     *     `listing.yaml`" true (PRD 4, as amended by PRD 68).
+     * Create Ai Run
+     * @description Start a run for a saved listing. A ``409`` either names the active run
+     *     to reattach to, or gives the readiness rule that failed.
      */
-    post: operations["request_design_brief_api_ai_design_brief_post"];
+    post: operations["create_ai_run_api_ai_runs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/ai/runs/{run_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Ai Run */
+    get: operations["get_ai_run_api_ai_runs__run_id__get"];
+    put?: never;
+    post?: never;
+    /**
+     * Cancel Ai Run
+     * @description Cancel: the run's provider subprocess tree is killed and research
+     *     starts no new call. The run ends ``cancelled`` on its own thread
+     *     shortly after; a brief or snapshot already written stays.
+     */
+    delete: operations["cancel_ai_run_api_ai_runs__run_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/ai/runs/{run_id}/events": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Stream Ai Run Events */
+    get: operations["stream_ai_run_events_api_ai_runs__run_id__events_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -364,45 +390,16 @@ export interface paths {
      *
      *     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
      *     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
+     *
+     *     Either way the market snapshot goes now (market-seo.md, *Cache*): a
+     *     listing pending deletion is one the seller is done researching, and
+     *     otherwise only the wipe after the remote deletion would remove it.
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
     head?: never;
     /** Patch Listing */
     patch: operations["patch_listing_api_listings__name__patch"];
-    trace?: never;
-  };
-  "/api/listings/{name}/ai-seo/proposal": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Request Seo Proposal
-     * @description Run one complete AI Mode SEO request for this saved listing.
-     *
-     *     Refuses with 409 for exactly two reasons: this listing does not meet
-     *     :func:`_readiness`'s prerequisites (re-checked here independently of
-     *     whatever the client last saw from the readiness endpoint -- state can
-     *     change between the two calls), or another proposal request for the same
-     *     listing is already running (the settled "Concurrent requests" decision;
-     *     a *different* listing's request, or this listing's brief draft, is never
-     *     refused). :func:`_generation_errors` owns every other outcome.
-     *
-     *     Returns only what PR5 item 4 permits: the validated proposal, the input
-     *     snapshot, and expiry metadata. Nothing here is written to a workspace
-     *     file, a lockfile, or any server-side cache -- ``proposal`` and
-     *     ``seo_request`` fall out of scope the moment this function returns.
-     */
-    post: operations["request_seo_proposal_api_listings__name__ai_seo_proposal_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
     trace?: never;
   };
   "/api/listings/{name}/ai-seo/readiness": {
@@ -414,13 +411,41 @@ export interface paths {
     };
     /**
      * Get Seo Readiness
-     * @description Whether **AI Mode** may be offered for this saved listing right now
-     *     -- the call the frontend makes to decide whether to enable the always
-     *     visible control. Read-only: every check here, including each
-     *     provider's own `readiness()`, is a local probe (a file's existence, a
-     *     fast `--help`/`login status` subprocess) that changes nothing.
+     * @description Whether the **AI Mode** button may start a run for this saved listing
+     *     right now -- the call the frontend makes to decide whether to enable the
+     *     always visible control. The button drafts a brief when the saved one is
+     *     empty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``: an
+     *     empty brief is allowed, and then ``prompts/brief.md`` is required. A
+     *     filled brief skips drafting. A lit button is one the server will not
+     *     refuse. Read-only: every check here, including each provider's own
+     *     `readiness()`, is a local probe (a file's existence, a fast
+     *     `--help`/`login status` subprocess) that changes nothing.
      */
     get: operations["get_seo_readiness_api_listings__name__ai_seo_readiness_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/market": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Market Snapshot
+     * @description The listing's latest market research, as the top listings panel shows
+     *     it after a reload (market-seo.md, *UI*). Written only by an AI run whose
+     *     search succeeded, so a failed run leaves the previous one here. 404 until
+     *     the first search -- the panel is not rendered then -- and for a snapshot
+     *     that no longer reads as one, which the next run replaces.
+     */
+    get: operations["get_market_snapshot_api_listings__name__market_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -891,6 +916,203 @@ export interface components {
       /** Outputs */
       outputs: string[];
     };
+    /**
+     * AiBriefEvent
+     * @description The brief was drafted. ``written`` is false when the seller filled the
+     *     field in the meantime, so their text was kept.
+     */
+    AiBriefEvent: {
+      /** Seq */
+      seq: number;
+      /** Text */
+      text: string;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "brief";
+      /** Written */
+      written: boolean;
+    };
+    /**
+     * AiMarketEvent
+     * @description A successful or empty search, once its snapshot is saved.
+     */
+    AiMarketEvent: {
+      /** Seq */
+      seq: number;
+      snapshot: components["schemas"]["MarketSnapshot"];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "market";
+    };
+    /**
+     * AiPhaseEvent
+     * @description Terminal, and always the run's last event.
+     */
+    AiPhaseEvent: {
+      /** Message */
+      message?: string | null;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "done" | "failed" | "cancelled";
+      /** Seq */
+      seq: number;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "phase";
+    };
+    /**
+     * AiProposalEvent
+     * @description The validated proposal: :class:`SeoProposalResponse` unchanged, plus
+     *     ``type`` and ``seq``.
+     */
+    AiProposalEvent: {
+      /** Description Leads */
+      description_leads: string[];
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string;
+      /** Observed Text */
+      observed_text: string;
+      /** Rationale */
+      rationale: components["schemas"]["SeoRationaleEntry"][];
+      /** Seq */
+      seq: number;
+      snapshot: components["schemas"]["SeoProposalSnapshot"];
+      /** Tags */
+      tags: string[];
+      /** Titles */
+      titles: string[];
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "proposal";
+      /** Warnings */
+      warnings: components["schemas"]["SeoWarningEntry"][];
+    };
+    /**
+     * AiQueriesEvent
+     * @description The three buyer searches extraction chose.
+     */
+    AiQueriesEvent: {
+      /** Queries */
+      queries: string[];
+      /** Seq */
+      seq: number;
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "queries";
+    };
+    /** AiRunDetail */
+    AiRunDetail: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Draft Brief */
+      draft_brief: boolean;
+      /** Events */
+      events: (
+        | components["schemas"]["AiStepEvent"]
+        | components["schemas"]["AiBriefEvent"]
+        | components["schemas"]["AiQueriesEvent"]
+        | components["schemas"]["AiMarketEvent"]
+        | components["schemas"]["AiProposalEvent"]
+        | components["schemas"]["AiPhaseEvent"]
+      )[];
+      /** Finished At */
+      finished_at: string | null;
+      /** Id */
+      id: string;
+      /** Listing */
+      listing: string;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "running" | "done" | "failed" | "cancelled";
+      /** Steps */
+      steps: components["schemas"]["WorkflowStep"][];
+    };
+    /**
+     * AiRunRefusal
+     * @description A ``409`` from ``POST /api/ai/runs``: exactly one of the two is set.
+     *     ``active_run`` names the run to reattach to; ``reason`` says which
+     *     readiness rule failed.
+     */
+    AiRunRefusal: {
+      /** Active Run */
+      active_run?: string | null;
+      /** Reason */
+      reason?: string | null;
+    };
+    /** AiRunSummary */
+    AiRunSummary: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Draft Brief */
+      draft_brief: boolean;
+      /** Finished At */
+      finished_at: string | null;
+      /** Id */
+      id: string;
+      /** Listing */
+      listing: string;
+      /**
+       * Phase
+       * @enum {string}
+       */
+      phase: "running" | "done" | "failed" | "cancelled";
+      /** Steps */
+      steps: components["schemas"]["WorkflowStep"][];
+    };
+    /**
+     * AiStepEvent
+     * @description A node changed. The first three events of a run set each node's
+     *     initial state.
+     */
+    AiStepEvent: {
+      /** Detail */
+      detail?: string | null;
+      /**
+       * Id
+       * @enum {string}
+       */
+      id: "brief" | "market" | "seo";
+      /** Seq */
+      seq: number;
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "pending" | "active" | "done" | "skipped" | "warning" | "failed";
+      /**
+       * @description discriminator enum property added by openapi-typescript
+       * @enum {string}
+       */
+      type: "step";
+    };
     /** ApplyRunDetail */
     ApplyRunDetail: {
       /**
@@ -1130,6 +1352,16 @@ export interface components {
       /** Ref */
       ref: string;
     };
+    /** CreateAiRunRequest */
+    CreateAiRunRequest: {
+      /**
+       * Draft Brief
+       * @default false
+       */
+      draft_brief: boolean;
+      /** Listing */
+      listing: string;
+    };
     /**
      * CreateListingRequest
      * @description The whole document, not a handful of fields to build one from.
@@ -1158,42 +1390,6 @@ export interface components {
       ref?: string | null;
       /** Text */
       text?: string | null;
-    };
-    /**
-     * DesignBriefRequest
-     * @description What drafting a brief actually needs (PRD 68): the design, and nothing
-     *     else.
-     *
-     *     Not a listing, and not a garment profile. A brief describes the
-     *     *artwork*, and the one moment it is most wanted is the moment a design is
-     *     attached -- which, when a seller is creating a listing, is usually before
-     *     it has a name, a file, or a garment chosen. Asking only for the design is
-     *     what lets the request go out then (see `ai/brief.py.BriefRequest` for why
-     *     the garment context was dropped rather than made optional).
-     *
-     *     ``design`` is workspace-relative and POSIX (``designs/take-a-hike.png``),
-     *     resolved through `Workspace.resolve`, which is what refuses anything
-     *     pointing outside the workspace (`A8`) -- this value arrives from a
-     *     browser, so that check is the security boundary, not a tidiness rule.
-     */
-    DesignBriefRequest: {
-      /** Design */
-      design: string;
-    };
-    /**
-     * DesignBriefResponse
-     * @description One drafted listing brief (PRD 68).
-     *
-     *     Deliberately thinner than `SeoProposalResponse`: no snapshot and no
-     *     expiry, because there is nothing here to keep. The browser writes
-     *     ``brief`` straight into the ordinary Brief field through the existing
-     *     autosave path, at which point it is seller-owned listing content like
-     *     any other -- so there is no pending state to go stale, nothing to
-     *     restore after a refresh, and nothing to retain past this response.
-     */
-    DesignBriefResponse: {
-      /** Brief */
-      brief: string;
     };
     /**
      * DesignSummary
@@ -1719,6 +1915,36 @@ export interface components {
       /** Url */
       url?: string | null;
     };
+    /**
+     * MarketSnapshot
+     * @description One research, as the panel reads it back: the result's fields, when
+     *     the search ran, and the exact block the proposal was given. Holds each
+     *     listing's lead, never its full description (market-seo.md, *What the
+     *     proposal sees*).
+     */
+    MarketSnapshot: {
+      /** Block */
+      block: string;
+      /** Empty */
+      empty: boolean;
+      /** Found */
+      found: number;
+      /** Listings */
+      listings: components["schemas"]["ScoredListing"][];
+      /** Phrases */
+      phrases: components["schemas"]["PhraseScore"][];
+      /** Queries */
+      queries: string[];
+      /** Relaxed */
+      relaxed: boolean;
+      /** Scored */
+      scored: number;
+      /**
+       * Searched At
+       * Format: date-time
+       */
+      searched_at: string;
+    };
     /** MediaChangeDTO */
     MediaChangeDTO: {
       /** After */
@@ -1817,6 +2043,19 @@ export interface components {
        * @enum {string}
        */
       type: "phase";
+    };
+    /**
+     * PhraseScore
+     * @description One tag used by the scored listings: how many use it, and the sum of
+     *     their scores normalised so the best phrase is 1.
+     */
+    PhraseScore: {
+      /** Listings */
+      listings: number;
+      /** Phrase */
+      phrase: string;
+      /** Score */
+      score: number;
     };
     /**
      * Placement
@@ -2169,36 +2408,50 @@ export interface components {
       stage: "retract";
     };
     /**
-     * SeoProposalResponse
-     * @description A complete, hard-validated proposal plus what PR5 item 4 promises
-     *     beside it: the input snapshot and expiry metadata. Never cached
-     *     server-side past this one response -- `ui/api/seo.py` builds this,
-     *     returns it, and keeps nothing.
+     * ScoredListing
+     * @description One of the (at most) twenty listings scored, with everything the top
+     *     listings panel shows (ui-market-seo-interactions.md, *Where the data
+     *     comes from*) -- and deliberately not the full description, which neither
+     *     the panel nor the model is given (market-seo.md, *What the proposal
+     *     sees*).
      */
-    SeoProposalResponse: {
-      /** Description Leads */
-      description_leads: string[];
-      /**
-       * Expires At
-       * Format: date-time
-       */
-      expires_at: string;
-      /**
-       * Generated At
-       * Format: date-time
-       */
-      generated_at: string;
-      /** Observed Text */
-      observed_text: string;
-      /** Rationale */
-      rationale: components["schemas"]["SeoRationaleEntry"][];
-      snapshot: components["schemas"]["SeoProposalSnapshot"];
+    ScoredListing: {
+      /** Favourites Per Day */
+      favourites_per_day: number | null;
+      /** Lead */
+      lead: string;
+      /** Listing Id */
+      listing_id: number;
+      /** Own Shop */
+      own_shop: boolean;
+      /** Rank */
+      rank: number;
+      /** Reviews */
+      reviews: number;
+      /** Score */
+      score: number;
+      /** Score Raw */
+      score_raw: number;
+      /** Search Rank */
+      search_rank: number;
+      /** Shop Id */
+      shop_id: number;
+      /** Shop Name */
+      shop_name: string;
+      /** Shop Rating */
+      shop_rating: number | null;
+      /** Shop Sales */
+      shop_sales: number;
       /** Tags */
       tags: string[];
-      /** Titles */
-      titles: string[];
-      /** Warnings */
-      warnings: components["schemas"]["SeoWarningEntry"][];
+      /** Thumbnail Url */
+      thumbnail_url: string | null;
+      /** Title */
+      title: string;
+      /** Url */
+      url: string | null;
+      /** Views Per Day */
+      views_per_day: number | null;
     };
     /**
      * SeoProposalSnapshot
@@ -2581,6 +2834,25 @@ export interface components {
        */
       type: "work";
     };
+    /**
+     * WorkflowStep
+     * @description One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
+     *     ``WorkflowStep``).
+     */
+    WorkflowStep: {
+      /** Detail */
+      detail?: string | null;
+      /**
+       * Id
+       * @enum {string}
+       */
+      id: "brief" | "market" | "seo";
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "pending" | "active" | "done" | "skipped" | "warning" | "failed";
+    };
     /** WorkspaceApplyRequest */
     WorkspaceApplyRequest: {
       /** Expect */
@@ -2636,7 +2908,45 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  request_design_brief_api_ai_design_brief_post: {
+  find_ai_run_api_ai_runs_get: {
+    parameters: {
+      query: {
+        listing: string;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunSummary"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_ai_run_api_ai_runs_post: {
     parameters: {
       query?: never;
       header?: never;
@@ -2645,9 +2955,56 @@ export interface operations {
     };
     requestBody: {
       content: {
-        "application/json": components["schemas"]["DesignBriefRequest"];
+        "application/json": components["schemas"]["CreateAiRunRequest"];
       };
     };
+    responses: {
+      /** @description Successful Response */
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunSummary"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunRefusal"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_ai_run_api_ai_runs__run_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
     responses: {
       /** @description Successful Response */
       200: {
@@ -2655,8 +3012,98 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["DesignBriefResponse"];
+          "application/json": components["schemas"]["AiRunDetail"];
         };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cancel_ai_run_api_ai_runs__run_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["AiRunSummary"];
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Conflict */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stream_ai_run_events_api_ai_runs__run_id__events_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        run_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Not Found */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -3142,37 +3589,6 @@ export interface operations {
       };
     };
   };
-  request_seo_proposal_api_listings__name__ai_seo_proposal_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SeoProposalResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
   get_seo_readiness_api_listings__name__ai_seo_readiness_get: {
     parameters: {
       query?: never;
@@ -3192,6 +3608,44 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["SeoReadinessResponse"];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_market_snapshot_api_listings__name__market_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MarketSnapshot"];
+        };
+      };
+      /** @description No such listing, or no market search for it yet */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
