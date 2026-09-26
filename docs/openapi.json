@@ -1496,7 +1496,7 @@
         "type": "object"
       },
       "EtsySectionSummary": {
-        "description": "One row for the Details tab's Section dropdown, from\n`EtsyShopClient.shop_sections` -- unscoped, so this needs only the\nworkspace's app key pair, never a signed-in Etsy session.",
+        "description": "One row for the Details tab's Section dropdown.\n\nExisting rows come from the unscoped `EtsyShopClient.shop_sections`;\ncreating one returns the same shape through the signed-in client.",
         "properties": {
           "id": {
             "title": "Id",
@@ -1512,6 +1512,28 @@
           "title"
         ],
         "title": "EtsySectionSummary",
+        "type": "object"
+      },
+      "EtsySectionsResponse": {
+        "description": "The section picker's rows and whether Etsy could supply them.\n\n``available`` distinguishes a configured shop with no sections -- where\nthe editor can create the first one -- from a workspace that must retain\nthe plain-text fallback because its Etsy connection is unavailable.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/EtsySectionSummary"
+            },
+            "title": "Sections",
+            "type": "array"
+          }
+        },
+        "required": [
+          "available",
+          "sections"
+        ],
+        "title": "EtsySectionsResponse",
         "type": "object"
       },
       "EtsyVideosSnapshot": {
@@ -5117,18 +5139,14 @@
     },
     "/api/etsy/sections": {
       "get": {
-        "description": "The live shop's sections, for the Details tab's Section dropdown.\nEmpty (not a 500) for a workspace with no `shop_id` yet or no Etsy app\nkey pair -- both ordinary states short of `setup`/`auth etsy`, and the\nfrontend falls back to a plain text field exactly like it did before this\nendpoint existed.",
+        "description": "The live shop's sections, for the Details tab's Section dropdown.\nUnavailable (not a 500) for a workspace with no `shop_id` yet or no Etsy\napp key pair -- both ordinary states short of `setup`/`auth etsy`, where\nthe frontend falls back to a plain text field. An available empty list is\ndifferent: it lets a configured shop create its first section.",
         "operationId": "list_etsy_sections_api_etsy_sections_get",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/EtsySectionSummary"
-                  },
-                  "title": "Response List Etsy Sections Api Etsy Sections Get",
-                  "type": "array"
+                  "$ref": "#/components/schemas/EtsySectionsResponse"
                 }
               }
             },

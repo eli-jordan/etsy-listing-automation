@@ -1,5 +1,5 @@
-"""Contract layer for the listing surface Phase 3's stages write through:
-payload shape, both `image_ids` encodings, and the two asymmetric reads
+"""Contract layer for the signed-in Etsy surface the stages and editor use:
+payload shape, shop-section creation, both `image_ids` encodings, and the two asymmetric reads
 (`GET .../listings/{id}` works, `GET .../shops/{shop}/listings/{id}` 404s;
 the images endpoint 404s for every id, valid or invented).
 

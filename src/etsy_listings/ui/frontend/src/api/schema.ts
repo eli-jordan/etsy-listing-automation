@@ -192,10 +192,10 @@ export interface paths {
     /**
      * List Etsy Sections
      * @description The live shop's sections, for the Details tab's Section dropdown.
-     *     Empty (not a 500) for a workspace with no `shop_id` yet or no Etsy app
-     *     key pair -- both ordinary states short of `setup`/`auth etsy`, and the
-     *     frontend falls back to a plain text field exactly like it did before this
-     *     endpoint existed.
+     *     Unavailable (not a 500) for a workspace with no `shop_id` yet or no Etsy
+     *     app key pair -- both ordinary states short of `setup`/`auth etsy`, where
+     *     the frontend falls back to a plain text field. An available empty list is
+     *     different: it lets a configured shop create its first section.
      */
     get: operations["list_etsy_sections_api_etsy_sections_get"];
     put?: never;
@@ -1651,15 +1651,30 @@ export interface components {
     };
     /**
      * EtsySectionSummary
-     * @description One row for the Details tab's Section dropdown, from
-     *     `EtsyShopClient.shop_sections` -- unscoped, so this needs only the
-     *     workspace's app key pair, never a signed-in Etsy session.
+     * @description One row for the Details tab's Section dropdown.
+     *
+     *     Existing rows come from the unscoped `EtsyShopClient.shop_sections`;
+     *     creating one returns the same shape through the signed-in client.
      */
     EtsySectionSummary: {
       /** Id */
       id: number;
       /** Title */
       title: string;
+    };
+    /**
+     * EtsySectionsResponse
+     * @description The section picker's rows and whether Etsy could supply them.
+     *
+     *     ``available`` distinguishes a configured shop with no sections -- where
+     *     the editor can create the first one -- from a workspace that must retain
+     *     the plain-text fallback because its Etsy connection is unavailable.
+     */
+    EtsySectionsResponse: {
+      /** Available */
+      available: boolean;
+      /** Sections */
+      sections: components["schemas"]["EtsySectionSummary"][];
     };
     /**
      * EtsyVideosSnapshot
@@ -3428,7 +3443,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["EtsySectionSummary"][];
+          "application/json": components["schemas"]["EtsySectionsResponse"];
         };
       };
     };

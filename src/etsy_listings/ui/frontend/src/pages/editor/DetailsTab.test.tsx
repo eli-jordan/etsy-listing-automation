@@ -478,10 +478,13 @@ describe("DetailsTab", () => {
   });
 
   it("shows a section dropdown once the shop's sections are known", async () => {
-    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([
-      { id: 1, title: "Tees" },
-      { id: 2, title: "Hoodies" },
-    ]);
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({
+      available: true,
+      sections: [
+        { id: 1, title: "Tees" },
+        { id: 2, title: "Hoodies" },
+      ],
+    });
     const onUpdate = vi.fn();
     render(
       <DetailsTab
@@ -491,16 +494,19 @@ describe("DetailsTab", () => {
       />,
     );
     await screen.findByText("Hoodies");
-    expect(screen.getByLabelText("Section")).toHaveValue("Tees");
-    fireEvent.change(screen.getByLabelText("Section"), { target: { value: "Hoodies" } });
+    expect(screen.getByLabelText("Section")).toHaveValue("1");
+    fireEvent.change(screen.getByLabelText("Section"), { target: { value: "2" } });
     expect(onUpdate).toHaveBeenCalledWith({ etsy: { section: "Hoodies" } });
   });
 
   it("creates and selects a new shop section from the dropdown", async () => {
-    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([
-      { id: 1, title: "Tees" },
-      { id: 2, title: "Hoodies" },
-    ]);
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({
+      available: true,
+      sections: [
+        { id: 1, title: "Tees" },
+        { id: 2, title: "Hoodies" },
+      ],
+    });
     const create = vi
       .spyOn(listingsApi, "createEtsySection")
       .mockResolvedValue({ id: 3, title: "Trail Gear" });
@@ -516,7 +522,7 @@ describe("DetailsTab", () => {
     );
 
     await screen.findByRole("option", { name: "Hoodies" });
-    await user.selectOptions(screen.getByLabelText("Section"), "__create_section__");
+    await user.selectOptions(screen.getByLabelText("Section"), "create");
     await user.type(screen.getByLabelText("New section name"), "  Trail Gear  ");
     await user.click(screen.getByRole("button", { name: "Create section" }));
 
@@ -527,10 +533,24 @@ describe("DetailsTab", () => {
   });
 
   it("falls back to a text field when no shop sections are available", async () => {
-    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({
+      available: false,
+      sections: [],
+    });
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     const field = await screen.findByLabelText("Section");
     expect(field.tagName).toBe("INPUT");
+  });
+
+  it("can create the first section in an available empty shop", async () => {
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({
+      available: true,
+      sections: [],
+    });
+    render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    await waitFor(() => expect(screen.getByLabelText("Section").tagName).toBe("SELECT"));
+    expect(screen.getByRole("option", { name: "Create new section…" })).toBeInTheDocument();
   });
 });
 

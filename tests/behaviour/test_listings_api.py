@@ -1088,22 +1088,40 @@ class TestSupportingEndpoints:
 
 
 class TestEtsySections:
-    """`GET /api/etsy/sections`: the Details tab's Section dropdown, backed
-    by `EtsyShopClient.shop_sections` -- unscoped, so this needs only the
-    workspace's app key pair, never a signed-in Etsy session."""
+    """The Details tab's section list and create endpoints.
+
+    Reading uses unscoped `EtsyShopClient.shop_sections`; creation uses the
+    signed-in listing client because Etsy requires `shops_w`.
+    """
 
     def test_is_empty_without_a_shop_id(self, client: TestClient) -> None:
         """The fixture workspace deliberately carries no `etsy.shop_id`."""
         response = client.get("/api/etsy/sections")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {"available": False, "sections": []}
 
     def test_is_empty_with_a_shop_id_but_no_app_key_pair(self, workspace_root: Path) -> None:
         set_etsy_shop_id(workspace_root, 12345678)
         keyless = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
         response = keyless.get("/api/etsy/sections")
         assert response.status_code == 200
-        assert response.json() == []
+        assert response.json() == {"available": False, "sections": []}
+
+    def test_an_available_shop_with_no_sections_is_distinct_from_no_shop(
+        self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        set_etsy_shop_id(workspace_root, 12345678)
+        monkeypatch.setattr(
+            connections,
+            "etsy_shop_client",
+            lambda root: FakeEtsyShopClient(sections=[]),
+        )
+        sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+
+        response = sectioned.get("/api/etsy/sections")
+
+        assert response.status_code == 200
+        assert response.json() == {"available": True, "sections": []}
 
     def test_lists_the_live_shops_sections(
         self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch
@@ -1122,10 +1140,13 @@ class TestEtsySections:
         sectioned = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
         response = sectioned.get("/api/etsy/sections")
         assert response.status_code == 200
-        assert response.json() == [
-            {"id": 1, "title": "Tees"},
-            {"id": 2, "title": "Hoodies"},
-        ]
+        assert response.json() == {
+            "available": True,
+            "sections": [
+                {"id": 1, "title": "Tees"},
+                {"id": 2, "title": "Hoodies"},
+            ],
+        }
 
     def test_creates_a_section_through_the_signed_in_client(
         self, workspace_root: Path, monkeypatch: pytest.MonkeyPatch

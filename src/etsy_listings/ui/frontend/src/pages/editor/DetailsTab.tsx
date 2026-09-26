@@ -24,7 +24,7 @@ import type { AiSeoMode } from "./aiSeo/useAiSeoMode";
  * truncates what you paste is worse than one that tells you it is over. */
 const MAX_TITLE_LENGTH = 140;
 const MAX_TAGS = 13;
-const CREATE_SECTION_VALUE = "__create_section__";
+const CREATE_SECTION_VALUE = "create";
 
 /** `check_copy_is_concrete`/`check_description_ref`
  * (`config/listing_validation.py`) file every description issue -- the empty
@@ -47,6 +47,7 @@ interface Props {
 export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
+  const [sectionsAvailable, setSectionsAvailable] = useState(false);
   const [creatingSection, setCreatingSection] = useState(false);
   const [sectionDraft, setSectionDraft] = useState("");
   const [sectionCreating, setSectionCreating] = useState(false);
@@ -75,7 +76,10 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   const descriptionIssues = detail.issues.filter((i) => i.where === DESCRIPTION_ISSUE_WHERE);
 
   useEffect(() => {
-    listEtsySections().then(setSections);
+    listEtsySections().then((result) => {
+      setSectionsAvailable(result.available);
+      setSections(result.sections);
+    });
   }, []);
 
   useEffect(() => {
@@ -361,11 +365,17 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
 
         <div className={sectionError ? "field field--invalid" : "field"}>
           <label htmlFor="details-section">Section</label>
-          {sections.length > 0 ? (
+          {sectionsAvailable ? (
             <select
               id="details-section"
               className="input"
-              value={creatingSection ? CREATE_SECTION_VALUE : (detail.etsy.section ?? "")}
+              value={
+                creatingSection
+                  ? CREATE_SECTION_VALUE
+                  : String(
+                      sections.find((section) => section.title === detail.etsy.section)?.id ?? "",
+                    )
+              }
               onChange={(event) => {
                 if (event.target.value === CREATE_SECTION_VALUE) {
                   setCreatingSection(true);
@@ -373,13 +383,16 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
                   return;
                 }
                 setCreatingSection(false);
-                onUpdate({ etsy: { section: event.target.value || null } });
+                const selected = sections.find(
+                  (section) => String(section.id) === event.target.value,
+                );
+                onUpdate({ etsy: { section: selected?.title ?? null } });
                 onFlush();
               }}
             >
               <option value="">No section</option>
               {sections.map((s) => (
-                <option key={s.id} value={s.title}>
+                <option key={s.id} value={String(s.id)}>
                   {s.title}
                 </option>
               ))}

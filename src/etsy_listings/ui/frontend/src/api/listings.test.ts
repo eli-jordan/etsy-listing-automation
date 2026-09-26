@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { api } from "./client";
-import { createEtsySection } from "./listings";
+import { createEtsySection, listEtsySections } from "./listings";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -19,5 +19,18 @@ describe("createEtsySection", () => {
     expect(post).toHaveBeenCalledWith("/api/etsy/sections", {
       body: { title: "Trail Gear" },
     });
+  });
+});
+
+describe("listEtsySections", () => {
+  it("preserves an available shop's empty section list", async () => {
+    const result = { available: true, sections: [] };
+    vi.spyOn(api, "GET").mockResolvedValue({
+      data: result,
+      error: undefined,
+      response: new Response(null, { status: 200 }),
+    } as never);
+
+    await expect(listEtsySections()).resolves.toEqual(result);
   });
 });

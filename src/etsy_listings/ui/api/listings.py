@@ -76,6 +76,7 @@ from etsy_listings.ui.api.schemas import (
     CreateEtsySectionRequest,
     CreateListingRequest,
     DraftListingRequest,
+    EtsySectionsResponse,
     EtsySectionSummary,
     GarmentProfileSummary,
     Issue,
@@ -776,25 +777,28 @@ def list_pricing_plans(request: Request, garment_profile: str = "") -> list[Pric
     ]
 
 
-@support_router.get("/api/etsy/sections", response_model=list[EtsySectionSummary])
-def list_etsy_sections(request: Request) -> list[EtsySectionSummary]:
+@support_router.get("/api/etsy/sections", response_model=EtsySectionsResponse)
+def list_etsy_sections(request: Request) -> EtsySectionsResponse:
     """The live shop's sections, for the Details tab's Section dropdown.
-    Empty (not a 500) for a workspace with no `shop_id` yet or no Etsy app
-    key pair -- both ordinary states short of `setup`/`auth etsy`, and the
-    frontend falls back to a plain text field exactly like it did before this
-    endpoint existed."""
+    Unavailable (not a 500) for a workspace with no `shop_id` yet or no Etsy
+    app key pair -- both ordinary states short of `setup`/`auth etsy`, where
+    the frontend falls back to a plain text field. An available empty list is
+    different: it lets a configured shop create its first section."""
     workspace = _workspace(request)
     shop_id = workspace.defaults.etsy.shop_id
     if shop_id is None:
-        return []
+        return EtsySectionsResponse(available=False, sections=[])
     client = connections.etsy_shop_client(workspace.root)
     if client is None:
-        return []
+        return EtsySectionsResponse(available=False, sections=[])
     try:
         sections = client.shop_sections(shop_id)
     except (EtsyApiError, EtsyAuthError):
-        return []
-    return [EtsySectionSummary(id=s.shop_section_id, title=s.title) for s in sections]
+        return EtsySectionsResponse(available=False, sections=[])
+    return EtsySectionsResponse(
+        available=True,
+        sections=[EtsySectionSummary(id=s.shop_section_id, title=s.title) for s in sections],
+    )
 
 
 @support_router.post("/api/etsy/sections", response_model=EtsySectionSummary)

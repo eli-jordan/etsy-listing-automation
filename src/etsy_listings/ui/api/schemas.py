@@ -361,6 +361,18 @@ class EtsySectionSummary(BaseModel):
     title: str
 
 
+class EtsySectionsResponse(BaseModel):
+    """The section picker's rows and whether Etsy could supply them.
+
+    ``available`` distinguishes a configured shop with no sections -- where
+    the editor can create the first one -- from a workspace that must retain
+    the plain-text fallback because its Etsy connection is unavailable.
+    """
+
+    available: bool
+    sections: list[EtsySectionSummary]
+
+
 class CreateEtsySectionRequest(BaseModel):
     """The title Etsy should give a newly created shop section."""
 
