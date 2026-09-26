@@ -5,6 +5,7 @@ import {
   MAX_VIDEOS,
   type MediaState,
   addEveryMissingColour,
+  canReorder,
   removeAt,
   reorder,
   roomLeft,
@@ -278,5 +279,73 @@ describe("the gallery rules (PRD 71)", () => {
   it("leaves a gallery with no video exactly as the removal left it", () => {
     const media = ["a.png", "b.png", "c.png"];
     expect(entries(removeAt(state({ media }), 0))).toEqual(["b.png", "c.png"]);
+  });
+});
+
+/**
+ * A drag inside the same rules. A move either lands a gallery
+ * `_check_gallery` accepts or is no move at all -- the tile snaps back.
+ */
+describe("reorder, within the gallery rules (PRD 71)", () => {
+  const CLIP = "common-media/intro.mp4";
+  const LOCAL = "./close-up.MOV";
+
+  it("moves the second video among the images", () => {
+    const media = ["a.png", CLIP, "b.png", "c.png", LOCAL];
+    expect(entries(reorder(state({ media }), 4, 2))).toEqual([
+      "a.png",
+      CLIP,
+      LOCAL,
+      "b.png",
+      "c.png",
+    ]);
+    expect(canReorder(media, 4, 2)).toBe(true);
+  });
+
+  it("swaps the videos by dropping the second on the featured slot", () => {
+    const media = ["a.png", CLIP, "b.png", LOCAL];
+    expect(entries(reorder(state({ media }), 3, 1))).toEqual(["a.png", LOCAL, CLIP, "b.png"]);
+  });
+
+  it("lets another image become the thumbnail, the featured video staying 2nd", () => {
+    const media = ["a.png", CLIP, "b.png"];
+    expect(entries(reorder(state({ media }), 2, 0))).toEqual(["b.png", CLIP, "a.png"]);
+  });
+
+  it("moves the thumbnail behind the featured video, which stays 2nd", () => {
+    const media = ["a.png", CLIP, "b.png", "c.png"];
+    expect(entries(reorder(state({ media }), 0, 2))).toEqual(["b.png", CLIP, "a.png", "c.png"]);
+  });
+
+  it("moves images among images around the featured video", () => {
+    const media = ["a.png", CLIP, "b.png", "c.png"];
+    expect(entries(reorder(state({ media }), 3, 2))).toEqual(["a.png", CLIP, "c.png", "b.png"]);
+  });
+
+  it("snaps back a video dropped on the thumbnail", () => {
+    const media = ["a.png", CLIP, "b.png", LOCAL];
+    expect(reorder(state({ media }), 3, 0)).toBeNull();
+    expect(canReorder(media, 3, 0)).toBe(false);
+  });
+
+  it("snaps back the only image dragged behind both videos -- the second would be the thumbnail", () => {
+    expect(reorder(state({ media: ["a.png", CLIP, LOCAL] }), 0, 2)).toBeNull();
+  });
+
+  it("snaps back the thumbnail dropped on the featured slot", () => {
+    expect(reorder(state({ media: ["a.png", CLIP, "b.png"] }), 0, 1)).toBeNull();
+  });
+
+  it("snaps back an image dropped on the featured slot", () => {
+    expect(reorder(state({ media: ["a.png", CLIP, "b.png"] }), 2, 1)).toBeNull();
+  });
+
+  it("snaps back the featured video dragged past an image", () => {
+    expect(reorder(state({ media: ["a.png", CLIP, "b.png", LOCAL] }), 1, 2)).toBeNull();
+  });
+
+  it("allows nothing for a move that is no move", () => {
+    expect(canReorder(["a.png", "b.png"], 1, 1)).toBe(false);
+    expect(canReorder(["a.png", "b.png"], 5, 0)).toBe(false);
   });
 });

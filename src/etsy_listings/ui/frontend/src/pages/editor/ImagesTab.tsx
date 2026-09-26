@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { listTemplates } from "../../api/calibrator";
 import { listCommonMedia, listListingMediaFiles } from "../../api/listings";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
-import { mediaLabel, pictureFor, singleDesignName } from "../../media";
+import { mediaKind, mediaLabel, pictureFor, singleDesignName } from "../../media";
 import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
@@ -85,6 +85,7 @@ export function ImagesTab({ detail, onUpdate }: Props) {
     id: `${mediaLabel(entry)}-${index}`,
     label: mediaLabel(entry),
     url: pictureFor(entry, design, "full", listing),
+    kind: mediaKind(entry),
   }));
 
   const view = focus === null ? null : viewFocus(focus, detail, templates, design);
@@ -120,7 +121,21 @@ export function ImagesTab({ detail, onUpdate }: Props) {
                 <span>Point at something on the left</span>
               </div>
             )}
-            {view !== null && (
+            {view?.kind === "video" && (
+              /* Its own controls, not the carousel button: a click on a
+                  clip is play or seek (PRD 71). Keyed by the file, so
+                  pointing at another clip starts that one afresh. */
+              <video
+                key={view.picture}
+                className="preview-stage__video"
+                src={view.picture}
+                aria-label={view.title}
+                controls
+                playsInline
+                preload="metadata"
+              />
+            )}
+            {view?.kind === "image" && (
               /* A button, not a bare `<img onClick>`: opening the carousel
                   is an action, and the keyboard has to be able to take it. */
               <button
@@ -145,6 +160,14 @@ export function ImagesTab({ detail, onUpdate }: Props) {
               <span className="preview-meta">
                 <span className="preview-meta__title">{view.title}</span>
                 <span className="preview-meta__path">{view.path}</span>
+                {view.notes.map((note) => (
+                  <span
+                    key={note.message}
+                    className={`preview-meta__note preview-meta__note--${note.severity}`}
+                  >
+                    {note.message}
+                  </span>
+                ))}
               </span>
               <span className="preview-actions">
                 <button

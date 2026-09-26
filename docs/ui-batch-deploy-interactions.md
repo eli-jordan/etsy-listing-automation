@@ -346,7 +346,7 @@ credentials never appear in the browser.
   that pointer users alone can reach.
 - The drawer is labeled by the listing title, traps focus while open, closes on
   `Escape`, and restores focus to its trigger.
-- Progress updates expose a concise live-region message such as **Etsy images,
+- Progress updates expose a concise live-region message such as **Etsy media,
   2 of 4 listings complete; running Mountain sunrise tee**. Do not announce
   every low-level log line.
 - Counts use tabular numerals so progress does not visually jump as it changes.

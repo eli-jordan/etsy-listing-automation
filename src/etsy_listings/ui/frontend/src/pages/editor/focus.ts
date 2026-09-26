@@ -1,12 +1,13 @@
 import {
   isInMedia,
+  mediaKind,
   mediaLabel,
   pictureFor,
   refName,
   scenePath,
   templatePicture,
 } from "../../media";
-import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
+import type { Issue, MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 
 /**
  * What the Listing Images tab's preview pane is pointing at, and everything
@@ -33,6 +34,12 @@ export interface FocusView {
    * and the reason the foot shows a path at all. */
   path: string;
   picture: string;
+  /** A video is previewed by a playable `<video>`, an image by an `<img>`
+   * (PRD 71). */
+  kind: "image" | "video";
+  /** What the listing's check says about this one file -- a video's sound
+   * note, a clip too short -- so the pane showing it says it too. */
+  notes: Issue[];
   inListing: boolean;
   /** Where it sits in the reel, or `-1` when it is something the locator is
    * offering that the listing has not taken yet. Such a thing is not in the
@@ -48,10 +55,14 @@ export function viewFocus(
   design: string | null,
 ): FocusView {
   if (focus.kind === "file") {
+    const ref = focus.asset.ref;
     return {
-      title: refName(focus.asset.ref),
+      title: refName(ref),
       path: focus.asset.file,
-      picture: pictureFor(focus.asset.ref, design, "full", detail.name || null),
+      picture: pictureFor(ref, design, "full", detail.name || null),
+      kind: mediaKind(ref),
+      // `check_videos` places each of its issues at the ref it is about.
+      notes: detail.issues.filter((issue) => issue.where === `Listing Images › ${ref}`),
       inListing: detail.media.includes(focus.asset.ref),
       reelIndex: detail.media.indexOf(focus.asset.ref),
     };
@@ -61,6 +72,8 @@ export function viewFocus(
     title: mediaLabel({ template: focus.template, colour: focus.colour }),
     path: scenePath(summary, focus.template, focus.colour),
     picture: templatePicture(focus.template, focus.colour, design),
+    kind: "image",
+    notes: [],
     inListing: isInMedia(detail.media, focus.template, focus.colour),
     reelIndex: detail.media.findIndex(
       (entry) =>

@@ -3099,6 +3099,16 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 50%, transparent);
 }
 
+.locator__limit {
+  margin: 0 0 var(--space-2);
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-100);
+  color: var(--color-accent-700);
+  font-size: 11px;
+  font-weight: 600;
+}
+
 .loc-tmpl {
   border: 1px solid var(--color-divider);
   border-radius: var(--radius-sm);
@@ -3305,6 +3315,11 @@ table.listings tbody tr:last-child td {
   background: var(--color-accent-2-100);
 }
 
+.loc-img--unavailable {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
 .loc-img__face {
   width: 100%;
   aspect-ratio: 1 / 1;
@@ -3403,7 +3418,8 @@ table.listings tbody tr:last-child td {
   padding: var(--space-2);
 }
 
-.preview-stage--large img {
+.preview-stage--large img,
+.preview-stage--large video {
   max-width: 100%;
   max-height: min(1024px, calc(100vh - 260px));
 }
@@ -3488,6 +3504,18 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
+/* What the listing's check says about the file on the stage (PRD 71). */
+.preview-meta__note {
+  display: block;
+  margin-top: 3px;
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+}
+
+.preview-meta__note--block {
+  color: var(--color-danger);
+}
+
 .preview-actions {
   display: flex;
   align-items: center;
@@ -3564,10 +3592,35 @@ table.listings tbody tr:last-child td {
   justify-content: center;
 }
 
-.rtile__face img {
+.rtile__face img,
+.rtile__face video {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  display: block;
+}
+
+/* The drag belongs to the tile; a <video> would otherwise take the pointer. */
+.rtile__face video {
+  pointer-events: none;
+}
+
+/* A clip in the gallery (PRD 71): the play mark fades while it plays. */
+.rtile__play {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-bg);
+  font-size: 24px;
+  text-shadow: 0 1px 4px color-mix(in srgb, var(--color-neutral-900) 80%, transparent);
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+
+.rtile__face:hover .rtile__play {
+  opacity: 0;
 }
 
 .rtile--selected .rtile__face {
@@ -3582,6 +3635,13 @@ table.listings tbody tr:last-child td {
 .rtile--over .rtile__face {
   border-color: var(--color-accent-2);
   border-style: dashed;
+}
+
+/* A drop the gallery rules refuse: the tile will snap back (PRD 71). */
+.rtile--refused .rtile__face {
+  border-color: var(--color-danger);
+  border-style: dashed;
+  cursor: no-drop;
 }
 
 /* This tile is what Etsy shows beside its colour option (PRD 56). */
@@ -3634,6 +3694,16 @@ table.listings tbody tr:last-child td {
   letter-spacing: 0.05em;
   text-transform: uppercase;
   text-align: center;
+  pointer-events: none;
+}
+
+/* Where Etsy pins the first video, second after the thumbnail. */
+.rtile__first--featured {
+  background: color-mix(in srgb, var(--color-accent-2) 88%, transparent);
+  /* Sentence case, so the label fits one line of a 104px tile. */
+  text-transform: none;
+  letter-spacing: 0;
+  white-space: nowrap;
 }
 
 .rtile__x {
@@ -3970,6 +4040,17 @@ table.listings tbody tr:last-child td {
   grid-column: span 2;
   grid-row: span 2;
 }
+/* Videos have slots, not ranks (decision 9): no big first tile. */
+.dv-gallery--videos .dv-thumb-wrap:first-child {
+  grid-column: auto;
+  grid-row: auto;
+}
+.dv-thumb__caption {
+  margin-top: 3px;
+  font-size: 10px;
+  line-height: 1.25;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
 .dv-block {
   border-radius: var(--radius-sm);
   padding: 8px 10px;
@@ -4092,7 +4173,8 @@ table.listings tbody tr:last-child td {
   align-items: center;
   justify-content: center;
 }
-.dv-thumb img {
+.dv-thumb img,
+.dv-thumb video {
   display: block;
   width: 100%;
   height: 100%;
@@ -4186,6 +4268,20 @@ table.listings tbody tr:last-child td {
   overflow: hidden;
   background: var(--color-neutral-100);
 }
+/* A stage and the ones the engine groups under it (PRD 71): one bordered
+   run of cells, as the CLI prints etsy_media/etsy_videos. */
+.dv-step-group {
+  display: grid;
+  border-left: 1px solid var(--color-divider);
+  box-shadow: inset 0 2px 0 var(--color-accent-2-400);
+}
+.dv-step-group:first-child {
+  border-left: 0;
+}
+.dv-step-group > .dv-step + .dv-step {
+  border-left-style: dashed;
+}
+
 .dv-step {
   padding: 11px 12px 12px;
   display: grid;
@@ -5154,4 +5250,120 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
   margin-bottom: var(--space-3);
   font-size: 13px;
   color: var(--color-text);
+}
+
+/* The desktop shell deliberately spends 240px on persistent navigation. On a
+   phone that leaves too little room for any workflow, so the same labeled
+   navigation becomes a compact two-row header and the page owns the viewport. */
+@media (max-width: 700px) {
+  .shell {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    flex-direction: row;
+    flex-wrap: wrap;
+    align-items: center;
+    padding: var(--space-2) var(--space-3);
+    border-right: 0;
+    border-bottom: 1px solid var(--color-divider);
+  }
+
+  .sidebar__brand {
+    padding: 0;
+  }
+
+  .sidebar__nav {
+    width: 100%;
+    flex-direction: row;
+    justify-content: space-between;
+    margin-top: var(--space-2);
+  }
+
+  .sidebar__bottom {
+    display: none;
+  }
+
+  .nav-item {
+    gap: 5px;
+    padding: 6px 5px;
+    font-size: 11.5px;
+  }
+
+  .nav-item svg {
+    width: 17px;
+    height: 17px;
+  }
+
+  .shell__main {
+    width: 100%;
+    padding: var(--space-4) var(--space-3);
+  }
+
+  .page-head__title,
+  .page-head__crumb,
+  .design-row__file,
+  .preview-meta__path {
+    overflow-wrap: anywhere;
+  }
+
+  .page-head__actions {
+    width: 100%;
+    margin-left: 0;
+    flex-wrap: wrap;
+  }
+
+  .page-head__name {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .status-tag__hint {
+    right: 0;
+    left: auto;
+    max-width: calc(100vw - (2 * var(--space-3)));
+  }
+
+  .toolbar__search {
+    width: 100%;
+  }
+
+  table.listings {
+    display: block;
+    max-width: 100%;
+    overflow-x: auto;
+  }
+
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: var(--space-2);
+  }
+
+  .tabs {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .tabs .seg-opt {
+    justify-content: center;
+    min-width: 0;
+    padding-inline: var(--space-2);
+    text-align: center;
+  }
+
+  .layout--variants,
+  .images-tab {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .preview-stage--large {
+    min-height: 280px;
+  }
+
+  .dv-col {
+    padding-inline: var(--space-3);
+  }
 }

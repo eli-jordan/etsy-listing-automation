@@ -8,6 +8,11 @@ import { STAGE_LABELS, stageActions, stageBlocked, stageReason, stageWillRun } f
  * actually returned, in pipeline order (spec's "Step strip" element,
  * decision 11: nothing here hard-codes five stages, so a `retract`-only
  * plan draws one cell and an `_all_blocked` listing draws every stage red).
+ *
+ * A stage the engine puts under another by `group` (`etsy_videos` under
+ * `etsy_media`, PRD 71) is drawn beside it inside one labelled group, so the
+ * strip reads as the CLI's `etsy_media/etsy_videos` does. The grouping is the
+ * engine's data, never inferred here from a name.
  */
 
 type CellState =
@@ -166,6 +171,21 @@ function StepCell({
   );
 }
 
+/** The strip's cells, each stage with the ones grouped under it. A stage
+ * whose group is not in the plan stands on its own. */
+function nest(stagePlans: readonly StagePlanDTO[]): StagePlanDTO[][] {
+  const present = new Set(stagePlans.map((s) => s.stage as string));
+  const rows: StagePlanDTO[][] = [];
+  for (const stagePlan of stagePlans) {
+    const parent = stagePlan.group ?? null;
+    const row =
+      parent !== null && present.has(parent) ? rows.find((r) => r[0]?.stage === parent) : undefined;
+    if (row !== undefined) row.push(stagePlan);
+    else rows.push([stagePlan]);
+  }
+  return rows;
+}
+
 export function StepStrip({
   plan,
   stageRuntime,
@@ -176,19 +196,38 @@ export function StepStrip({
   heading: string;
 }) {
   const failedIndex = plan.stage_plans.findIndex((s) => stageRuntime[s.stage]?.kind === "failed");
+  const cell = (stagePlan: StagePlanDTO) => (
+    <StepCell
+      key={stagePlan.stage}
+      stagePlan={stagePlan}
+      runtime={stageRuntime[stagePlan.stage]}
+      failedEarlier={failedIndex !== -1 && plan.stage_plans.indexOf(stagePlan) > failedIndex}
+    />
+  );
 
   return (
     <div className="dv-stack" style={{ gap: 8 }}>
       <span className="dv-eyebrow">{heading}</span>
       <div className="dv-steps">
-        {plan.stage_plans.map((stagePlan, index) => (
-          <StepCell
-            key={stagePlan.stage}
-            stagePlan={stagePlan}
-            runtime={stageRuntime[stagePlan.stage]}
-            failedEarlier={failedIndex !== -1 && index > failedIndex}
-          />
-        ))}
+        {nest(plan.stage_plans).map((row) => {
+          const head = row[0] as StagePlanDTO;
+          if (row.length === 1) return cell(head);
+          const label = STAGE_LABELS[head.stage] ?? head.stage;
+          return (
+            <div
+              key={head.stage}
+              className="dv-step-group"
+              role="group"
+              aria-label={label}
+              style={{
+                gridColumn: `span ${row.length}`,
+                gridTemplateColumns: `repeat(${row.length}, minmax(0, 1fr))`,
+              }}
+            >
+              {row.map(cell)}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

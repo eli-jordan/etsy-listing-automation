@@ -1,8 +1,11 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 import { templateThumbnailUrl } from "../../api/calibrator";
-import { isInMedia, missingColours, pictureFor } from "../../media";
+import { MutedClip } from "../../components/MutedClip";
+import { useHoverPlay } from "../../hooks/useHoverPlay";
+import { isInMedia, mediaKind, missingColours, pictureFor } from "../../media";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import type { Focus } from "./focus";
+import { MAX_VIDEOS } from "./mediaEdits";
 
 /**
  * The half of the Listing Images tab that *offers* things: browse the two
@@ -55,47 +58,31 @@ function clipLength(seconds: number): string {
   return `${Math.floor(whole / 60)}:${String(whole % 60).padStart(2, "0")}`;
 }
 
-/** Where a muted clip rests: half a second in, since a first frame is often
- * black. Also the media fragment the `<video>` loads with, so the browser
- * draws that frame as its poster. */
-const POSTER_TIME = 0.5;
-
 interface FileTileProps {
   asset: MediaFileSummary;
   listing: string | null;
   inListing: boolean;
+  unavailable: string | null;
   onToggle: () => void;
   onFocus: () => void;
 }
 
 /** One file in the list: a picture for an image, a first frame and a length
  * for a video. */
-function FileTile({ asset, listing, inListing, onToggle, onFocus }: FileTileProps) {
-  const video = useRef<HTMLVideoElement>(null);
+function FileTile({ asset, listing, inListing, unavailable, onToggle, onFocus }: FileTileProps) {
+  const { ref: clipRef, play, rest } = useHoverPlay();
   const [length, setLength] = useState<number | null>(null);
   const isVideo = asset.kind === "video";
-
-  function play() {
-    const clip = video.current;
-    if (clip === null) return;
-    clip.currentTime = 0;
-    // A browser may refuse autoplay; the poster frame stays, which is fine.
-    void clip.play()?.catch(() => {});
-  }
-
-  function rest() {
-    const clip = video.current;
-    if (clip === null) return;
-    clip.pause();
-    clip.currentTime = POSTER_TIME;
-  }
 
   return (
     <button
       type="button"
-      className={inListing ? "loc-img loc-img--in" : "loc-img"}
+      className={`loc-img${inListing ? " loc-img--in" : ""}${unavailable ? " loc-img--unavailable" : ""}`}
       aria-pressed={inListing}
+      aria-describedby={unavailable === null ? undefined : "video-limit"}
       aria-label={asset.name}
+      disabled={unavailable !== null}
+      title={unavailable ?? undefined}
       onClick={onToggle}
       onMouseEnter={() => {
         onFocus();
@@ -106,14 +93,10 @@ function FileTile({ asset, listing, inListing, onToggle, onFocus }: FileTileProp
       <span className="loc-img__face">
         {isVideo ? (
           <>
-            <video
-              ref={video}
-              src={`${pictureFor(asset.ref, null, "full", listing)}#t=${POSTER_TIME}`}
-              preload="metadata"
-              muted
-              loop
-              playsInline
-              onLoadedMetadata={(event) => setLength(event.currentTarget.duration)}
+            <MutedClip
+              src={pictureFor(asset.ref, null, "full", listing)}
+              clipRef={clipRef}
+              onDuration={setLength}
             />
             <span className="loc-img__badge">
               {length === null ? "▶" : `▶ ${clipLength(length)}`}
@@ -169,6 +152,8 @@ export function MediaLocator({
   const nothingMatches =
     groups.some((g) => g.files.length > 0) && groups.every((g) => !g.files.some(matches));
   const swatchTemplate = detail.etsy.variation_images ?? null;
+  const videoLimitReached =
+    detail.media.filter((entry) => mediaKind(entry) === "video").length >= MAX_VIDEOS;
 
   function entriesFor(template: string): number {
     return detail.media.filter((m) => typeof m !== "string" && m.template === template).length;
@@ -217,6 +202,11 @@ export function MediaLocator({
 
       {mode === "files" && (
         <div className="locator__list">
+          {videoLimitReached && (
+            <p className="locator__limit" id="video-limit" role="status">
+              {MAX_VIDEOS}-video limit reached — remove one before adding another.
+            </p>
+          )}
           {groups.map((g) => {
             const visible = g.files.filter(matches);
             return (
@@ -230,6 +220,13 @@ export function MediaLocator({
                         asset={asset}
                         listing={listing}
                         inListing={detail.media.includes(asset.ref)}
+                        unavailable={
+                          asset.kind === "video" &&
+                          videoLimitReached &&
+                          !detail.media.includes(asset.ref)
+                            ? `Etsy allows at most ${MAX_VIDEOS} videos per listing`
+                            : null
+                        }
                         onToggle={() => onToggleFile(asset.ref)}
                         onFocus={() => onFocus({ kind: "file", asset })}
                       />

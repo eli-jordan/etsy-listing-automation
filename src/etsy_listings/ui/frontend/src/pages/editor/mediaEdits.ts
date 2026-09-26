@@ -124,15 +124,59 @@ export function removeAt(detail: MediaState, index: number): Patch | null {
 
 /** Move a reel tile. The reel's order is the order Etsy shows the images in,
  * so this is a product decision the user makes by dragging, not a display
- * detail. */
+ * detail.
+ *
+ * Inside PRD 71's gallery rules. The featured video holds position 2 while
+ * images move around it, so an image dropped on the thumbnail becomes the
+ * thumbnail without pushing the video to 3. The second video may go anywhere
+ * after the featured one, and dropping it on position 2 swaps them. A move
+ * the rules cannot take -- a video on the thumbnail, an image on the featured
+ * slot, the featured video past an image -- is no move at all: `null`, and
+ * the tile snaps back.
+ */
 export function reorder(detail: MediaState, from: number, to: number): Patch | null {
-  if (from === to) return null;
-  const next = [...detail.media];
-  const moved = next[from];
-  if (moved === undefined) return null;
-  next.splice(from, 1);
-  next.splice(to, 0, moved);
-  return { media: next };
+  const next = moved(detail.media, from, to);
+  return next === null ? null : { media: next };
+}
+
+/** Whether {@link reorder} would take this drag -- what the reel asks while a
+ * tile is carried, so a refused drop target looks refused before the drop. */
+export function canReorder(media: readonly MediaEntry[], from: number, to: number): boolean {
+  return moved(media, from, to) !== null;
+}
+
+function moved(media: readonly MediaEntry[], from: number, to: number): MediaEntry[] | null {
+  const entry = media[from];
+  if (from === to || entry === undefined) return null;
+  const featured = media[1];
+  const pinned =
+    featured !== undefined && mediaKind(featured) === "video" && mediaKind(entry) === "image";
+  if (!pinned || to === 1) {
+    const next = spliced(media, from, to);
+    return fitsGallery(next) ? next : null;
+  }
+  // Lift the featured video out, move the image among the rest, put it back.
+  const rest = media.filter((_, i) => i !== 1);
+  const shift = (i: number) => (i > 1 ? i - 1 : i);
+  const [thumbnail, ...after] = spliced(rest, shift(from), shift(to));
+  const next = [thumbnail as MediaEntry, featured, ...after];
+  return fitsGallery(next) ? next : null;
+}
+
+function spliced(media: readonly MediaEntry[], from: number, to: number): MediaEntry[] {
+  const next = [...media];
+  const [entry] = next.splice(from, 1);
+  next.splice(to, 0, entry as MediaEntry);
+  return next;
+}
+
+/** `config/listing.py`'s `_check_gallery`, for the order alone: position 1 is
+ * an image, and a listing with a video has one at position 2. The caps are
+ * the adding rules' business; a move changes no count. */
+function fitsGallery(media: readonly MediaEntry[]): boolean {
+  if (media.length > 0 && mediaKind(media[0] as MediaEntry) === "video") return false;
+  if (count(media, "video") === 0) return true;
+  return media[1] !== undefined && mediaKind(media[1]) === "video";
 }
 
 function entriesForMissing(detail: MediaState, template: string): TemplateMediaEntry[] {

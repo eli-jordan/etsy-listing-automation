@@ -105,13 +105,18 @@ export function stageActions(stage: StagePlanDTO): ActionDTO[] {
 
 /** One planned pipeline stage's own name, as `engine/stages/__init__.py`'s
  * `STAGES` orders them -- the order `PlanDTO.stage_plans` already arrives in,
- * repeated here only for the display label lookup (`StepStrip.tsx`). */
+ * repeated here only for the display label lookup (`StepStrip.tsx`).
+ *
+ * `etsy_media` is "Etsy media", not "Etsy images": `etsy_videos` is drawn
+ * under it by the `group` the engine hands out (PRD 71), and each label
+ * still reads on its own where there is no nesting, as in the batch view. */
 export const STAGE_LABELS: Record<string, string> = {
   render: "Render mockups",
   printify_product: "Printify product",
   publish: "Publish to Etsy",
   etsy_listing: "Etsy listing",
-  etsy_media: "Etsy images",
+  etsy_media: "Etsy media",
+  etsy_videos: "Etsy videos",
   retract: "Remove from Etsy",
 };
 
@@ -137,3 +142,8 @@ export type EtsyListingSnapshot = components["schemas"]["EtsyListingSnapshot"];
 export type DesiredImageSnapshot = components["schemas"]["DesiredImageSnapshot"];
 export type LiveImageSnapshot = components["schemas"]["LiveImageSnapshot"];
 export type EtsyMediaSnapshot = components["schemas"]["EtsyMediaSnapshot"];
+
+/** `engine/stages/etsy_videos.py`'s `EtsyVideosSnapshot` (PRD 71). */
+export type DesiredVideoSnapshot = components["schemas"]["DesiredVideoSnapshot"];
+export type LiveVideoSnapshot = components["schemas"]["LiveVideoSnapshot"];
+export type EtsyVideosSnapshot = components["schemas"]["EtsyVideosSnapshot"];

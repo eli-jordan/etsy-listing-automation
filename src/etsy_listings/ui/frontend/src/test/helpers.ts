@@ -20,6 +20,7 @@ export type StagePlanOverrides<Name extends StageName> = {
   drift?: StagePlanFor<Name>["drift"];
   actions?: WorkOutcome["actions"];
   snapshot?: StagePlanFor<Name>["snapshot"];
+  group?: string | null;
   will_run?: boolean;
   reason?: string | null;
   blocked?: string | null;

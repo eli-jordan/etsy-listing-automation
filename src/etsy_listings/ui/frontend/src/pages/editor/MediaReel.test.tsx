@@ -41,6 +41,13 @@ function tiles(): HTMLElement[] {
   return Array.from(document.querySelectorAll<HTMLElement>(".rtile"));
 }
 
+const INTRO: MediaFileSummary = {
+  name: "intro.mp4",
+  file: "common-media/intro.mp4",
+  ref: "common-media/intro.mp4",
+  kind: "video",
+};
+
 const THREE: MediaEntry[] = [
   { template: "flat-lay-01", colour: "black" },
   { template: "flat-lay-01", colour: "ivory" },
@@ -50,12 +57,14 @@ const THREE: MediaEntry[] = [
 describe("MediaReel", () => {
   it("says how full the listing is against Etsy's ceiling", () => {
     reel({ media: THREE });
-    expect(screen.getByText("3 of 20")).toBeTruthy();
+    expect(screen.getByText("3 of 20 images")).toBeTruthy();
+    expect(screen.getByText("0 of 2 videos")).toBeTruthy();
   });
 
-  it("counts images against the ceiling, not videos, which Etsy caps apart (PRD 71)", () => {
+  it("counts images and videos apart, as Etsy caps them (PRD 71)", () => {
     reel({ media: [THREE[0] as MediaEntry, "common-media/intro.mp4", ...THREE.slice(1)] });
-    expect(screen.getByText("3 of 20")).toBeTruthy();
+    expect(screen.getByText("3 of 20 images")).toBeTruthy();
+    expect(screen.getByText("1 of 2 videos")).toBeTruthy();
   });
 
   it("draws one of the listing's own files from under that listing", () => {
@@ -83,7 +92,92 @@ describe("MediaReel", () => {
   });
 });
 
+/** Videos sit inline in the one reel, because `media:` is the gallery
+ * (PRD 71): a muted clip showing its own frame, marked as a clip. */
+describe("MediaReel's videos", () => {
+  const GALLERY: MediaEntry[] = ["a.png", INTRO.ref, "b.png", "./close-up.mov"];
+
+  function clip(index: number): HTMLVideoElement {
+    const element = tiles()[index]?.querySelector("video");
+    expect(element).toBeTruthy();
+    return element as HTMLVideoElement;
+  }
+
+  it("draws a video as a muted, metadata-only clip resting on its poster frame", () => {
+    reel({ media: GALLERY });
+    const video = clip(1);
+    expect(video).toHaveAttribute("src", "/api/common-media/intro.mp4/file#t=0.5");
+    expect(video).toHaveAttribute("preload", "metadata");
+    expect(video.muted).toBe(true);
+    expect(tiles()[1]?.querySelector("img")).toBeNull();
+    expect(clip(3)).toHaveAttribute(
+      "src",
+      "/api/listings/take-a-hike/media-files/close-up.mov/file#t=0.5",
+    );
+  });
+
+  it("marks a video tile with a play badge", () => {
+    reel({ media: GALLERY });
+    expect(tiles().map((t) => t.querySelector(".rtile__play") !== null)).toEqual([
+      false,
+      true,
+      false,
+      true,
+    ]);
+  });
+
+  it("labels the featured slot, where Etsy pins the first video", () => {
+    reel({ media: GALLERY });
+    expect(screen.getAllByText("Featured · shown 2nd")).toHaveLength(1);
+    expect(tiles()[1]).toHaveTextContent("Featured · shown 2nd");
+  });
+
+  it("has no featured slot without a video", () => {
+    reel({ media: THREE });
+    expect(screen.queryByText("Featured · shown 2nd")).toBeNull();
+  });
+
+  it("plays a clip on hover and puts it back on its poster frame after", () => {
+    const play = vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+    const pause = vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
+    const props = reel({ media: GALLERY, files: [INTRO] });
+    const face = document.querySelectorAll(".rtile__face")[1] as HTMLElement;
+
+    fireEvent.mouseEnter(face);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(props.onFocus).toHaveBeenCalledWith({ kind: "file", asset: INTRO });
+
+    fireEvent.mouseLeave(face);
+    expect(pause).toHaveBeenCalledTimes(1);
+    expect(clip(1).currentTime).toBe(0.5);
+  });
+});
+
 describe("MediaReel's drag", () => {
+  it("shows a drop the gallery rules refuse as refused, not as a landing place", () => {
+    reel({ media: ["a.png", INTRO.ref, "b.png"] });
+    const [first, second, third] = tiles();
+
+    fireEvent.dragStart(third as HTMLElement);
+    fireEvent.dragOver(first as HTMLElement);
+    expect((first as HTMLElement).className).toContain("rtile--over");
+
+    fireEvent.dragOver(second as HTMLElement);
+    expect((second as HTMLElement).className).toContain("rtile--refused");
+    expect((second as HTMLElement).className).not.toContain("rtile--over");
+  });
+
+  it("lets a video tile be carried", () => {
+    const props = reel({ media: ["a.png", INTRO.ref, "b.png", "./close-up.mov"] });
+    const [, second, , fourth] = tiles();
+
+    fireEvent.dragStart(fourth as HTMLElement);
+    fireEvent.dragOver(second as HTMLElement);
+    fireEvent.drop(second as HTMLElement);
+
+    expect(props.onReorder).toHaveBeenCalledWith(3, 1);
+  });
+
   it("reports the move once the tile is dropped", () => {
     const props = reel({ media: THREE });
     const [first, , third] = tiles();
