@@ -6096,6 +6096,10 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
     flex-wrap: wrap;
   }
 
+  .page-head--editor {
+    flex-wrap: wrap;
+  }
+
   .page-head__name {
     width: 100%;
     min-width: 0;
