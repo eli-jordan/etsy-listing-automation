@@ -507,7 +507,7 @@ def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
 
 
 @router.delete("/{name}", response_model=None)
-def delete_listing(target: Existing) -> ListingSummary | Response:
+def delete_listing(target: Existing, request: Request) -> ListingSummary | Response:
     """Delete from the listings table (PRD 63, 66).
 
     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
@@ -522,6 +522,7 @@ def delete_listing(target: Existing) -> ListingSummary | Response:
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
+    _forget_ai_run(request, name)
     with target.writing():
         if etsy_listing_id is None and printify_product_id is None:
             workspace.remove_listing(name)
@@ -617,7 +618,7 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
 
 
 @router.post("/{name}/rename", response_model=ListingDetail)
-def rename_listing(target: Existing, body: RenameListingRequest) -> ListingDetail:
+def rename_listing(target: Existing, body: RenameListingRequest, request: Request) -> ListingDetail:
     """Move a listing, whole, to a new name.
 
     A listing's identity is its directory name (PRD 60), so the rename is a
@@ -653,7 +654,14 @@ def rename_listing(target: Existing, body: RenameListingRequest) -> ListingDetai
         snapshot = workspace.market_snapshot_file(old)
         if snapshot.is_file():
             os.replace(snapshot, workspace.market_snapshot_file(new))
+    _forget_ai_run(request, old)
     return _detail(workspace, new)
+
+
+def _forget_ai_run(request: Request, name: str) -> None:
+    """A deleted or renamed listing's finished AI run goes with it, so a new
+    listing given the name does not reattach to it (`AiRunRegistry.forget`)."""
+    request.app.state.ai_run_registry.forget(name)
 
 
 def _preview_response(

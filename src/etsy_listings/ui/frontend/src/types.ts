@@ -31,9 +31,11 @@ export type TemplatePhoto = components["schemas"]["TemplatePhoto"];
 
 // ── Listing SEO AI Mode (AI SEO implementation plan, PR7) ───────────────────
 
-export type DesignBriefResponse = components["schemas"]["DesignBriefResponse"];
 export type SeoReadinessResponse = components["schemas"]["SeoReadinessResponse"];
-export type SeoProposalResponse = components["schemas"]["SeoProposalResponse"];
+/** A proposal as the browser keeps it: an AI run's `proposal` event without
+ * the event's own `type` and `seq` (the server sends it flat, so the two
+ * are the same fields). */
+export type SeoProposalResponse = Omit<components["schemas"]["AiProposalEvent"], "type" | "seq">;
 export type SeoProposalSnapshot = components["schemas"]["SeoProposalSnapshot"];
 export type SeoRationaleEntry = components["schemas"]["SeoRationaleEntry"];
 export type SeoWarningEntry = components["schemas"]["SeoWarningEntry"];

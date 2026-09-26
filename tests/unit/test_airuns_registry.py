@@ -141,3 +141,26 @@ def test_wait_for_events_returns_what_came_after_and_done_once_finished() -> Non
     pending, done = run.wait_for_events(3, timeout=0.01)
     assert pending == []
     assert done is True
+
+
+def test_forgetting_a_listing_drops_its_finished_run() -> None:
+    # A deleted or renamed listing's old run must not be what a new listing
+    # of that name reattaches to -- its replayed brief and proposal belong
+    # to a listing that no longer exists.
+    registry = _registry()
+    run = _create(registry, "Take-A-Hike")
+    run.finish("done")
+
+    registry.forget("take-a-hike")
+
+    assert registry.latest("take-a-hike") is None
+    assert registry.get(run.id) is None
+
+
+def test_forgetting_a_listing_leaves_a_running_run_to_end_on_its_own() -> None:
+    registry = _registry()
+    run = _create(registry)
+
+    registry.forget("take-a-hike")
+
+    assert registry.latest("take-a-hike") is run

@@ -395,3 +395,20 @@ def test_generate_classifies_an_unrecognised_failure_as_generation_error(
 
     with pytest.raises(ProviderGenerationError):
         provider.generate(_task(tmp_path), Deadline.starting_now(seconds=60))
+
+
+def test_generate_with_no_binary_on_path_is_unavailable_so_the_next_provider_runs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    # A machine with only one of the two CLIs installed. Launching the bare
+    # name fails with WinError 2, which is not an availability failure the
+    # orchestrator falls through on -- it used to end the whole run.
+    monkeypatch.setattr(codex.shutil, "which", lambda name: None)
+
+    def never_launched(argv: list[str], **kwargs: Any) -> ProcessResult:
+        raise AssertionError("a missing binary must not be launched")
+
+    monkeypatch.setattr(codex, "run_managed", never_launched)
+
+    with pytest.raises(ProviderUnavailableError, match="codex was not found on PATH"):
+        _provider(tmp_path).generate(_task(tmp_path), Deadline.starting_now(seconds=60))

@@ -4,46 +4,6 @@
  */
 
 export interface paths {
-  "/api/ai/design-brief": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Request Design Brief
-     * @description Draft a listing brief from a design image (PRD 68).
-     *
-     *     The browser calls this by itself, once, the moment a design is attached
-     *     to a listing whose brief is empty -- including a listing that has no name
-     *     and no file yet, which is the ordinary case while one is being created.
-     *     So every refusal here is one a caller nobody asked to call has to be able
-     *     to live with silently, and the client's reason for calling is re-checked
-     *     rather than trusted: the design has to resolve inside the workspace and
-     *     exist, some provider has to be ready, and `prompts/brief.md` has to be
-     *     readable. Nothing about the listing is asked for -- not its name, and not
-     *     its garment profile, which is usually still unchosen at this point.
-     *
-     *     It deliberately does *not* ask whether any brief is already filled in.
-     *     There is no listing here to ask about, and the browser is the only thing
-     *     that knows whether the seller has typed into the field since the request
-     *     was armed.
-     *
-     *     Never writes the drafted text anywhere. It is returned, the editor puts
-     *     it in the ordinary Brief field, and autosave persists it exactly as it
-     *     persists a typed one -- which is what keeps "the model never writes
-     *     `listing.yaml`" true (PRD 4, as amended by PRD 68).
-     */
-    post: operations["request_design_brief_api_ai_design_brief_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/ai/runs": {
     parameters: {
       query?: never;
@@ -442,39 +402,6 @@ export interface paths {
     patch: operations["patch_listing_api_listings__name__patch"];
     trace?: never;
   };
-  "/api/listings/{name}/ai-seo/proposal": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    get?: never;
-    put?: never;
-    /**
-     * Request Seo Proposal
-     * @description Run one complete AI Mode SEO request for this saved listing.
-     *
-     *     Refuses with 409 for exactly two reasons: this listing does not meet
-     *     :func:`readiness`'s prerequisites (re-checked here independently of
-     *     whatever the client last saw from the readiness endpoint -- state can
-     *     change between the two calls), or another proposal request for the same
-     *     listing is already running (the settled "Concurrent requests" decision;
-     *     a *different* listing's request, or this listing's brief draft, is never
-     *     refused). :func:`_generation_errors` owns every other outcome.
-     *
-     *     Returns only what PR5 item 4 permits: the validated proposal, the input
-     *     snapshot, and expiry metadata. Nothing here is written to a workspace
-     *     file, a lockfile, or any server-side cache -- ``proposal`` and
-     *     ``seo_request`` fall out of scope the moment this function returns.
-     */
-    post: operations["request_seo_proposal_api_listings__name__ai_seo_proposal_post"];
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/listings/{name}/ai-seo/readiness": {
     parameters: {
       query?: never;
@@ -486,12 +413,12 @@ export interface paths {
      * Get Seo Readiness
      * @description Whether the **AI Mode** button may start a run for this saved listing
      *     right now -- the call the frontend makes to decide whether to enable the
-     *     always visible control. The button starts an AI run that never drafts
-     *     the brief, so this is ``POST /api/ai/runs``'s own rule set for
-     *     ``draft_brief=false``: a lit button is one the server will not refuse.
-     *     Read-only: every check here, including each provider's own
-     *     `readiness()`, is a local probe (a file's existence, a fast
-     *     `--help`/`login status` subprocess) that changes nothing.
+     *     always visible control. The button never drafts a brief, so this is
+     *     ``POST /api/ai/runs``'s own rule set for ``draft_brief=false``: a lit
+     *     button is one the server will not refuse. Read-only: every check here,
+     *     including each provider's own `readiness()`, is a local probe (a file's
+     *     existence, a fast `--help`/`login status` subprocess) that changes
+     *     nothing.
      */
     get: operations["get_seo_readiness_api_listings__name__ai_seo_readiness_get"];
     put?: never;
@@ -1438,42 +1365,6 @@ export interface components {
       ref?: string | null;
       /** Text */
       text?: string | null;
-    };
-    /**
-     * DesignBriefRequest
-     * @description What drafting a brief actually needs (PRD 68): the design, and nothing
-     *     else.
-     *
-     *     Not a listing, and not a garment profile. A brief describes the
-     *     *artwork*, and the one moment it is most wanted is the moment a design is
-     *     attached -- which, when a seller is creating a listing, is usually before
-     *     it has a name, a file, or a garment chosen. Asking only for the design is
-     *     what lets the request go out then (see `ai/brief.py.BriefRequest` for why
-     *     the garment context was dropped rather than made optional).
-     *
-     *     ``design`` is workspace-relative and POSIX (``designs/take-a-hike.png``),
-     *     resolved through `Workspace.resolve`, which is what refuses anything
-     *     pointing outside the workspace (`A8`) -- this value arrives from a
-     *     browser, so that check is the security boundary, not a tidiness rule.
-     */
-    DesignBriefRequest: {
-      /** Design */
-      design: string;
-    };
-    /**
-     * DesignBriefResponse
-     * @description One drafted listing brief (PRD 68).
-     *
-     *     Deliberately thinner than `SeoProposalResponse`: no snapshot and no
-     *     expiry, because there is nothing here to keep. The browser writes
-     *     ``brief`` straight into the ordinary Brief field through the existing
-     *     autosave path, at which point it is seller-owned listing content like
-     *     any other -- so there is no pending state to go stale, nothing to
-     *     restore after a refresh, and nothing to retain past this response.
-     */
-    DesignBriefResponse: {
-      /** Brief */
-      brief: string;
     };
     /**
      * DesignSummary
@@ -2538,38 +2429,6 @@ export interface components {
       views_per_day: number | null;
     };
     /**
-     * SeoProposalResponse
-     * @description A complete, hard-validated proposal plus what PR5 item 4 promises
-     *     beside it: the input snapshot and expiry metadata. Never cached
-     *     server-side past this one response -- `ui/api/seo.py` builds this,
-     *     returns it, and keeps nothing.
-     */
-    SeoProposalResponse: {
-      /** Description Leads */
-      description_leads: string[];
-      /**
-       * Expires At
-       * Format: date-time
-       */
-      expires_at: string;
-      /**
-       * Generated At
-       * Format: date-time
-       */
-      generated_at: string;
-      /** Observed Text */
-      observed_text: string;
-      /** Rationale */
-      rationale: components["schemas"]["SeoRationaleEntry"][];
-      snapshot: components["schemas"]["SeoProposalSnapshot"];
-      /** Tags */
-      tags: string[];
-      /** Titles */
-      titles: string[];
-      /** Warnings */
-      warnings: components["schemas"]["SeoWarningEntry"][];
-    };
-    /**
      * SeoProposalSnapshot
      * @description The submitted generation inputs, echoed back beside the proposal
      *     (implementation plan, PR5 item 4: "input snapshot data").
@@ -3024,39 +2883,6 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-  request_design_brief_api_ai_design_brief_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    requestBody: {
-      content: {
-        "application/json": components["schemas"]["DesignBriefRequest"];
-      };
-    };
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["DesignBriefResponse"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
   find_ai_run_api_ai_runs_get: {
     parameters: {
       query: {
@@ -3725,37 +3551,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  request_seo_proposal_api_listings__name__ai_seo_proposal_post: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["SeoProposalResponse"];
         };
       };
       /** @description Validation Error */

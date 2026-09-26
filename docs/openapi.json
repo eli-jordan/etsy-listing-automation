@@ -1026,34 +1026,6 @@
         "title": "DescriptionConfig",
         "type": "object"
       },
-      "DesignBriefRequest": {
-        "description": "What drafting a brief actually needs (PRD 68): the design, and nothing\nelse.\n\nNot a listing, and not a garment profile. A brief describes the\n*artwork*, and the one moment it is most wanted is the moment a design is\nattached -- which, when a seller is creating a listing, is usually before\nit has a name, a file, or a garment chosen. Asking only for the design is\nwhat lets the request go out then (see `ai/brief.py.BriefRequest` for why\nthe garment context was dropped rather than made optional).\n\n``design`` is workspace-relative and POSIX (``designs/take-a-hike.png``),\nresolved through `Workspace.resolve`, which is what refuses anything\npointing outside the workspace (`A8`) -- this value arrives from a\nbrowser, so that check is the security boundary, not a tidiness rule.",
-        "properties": {
-          "design": {
-            "title": "Design",
-            "type": "string"
-          }
-        },
-        "required": [
-          "design"
-        ],
-        "title": "DesignBriefRequest",
-        "type": "object"
-      },
-      "DesignBriefResponse": {
-        "description": "One drafted listing brief (PRD 68).\n\nDeliberately thinner than `SeoProposalResponse`: no snapshot and no\nexpiry, because there is nothing here to keep. The browser writes\n``brief`` straight into the ordinary Brief field through the existing\nautosave path, at which point it is seller-owned listing content like\nany other -- so there is no pending state to go stale, nothing to\nrestore after a refresh, and nothing to retain past this response.",
-        "properties": {
-          "brief": {
-            "title": "Brief",
-            "type": "string"
-          }
-        },
-        "required": [
-          "brief"
-        ],
-        "title": "DesignBriefResponse",
-        "type": "object"
-      },
       "DesignSummary": {
         "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
         "properties": {
@@ -3538,76 +3510,6 @@
         "title": "ScoredListing",
         "type": "object"
       },
-      "SeoProposalResponse": {
-        "description": "A complete, hard-validated proposal plus what PR5 item 4 promises\nbeside it: the input snapshot and expiry metadata. Never cached\nserver-side past this one response -- `ui/api/seo.py` builds this,\nreturns it, and keeps nothing.",
-        "properties": {
-          "description_leads": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Description Leads",
-            "type": "array"
-          },
-          "expires_at": {
-            "format": "date-time",
-            "title": "Expires At",
-            "type": "string"
-          },
-          "generated_at": {
-            "format": "date-time",
-            "title": "Generated At",
-            "type": "string"
-          },
-          "observed_text": {
-            "title": "Observed Text",
-            "type": "string"
-          },
-          "rationale": {
-            "items": {
-              "$ref": "#/components/schemas/SeoRationaleEntry"
-            },
-            "title": "Rationale",
-            "type": "array"
-          },
-          "snapshot": {
-            "$ref": "#/components/schemas/SeoProposalSnapshot"
-          },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Tags",
-            "type": "array"
-          },
-          "titles": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Titles",
-            "type": "array"
-          },
-          "warnings": {
-            "items": {
-              "$ref": "#/components/schemas/SeoWarningEntry"
-            },
-            "title": "Warnings",
-            "type": "array"
-          }
-        },
-        "required": [
-          "titles",
-          "tags",
-          "description_leads",
-          "rationale",
-          "warnings",
-          "observed_text",
-          "snapshot",
-          "generated_at",
-          "expires_at"
-        ],
-        "title": "SeoProposalResponse",
-        "type": "object"
-      },
       "SeoProposalSnapshot": {
         "description": "The submitted generation inputs, echoed back beside the proposal\n(implementation plan, PR5 item 4: \"input snapshot data\").\n\nThis is what a future frontend (PR7) compares its own current editor\nstate against to decide a pending proposal has gone stale\n(`docs/ui-listing-seo-interactions.md` section 7) -- everything\n`ai/models.py.SeoRequest` sent to the provider except the design image\nitself. Design identity and content are captured before generation, rather\nthan inferred from whichever editor state exists when the response arrives.",
         "properties": {
@@ -4514,48 +4416,6 @@
   },
   "openapi": "3.1.0",
   "paths": {
-    "/api/ai/design-brief": {
-      "post": {
-        "description": "Draft a listing brief from a design image (PRD 68).\n\nThe browser calls this by itself, once, the moment a design is attached\nto a listing whose brief is empty -- including a listing that has no name\nand no file yet, which is the ordinary case while one is being created.\nSo every refusal here is one a caller nobody asked to call has to be able\nto live with silently, and the client's reason for calling is re-checked\nrather than trusted: the design has to resolve inside the workspace and\nexist, some provider has to be ready, and `prompts/brief.md` has to be\nreadable. Nothing about the listing is asked for -- not its name, and not\nits garment profile, which is usually still unchosen at this point.\n\nIt deliberately does *not* ask whether any brief is already filled in.\nThere is no listing here to ask about, and the browser is the only thing\nthat knows whether the seller has typed into the field since the request\nwas armed.\n\nNever writes the drafted text anywhere. It is returned, the editor puts\nit in the ordinary Brief field, and autosave persists it exactly as it\npersists a typed one -- which is what keeps \"the model never writes\n`listing.yaml`\" true (PRD 4, as amended by PRD 68).",
-        "operationId": "request_design_brief_api_ai_design_brief_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/DesignBriefRequest"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/DesignBriefResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Request Design Brief",
-        "tags": [
-          "ai-brief"
-        ]
-      }
-    },
     "/api/ai/runs": {
       "get": {
         "description": "The listing's running or most recent run -- what the editor\nreattaches to after a reload.",
@@ -5388,52 +5248,9 @@
         ]
       }
     },
-    "/api/listings/{name}/ai-seo/proposal": {
-      "post": {
-        "description": "Run one complete AI Mode SEO request for this saved listing.\n\nRefuses with 409 for exactly two reasons: this listing does not meet\n:func:`readiness`'s prerequisites (re-checked here independently of\nwhatever the client last saw from the readiness endpoint -- state can\nchange between the two calls), or another proposal request for the same\nlisting is already running (the settled \"Concurrent requests\" decision;\na *different* listing's request, or this listing's brief draft, is never\nrefused). :func:`_generation_errors` owns every other outcome.\n\nReturns only what PR5 item 4 permits: the validated proposal, the input\nsnapshot, and expiry metadata. Nothing here is written to a workspace\nfile, a lockfile, or any server-side cache -- ``proposal`` and\n``seo_request`` fall out of scope the moment this function returns.",
-        "operationId": "request_seo_proposal_api_listings__name__ai_seo_proposal_post",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "title": "Name",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SeoProposalResponse"
-                }
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Request Seo Proposal",
-        "tags": [
-          "ai-seo"
-        ]
-      }
-    },
     "/api/listings/{name}/ai-seo/readiness": {
       "get": {
-        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button starts an AI run that never drafts\nthe brief, so this is ``POST /api/ai/runs``'s own rule set for\n``draft_brief=false``: a lit button is one the server will not refuse.\nRead-only: every check here, including each provider's own\n`readiness()`, is a local probe (a file's existence, a fast\n`--help`/`login status` subprocess) that changes nothing.",
+        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button never drafts a brief, so this is\n``POST /api/ai/runs``'s own rule set for ``draft_brief=false``: a lit\nbutton is one the server will not refuse. Read-only: every check here,\nincluding each provider's own `readiness()`, is a local probe (a file's\nexistence, a fast `--help`/`login status` subprocess) that changes\nnothing.",
         "operationId": "get_seo_readiness_api_listings__name__ai_seo_readiness_get",
         "parameters": [
           {

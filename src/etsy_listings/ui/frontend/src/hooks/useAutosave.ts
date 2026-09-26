@@ -148,6 +148,13 @@ export function useAutosave(
    * create, which is what lets the next edit retry it rather than asking the
    * user to type the name again. */
   const draftName = useRef("");
+  /** What `adopt` has shown since the last save *sent* after it. A response
+   * to a request sent earlier describes the file as it was before the server
+   * wrote these values -- an AI run's brief lands while an autosave is in
+   * flight -- so they are laid back over that response rather than blanked
+   * by it. A new object on every adopt, so a request can tell whether one
+   * happened while it was out. */
+  const adopted = useRef<Patch | null>(null);
   // `detail` as the save callbacks should read it. A ref rather than a
   // dependency because a save must send what is on screen *now*, not what was
   // on screen when the debounce was armed.
@@ -167,7 +174,8 @@ export function useAutosave(
     return mergePatch(listingDocument(latest.current) as Patch, pending.current ?? {});
   }, []);
 
-  const applyResponse = useCallback((fresh: ListingDetail) => {
+  /** `sentWith` is `adopted` as it stood when the request was sent. */
+  const applyResponse = useCallback((fresh: ListingDetail, sentWith: Patch | null) => {
     // A response carrying field errors describes the *empty* draft alongside
     // them (there is no listing to describe), so only the errors are news --
     // taking the rest would wipe the document being edited.
@@ -175,11 +183,16 @@ export function useAutosave(
       setDetail((current) => ({ ...current, field_errors: fresh.field_errors }));
       return;
     }
-    // Keep edits made while a save was in flight visible.
+    // Sent after the last adopt: the response already carries what was
+    // adopted, and from here the file is the word on it.
+    if (adopted.current === sentWith) adopted.current = null;
+    // Keep edits made while a save was in flight visible, over anything
+    // adopted meanwhile: the seller's own typing wins.
+    const overlay = mergePatch(adopted.current ?? {}, pending.current ?? {});
     setDetail(
-      pending.current === null
+      Object.keys(overlay).length === 0
         ? fresh
-        : (coerceDesign(mergePatch(fresh, pending.current)) as ListingDetail),
+        : (coerceDesign(mergePatch(fresh, overlay)) as ListingDetail),
     );
   }, []);
 
@@ -195,18 +208,19 @@ export function useAutosave(
       // 68's drafted brief is written by a request that resolves during
       // exactly this window, and it went missing every time.
       const sent = pending.current;
+      const sentWith = adopted.current;
       const fresh = await createListing({ name: next, document: candidate() });
       if (fresh.name === "") {
         // The server would not write it -- `field_errors` says why. `pending`
         // stays put, and so does the name, so the edit that fixes the document
         // is what retries the create.
-        applyResponse(fresh);
+        applyResponse(fresh, sentWith);
         setSave({ kind: "unsaved" });
         return;
       }
       if (pending.current === sent) pending.current = null;
       savedName.current = next;
-      applyResponse(fresh);
+      applyResponse(fresh, sentWith);
       // Left "saving" when something is still pending, so the flush
       // `commitName` schedules is what reports the listing saved -- the same
       // way `flush` withholds it while another edit is waiting.
@@ -246,9 +260,10 @@ export function useAutosave(
         pending.current = null;
         patching.current = true;
         setSave({ kind: "saving" });
+        const sentWith = adopted.current;
         try {
           const fresh = await patchListing(currentName, patch);
-          applyResponse(fresh);
+          applyResponse(fresh, sentWith);
           // A newer edit may already be waiting. Marking this one saved would
           // hide it until the next iteration starts.
           if (pending.current === null) setSave(saved());
@@ -288,8 +303,9 @@ export function useAutosave(
     // Not on disk and not named: describe the candidate so the issues banner
     // stays true. Nothing is written, so `pending` is not cleared -- it is what
     // the create will carry once a name arrives.
+    const sentWith = adopted.current;
     const fresh = await describeListingDraft(candidate());
-    applyResponse(fresh);
+    applyResponse(fresh, sentWith);
   }, [applyResponse, candidate, clearTimer, create]);
 
   const update = useCallback(
@@ -303,6 +319,7 @@ export function useAutosave(
   );
 
   const adopt = useCallback((patch: Patch) => {
+    adopted.current = mergePatch(adopted.current ?? {}, patch);
     setDetail((current) => coerceDesign(mergePatch(current, patch)) as ListingDetail);
   }, []);
 
@@ -323,9 +340,13 @@ export function useAutosave(
         // sent under the new name -- two fates, and no third.
         const patch = pending.current;
         pending.current = null;
-        if (patch !== null) applyResponse(await patchListing(savedName.current, patch));
+        const sentWith = adopted.current;
+        if (patch !== null) applyResponse(await patchListing(savedName.current, patch), sentWith);
         const fresh = await renameListing(savedName.current, next);
         savedName.current = next;
+        // Read from the file after the drain, under the rename's lock: it
+        // carries anything adopted before it.
+        if (adopted.current === sentWith) adopted.current = null;
         setDetail(fresh);
         setSave(saved());
         onNamed?.(next, fresh);

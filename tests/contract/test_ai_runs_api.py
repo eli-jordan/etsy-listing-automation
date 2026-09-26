@@ -17,6 +17,7 @@ import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -198,6 +199,23 @@ def test_an_empty_brief_is_allowed_when_the_run_drafts_it(
     assert client.get(f"/api/listings/{LISTING}").json()["brief"] == DRAFTED_BRIEF
 
 
+def test_an_autosave_that_lands_after_the_drafted_brief_keeps_it(
+    workspace_root: Path, client: TestClient
+) -> None:
+    """The editor's autosave sends only the fields the seller changed, and
+    PATCH merges them into the file as it is when the write lock is taken --
+    so a save the editor sent before the brief was written, served after,
+    cannot erase it."""
+    edit_listing(workspace_root, brief="")
+    _finished(client, _start(client, draft_brief=True)["id"])
+
+    saved = client.patch(f"/api/listings/{LISTING}", json={"etsy": {"section": "Apparel"}})
+
+    assert saved.status_code == 200, saved.text
+    assert saved.json()["brief"] == DRAFTED_BRIEF
+    assert client.get(f"/api/listings/{LISTING}").json()["brief"] == DRAFTED_BRIEF
+
+
 def test_post_refuses_without_the_market_queries_prompt(
     workspace_root: Path, client: TestClient
 ) -> None:
@@ -260,6 +278,25 @@ def test_get_by_listing_is_404_without_a_run(client: TestClient) -> None:
     assert client.get("/api/ai/runs", params={"listing": LISTING}).status_code == 404
 
 
+def test_deleting_the_listing_forgets_its_finished_run(client: TestClient) -> None:
+    _finished(client, _start(client)["id"])
+
+    assert client.delete(f"/api/listings/{LISTING}").status_code == 204
+
+    assert client.get("/api/ai/runs", params={"listing": LISTING}).status_code == 404
+
+
+def test_renaming_the_listing_forgets_the_finished_run_under_the_old_name(
+    client: TestClient,
+) -> None:
+    _finished(client, _start(client)["id"])
+
+    renamed = client.post(f"/api/listings/{LISTING}/rename", json={"new_name": "renamed"})
+
+    assert renamed.status_code == 200
+    assert client.get("/api/ai/runs", params={"listing": LISTING}).status_code == 404
+
+
 def test_get_an_unknown_run_is_404(client: TestClient) -> None:
     assert client.get("/api/ai/runs/nope").status_code == 404
     assert client.get("/api/ai/runs/nope/events").status_code == 404
@@ -274,6 +311,10 @@ def test_the_detail_carries_every_event_type(client: TestClient) -> None:
     assert [event["seq"] for event in detail["events"]] == list(range(1, len(types) + 1))
     proposal = next(e for e in detail["events"] if e["type"] == "proposal")
     assert {"titles", "tags", "description_leads", "snapshot", "expires_at"} <= set(proposal)
+    kept_for = datetime.fromisoformat(proposal["expires_at"]) - datetime.fromisoformat(
+        proposal["generated_at"]
+    )
+    assert kept_for == timedelta(days=1)
     market = next(e for e in detail["events"] if e["type"] == "market")
     assert market["snapshot"]["scored"] == 3
     assert detail["events"][-1] == {
