@@ -428,12 +428,15 @@ def photo(template: Existing, colour: str | None = None) -> Response:
 
 @router.get("/{name}/config", response_model=TemplateConfig)
 def get_config(template: Existing, response: Response) -> AnyTemplate:
+    # Loaded first: `_load_config` is what turns a missing template.yaml into
+    # the 404 the kind picker expects, and a stat() ahead of it was a 500.
+    config = _load_config(template.workspace, template.name)
     modified_at = datetime.fromtimestamp(
         template.workspace.template_config_file(template.name).stat().st_mtime,
         tz=UTC,
     )
     response.headers["Last-Modified"] = format_datetime(modified_at, usegmt=True)
-    return _load_config(template.workspace, template.name)
+    return config
 
 
 @router.put("/{name}/config", response_model=TemplateConfig)

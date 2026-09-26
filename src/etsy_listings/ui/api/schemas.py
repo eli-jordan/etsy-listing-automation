@@ -296,7 +296,7 @@ class PricingPlanSummary(BaseModel):
     """Whether this plan declares the exact garment profile asked for --
     mirrors `newcmd.logic.build_pricing_plan_choices`'s marker."""
     ref: str
-    """Listing-relative, ready to PATCH straight into `pricing_plan:`
+    """Workspace-rooted (PRD 72), ready to PATCH straight into `pricing_plan:`
     unchanged -- `newcmd.logic.pricing_plan_ref`'s write-side form, the same
     rule `CommonMediaSummary.ref` follows for a shared image."""
 
@@ -316,23 +316,22 @@ class CommonMediaSummary(BaseModel):
     file: str
     """Workspace-relative, for display: ``common-media/size-guide.png``."""
     ref: str
-    """Listing-relative, ready to write into `media:` unchanged. A bare media
-    entry resolves against the listing's own directory (PRD 8a), the same rule
-    `design:` follows, so the picker hands back the stored form rather than
-    leaving every caller to rebuild it."""
+    """The ref to write into `media:` unchanged. Under PRD 72's two roots a
+    shared file's ref is its workspace-relative path, so today it equals
+    ``file``; it stays a field of its own because a listing's own files
+    (``./close-up.mp4``) are spelled differently from where they sit, and the
+    picker hands back the stored form rather than leaving callers to build it."""
 
 
 class CommonCopySummary(BaseModel):
     """One `common-copy/*.md` file, for the Description tab's body-source
-    selector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s
-    ref, a common-copy ref is portable -- workspace-relative, not
-    listing-relative -- so it is exactly what `description.ref` stores,
-    already usable as-is."""
+    selector (AI SEO implementation plan, PR6). A common-copy ref is
+    workspace-relative, like every other ref (PRD 72), so it is exactly what
+    `description.ref` stores, already usable as-is."""
 
     ref: str
     """Workspace-relative, e.g. ``common-copy/comfort-colors.md`` -- what
-    `description.ref` stores unchanged (unlike `CommonMediaSummary.ref`,
-    which is listing-relative)."""
+    `description.ref` stores unchanged."""
     title: str
     """The file's front-matter title, for the picker's option label."""
     summary: str | None = None

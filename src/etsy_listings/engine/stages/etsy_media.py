@@ -208,10 +208,9 @@ def _manifest_entry(
 ) -> ManifestEntry:
     workspace = ctx.workspace
     if isinstance(entry, str):
-        # A bare string is a shared asset under `common-media/`, resolved the
-        # same way `design:` is -- relative to the listing's own directory
-        # (PRD 8a's convention, not re-invented here).
-        source = workspace.resolve(entry, relative_to=workspace.listing_dir(listing))
+        # A bare string is a file ref, resolved the same way `design:` is:
+        # PRD 72's two roots, the workspace or `./` for the listing's own.
+        source = workspace.resolve_ref(entry, listing_dir=workspace.listing_dir(listing))
         ref = entry
         colour = None
     else:

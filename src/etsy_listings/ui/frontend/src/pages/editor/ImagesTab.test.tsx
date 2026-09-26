@@ -439,12 +439,12 @@ describe("ImagesTab's shared images (common-media/)", () => {
     {
       name: "size-guide",
       file: "common-media/size-guide.png",
-      ref: "../../common-media/size-guide.png",
+      ref: "common-media/size-guide.png",
     },
     {
       name: "care-instructions",
       file: "common-media/care-instructions.png",
-      ref: "../../common-media/care-instructions.png",
+      ref: "common-media/care-instructions.png",
     },
   ];
 
@@ -466,18 +466,18 @@ describe("ImagesTab's shared images (common-media/)", () => {
     expect(screen.queryByText("flat-lay-01")).not.toBeInTheDocument();
   });
 
-  it("adds one as the listing-relative bare path a listing stores", async () => {
-    /* `media:` holds these as a plain string resolved against the listing's
-       own directory, not as a {template, colour} entry. */
+  it("adds one as the workspace-rooted ref a listing stores", async () => {
+    /* `media:` holds these as a plain string ref (PRD 72), not as a
+       {template, colour} entry. */
     const onUpdate = renderShared();
     fireEvent.click(await screen.findByRole("button", { name: "Images" }));
     fireEvent.click(await screen.findByRole("button", { name: "size-guide.png" }));
 
-    expect(onUpdate).toHaveBeenCalledWith({ media: ["../../common-media/size-guide.png"] });
+    expect(onUpdate).toHaveBeenCalledWith({ media: ["common-media/size-guide.png"] });
   });
 
   it("takes one back out when it is already in the listing", async () => {
-    const onUpdate = renderShared({ media: ["../../common-media/size-guide.png"] });
+    const onUpdate = renderShared({ media: ["common-media/size-guide.png"] });
     fireEvent.click(await screen.findByRole("button", { name: "Images" }));
     fireEvent.click(await screen.findByRole("button", { name: "size-guide.png" }));
 
@@ -497,7 +497,7 @@ describe("ImagesTab's shared images (common-media/)", () => {
   });
 
   it("draws a shared asset in the reel as a picture, not as its raw path", async () => {
-    renderShared({ media: ["../../common-media/size-guide.png"] });
+    renderShared({ media: ["common-media/size-guide.png"] });
     await screen.findByText("flat-lay-01");
 
     expect(screen.getByAltText("size-guide")).toHaveAttribute(
@@ -546,12 +546,12 @@ describe("ImagesTab's search", () => {
 
 describe("ImagesTab's full-size carousel", () => {
   const reel = detail({
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black", "white"],
     media: [
       { template: "flat-lay-01", colour: "black" },
       { template: "flat-lay-01", colour: "white" },
-      "../../common-media/size-guide.png",
+      "common-media/size-guide.png",
     ],
   });
 

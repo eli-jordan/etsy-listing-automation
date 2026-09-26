@@ -49,18 +49,18 @@ describe("PricingTab", () => {
         name: "tee-basic",
         garment_profile: "comfort-colors-1717",
         compatible: true,
-        ref: "../../pricing-plans/tee-basic.yaml",
+        ref: "pricing-plans/tee-basic.yaml",
       },
     ]);
     render(
       <PricingTab
-        detail={detail({ pricing_plan: "../../pricing-plans/tee-basic.yaml" })}
+        detail={detail({ pricing_plan: "pricing-plans/tee-basic.yaml" })}
         onUpdate={vi.fn()}
         onFlush={vi.fn()}
       />,
     );
     await waitFor(() =>
-      expect(screen.getByLabelText("Plan")).toHaveValue("../../pricing-plans/tee-basic.yaml"),
+      expect(screen.getByLabelText("Plan")).toHaveValue("pricing-plans/tee-basic.yaml"),
     );
     expect(screen.getByText("tee-basic")).toBeInTheDocument();
     expect(screen.getByLabelText("Price for size S")).toHaveValue(349);
@@ -75,27 +75,27 @@ describe("PricingTab", () => {
         name: "tee-basic",
         garment_profile: "comfort-colors-1717",
         compatible: true,
-        ref: "../../pricing-plans/tee-basic.yaml",
+        ref: "pricing-plans/tee-basic.yaml",
       },
       {
         name: "tee-premium",
         garment_profile: "comfort-colors-1717",
         compatible: true,
-        ref: "../../pricing-plans/tee-premium.yaml",
+        ref: "pricing-plans/tee-premium.yaml",
       },
     ]);
     render(
       <PricingTab
-        detail={detail({ pricing_plan: "../../pricing-plans/tee-basic.yaml" })}
+        detail={detail({ pricing_plan: "pricing-plans/tee-basic.yaml" })}
         onUpdate={onUpdate}
         onFlush={onFlush}
       />,
     );
     await screen.findByText("tee-premium");
     fireEvent.change(screen.getByLabelText("Plan"), {
-      target: { value: "../../pricing-plans/tee-premium.yaml" },
+      target: { value: "pricing-plans/tee-premium.yaml" },
     });
-    expect(onUpdate).toHaveBeenCalledWith({ pricing_plan: "../../pricing-plans/tee-premium.yaml" });
+    expect(onUpdate).toHaveBeenCalledWith({ pricing_plan: "pricing-plans/tee-premium.yaml" });
     expect(onFlush).toHaveBeenCalled();
   });
 

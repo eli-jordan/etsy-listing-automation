@@ -61,7 +61,7 @@ describe("toggleEntry", () => {
   });
 
   it("declines rather than writing a twenty-first image", () => {
-    const media = Array.from({ length: MAX_MEDIA }, (_, i) => `../../common-media/${i}.png`);
+    const media = Array.from({ length: MAX_MEDIA }, (_, i) => `common-media/${i}.png`);
     expect(toggleEntry(state({ media }), "flat-lay-01", "black")).toBeNull();
   });
 
@@ -76,18 +76,18 @@ describe("toggleEntry", () => {
 
 describe("toggleShared", () => {
   it("stores a shared asset as the bare ref, not an entry object", () => {
-    const patch = toggleShared(state(), "../../common-media/sizing.png");
-    expect(entries(patch)).toEqual(["../../common-media/sizing.png"]);
+    const patch = toggleShared(state(), "common-media/sizing.png");
+    expect(entries(patch)).toEqual(["common-media/sizing.png"]);
   });
 
   it("removes it again", () => {
-    const media = ["../../common-media/sizing.png"];
-    expect(entries(toggleShared(state({ media }), "../../common-media/sizing.png"))).toEqual([]);
+    const media = ["common-media/sizing.png"];
+    expect(entries(toggleShared(state({ media }), "common-media/sizing.png"))).toEqual([]);
   });
 
   it("declines at the ceiling", () => {
     const media = Array.from({ length: MAX_MEDIA }, (_, i) => `a-${i}.png`);
-    expect(toggleShared(state({ media }), "../../common-media/sizing.png")).toBeNull();
+    expect(toggleShared(state({ media }), "common-media/sizing.png")).toBeNull();
   });
 });
 

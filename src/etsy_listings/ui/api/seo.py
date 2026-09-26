@@ -91,7 +91,7 @@ from etsy_listings.ui.api.schemas import (
     SeoWarningEntry,
 )
 from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import PathEscapesWorkspaceError, Workspace
+from etsy_listings.workspace.workspace import InvalidRefError, Workspace
 
 router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
 brief_router = APIRouter(prefix="/api/ai", tags=["ai-brief"])
@@ -234,7 +234,12 @@ def _active_requests(request: Request) -> ActiveSeoRequests:
 def _primary_design_image(workspace: Workspace, name: str, listing: Listing) -> Path:
     listing_dir = workspace.listing_dir(name)
     key = next((k for k in _PREFERRED_DESIGN_KEYS if k in listing.design), min(listing.design))
-    return workspace.resolve(listing.design[key], relative_to=listing_dir)
+    try:
+        return workspace.resolve_ref(listing.design[key], listing_dir=listing_dir)
+    except InvalidRefError as exc:
+        # A seller's file to fix (PRD 72's legacy form, most likely), so a
+        # 409 naming it, the way a missing garment profile is answered.
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def _readiness(
@@ -311,14 +316,17 @@ def _build_request(workspace: Workspace, name: str, listing: Listing) -> SeoRequ
 def _build_brief_request(workspace: Workspace, asked: DesignBriefRequest) -> BriefRequest:
     """The one input a drafted brief has: the design image.
 
-    Checked rather than trusted, because it arrives from a browser. The path
-    goes through `Workspace.resolve`, which refuses anything outside the
-    workspace, and then has to exist -- a provider handed a missing image
-    describes nothing, and says so confidently.
+    Checked rather than trusted, because it arrives from a browser. It is a
+    `design:` ref, so it goes through `Workspace.resolve_ref` (PRD 72), which
+    refuses anything outside the workspace, and then has to exist -- a
+    provider handed a missing image describes nothing, and says so
+    confidently. The listing may not be named yet, hence the draft directory.
     """
     try:
-        design_image = workspace.resolve(asked.design, relative_to=workspace.root)
-    except PathEscapesWorkspaceError as exc:
+        design_image = workspace.resolve_ref(
+            asked.design, listing_dir=workspace.draft_listing_dir()
+        )
+    except InvalidRefError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     if not design_image.is_file():
         raise HTTPException(status_code=409, detail=f"no design file at {asked.design!r}")

@@ -69,8 +69,8 @@ export type DesignBriefOutcome =
  * Takes only the design -- not a listing name, and not a garment profile --
  * because the moment a brief is wanted is the moment a design is attached,
  * which while a seller is creating a listing is before it has a name, a
- * file, or a garment chosen. `design` is workspace-relative
- * (`designs/take-a-hike.png`): see `media.ts.workspacePath`.
+ * file, or a garment chosen. `design` is the listing's own `design:` ref
+ * (`designs/take-a-hike.png`, PRD 72), sent as stored.
  *
  * The same three outcomes a proposal request has, for the same reason -- and
  * with more riding on the third here, because nobody asked for this request.

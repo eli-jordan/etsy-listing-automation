@@ -160,7 +160,7 @@ class TestListListings:
     def test_a_row_names_the_design_its_thumbnail_is_addressed_by(self, client: TestClient) -> None:
         """The table shows the artwork, so a row has to carry the name
         `GET /api/listing-designs/{name}/thumbnail` takes -- the stem, not
-        the ``../../designs/take-a-hike.png`` ref stored in listing.yaml."""
+        the ``designs/take-a-hike.png`` ref stored in listing.yaml."""
         row = {r["name"]: r for r in client.get("/api/listings").json()}["take-a-hike"]
         assert row["design"] == "take-a-hike"
         assert client.get(f"/api/listing-designs/{row['design']}/thumbnail").status_code == 200
@@ -175,8 +175,8 @@ class TestListListings:
         path = workspace_root / "listings" / "take-a-hike" / "listing.yaml"
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
         raw["design"] = {
-            "on-light": "../../designs/take-a-hike.png",
-            "on-dark": "../../designs/take-a-hike.png",
+            "on-light": "designs/take-a-hike.png",
+            "on-dark": "designs/take-a-hike.png",
         }
         path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
 
@@ -240,8 +240,8 @@ class TestGetListingDetail:
         edit_listing(
             workspace_root,
             design={
-                "default": "../../designs/take-a-hike.png",
-                "alternate": "../../designs/missing.png",
+                "default": "designs/take-a-hike.png",
+                "alternate": "designs/missing.png",
             },
         )
         first = client.get("/api/listings/take-a-hike").json()["design_content_hash"]
@@ -637,7 +637,7 @@ class TestCreateListing:
     def _document(self, **over: object) -> dict[str, object]:
         document: dict[str, object] = {
             "garment_profile": "comfort-colors-1717",
-            "design": "../../designs/take-a-hike.png",
+            "design": "designs/take-a-hike.png",
             "colors": ["black"],
             "brief": "",
             "prices": {"S": "349 NOK"},
@@ -655,7 +655,7 @@ class TestCreateListing:
         assert response.status_code == 200
         body = response.json()
         assert body["name"] == "my-new-shirt"
-        assert body["design"] == {"default": "../../designs/take-a-hike.png"}
+        assert body["design"] == {"default": "designs/take-a-hike.png"}
         assert body["colors"] == ["black"]
 
         written = workspace_root / "listings" / "my-new-shirt" / "listing.yaml"
@@ -782,7 +782,7 @@ class TestListingDraft:
         an unsaved listing has for being told what it needs is lying to it."""
         document = {
             "garment_profile": "comfort-colors-1717",
-            "design": "../../designs/take-a-hike.png",
+            "design": "designs/take-a-hike.png",
             "colors": ["black"],
             "brief": "",
             "media": [],
@@ -815,7 +815,7 @@ class TestListingDraft:
             json={
                 "document": {
                     "garment_profile": "comfort-colors-1717",
-                    "design": "../../designs/take-a-hike.png",
+                    "design": "designs/take-a-hike.png",
                     "colors": ["black"],
                     "brief": "",
                     "media": [],
@@ -938,9 +938,9 @@ class TestSupportingEndpoints:
         assert by_name["tee-basic"]["compatible"] is True
         assert by_name["other-garment"]["compatible"] is False
         # `ref` is what a PATCH writes straight into `pricing_plan:` --
-        # listing-relative, ready to use unchanged (mirrors
+        # workspace-rooted (PRD 72), ready to use unchanged (mirrors
         # `CommonMediaSummary.ref`).
-        assert by_name["tee-basic"]["ref"] == "../../pricing-plans/tee-basic.yaml"
+        assert by_name["tee-basic"]["ref"] == "pricing-plans/tee-basic.yaml"
 
     def test_lists_listing_designs(self, client: TestClient) -> None:
         response = client.get("/api/listing-designs")
@@ -969,9 +969,8 @@ class TestSupportingEndpoints:
     def test_lists_common_media_with_the_ref_a_listing_stores(
         self, client: TestClient, workspace_root: Path
     ) -> None:
-        """A bare media entry resolves relative to the listing's own directory
-        (PRD 8a), the same as `design:` -- so the picker hands back the ref
-        ready to write, not a workspace-relative path the caller must fix up."""
+        """The picker hands back the ref ready to write. A shared file's ref is
+        its workspace-relative path (PRD 72), with no `../../` in front."""
         shared = workspace_root / "common-media"
         shared.mkdir(exist_ok=True)
         (shared / "size-guide.png").write_bytes(b"")
@@ -979,7 +978,7 @@ class TestSupportingEndpoints:
         response = client.get("/api/common-media")
         assert response.status_code == 200
         by_name = {row["name"]: row for row in response.json()}
-        assert by_name["size-guide"]["ref"] == "../../common-media/size-guide.png"
+        assert by_name["size-guide"]["ref"] == "common-media/size-guide.png"
         assert by_name["size-guide"]["file"] == "common-media/size-guide.png"
 
     def test_common_media_is_empty_on_a_workspace_that_has_none(self, client: TestClient) -> None:

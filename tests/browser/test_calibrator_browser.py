@@ -789,9 +789,14 @@ class TestKindPickerCreatesEachKind:
             {"just-the-one.png": self._source(workspace_root)},
         )
 
+        from playwright.sync_api import expect
+
+        # Waited for, not read once: the picker renders before its colour
+        # report lands, and until then it cannot know there is only one
+        # photo -- on a slow runner the first read saw colour-matrix enabled.
         colour_matrix = page.locator('.kind-picker input[value="colour-matrix"]')
-        assert colour_matrix.is_disabled()
-        assert page.locator('.kind-picker input[value="single"]').is_checked()
+        expect(colour_matrix).to_be_disabled()
+        expect(page.locator('.kind-picker input[value="single"]')).to_be_checked()
         # `multiple` is a chart: one photo with several garments in it, so it
         # is exactly the single-photo case and must stay offered.
-        assert page.locator('.kind-picker input[value="multiple"]').is_enabled()
+        expect(page.locator('.kind-picker input[value="multiple"]')).to_be_enabled()

@@ -35,8 +35,8 @@ const FLAT_LAY: TemplateSummary = {
 };
 
 describe("refName", () => {
-  it("takes the stem of a listing-relative ref", () => {
-    expect(refName("../../common-media/sizing-chart.png")).toBe("sizing-chart");
+  it("takes the stem of a ref", () => {
+    expect(refName("common-media/sizing-chart.png")).toBe("sizing-chart");
   });
 
   it("takes the stem of a bare filename", () => {
@@ -44,7 +44,7 @@ describe("refName", () => {
   });
 
   it("keeps a name with no extension", () => {
-    expect(refName("../../common-media/README")).toBe("README");
+    expect(refName("common-media/README")).toBe("README");
   });
 
   it("strips only the last extension, so a dotted name survives", () => {
@@ -54,12 +54,12 @@ describe("refName", () => {
 
 describe("singleDesignName", () => {
   it("names the one design", () => {
-    expect(singleDesignName({ default: "../../designs/take-a-hike.png" })).toBe("take-a-hike");
+    expect(singleDesignName({ default: "designs/take-a-hike.png" })).toBe("take-a-hike");
   });
 
   it("answers null for a multi-artwork listing, which has no single design", () => {
     expect(
-      singleDesignName({ "on-light": "../../designs/a.png", "on-dark": "../../designs/b.png" }),
+      singleDesignName({ "on-light": "designs/a.png", "on-dark": "designs/b.png" }),
     ).toBeNull();
   });
 
@@ -78,13 +78,13 @@ describe("mediaLabel", () => {
   });
 
   it("labels a shared asset by its filename", () => {
-    expect(mediaLabel("../../common-media/sizing.png")).toBe("sizing");
+    expect(mediaLabel("common-media/sizing.png")).toBe("sizing");
   });
 });
 
 describe("isInMedia", () => {
   const media: MediaEntry[] = [
-    "../../common-media/sizing.png",
+    "common-media/sizing.png",
     { template: "flat-lay-01", colour: "black" },
     { template: "rack-shot", colour: null },
   ];
@@ -102,7 +102,7 @@ describe("isInMedia", () => {
   });
 
   it("never matches a shared asset", () => {
-    expect(isInMedia(media, "../../common-media/sizing.png", null)).toBe(false);
+    expect(isInMedia(media, "common-media/sizing.png", null)).toBe(false);
   });
 });
 
@@ -141,13 +141,13 @@ describe("pictureFor", () => {
   });
 
   it("serves a shared asset as-is at full size -- it is already what Etsy gets", () => {
-    expect(pictureFor("../../common-media/sizing.png", "take-a-hike")).toBe(
+    expect(pictureFor("common-media/sizing.png", "take-a-hike")).toBe(
       "/api/common-media/sizing/file",
     );
   });
 
   it("serves a shared asset's thumbnail for a tile", () => {
-    expect(pictureFor("../../common-media/sizing.png", null, "tile")).toBe(
+    expect(pictureFor("common-media/sizing.png", null, "tile")).toBe(
       "/api/common-media/sizing/thumbnail",
     );
   });

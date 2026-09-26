@@ -60,6 +60,23 @@ class PathEscapesWorkspaceError(ValueError):
         super().__init__(f"path {ref!r} escapes the workspace root ({root})")
 
 
+MIGRATION_SCRIPT = "scripts/migrate_workspace_refs.py"
+"""PRD 72's one-off rewrite, named by every refusal of the form it replaces."""
+
+
+class InvalidRefError(ConfigLoadError):
+    """A path in ``listing.yaml`` that is not a two-root ref (PRD 72).
+
+    A :class:`ConfigLoadError`, so a stage that meets one fails that listing
+    with a sentence rather than a traceback, and the rest of an ``--all``
+    batch carries on (PRD 16).
+    """
+
+    def __init__(self, listing_dir: Path, ref: str, detail: str) -> None:
+        self.ref = ref
+        super().__init__(listing_dir / layout.LISTING_FILE, f"ref {ref!r}: {detail}")
+
+
 @dataclass(frozen=True)
 class DescriptionResolution:
     """One common-copy read, shared by the editor's preview and its issue check."""
@@ -244,11 +261,11 @@ class Workspace:
         raise WorkspaceNotFoundError(search_start)
 
     def resolve(self, ref: str, relative_to: Path) -> Path:
-        """Resolve ``ref`` (as written in a config file) to an absolute path.
+        """Resolve ``ref`` against ``relative_to`` to an absolute path.
 
-        ``relative_to`` is the directory the reference is written relative to
-        (typically the config file's own directory), matching how the PRD's
-        example configs use ``../../designs/take-a-hike.png``-style paths.
+        The escape check every path goes through (A8). A path written in
+        ``listing.yaml`` does not come here directly: :meth:`resolve_ref`
+        interprets its two roots first, then calls this.
         Raises :class:`PathEscapesWorkspaceError` if the result would fall
         outside :attr:`root`.
         """
@@ -261,6 +278,41 @@ class Workspace:
         except ValueError as exc:
             raise PathEscapesWorkspaceError(ref, self.root) from exc
         return candidate
+
+    def resolve_ref(self, ref: str, *, listing_dir: Path) -> Path:
+        """The one interpreter of a path written in ``listing.yaml`` (PRD 72).
+
+        Two roots: no prefix is the workspace root (``designs/x.png``), and
+        ``./`` is the listing's own directory (``./shots/back.png``).
+        Subdirectories are fine under either; ``..`` is refused anywhere, so a
+        ref says where its file is without a reader having to count levels.
+        The result still goes through :meth:`resolve`'s escape check (A8), which
+        is what catches a symlink out of the root.
+
+        ``listing_dir`` rather than a name, because the editor's unnamed draft
+        has no directory of its own and resolves against a stand-in at the
+        same depth. Every refusal is an :class:`InvalidRefError`.
+        """
+        if Path(ref).is_absolute() or _looks_like_windows_absolute(ref):
+            raise InvalidRefError(listing_dir, ref, "an absolute path is not a ref")
+        if "\\" in ref:
+            raise InvalidRefError(listing_dir, ref, "use '/' between directories, not a backslash")
+        if ref.startswith("../"):
+            raise InvalidRefError(
+                listing_dir,
+                ref,
+                "'..' refs are the old listing-relative form; write it from the workspace "
+                f"root instead (run {MIGRATION_SCRIPT} to rewrite a whole workspace)",
+            )
+        if ".." in ref.split("/"):
+            raise InvalidRefError(listing_dir, ref, "'..' is not allowed in a ref")
+        base, rest = (listing_dir, ref[2:]) if ref.startswith("./") else (self.root, ref)
+        if all(segment in ("", ".") for segment in rest.split("/")):
+            raise InvalidRefError(listing_dir, ref, "the ref is empty")
+        try:
+            return self.resolve(rest, relative_to=base)
+        except PathEscapesWorkspaceError as exc:
+            raise InvalidRefError(listing_dir, ref, str(exc)) from exc
 
     def cache(self, *parts: str) -> Path:
         return self.root.joinpath(layout.CACHE_DIR, *parts)
@@ -308,6 +360,15 @@ class Workspace:
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)
 
+    def draft_listing_dir(self) -> Path:
+        """A listing directory for a listing that has none yet -- the editor's
+        unnamed draft, and the design a brief is drafted from before the
+        listing is named. A workspace-rooted ref (PRD 72) lands on the same file
+        from any listing directory, so this answers for them exactly as a real
+        one would; a `./` ref finds nothing here, which is right, since a
+        listing with no directory has no files of its own."""
+        return self.root / layout.LISTINGS_DIR / "_"
+
     def listing_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LISTING_FILE
 
@@ -324,13 +385,13 @@ class Workspace:
         for key, ref in sorted(design.items()):
             content_hash: str | None = None
             try:
-                path = self.resolve(ref, relative_to=listing_dir)
+                path = self.resolve_ref(ref, listing_dir=listing_dir)
                 file_digest = hashlib.sha256()
                 with path.open("rb") as source:
                     for chunk in iter(lambda: source.read(1024 * 1024), b""):
                         file_digest.update(chunk)
                 content_hash = file_digest.hexdigest()
-            except (OSError, PathEscapesWorkspaceError):
+            except (OSError, InvalidRefError):
                 pass
             entry = json.dumps((key, ref, content_hash), ensure_ascii=False)
             digest.update(entry.encode("utf-8"))
@@ -402,11 +463,9 @@ class Workspace:
         """Verify a `description.ref` and resolve it -- beneath
         `common-copy/` only (PRD's description model).
 
-        Unlike `design:`/`pricing_plan:` refs, which are written relative to
-        the listing's own directory, a common-copy ref is portable: written
-        once, relative to the workspace root, the same wherever it is
-        referenced from (`common-copy/comfort-colors.md`, never
-        `../../common-copy/...`). It still goes through :meth:`resolve` for
+        Written from the workspace root, as every ref is (PRD 72), but
+        narrower than :meth:`resolve_ref`: it has no `./` form, because
+        common copy is shared by definition. It still goes through :meth:`resolve` for
         the general escape checks (absolute paths, `..` past the root,
         Windows drive forms), plus one more: the result must actually land
         inside :meth:`common_copy_dir`, so `common-copy/../listings/x` -- inside

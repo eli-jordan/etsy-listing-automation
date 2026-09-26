@@ -31,7 +31,7 @@ function plan(stagePlans: StagePlanDTO[], etsyListingId: number | null = 1): Pla
 function detail(): ListingDetail {
   return {
     garment_profile: "comfort-colors-1717",
-    design: { default: "../../designs/take-a-hike.png" },
+    design: { default: "designs/take-a-hike.png" },
     colors: ["black"],
     brief: "",
     prices: {},

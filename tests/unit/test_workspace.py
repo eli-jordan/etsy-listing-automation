@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.workspace.workspace import (
     AmbiguousColourSuffixError,
     InvalidNameError,
+    InvalidRefError,
     PathEscapesWorkspaceError,
     Workspace,
     WorkspaceNotFoundError,
@@ -42,8 +44,7 @@ def test_discover_raises_when_not_found(tmp_path: Path) -> None:
 
 def test_resolve_within_root(workspace_root: Path) -> None:
     ws = Workspace.discover(root_override=workspace_root)
-    listing_dir = ws.root / "listings" / "take-a-hike"
-    resolved = ws.resolve("../../designs/take-a-hike.png", relative_to=listing_dir)
+    resolved = ws.resolve("designs/take-a-hike.png", relative_to=ws.root)
     assert resolved == (ws.root / "designs" / "take-a-hike.png").resolve()
 
 
@@ -91,6 +92,84 @@ def test_resolve_rejects_symlink_escape(workspace_root: Path, tmp_path: Path) ->
     ws = Workspace.discover(root_override=workspace_root)
     with pytest.raises(PathEscapesWorkspaceError):
         ws.resolve("escape-link/secret.png", relative_to=ws.root / "designs")
+
+
+class TestResolveRef:
+    """PRD 72: every path in `listing.yaml` is a ref with two roots."""
+
+    @pytest.fixture
+    def ws(self, workspace_root: Path) -> Workspace:
+        return Workspace.discover(root_override=workspace_root)
+
+    def test_a_ref_with_no_prefix_is_the_workspace_root(self, ws: Workspace) -> None:
+        listing_dir = ws.listing_dir("take-a-hike")
+        resolved = ws.resolve_ref("designs/take-a-hike.png", listing_dir=listing_dir)
+        assert resolved == ws.root / "designs" / "take-a-hike.png"
+
+    def test_a_dot_slash_ref_is_the_listing_directory(self, ws: Workspace) -> None:
+        listing_dir = ws.listing_dir("take-a-hike")
+        resolved = ws.resolve_ref("./close-up.mp4", listing_dir=listing_dir)
+        assert resolved == ws.root / "listings" / "take-a-hike" / "close-up.mp4"
+
+    def test_subdirectories_are_allowed_under_either_root(self, ws: Workspace) -> None:
+        listing_dir = ws.listing_dir("take-a-hike")
+        assert (
+            ws.resolve_ref("./shots/back.png", listing_dir=listing_dir)
+            == ws.root / "listings" / "take-a-hike" / "shots" / "back.png"
+        )
+        assert (
+            ws.resolve_ref("pricing-plans/tees/basic.yaml", listing_dir=listing_dir)
+            == ws.root / "pricing-plans" / "tees" / "basic.yaml"
+        )
+
+    def test_a_legacy_parent_ref_names_the_migration_script(self, ws: Workspace) -> None:
+        with pytest.raises(InvalidRefError, match=r"scripts/migrate_workspace_refs\.py"):
+            ws.resolve_ref("../../designs/take-a-hike.png", listing_dir=ws.listing_dir("x"))
+
+    @pytest.mark.parametrize(
+        "ref",
+        [
+            "designs/../listings/x/secret.png",
+            "./shots/../../other/listing.yaml",
+            "common-media/..",
+            "..",
+        ],
+    )
+    def test_dot_dot_anywhere_is_refused(self, ws: Workspace, ref: str) -> None:
+        with pytest.raises(InvalidRefError, match=r"'\.\.'"):
+            ws.resolve_ref(ref, listing_dir=ws.listing_dir("x"))
+
+    @pytest.mark.parametrize(
+        "ref", ["/etc/passwd", "C:\\Windows\\x.png", "C:x.png", "//server/share/x.png"]
+    )
+    def test_an_absolute_ref_is_refused(self, ws: Workspace, ref: str) -> None:
+        with pytest.raises(InvalidRefError, match="absolute"):
+            ws.resolve_ref(ref, listing_dir=ws.listing_dir("x"))
+
+    def test_a_backslash_is_refused(self, ws: Workspace) -> None:
+        with pytest.raises(InvalidRefError, match="backslash"):
+            ws.resolve_ref("designs\\take-a-hike.png", listing_dir=ws.listing_dir("x"))
+
+    @pytest.mark.parametrize("ref", ["", "./", "."])
+    def test_an_empty_ref_is_refused(self, ws: Workspace, ref: str) -> None:
+        with pytest.raises(InvalidRefError, match="empty"):
+            ws.resolve_ref(ref, listing_dir=ws.listing_dir("x"))
+
+    def test_the_error_is_a_config_error_about_the_listing_file(self, ws: Workspace) -> None:
+        listing_dir = ws.listing_dir("take-a-hike")
+        with pytest.raises(ConfigLoadError) as caught:
+            ws.resolve_ref("../x.png", listing_dir=listing_dir)
+        assert caught.value.path == listing_dir / "listing.yaml"
+
+    @pytest.mark.skipif(os.name == "nt", reason="symlinks need elevation on Windows")
+    def test_it_still_refuses_a_symlink_out_of_the_root(
+        self, ws: Workspace, tmp_path: Path
+    ) -> None:
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (ws.root / "designs" / "escape-link").symlink_to(outside)
+        with pytest.raises(InvalidRefError, match="escapes"):
+            ws.resolve_ref("designs/escape-link/secret.png", listing_dir=ws.listing_dir("x"))
 
 
 def test_cache_path_is_under_root(workspace_root: Path) -> None:

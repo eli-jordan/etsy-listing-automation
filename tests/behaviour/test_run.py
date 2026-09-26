@@ -100,6 +100,17 @@ def test_a_failure_carries_the_message_not_a_stack(workspace_root: Path) -> None
     assert report.outcomes[0].planned is None
 
 
+def test_an_unmigrated_ref_fails_its_listing_naming_the_migration(workspace_root: Path) -> None:
+    """PRD 72: the old listing-relative form is refused by name -- as that
+    listing's failure, so the rest of an `--all` batch still plans."""
+    copy_listing(workspace_root, "legacy", design="../../designs/take-a-hike.png")
+
+    report = plan_listings(_ctx(workspace_root), ["legacy", LISTING], STAGES)
+
+    assert [outcome.ok for outcome in report.outcomes] == [False, True]
+    assert "scripts/migrate_workspace_refs.py" in str(report.outcomes[0].error)
+
+
 class _RefusingCatalog(FakeCatalogClient):
     """A catalog whose every read is refused, the way a live one refuses.
 

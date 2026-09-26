@@ -1104,10 +1104,9 @@ export interface components {
     /**
      * CommonCopySummary
      * @description One `common-copy/*.md` file, for the Description tab's body-source
-     *     selector (AI SEO implementation plan, PR6). Unlike `CommonMediaSummary`'s
-     *     ref, a common-copy ref is portable -- workspace-relative, not
-     *     listing-relative -- so it is exactly what `description.ref` stores,
-     *     already usable as-is.
+     *     selector (AI SEO implementation plan, PR6). A common-copy ref is
+     *     workspace-relative, like every other ref (PRD 72), so it is exactly what
+     *     `description.ref` stores, already usable as-is.
      */
     CommonCopySummary: {
       /** Ref */

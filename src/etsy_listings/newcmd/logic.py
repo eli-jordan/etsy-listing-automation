@@ -374,14 +374,13 @@ def build_pricing_plan_choices(
     )
 
 
-def pricing_plan_ref(plan_path: Path, *, listing_dir: Path) -> str:
-    """The write-side counterpart to :meth:`Workspace.resolve` -- a
-    ``listing_dir``-relative POSIX ref, e.g.
-    ``'../../pricing-plans/tee-basic.yaml'``. Needed because (unlike
-    ``design``/``garment_profile``, which have one fixed depth) discovery under
-    ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the way
-    ``../../designs/{name}.png`` is."""
-    return plan_path.resolve().relative_to(listing_dir.resolve(), walk_up=True).as_posix()
+def pricing_plan_ref(plan_path: Path, *, root: Path) -> str:
+    """The write-side counterpart to :meth:`Workspace.resolve_ref` -- a
+    workspace-rooted POSIX ref (PRD 72), e.g. ``'pricing-plans/tee-basic.yaml'``.
+    Needed because (unlike ``design``, which has one fixed directory) discovery
+    under ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the
+    way ``designs/{name}.png`` is."""
+    return plan_path.resolve().relative_to(root.resolve()).as_posix()
 
 
 def compute_starting_prices(

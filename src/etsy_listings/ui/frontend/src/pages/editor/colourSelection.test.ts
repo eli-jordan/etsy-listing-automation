@@ -64,7 +64,7 @@ describe("selectColours", () => {
        shared asset is a bare path -- neither is about a variant, so dropping
        every colour leaves both alone (and `media` out of the patch, since
        there is nothing about it to change). */
-    const media = [{ template: "sizing-chart", colour: null }, "../../common-media/care.png"];
+    const media = [{ template: "sizing-chart", colour: null }, "common-media/care.png"];
     const listing = detail({ media });
     expect("media" in selectColours(listing, [])).toBe(false);
     expect(mediaLostBy(listing, [])).toBe(0);
@@ -95,7 +95,7 @@ describe("selectColours", () => {
       media: [
         { template: "flat-lay-01", colour: "black" },
         { template: "flat-lay-01", colour: "white" },
-        "../../common-media/care.png",
+        "common-media/care.png",
       ],
     });
     expect(mediaLostBy(listing, ["black"])).toBe(1);
