@@ -22,6 +22,7 @@ function mode(over: Partial<AiSeoMode> = {}): AiSeoMode {
     failure: null,
     startedAt: null,
     run: aiRunStub(),
+    market: null,
     chooseTitle: vi.fn(),
     rejectTitle: vi.fn(),
     chooseLead: vi.fn(),

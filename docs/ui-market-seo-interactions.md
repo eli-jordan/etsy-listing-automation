@@ -29,6 +29,11 @@ The mockup code lives in `src/etsy_listings/ui/frontend/design/screens/marketSeo
 Nothing in `src/` may import from `design/`. Port the markup and styles into
 the app; don't reference the mockup files.
 
+The ports: the indicator is `src/pages/editor/aiSeo/AiWorkflowIndicator.tsx`
+(PR 7). The panel is `src/pages/editor/market/MarketListingsPanel.tsx`, and
+`useMarketPanel.ts` beside it chooses the panel's state (PR 8). Their styles
+are in `src/index.css`.
+
 ## Contents
 
 1. [Workflow indicator](#1-workflow-indicator)
@@ -539,6 +544,10 @@ A two-option segmented switch, **Listings | Phrases**, sits under the searches
 line. The mockup draws it as `.mkt-switch` (L321-350). **The implementation
 reuses the app's existing `.seg` control** and its keyboard behaviour,
 instead of porting `.mkt-switch`, so the app has one segmented control.
+So the selected option is the app's accent, not the mockup's white pill.
+`.mkt-seg` only stretches it to the panel's width and sets its type size,
+and draws the focus ring inside each option, where `.seg`'s overflow
+clipping can't hide it.
 
 ([`Phrases`, L146-165](../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L146))
 
@@ -573,10 +582,10 @@ AI Mode picked up.
 | State | When | Shows | Frame |
 |---|---|---|---|
 | none | No snapshot yet and no run | Nothing: the panel isn't rendered, and the fields keep their current width | — |
-| `loading` | The market node is active, including on a re-run over an existing snapshot | *Searching Etsy for …* (queries pulsing, filled by the `queries` event) and five shimmering skeleton rows | `researching` |
+| `loading` | The market node is active, including on a re-run over an existing snapshot | *Searching Etsy for …* (queries pulsing, filled by the `queries` event) and five shimmering skeleton rows. Until that event arrives, the line reads *Choosing Etsy searches from the brief…* | `researching` |
 | `ready` | A `market` event, or a snapshot loaded on mount | Everything above | `suggesting`, `ready`, `states` |
 | `empty` | The market node ended in `warning` | Searches line and a neutral note: *No comparable listings found. Etsy returned nothing for these searches, even without the age filter. The suggestions were written from the design and brief alone.* | `states` |
-| `failed` | The market node ended in `failed` | A note with a red heading: *Etsy market search failed*, the reason, then *Nothing changed. Run AI Mode again to retry.* A failed run doesn't replace the snapshot, so a reload shows the previous results again | `states` |
+| `failed` | The market node ended in `failed` while the editor was watching the run | A note with a red heading: *Etsy market search failed*, the reason (the step's detail without that prefix), then *Nothing changed. Run AI Mode again to retry.* A failed run doesn't replace the snapshot, so a reload shows the previous results again. The reload replays the failed run, but the panel only shows a failure it watched happen | `states` |
 
 The `PanelState` union is at
 [`MarketListingsPanel.tsx:31-35`](../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L31).

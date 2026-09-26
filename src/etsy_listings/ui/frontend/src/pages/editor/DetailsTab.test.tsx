@@ -4,7 +4,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../api/listings";
 import * as seoApi from "../../api/seo";
 import type { SaveState } from "../../hooks/useAutosave";
-import { type FakeAiRuns, fakeAiRuns, phaseEvent, proposalEvent } from "../../test/aiRuns";
+import {
+  type FakeAiRuns,
+  aiRunSummary,
+  fakeAiRuns,
+  marketEvent,
+  phaseEvent,
+  proposalEvent,
+  queriesEvent,
+  stepEvent,
+} from "../../test/aiRuns";
+import { MARKET_QUERIES, marketSnapshot } from "../../test/market";
 import type { ListingDetail, SeoProposalResponse } from "../../types";
 import { DetailsTab as DetailsTabView } from "./DetailsTab";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
@@ -719,5 +729,111 @@ describe("DetailsTab AI Mode", () => {
 
     expect(await screen.findByText(/couldn.t generate/i)).toBeInTheDocument();
     expect(onUpdate).not.toHaveBeenCalled();
+  });
+});
+
+describe("DetailsTab top listings panel", () => {
+  const withDesign = () =>
+    detail({ design: { default: "designs/take-a-hike.png" }, brief: "A relaxed hiking tee." });
+
+  function fieldset() {
+    return screen.getByRole("group", { name: "Listing details" });
+  }
+
+  it("keeps the fields at their own width when there is no search to show", async () => {
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    await waitFor(() => expect(runs.market).toHaveBeenCalledWith("take-a-hike"));
+    expect(screen.queryByRole("complementary", { name: "Top listings on Etsy" })).toBeNull();
+    expect(fieldset().closest(".mkt-layout")).toBeNull();
+  });
+
+  it("puts the last search beside the fields", async () => {
+    runs.market.mockResolvedValue(marketSnapshot());
+
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    const panel = await screen.findByRole("complementary", { name: "Top listings on Etsy" });
+    const layout = fieldset().closest(".mkt-layout");
+    expect(layout?.children).toHaveLength(2);
+    expect(layout?.children[0]).toHaveClass("details-tab");
+    expect(layout?.children[0]).toContainElement(fieldset());
+    expect(layout?.children[1]).toBe(panel);
+  });
+
+  it("keeps the seller's place in the fields when the panel appears", async () => {
+    runs.find.mockResolvedValue(aiRunSummary());
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    const title = screen.getByLabelText("Title");
+    title.focus();
+
+    runs.emit(stepEvent("market", "active"));
+
+    expect(screen.getByRole("complementary", { name: "Top listings on Etsy" })).toBeVisible();
+    expect(screen.getByLabelText("Title")).toBe(title);
+    expect(title).toHaveFocus();
+  });
+
+  it("shows research as the run does it, and what it found", async () => {
+    runs.find.mockResolvedValue(aiRunSummary());
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+
+    runs.emit(stepEvent("market", "active"), queriesEvent(MARKET_QUERIES));
+
+    const panel = screen.getByRole("complementary", { name: "Top listings on Etsy" });
+    expect(panel).toHaveTextContent("Searching Etsy for “retro sunset hiking shirt”");
+
+    runs.emit(marketEvent(marketSnapshot({ found: 31 })), stepEvent("market", "done"));
+
+    expect(panel).toHaveTextContent("12 scored from 31 found");
+  });
+
+  it("ticks the phrases the pending suggestions use", async () => {
+    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
+      shop_name: "Pine & Thread",
+      storage_id: "workspace-1",
+    });
+    runs.market.mockResolvedValue(marketSnapshot());
+    runs.find.mockResolvedValue(aiRunSummary());
+    const user = userEvent.setup();
+    render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    const panel = await screen.findByRole("complementary", { name: "Top listings on Etsy" });
+    await user.click(within(panel).getByRole("tab", { name: "Phrases" }));
+    expect(within(panel).queryByLabelText("In your suggestions")).toBeNull();
+
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(
+      proposalEvent({
+        titles: ["Retro Hiking Shirt", "Title B", "Title C"],
+        tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
+        description_leads: ["Lead A", "Lead B", "Lead C"],
+        rationale: [],
+        warnings: [],
+        observed_text: "",
+        snapshot: {
+          brief: "A relaxed hiking tee.",
+          product_type: "",
+          etsy_category: "",
+          materials: [],
+          colors: ["black"],
+          garment_brand: "",
+          garment_model: "",
+          garment_profile: "comfort-colors-1717",
+          design: { default: "designs/take-a-hike.png" },
+          design_content_hash: null,
+        },
+        generated_at: new Date().toISOString(),
+        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+      }),
+    );
+
+    await waitFor(() =>
+      expect(within(panel).getAllByLabelText("In your suggestions")).toHaveLength(1),
+    );
+    const [ticked] = within(panel).getAllByRole("listitem");
+    expect(ticked).toHaveTextContent("retro hiking shirt");
+    expect(ticked).toContainElement(within(panel).getByLabelText("In your suggestions"));
   });
 });

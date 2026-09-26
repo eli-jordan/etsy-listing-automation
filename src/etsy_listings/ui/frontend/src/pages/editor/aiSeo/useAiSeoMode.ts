@@ -13,6 +13,8 @@ import {
 } from "./aiSeoStorage";
 import { canToggleTag } from "./aiSeoTags";
 import { type AiRun, useAiRun } from "./useAiRun";
+import type { MarketPanelState } from "../market/MarketListingsPanel";
+import { useMarketPanel } from "../market/useMarketPanel";
 
 /**
  * Listing Details' **AI Mode** (AI SEO implementation plan, PR7): readiness,
@@ -23,8 +25,9 @@ import { type AiRun, useAiRun } from "./useAiRun";
  * the tab it was started from; `DetailsTab` renders it.
  *
  * The run is exposed whole as `run`: its `steps` drive the page head's
- * indicator, and its `queries` and `market` are what the market panel will
- * read. What this hook adds is what AI Mode does with a run's two actionable
+ * indicator, and `market` is the top listings panel's state, built from the
+ * run's market node and events and the listing's saved snapshot
+ * (`useMarketPanel`). What this hook adds is what AI Mode does with a run's two actionable
  * events: a drafted brief goes into the field through `onAdopt` (the server
  * already wrote it, so it is not autosaved again), and a proposal goes into
  * `aiSeoStorage`, which is what opens the drawers.
@@ -64,8 +67,11 @@ export interface AiSeoMode {
   /** When the current run started (ms since the epoch). *Generating for…*
    * counts from here, so a reload mid-run keeps counting. */
   startedAt: number | null;
-  /** The run itself, for the page head's indicator and the market panel. */
+  /** The run itself, for the page head's indicator. */
   run: AiRun;
+  /** The top listings panel beside the fields, or `null` for none: what the
+   * run is researching or found, else the listing's saved snapshot. */
+  market: MarketPanelState | null;
   chooseTitle: (value: string) => void;
   rejectTitle: () => void;
   chooseLead: (value: string) => void;
@@ -136,6 +142,7 @@ export function useAiSeoMode(
   }, []);
 
   const run = useAiRun(detail, save, { onBrief, onProposal });
+  const market = useMarketPanel(detail.name, run);
 
   const hasDesign = Object.keys(detail.design).length > 0;
   const hasBrief = detail.brief.trim() !== "";
@@ -308,6 +315,7 @@ export function useAiSeoMode(
     failure: run.phase === "failed" ? run.message : null,
     startedAt: run.startedAt,
     run,
+    market,
     chooseTitle,
     rejectTitle,
     chooseLead,

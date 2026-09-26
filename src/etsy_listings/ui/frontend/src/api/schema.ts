@@ -429,6 +429,30 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/listings/{name}/market": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Market Snapshot
+     * @description The listing's latest market research, as the top listings panel shows
+     *     it after a reload (market-seo.md, *UI*). Written only by an AI run whose
+     *     search succeeded, so a failed run leaves the previous one here. 404 until
+     *     the first search -- the panel is not rendered then -- and for a snapshot
+     *     that no longer reads as one, which the next run replaces.
+     */
+    get: operations["get_market_snapshot_api_listings__name__market_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/listings/{name}/previews/{template}": {
     parameters: {
       query?: never;
@@ -3583,6 +3607,44 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["SeoReadinessResponse"];
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_market_snapshot_api_listings__name__market_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MarketSnapshot"];
+        };
+      };
+      /** @description No such listing, or no market search for it yet */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
