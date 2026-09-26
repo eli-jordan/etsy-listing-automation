@@ -1,6 +1,7 @@
 import { createRef } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { aiRunStub } from "../../../test/aiRuns";
 import { AiSeoControl } from "./AiSeoControl";
 import type { AiSeoMode } from "./useAiSeoMode";
 
@@ -18,6 +19,9 @@ function mode(over: Partial<AiSeoMode> = {}): AiSeoMode {
     stale: false,
     generate: vi.fn(),
     cancel: vi.fn(),
+    failure: null,
+    startedAt: null,
+    run: aiRunStub(),
     chooseTitle: vi.fn(),
     rejectTitle: vi.fn(),
     chooseLead: vi.fn(),
@@ -71,7 +75,7 @@ describe("AiSeoControl", () => {
   it("shows a polite loading status with Cancel while generating, and disables AI Mode", () => {
     vi.useFakeTimers();
     const cancel = vi.fn();
-    render(<AiSeoControl mode={mode({ phase: "loading", cancel })} />);
+    render(<AiSeoControl mode={mode({ phase: "loading", cancel, startedAt: Date.now() })} />);
 
     expect(screen.getByRole("tooltip", { hidden: true })).toHaveTextContent(
       "Generating title, description and tag recommendations for your review",
@@ -88,6 +92,25 @@ describe("AiSeoControl", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /cancel/i }));
     expect(cancel).toHaveBeenCalled();
+  });
+
+  it("counts from the run's own start, so a reload mid-run keeps counting", () => {
+    vi.useFakeTimers();
+    render(<AiSeoControl mode={mode({ phase: "loading", startedAt: Date.now() - 65_000 })} />);
+
+    expect(screen.getByText("Generating for 1:05 seconds")).toBeInTheDocument();
+  });
+
+  it("names what failed when the run says", () => {
+    render(
+      <AiSeoControl
+        mode={mode({ phase: "failed", failure: "Etsy market search failed: timed out" })}
+      />,
+    );
+
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "AI Mode couldn’t finish: Etsy market search failed: timed out",
+    );
   });
 
   it("shows a failure message with Try again, and leaves AI Mode enabled", () => {

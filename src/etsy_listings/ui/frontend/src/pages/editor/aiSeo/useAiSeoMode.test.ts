@@ -2,6 +2,14 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../../api/listings";
 import * as seoApi from "../../../api/seo";
+import {
+  aiRunSummary,
+  briefEvent,
+  type FakeAiRuns,
+  fakeAiRuns,
+  phaseEvent,
+  proposalEvent,
+} from "../../../test/aiRuns";
 import type {
   ListingDetail,
   SeoProposalResponse,
@@ -87,9 +95,22 @@ function mockReadiness(response: SeoReadinessResponse) {
   vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue(response);
 }
 
+let runs: FakeAiRuns;
+
 beforeEach(() => {
   localStorage.clear();
+  runs = fakeAiRuns();
 });
+
+function aiRunDone() {
+  return aiRunSummary({ phase: "done" });
+}
+
+/** The run behind the button delivers `body` and ends. */
+async function delivers(body: SeoProposalResponse) {
+  await waitFor(() => expect(runs.streams).toHaveLength(1));
+  runs.emit(proposalEvent(body), phaseEvent("done"));
+}
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -172,83 +193,138 @@ describe("useAiSeoMode availability", () => {
 });
 
 describe("useAiSeoMode generation", () => {
-  it("moves through loading to an idle phase with the stored proposal on success", async () => {
+  it("starts a run without drafting, and keeps the proposal it delivers", async () => {
     mockWorkspace();
     mockReadiness({ ready: true });
     const body = proposal();
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
     await waitFor(() => expect(result.current.available).toBe(true));
 
     act(() => result.current.generate());
     expect(result.current.phase).toBe("loading");
+    expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: false });
 
-    await waitFor(() => expect(result.current.phase).toBe("idle"));
+    await delivers(body);
+    expect(result.current.phase).toBe("idle");
     expect(result.current.proposal?.proposal).toEqual(body);
     expect(loadStoredProposal({ workspace: "workspace-1", listing: "take-a-hike" })).not.toBeNull();
   });
 
-  it("moves to a failed phase and stores nothing when generation fails", async () => {
+  it("exposes the run, and when it started", async () => {
     mockWorkspace();
     mockReadiness({ ready: true });
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "failed" });
+
+    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    await waitFor(() => expect(result.current.available).toBe(true));
+    act(() => result.current.generate());
+
+    await waitFor(() => expect(result.current.run.steps).toHaveLength(3));
+    expect(result.current.startedAt).toBe(result.current.run.startedAt);
+    expect(result.current.startedAt).not.toBeNull();
+  });
+
+  it("moves to a failed phase, says why, and stores nothing when the run fails", async () => {
+    mockWorkspace();
+    mockReadiness({ ready: true });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
     await waitFor(() => expect(result.current.available).toBe(true));
 
     act(() => result.current.generate());
-    await waitFor(() => expect(result.current.phase).toBe("failed"));
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(phaseEvent("failed", "Etsy market search failed: timed out"));
+
+    expect(result.current.phase).toBe("failed");
+    expect(result.current.failure).toBe("Etsy market search failed: timed out");
     expect(result.current.proposal).toBeNull();
   });
 
-  it("returns to idle with no stored proposal when generation is cancelled", async () => {
+  it("cancels the run and returns to idle with no proposal", async () => {
     mockWorkspace();
     mockReadiness({ ready: true });
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "cancelled" });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
     await waitFor(() => expect(result.current.available).toBe(true));
 
     act(() => result.current.generate());
-    await waitFor(() => expect(result.current.phase).toBe("idle"));
-    expect(result.current.proposal).toBeNull();
-  });
-
-  it("aborts the in-flight request and returns to idle when cancel() is called", async () => {
-    mockWorkspace();
-    mockReadiness({ ready: true });
-    const requestSeoProposal = vi
-      .spyOn(seoApi, "requestSeoProposal")
-      .mockImplementation(() => new Promise<seoApi.SeoProposalOutcome>(() => {}));
-
-    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
-    await waitFor(() => expect(result.current.available).toBe(true));
-
-    act(() => result.current.generate());
-    expect(result.current.phase).toBe("loading");
-
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
     act(() => result.current.cancel());
+    runs.emit(phaseEvent("cancelled"));
+
+    expect(runs.cancel).toHaveBeenCalledWith("run-1");
     expect(result.current.phase).toBe("idle");
-    const signal = requestSeoProposal.mock.calls[0]?.[1];
-    expect(signal?.aborted).toBe(true);
+    expect(result.current.proposal).toBeNull();
   });
 
-  it("aborts the in-flight request on unmount", async () => {
+  it("does not reopen drawers the seller resolved when the run replays after a reload", async () => {
     mockWorkspace();
     mockReadiness({ ready: true });
-    const requestSeoProposal = vi
-      .spyOn(seoApi, "requestSeoProposal")
-      .mockImplementation(() => new Promise<seoApi.SeoProposalOutcome>(() => {}));
+    const body = proposal();
+    const first = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    await waitFor(() => expect(first.result.current.available).toBe(true));
+    act(() => first.result.current.generate());
+    await delivers(body);
+    act(() => first.result.current.rejectTitle());
+    first.unmount();
 
-    const { result, unmount } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
-    await waitFor(() => expect(result.current.available).toBe(true));
+    runs.find.mockResolvedValue(aiRunDone());
+    const second = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    await waitFor(() => expect(runs.streams).toHaveLength(2));
+    runs.emit(proposalEvent(body), phaseEvent("done"));
 
-    act(() => result.current.generate());
-    unmount();
+    await waitFor(() => expect(second.result.current.proposal).not.toBeNull());
+    expect(second.result.current.proposal?.unresolved.title).toBe(false);
+  });
+});
 
-    const signal = requestSeoProposal.mock.calls[0]?.[1];
-    expect(signal?.aborted).toBe(true);
+describe("useAiSeoMode and the auto chain's brief", () => {
+  it("puts a drafted brief into an empty field without saving it again", async () => {
+    const onUpdate = vi.fn();
+    const onAdopt = vi.fn();
+    const { result } = renderHook(() =>
+      useAiSeoMode(detail({ brief: "" }), onUpdate, vi.fn(), undefined, onAdopt),
+    );
+
+    act(() => result.current.run.start({ draftBrief: true }));
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(briefEvent("Retro sunset over mountains."));
+
+    expect(onAdopt).toHaveBeenCalledWith({ brief: "Retro sunset over mountains." });
+    expect(onUpdate).not.toHaveBeenCalled();
+  });
+
+  it("leaves a brief the seller typed meanwhile alone", async () => {
+    const onAdopt = vi.fn();
+    const { result, rerender } = renderHook(
+      (d: ListingDetail) => useAiSeoMode(d, vi.fn(), vi.fn(), undefined, onAdopt),
+      { initialProps: detail({ brief: "" }) },
+    );
+    act(() => result.current.run.start({ draftBrief: true }));
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+
+    rerender(detail({ brief: "My own words." }));
+    runs.emit(briefEvent("Retro sunset over mountains."));
+
+    expect(onAdopt).not.toHaveBeenCalled();
+  });
+
+  it("keeps a proposal that arrives before the workspace is known", async () => {
+    mockWorkspace();
+    mockReadiness({ ready: true });
+    const body = proposal();
+    const { result, rerender } = renderHook(
+      (d: ListingDetail) => useAiSeoMode(d, vi.fn(), vi.fn()),
+      { initialProps: detail({ brief: "" }) },
+    );
+    act(() => result.current.run.start({ draftBrief: true }));
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(proposalEvent(body), phaseEvent("done"));
+    expect(result.current.proposal).toBeNull();
+
+    rerender(detail());
+
+    await waitFor(() => expect(result.current.proposal?.proposal).toEqual(body));
   });
 });
 
@@ -256,7 +332,6 @@ async function readyHookWithProposal(onUpdate = vi.fn(), onFlush = vi.fn()) {
   mockWorkspace();
   mockReadiness({ ready: true });
   const body = proposal();
-  vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
 
   const { result, rerender } = renderHook(
     (d: ListingDetail) => useAiSeoMode(d, onUpdate, onFlush),
@@ -264,6 +339,7 @@ async function readyHookWithProposal(onUpdate = vi.fn(), onFlush = vi.fn()) {
   );
   await waitFor(() => expect(result.current.available).toBe(true));
   act(() => result.current.generate());
+  await delivers(body);
   await waitFor(() => expect(result.current.proposal).not.toBeNull());
   return { result, rerender, body };
 }
@@ -318,14 +394,13 @@ describe("useAiSeoMode acceptance", () => {
     mockWorkspace();
     mockReadiness({ ready: true });
     const body = proposal();
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
 
     const { result } = renderHook((d: ListingDetail) => useAiSeoMode(d, onUpdate, vi.fn()), {
       initialProps: detail({ etsy: { ...detail().etsy, tags: ["tag-0"] } }),
     });
     await waitFor(() => expect(result.current.available).toBe(true));
     act(() => result.current.generate());
-    await waitFor(() => expect(result.current.proposal).not.toBeNull());
+    await delivers(body);
 
     act(() => result.current.toggleTag("tag-0"));
 
@@ -337,7 +412,6 @@ describe("useAiSeoMode acceptance", () => {
     mockWorkspace();
     mockReadiness({ ready: true });
     const body = proposal();
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
     const thirteen = Array.from({ length: 13 }, (_, i) => `existing-${i}`);
 
     const { result } = renderHook(() =>
@@ -345,7 +419,7 @@ describe("useAiSeoMode acceptance", () => {
     );
     await waitFor(() => expect(result.current.available).toBe(true));
     act(() => result.current.generate());
-    await waitFor(() => expect(result.current.proposal).not.toBeNull());
+    await delivers(body);
 
     act(() => result.current.toggleTag("tag-0"));
 
@@ -388,10 +462,6 @@ describe("useAiSeoMode stale state", () => {
   it("keeps an in-flight proposal tied to the saved inputs it used", async () => {
     mockWorkspace();
     mockReadiness({ ready: true });
-    let finish!: (value: Awaited<ReturnType<typeof seoApi.requestSeoProposal>>) => void;
-    vi.spyOn(seoApi, "requestSeoProposal").mockImplementation(
-      () => new Promise((resolve) => (finish = resolve)),
-    );
     const { result, rerender } = renderHook(
       (d: ListingDetail) => useAiSeoMode(d, vi.fn(), vi.fn()),
       {
@@ -401,8 +471,9 @@ describe("useAiSeoMode stale state", () => {
     await waitFor(() => expect(result.current.available).toBe(true));
 
     act(() => result.current.generate());
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
     rerender(detail({ design: { default: "designs/new.png" }, garment_profile: "new-profile" }));
-    await act(async () => finish({ kind: "success", proposal: proposal() }));
+    runs.emit(proposalEvent(proposal()), phaseEvent("done"));
 
     expect(result.current.stale).toBe(true);
   });

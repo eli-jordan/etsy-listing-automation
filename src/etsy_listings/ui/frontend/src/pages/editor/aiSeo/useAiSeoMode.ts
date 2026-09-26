@@ -1,31 +1,38 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { getWorkspace } from "../../../api/listings";
 import type { SaveState } from "../../../hooks/useAutosave";
-import { getSeoReadiness, requestSeoProposal } from "../../../api/seo";
-import type { ListingDetail } from "../../../types";
+import { getSeoReadiness } from "../../../api/seo";
+import type { ListingDetail, SeoProposalResponse } from "../../../types";
 import {
   type AiSeoStorageScope,
   type StoredAiSeoProposal,
   isStale,
   loadStoredProposal,
-  saveStoredProposal,
-  toStoredProposal,
+  receiveProposal,
   updateUnresolved,
 } from "./aiSeoStorage";
 import { canToggleTag } from "./aiSeoTags";
+import { type AiRun, useAiRun } from "./useAiRun";
 
 /**
  * Listing Details' **AI Mode** (AI SEO implementation plan, PR7): readiness,
- * one request at a time with cancellation, the browser-local pending
- * proposal, staleness against the current editor state, and the three
- * independent per-field acceptance actions. `DetailsTab` is the one caller;
- * this hook exists separately so each of those concerns (readiness polling,
- * the abortable request, local-storage persistence) has one seam a test can
- * drive without rendering the whole tab.
+ * the AI run behind the button (`useAiRun`; market-seo.md, *AI runs*), the
+ * browser-local pending proposal, staleness against the current editor
+ * state, and the three independent per-field acceptance actions.
+ * `ListingEditorPageContent` owns it, above the tabs, because a run outlives
+ * the tab it was started from; `DetailsTab` renders it.
+ *
+ * The run is exposed whole as `run`: its `steps` drive the page head's
+ * indicator, and its `queries` and `market` are what the market panel will
+ * read. What this hook adds is what AI Mode does with a run's two actionable
+ * events: a drafted brief goes into the field through `onAdopt` (the server
+ * already wrote it, so it is not autosaved again), and a proposal goes into
+ * `aiSeoStorage`, which is what opens the drawers.
  *
  * `getWorkspace()` supplies an opaque root identity for PRD 4's browser-only
- * proposal scope. Generation waits for it, so two roots with the same shop
- * name cannot restore each other's pending choices.
+ * proposal scope, so two roots with the same shop name cannot restore each
+ * other's pending choices. A proposal that arrives before it is kept until
+ * it does.
  */
 
 export type AiSeoPhase = "idle" | "loading" | "failed";
@@ -44,14 +51,21 @@ export interface AiSeoMode {
    * values -- visible but not selectable until regenerated. Always `false`
    * when `proposal` is `null`. */
   stale: boolean;
-  /** Starts a request, or replaces the current proposal with a fresh one
-   * (this is also what a seller's "Regenerate" click on a stale proposal
-   * calls -- one control, since a request always produces one complete
+  /** Starts a run from the button -- always without drafting, since the
+   * button needs a brief -- or replaces the current proposal with a fresh
+   * one (this is also what a seller's "Regenerate" click on a stale
+   * proposal calls -- one control, since a run always produces one complete
    * proposal for all three fields). */
   generate: () => void;
-  /** Aborts the in-flight request, if any, and returns to `"idle"` with no
-   * proposal retained. */
+  /** Cancels the run. A brief or snapshot it already wrote stays. */
   cancel: () => void;
+  /** Why the last run failed or was refused, while `phase` is `"failed"`. */
+  failure: string | null;
+  /** When the current run started (ms since the epoch). *Generating for…*
+   * counts from here, so a reload mid-run keeps counting. */
+  startedAt: number | null;
+  /** The run itself, for the page head's indicator and the market panel. */
+  run: AiRun;
   chooseTitle: (value: string) => void;
   rejectTitle: () => void;
   chooseLead: (value: string) => void;
@@ -66,6 +80,9 @@ export function useAiSeoMode(
   onUpdate: (patch: Record<string, unknown>) => void,
   onFlush: () => void,
   save?: SaveState,
+  /** Puts a value the server already wrote into the editor without saving
+   * it again (`useAutosave`'s `adopt`). The drafted brief arrives this way. */
+  onAdopt?: (patch: Record<string, unknown>) => void,
 ): AiSeoMode {
   const [workspaceId, setWorkspaceId] = useState<string | null>(null);
   const [workspaceFailed, setWorkspaceFailed] = useState(false);
@@ -78,22 +95,47 @@ export function useAiSeoMode(
   // here needs the extra render that resetting this to `false` would cost).
   const [remoteReady, setRemoteReady] = useState(false);
   const [remoteReason, setRemoteReason] = useState<string | null>(null);
-  const [phase, setPhase] = useState<AiSeoPhase>("idle");
   const [stored, setStored] = useState<StoredAiSeoProposal | null>(null);
-  const controllerRef = useRef<AbortController | null>(null);
-  // `onUpdate`/`onFlush`/`detail` as the pending request should see them once
-  // it resolves -- a request can take up to 60 seconds, during which the
-  // seller may keep editing, and the acceptance actions must always act on
-  // what is on screen *now*, not what was on screen when `generate()` was
-  // called. Mirrors `useAutosave`'s own `latest` ref for the same reason.
+  // `onUpdate`/`onFlush`/`detail` as a run's events should see them when they
+  // arrive -- a run can take minutes, during which the seller may keep
+  // editing, and the acceptance actions must always act on what is on screen
+  // *now*, not what was on screen when `generate()` was called. Mirrors
+  // `useAutosave`'s own `latest` ref for the same reason.
   const latestDetail = useRef(detail);
   const latestOnUpdate = useRef(onUpdate);
   const latestOnFlush = useRef(onFlush);
+  const latestOnAdopt = useRef(onAdopt);
   useEffect(() => {
     latestDetail.current = detail;
     latestOnUpdate.current = onUpdate;
     latestOnFlush.current = onFlush;
+    latestOnAdopt.current = onAdopt;
   });
+  /** The workspace's storage id once known, for the run's event handlers. */
+  const workspaceRef = useRef<string | null>(null);
+  /** A proposal that arrived before the workspace id did. The auto chain
+   * starts with an empty brief, and the id is only asked for once there is
+   * one, so the proposal waits here for it. */
+  const awaiting = useRef<SeoProposalResponse | null>(null);
+
+  const onProposal = useCallback((proposal: SeoProposalResponse) => {
+    const workspace = workspaceRef.current;
+    if (workspace === null) {
+      awaiting.current = proposal;
+      return;
+    }
+    setStored(receiveProposal({ workspace, listing: latestDetail.current.name }, proposal));
+  }, []);
+
+  // Only into an empty field: the seller may have started typing their own
+  // brief while it was drafted, and their text wins. (The server made the
+  // same check before it wrote, but the editor can be ahead of the disk.)
+  const onBrief = useCallback((text: string) => {
+    if (latestDetail.current.brief.trim() !== "") return;
+    latestOnAdopt.current?.({ brief: text });
+  }, []);
+
+  const run = useAiRun(detail, save, { onBrief, onProposal });
 
   const hasDesign = Object.keys(detail.design).length > 0;
   const hasBrief = detail.brief.trim() !== "";
@@ -116,9 +158,15 @@ export function useAiSeoMode(
     let current = true;
     getWorkspace()
       .then((workspace) => {
-        if (current) {
-          setWorkspaceId(workspace.storage_id);
-          setWorkspaceFailed(false);
+        if (!current) return;
+        workspaceRef.current = workspace.storage_id;
+        setWorkspaceId(workspace.storage_id);
+        setWorkspaceFailed(false);
+        const proposal = awaiting.current;
+        awaiting.current = null;
+        if (proposal !== null) {
+          const scope = { workspace: workspace.storage_id, listing: latestDetail.current.name };
+          setStored(receiveProposal(scope, proposal));
         }
       })
       .catch(() => {
@@ -188,40 +236,9 @@ export function useAiSeoMode(
     setStored(workspaceId === null ? null : loadStoredProposal(scope));
   }
 
-  const abortActive = useCallback(() => {
-    controllerRef.current?.abort();
-    controllerRef.current = null;
-  }, []);
-
-  useEffect(() => abortActive, [abortActive, scope]);
-
-  const generate = useCallback(() => {
-    if (workspaceId === null) return;
-    abortActive();
-    const controller = new AbortController();
-    controllerRef.current = controller;
-    setPhase("loading");
-    const requestScope = scope;
-    requestSeoProposal(latestDetail.current.name, controller.signal).then((outcome) => {
-      if (controllerRef.current !== controller) return;
-      controllerRef.current = null;
-      if (outcome.kind === "success") {
-        const next = toStoredProposal(outcome.proposal);
-        saveStoredProposal(requestScope, next);
-        setStored(next);
-        setPhase("idle");
-      } else if (outcome.kind === "cancelled") {
-        setPhase("idle");
-      } else {
-        setPhase("failed");
-      }
-    });
-  }, [abortActive, scope, workspaceId]);
-
-  const cancel = useCallback(() => {
-    abortActive();
-    setPhase("idle");
-  }, [abortActive]);
+  const startRun = run.start;
+  const generate = useCallback(() => startRun({ draftBrief: false }), [startRun]);
+  const phase: AiSeoPhase = run.busy ? "loading" : run.phase === "failed" ? "failed" : "idle";
 
   const stale = stored !== null && isStale(stored, detail);
 
@@ -287,7 +304,10 @@ export function useAiSeoMode(
     proposal: stored,
     stale,
     generate,
-    cancel,
+    cancel: run.cancel,
+    failure: run.phase === "failed" ? run.message : null,
+    startedAt: run.startedAt,
+    run,
     chooseTitle,
     rejectTitle,
     chooseLead,

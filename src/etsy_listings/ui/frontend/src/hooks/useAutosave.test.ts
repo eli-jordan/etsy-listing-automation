@@ -348,6 +348,36 @@ describe("useAutosave", () => {
   });
 });
 
+describe("useAutosave adopting what the server wrote", () => {
+  it("shows the value without saving it again", async () => {
+    const patch = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+    const before = result.current.save;
+
+    act(() => result.current.adopt({ brief: "Drafted by the AI run." }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(result.current.detail.brief).toBe("Drafted by the AI run.");
+    expect(result.current.save).toBe(before);
+    expect(patch).not.toHaveBeenCalled();
+  });
+
+  it("leaves an edit that is still pending to be sent as it was", async () => {
+    const patch = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
+    const { result } = renderHook(() => useAutosave("take-a-hike", detail()));
+
+    act(() => result.current.update({ colors: ["white"] }));
+    act(() => result.current.adopt({ brief: "Drafted by the AI run." }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(patch).toHaveBeenCalledWith("take-a-hike", { colors: ["white"] });
+  });
+});
+
 describe("useAutosave before the listing exists", () => {
   const draft = () =>
     detail({ name: "", garment_profile: "", design: {}, colors: [], prices: {}, media: [] });

@@ -19,7 +19,7 @@ export function AiSeoControl({
   buttonRef?: Ref<HTMLButtonElement>;
 }) {
   const loading = mode.phase === "loading";
-  const elapsed = useElapsed(loading);
+  const elapsed = useElapsed(loading ? mode.startedAt : null);
   return (
     <>
       <div
@@ -85,7 +85,11 @@ export function AiSeoControl({
 
       {mode.phase === "failed" && (
         <div className="seo-inline-status" role="status" aria-live="polite">
-          <span>AI Mode couldn’t generate valid suggestions. Nothing changed.</span>
+          <span>
+            {mode.failure
+              ? `AI Mode couldn’t finish: ${mode.failure}`
+              : "AI Mode couldn’t generate valid suggestions. Nothing changed."}
+          </span>
           <button type="button" onClick={mode.generate}>
             Try again
           </button>
@@ -95,22 +99,18 @@ export function AiSeoControl({
   );
 }
 
-/** Seconds since `active` became true, reset when it stops. */
-function useElapsed(active: boolean): number {
-  const [seconds, setSeconds] = useState(0);
-  const [prevActive, setPrevActive] = useState(active);
-  if (active !== prevActive) {
-    setPrevActive(active);
-    if (!active) setSeconds(0);
-  }
+/** Whole seconds since `startedAt` (the run's own start, from the server,
+ * so a reload mid-run keeps counting rather than starting again at 0:00);
+ * 0 while there is no running run. */
+function useElapsed(startedAt: number | null): number {
+  const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!active) return;
-    const started = Date.now();
-    const update = () => setSeconds(Math.floor((Date.now() - started) / 1000));
-    const id = window.setInterval(update, 250);
+    if (startedAt === null) return;
+    const id = window.setInterval(() => setNow(Date.now()), 250);
     return () => window.clearInterval(id);
-  }, [active]);
-  return active ? seconds : 0;
+  }, [startedAt]);
+  if (startedAt === null) return 0;
+  return Math.max(0, Math.floor((now - startedAt) / 1000));
 }
 
 function formatElapsed(seconds: number): string {

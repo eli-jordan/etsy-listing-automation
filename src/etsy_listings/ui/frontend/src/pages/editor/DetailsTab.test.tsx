@@ -1,21 +1,36 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../api/listings";
 import * as seoApi from "../../api/seo";
 import type { SaveState } from "../../hooks/useAutosave";
+import { type FakeAiRuns, fakeAiRuns, phaseEvent, proposalEvent } from "../../test/aiRuns";
 import type { ListingDetail, SeoProposalResponse } from "../../types";
 import { DetailsTab as DetailsTabView } from "./DetailsTab";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
+
+let runs: FakeAiRuns;
+
+beforeEach(() => {
+  localStorage.clear();
+  runs = fakeAiRuns();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
 });
 
+/** What the AI run behind the button sends once it has written the
+ * suggestions: the proposal, then the end of the run. */
+async function runDelivers(body: SeoProposalResponse) {
+  await waitFor(() => expect(runs.streams).toHaveLength(1));
+  runs.emit(proposalEvent(body), phaseEvent("done"));
+}
+
 /** The tab with AI Mode attached, exactly as `ListingEditorShell` mounts it.
  *
  * `useAiSeoMode` moved out of `DetailsTab` and up to the shell (PRD 68): a
- * request has to survive a tab switch, and the chain that starts one begins
+ * run has to survive a tab switch, and the chain that starts one begins
  * at the design strip above the tabs. Every test below is still about what
  * the tab *does* with AI Mode, so the harness supplies the same wiring the
  * real caller does rather than a stub -- a hand-built `AiSeoMode` object
@@ -629,11 +644,11 @@ describe("DetailsTab AI Mode", () => {
     });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     const aiModeButton = await screen.findByRole("button", { name: /AI Mode/i });
     await userEvent.click(aiModeButton);
+    await runDelivers(body);
 
     expect(await screen.findByRole("region", { name: "title AI suggestions" })).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "tag AI suggestions" })).toBeInTheDocument();
@@ -651,11 +666,11 @@ describe("DetailsTab AI Mode", () => {
     });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "success", proposal: body });
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
     const aiModeButton = await screen.findByRole("button", { name: /AI Mode/i });
     await userEvent.click(aiModeButton);
+    await runDelivers(body);
     await screen.findByRole("region", { name: "title AI suggestions" });
 
     await userEvent.click(screen.getByRole("button", { name: /Title A/ }));
@@ -675,15 +690,12 @@ describe("DetailsTab AI Mode", () => {
       storage_id: "workspace-1",
     });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({
-      kind: "success",
-      proposal: proposal(),
-    });
     const onUpdate = vi.fn();
     const onFlush = vi.fn();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={onFlush} />);
     await userEvent.click(await screen.findByRole("button", { name: /AI Mode/i }));
+    await runDelivers(proposal());
     await screen.findByRole("region", { name: "title AI suggestions" });
 
     await userEvent.click(screen.getByRole("button", { name: /Title B/ }));
@@ -698,11 +710,12 @@ describe("DetailsTab AI Mode", () => {
       storage_id: "workspace-1",
     });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
-    vi.spyOn(seoApi, "requestSeoProposal").mockResolvedValue({ kind: "failed" });
     const onUpdate = vi.fn();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
     await userEvent.click(await screen.findByRole("button", { name: /AI Mode/i }));
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    runs.emit(phaseEvent("failed"));
 
     expect(await screen.findByText(/couldn.t generate/i)).toBeInTheDocument();
     expect(onUpdate).not.toHaveBeenCalled();

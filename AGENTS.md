@@ -226,6 +226,13 @@ src/etsy_listings/
                 frontend/src/media.ts — what `media:` holds and what it looks
                   like: every picture URL and every ref→name derivation, for
                   both halves of the app
+                frontend/src/pages/editor/aiSeo/useAiRun.ts — the editor's
+                  side of an AI run: start, follow (the SSE reader is
+                  src/api/sse.ts, shared with plan/apply runs), reattach on
+                  mount, cancel, and PRD 68's auto chain (armed by a design
+                  pick, fired by the next save that can run it). Its
+                  `steps`/`queries`/`market` are rebuilt from the events, so a
+                  reload shows the same run again
                 frontend/src/pages/editor/ — the Images tab is four modules:
                   MediaLocator (browse and add), MediaReel (order, by drag),
                   focus (what the preview points at) and mediaEdits (what a

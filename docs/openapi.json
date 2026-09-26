@@ -5433,7 +5433,7 @@
     },
     "/api/listings/{name}/ai-seo/readiness": {
       "get": {
-        "description": "Whether **AI Mode** may be offered for this saved listing right now\n-- the call the frontend makes to decide whether to enable the always\nvisible control. Read-only: every check here, including each\nprovider's own `readiness()`, is a local probe (a file's existence, a\nfast `--help`/`login status` subprocess) that changes nothing.",
+        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button starts an AI run that never drafts\nthe brief, so this is ``POST /api/ai/runs``'s own rule set for\n``draft_brief=false``: a lit button is one the server will not refuse.\nRead-only: every check here, including each provider's own\n`readiness()`, is a local probe (a file's existence, a fast\n`--help`/`login status` subprocess) that changes nothing.",
         "operationId": "get_seo_readiness_api_listings__name__ai_seo_readiness_get",
         "parameters": [
           {

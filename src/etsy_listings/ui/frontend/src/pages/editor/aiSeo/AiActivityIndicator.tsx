@@ -1,33 +1,32 @@
-import type { AiSeoMode } from "./useAiSeoMode";
-import type { AutoDesignBrief } from "./useAutoDesignBrief";
+import type { WorkflowStep } from "../../../types";
+
+/** What each node says while it is the active one -- the labels of
+ * `docs/ui-market-seo-interactions.md` section 1's anatomy table. */
+const ACTIVE_LABEL: Record<WorkflowStep["id"], string> = {
+  brief: "Drafting brief…",
+  market: "Researching the market…",
+  seo: "Writing suggestions…",
+};
 
 /**
- * What the editor's page head says while PRD 68's chain runs, beside the
- * autosave meta line.
+ * What the editor's page head says while an AI run works, beside the
+ * autosave meta line: the label of the step that is running, taken from the
+ * run's latest `step` events (market-seo.md, *AI runs*), so a reload mid-run
+ * shows it again.
  *
  * It belongs next to "Saved a moment ago" rather than beside the field it is
  * about, because it reports the same *kind* of thing that line does: work
- * this editor started on its own and will finish without being asked. A
- * seller who attached a design is normally looking at Variants, several
- * scrolls from the Brief field, and the head is the one part of the editor
- * that reads the same on every tab.
+ * this editor started and will finish without being asked. A seller who
+ * attached a design is normally looking at Variants, several scrolls from
+ * the Brief field, and the head is the one part of the editor that reads the
+ * same on every tab.
  *
- * Two messages, in the order the chain produces them, and nothing else --
- * no cancel, no retry, no count. The failure a draft can end in is reported
- * where it can be acted on (the Brief field is simply still empty, and AI
- * Mode's own control explains what it needs); a spinner in a page head is
- * the wrong place to put a decision.
- *
- * Renders nothing at all in the ordinary case, which is most of the time.
+ * Renders nothing at all when no step is running, which is most of the time.
+ * PR 7 replaces this with the three-node workflow indicator.
  */
-export function AiActivityIndicator({ auto, aiSeo }: { auto: AutoDesignBrief; aiSeo: AiSeoMode }) {
-  const label =
-    auto.phase === "drafting"
-      ? "Generating brief…"
-      : aiSeo.phase === "loading"
-        ? "Generating SEO…"
-        : null;
-  if (label === null) return null;
+export function AiActivityIndicator({ steps }: { steps: WorkflowStep[] }) {
+  const active = steps.find((step) => step.state === "active");
+  if (active === undefined) return null;
 
   return (
     <span className="ai-activity" role="status" aria-live="polite">
@@ -37,7 +36,7 @@ export function AiActivityIndicator({ auto, aiSeo }: { auto: AutoDesignBrief; ai
           work in progress. A loading spinner is the case where the motion
           *is* the information. */}
       <span className="dv-spinner" aria-hidden="true" />
-      {label}
+      {ACTIVE_LABEL[active.id]}
     </span>
   );
 }

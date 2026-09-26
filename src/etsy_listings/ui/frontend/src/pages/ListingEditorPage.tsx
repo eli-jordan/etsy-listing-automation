@@ -11,7 +11,6 @@ import type { Issue, IssueTab, ListingDetail } from "../types";
 import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { AiActivityIndicator } from "./editor/aiSeo/AiActivityIndicator";
 import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
-import { useAutoDesignBrief } from "./editor/aiSeo/useAutoDesignBrief";
 import { DeployControl } from "./editor/DeployControl";
 import { DesignSelect } from "./editor/DesignSelect";
 import { DetailsTab } from "./editor/DetailsTab";
@@ -64,6 +63,18 @@ export function ListingEditorPage() {
   // GET could answer with a document older than the save the unmounting editor
   // just flushed.
   const handed = (useLocation().state as { listing?: ListingDetail } | null)?.listing ?? null;
+  // Used once, then dropped from the browser's history entry: a reload keeps
+  // history state, and the handed document is the listing as it was named,
+  // long since changed on disk. `window.history` directly, not `navigate`,
+  // because React Router does not watch it -- this page must not re-render
+  // (and remount the editor) over it; only the next load must not see it.
+  useEffect(() => {
+    if (handed === null) return;
+    const entry = window.history.state as Record<string, unknown> | null;
+    if (entry !== null && typeof entry === "object" && "usr" in entry) {
+      window.history.replaceState({ ...entry, usr: null }, "");
+    }
+  }, [handed]);
   const [fetched, setFetched] = useState<ListingDetail | null>(null);
   const [loadError, setLoadError] = useState("");
 
@@ -114,9 +125,9 @@ export function ListingEditorPage() {
       // non-null. `useAutosave` handles a name change itself (`commitName`
       // updates its own `savedName`, `detail` and `save` before `onNamed`
       // fires), so that remount threw away state for nothing. It is not
-      // nothing any more: PRD 68's chain starts when a design is attached,
+      // nothing any more: PRD 68's chain is armed when a design is attached,
       // which on a new listing is usually *before* it is named, and a
-      // remount there aborted the request the seller was waiting on.
+      // remount there would disarm it before the save that fires it.
       name={routeName}
       initial={initial}
       onBack={() => navigate("/listings")}
@@ -141,20 +152,21 @@ function ListingEditorPageContent({
   onBack: () => void;
   onNamed: (name: string, fresh: ListingDetail) => void;
 }) {
-  const { detail, update, flush, commitName, save } = useAutosave(name, initial, { onNamed });
-  // Both AI requests live here rather than inside a tab: each outlives the
-  // tab that was showing when it started, and the chain that begins them
-  // begins at the design strip, above the tab strip (PRD 68). Living here
-  // rather than in `ListingEditorShell` is what lets the page head report
-  // them beside the autosave line.
+  const { detail, update, adopt, flush, commitName, save } = useAutosave(name, initial, {
+    onNamed,
+  });
+  // AI Mode, and the AI run behind it, live here rather than inside a tab: a
+  // run outlives the tab that was showing when it started, and the chain
+  // that begins one begins at the design strip, above the tab strip (PRD
+  // 68). Living here rather than in `ListingEditorShell` is what lets the
+  // page head report it beside the autosave line.
   /** A name the design pick chose, before the listing exists under it. */
   const [pickedName, setPickedName] = useState("");
   /** A name the seller has started typing but not committed. `detail.name` is
    * still `""` at that point -- an uncommitted name is not the listing's name
    * -- so without this a design pick would overwrite what they were typing. */
   const [typedName, setTypedName] = useState("");
-  const aiSeo = useAiSeoMode(detail, update, flush, save);
-  const autoBrief = useAutoDesignBrief(detail.brief, update, flush, aiSeo);
+  const aiSeo = useAiSeoMode(detail, update, flush, save, adopt);
 
   /** Everything picking a design sets off, in the one handler, because two of
    * the three need the pick itself rather than a later render of its effect.
@@ -182,7 +194,9 @@ function ListingEditorPageContent({
       setPickedName(named);
       commitName(named);
     }
-    autoBrief.start(ref);
+    // PRD 68: armed while the brief is empty, fired by the first save that
+    // can run it (`useAiRun`).
+    aiSeo.run.arm();
   }
 
   return (
@@ -197,7 +211,7 @@ function ListingEditorPageContent({
           detail={detail}
           onBack={onBack}
           flush={flush}
-          activity={<AiActivityIndicator auto={autoBrief} aiSeo={aiSeo} />}
+          activity={<AiActivityIndicator steps={aiSeo.run.steps} />}
           title={
             <EditableName
               value={name ?? pickedName}
@@ -290,12 +304,12 @@ export function ListingEditorShell({
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
   /** Everything one design pick sets off -- the edit, naming an unnamed
-   * draft, and the brief draft. Built by `ListingEditorPageContent`, which is
+   * draft, and arming the AI chain. Built by `ListingEditorPageContent`, which is
    * the layer that has `commitName`. */
   onPickDesign: (ref: string) => void;
   /** Owned by `ListingEditorPageContent`, not by this shell and not by
-   * `DetailsTab`: a request outlives the tab it was started from -- switching
-   * to Variants used to unmount the tab and abort a proposal mid-flight. */
+   * `DetailsTab`: a run outlives the tab it was started from -- switching to
+   * Variants unmounts the tab. */
   aiSeo: AiSeoMode;
   head: ReactNode;
 }) {
