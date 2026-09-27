@@ -24,14 +24,11 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-import yaml
-
 from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.listing_validation import Issue
 from etsy_listings.errors import UserFacingError
 from etsy_listings.listing_templates.check import check_listing_template_files
 from etsy_listings.workspace import layout
-from etsy_listings.workspace.atomic import write_bytes_atomic
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import InvalidRefError, Workspace, remove_tree
 
@@ -56,11 +53,13 @@ class ListingTemplateExistsError(UserFacingError, ValueError):
 
 @dataclass(frozen=True)
 class AssetCopy:
-    """One file the template will own: the ref it will name it by, and the
-    file on disk it is copied from."""
+    """One file the template will own: the ref it will name it by, the file
+    on disk it is copied from, and the ref its source names that file by --
+    what a picture of it has to be asked for until the copy exists."""
 
     ref: str
     source: Path
+    source_ref: str
 
 
 @dataclass(frozen=True)
@@ -126,7 +125,11 @@ def from_listing(workspace: Workspace, listing: str) -> ListingTemplateDraft:
     listing_dir = workspace.listing_dir(listing)
     renamed = {ref: _ASSETS_REF + ref.removeprefix("./") for ref in _local_refs(template)}
     assets = tuple(
-        AssetCopy(ref=new, source=_readable(ref, _resolve_listing_ref(workspace, ref, listing_dir)))
+        AssetCopy(
+            ref=new,
+            source=_readable(ref, _resolve_listing_ref(workspace, ref, listing_dir)),
+            source_ref=ref,
+        )
         for ref, new in renamed.items()
     )
     rewritten = template.model_copy(
@@ -162,7 +165,7 @@ def from_template(workspace: Workspace, template: str) -> ListingTemplateDraft:
             path = workspace.resolve_template_ref(ref, template=template)
         except InvalidRefError as exc:
             raise UnreadableAssetError(ref, exc.detail) from exc
-        assets.append(AssetCopy(ref=ref, source=_readable(ref, path)))
+        assets.append(AssetCopy(ref=ref, source=_readable(ref, path), source_ref=ref))
     return ListingTemplateDraft(template=document, assets=tuple(assets))
 
 
@@ -212,11 +215,7 @@ def save(
             target = workspace.resolve_template_ref(asset.ref, template=name)
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(asset.source, target)
-        document = draft.template.model_dump(mode="json", exclude_defaults=True)
-        write_bytes_atomic(
-            workspace.listing_template_file(name),
-            yaml.safe_dump(document, sort_keys=False, allow_unicode=True).encode("utf-8"),
-        )
+        workspace.write_listing_template(name, draft.template)
     except BaseException:
         remove_tree(directory)
         raise

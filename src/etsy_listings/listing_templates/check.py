@@ -52,10 +52,13 @@ def check_listing_template_files(
     )
 
 
-def saved_issues(workspace: Workspace, name: str, *, facts: WorkspaceFacts) -> list[Issue]:
-    """The issues a saved template has now -- a shared ref it names can have
-    changed under it since it was saved complete."""
-    template = workspace.load_listing_template(name)
+def template_issues(
+    workspace: Workspace, name: str, template: ListingTemplate, *, facts: WorkspaceFacts
+) -> list[Issue]:
+    """The issues ``template`` has as listing template ``name`` -- the one on
+    disk, whose shared refs can have changed under it since it was saved
+    complete, or a ``PUT``'s candidate, whose ``./`` refs name that
+    template's directory."""
 
     def resolve(ref: str) -> Path:
         return workspace.resolve_template_ref(ref, template=name)

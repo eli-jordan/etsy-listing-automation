@@ -58,6 +58,16 @@ class WorkspaceLocks:
                 stack.enter_context(self._lock(key))
             yield
 
+    @contextmanager
+    def listing_template(self, name: str) -> Iterator[None]:
+        """The same, for a listing template's name (A35): creating one checks
+        the name is free and then writes, and so does a ``PUT`` re-checking
+        it still exists. Its own key space -- a ``/`` can never be in a name
+        -- so a template and a listing that share a name never wait on each
+        other."""
+        with self._lock(f"listing-templates/{name.casefold()}"):
+            yield
+
     def _lock(self, key: str) -> threading.Lock:
         with self._guard:
             return self._locks.setdefault(key, threading.Lock())

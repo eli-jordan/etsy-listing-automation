@@ -13,7 +13,8 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from etsy_listings.config.listing import Listing
-from etsy_listings.config.media import MediaKind
+from etsy_listings.config.listing_template import ListingTemplate
+from etsy_listings.config.media import MediaEntry, MediaKind
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -400,6 +401,91 @@ class CreateListingRequest(BaseModel):
 
 class RenameListingRequest(BaseModel):
     new_name: str
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Listing templates (A35, A36). The detail reuses `ListingTemplate` directly,
+# as `ListingDetail` reuses `Listing`: the wire shape *is* template.yaml.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class ListingTemplateSummary(BaseModel):
+    """One card on the Listing templates page (UI doc §2)."""
+
+    name: str
+    garment_profile: str
+    garment: str | None
+    """The garment profile's blueprint as a seller names it --
+    ``Comfort Colors 1717`` -- or ``None`` when the profile will not load."""
+    colour_count: int
+    pricing_plan_name: str | None
+    """The plan ref's filename stem; ``None`` when the template prices its
+    sizes itself."""
+    media: list[MediaEntry]
+    batch_count: int = 0
+    """Batches made from this template. Always 0 until batches exist (PR 2)."""
+
+
+class _ListingTemplateView(ListingTemplate):
+    issues: list[Issue]
+    garment: str | None = None
+    pricing_plan_name: str | None = None
+    description_title: str | None = None
+    """The common-copy file's own title when the body is a ref, so the page
+    can name it rather than show a path."""
+
+
+class ListingTemplateDetail(_ListingTemplateView):
+    name: str
+    modified_at: datetime
+
+
+class ListingTemplateSource(BaseModel):
+    kind: Literal["listing", "listing-template"]
+    name: str
+
+
+class ListingTemplateAsset(BaseModel):
+    """A file the draft will copy: the ``./`` ref the template will name it
+    by, and the ref it has in its source -- which is where the *name it*
+    page's thumbnail has to come from, since the copy does not exist yet."""
+
+    ref: str
+    source_ref: str
+
+
+class ListingTemplateDraftDetail(_ListingTemplateView):
+    """A listing template as Save as listing template or Clone would write it,
+    written nowhere (UI doc §1)."""
+
+    source: ListingTemplateSource
+    assets: list[ListingTemplateAsset]
+
+
+class ListingTemplateSaveResult(BaseModel):
+    """What a create or ``PUT`` did (A36). Refusing an incomplete document is
+    a 200 with ``saved: false``, as a listing's malformed PATCH is, because the
+    editor shows the issues and keeps going; nothing was written."""
+
+    saved: bool
+    issues: list[Issue]
+    field_errors: dict[str, str] = {}
+    template: ListingTemplateDetail | None = None
+
+
+class CreateListingTemplateRequest(BaseModel):
+    """Save as listing template (``from_listing``) or Clone
+    (``from_template``) -- exactly one. There is no blank creation (spec)."""
+
+    name: str
+    from_listing: str | None = None
+    from_template: str | None = None
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> CreateListingTemplateRequest:
+        if (self.from_listing is None) == (self.from_template is None):
+            raise ValueError("give exactly one of from_listing and from_template")
+        return self
 
 
 # ──────────────────────────────────────────────────────────────────────────

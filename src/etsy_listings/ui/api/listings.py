@@ -435,7 +435,9 @@ def _describe(
     )
 
 
-def _field_errors(exc: ValidationError) -> dict[str, str]:
+def field_errors_of(exc: ValidationError) -> dict[str, str]:
+    """Each failed field, dotted, to pydantic's message: the ``field_errors``
+    a refused write answers with, here and in ``listing_templates.py``."""
     result: dict[str, str] = {}
     for error in exc.errors():
         loc = ".".join(str(part) for part in error["loc"]) or "__root__"
@@ -501,7 +503,7 @@ def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
         try:
             Listing.model_validate(merged, context={"currency": workspace.defaults.etsy.currency})
         except ValidationError as exc:
-            return _detail(workspace, name, field_errors=_field_errors(exc))
+            return _detail(workspace, name, field_errors=field_errors_of(exc))
         replace_listing_yaml(path, merged)
     return _detail(workspace, name)
 
@@ -572,7 +574,7 @@ def _describe_draft(
         listing = Listing.model_validate(dict(document), context={"currency": currency})
     except ValidationError as exc:
         listing = Listing.empty_draft(currency=currency)
-        field_errors = _field_errors(exc)
+        field_errors = field_errors_of(exc)
     return _describe(
         workspace,
         WorkspaceFacts.gather(workspace),

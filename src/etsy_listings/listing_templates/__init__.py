@@ -11,7 +11,7 @@ Deliberately withheld: instantiating a template into listings. That is batch
 creation's (A39), which freezes a template before it creates anything.
 """
 
-from etsy_listings.listing_templates.check import saved_issues
+from etsy_listings.listing_templates.check import template_issues
 from etsy_listings.listing_templates.convert import (
     AssetCopy,
     ListingTemplateDraft,
@@ -29,9 +29,9 @@ __all__ = [
     "AssetCopy",
     "from_listing",
     "from_template",
-    # Completeness (A36), for a draft and for a template already on disk.
+    # Completeness (A36), for a draft and for a named template.
     "draft_issues",
-    "saved_issues",
+    "template_issues",
     # The one write, and its two refusals.
     "save",
     "ListingTemplateExistsError",

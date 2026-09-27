@@ -326,6 +326,123 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/listing-templates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Listing Templates
+     * @description Every listing template, as its card on the Listing templates page shows
+     *     it (UI doc §2). A template whose file will not load is left out rather
+     *     than failing the page; it can only get that way by a hand edit.
+     */
+    get: operations["list_listing_templates_api_listing_templates_get"];
+    put?: never;
+    /**
+     * Create Listing Template
+     * @description Naming the draft is what writes it (UI doc §1). The name is checked
+     *     first, so a bad one is a 400 before any source is read.
+     */
+    post: operations["create_listing_template_api_listing_templates_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Template Draft
+     * @description The template Save as listing template or Clone would write, written
+     *     nowhere: what the *name it* page shows before the seller commits a name
+     *     (UI doc §1).
+     */
+    get: operations["listing_template_draft_api_listing_templates_draft_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{name}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Listing Template */
+    get: operations["get_listing_template_api_listing_templates__name__get"];
+    /**
+     * Put Listing Template
+     * @description A36: write the whole document only if it is complete. A malformed or
+     *     incomplete one leaves ``template.yaml`` byte-for-byte as it was, so the
+     *     server always holds the last complete version; the listing-template editor
+     *     (PR 6) keeps the unsaved values on its side.
+     */
+    put: operations["put_listing_template_api_listing_templates__name__put"];
+    post?: never;
+    /**
+     * Delete Listing Template
+     * @description Allowed whatever was made from it: batches keep their own frozen copy,
+     *     and a listing never had a link to it (spec, *Completeness and editing*).
+     */
+    delete: operations["delete_listing_template_api_listing_templates__name__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{template}/media-files/{path}/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listing Template Media File */
+    get: operations["listing_template_media_file_api_listing_templates__template__media_files__path__file_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{template}/media-files/{path}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Template Media Thumbnail
+     * @description A listing template's own file (its ``./`` root, A35) -- the pictures on
+     *     its card. The same boundary as a listing's: the directory also holds
+     *     ``template.yaml``.
+     */
+    get: operations["listing_template_media_thumbnail_api_listing_templates__template__media_files__path__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/listings": {
     parameters: {
       query?: never;
@@ -1413,6 +1530,19 @@ export interface components {
       /** Name */
       name: string;
     };
+    /**
+     * CreateListingTemplateRequest
+     * @description Save as listing template (``from_listing``) or Clone
+     *     (``from_template``) -- exactly one. There is no blank creation (spec).
+     */
+    CreateListingTemplateRequest: {
+      /** From Listing */
+      from_listing?: string | null;
+      /** From Template */
+      from_template?: string | null;
+      /** Name */
+      name: string;
+    };
     /** DescriptionConfig */
     DescriptionConfig: {
       /**
@@ -1981,6 +2111,167 @@ export interface components {
         | "pending-retire"
         | "inactive"
         | "expired";
+    };
+    /**
+     * ListingTemplateAsset
+     * @description A file the draft will copy: the ``./`` ref the template will name it
+     *     by, and the ref it has in its source -- which is where the *name it*
+     *     page's thumbnail has to come from, since the copy does not exist yet.
+     */
+    ListingTemplateAsset: {
+      /** Ref */
+      ref: string;
+      /** Source Ref */
+      source_ref: string;
+    };
+    /** ListingTemplateDetail */
+    ListingTemplateDetail: {
+      /** Colors */
+      colors: string[];
+      /** Description Title */
+      description_title?: string | null;
+      /**
+       * @default {
+       *       "description": {}
+       *     }
+       */
+      etsy: components["schemas"]["TemplateEtsyConfig"];
+      /** Garment */
+      garment?: string | null;
+      /** Garment Profile */
+      garment_profile: string;
+      /** Issues */
+      issues: components["schemas"]["Issue"][];
+      /** Media */
+      media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /**
+       * Modified At
+       * Format: date-time
+       */
+      modified_at: string;
+      /** Name */
+      name: string;
+      /**
+       * Price Overrides
+       * @default {}
+       */
+      price_overrides: {
+        [key: string]: {
+          [key: string]: string;
+        };
+      };
+      /**
+       * Prices
+       * @default {}
+       */
+      prices: {
+        [key: string]: string;
+      };
+      /** Pricing Plan */
+      pricing_plan?: string | null;
+      /** Pricing Plan Name */
+      pricing_plan_name?: string | null;
+    };
+    /**
+     * ListingTemplateDraftDetail
+     * @description A listing template as Save as listing template or Clone would write it,
+     *     written nowhere (UI doc §1).
+     */
+    ListingTemplateDraftDetail: {
+      /** Assets */
+      assets: components["schemas"]["ListingTemplateAsset"][];
+      /** Colors */
+      colors: string[];
+      /** Description Title */
+      description_title?: string | null;
+      /**
+       * @default {
+       *       "description": {}
+       *     }
+       */
+      etsy: components["schemas"]["TemplateEtsyConfig"];
+      /** Garment */
+      garment?: string | null;
+      /** Garment Profile */
+      garment_profile: string;
+      /** Issues */
+      issues: components["schemas"]["Issue"][];
+      /** Media */
+      media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /**
+       * Price Overrides
+       * @default {}
+       */
+      price_overrides: {
+        [key: string]: {
+          [key: string]: string;
+        };
+      };
+      /**
+       * Prices
+       * @default {}
+       */
+      prices: {
+        [key: string]: string;
+      };
+      /** Pricing Plan */
+      pricing_plan?: string | null;
+      /** Pricing Plan Name */
+      pricing_plan_name?: string | null;
+      source: components["schemas"]["ListingTemplateSource"];
+    };
+    /**
+     * ListingTemplateSaveResult
+     * @description What a create or ``PUT`` did (A36). Refusing an incomplete document is
+     *     a 200 with ``saved: false``, as a listing's malformed PATCH is, because the
+     *     editor shows the issues and keeps going; nothing was written.
+     */
+    ListingTemplateSaveResult: {
+      /**
+       * Field Errors
+       * @default {}
+       */
+      field_errors: {
+        [key: string]: string;
+      };
+      /** Issues */
+      issues: components["schemas"]["Issue"][];
+      /** Saved */
+      saved: boolean;
+      template?: components["schemas"]["ListingTemplateDetail"] | null;
+    };
+    /** ListingTemplateSource */
+    ListingTemplateSource: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "listing" | "listing-template";
+      /** Name */
+      name: string;
+    };
+    /**
+     * ListingTemplateSummary
+     * @description One card on the Listing templates page (UI doc §2).
+     */
+    ListingTemplateSummary: {
+      /**
+       * Batch Count
+       * @default 0
+       */
+      batch_count: number;
+      /** Colour Count */
+      colour_count: number;
+      /** Garment */
+      garment: string | null;
+      /** Garment Profile */
+      garment_profile: string;
+      /** Media */
+      media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /** Name */
+      name: string;
+      /** Pricing Plan Name */
+      pricing_plan_name: string | null;
     };
     /**
      * LiveImageSnapshot
@@ -2860,6 +3151,35 @@ export interface components {
       hex: string;
     };
     /**
+     * TemplateDescriptionConfig
+     * @description A description *body*: inline ``text`` or a common-copy ``ref``, and no
+     *     ``lead``. The lead is the opening a shopper reads about one design, so
+     *     every listing made from the template gets its own (spec, copy table).
+     */
+    TemplateDescriptionConfig: {
+      /** Ref */
+      ref?: string | null;
+      /** Text */
+      text?: string | null;
+    };
+    /**
+     * TemplateEtsyConfig
+     * @description `EtsyListingConfig` without the copy an instance writes for itself.
+     *     The four settings keep the meanings `EtsyListingConfig` documents.
+     */
+    TemplateEtsyConfig: {
+      /** @default {} */
+      description: components["schemas"]["TemplateDescriptionConfig"];
+      /** Renewal */
+      renewal?: ("manual" | "auto") | null;
+      /** Section */
+      section?: string | null;
+      /** Shipping Profile */
+      shipping_profile?: string | null;
+      /** Variation Images */
+      variation_images?: string | null;
+    };
+    /**
      * TemplateMediaEntry
      * @description Always-explicit template reference -- there is no bare-colour
      *     shorthand. ``colour`` is required when the referenced template is
@@ -3550,6 +3870,252 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_listing_templates_api_listing_templates_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateSummary"][];
+        };
+      };
+    };
+  };
+  create_listing_template_api_listing_templates_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateListingTemplateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateSaveResult"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_template_draft_api_listing_templates_draft_get: {
+    parameters: {
+      query?: {
+        from_listing?: string | null;
+        from_template?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateDraftDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_listing_template_api_listing_templates__name__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  put_listing_template_api_listing_templates__name__put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateSaveResult"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_listing_template_api_listing_templates__name__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_template_media_file_api_listing_templates__template__media_files__path__file_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template: string;
+        path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_template_media_thumbnail_api_listing_templates__template__media_files__path__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template: string;
+        path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */

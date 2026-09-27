@@ -42,6 +42,7 @@ from etsy_listings.config.slug import ColourExceptions
 from etsy_listings.render.config import AnyTemplate, dump_template_config
 from etsy_listings.render.config import load_template_config as parse_template_config
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.atomic import write_bytes_atomic
 from etsy_listings.workspace.common_copy import (
     CommonCopyDocument,
     CommonCopyError,
@@ -472,6 +473,17 @@ class Workspace:
     def load_listing_template(self, template: str) -> ListingTemplate:
         return ListingTemplate.load(
             self.listing_template_file(template), currency=self.defaults.etsy.currency
+        )
+
+    def write_listing_template(self, template: str, document: ListingTemplate) -> None:
+        """Write ``template.yaml``, atomically (A37). Defaults are left out, so
+        the file says only what the seller set -- as a hand-written listing
+        does. Whether the document is complete enough to write is the
+        caller's question (A36), not the file's."""
+        dumped = document.model_dump(mode="json", exclude_defaults=True)
+        write_bytes_atomic(
+            self.listing_template_file(template),
+            yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True).encode("utf-8"),
         )
 
     def design_content_hash(self, design: Mapping[str, str], *, listing_dir: Path) -> str | None:
