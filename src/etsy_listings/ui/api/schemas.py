@@ -409,6 +409,11 @@ class RenameListingRequest(BaseModel):
 # ──────────────────────────────────────────────────────────────────────────
 
 
+class PixelSize(BaseModel):
+    width: int
+    height: int
+
+
 class ListingTemplateSummary(BaseModel):
     """One card on the Listing templates page (UI doc §2)."""
 
@@ -423,7 +428,10 @@ class ListingTemplateSummary(BaseModel):
     sizes itself."""
     media: list[MediaEntry]
     batch_count: int = 0
-    """Batches made from this template. Always 0 until batches exist (PR 2)."""
+    """Batches made from this template, while their records last (A37)."""
+    design_minimum: PixelSize | None = None
+    """The smallest design the garment's print area takes -- New batch's size
+    hint (UI doc §4). ``None`` when the garment profile will not load."""
 
 
 class ListingTemplateSource(BaseModel):
@@ -481,6 +489,71 @@ class CreateListingTemplateRequest(BaseModel):
         if (self.from_listing is None) == (self.from_template is None):
             raise ValueError("give exactly one of from_listing and from_template")
         return self
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Staging and batches (A37-A39; batch plan PR 2).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class StagingRowDetail(BaseModel):
+    """One unique design on the staging page (UI doc §5)."""
+
+    id: str
+    sources: list[str]
+    """Every uploaded file with these bytes; more than one is a merge."""
+    name: str
+    typed: bool
+    state: Literal["ready", "name", "invalid"]
+    """``ready`` will be created; ``name`` blocks Create until fixed;
+    ``invalid`` will not be created and blocks nothing."""
+    message: str | None
+    note: str | None
+    suggestion: str | None
+
+
+class StagingDetail(BaseModel):
+    id: str
+    listing_template: str
+    label: str
+    template_saved_at: datetime
+    """When the frozen listing template was last saved: *Using X as saved at
+    HH:MM*."""
+    expires_at: datetime
+    rows: list[StagingRowDetail]
+
+
+class StagingRefusal(BaseModel):
+    """A ``422``'s ``detail`` for an upload refused before staging (A45)."""
+
+    message: str
+    remedy: str
+
+
+class StagingPatch(BaseModel):
+    """Every staging edit, applied in order: label, names, removals."""
+
+    label: str | None = None
+    names: dict[str, str] = {}
+    remove: list[str] = []
+
+
+class BatchRowDetail(BaseModel):
+    id: str
+    sources: list[str]
+    name: str
+    """The name actually created, which confirm may have suffixed (A38)."""
+    design: str
+    creation: Literal["pending", "created", "failed"]
+    error: str | None
+
+
+class BatchDetail(BaseModel):
+    id: str
+    label: str
+    listing_template: str
+    created_at: datetime
+    rows: list[BatchRowDetail]
 
 
 # ──────────────────────────────────────────────────────────────────────────

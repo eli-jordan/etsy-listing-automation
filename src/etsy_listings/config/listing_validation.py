@@ -125,7 +125,9 @@ refusal; the live catalog remains the authority on what can actually be sent.
 """
 
 
-def _required_pixels(profile: GarmentProfile) -> tuple[int, int]:
+def required_design_pixels(profile: GarmentProfile) -> tuple[int, int]:
+    """The smallest design ``profile`` prints: 90% of its print area on each
+    axis. Public for New batch's size hint (UI doc §4)."""
     return (
         int(profile.print_area.width * RESOLUTION_TOLERANCE),
         int(profile.print_area.height * RESOLUTION_TOLERANCE),
@@ -163,7 +165,7 @@ def check_design_resolution(design: Path, profile: GarmentProfile) -> list[Issue
             f"Export it as RGBA."
         )
 
-    need_width, need_height = _required_pixels(profile)
+    need_width, need_height = required_design_pixels(profile)
     if width < need_width or height < need_height:
         return blocked(
             f"{design.name} is {width}x{height}, too small for this garment's "
