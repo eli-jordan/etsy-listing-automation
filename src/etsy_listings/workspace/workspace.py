@@ -28,6 +28,7 @@ from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.settings import Settings
@@ -74,10 +75,12 @@ class InvalidRefError(ConfigLoadError):
     batch carries on (PRD 16).
     """
 
-    def __init__(self, listing_dir: Path, ref: str, detail: str) -> None:
+    def __init__(
+        self, listing_dir: Path, ref: str, detail: str, *, file: str = layout.LISTING_FILE
+    ) -> None:
         self.ref = ref
         self.detail = detail
-        super().__init__(listing_dir / layout.LISTING_FILE, f"ref {ref!r}: {detail}")
+        super().__init__(listing_dir / file, f"ref {ref!r}: {detail}")
 
 
 @dataclass(frozen=True)
@@ -329,26 +332,41 @@ class Workspace:
         has no directory of its own and resolves against a stand-in at the
         same depth. Every refusal is an :class:`InvalidRefError`.
         """
+        return self._resolve_owned_ref(ref, listing_dir, layout.LISTING_FILE)
+
+    def resolve_template_ref(self, ref: str, *, template: str) -> Path:
+        """:meth:`resolve_ref` for a path in a listing template's
+        ``template.yaml`` (A35): the same two roots, with ``./`` meaning the
+        template's own directory, where Save as listing template copies a
+        listing's local media. One interpreter with a second owner, not a
+        second resolver -- a template's refs become a listing's when it is
+        instantiated, so they must mean the same thing."""
+        return self._resolve_owned_ref(
+            ref, self.listing_template_dir(template), layout.TEMPLATE_FILE
+        )
+
+    def _resolve_owned_ref(self, ref: str, owner_dir: Path, owner_file: str) -> Path:
+        def refused(detail: str) -> InvalidRefError:
+            return InvalidRefError(owner_dir, ref, detail, file=owner_file)
+
         if Path(ref).is_absolute() or _looks_like_windows_absolute(ref):
-            raise InvalidRefError(listing_dir, ref, "an absolute path is not a ref")
+            raise refused("an absolute path is not a ref")
         if "\\" in ref:
-            raise InvalidRefError(listing_dir, ref, "use '/' between directories, not a backslash")
+            raise refused("use '/' between directories, not a backslash")
         if ref.startswith("../"):
-            raise InvalidRefError(
-                listing_dir,
-                ref,
+            raise refused(
                 "'..' refs are the old listing-relative form; write it from the workspace "
-                f"root instead (run {MIGRATION_SCRIPT} to rewrite a whole workspace)",
+                f"root instead (run {MIGRATION_SCRIPT} to rewrite a whole workspace)"
             )
         if ".." in ref.split("/"):
-            raise InvalidRefError(listing_dir, ref, "'..' is not allowed in a ref")
-        base, rest = (listing_dir, ref[2:]) if ref.startswith("./") else (self.root, ref)
+            raise refused("'..' is not allowed in a ref")
+        base, rest = (owner_dir, ref[2:]) if ref.startswith("./") else (self.root, ref)
         if all(segment in ("", ".") for segment in rest.split("/")):
-            raise InvalidRefError(listing_dir, ref, "the ref is empty")
+            raise refused("the ref is empty")
         try:
             return self.resolve(rest, relative_to=base)
         except PathEscapesWorkspaceError as exc:
-            raise InvalidRefError(listing_dir, ref, str(exc)) from exc
+            raise refused(str(exc)) from exc
 
     def cache(self, *parts: str) -> Path:
         return self.root.joinpath(layout.CACHE_DIR, *parts)
@@ -409,6 +427,52 @@ class Workspace:
 
     def listing_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LISTING_FILE
+
+    def listing_templates_dir(self) -> Path:
+        return self.root / layout.LISTING_TEMPLATES_DIR
+
+    def listing_template_names(self) -> list[str]:
+        """Directories that hold a ``template.yaml`` (A35). Save as listing
+        template creates the directory before it writes the file, and a
+        directory without one is a save still in flight or one that failed,
+        not a template anybody can use."""
+        directory = self.listing_templates_dir()
+        if not directory.is_dir():
+            return []
+        return sorted(
+            path.name
+            for path in directory.iterdir()
+            if path.is_dir() and (path / layout.TEMPLATE_FILE).is_file()
+        )
+
+    def listing_template_dir(self, template: str) -> Path:
+        return self.listing_templates_dir() / _segment(template)
+
+    def listing_template_file(self, template: str) -> Path:
+        return self.listing_template_dir(template) / layout.TEMPLATE_FILE
+
+    def listing_template_assets_dir(self, template: str) -> Path:
+        return self.listing_template_dir(template) / layout.LISTING_TEMPLATE_ASSETS_DIR
+
+    def listing_template_media_file(self, template: str, path: str) -> Path:
+        """One of a listing template's own files, by its path under the
+        template's directory -- a ``./`` ref without the ``./``. The boundary
+        :meth:`listing_media_file` draws, for the same reason: the directory
+        also holds ``template.yaml``."""
+        return self._media_file_in(self.listing_template_dir(template), path)
+
+    def remove_listing_template(self, template: str) -> None:
+        """Wipe ``listing-templates/{name}/``, assets and all. Batches and
+        listings made from it keep their own frozen copies (spec,
+        *Completeness and editing*), so nothing else goes with it."""
+        directory = self.listing_template_dir(template)
+        if directory.is_dir():
+            remove_tree(directory)
+
+    def load_listing_template(self, template: str) -> ListingTemplate:
+        return ListingTemplate.load(
+            self.listing_template_file(template), currency=self.defaults.etsy.currency
+        )
 
     def design_content_hash(self, design: Mapping[str, str], *, listing_dir: Path) -> str | None:
         """Content identity for the design the editor and SEO request see.

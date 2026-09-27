@@ -54,15 +54,27 @@ content shared across listings -- but never confused with it: this directory
 holds text a `description.ref` resolves to, not pictures a listing's `media:`
 uploads."""
 LISTINGS_DIR = "listings"
+LISTING_TEMPLATES_DIR = "listing-templates"
+"""A35: a listing's reusable production settings, one directory per listing
+template. A sibling of :data:`LISTINGS_DIR`, never inside it, which is what
+keeps a listing template out of listing discovery, ``plan --all`` and deploy
+without a filter anywhere (spec, *Product invariants* 1)."""
 
 # Per listing, inside LISTINGS_DIR/<name>/
 LISTING_FILE = "listing.yaml"
 GENERATED_FILE = "generated.yaml"
 LOCK_FILE = "state.lock.json"
 
-# Per mockup template set, inside MOCKUP_TEMPLATES_DIR/<name>/
+# Per mockup template set, inside MOCKUP_TEMPLATES_DIR/<name>/, and per
+# listing template, inside LISTING_TEMPLATES_DIR/<name>/ (A35). One name for
+# both files: the directory says which kind of template it is.
 TEMPLATE_FILE = "template.yaml"
 DERIVED_DIR = "_derived"
+LISTING_TEMPLATE_ASSETS_DIR = "assets"
+"""Inside LISTING_TEMPLATES_DIR/<name>/: the listing-local media Save as
+listing template copied, which its ``./assets/...`` refs name (A35). A35
+calls it ``TEMPLATE_ASSETS_DIR``; qualified here because a bare "template"
+means a mockup template (spec, *Terms*)."""
 
 # Inside CACHE_DIR (gitignored, fully derivable -- PRD 22)
 CATALOG_DIR = "catalog"

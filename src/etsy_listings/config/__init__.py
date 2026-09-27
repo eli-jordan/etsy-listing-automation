@@ -3,13 +3,14 @@ types they are built from.
 
 ``shop.yaml`` (:class:`Defaults`), ``garment-profiles/*.yaml``
 (:class:`GarmentProfile`), ``listings/*/listing.yaml`` (:class:`Listing`),
+``listing-templates/*/template.yaml`` (:class:`ListingTemplate`, A35),
 ``pricing-plans/**.yaml``
 (:class:`PricingPlan`) and ``exceptions.yaml``. Every one of them is loaded
 *by path* -- this module has no idea where any of those files live, which is
 ``workspace``'s job, and it knows nothing about ``render`` or ``catalog``.
 
-``template.yaml`` is deliberately not here: it is render geometry, so its
-models live in :mod:`etsy_listings.render`.
+A *mockup* template's ``template.yaml`` is deliberately not here: it is render
+geometry, so its models live in :mod:`etsy_listings.render`.
 """
 
 from etsy_listings.config.defaults import Defaults
@@ -18,6 +19,7 @@ from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile, PrintArea
 from etsy_listings.config.listing import EtsyListingConfig, Listing
+from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.media import (
     MAX_IMAGES,
     MAX_VIDEOS,
@@ -43,6 +45,7 @@ __all__ = [
     # One class per config file.
     "Defaults",
     "Listing",
+    "ListingTemplate",
     "PricingPlan",
     "GarmentProfile",
     "EtsyListingConfig",

@@ -17,11 +17,13 @@ from PIL import Image
 from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
 from etsy_listings.config.listing import EtsyListingConfig, Listing, TemplateMediaEntry
+from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.listing_validation import (
     Issue,
     TemplateInfo,
     check_lifecycle_verb,
     check_listing,
+    check_listing_template,
     check_listing_yaml_present,
     check_videos,
 )
@@ -558,3 +560,91 @@ class TestVideos:
         listing = _listing(media=[TemplateMediaEntry(template="flat-lay-01", colour="black"), CLIP])
         issues = _check(listing, videos={CLIP: replace(GOOD_VIDEO, duration_seconds=2.0)})
         assert any(CLIP in i.message for i in _blocks(issues))
+
+
+class TestListingTemplateCompleteness:
+    """A36: a listing template is checked with the listing's own production
+    checks, and none about a design, a brief or copy -- those are absent on
+    purpose, not missing."""
+
+    @staticmethod
+    def _template(**overrides: object) -> ListingTemplate:
+        document: dict[str, object] = {
+            "garment_profile": "comfort-colors-1717",
+            "colors": ["black", "white"],
+            "prices": {"S": "349 NOK"},
+            "media": [{"template": "flat-lay-01", "colour": "black"}],
+            **overrides,
+        }
+        return ListingTemplate.model_validate(document)
+
+    @staticmethod
+    def _check(
+        template: ListingTemplate,
+        *,
+        garment_profile: GarmentProfile | None = PROFILE,
+        garment_profile_names: tuple[str, ...] = ("comfort-colors-1717",),
+        description_ref_error: str | None = None,
+        videos: dict[str, VideoFacts | ProbeFailure] | None = None,
+    ) -> list[Issue]:
+        return check_listing_template(
+            template,
+            garment_profile=garment_profile,
+            garment_profile_names=garment_profile_names,
+            templates={"flat-lay-01": FLAT_LAY, "colour-chart-01": CHART},
+            description_ref_error=description_ref_error,
+            videos=videos,
+        )
+
+    def test_a_complete_template_has_no_issues(self) -> None:
+        assert self._check(self._template()) == []
+
+    def test_no_design_brief_title_tags_or_lead_is_ever_an_issue(self) -> None:
+        wheres = {issue.where for issue in self._check(self._template(colors=[], media=[]))}
+        assert wheres.isdisjoint(
+            {
+                "Design",
+                "Listing Details › Title",
+                "Listing Details › Tags",
+                "Listing Details › Description",
+            }
+        )
+
+    def test_no_colours_enabled_blocks(self) -> None:
+        issues = self._check(self._template(colors=[], media=["common-media/chart.png"]))
+        assert [(i.severity, i.where) for i in issues] == [("block", "Variants › Colours")]
+
+    def test_an_unknown_garment_profile_blocks(self) -> None:
+        issues = self._check(self._template(), garment_profile=None, garment_profile_names=())
+        assert [(i.severity, i.where) for i in issues] == [("block", "Variants › Garment profile")]
+
+    def test_no_price_source_blocks(self) -> None:
+        issues = self._check(self._template(prices={}))
+        assert [(i.severity, i.tab) for i in issues] == [("block", "pricing")]
+
+    def test_an_empty_gallery_blocks(self) -> None:
+        issues = self._check(self._template(media=[]))
+        assert [(i.severity, i.tab) for i in issues] == [("block", "images")]
+
+    def test_a_template_kind_mismatch_blocks(self) -> None:
+        issues = self._check(self._template(media=[{"template": "flat-lay-01"}]))
+        assert [(i.severity, i.where) for i in issues] == [
+            ("block", "Listing Images › flat-lay-01")
+        ]
+
+    def test_variation_images_are_checked_as_a_listing_s_are(self) -> None:
+        issues = self._check(self._template(etsy={"variation_images": "colour-chart-01"}))
+        assert [i.severity for i in issues] == ["block"]
+
+    def test_an_unresolvable_description_ref_blocks(self) -> None:
+        template = self._template(etsy={"description": {"ref": "common-copy/gone.md"}})
+        issues = self._check(template, description_ref_error="'common-copy/gone.md': not found")
+        assert [(i.severity, i.where) for i in issues] == [
+            ("block", "Listing Details › Description")
+        ]
+
+    def test_a_video_etsy_would_refuse_blocks(self) -> None:
+        clip = "./assets/clip.mp4"
+        template = self._template(media=[{"template": "flat-lay-01", "colour": "black"}, clip])
+        issues = self._check(template, videos={clip: ProbeFailure("is missing")})
+        assert [(i.severity, i.where) for i in issues] == [("block", f"Listing Images › {clip}")]

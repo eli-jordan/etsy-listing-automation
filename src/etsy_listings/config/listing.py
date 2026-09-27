@@ -111,6 +111,43 @@ def _check_gallery(media: list[MediaEntry]) -> None:
         )
 
 
+def check_production_fields(
+    *,
+    colors: list[str],
+    prices: Mapping[str, Money],
+    price_overrides: Mapping[str, Mapping[str, Money]],
+    media: list[MediaEntry],
+    currency: str | None,
+) -> None:
+    """The structural rules over the fields a listing and a listing template
+    both carry (A35): prices in the workspace's currency, a gallery Etsy can
+    show, and no override or media entry for a colour that is not on sale.
+
+    One function rather than a copy in each model, because a listing template
+    is instantiated *into* a listing: a rule stated twice here is a template
+    that saves and then makes listings that will not load."""
+    if currency:
+        for size, price in prices.items():
+            require_currency(price, currency, f"prices.{size}")
+        for color, overrides in price_overrides.items():
+            for size, price in overrides.items():
+                require_currency(price, currency, f"price_overrides.{color}.{size}")
+
+    _check_gallery(media)
+
+    for color in price_overrides:
+        if color not in colors:
+            raise ValueError(f"price_overrides has an entry for {color!r}, which is not in colors")
+
+    for entry in media:
+        if (
+            isinstance(entry, TemplateMediaEntry)
+            and entry.colour is not None
+            and entry.colour not in colors
+        ):
+            raise ValueError(f"media references colour {entry.colour!r}, which is not in colors")
+
+
 class EtsyListingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -197,37 +234,16 @@ class Listing(BaseModel):
 
     @model_validator(mode="after")
     def _validate(self, info: ValidationInfo) -> Listing:
-        context = info.context or {}
-        expected_currency = context.get("currency")
-        if expected_currency:
-            for size, price in self.prices.items():
-                require_currency(price, expected_currency, f"prices.{size}")
-            for color, overrides in self.price_overrides.items():
-                for size, price in overrides.items():
-                    require_currency(price, expected_currency, f"price_overrides.{color}.{size}")
-
-        _check_gallery(self.media)
-
-        for color in self.price_overrides:
-            if color not in self.colors:
-                raise ValueError(
-                    f"price_overrides has an entry for {color!r}, which is not in colors"
-                )
-
+        check_production_fields(
+            colors=self.colors,
+            prices=self.prices,
+            price_overrides=self.price_overrides,
+            media=self.media,
+            currency=(info.context or {}).get("currency"),
+        )
         for color in self.artwork:
             if color not in self.colors:
                 raise ValueError(f"artwork has an entry for {color!r}, which is not in colors")
-
-        for entry in self.media:
-            if (
-                isinstance(entry, TemplateMediaEntry)
-                and entry.colour is not None
-                and entry.colour not in self.colors
-            ):
-                raise ValueError(
-                    f"media references colour {entry.colour!r}, which is not in colors"
-                )
-
         return self
 
     @classmethod
