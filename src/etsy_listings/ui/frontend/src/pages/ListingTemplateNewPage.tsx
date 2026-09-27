@@ -36,6 +36,18 @@ function sourceFrom(params: URLSearchParams): ListingTemplateSource | null {
   return null;
 }
 
+/** `IssuesBanner`'s count, in the mockup's template wording: a block is what
+ * stops the save (A36); a warning is advice, and the template still saves. */
+function summarise(issues: Issue[]): string {
+  const blocks = issues.filter((issue) => issue.severity === "block").length;
+  const warns = issues.length - blocks;
+  const parts: string[] = [];
+  if (blocks > 0) parts.push(`${blocks} to fix before this template saves`);
+  const other = blocks > 0 ? "other " : "";
+  if (warns > 0) parts.push(warns === 1 ? `1 ${other}warning` : `${warns} ${other}warnings`);
+  return parts.join(" · ");
+}
+
 /** `IssuesBanner`'s markup with the template wording the mockup gives it:
  * a template never deploys, so nothing here says *Prevents deploying*. Read
  * only -- the fix is in the source, not on this page. */
@@ -45,9 +57,7 @@ function TemplateIssues({ issues }: { issues: Issue[] }) {
   return (
     <div className="issues">
       <div className="issues__head">
-        <span className="issues__summary issues__summary--warn">
-          {visible.length} to fix before this template saves
-        </span>
+        <span className="issues__summary issues__summary--warn">{summarise(visible)}</span>
         <span className="issues__when">Checked against what this template keeps</span>
       </div>
       {visible.map((issue, index) => (

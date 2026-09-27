@@ -172,6 +172,20 @@ describe("ListingTemplateNewPage", () => {
     ).toBeInTheDocument();
   });
 
+  it("counts a warning as a warning: it does not stop the save", async () => {
+    const warn = {
+      severity: "warn" as const,
+      tab: "variants" as const,
+      where: "Variants › Colours",
+      message: "moss not classified light/dark in the garment profile",
+    };
+    vi.spyOn(templatesApi, "getListingTemplateDraft").mockResolvedValue(draft({ issues: [warn] }));
+    renderAt("/listing-templates/new?from_listing=take-a-hike");
+
+    expect(await screen.findByText("1 warning")).toBeInTheDocument();
+    expect(screen.queryByText(/to fix before this template saves/)).not.toBeInTheDocument();
+  });
+
   it("clones a listing template, crumb back to the page", async () => {
     const get = vi
       .spyOn(templatesApi, "getListingTemplateDraft")
