@@ -7,43 +7,81 @@
   "description": "Retired directions, grouped by feature - history, not options.",
   "layout": {
     "rows": [
-      ["archive"],
+      [
+        "archive"
+      ],
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v1"],
+      [
+        "batch-deploy-lofi-v1"
+      ],
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v2"],
+      [
+        "batch-deploy-lofi-v2"
+      ],
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v3"],
+      [
+        "batch-deploy-lofi-v3"
+      ],
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v4"],
+      [
+        "batch-deploy-lofi-v4"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-lofi-v1"],
+      [
+        "listing-seo-lofi-v1"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-v1"],
+      [
+        "listing-seo-v1"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-lofi-v2"],
+      [
+        "listing-seo-lofi-v2"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-v2"],
+      [
+        "listing-seo-v2"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-v3"]
+      [
+        "listing-seo-v3"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "batch-create-lofi-v1"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "batch-create-lofi-v2"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "batch-create-lofi-v3"
+      ]
     ],
     "scenes": {
       "archive": {
@@ -72,28 +110,133 @@
         ]
       },
       "batch-deploy-lofi-v2": {
-        "rows": [["listings", "review-bottom-sheet"]]
+        "rows": [
+          [
+            "listings",
+            "review-bottom-sheet"
+          ]
+        ]
       },
       "batch-deploy-lofi-v3": {
-        "rows": [["listings", "review-bottom-sheet"]]
+        "rows": [
+          [
+            "listings",
+            "review-bottom-sheet"
+          ]
+        ]
       },
       "batch-deploy-lofi-v4": {
-        "rows": [["listings", "review-bottom-sheet"]]
+        "rows": [
+          [
+            "listings",
+            "review-bottom-sheet"
+          ]
+        ]
       },
       "listing-seo-lofi-v1": {
-        "rows": [["readiness", "generating", "proposal", "stale", "description-source"]]
+        "rows": [
+          [
+            "readiness",
+            "generating",
+            "proposal",
+            "stale",
+            "description-source"
+          ]
+        ]
       },
       "listing-seo-v1": {
-        "rows": [["readiness", "loading", "review", "stale", "failed"]]
+        "rows": [
+          [
+            "readiness",
+            "loading",
+            "review",
+            "stale",
+            "failed"
+          ]
+        ]
       },
       "listing-seo-lofi-v2": {
-        "rows": [["readiness", "generating", "proposal", "stale", "description-source"]]
+        "rows": [
+          [
+            "readiness",
+            "generating",
+            "proposal",
+            "stale",
+            "description-source"
+          ]
+        ]
       },
       "listing-seo-v2": {
-        "rows": [["readiness", "loading", "review", "stale", "failed"]]
+        "rows": [
+          [
+            "readiness",
+            "loading",
+            "review",
+            "stale",
+            "failed"
+          ]
+        ]
       },
       "listing-seo-v3": {
-        "rows": [["readiness", "loading", "review", "stale", "failed"]]
+        "rows": [
+          [
+            "readiness",
+            "loading",
+            "review",
+            "stale",
+            "failed"
+          ]
+        ]
+      },
+      "batch-create-lofi-v1": {
+        "rows": [
+          [
+            "save-template",
+            "templates",
+            "new-batch",
+            "staging",
+            "staging-blocked",
+            "staging-refused",
+            "batch-summary",
+            "listings-filtered"
+          ]
+        ]
+      },
+      "batch-create-lofi-v2": {
+        "rows": [
+          [
+            "batch-summary",
+            "listing-from-batch",
+            "listing-stale-confirm",
+            "new-batch",
+            "staging",
+            "staging-blocked",
+            "staging-refused",
+            "template-editor",
+            "template-new",
+            "template-unsaved",
+            "templates"
+          ]
+        ]
+      },
+      "batch-create-lofi-v3": {
+        "rows": [
+          [
+            "batch-summary",
+            "listing-from-batch",
+            "new-batch",
+            "staging",
+            "staging-blocked",
+            "staging-refused",
+            "template-details",
+            "template-images",
+            "template-new",
+            "template-pricing",
+            "template-unsaved",
+            "template-variants",
+            "templates"
+          ]
+        ]
       }
     }
   },
@@ -229,6 +372,102 @@
     },
     {
       "frame": "listing-seo-v3/failed"
+    },
+    {
+      "frame": "batch-create-lofi-v1/save-template"
+    },
+    {
+      "frame": "batch-create-lofi-v1/templates"
+    },
+    {
+      "frame": "batch-create-lofi-v1/new-batch"
+    },
+    {
+      "frame": "batch-create-lofi-v1/staging"
+    },
+    {
+      "frame": "batch-create-lofi-v1/staging-blocked"
+    },
+    {
+      "frame": "batch-create-lofi-v1/staging-refused"
+    },
+    {
+      "frame": "batch-create-lofi-v1/batch-summary"
+    },
+    {
+      "frame": "batch-create-lofi-v1/listings-filtered"
+    },
+    {
+      "frame": "batch-create-lofi-v2/batch-summary"
+    },
+    {
+      "frame": "batch-create-lofi-v2/listing-from-batch"
+    },
+    {
+      "frame": "batch-create-lofi-v2/listing-stale-confirm"
+    },
+    {
+      "frame": "batch-create-lofi-v2/new-batch"
+    },
+    {
+      "frame": "batch-create-lofi-v2/staging"
+    },
+    {
+      "frame": "batch-create-lofi-v2/staging-blocked"
+    },
+    {
+      "frame": "batch-create-lofi-v2/staging-refused"
+    },
+    {
+      "frame": "batch-create-lofi-v2/template-editor"
+    },
+    {
+      "frame": "batch-create-lofi-v2/template-new"
+    },
+    {
+      "frame": "batch-create-lofi-v2/template-unsaved"
+    },
+    {
+      "frame": "batch-create-lofi-v2/templates"
+    },
+    {
+      "frame": "batch-create-lofi-v3/batch-summary"
+    },
+    {
+      "frame": "batch-create-lofi-v3/listing-from-batch"
+    },
+    {
+      "frame": "batch-create-lofi-v3/new-batch"
+    },
+    {
+      "frame": "batch-create-lofi-v3/staging"
+    },
+    {
+      "frame": "batch-create-lofi-v3/staging-blocked"
+    },
+    {
+      "frame": "batch-create-lofi-v3/staging-refused"
+    },
+    {
+      "frame": "batch-create-lofi-v3/template-details"
+    },
+    {
+      "frame": "batch-create-lofi-v3/template-images"
+    },
+    {
+      "frame": "batch-create-lofi-v3/template-new"
+    },
+    {
+      "frame": "batch-create-lofi-v3/template-pricing"
+    },
+    {
+      "frame": "batch-create-lofi-v3/template-unsaved"
+    },
+    {
+      "frame": "batch-create-lofi-v3/template-variants"
+    },
+    {
+      "frame": "batch-create-lofi-v3/templates"
     }
   ]
 }

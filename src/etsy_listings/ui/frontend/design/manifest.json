@@ -20,6 +20,11 @@
       "description": "Hi-fi mockups: the three-step AI workflow indicator in the top bar and the related listings panel on Listing Details."
     },
     {
+      "name": "batch-create",
+      "title": "Batch Listing Creation",
+      "description": "Hi-fi (round 4) from the app's real components: template editor, templates and batches, staging, batch summary, listing from a batch."
+    },
+    {
       "name": "archive",
       "title": "Archive",
       "description": "Retired directions, grouped by feature - history, not options."
@@ -32,6 +37,38 @@
       "brief": "design/scenes/archive/_brief.md",
       "title": "Archive",
       "description": "Retired directions, kept as history — never linked from a live flow."
+    },
+    {
+      "name": "batch-create-lofi",
+      "frames": 13,
+      "brief": "design/scenes/batch-create-lofi/_brief.md",
+      "title": "Batch Creation — Hi-fi",
+      "description": "Batch listing creation hi-fi — built from the app's real components over a fixture API (round 4; brief UNCONFIRMED)."
+    },
+    {
+      "name": "batch-create-lofi-v1",
+      "frames": 8,
+      "brief": "design/scenes/batch-create-lofi-v1/_brief.md",
+      "description": "Batch creation wireframes v1 — snapshot before round 1 feedback (drop listings filter, lighter template creation, editor pieces)."
+    },
+    {
+      "name": "batch-create-lofi-v2",
+      "frames": 11,
+      "brief": "design/scenes/batch-create-lofi-v2/_brief.md",
+      "description": "Batch creation wireframes v2 — snapshot before round 2 feedback (template editor mirrors listing editor, batch statuses, no stale modal)."
+    },
+    {
+      "name": "batch-create-lofi-v3",
+      "frames": 13,
+      "brief": "design/scenes/batch-create-lofi-v3/_brief.md",
+      "description": "Batch creation wireframes v3 — snapshot before the hi-fi pass (real components, template editor without Clone/Delete/Start batch)."
+    },
+    {
+      "name": "batch-create-specs",
+      "frames": 1,
+      "brief": "design/scenes/batch-create-specs/_brief.md",
+      "title": "Batch Creation — Thinking",
+      "description": "Batch listing creation thinking — brief and flow from docs/listing-batch-creation-spec.md (UNCONFIRMED: self-answered from the spec)."
     },
     {
       "name": "batch-deploy-lofi",
@@ -146,6 +183,428 @@
       "title": "Batch deployment — review (stage matrix)",
       "viewport": "laptop",
       "description": "Retired: the stage matrix read as a spreadsheet - the plain listing list won, with stages per listing in the bottom sheet."
+    },
+    {
+      "id": "batch-create-lofi-v1/batch-summary",
+      "file": "design/scenes/batch-create-lofi-v1/batch-summary.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "Batch summary · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: the batch's one review surface mid-queue: drafted, drafting, queued, failed, not-created and deleted rows."
+    },
+    {
+      "id": "batch-create-lofi-v1/listings-filtered",
+      "file": "design/scenes/batch-create-lofi-v1/listings-filtered.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "Listings — filtered to a batch · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: the ordinary Listings table narrowed to one batch, with a review column and a way back to the summary."
+    },
+    {
+      "id": "batch-create-lofi-v1/new-batch",
+      "file": "design/scenes/batch-create-lofi-v1/new-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "New batch — choose and drop · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: pick one listing template, then drop one ZIP or loose PNGs; offers to resume an unfinished staging session."
+    },
+    {
+      "id": "batch-create-lofi-v1/save-template",
+      "file": "design/scenes/batch-create-lofi-v1/save-template.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "Save as listing template · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: dialog over the listing editor naming the template and showing what it keeps and what each new listing gets fresh."
+    },
+    {
+      "id": "batch-create-lofi-v1/staging",
+      "file": "design/scenes/batch-create-lofi-v1/staging.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "New batch — staging review · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: validated, deduped, auto-named rows ready to confirm; invalid PNGs are shown and left out."
+    },
+    {
+      "id": "batch-create-lofi-v1/staging-blocked",
+      "file": "design/scenes/batch-create-lofi-v1/staging-blocked.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "New batch — names need fixing · v1",
+      "viewport": "laptop",
+      "description": "Wireframe state: an empty slug and a manually typed name conflict block Create until fixed."
+    },
+    {
+      "id": "batch-create-lofi-v1/staging-refused",
+      "file": "design/scenes/batch-create-lofi-v1/staging-refused.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "New batch — upload refused · v1",
+      "viewport": "laptop",
+      "description": "Wireframe error state: a ZIP over the 25-design limit is refused before staging, with the recovery spelled out."
+    },
+    {
+      "id": "batch-create-lofi-v1/templates",
+      "file": "design/scenes/batch-create-lofi-v1/templates.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "Listing templates · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: listing-template cards (one shown mid-drag as a drop target) and the recent-batches list."
+    },
+    {
+      "id": "batch-create-lofi-v2/batch-summary",
+      "file": "design/scenes/batch-create-lofi-v2/batch-summary.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Batch summary · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: the batch's one review surface mid-queue: drafted, drafting, queued, failed, not-created and deleted rows."
+    },
+    {
+      "id": "batch-create-lofi-v2/listing-from-batch",
+      "file": "design/scenes/batch-create-lofi-v2/listing-from-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing — opened from a batch · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: batch listing in the editor with Back to batch, Mark reviewed, and a stale title proposal that can still be used."
+    },
+    {
+      "id": "batch-create-lofi-v2/listing-stale-confirm",
+      "file": "design/scenes/batch-create-lofi-v2/listing-stale-confirm.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing — use a stale suggestion? · v2",
+      "viewport": "laptop",
+      "description": "Wireframe state: the one-time warning before accepting an out-of-date AI suggestion in this editor session."
+    },
+    {
+      "id": "batch-create-lofi-v2/new-batch",
+      "file": "design/scenes/batch-create-lofi-v2/new-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "New batch — choose and drop · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: pick one listing template, then drop one ZIP or loose PNGs; offers to resume an unfinished staging session."
+    },
+    {
+      "id": "batch-create-lofi-v2/staging",
+      "file": "design/scenes/batch-create-lofi-v2/staging.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "note": "### AI readiness shows only when it fails\n\nNothing is said when AI drafting can run. If a prompt, a ready provider or Etsy\nmarket access is missing, a blocking callout replaces the count strip's right\nside and **Create listings** is disabled, e.g.:\n\n> **AI drafting can't run yet.** No AI provider is ready. Add one in Setup, then come back. Your staging is kept.",
+      "title": "New batch — staging review · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: validated, deduped, auto-named rows ready to confirm; invalid PNGs are shown and left out."
+    },
+    {
+      "id": "batch-create-lofi-v2/staging-blocked",
+      "file": "design/scenes/batch-create-lofi-v2/staging-blocked.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "New batch — names need fixing · v2",
+      "viewport": "laptop",
+      "description": "Wireframe state: an empty slug and a manually typed name conflict block Create until fixed."
+    },
+    {
+      "id": "batch-create-lofi-v2/staging-refused",
+      "file": "design/scenes/batch-create-lofi-v2/staging-refused.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "New batch — upload refused · v2",
+      "viewport": "laptop",
+      "description": "Wireframe error state: a ZIP over the 25-design limit is refused before staging, with the recovery spelled out."
+    },
+    {
+      "id": "batch-create-lofi-v2/template-editor",
+      "file": "design/scenes/batch-create-lofi-v2/template-editor.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing template editor · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: editing a template's gallery, previewed with the calibrator's test-design picker (Bundled grid by default)."
+    },
+    {
+      "id": "batch-create-lofi-v2/template-new",
+      "file": "design/scenes/batch-create-lofi-v2/template-new.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing template — new · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: Save as listing template (or Clone) opens the new template with the cursor in the name field; nothing saves until it is named."
+    },
+    {
+      "id": "batch-create-lofi-v2/template-unsaved",
+      "file": "design/scenes/batch-create-lofi-v2/template-unsaved.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing template — change not saved · v2",
+      "viewport": "laptop",
+      "description": "Wireframe state: an edit that makes the template incomplete is held and explained; the last complete version stays saved."
+    },
+    {
+      "id": "batch-create-lofi-v2/templates",
+      "file": "design/scenes/batch-create-lofi-v2/templates.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing templates · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: listing-template cards (one mid-drag; a drop goes straight to staging) and recent batches, including an unconfirmed staging session."
+    },
+    {
+      "id": "batch-create-lofi-v3/batch-summary",
+      "file": "design/scenes/batch-create-lofi-v3/batch-summary.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Batch summary · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: the batch's one review surface mid-queue: drafted, drafting, queued, failed, not-created and deleted rows."
+    },
+    {
+      "id": "batch-create-lofi-v3/listing-from-batch",
+      "file": "design/scenes/batch-create-lofi-v3/listing-from-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing — opened from a batch · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: batch listing in the editor with Back to batch, Mark reviewed, and an out-of-date title proposal that can still be used directly."
+    },
+    {
+      "id": "batch-create-lofi-v3/new-batch",
+      "file": "design/scenes/batch-create-lofi-v3/new-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "New batch — choose and drop · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: pick one listing template, then drop one ZIP or loose PNGs; offers to resume an unfinished staging session."
+    },
+    {
+      "id": "batch-create-lofi-v3/staging",
+      "file": "design/scenes/batch-create-lofi-v3/staging.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "note": "### AI readiness shows only when it fails\n\nNothing is said when AI drafting can run. If a prompt, a ready provider or Etsy\nmarket access is missing, a blocking callout replaces the count strip's right\nside and **Create listings** is disabled, e.g.:\n\n> **AI drafting can't run yet.** No AI provider is ready. Add one in Setup, then come back. Your staging is kept.",
+      "title": "New batch — staging review · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: validated, deduped, auto-named rows ready to confirm; invalid PNGs are shown and left out."
+    },
+    {
+      "id": "batch-create-lofi-v3/staging-blocked",
+      "file": "design/scenes/batch-create-lofi-v3/staging-blocked.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "New batch — names need fixing · v3",
+      "viewport": "laptop",
+      "description": "Wireframe state: an empty slug and a manually typed name conflict block Create until fixed."
+    },
+    {
+      "id": "batch-create-lofi-v3/staging-refused",
+      "file": "design/scenes/batch-create-lofi-v3/staging-refused.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "New batch — upload refused · v3",
+      "viewport": "laptop",
+      "description": "Wireframe error state: a ZIP over the 25-design limit is refused before staging, with the recovery spelled out."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-details",
+      "file": "design/scenes/batch-create-lofi-v3/template-details.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — Listing Details · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Listing Details without brief, title, tags, lead or AI Mode; description body, preview, section and materials remain."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-images",
+      "file": "design/scenes/batch-create-lofi-v3/template-images.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — Listing Images · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Listing Images as in the listing editor (Files group reads This template)."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-new",
+      "file": "design/scenes/batch-create-lofi-v3/template-new.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — new · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Save as listing template (or Clone) opens the new template on Variants with the empty name field focused; nothing saves until named."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-pricing",
+      "file": "design/scenes/batch-create-lofi-v3/template-pricing.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — Pricing · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Pricing tab, identical to the listing editor's plan and per-size prices."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-unsaved",
+      "file": "design/scenes/batch-create-lofi-v3/template-unsaved.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — change not saved · v3",
+      "viewport": "laptop",
+      "description": "Wireframe state: an edit that makes the template incomplete is held and flagged; the last complete version stays saved."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-variants",
+      "file": "design/scenes/batch-create-lofi-v3/template-variants.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — Variants · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Variants tab, identical to the listing editor's; the preview design row (shown open) replaces the listing's design row."
+    },
+    {
+      "id": "batch-create-lofi-v3/templates",
+      "file": "design/scenes/batch-create-lofi-v3/templates.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "note": "### Recent batches: one status per batch\n\nDerived from the batch, never set by hand. The title opens it: a **Staging** row reopens staging, every other row opens the batch summary.\n\n| Status | Means |\n|---|---|\n| Staging | Uploaded, not confirmed. Nothing created yet |\n| Drafting | Listings exist, AI queue still working |\n| In review | Drafting done, not every listing marked reviewed |\n| Complete | Every created listing marked reviewed |\n| Stopped | Cancel batch left work undrafted; Resume on the summary |\n\nFailures don't get a status. They show as a red count beside the progress, so a batch with one failed row still reads as \"In review\".\n\n**Open:** should *Complete* also require the listings to be deployed? Here it only needs Reviewed, which the spec keeps separate from deploying.",
+      "title": "Listing templates · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: listing-template cards (one mid-drag; a drop goes straight to staging) and recent batches with a lifecycle status per batch."
+    },
+    {
+      "id": "batch-create-lofi/batch-summary",
+      "file": "design/scenes/batch-create-lofi/batch-summary.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Batch summary",
+      "viewport": "laptop",
+      "description": "The batch's one review surface mid-queue, with the editor's own AI step indicator on running and failed rows."
+    },
+    {
+      "id": "batch-create-lofi/listing-from-batch",
+      "file": "design/scenes/batch-create-lofi/listing-from-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing — opened from a batch",
+      "viewport": "laptop",
+      "description": "Hi-fi: batch listing in the editor with Back to batch, Mark reviewed, and an out-of-date title proposal that can still be used directly."
+    },
+    {
+      "id": "batch-create-lofi/new-batch",
+      "file": "design/scenes/batch-create-lofi/new-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "New batch — choose and drop",
+      "viewport": "laptop",
+      "description": "Hi-fi: pick one listing template, then drop one ZIP or loose PNGs; offers to resume an unfinished staging session."
+    },
+    {
+      "id": "batch-create-lofi/staging",
+      "file": "design/scenes/batch-create-lofi/staging.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "note": "### AI readiness shows only when it fails\n\nNothing is said when AI drafting can run. If a prompt, a ready provider or Etsy\nmarket access is missing, a blocking callout replaces the count strip's right\nside and **Create listings** is disabled, e.g.:\n\n> **AI drafting can't run yet.** No AI provider is ready. Add one in Setup, then come back. Your staging is kept.",
+      "title": "New batch — staging review",
+      "viewport": "laptop",
+      "description": "Hi-fi: validated, deduped, auto-named rows ready to confirm; invalid PNGs are shown and left out."
+    },
+    {
+      "id": "batch-create-lofi/staging-blocked",
+      "file": "design/scenes/batch-create-lofi/staging-blocked.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "New batch — names need fixing",
+      "viewport": "laptop",
+      "description": "Hi-fi state: an empty slug and a manually typed name conflict block Create until fixed."
+    },
+    {
+      "id": "batch-create-lofi/staging-refused",
+      "file": "design/scenes/batch-create-lofi/staging-refused.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "New batch — upload refused",
+      "viewport": "laptop",
+      "description": "Hi-fi error state: a ZIP over the 25-design limit is refused before staging, with the recovery spelled out."
+    },
+    {
+      "id": "batch-create-lofi/template-details",
+      "file": "design/scenes/batch-create-lofi/template-details.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — Listing Details",
+      "viewport": "laptop",
+      "description": "Hi-fi: Listing Details without brief, title, tags, lead or AI Mode; description body, preview, section and materials remain."
+    },
+    {
+      "id": "batch-create-lofi/template-images",
+      "file": "design/scenes/batch-create-lofi/template-images.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — Listing Images",
+      "viewport": "laptop",
+      "description": "Hi-fi: Listing Images is the real ImagesTab (its Files group should read This template)."
+    },
+    {
+      "id": "batch-create-lofi/template-new",
+      "file": "design/scenes/batch-create-lofi/template-new.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — new",
+      "viewport": "laptop",
+      "description": "Hi-fi: Save as listing template (or Clone) opens the new template (real EditableName, empty and focused); nothing saves until named."
+    },
+    {
+      "id": "batch-create-lofi/template-pricing",
+      "file": "design/scenes/batch-create-lofi/template-pricing.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — Pricing",
+      "viewport": "laptop",
+      "description": "Hi-fi: Pricing is the real PricingTab with the template's plan and per-size prices."
+    },
+    {
+      "id": "batch-create-lofi/template-unsaved",
+      "file": "design/scenes/batch-create-lofi/template-unsaved.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — change not saved",
+      "viewport": "laptop",
+      "description": "Hi-fi state: an edit that makes the template incomplete is held and flagged; the last complete version stays saved."
+    },
+    {
+      "id": "batch-create-lofi/template-variants",
+      "file": "design/scenes/batch-create-lofi/template-variants.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "note": "### Built from the real editor\n\nThese frames mount the app's own **VariantsTab, PricingTab, ImagesTab, EditableName** and save line over a fixture API (`_mockApi.ts`). Nothing is a lookalike.\n\n**Changes the real components need for templates**\n\n- **DesignSelect**: preview wording (*Preview design…*, *Only for previewing…*) and a preview-design list.\n- **MediaLocator**: the Files group label *This listing* becomes *This template*.\n- **IssuesBanner**: a template wording (*to fix before this template saves*), with no *Prevents deploying* tag.\n- **DetailsTab**: a template mode without brief, title, tags, lead or AI Mode.\n- **AiChoiceDrawer** (listing editor): stale choices stay usable, heading *Out of date: brief edited since. Still usable*.\n\nThe template head has no actions: Clone, Delete and Start batch live on the [Listing templates](goto:batch-create-lofi/templates) page.",
+      "title": "Listing template — Variants",
+      "viewport": "laptop",
+      "description": "Hi-fi: Variants tab is the real VariantsTab; the preview design row (shown open) replaces the listing's design row."
+    },
+    {
+      "id": "batch-create-lofi/templates",
+      "file": "design/scenes/batch-create-lofi/templates.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "note": "### Recent batches: one status per batch\n\nDerived from the batch, never set by hand. The title opens it: a **Staging** row reopens staging, every other row opens the batch summary.\n\n| Status | Means |\n|---|---|\n| Staging | Uploaded, not confirmed. Nothing created yet |\n| Drafting | Listings exist, AI queue still working |\n| In review | Drafting done, not every listing marked reviewed |\n| Complete | Every created listing marked reviewed |\n| Stopped | Cancel batch left work undrafted; Resume on the summary |\n\nFailures don't get a status. They show as a red count beside the progress, so a batch with one failed row still reads as \"In review\".\n\n*Complete* needs only every listing marked reviewed; deploying is separate.",
+      "title": "Listing templates",
+      "viewport": "laptop",
+      "description": "Hi-fi: listing-template cards (one mid-drag; a drop goes straight to staging) and recent batches with a lifecycle status per batch."
+    },
+    {
+      "id": "batch-create-specs/flow",
+      "file": "design/scenes/batch-create-specs/flow.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-specs",
+      "title": "Batch creation — flow",
+      "viewport": "laptop",
+      "description": "Flow (round 4): template, staging, batch summary, and the listing editor with its way back to the batch.",
+      "intent": "diagram",
+      "contentWidth": 1280
     },
     {
       "id": "batch-deploy-lofi-v1/listings",
