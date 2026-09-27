@@ -1,6 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import * as calibrator from "../api/calibrator";
 import * as listingsApi from "../api/listings";
 import * as seoApi from "../api/seo";
@@ -42,6 +42,10 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   };
 }
 
+function NewTemplateProbe() {
+  return <p>new listing template from {useLocation().search}</p>;
+}
+
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
@@ -49,6 +53,7 @@ function renderAt(path: string) {
         <Route path="/listings" element={<p>listings page</p>} />
         <Route path="/listings/new" element={<ListingEditorPage />} />
         <Route path="/listings/:name" element={<ListingEditorPage />} />
+        <Route path="/listing-templates/new" element={<NewTemplateProbe />} />
       </Routes>
     </MemoryRouter>,
   );
@@ -73,6 +78,25 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 describe("ListingEditorPage", () => {
+  it("opens the unsaved listing template from a saved listing, with no dialog (UI doc §1)", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    renderAt("/listings/take-a-hike");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Save as listing template" }));
+
+    expect(
+      await screen.findByText("new listing template from ?from_listing=take-a-hike"),
+    ).toBeInTheDocument();
+  });
+
+  it("offers no Save as listing template before the listing exists", async () => {
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(detail({ name: "" }));
+    renderAt("/listings/new");
+
+    await screen.findByLabelText("Listing name");
+    expect(screen.queryByRole("button", { name: "Save as listing template" })).toBeNull();
+  });
+
   it("loads the listing and shows its name, defaulting to the Variants tab", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");

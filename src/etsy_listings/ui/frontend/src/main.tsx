@@ -8,6 +8,8 @@ import { BatchDeployPage } from "./pages/BatchDeployPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DeployPage } from "./pages/DeployPage";
 import { ListingEditorPage } from "./pages/ListingEditorPage";
+import { ListingTemplateNewPage } from "./pages/ListingTemplateNewPage";
+import { ListingTemplatesPage } from "./pages/ListingTemplatesPage";
 import { ListingsPage } from "./pages/ListingsPage";
 
 const container = document.getElementById("root");
@@ -33,6 +35,10 @@ createRoot(container).render(
               `/listings/:name`, which re-fetches `ListingDetail` fresh rather
               than reusing state a deploy run may have changed server-side. */}
           <Route path="/listings/:name/deploy" element={<DeployPage />} />
+          {/* A35: listing templates. `/listing-templates/:name`, the editor,
+              arrives with PR 6. */}
+          <Route path="/listing-templates" element={<ListingTemplatesPage />} />
+          <Route path="/listing-templates/new" element={<ListingTemplateNewPage />} />
           {/* The calibrator, unmounted -- mounted here unchanged. */}
           <Route path="/templates" element={<App />} />
         </Route>

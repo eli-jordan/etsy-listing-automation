@@ -156,6 +156,7 @@ function ListingEditorPageContent({
   const { detail, update, adopt, flush, commitName, save } = useAutosave(name, initial, {
     onNamed,
   });
+  const navigate = useNavigate();
   // AI Mode, and the AI run behind it, live here rather than inside a tab: a
   // run outlives the tab that was showing when it started, and the chain
   // that begins one begins at the design strip, above the tab strip (PRD
@@ -201,35 +202,59 @@ function ListingEditorPageContent({
   }
 
   return (
-    <ListingEditorShell
-      detail={detail}
-      update={update}
-      flush={flush}
-      onPickDesign={pickDesign}
-      aiSeo={aiSeo}
-      head={
-        <EditorHead
-          detail={detail}
-          onBack={onBack}
-          flush={flush}
-          activity={<AiWorkflowIndicator steps={aiSeo.run.steps} running={aiSeo.run.busy} />}
-          title={
-            <EditableName
-              value={name ?? pickedName}
-              onCommit={commitName}
-              onDraftChange={setTypedName}
-              error={
-                save.kind === "name-taken"
-                  ? { name: save.name, message: "that name is already taken" }
-                  : null
-              }
-              busy={save.kind === "saving"}
-            />
-          }
-          meta={metaFor(save, name)}
-        />
-      }
-    />
+    <>
+      {/* The row above the head (UI doc, *Listing editor*): Save as listing
+          template now, Back to batch and Mark reviewed with batches (PR 5).
+          Only once the listing exists, since a template is made from the
+          file on disk. */}
+      {detail.name !== "" && (
+        <div className="bc-row" style={{ marginBottom: "var(--space-2)" }}>
+          <span className="bc-spacer" />
+          <button
+            type="button"
+            className="btn btn-ghost"
+            onClick={() => {
+              // No dialog (UI doc §1): the pending edit lands first, so the
+              // draft is made from what the seller is looking at.
+              void flush().then(() =>
+                navigate(`/listing-templates/new?from_listing=${encodeURIComponent(detail.name)}`),
+              );
+            }}
+          >
+            Save as listing template
+          </button>
+        </div>
+      )}
+      <ListingEditorShell
+        detail={detail}
+        update={update}
+        flush={flush}
+        onPickDesign={pickDesign}
+        aiSeo={aiSeo}
+        head={
+          <EditorHead
+            detail={detail}
+            onBack={onBack}
+            flush={flush}
+            activity={<AiWorkflowIndicator steps={aiSeo.run.steps} running={aiSeo.run.busy} />}
+            title={
+              <EditableName
+                value={name ?? pickedName}
+                onCommit={commitName}
+                onDraftChange={setTypedName}
+                error={
+                  save.kind === "name-taken"
+                    ? { name: save.name, message: "that name is already taken" }
+                    : null
+                }
+                busy={save.kind === "saving"}
+              />
+            }
+            meta={metaFor(save, name)}
+          />
+        }
+      />
+    </>
   );
 }
 

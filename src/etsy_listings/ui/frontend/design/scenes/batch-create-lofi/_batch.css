@@ -1,12 +1,8 @@
 /* Batch-creation wireframe pieces. Tokens only - every value the app's
-   stylesheet already names comes from it. */
+   stylesheet already names comes from it. Rules the app now uses have moved
+   to src/index.css ("Listing templates"), which design/theme.css imports, so
+   the frames and the app draw them from one place. */
 
-.bc-muted {
-  color: color-mix(in srgb, var(--color-text) 58%, transparent);
-}
-.bc-small {
-  font-size: 12.5px;
-}
 .bc-lede {
   margin: 0 0 var(--space-4);
   max-width: 72ch;
@@ -19,20 +15,6 @@
 .bc-section > h2 {
   font-size: 20px;
   margin: 0 0 var(--space-3);
-}
-.bc-row {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-wrap: wrap;
-}
-.bc-spacer {
-  flex: 1;
-}
-.bc-icon {
-  width: 16px;
-  height: 16px;
-  flex: none;
 }
 .bc-mono {
   font-family: ui-monospace, "SF Mono", Menlo, monospace;
@@ -53,62 +35,6 @@
 }
 
 /* — listing-template cards — */
-.bc-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
-  gap: var(--space-4);
-}
-.bc-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-sm);
-  background: var(--color-neutral-100);
-  overflow: hidden;
-  transition: border-color 0.12s ease, box-shadow 0.12s ease;
-}
-.bc-card:hover {
-  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
-  box-shadow: var(--shadow-sm);
-}
-.bc-card__gallery {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  grid-template-rows: 128px;
-  gap: 2px;
-  height: 128px;
-  overflow: hidden;
-  background: var(--color-neutral-200);
-}
-.bc-card__gallery img {
-  width: 100%;
-  height: 100%;
-  min-height: 0;
-  object-fit: cover;
-  display: block;
-}
-.bc-card__body {
-  padding: var(--space-3);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-.bc-card__name {
-  font-weight: 700;
-  font-size: 15px;
-}
-.bc-card__facts {
-  font-size: 12.5px;
-  color: color-mix(in srgb, var(--color-text) 60%, transparent);
-}
-.bc-card__foot {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  padding: var(--space-2) var(--space-3);
-  border-top: 1px solid var(--color-divider);
-}
 .bc-card__drop-hint {
   font-size: 11.5px;
   color: color-mix(in srgb, var(--color-text) 50%, transparent);
@@ -218,34 +144,6 @@ table.bc-table .bc-end {
 }
 
 /* — quiet row-level actions — */
-.bc-quiet {
-  font-family: var(--font-body);
-  font-weight: 600;
-  font-size: 12px;
-  line-height: 1.2;
-  padding: 4px 9px;
-  color: color-mix(in srgb, var(--color-text) 68%, transparent);
-  background: transparent;
-  border: 1px solid var(--color-divider);
-  border-radius: var(--radius-sm);
-  cursor: pointer;
-  white-space: nowrap;
-}
-.bc-quiet:hover:not(:disabled) {
-  color: var(--color-text);
-  background: color-mix(in srgb, var(--color-text) 8%, transparent);
-  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
-}
-.bc-quiet--on {
-  color: var(--color-accent-2-800);
-  background: var(--color-accent-2-100);
-  border-color: var(--color-accent-2-300);
-}
-.bc-quiet--on:hover:not(:disabled) {
-  color: var(--color-accent-2-900);
-  background: var(--color-accent-2-200);
-  border-color: var(--color-accent-2-400);
-}
 
 /* — count strip above a table — */
 .bc-counts {

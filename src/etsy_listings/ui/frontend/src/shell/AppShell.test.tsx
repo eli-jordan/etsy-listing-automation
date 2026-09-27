@@ -13,6 +13,8 @@ function renderAt(path: string) {
           <Route path="/listings" element={<p>listings content</p>} />
           <Route path="/listings/:name" element={<p>editor content</p>} />
           <Route path="/templates" element={<p>templates content</p>} />
+          <Route path="/listing-templates" element={<p>listing templates content</p>} />
+          <Route path="/listing-templates/new" element={<p>new listing template</p>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -69,6 +71,21 @@ describe("AppShell", () => {
     renderAt("/listings/take-a-hike");
     expect(screen.getByRole("link", { name: /Listings/ })).toHaveClass("nav-item--active");
     expect(screen.getByText("editor content")).toBeInTheDocument();
+  });
+
+  it("puts Listing Templates between Listings and Mockup Templates", () => {
+    renderAt("/");
+    const names = screen.getAllByRole("link").map((link) => link.textContent);
+    expect(names).toEqual(["Dashboard", "Listings", "Listing Templates", "Mockup Templates"]);
+  });
+
+  it("keeps Listing Templates, and only it, active while naming a new one", () => {
+    renderAt("/listing-templates/new");
+    expect(screen.getByRole("link", { name: /Listing Templates/ })).toHaveClass("nav-item--active");
+    expect(screen.getByRole("link", { name: /^Listings$/ })).not.toHaveClass("nav-item--active");
+    expect(screen.getByRole("link", { name: /Mockup Templates/ })).not.toHaveClass(
+      "nav-item--active",
+    );
   });
 
   it("marks Mockup Templates active on /templates", () => {
