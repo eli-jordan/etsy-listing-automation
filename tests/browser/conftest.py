@@ -28,6 +28,41 @@ def _free_port() -> int:
         return port
 
 
+class _SingleProcessChromium:
+    """Chromium in one process, for a sandbox that forbids its helpers.
+
+    A sandbox that forbids Chromium's zygote and GPU helper processes (the
+    macOS seatbelt agents run under) kills the normal launch with "Target
+    page, context or browser has been closed". ``--single-process`` survives
+    it, but in that mode a browser does not survive its contexts closing, so
+    every ``new_context`` gets a browser of its own. Chromium does not support the
+    mode, which is why it is only the fallback: CI, where the plain launch
+    works, never builds one of these.
+    """
+
+    def __init__(self, chromium) -> None:  # noqa: ANN001
+        self._chromium = chromium
+        self._browser = chromium.launch(args=["--single-process"])
+
+    def new_context(self, **kwargs):  # noqa: ANN003, ANN201
+        # A fresh browser per context: one that has closed a context before is
+        # not reliably able to open another in this mode.
+        self.close()
+        self._browser = self._chromium.launch(args=["--single-process"])
+        return self._browser.new_context(**kwargs)
+
+    def close(self) -> None:
+        if self._browser.is_connected():
+            self._browser.close()
+
+
+def _launch(chromium):  # noqa: ANN001, ANN202 - playwright's types, as above
+    try:
+        return chromium.launch()
+    except Exception:  # pragma: no cover - environment-dependent
+        return _SingleProcessChromium(chromium)
+
+
 @pytest.fixture(scope="session")
 def browser_type(prerequisite_missing):  # noqa: ANN201 - playwright's type isn't worth importing at module scope
     try:
@@ -36,7 +71,7 @@ def browser_type(prerequisite_missing):  # noqa: ANN201 - playwright's type isn'
         prerequisite_missing("playwright not installed; run `uv sync`")
     with playwright.sync_playwright() as p:
         try:
-            browser = p.chromium.launch()
+            browser = _launch(p.chromium)
         except Exception as exc:  # pragma: no cover - environment-dependent
             prerequisite_missing(
                 f"no chromium available (`uv run playwright install chromium`): {exc}"
