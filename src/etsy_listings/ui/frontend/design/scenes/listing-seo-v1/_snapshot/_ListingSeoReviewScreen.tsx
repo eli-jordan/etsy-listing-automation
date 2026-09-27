@@ -1,4 +1,4 @@
-import { ShellSidebar } from "../../../src/shell/ShellSidebar";
+import { ShellSidebar } from "../../../../src/shell/ShellSidebar";
 import type { ReactNode } from "react";
 import "./listingSeoReview.css";
 
