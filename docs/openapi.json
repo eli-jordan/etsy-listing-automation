@@ -2376,24 +2376,22 @@
       },
       "ListingTemplateDetail": {
         "additionalProperties": false,
+        "description": "A listing template as its pages read it, saved or not -- one shape for\nboth, as `ListingDetail` is one shape for a listing and the unnamed draft.\n\nA draft (``GET /draft``: Save as listing template or Clone, written\nnowhere, UI doc \u00a71) has ``name`` ``\"\"``, no ``modified_at``, and says\nwhere it came from in ``source`` and ``assets``.",
         "properties": {
+          "assets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ListingTemplateAsset"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
           "colors": {
             "items": {
               "type": "string"
             },
             "title": "Colors",
             "type": "array"
-          },
-          "description_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description Title"
           },
           "etsy": {
             "$ref": "#/components/schemas/TemplateEtsyConfig",
@@ -2438,9 +2436,16 @@
             "type": "array"
           },
           "modified_at": {
-            "format": "date-time",
-            "title": "Modified At",
-            "type": "string"
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified At"
           },
           "name": {
             "title": "Name",
@@ -2492,150 +2497,27 @@
               }
             ],
             "title": "Pricing Plan Name"
-          }
-        },
-        "required": [
-          "garment_profile",
-          "colors",
-          "media",
-          "issues",
-          "name",
-          "modified_at"
-        ],
-        "title": "ListingTemplateDetail",
-        "type": "object"
-      },
-      "ListingTemplateDraftDetail": {
-        "additionalProperties": false,
-        "description": "A listing template as Save as listing template or Clone would write it,\nwritten nowhere (UI doc \u00a71).",
-        "properties": {
-          "assets": {
-            "items": {
-              "$ref": "#/components/schemas/ListingTemplateAsset"
-            },
-            "title": "Assets",
-            "type": "array"
-          },
-          "colors": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Colors",
-            "type": "array"
-          },
-          "description_title": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Description Title"
-          },
-          "etsy": {
-            "$ref": "#/components/schemas/TemplateEtsyConfig",
-            "default": {
-              "description": {}
-            }
-          },
-          "garment": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Garment"
-          },
-          "garment_profile": {
-            "title": "Garment Profile",
-            "type": "string"
-          },
-          "issues": {
-            "items": {
-              "$ref": "#/components/schemas/Issue"
-            },
-            "title": "Issues",
-            "type": "array"
-          },
-          "media": {
-            "items": {
-              "anyOf": [
-                {
-                  "$ref": "#/components/schemas/TemplateMediaEntry"
-                },
-                {
-                  "type": "string"
-                }
-              ]
-            },
-            "title": "Media",
-            "type": "array"
-          },
-          "price_overrides": {
-            "additionalProperties": {
-              "additionalProperties": {
-                "examples": [
-                  "349 NOK"
-                ],
-                "type": "string"
-              },
-              "type": "object"
-            },
-            "default": {},
-            "title": "Price Overrides",
-            "type": "object"
-          },
-          "prices": {
-            "additionalProperties": {
-              "examples": [
-                "349 NOK"
-              ],
-              "type": "string"
-            },
-            "default": {},
-            "title": "Prices",
-            "type": "object"
-          },
-          "pricing_plan": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pricing Plan"
-          },
-          "pricing_plan_name": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Pricing Plan Name"
           },
           "source": {
-            "$ref": "#/components/schemas/ListingTemplateSource"
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListingTemplateSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
           "garment_profile",
           "colors",
           "media",
-          "issues",
-          "source",
-          "assets"
+          "name",
+          "modified_at",
+          "issues"
         ],
-        "title": "ListingTemplateDraftDetail",
+        "title": "ListingTemplateDetail",
         "type": "object"
       },
       "ListingTemplateSaveResult": {
@@ -2713,18 +2595,7 @@
             "type": "integer"
           },
           "garment": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Garment"
-          },
-          "garment_profile": {
-            "title": "Garment Profile",
+            "title": "Garment",
             "type": "string"
           },
           "media": {
@@ -2759,7 +2630,6 @@
         },
         "required": [
           "name",
-          "garment_profile",
           "garment",
           "colour_count",
           "pricing_plan_name",
@@ -5949,7 +5819,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ListingTemplateDraftDetail"
+                  "$ref": "#/components/schemas/ListingTemplateDetail"
                 }
               }
             },

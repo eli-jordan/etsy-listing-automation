@@ -7,6 +7,8 @@ import { ListingTemplateNewPage } from "./ListingTemplateNewPage";
 
 function draft(over: Partial<ListingTemplateDraft> = {}): ListingTemplateDraft {
   return {
+    name: "",
+    modified_at: null,
     garment_profile: "comfort-colors-1717",
     garment: "Comfort Colors 1717",
     colors: ["black", "ivory"],
@@ -23,7 +25,6 @@ function draft(over: Partial<ListingTemplateDraft> = {}): ListingTemplateDraft {
     },
     media: [{ template: "flat-lay-01", colour: "black" }, "./assets/shots/back.png"],
     issues: [],
-    description_title: "Comfort Colors care",
     source: { kind: "listing", name: "take-a-hike" },
     assets: [{ ref: "./assets/shots/back.png", source_ref: "./shots/back.png" }],
     ...over,
@@ -74,7 +75,7 @@ describe("ListingTemplateNewPage", () => {
     expect(screen.getByText("Comfort Colors 1717")).toBeInTheDocument();
     expect(screen.getByText("black, ivory")).toBeInTheDocument();
     expect(screen.getByText("Prices set per size: S 349 NOK · M 349 NOK")).toBeInTheDocument();
-    expect(screen.getByText("Common copy: Comfort Colors care")).toBeInTheDocument();
+    expect(screen.getByText("Common copy: common-copy/care.md")).toBeInTheDocument();
     expect(screen.getByText("2 images")).toBeInTheDocument();
     // The copy does not exist until the save, so a local file is drawn from
     // where the listing keeps it.
@@ -94,7 +95,6 @@ describe("ListingTemplateNewPage", () => {
         pricing_plan_name: "standard-nok",
         prices: {},
         etsy: { ...draft().etsy, description: { text: "Garment-dyed cotton.", ref: null } },
-        description_title: null,
       }),
     );
     renderAt("/listing-templates/new?from_listing=take-a-hike");

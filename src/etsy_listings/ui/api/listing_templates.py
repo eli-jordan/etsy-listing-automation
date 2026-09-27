@@ -48,13 +48,11 @@ from etsy_listings.ui.api.schemas import (
     Issue,
     ListingTemplateAsset,
     ListingTemplateDetail,
-    ListingTemplateDraftDetail,
     ListingTemplateSaveResult,
     ListingTemplateSource,
     ListingTemplateSummary,
 )
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace.common_copy import CommonCopyError
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import Workspace
 
@@ -99,17 +97,6 @@ def _plan_name(template: ListingTemplate) -> str | None:
     return PurePosixPath(template.pricing_plan).stem if template.pricing_plan else None
 
 
-def _description_title(workspace: Workspace, template: ListingTemplate) -> str | None:
-    ref = template.etsy.description.ref
-    if ref is None:
-        return None
-    try:
-        return workspace.load_common_copy(ref).title
-    except (CommonCopyError, ValueError):
-        # An unusable ref is already a block issue on the same answer.
-        return None
-
-
 def _view(
     workspace: Workspace,
     facts: WorkspaceFacts,
@@ -121,7 +108,6 @@ def _view(
         "issues": [i.model_dump() for i in _wire(issues)],
         "garment": _garment(facts, template),
         "pricing_plan_name": _plan_name(template),
-        "description_title": _description_title(workspace, template),
     }
 
 
@@ -182,8 +168,7 @@ def list_listing_templates(request: Request) -> list[ListingTemplateSummary]:
         cards.append(
             ListingTemplateSummary(
                 name=name,
-                garment_profile=template.garment_profile,
-                garment=_garment(facts, template),
+                garment=_garment(facts, template) or template.garment_profile,
                 colour_count=len(template.colors),
                 pricing_plan_name=_plan_name(template),
                 media=template.media,
@@ -192,19 +177,21 @@ def list_listing_templates(request: Request) -> list[ListingTemplateSummary]:
     return cards
 
 
-@router.get("/draft", response_model=ListingTemplateDraftDetail)
+@router.get("/draft", response_model=ListingTemplateDetail)
 def listing_template_draft(
     request: Request, from_listing: str | None = None, from_template: str | None = None
-) -> ListingTemplateDraftDetail:
+) -> ListingTemplateDetail:
     """The template Save as listing template or Clone would write, written
     nowhere: what the *name it* page shows before the seller commits a name
     (UI doc §1)."""
     workspace = _workspace(request)
     source, draft = _draft(workspace, listing=from_listing, template=from_template)
     facts = WorkspaceFacts.gather(workspace)
-    return ListingTemplateDraftDetail.model_validate(
+    return ListingTemplateDetail.model_validate(
         {
             **_view(workspace, facts, draft.template, draft_issues(workspace, draft, facts=facts)),
+            "name": "",
+            "modified_at": None,
             "source": source.model_dump(),
             "assets": [
                 ListingTemplateAsset(ref=a.ref, source_ref=a.source_ref).model_dump()

@@ -49,8 +49,7 @@ function TemplateCard({
       <div className="bc-card__body">
         <span className="bc-card__name">{template.name}</span>
         <span className="bc-card__facts">
-          {template.garment ?? template.garment_profile} ·{" "}
-          {plural(template.colour_count, "colour", "colours")} · {pricing}
+          {template.garment} · {plural(template.colour_count, "colour", "colours")} · {pricing}
         </span>
         <span className="bc-card__facts">
           {plural(template.media.length, "gallery image", "gallery images")} ·{" "}

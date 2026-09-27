@@ -7,7 +7,8 @@ import {
 } from "../api/listingTemplates";
 import { EditableName, type NameRefusal } from "../components/EditableName";
 import { mediaKind, mediaLabel, ownedTile } from "../media";
-import type { Issue, ListingTemplateDraft, ListingTemplateSource } from "../types";
+import { IssuesBanner } from "./editor/IssuesBanner";
+import type { ListingTemplateDraft, ListingTemplateSource } from "../types";
 
 /**
  * A new listing template in its *name it* state (UI doc §1; the
@@ -36,57 +37,6 @@ function sourceFrom(params: URLSearchParams): ListingTemplateSource | null {
   return null;
 }
 
-/** `IssuesBanner`'s count, in the mockup's template wording: a block is what
- * stops the save (A36); a warning is advice, and the template still saves. */
-function summarise(issues: Issue[]): string {
-  const blocks = issues.filter((issue) => issue.severity === "block").length;
-  const warns = issues.length - blocks;
-  const parts: string[] = [];
-  if (blocks > 0) parts.push(`${blocks} to fix before this template saves`);
-  const other = blocks > 0 ? "other " : "";
-  if (warns > 0) parts.push(warns === 1 ? `1 ${other}warning` : `${warns} ${other}warnings`);
-  return parts.join(" · ");
-}
-
-/** `IssuesBanner`'s markup with the template wording the mockup gives it:
- * a template never deploys, so nothing here says *Prevents deploying*. Read
- * only -- the fix is in the source, not on this page. */
-function TemplateIssues({ issues }: { issues: Issue[] }) {
-  const visible = issues.filter((issue) => issue.severity !== "info");
-  if (visible.length === 0) return null;
-  return (
-    <div className="issues">
-      <div className="issues__head">
-        <span className="issues__summary issues__summary--warn">{summarise(visible)}</span>
-        <span className="issues__when">Checked against what this template keeps</span>
-      </div>
-      {visible.map((issue, index) => (
-        <div key={`${issue.where}-${index}`} className="issue issue--warn">
-          <span className="issue__icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" width="15" height="15">
-              <path
-                d="M10.3 3.9a2 2 0 0 1 3.4 0l8.1 14.1A2 2 0 0 1 20.1 21H3.9a2 2 0 0 1-1.7-3z"
-                fill="var(--color-warning)"
-              />
-              <path
-                d="M12 9v4.6M12 17.2v.01"
-                fill="none"
-                stroke="var(--color-warning-ink)"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-              />
-            </svg>
-          </span>
-          <span className="issue__body">
-            <span className="issue__text">{issue.message}</span>
-            <span className="issue__where">{issue.where}</span>
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function pricingLine(draft: ListingTemplateDraft): string {
   if (draft.pricing_plan_name) return `Pricing plan: ${draft.pricing_plan_name}`;
   const sizes = Object.entries(draft.prices).map(([size, amount]) => `${size} ${amount}`);
@@ -95,7 +45,7 @@ function pricingLine(draft: ListingTemplateDraft): string {
 
 function descriptionLine(draft: ListingTemplateDraft): string {
   const body = draft.etsy.description;
-  if (body.ref) return `Common copy: ${draft.description_title ?? body.ref}`;
+  if (body.ref) return `Common copy: ${body.ref}`;
   if (body.text) return "Written in this template";
   return "No description body";
 }
@@ -105,7 +55,7 @@ function descriptionLine(draft: ListingTemplateDraft): string {
 function KeptSummary({ draft }: { draft: ListingTemplateDraft }) {
   // A local file's copy does not exist until the save: draw it from where its
   // source keeps it. A clone's source *is* a listing template.
-  const owner = draft.source;
+  const owner = draft.source ?? { kind: "listing-template", name: draft.name };
   const sourceRef = new Map(draft.assets.map((asset) => [asset.ref, asset.source_ref]));
   const images = draft.media.filter((entry) => mediaKind(entry) === "image").length;
   const videos = draft.media.length - images;
@@ -248,7 +198,11 @@ export function ListingTemplateNewPage() {
         </span>
       </div>
 
-      <TemplateIssues issues={current.issues} />
+      <IssuesBanner
+        issues={current.issues}
+        subject="listing-template"
+        when="Checked against what this template keeps"
+      />
       <KeptSummary draft={current} />
     </div>
   );

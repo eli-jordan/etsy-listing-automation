@@ -7,7 +7,6 @@ import { ListingTemplatesPage } from "./ListingTemplatesPage";
 
 function card(over: Partial<ListingTemplateSummary> & { name: string }): ListingTemplateSummary {
   return {
-    garment_profile: "comfort-colors-1717",
     garment: "Comfort Colors 1717",
     colour_count: 5,
     pricing_plan_name: "standard-nok",
@@ -88,7 +87,7 @@ describe("ListingTemplatesPage", () => {
     expect(screen.getByRole("button", { name: "New batch" })).toBeDisabled();
   });
 
-  it("deletes a template after confirming, and the card goes", async () => {
+  it("deletes a template only once confirmed, and the card goes", async () => {
     vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
       card({ name: "heavyweight-tee" }),
       card({ name: "everyday-tee" }),
@@ -96,6 +95,10 @@ describe("ListingTemplatesPage", () => {
     const remove = vi.spyOn(templatesApi, "deleteListingTemplate").mockResolvedValue();
     renderPage();
     await screen.findByText("heavyweight-tee");
+
+    fireEvent.click(screen.getByRole("button", { name: "Delete heavyweight-tee" }));
+    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(remove).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Delete heavyweight-tee" }));
     const dialog = screen.getByRole("dialog");
@@ -106,21 +109,6 @@ describe("ListingTemplatesPage", () => {
     expect(remove).toHaveBeenCalledWith("heavyweight-tee");
     expect(screen.getByText("everyday-tee")).toBeInTheDocument();
     expect(screen.getByText("1 template")).toBeInTheDocument();
-  });
-
-  it("cancelling the confirmation deletes nothing", async () => {
-    vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
-      card({ name: "heavyweight-tee" }),
-    ]);
-    const remove = vi.spyOn(templatesApi, "deleteListingTemplate").mockResolvedValue();
-    renderPage();
-    await screen.findByText("heavyweight-tee");
-
-    fireEvent.click(screen.getByRole("button", { name: "Delete heavyweight-tee" }));
-    fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
-
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(remove).not.toHaveBeenCalled();
   });
 
   it("says a failed delete, keeping the card", async () => {

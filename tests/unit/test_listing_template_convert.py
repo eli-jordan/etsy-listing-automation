@@ -203,11 +203,6 @@ class TestFileRefs:
 
 
 class TestSaving:
-    def test_nothing_is_written_until_save(self, workspace: Workspace) -> None:
-        from_listing(workspace, FIXTURE_LISTING)
-
-        assert not workspace.listing_templates_dir().exists()
-
     def test_a_saved_template_loads_back_as_it_was_converted(self, workspace: Workspace) -> None:
         draft = from_listing(workspace, FIXTURE_LISTING)
 

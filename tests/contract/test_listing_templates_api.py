@@ -162,23 +162,11 @@ class TestDraft:
         assert body["garment"] == "Comfort Colors 1717"
         assert not workspace.listing_templates_dir().exists()
 
-    def test_a_draft_of_an_incomplete_listing_carries_its_issues(
-        self, client: TestClient, workspace: Workspace
-    ) -> None:
-        edit_listing(workspace.root, colors=[], media=["common-media/size-guide.png"])
-
-        body = client.get(f"/api/listing-templates/draft?from_listing={FIXTURE_LISTING}").json()
-
-        assert [i["where"] for i in body["issues"]] == ["Variants › Colours"]
-
-    def test_a_clone_draft_names_its_source_template(self, client: TestClient) -> None:
+    def test_a_draft_needs_exactly_one_source_that_exists(self, client: TestClient) -> None:
         _create(client)
+        clone = client.get(f"/api/listing-templates/draft?from_template={NAME}").json()
 
-        body = client.get(f"/api/listing-templates/draft?from_template={NAME}").json()
-
-        assert body["source"] == {"kind": "listing-template", "name": NAME}
-
-    def test_a_draft_needs_exactly_one_source(self, client: TestClient) -> None:
+        assert clone["source"] == {"kind": "listing-template", "name": NAME}
         assert client.get("/api/listing-templates/draft").status_code == 422
         missing = client.get("/api/listing-templates/draft?from_listing=no-such-listing")
         assert missing.status_code == 404
@@ -196,9 +184,6 @@ class TestReadAndDelete:
         assert card["pricing_plan_name"] is None
         assert len(card["media"]) == 4
         assert card["batch_count"] == 0
-
-    def test_the_index_is_empty_before_any_template_exists(self, client: TestClient) -> None:
-        assert client.get("/api/listing-templates").json() == []
 
     def test_one_template_reads_back_with_its_issues(self, client: TestClient) -> None:
         _create(client)

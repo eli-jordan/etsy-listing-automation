@@ -33,15 +33,23 @@ import type { Issue, IssueTab } from "../../types";
 
 interface Props {
   issues: Issue[];
-  activeTab: IssueTab;
-  onJumpTo: (tab: IssueTab) => void;
+  activeTab?: IssueTab;
+  /** Absent where there are no tabs to jump to -- the listing-template
+   * *name it* page, which is read only -- and the rows then offer no action. */
+  onJumpTo?: (tab: IssueTab) => void;
+  /** A listing template's wording (the `template-unsaved` mockup): it never
+   * deploys, so a block is what stops the *save* (A36), and no row says
+   * *Prevents deploying*. */
+  subject?: "listing" | "listing-template";
+  when?: string;
 }
 
-function summarise(issues: Issue[]): string {
+function summarise(issues: Issue[], subject: Props["subject"]): string {
   const blocks = issues.filter((i) => i.severity === "block").length;
   const warns = issues.filter((i) => i.severity === "warn").length;
   const parts: string[] = [];
-  if (blocks > 0) parts.push(`${blocks} to fix before deploying`);
+  const stops = subject === "listing-template" ? "this template saves" : "deploying";
+  if (blocks > 0) parts.push(`${blocks} to fix before ${stops}`);
   // "Other" only beside a blocker count, where it says these are the ones
   // that do not stop a deploy; on its own it would be other than nothing.
   const other = blocks > 0 ? "other " : "";
@@ -72,15 +80,21 @@ function WarnIcon() {
   );
 }
 
-export function IssuesBanner({ issues, activeTab, onJumpTo }: Props) {
+export function IssuesBanner({
+  issues,
+  activeTab,
+  onJumpTo,
+  subject = "listing",
+  when = "Checked against this listing’s own configuration",
+}: Props) {
   const visible = issues.filter((issue) => issue.severity !== "info");
   if (visible.length === 0) return null;
 
   return (
     <div className="issues">
       <div className="issues__head">
-        <span className="issues__summary issues__summary--warn">{summarise(visible)}</span>
-        <span className="issues__when">Checked against this listing&rsquo;s own configuration</span>
+        <span className="issues__summary issues__summary--warn">{summarise(visible, subject)}</span>
+        <span className="issues__when">{when}</span>
       </div>
       {visible.map((issue, index) => (
         <div key={`${issue.tab}-${issue.where}-${index}`} className="issue issue--warn">
@@ -91,12 +105,12 @@ export function IssuesBanner({ issues, activeTab, onJumpTo }: Props) {
             <span className="issue__text">{issue.message}</span>
             <span className="issue__where">
               {issue.where}
-              {issue.severity === "block" && (
+              {issue.severity === "block" && subject === "listing" && (
                 <span className="issue__deploy">Prevents deploying</span>
               )}
             </span>
           </span>
-          {issue.tab === activeTab ? (
+          {onJumpTo === undefined ? null : issue.tab === activeTab ? (
             <span className="issue__fix issue__fix--here">Below</span>
           ) : (
             <button

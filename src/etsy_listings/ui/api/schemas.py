@@ -413,10 +413,10 @@ class ListingTemplateSummary(BaseModel):
     """One card on the Listing templates page (UI doc §2)."""
 
     name: str
-    garment_profile: str
-    garment: str | None
+    garment: str
     """The garment profile's blueprint as a seller names it --
-    ``Comfort Colors 1717`` -- or ``None`` when the profile will not load."""
+    ``Comfort Colors 1717`` -- or the profile's own name when it will not
+    load."""
     colour_count: int
     pricing_plan_name: str | None
     """The plan ref's filename stem; ``None`` when the template prices its
@@ -424,20 +424,6 @@ class ListingTemplateSummary(BaseModel):
     media: list[MediaEntry]
     batch_count: int = 0
     """Batches made from this template. Always 0 until batches exist (PR 2)."""
-
-
-class _ListingTemplateView(ListingTemplate):
-    issues: list[Issue]
-    garment: str | None = None
-    pricing_plan_name: str | None = None
-    description_title: str | None = None
-    """The common-copy file's own title when the body is a ref, so the page
-    can name it rather than show a path."""
-
-
-class ListingTemplateDetail(_ListingTemplateView):
-    name: str
-    modified_at: datetime
 
 
 class ListingTemplateSource(BaseModel):
@@ -454,12 +440,21 @@ class ListingTemplateAsset(BaseModel):
     source_ref: str
 
 
-class ListingTemplateDraftDetail(_ListingTemplateView):
-    """A listing template as Save as listing template or Clone would write it,
-    written nowhere (UI doc §1)."""
+class ListingTemplateDetail(ListingTemplate):
+    """A listing template as its pages read it, saved or not -- one shape for
+    both, as `ListingDetail` is one shape for a listing and the unnamed draft.
 
-    source: ListingTemplateSource
-    assets: list[ListingTemplateAsset]
+    A draft (``GET /draft``: Save as listing template or Clone, written
+    nowhere, UI doc §1) has ``name`` ``""``, no ``modified_at``, and says
+    where it came from in ``source`` and ``assets``."""
+
+    name: str
+    modified_at: datetime | None
+    issues: list[Issue]
+    garment: str | None = None
+    pricing_plan_name: str | None = None
+    source: ListingTemplateSource | None = None
+    assets: list[ListingTemplateAsset] = []
 
 
 class ListingTemplateSaveResult(BaseModel):

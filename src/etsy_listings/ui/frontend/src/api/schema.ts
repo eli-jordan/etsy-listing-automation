@@ -2124,12 +2124,23 @@ export interface components {
       /** Source Ref */
       source_ref: string;
     };
-    /** ListingTemplateDetail */
+    /**
+     * ListingTemplateDetail
+     * @description A listing template as its pages read it, saved or not -- one shape for
+     *     both, as `ListingDetail` is one shape for a listing and the unnamed draft.
+     *
+     *     A draft (``GET /draft``: Save as listing template or Clone, written
+     *     nowhere, UI doc §1) has ``name`` ``""``, no ``modified_at``, and says
+     *     where it came from in ``source`` and ``assets``.
+     */
     ListingTemplateDetail: {
+      /**
+       * Assets
+       * @default []
+       */
+      assets: components["schemas"]["ListingTemplateAsset"][];
       /** Colors */
       colors: string[];
-      /** Description Title */
-      description_title?: string | null;
       /**
        * @default {
        *       "description": {}
@@ -2144,11 +2155,8 @@ export interface components {
       issues: components["schemas"]["Issue"][];
       /** Media */
       media: (components["schemas"]["TemplateMediaEntry"] | string)[];
-      /**
-       * Modified At
-       * Format: date-time
-       */
-      modified_at: string;
+      /** Modified At */
+      modified_at: string | null;
       /** Name */
       name: string;
       /**
@@ -2171,54 +2179,7 @@ export interface components {
       pricing_plan?: string | null;
       /** Pricing Plan Name */
       pricing_plan_name?: string | null;
-    };
-    /**
-     * ListingTemplateDraftDetail
-     * @description A listing template as Save as listing template or Clone would write it,
-     *     written nowhere (UI doc §1).
-     */
-    ListingTemplateDraftDetail: {
-      /** Assets */
-      assets: components["schemas"]["ListingTemplateAsset"][];
-      /** Colors */
-      colors: string[];
-      /** Description Title */
-      description_title?: string | null;
-      /**
-       * @default {
-       *       "description": {}
-       *     }
-       */
-      etsy: components["schemas"]["TemplateEtsyConfig"];
-      /** Garment */
-      garment?: string | null;
-      /** Garment Profile */
-      garment_profile: string;
-      /** Issues */
-      issues: components["schemas"]["Issue"][];
-      /** Media */
-      media: (components["schemas"]["TemplateMediaEntry"] | string)[];
-      /**
-       * Price Overrides
-       * @default {}
-       */
-      price_overrides: {
-        [key: string]: {
-          [key: string]: string;
-        };
-      };
-      /**
-       * Prices
-       * @default {}
-       */
-      prices: {
-        [key: string]: string;
-      };
-      /** Pricing Plan */
-      pricing_plan?: string | null;
-      /** Pricing Plan Name */
-      pricing_plan_name?: string | null;
-      source: components["schemas"]["ListingTemplateSource"];
+      source?: components["schemas"]["ListingTemplateSource"] | null;
     };
     /**
      * ListingTemplateSaveResult
@@ -2263,9 +2224,7 @@ export interface components {
       /** Colour Count */
       colour_count: number;
       /** Garment */
-      garment: string | null;
-      /** Garment Profile */
-      garment_profile: string;
+      garment: string;
       /** Media */
       media: (components["schemas"]["TemplateMediaEntry"] | string)[];
       /** Name */
@@ -3954,7 +3913,7 @@ export interface operations {
           [name: string]: unknown;
         };
         content: {
-          "application/json": components["schemas"]["ListingTemplateDraftDetail"];
+          "application/json": components["schemas"]["ListingTemplateDetail"];
         };
       };
       /** @description Validation Error */
