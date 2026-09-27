@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 480">
+  <g fill="none" stroke="#23445a" stroke-width="10" stroke-linejoin="round" stroke-linecap="round">
+    <circle cx="200" cy="200" r="150"/>
+    <path d="M70 250 L150 150 L195 205 L240 130 L330 250"/>
+    <path d="M110 250 C150 232 250 232 290 250" stroke="#7fb3c9"/>
+  </g>
+  <circle cx="265" cy="110" r="22" fill="#7fb3c9"/>
+  <text x="200" y="405" text-anchor="middle" font-family="Georgia, serif" font-size="46" font-weight="700" fill="#23445a" letter-spacing="3">FJORD</text>
+  <text x="200" y="450" text-anchor="middle" font-family="Georgia, serif" font-size="24" fill="#7fb3c9" letter-spacing="6">MORNINGS</text>
+</svg>
