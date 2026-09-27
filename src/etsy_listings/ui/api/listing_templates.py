@@ -14,8 +14,8 @@ answer is on the wire, in the listings endpoints' idiom:
 * A **source** that cannot become a template -- no such listing, a ``./``
   file that cannot be read -- is ``404`` or ``422`` with the sentence.
 
-``GET /draft`` is declared before ``GET /{name}``, so a listing template
-cannot usefully be called ``draft``; that is the price of the plan's route.
+``GET /draft`` is declared before ``GET /{name}``, so ``draft`` is refused as
+a name: a template called that could be created and never opened.
 """
 
 from __future__ import annotations
@@ -210,6 +210,8 @@ def create_listing_template(
     first, so a bad one is a 400 before any source is read."""
     workspace = _workspace(request)
     workspace.listing_template_dir(body.name)
+    if body.name == "draft":
+        raise HTTPException(status_code=400, detail="'draft' is reserved; pick another name")
     _, draft = _draft(workspace, listing=body.from_listing, template=body.from_template)
     facts = WorkspaceFacts.gather(workspace)
     with _locks(request).listing_template(body.name):

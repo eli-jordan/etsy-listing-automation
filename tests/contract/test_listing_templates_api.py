@@ -124,6 +124,7 @@ class TestCreate:
         self, client: TestClient, workspace: Workspace
     ) -> None:
         assert _create(client, name="../escape").status_code == 400
+        assert _create(client, name="draft").status_code == 400  # GET /draft's path
         assert not workspace.listing_templates_dir().exists()
 
     def test_a_clone_is_created_from_another_template(
