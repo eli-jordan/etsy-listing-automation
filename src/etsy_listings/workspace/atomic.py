@@ -7,6 +7,7 @@ growing its own spelling of "temporary file, then rename".
 
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -26,3 +27,10 @@ def write_bytes_atomic(path: Path, data: bytes) -> None:
     except BaseException:
         Path(temporary).unlink(missing_ok=True)
         raise
+
+
+def write_json_atomic(path: Path, document: object) -> None:
+    """:func:`write_bytes_atomic` for a cache record (A37): indented UTF-8
+    JSON, so a record is readable when somebody opens ``.cache`` to see why."""
+    text = json.dumps(document, indent=2, ensure_ascii=False, sort_keys=False)
+    write_bytes_atomic(path, (text + "\n").encode("utf-8"))

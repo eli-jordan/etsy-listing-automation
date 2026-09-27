@@ -74,9 +74,11 @@ class ListingTemplateDraft:
         return next((asset.source for asset in self.assets if asset.ref == ref), None)
 
 
-def _local_refs(template: ListingTemplate) -> list[str]:
+def owned_refs(template: ListingTemplate) -> list[str]:
     """Every ``./`` ref a template names, once each, in order: its gallery
-    files and a pricing plan kept beside the listing."""
+    files and a pricing plan kept beside the listing. The files a template
+    owns -- what Save as copies in, and what staging freezes and batch
+    creation copies out into each listing (A39)."""
     refs = [entry for entry in template.media if isinstance(entry, str)]
     if template.pricing_plan is not None:
         refs.append(template.pricing_plan)
@@ -123,7 +125,7 @@ def from_listing(workspace: Workspace, listing: str) -> ListingTemplateDraft:
         context={"currency": workspace.defaults.etsy.currency},
     )
     listing_dir = workspace.listing_dir(listing)
-    renamed = {ref: _ASSETS_REF + ref.removeprefix("./") for ref in _local_refs(template)}
+    renamed = {ref: _ASSETS_REF + ref.removeprefix("./") for ref in owned_refs(template)}
     assets = tuple(
         AssetCopy(
             ref=new,
@@ -160,7 +162,7 @@ def from_template(workspace: Workspace, template: str) -> ListingTemplateDraft:
     they already name the template's own directory."""
     document = workspace.load_listing_template(template)
     assets: list[AssetCopy] = []
-    for ref in _local_refs(document):
+    for ref in owned_refs(document):
         try:
             path = workspace.resolve_template_ref(ref, template=template)
         except InvalidRefError as exc:
