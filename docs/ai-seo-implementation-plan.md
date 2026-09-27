@@ -6,12 +6,19 @@
 decision 4 and the AI-generation sections must be amended in PR 1 before any
 implementation PR is merged.
 
+**Amended by PRD 74 and A41.** Proposals are no longer browser state: the
+latest one per listing, and its per-section resolution, is kept in
+`.cache/proposals/` with no expiry, and a stale proposal stays usable. The
+persistence and stale-state rules below are superseded where they say
+otherwise; see
+[listing-batch-creation-implementation-plan.md](listing-batch-creation-implementation-plan.md).
+
 ## Outcome
 
 AI Mode is a manual, local editing aid within a *saved* listing's Details tab.
 It asks a locally authenticated coding-agent CLI for one complete SEO proposal,
 then lets the seller accept individual title, tag, and description-lead choices.
-The proposal itself is temporary browser state. Accepted values follow the
+The proposal itself is server-cached, not listing content (PRD 74). Accepted values follow the
 ordinary listing-editor autosave path; the model never writes `listing.yaml`, a
 lockfile, `generated.yaml`, or a remote listing.
 
@@ -44,7 +51,7 @@ different credentials boundary.
 | Prompt | `prompts/seo.md` is plain seller-editable instruction text. The application appends delimited JSON context and a JSON response schema; it does not support placeholders or executable prompt code. `setup` seeds the default only when the file is absent, never overwriting seller content. |
 | Proposal | Exactly three titles, twenty unique ranked tags, three description leads, seven phrase rationales, warnings, and observed OCR text. The first thirteen tags are **Best 13**. OCR is disclosed in the proposal, not saved as design data. |
 | Validation | Normalize harmless formatting, then enforce Etsy title/tag limits, tag uniqueness, and the agreed hard affiliation/content checks before the UI sees a proposal. Trademark findings are warnings, not a hard refusal. |
-| Proposal persistence | Store unresolved proposals only in browser local storage, scoped to the workspace and listing, for one day. Never store them server-side or in a workspace file. Editor changes to submitted generation inputs make a proposal stale; accepted values remain ordinary seller edits. |
+| Proposal persistence | **Amended (A41):** store the latest proposal per listing, with per-section resolution, in `.cache/proposals/`, with no expiry. Never in a workspace file. Editor changes to submitted generation inputs make a proposal stale, computed on the server; accepted values remain ordinary seller edits. |
 | Description model | `etsy.description` has a required `lead` and may contain exactly one sibling content source: `text` or `ref`. The final description is composed once and consumed everywhere. |
 | Common copy | `description.ref` is a portable POSIX workspace reference such as `common-copy/comfort-colors.md`; it may resolve only beneath `common-copy/`. The Markdown file has `title` and `targets` front matter, optional `summary`, and must target `description`. |
 | Legacy copy | Remove `<generate>` from the listing schema. Convert it to empty ordinary editable values. Convert a legacy scalar description to `description.text` unchanged with an empty lead; do not guess the opening paragraph. There is no runtime migration or compatibility reader. |
@@ -97,7 +104,7 @@ SEO service ── typed request / deadline / cancellation
 proposal normalisation + hard validation
         |
         v
-browser-local proposal drawers ── seller selection ── normal autosave
+server-cached proposal drawers ── seller selection ── normal autosave
 ```
 
 ### Provider adapters
@@ -142,11 +149,12 @@ state remains the provider's own responsibility.
 The request snapshots precisely the saved listing inputs: listing brief,
 selected design identity/content hash, garment context, and relevant editable
 listing values. The server captures the snapshot before generation and returns
-it with the proposal; the browser stores both under an opaque workspace-root
-identity and listing name. Changes to those editor inputs stale unresolved
-choices; prompt-file edits, unrelated workspace edits, and changes in other
-listings do not. A stale proposal remains visible but cannot be selected until
-regenerated.
+it with the proposal; the server stores both under the listing name (A41,
+originally the browser under an opaque workspace-root identity). Changes to
+those editor inputs stale unresolved choices; prompt-file edits, unrelated
+workspace edits, and changes in other listings do not. A stale proposal remains
+visible and, since PRD 74, selectable: the drawer heading names what changed and
+**Regenerate** stays available.
 
 Accepting a title or lead replaces that normal editor field. Tag candidates
 toggle into and out of the normal tag collection, respecting its thirteen-tag

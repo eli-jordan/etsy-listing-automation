@@ -1,9 +1,13 @@
 # Listing template and batch creation specification
 
-**Status:** proposed product requirements. This document records the settled
-requirements for listing templates and design-driven batch creation. It is not
-an authority over [prd.md](prd.md): the PRD wins until the conflicting AI
-proposal decisions identified below are amended.
+**Status:** settled product requirements, subsidiary to [prd.md](prd.md)
+through PRD 74, like [phase-3-etsy.md](phase-3-etsy.md) and
+[listing-lifecycle.md](listing-lifecycle.md). Where this document and the PRD
+disagree, the PRD wins. The interactions are in
+[ui-batch-creation-interactions.md](ui-batch-creation-interactions.md), which
+wins over this document where they differ; its reviewed departures have been
+applied here. The build is planned in
+[listing-batch-creation-implementation-plan.md](listing-batch-creation-implementation-plan.md).
 
 ## Outcome
 
@@ -125,6 +129,13 @@ missing or unreadable source asset prevents the listing template from being
 saved. Inline `etsy.description.text` is copied deliberately because the seller
 chose it as reusable template content; the conversion UI must show it rather
 than implying that all prose is being reset.
+
+**Save as listing template** has no confirmation dialog. It opens the new
+listing template straight away in the listing-template editor, unsaved, with
+the name field focused; the editor shows what was kept, and the design-specific
+fields are simply absent. Nothing is written until the seller commits a unique
+name, and leaving without naming discards the draft. **Clone** opens the same
+unsaved state prefilled from the source listing template.
 
 ### Completeness and editing
 
@@ -355,7 +366,7 @@ completed proposals, errors, and history. **Resume batch** explicitly queues
 the remaining work again.
 
 Deleting a batch record implicitly cancels its work, then removes its summary,
-review flags, retry/resume state, and listings-table filter. It never deletes
+review flags, retry/resume state, and its Recent batches row. It never deletes
 designs, listings, written briefs, or proposals.
 
 ## Durable AI proposals
@@ -379,13 +390,13 @@ or dismissed title, tag, and lead sections remain resolved after reload; keeping
 the proposal means the seller can still inspect or deliberately reopen those
 suggestions, not that resolved drawers repeatedly present themselves as new.
 
-Changes to relevant generation inputs mark the proposal stale. A stale proposal
-remains visible and, unlike the current interaction, can be accepted after an
-explicit warning confirmation. This rule applies to every proposal, not only
-batch proposals. The first stale acceptance in an editor session requires the
-confirmation; subsequent choices from that same proposal in that session may
-proceed until reload or proposal replacement. Staleness must never be hidden or
-mistaken for current output.
+Changes to relevant generation inputs mark the proposal stale. Staleness is
+computed by the server, so the batch summary and the editor report it the same
+way. A stale proposal remains visible and, unlike the earlier interaction, its
+choices stay usable with no confirmation dialog: the drawer heading is the
+warning (*Out of date: brief edited since. Still usable*), and **Regenerate**
+remains available. This rule applies to every proposal, not only batch
+proposals. Staleness must never be hidden or mistaken for current output.
 
 Marking a row Reviewed does not clear its proposal. Renaming a listing moves its
 proposal ownership; deleting a listing removes the proposal and cancels an
@@ -399,9 +410,17 @@ error, proposal readiness/staleness, and the independent Reviewed flag for each
 row. It provides the relevant Resume, Retry, rename-batch, open-listing, and
 review-state actions.
 
-The ordinary listings table gains a batch filter so the seller can see only the
-listings created by one batch. There is no separate next/previous batch review
-editor in the first version.
+The ordinary listings table is unchanged: there is no batch filter, because the
+summary already lists and opens every listing in the batch. There is no separate
+next/previous batch review editor in the first version.
+
+Batches and unfinished staging sessions are reopened from a **Recent batches**
+table on the Listing templates page. Each row shows a status derived from its
+rows, never set by hand: *Staging* (not confirmed), *Drafting* (AI work still
+queued or running), *In review* (AI finished, not every listing reviewed),
+*Complete* (every created listing reviewed) or *Stopped* (**Cancel batch** left
+work undrafted). Failures are not a status; they appear as a count beside the
+progress. Complete does not require deploying.
 
 **Mark reviewed** and **Mark needs review** are available from both the batch
 summary and listing editor. Reviewed is an explicit seller judgment:
@@ -414,7 +433,7 @@ summary and listing editor. Reviewed is an explicit seller judgment:
 - review state is advisory and never blocks `plan` or `apply`.
 
 Review and batch membership live in disposable cache. Clearing `.cache` removes
-batch history, filters, queue state, Reviewed flags, staging sessions, and
+batch history, queue state, Reviewed flags, staging sessions, and
 unaccepted proposals. It does not remove listing templates, designs, listings,
 generated briefs, accepted SEO edits, lockfiles, or remote state.
 
@@ -424,17 +443,24 @@ Batch creation never deploys. A created listing becomes deployable only after
 ordinary listing validation passes, including a seller-accepted non-empty title
 and description lead.
 
-If any UI or CLI `apply` starts for a listing with pending batch work or any
-active AI run, deployment takes precedence. The engine claims the listing,
+If a UI deploy (plan or apply) starts for a listing with pending batch work or
+any active AI run, deployment takes precedence. The server claims the listing,
 cancels the work, and waits for its worker to finish before planning reads the
-listing or any remote write begins. It also refuses a new AI run while apply
-owns the listing. Cancelled batch work must not later resume automatically and
-place a proposal onto the deployed listing.
+listing or any remote write begins. It also refuses a new AI run while the
+deploy owns the listing. Cancelled batch work must not later resume
+automatically and place a proposal onto the deployed listing; only an explicit
+Retry of that row queues it again.
+
+CLI `apply` does not cancel or wait for AI work. The AI queue lives in the `ui`
+server process, and a CLI apply during batch AI is an accepted edge: the run may
+leave a proposal on the deployed listing, which the seller can ignore or
+regenerate.
 
 After the full apply for a listing succeeds, every apply entry point removes
-that listing's cached proposal. Success means the engine reports the listing's
-requested run complete with no blocked, failed, cancelled, or partially applied
-stage; it does not mean merely that an entry-point command returned normally.
+that listing's cached proposal. **Full success** means the engine's outcome for
+the listing is `ok`, no stage in its plan was blocked, and its lockfile carries
+no incomplete-apply marker. `ok` alone is not enough, because a blocked stage is
+not a failure; nor is an entry-point command merely returning normally.
 The batch record remains, and deployment does not change the explicit Reviewed
 flag.
 
@@ -445,12 +471,11 @@ behavior. A CLI apply and UI apply must leave the same proposal state.
 
 | Surface | Required behavior |
 |---|---|
-| Listing editor | **Save as listing template**; durable proposal review; stale acceptance warning; Mark reviewed/needs review when the listing belongs to a cached batch. |
-| Listing templates page | Small card collection; open editor; clone; delete; start a batch; accept a drop as a shortcut to staging. |
+| Listing editor | **Save as listing template**; durable proposal review; stale choices usable under an *Out of date* heading; Back to batch when opened from a batch summary; Mark reviewed/needs review when the listing belongs to a cached batch. |
+| Listing templates page | Small card collection; open editor; clone; delete; start a batch; accept a drop as a shortcut to staging; Recent batches with derived status. |
 | Listing-template editor | Valid-only autosave, production settings, copied media assets, and calibrator test-design preview controls. |
 | New batch page | Select one listing template, upload one ZIP or loose PNG set, persist and resume staging, edit names, remove invalid rows, confirm. |
 | Batch summary | Rename, status counts and rows, Cancel/Resume, Retry failures, open listing, Mark reviewed/needs review, delete batch record. |
-| Listings table | Filter by cached batch identity and label. |
 
 ## Error and recovery rules
 
@@ -489,28 +514,23 @@ The first version does not include:
 - a hard deployment gate based on disposable Reviewed state;
 - proposal history or automatic proposal expiry;
 - individual row cancellation;
-- a settings UI for batch concurrency; or
-- live-linked or explicitly versioned listing templates.
+- a settings UI for batch concurrency;
+- live-linked or explicitly versioned listing templates;
+- a batch filter on the listings table; or
+- CLI `apply` cancelling or awaiting AI work.
 
 An inbox may be added later as another producer of the same staging resource. It
 must not introduce a second naming, validation, deduplication, or batch-creation
 path.
 
-## Documentation changes required before implementation
+## Documentation changes
 
-The current authority and interaction documents deliberately specify temporary
-browser-local proposals and prohibit accepting stale choices. This feature
-changes both decisions. Before implementation merges, amend the PRD first, then
-bring its subsidiary documents into agreement. At minimum review:
-
-- PRD decisions 4 and 27, the rename/proposal rule in PRD 60, and the AI-run
-  decisions around PRD 68-71;
-- [ai-seo-implementation-plan.md](ai-seo-implementation-plan.md), especially
-  proposal persistence and stale-state rules;
-- [ui-listing-seo-interactions.md](ui-listing-seo-interactions.md), especially
-  the product invariants and stale interaction; and
-- [implementation-plan.md](implementation-plan.md), including the AI proposal
-  lifecycle and the new workspace layout.
+The earlier authority and interaction documents specified temporary
+browser-local proposals and prohibited accepting stale choices. PRD 74 changes
+both, and the documents were amended with it: PRD 4, 27, 60, 68, 69 and 71;
+A9 and the new A35–A46 in [implementation-plan.md](implementation-plan.md);
+[ai-seo-implementation-plan.md](ai-seo-implementation-plan.md); and
+[ui-listing-seo-interactions.md](ui-listing-seo-interactions.md).
 
 The naming allocator does not weaken PRD 60's no-overwrite rule. It chooses a
 free identity before creation; it never merges into or replaces an existing
@@ -538,12 +558,13 @@ The feature is complete when all of the following are observable:
 7. Every successful row has a fresh saved brief, unless the seller supplied one
    before drafting, and one latest server-cached SEO proposal; accepted title,
    tags, and lead still require seller actions.
-8. A stale proposal is clearly labelled and can be accepted only after an
-   explicit warning confirmation.
-9. Batch summary, listing-table filtering, Retry, Cancel/Resume, and explicit
-   Reviewed controls survive browser and server restarts while cache remains.
+8. A stale proposal is clearly labelled as out of date and its choices remain
+   usable without a confirmation dialog.
+9. Batch summary, Recent batches with derived status, Retry, Cancel/Resume, and
+   explicit Reviewed controls survive browser and server restarts while cache
+   remains.
 10. Clearing cache has exactly the documented losses and never removes created
     workspace listings, designs, accepted copy, or deployment state.
-11. UI and CLI apply both cancel pending batch work and any active AI run before
-    deployment, await its termination, and clear the cached proposal only after
-    the listing's full apply succeeds.
+11. A UI deploy cancels pending batch work and any active AI run for the listing
+    and awaits its termination before planning; UI and CLI apply both clear the
+    cached proposal only after the listing's full apply succeeds.

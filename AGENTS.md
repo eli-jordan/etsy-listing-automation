@@ -19,14 +19,18 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 72 numbered product decisions in its appendix. |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 74 numbered product decisions in its appendix. |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 46 architecture decisions, `A1`–`A46`. |
 
-Four subsidiary documents carry detail those two point at rather than repeat:
+Five subsidiary documents carry detail those two point at rather than repeat:
 [docs/multi-placement-rendering.md](docs/multi-placement-rendering.md) (PRD 28),
 [docs/phase-3-etsy.md](docs/phase-3-etsy.md) (PRD 52–59, A24–A28),
-[docs/listing-lifecycle.md](docs/listing-lifecycle.md) (PRD 61–67), and
-[docs/deploy-changes.md](docs/deploy-changes.md) (PRD 20's runner, A29–A33). They are
+[docs/listing-lifecycle.md](docs/listing-lifecycle.md) (PRD 61–67),
+[docs/deploy-changes.md](docs/deploy-changes.md) (PRD 20's runner, A29–A33), and
+[docs/listing-batch-creation-spec.md](docs/listing-batch-creation-spec.md) (PRD 74,
+A35–A46), whose interactions doc
+[docs/ui-batch-creation-interactions.md](docs/ui-batch-creation-interactions.md)
+wins over it where they differ. They are
 not a third authority — where any disagrees with the PRD, the PRD wins.
 
 When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.

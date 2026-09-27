@@ -9,9 +9,11 @@ It explains what the seller does, what the interface does in response, and why.
 The product requirements are in
 [listing-batch-creation-spec.md](listing-batch-creation-spec.md); this document
 does not repeat them, but it does record the places where the reviewed designs
-deliberately depart from that spec (see [Departures from the spec](#departures-from-the-spec)).
-Where the two still disagree and this document is silent, the spec wins, and
-[prd.md](prd.md) wins over both.
+deliberately departed from that spec (see [Departures from the spec](#departures-from-the-spec)).
+Where the two disagree, this document wins over the spec; where this document is
+silent, the spec applies, and [prd.md](prd.md) (PRD 74) wins over both. The
+build is planned in
+[listing-batch-creation-implementation-plan.md](listing-batch-creation-implementation-plan.md).
 
 Paths below are relative to the repository root. `mockups/` is shorthand for
 `src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/`, and `app/`
@@ -319,7 +321,8 @@ Not obvious from the designs:
 
 Review changed these decisions after
 [listing-batch-creation-spec.md](listing-batch-creation-spec.md) was written.
-The spec (and, per its own list, the PRD) should be amended to match.
+The spec and the PRD (PRD 74) have been amended to match; the table is kept as
+the record of why.
 
 | Spec says | Mockups do | Why |
 |---|---|---|
@@ -416,11 +419,12 @@ with the scene brief in `_brief.md` beside it.
 | [`_batch.css`](../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_batch.css) | Styles for the new surfaces only (cards, drop zone, counts, status cells), all built from the app's tokens. Tables use the app's own `table.listings`. |
 | `design/assets/batch-create/` | Fixture design artwork (SVG) and the size chart. Mockup photos come from `design/assets/batch-deploy/`. |
 
-## Open questions
+## Closed questions
 
-1. **Recent batches placement.** It sits on the Listing templates page because
-   the spec names no batch index. If batches grow in number, they may want their
-   own page.
+Both were settled as drawn.
+
+1. **Recent batches placement.** It stays on the Listing templates page for the
+   first version. If batches grow in number, they may want their own page later.
 2. **Refused drop on a card.** A drop on a template card that breaks the input
-   rules is drawn as returning to New batch with the refusal shown; an inline
-   refusal on the card itself was not explored.
+   rules navigates to New batch with that template preselected and the refusal
+   shown. There is no inline refusal on the card.

@@ -52,8 +52,8 @@ workspace.
    autosave path persists it; there is no separate AI save or apply step.
 5. Rejecting or closing a suggestion drawer does not undo values already added
    to normal fields.
-6. Suggestions are temporary browser state, not another source of truth for
-   listing copy.
+6. Suggestions are a server-cached proposal (PRD 74), not another source of
+   truth for listing copy.
 7. Regeneration may replace pending suggestions, but never accepted listing
    values.
 8. All three drawers live in the existing Listing Details screen and may be
@@ -256,21 +256,23 @@ desktop `try-workspace` only, never arbitrary discovered workspaces.
 
 ## 7. Proposal lifecycle and stale inputs
 
-The pending proposal is stored only in browser local storage for one day, scoped
-to its workspace and saved listing, so it can survive an accidental refresh. It
-is not written to listing YAML, a generated-copy file, or the backend until the
-seller chooses a value that belongs in a normal listing field.
+The latest proposal is stored in server cache (`.cache/proposals/`), scoped to
+its saved listing, with which drawers were resolved (PRD 74). It survives a
+refresh or server restart and has no expiry: it lasts until replaced, the
+listing is deleted or fully applied, or the cache is cleared. It is never
+written to listing YAML, a generated-copy file, or a remote listing; only a
+value the seller chooses reaches a normal listing field.
 
 Generation records a snapshot of the relevant inputs, including the design,
 brief, garment context, and other facts supplied to the model.
 
 | Event                                                                           | UI response                                                                                                             | Why it is important                                                                                                 |
 | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| A relevant input changes while suggestions are pending | Keep the proposal visible, mark it stale, and disable selecting its pending values. Offer **Regenerate**. | Hiding the result would be disorienting, while accepting copy based on obsolete facts could introduce inaccuracies. |
+| A relevant input changes while suggestions are pending | Keep the proposal visible and its choices selectable. The drawer heading reads *Out of date: {what changed}. Still usable*. Offer **Regenerate**. | Hiding the result would be disorienting; the heading is the warning, and a dialog for every stale pick was friction without new information (PRD 74). |
 | The editor is left or reloaded while generation runs | Keep running. The editor reattaches to the run on return and stores its proposal when it arrives. | The work was asked for; walking away from the tab is not a request to throw it away. |
 | Activate **Regenerate**                                                         | Request a complete replacement proposal from the current inputs. Preserve all values already chosen into normal fields. | Regeneration repairs context without undoing seller decisions.                                                      |
 | Resolve or dismiss one drawer                                                   | Clear only that part of the pending proposal.                                                                           | Title, tags, and lead are independent decisions.                                                                    |
-| Resolve or dismiss all drawers                                                  | Remove the pending proposal from local storage.                                                                         | Temporary suggestions should not linger after they can no longer help.                                              |
+| Resolve or dismiss all drawers                                                  | Keep the proposal, recorded as resolved, so no drawer reopens as new; it can still be inspected.                         | Resolved suggestions must not keep presenting themselves, but the seller may deliberately revisit them.              |
 | Reload with a current pending proposal                                          | Restore unresolved drawers in place.                                                                                    | A refresh should not waste a completed model request.                                                               |
 
 Once a suggestion is chosen, it is no longer tied to the proposal and receives
@@ -329,8 +331,8 @@ The authority documents now establish the boundaries this interaction uses.
 Generation is an in-memory **AI run** with its own registry, separate from
 `ui/runs` and never on the plan/apply worker thread. It keeps no durable job
 record, and its only workspace outputs are the guarded `brief` write and the
-gitignored `.cache/market/` (PRD 71). Local storage scopes a one-day proposal
-by workspace and listing. The application appends delimited JSON context and a response
+gitignored `.cache/market/` (PRD 71), plus the listing's cached proposal in
+`.cache/proposals/` (PRD 74). The application appends delimited JSON context and a response
 schema to plain seller-editable `prompts/seo.md`; it does not support prompt
 placeholders or executable prompt code.
 
