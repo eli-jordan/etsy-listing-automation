@@ -86,6 +86,7 @@ def test_leaving_with_an_unsaved_edit_asks_first(page, workspace_root: Path) -> 
     _open(page)
     _switch_every_colour_off(page)
     page.get_by_text("Not saved — fix the highlighted field and it will be written").wait_for()
+    last_complete_colours = _colours(workspace_root)
 
     page.locator(".page-head__crumb", has_text="Listing templates").click()
 
@@ -97,7 +98,11 @@ def test_leaving_with_an_unsaved_edit_asks_first(page, workspace_root: Path) -> 
     page.locator(".page-head__crumb", has_text="Listing templates").click()
     page.get_by_role("dialog").get_by_role("button", name="Leave").click()
     page.locator("article.bc-card", has_text=LISTING_TEMPLATE).wait_for()
-    assert _colours(workspace_root) == ["moss"]
+    # Which complete edit reached the debounce before the all-off refusal is
+    # deliberately timing-independent. Leaving must preserve that exact last
+    # complete version rather than writing the unsaved empty selection.
+    assert last_complete_colours
+    assert _colours(workspace_root) == last_complete_colours
 
 
 def test_clone_and_name_makes_two_independent_listing_templates(  # noqa: ANN001
