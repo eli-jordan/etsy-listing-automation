@@ -86,7 +86,7 @@ names:
 .cache/staging/<id>/uploads/<sha256>.png
 .cache/batches/<id>.json              # batch record, rows, queue + review state
 .cache/batches/<id>/template/         # frozen template, kept for Retry
-.cache/proposals/<listing-casefold>.json
+.cache/proposals/<listing>.json
 ```
 
 Every record has a `schema` integer. A record with an unknown schema is treated
@@ -94,6 +94,10 @@ as absent (cache is disposable). Stores are plain classes over `Workspace`:
 `StagingStore` and `BatchStore` in a new `batches/` package, and `ProposalStore` in
 `ai/proposals.py`, so the engine can reach it without importing the UI. Mutations
 go through the store under a per-record `threading.Lock`.
+A proposal file is named by the listing's exact name, as PRD 4's layout and the
+market snapshot are, not its casefold: a casefolded key makes two listings that
+differ only in case share one file on a case-sensitive filesystem, and on a
+case-insensitive one such listings cannot coexist anyway.
 
 **A38 — Name allocation.** `batches/naming.py`: `allocate(base, taken) -> str`
 returns `base` or the smallest free `base-N` (N ≥ 2), where `taken` is the
