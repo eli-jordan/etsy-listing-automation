@@ -22,6 +22,9 @@ from etsy_listings import connections
 from etsy_listings.clients.etsy.listings import HttpEtsyListingClient
 from etsy_listings.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
 from etsy_listings.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
+from etsy_listings.clients.printify import CachedCatalogClient
+from etsy_listings.clients.printify.fakes import FakeCatalogClient
+from etsy_listings.clients.printify.models import Blueprint
 from etsy_listings.config.secrets import MissingCredentialError
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import Workspace
@@ -111,6 +114,32 @@ def test_a_run_context_carries_every_client_a_stage_might_ask_for(workspace_root
     assert ctx.catalog is not None
     assert ctx.printify is not None
     assert ctx.etsy is None  # no Etsy sign-in in the fixture workspace
+
+
+def test_a_run_can_borrow_credentials_without_borrowing_the_workspace_cache(
+    workspace_root: Path, tmp_path: Path
+) -> None:
+    """The E2E layer deploys a disposable workspace through credentials from
+    a configured one. Its catalog state still belongs to the disposable
+    workspace: no stale user cache is read or written (A8)."""
+    workspace = Workspace.discover(root_override=workspace_root)
+    expected = Blueprint(
+        id=706,
+        title="Unisex Garment-Dyed T-shirt",
+        brand="Comfort Colors",
+        model="1717",
+    )
+    CachedCatalogClient(
+        FakeCatalogClient([expected], {}, {}), workspace.catalog_cache_dir()
+    ).blueprints()
+    credentials_root = tmp_path / "credentials"
+    credentials_root.mkdir()
+    _env(credentials_root, KEY_PAIR)
+
+    ctx = connections.run_context(workspace, credentials_root=credentials_root)
+
+    assert ctx.catalog.blueprints() == [expected]
+    assert isinstance(ctx.etsy, HttpEtsyListingClient)
 
 
 # ------------------------------------------------------------ Etsy market

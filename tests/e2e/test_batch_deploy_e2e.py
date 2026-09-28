@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Callable, Iterator, Sequence
-from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -96,10 +95,10 @@ def client(
     etsy_market_workspace: Workspace,
     ai_providers: Callable[[Workspace], Sequence[AiProvider]],
 ) -> Iterator[TestClient]:
-    context = connections.run_context(credentials_workspace)
-
     def real_context(ws: Workspace, on_event: EventSink | None) -> RunContext:
-        return replace(context, workspace=ws, on_event=on_event or context.on_event)
+        return connections.run_context(
+            ws, on_event=on_event, credentials_root=credentials_workspace.root
+        )
 
     app = create_app(
         workspace,
