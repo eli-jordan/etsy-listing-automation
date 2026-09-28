@@ -81,7 +81,7 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
     page.get_by_text("Each listing is a local draft. Nothing goes to Printify or Etsy.").wait_for()
     create.click()
 
-    page.get_by_text("Work carries on if you close this tab.", exact=False).wait_for()
+    page.get_by_text("Briefs are written for you", exact=False).wait_for()
     rows = page.locator("table.bc-table tbody tr")
     assert rows.count() == 3
     names = ["night-hike-club", "cedar-trail", "summit-coffee"]

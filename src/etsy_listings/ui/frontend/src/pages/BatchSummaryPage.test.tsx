@@ -235,6 +235,36 @@ describe("BatchSummaryPage", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("No such batch.");
   });
 
+  it("says how drafting runs only while it is running", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW, { status: "in_review" }));
+    renderPage();
+
+    expect(await screen.findByText(/Drafting finished\./)).toBeInTheDocument();
+    expect(screen.queryByText(/listing at a time/)).toBeNull();
+    expect(screen.queryByText(/Work carries on if you close this tab/)).toBeNull();
+  });
+
+  it("says how many draft at once when the limit is above one", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(MID_RUN, { concurrency: 3 }));
+    renderPage();
+
+    expect(
+      await screen.findByText(
+        /Drafting up to 3 listings at a time\. Work carries on if you close this tab\./,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it("says drafting stopped while Cancel batch has left work for Resume", async () => {
+    const stopped = IN_REVIEW.map((r) =>
+      r.name === "after-rain-trail-2" ? { ...r, ai: "stopped" as const } : r,
+    );
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(stopped, { status: "stopped" }));
+    renderPage();
+
+    expect(await screen.findByText(/Drafting stopped\. Resume queues the rest\./)).toBeVisible();
+  });
+
   it("marks a row reviewed and back, and counts the reviewed listings", async () => {
     vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW, { status: "in_review" }));
     const reviewed = IN_REVIEW.map((r) =>

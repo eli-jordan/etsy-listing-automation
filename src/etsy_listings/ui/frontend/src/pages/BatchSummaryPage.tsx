@@ -274,10 +274,17 @@ export function BatchSummaryPage() {
   ];
   const needRetry = count("retry");
   const concurrency = batch?.concurrency ?? 1;
-  const pace =
-    concurrency === 1
-      ? "Drafting one listing at a time."
-      : `Drafting up to ${concurrency} listings at a time.`;
+  // How drafting runs is news only while it runs: once nothing is queued or
+  // running, the line says where the batch got to instead (UI doc §7).
+  const pace = busy
+    ? `${
+        concurrency === 1
+          ? "Drafting one listing at a time."
+          : `Drafting up to ${concurrency} listings at a time.`
+      } Work carries on if you close this tab.`
+    : count("stopped") > 0
+      ? "Drafting stopped. Resume queues the rest."
+      : "Drafting finished.";
 
   return (
     <>
@@ -388,9 +395,9 @@ export function BatchSummaryPage() {
           </div>
 
           <p className="bc-small bc-muted" style={{ margin: "0 0 var(--space-3)" }}>
-            Created {createdAt(batch.created_at)} from {batch.listing_template}. {pace} Work carries
-            on if you close this tab. Briefs are written for you; titles, tags and the description
-            lead wait for you to accept them in each listing.
+            Created {createdAt(batch.created_at)} from {batch.listing_template}. {pace} Briefs are
+            written for you; titles, tags and the description lead wait for you to accept them in
+            each listing.
           </p>
 
           <table className="listings bc-table">
