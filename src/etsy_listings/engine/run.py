@@ -280,14 +280,29 @@ def apply_listings(
                 raise StalePlanError(listing, planned)
         on_event(EngineListingPlanned(listing, planned.plan))
         lock_file = ctx.workspace.lock_file(listing)
+        halted = False
+
+        def stop_here() -> bool:
+            # `execute` breaks out of its loop the first time this answers
+            # True, so remembering that answer is knowing it stopped.
+            nonlocal halted
+            halted = halted or stop()
+            return halted
+
         execute(
             ctx,
             planned,
             lock,
             on_event=on_event,
             record=lambda updated: updated.write(lock_file),
-            should_stop=stop,
+            should_stop=stop_here,
         )
+        if halted:
+            # A33's graceful stop skipped stages the plan meant to run, so
+            # the listing-level half of the apply did not happen either: a
+            # retract that never ran must not wipe the listing, and a renew
+            # never sent must stay marked (PRD 62, 64).
+            return planned
         after_apply(ctx, listing, planned)
         return planned
 
