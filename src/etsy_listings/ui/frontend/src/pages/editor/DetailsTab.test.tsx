@@ -97,6 +97,54 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   };
 }
 
+describe("DetailsTab for a listing template", () => {
+  /* UI doc §3: Brief, Title, Tags, Description lead and AI Mode are written
+     for each listing in a batch, so a listing template has none of them. */
+  it("has none of the design-specific fields, and says where the lead goes", () => {
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([]);
+    render(
+      <DetailsTabView
+        kind="listing-template"
+        detail={detail({ etsy: { ...detail().etsy, section: "Hiking tees" } })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+
+    for (const label of ["Brief", "Title", "Description Lead"]) {
+      expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText("Tags")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /AI Mode/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Description Body")).toBeInTheDocument();
+    expect(screen.getByLabelText("Section")).toHaveValue("Hiking tees");
+    expect(
+      screen.getByText("Each listing's own description lead is placed above this body."),
+    ).toBeInTheDocument();
+  });
+
+  it("still edits the description body", () => {
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([]);
+    vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([]);
+    const onUpdate = vi.fn();
+    render(
+      <DetailsTabView
+        kind="listing-template"
+        detail={detail()}
+        onUpdate={onUpdate}
+        onFlush={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Description body"), { target: { value: "Cotton." } });
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      etsy: { description: { lead: "", text: "Cotton.", ref: null } },
+    });
+  });
+});
+
 describe("DetailsTab", () => {
   it("shows and edits the brief through normal autosave", () => {
     const onUpdate = vi.fn();

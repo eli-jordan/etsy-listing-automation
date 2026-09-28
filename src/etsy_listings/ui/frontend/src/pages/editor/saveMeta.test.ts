@@ -38,6 +38,26 @@ describe("metaFor", () => {
   });
 });
 
+describe("metaFor a listing template", () => {
+  /* UI doc §1 and §3: the same save line, about a different file. */
+  it("asks for a name before anything is written", () => {
+    expect(metaFor({ kind: "unnamed" }, null, "listing-template")).toBe(
+      "Not saved — name this template to save it",
+    );
+  });
+
+  it("names the listing template that took the name", () => {
+    expect(metaFor({ kind: "name-taken", name: "tee" }, null, "listing-template")).toBe(
+      "There is already a listing template called “tee” — pick another name",
+    );
+  });
+
+  it("shows template.yaml's path once saved", () => {
+    render(metaFor({ kind: "saved", savedAt: Date.now() }, "tee", "listing-template"));
+    expect(screen.getByText("listing-templates/tee/template.yaml")).toBeInTheDocument();
+  });
+});
+
 describe("timeAgo", () => {
   const now = Date.now();
 
