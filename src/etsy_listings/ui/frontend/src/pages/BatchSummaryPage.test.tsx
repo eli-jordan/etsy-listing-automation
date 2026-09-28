@@ -265,6 +265,32 @@ describe("BatchSummaryPage", () => {
     expect(await screen.findByText(/Drafting stopped\. Resume queues the rest\./)).toBeVisible();
   });
 
+  it("shows a row a deploy cancelled, offers its own Retry and no Resume (A43)", async () => {
+    const deployed = IN_REVIEW.map((r) =>
+      r.name === "after-rain-trail-2" ? { ...r, ai: "cancelled_by_deploy" as const } : r,
+    );
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(deployed, { status: "in_review" }));
+    const retryRow = vi
+      .spyOn(batchesApi, "retryBatchRow")
+      .mockResolvedValue(
+        batch(deployed.map((r) => (r.ai === "cancelled_by_deploy" ? { ...r, ai: "queued" } : r))),
+      );
+    renderPage();
+
+    await screen.findAllByText("after-rain-trail-2");
+    const cancelled = within(rowFor("after-rain-trail-2"));
+    expect(cancelled.getByText("Cancelled for deploy. Retry drafts it again.")).toBeVisible();
+    expect(counts()).toContain("1 cancelled for deploy");
+    expect(counts()).toContain("0 need retry");
+    expect(screen.queryByRole("button", { name: "Resume" })).toBeNull();
+    expect(screen.getByText(/Drafting finished\./)).toBeVisible();
+
+    fireEvent.click(cancelled.getByRole("button", { name: "Retry" }));
+
+    expect(retryRow).toHaveBeenCalledWith("b1", "after-rain-trail-2");
+    await waitFor(() => expect(counts()).toContain("1 queued"));
+  });
+
   it("marks a row reviewed and back, and counts the reviewed listings", async () => {
     vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW, { status: "in_review" }));
     const reviewed = IN_REVIEW.map((r) =>

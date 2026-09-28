@@ -265,6 +265,33 @@ describe("useAiSeoMode while a batch owns the listing (A40)", () => {
   });
 });
 
+describe("useAiSeoMode while a deploy holds the listing (A43)", () => {
+  const DEPLOYING = "This listing is deploying. AI Mode is back once the deploy finishes.";
+
+  afterEach(() => vi.useRealTimers());
+
+  it("is disabled with the hint and asks again until the deploy lets go", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const readiness = vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: false,
+      reason: DEPLOYING,
+      batch_pending: false,
+      deploying: true,
+    });
+    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    await waitFor(() => expect(result.current.reason).toBe(DEPLOYING));
+    expect(result.current.available).toBe(false);
+
+    readiness.mockResolvedValue({ ready: true, batch_pending: false, deploying: false });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BATCH_POLL_MS);
+    });
+
+    await waitFor(() => expect(result.current.available).toBe(true));
+    expect(runs.streams).toHaveLength(0);
+  });
+});
+
 describe("useAiSeoMode and the auto chain's brief", () => {
   it("puts a drafted brief into an empty field without saving it again", async () => {
     mockReadiness({ ready: true, batch_pending: false, deploying: false });

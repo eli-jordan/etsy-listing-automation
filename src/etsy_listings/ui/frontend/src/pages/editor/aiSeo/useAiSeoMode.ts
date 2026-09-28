@@ -40,6 +40,13 @@ import { useMarketPanel } from "../market/useMarketPanel";
  * the row's turn comes, so the editor shows the batch run live and opens
  * its drawers as a manual run's would.
  *
+ * ## A deploy (A43)
+ *
+ * While a plan or apply holds the listing, readiness says `deploying`:
+ * deploying takes precedence over AI (UI doc §8), so the control stays
+ * disabled with the server's hint and asks again every {@link BATCH_POLL_MS}
+ * until the deploy lets the listing go.
+ *
  * A resolution shows at once and is sent behind it. Every read and every
  * resolution takes a ticket, and only the latest one's answer is kept, so a
  * read that set off before a click cannot reopen the drawer it closed.
@@ -119,6 +126,7 @@ export function useAiSeoMode(
   const [remoteReady, setRemoteReady] = useState(false);
   const [remoteReason, setRemoteReason] = useState<string | null>(null);
   const [batchPending, setBatchPending] = useState(false);
+  const [deploying, setDeploying] = useState(false);
   /** Bumped by the batch poll, to ask readiness again. */
   const [poll, setPoll] = useState(0);
   const [record, setRecord] = useState<ListingProposal | null>(null);
@@ -194,6 +202,7 @@ export function useAiSeoMode(
           setRemoteReady(response.ready);
           setRemoteReason(response.reason ?? null);
           setBatchPending(response.batch_pending);
+          setDeploying(response.deploying);
         }
       })
       .catch(() => {
@@ -201,6 +210,7 @@ export function useAiSeoMode(
           setRemoteReady(false);
           setRemoteReason("Could not check AI setup.");
           setBatchPending(false);
+          setDeploying(false);
         }
       });
     read(name);
@@ -211,13 +221,13 @@ export function useAiSeoMode(
 
   const follow = run.follow;
   useEffect(() => {
-    if (!batchPending) return;
+    if (!batchPending && !deploying) return;
     const timer = setInterval(() => {
-      follow();
+      if (batchPending) follow();
       setPoll((n) => n + 1);
     }, BATCH_POLL_MS);
     return () => clearInterval(timer);
-  }, [batchPending, follow]);
+  }, [batchPending, deploying, follow]);
 
   const ready = canCheck && remoteReady;
   const reason = canCheck && !ready ? (remoteReason ?? "Checking AI setup...") : null;
