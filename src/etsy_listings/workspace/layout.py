@@ -110,6 +110,10 @@ BATCHES_DIR = "batches"
 """Confirmed batches (A37): ``<id>.json`` is the record, and ``<id>/`` beside
 it keeps the frozen listing template for Retry, plus the upload of any row
 whose creation failed, so the staging session can go (A46)."""
+PROPOSALS_DIR = "proposals"
+"""The latest AI SEO proposal per listing (A41), ``<listing-casefold>.json``:
+casefolded as the write locks and the AI run registry compare names, so a
+case-only rename keeps the file (A37). Moves and goes with the listing."""
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 

@@ -410,8 +410,8 @@ class Workspace:
 
     def remove_listing(self, listing: str) -> None:
         """Wipe ``listings/{name}/``, ``.cache/renders/{name}/`` (PRD 63),
-        ``.cache/previews/{name}/`` (A32) and the market snapshot
-        (market-seo.md, *Cache*).
+        ``.cache/previews/{name}/`` (A32), the market snapshot
+        (market-seo.md, *Cache*) and the cached AI proposal (A42).
 
         Designs, garment profiles and pricing plans stay -- they are reusable.
         """
@@ -423,6 +423,7 @@ class Workspace:
             if path.is_dir():
                 remove_tree(path)
         self.market_snapshot_file(listing).unlink(missing_ok=True)
+        self.proposal_file(listing).unlink(missing_ok=True)
 
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)
@@ -1007,6 +1008,12 @@ class Workspace:
         return self.cache(
             layout.MARKET_DIR, layout.MARKET_SNAPSHOTS_DIR, f"{_segment(listing)}.json"
         )
+
+    def proposal_file(self, listing: str) -> Path:
+        """The listing's cached AI SEO proposal (A41). Keyed by the
+        casefolded name (A37); the record inside names its listing, which is
+        what tells two names differing only in case apart."""
+        return self.cache(layout.PROPOSALS_DIR, f"{_segment(listing).casefold()}.json")
 
     def preview_dir(self, listing: str) -> Path:
         """Every preview this listing currently holds, one subdirectory per
