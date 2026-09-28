@@ -214,13 +214,13 @@ class BatchQueue:
             last = run.events[-1] if run.events else None
             message = last.message if isinstance(last, AiPhaseEvent) else None
             ended = _ENDED[run.phase]
-            if ended == "cancelled" and run.stop_reason == "deploy":
+            if self._registry.deploying(run.listing):
                 ended = "cancelled_by_deploy"
             self._update(
                 slot[0],
                 lambda row: row.id == slot[1] and row.ai == "running",
                 ai=ended,
-                ai_error=message if run.phase == "failed" else None,
+                ai_error=message if ended == "failed" else None,
                 ai_steps=[AiStep(**step.model_dump()) for step in run.steps],
             )
         self.wake()

@@ -22,9 +22,7 @@ from etsy_listings import connections
 from etsy_listings.clients.etsy.listings import HttpEtsyListingClient
 from etsy_listings.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
 from etsy_listings.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
-from etsy_listings.clients.printify import CachedCatalogClient
-from etsy_listings.clients.printify.fakes import FakeCatalogClient
-from etsy_listings.clients.printify.models import Blueprint
+from etsy_listings.clients.printify import Blueprint, CachedCatalogClient, FakeCatalogClient
 from etsy_listings.config.secrets import MissingCredentialError
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import Workspace

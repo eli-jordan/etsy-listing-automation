@@ -24,7 +24,7 @@ import threading
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -182,6 +182,38 @@ def test_an_apply_cancels_a_queued_row_and_no_proposal_follows_the_deploy(
 
     assert _states(client, batch_id) == ["done", "cancelled_by_deploy"]
     assert not has_proposal(client.app.state.workspace.root, "cedar-trail")  # type: ignore[attr-defined]
+
+
+@pytest.mark.parametrize("prior_reason", ["cancelled", "timeout"])
+def test_deploy_ownership_wins_when_stop_already_requested(
+    client: TestClient,
+    provider: ChainProvider,
+    prior_reason: Literal["cancelled", "timeout"],
+) -> None:
+    """A43 is about who owns the listing, not which stop request won a race:
+    Resume must not requeue active work once deploy has claimed it."""
+    provider.gate("brief")
+    batch_id = _batch(client, "night-hike-club")
+    wait_for(lambda: provider.started["brief"].is_set())
+    registry = client.app.state.ai_run_registry  # type: ignore[attr-defined]
+    run = registry.latest("night-hike-club")
+    assert run is not None
+
+    # Keep the runner from finishing between the seller's cancel request and
+    # the deploy's atomic registry hold; Condition uses an RLock, so
+    # request_stop itself remains callable while this thread owns it.
+    with run.condition:
+        assert run.request_stop(prior_reason)
+        deploy_id = _deploy(client, "apply", "night-hike-club")
+        wait_for(lambda: registry.deploying("night-hike-club"))
+        assert run.stop_reason == prior_reason
+
+    assert _finished(client, deploy_id) == "applied"
+    assert _states(client, batch_id) == ["cancelled_by_deploy"]
+
+    client.post(f"/api/batches/{batch_id}/resume")
+    _idle(client)
+    assert _states(client, batch_id) == ["cancelled_by_deploy"]
 
 
 def test_retry_queues_a_row_the_deploy_cancelled(

@@ -32,7 +32,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-import yaml
 from fastapi.testclient import TestClient
 
 from etsy_listings import connections
@@ -41,7 +40,7 @@ from etsy_listings.ai.market_queries import default_market_queries_prompt_text
 from etsy_listings.ai.prompt import default_seo_prompt_text
 from etsy_listings.ai.providers import AiProvider
 from etsy_listings.clients.etsy import HttpEtsyListingClient
-from etsy_listings.clients.printify.protocol import PrintifyClient
+from etsy_listings.clients.printify import PrintifyClient
 from etsy_listings.engine.context import EventSink, RunContext
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
@@ -181,8 +180,7 @@ def test_a_batch_created_listing_deploys_and_its_proposal_goes(
     # Accept the first title and lead, as the editor's drawers do: an
     # autosave PATCH with the concrete values, then the resolution. The
     # `etsy:` block merges one level deep, so the description is sent whole.
-    document = yaml.safe_load(workspace.listing_file(DESIGN).read_text(encoding="utf-8"))
-    description = dict(document["etsy"].get("description") or {})
+    description = workspace.load_listing(DESIGN).etsy.description.model_dump(exclude_none=True)
     description["lead"] = lead
     _ok(
         client.patch(
