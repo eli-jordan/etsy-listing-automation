@@ -1,7 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   BatchesApiError,
+  batchRowThumbnailUrl,
   cancelStaging,
+  deleteBatch,
+  getListingBatch,
+  listBatches,
+  renameBatch,
+  setReviewed,
   confirmStaging,
   getBatch,
   getStaging,
@@ -78,5 +84,45 @@ describe("batches api", () => {
 
   it("escapes a row's thumbnail url", () => {
     expect(stagingThumbnailUrl("s 1", "r/2")).toBe("/api/staging/s%201/rows/r%2F2/thumbnail");
+    expect(batchRowThumbnailUrl("b 1", "r/2")).toBe("/api/batches/b%201/rows/r%2F2/thumbnail");
+  });
+
+  it("sends a rename's label and a review's flag", async () => {
+    const patch = vi.spyOn(api, "PATCH").mockResolvedValue(answer(200, { id: "b1" }));
+    const put = vi.spyOn(api, "PUT").mockResolvedValue(answer(200, { id: "b1" }));
+
+    await renameBatch("b1", "Autumn drop");
+    await setReviewed("b1", "r1", true);
+
+    expect((patch.mock.calls[0]?.[1] as unknown as { body: unknown }).body).toEqual({
+      label: "Autumn drop",
+    });
+    expect(put.mock.calls[0]?.[1]).toMatchObject({
+      params: { path: { batch_id: "b1", row: "r1" } },
+      body: { reviewed: true },
+    });
+  });
+
+  it("reads no batch for a listing as null", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(answer(200, null));
+
+    await expect(getListingBatch("take-a-hike")).resolves.toBeNull();
+  });
+
+  it("says a failed index, rename, review, delete or membership read", async () => {
+    vi.spyOn(api, "GET").mockResolvedValue(answer(500, undefined, {}));
+    await expect(listBatches()).rejects.toBeInstanceOf(BatchesApiError);
+    await expect(getListingBatch("a")).rejects.toBeInstanceOf(BatchesApiError);
+
+    vi.spyOn(api, "PATCH").mockResolvedValue(answer(404, undefined, { detail: "no batch 'b'" }));
+    await expect(renameBatch("b", "x")).rejects.toThrow("no batch 'b'");
+
+    vi.spyOn(api, "PUT").mockResolvedValue(
+      answer(409, undefined, { detail: "a has no listing to review yet" }),
+    );
+    await expect(setReviewed("b", "r", true)).rejects.toThrow("a has no listing to review yet");
+
+    vi.spyOn(api, "DELETE").mockResolvedValue(answer(404));
+    await expect(deleteBatch("b")).rejects.toBeInstanceOf(BatchesApiError);
   });
 });

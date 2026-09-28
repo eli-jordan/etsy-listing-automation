@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import * as batchesApi from "../api/batches";
 import * as calibrator from "../api/calibrator";
 import * as listingsApi from "../api/listings";
 import * as seoApi from "../api/seo";
@@ -54,6 +55,7 @@ function renderAt(path: string) {
         <Route path="/listings/new" element={<ListingEditorPage />} />
         <Route path="/listings/:name" element={<ListingEditorPage />} />
         <Route path="/listing-templates/new" element={<NewTemplateProbe />} />
+        <Route path="/batches/:id" element={<p>batch summary</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -73,6 +75,7 @@ beforeEach(() => {
     storage_id: "workspace-1",
   });
   vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false, batch_pending: false });
+  vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(null);
 });
 
 afterEach(() => vi.restoreAllMocks());
@@ -87,6 +90,81 @@ describe("ListingEditorPage", () => {
     expect(
       await screen.findByText("new listing template from ?from_listing=take-a-hike"),
     ).toBeInTheDocument();
+  });
+
+  describe("opened from a batch (UI doc §8)", () => {
+    const MEMBER = {
+      batch_id: "b1",
+      label: "heavyweight-tee · 27 Sep 11:42",
+      row_id: "r1",
+      reviewed: false,
+      reviewable: true,
+    };
+
+    it("goes back to the batch it was opened from", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(MEMBER);
+      renderAt("/listings/take-a-hike?batch=b1");
+
+      fireEvent.click(
+        await screen.findByRole("button", {
+          name: "Back to batch heavyweight-tee · 27 Sep 11:42",
+        }),
+      );
+
+      expect(await screen.findByText("batch summary")).toBeInTheDocument();
+    });
+
+    it("marks the listing reviewed, and back, on the batch's row", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(MEMBER);
+      const row = (reviewed: boolean) => ({ id: "r1", reviewed }) as unknown as batchesApi.BatchRow;
+      const mark = vi
+        .spyOn(batchesApi, "setReviewed")
+        .mockResolvedValueOnce({ rows: [row(true)] } as batchesApi.BatchDetail)
+        .mockResolvedValueOnce({ rows: [row(false)] } as batchesApi.BatchDetail);
+      renderAt("/listings/take-a-hike?batch=b1");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+
+      const reviewed = await screen.findByRole("button", { name: "Reviewed" });
+      expect(reviewed).toHaveAttribute("aria-pressed", "true");
+      expect(reviewed).toHaveAttribute("title", "Mark needs review");
+      expect(mark).toHaveBeenCalledWith("b1", "r1", true);
+      fireEvent.click(reviewed);
+
+      expect(await screen.findByRole("button", { name: "Mark reviewed" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(mark).toHaveBeenLastCalledWith("b1", "r1", false);
+    });
+
+    it("offers Mark reviewed from anywhere, but Back to batch only from the batch", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(MEMBER);
+      renderAt("/listings/take-a-hike");
+
+      await screen.findByRole("button", { name: "Mark reviewed" });
+      expect(screen.queryByRole("button", { name: /Back to batch/ })).toBeNull();
+    });
+
+    it("holds Mark reviewed back while the batch is still drafting the listing", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue({ ...MEMBER, reviewable: false });
+      renderAt("/listings/take-a-hike?batch=b1");
+
+      expect(await screen.findByRole("button", { name: "Mark reviewed" })).toBeDisabled();
+    });
+
+    it("offers neither for a listing no batch made", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      renderAt("/listings/take-a-hike");
+
+      await screen.findByRole("button", { name: "Save as listing template" });
+      expect(screen.queryByRole("button", { name: "Mark reviewed" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Back to batch/ })).toBeNull();
+    });
   });
 
   it("offers no Save as listing template before the listing exists", async () => {

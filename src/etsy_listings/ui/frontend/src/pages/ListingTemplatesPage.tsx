@@ -6,6 +6,7 @@ import { deleteListingTemplate, listListingTemplates } from "../api/listingTempl
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { mediaLabel, ownedTile } from "../media";
 import type { ListingTemplateSummary } from "../types";
+import { RecentBatches } from "./RecentBatches";
 
 /**
  * The Listing templates page (UI doc §2), from the `templates` mockup frame:
@@ -13,10 +14,10 @@ import type { ListingTemplateSummary } from "../types";
  * pricing and how many batches used it.
  *
  * Start batch and New batch open New batch (batch plan PR 2), a card's with
- * its template preselected. Edit, Clone and the
- * card-as-drop-target arrive with the listing-template editor (PR 6), and
- * Recent batches with the batch index (PR 5). Delete is here because a
- * template a seller can make is one they must be able to remove.
+ * its template preselected. Edit, Clone and the card-as-drop-target arrive
+ * with the listing-template editor (PR 6). Delete is here because a
+ * template a seller can make is one they must be able to remove. Recent
+ * batches sits below the cards (PR 5).
  */
 
 const DELETE_DETAILS =
@@ -150,6 +151,8 @@ export function ListingTemplatesPage() {
           To make another template, open a finished listing and choose Save as listing template.
         </p>
       )}
+
+      <RecentBatches />
 
       {deleting !== null && (
         <ConfirmDialog

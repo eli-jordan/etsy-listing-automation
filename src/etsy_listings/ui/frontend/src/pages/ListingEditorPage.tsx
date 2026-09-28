@@ -1,6 +1,9 @@
+import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
+import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { getListingBatch, setReviewed, type ListingBatch } from "../api/batches";
 import { getListing, getListingDraft } from "../api/listings";
 import { EditableName } from "../components/EditableName";
 import { OpenOnMenu } from "../components/OpenOnMenu";
@@ -157,6 +160,9 @@ function ListingEditorPageContent({
     onNamed,
   });
   const navigate = useNavigate();
+  /** The batch summary this editor was opened from (`?batch=`, UI doc §8):
+   * a query parameter, so it survives a reload. */
+  const fromBatch = useSearchParams()[0].get("batch");
   // AI Mode, and the AI run behind it, live here rather than inside a tab: a
   // run outlives the tab that was showing when it started, and the chain
   // that begins one begins at the design strip, above the tab strip (PRD
@@ -209,8 +215,13 @@ function ListingEditorPageContent({
       onPickDesign={pickDesign}
       above={
         detail.name !== "" && (
-          <SaveAsTemplateRow
+          <AboveHeadRow
+            listing={detail.name}
+            fromBatch={fromBatch}
             onSave={() => void flush().then(() => navigate(saveAsUrl(detail.name)))}
+            onBack={(batch) =>
+              void flush().then(() => navigate(`/batches/${encodeURIComponent(batch)}`))
+            }
           />
         )
       }
@@ -246,18 +257,103 @@ function saveAsUrl(listing: string): string {
   return `/listing-templates/new?from_listing=${encodeURIComponent(listing)}`;
 }
 
-/** The row above the head (UI doc, *Listing editor*): Save as listing
- * template now; Back to batch and Mark reviewed join it with batches (PR 5).
- * Only for a listing that exists, since a template is made from its file. No
- * dialog: `onSave` flushes the pending edit first, so the draft is made from
- * what the seller is looking at. */
-function SaveAsTemplateRow({ onSave }: { onSave: () => void }) {
+/** The listing's batch, if one made it: what Back to batch and Mark
+ * reviewed need (`GET /api/listings/{name}/batch`). Asked again when the
+ * name changes, since a rename carries the batch row with it (A42). */
+function useListingBatch(listing: string) {
+  const [member, setMember] = useState<ListingBatch | null>(null);
+  useEffect(() => {
+    let current = true;
+    getListingBatch(listing)
+      .then((found) => current && setMember(found))
+      // The row is extra: an editor whose batch will not load is still an
+      // editor, so this says nothing and offers nothing.
+      .catch(() => current && setMember(null));
+    return () => {
+      current = false;
+    };
+  }, [listing]);
+  return [member, setMember] as const;
+}
+
+/** The row above the head (UI doc §8 and *Listing editor*):
+ *
+ * - **Back to batch …** only when the editor was opened from the batch
+ *   summary (`?batch=`); the same listing opened from the Listings page
+ *   shows the normal editor.
+ * - **Save as listing template** on every listing that exists, since a
+ *   template is made from its file. No dialog: `onSave` flushes the pending
+ *   edit first, so the draft is made from what the seller is looking at.
+ * - **Mark reviewed / Mark needs review** whenever a batch made the
+ *   listing: the same flag the summary sets (spec, *Review workflow*), held
+ *   back while the batch is still drafting it. */
+function AboveHeadRow({
+  listing,
+  fromBatch,
+  onSave,
+  onBack,
+}: {
+  listing: string;
+  fromBatch: string | null;
+  onSave: () => void;
+  onBack: (batch: string) => void;
+}) {
+  const [member, setMember] = useListingBatch(listing);
+  const [error, setError] = useState("");
+
+  function review(next: boolean) {
+    if (member === null) return;
+    setReviewed(member.batch_id, member.row_id, next)
+      .then((batch) => {
+        setError("");
+        const row = batch.rows.find((r) => r.id === member.row_id);
+        setMember({ ...member, reviewed: row?.reviewed ?? next });
+      })
+      .catch((exc: Error) => setError(exc.message));
+  }
+
+  const label = member !== null && member.batch_id === fromBatch ? ` ${member.label}` : "";
+
   return (
     <div className="bc-row" style={{ marginBottom: "var(--space-2)" }}>
+      {fromBatch !== null && (
+        <button
+          type="button"
+          className="btn btn-secondary bc-back"
+          onClick={() => onBack(fromBatch)}
+        >
+          <ArrowLeftIcon />
+          Back to batch{label}
+        </button>
+      )}
       <span className="bc-spacer" />
+      {error && (
+        <span className="bc-small bc-status--error" role="alert">
+          {error}
+        </span>
+      )}
       <button type="button" className="btn btn-ghost" onClick={onSave}>
         Save as listing template
       </button>
+      {member !== null && (
+        <button
+          type="button"
+          className="btn btn-secondary"
+          aria-pressed={member.reviewed}
+          title={
+            member.reviewed
+              ? "Mark needs review"
+              : member.reviewable
+                ? undefined
+                : "Available once the batch has drafted this listing"
+          }
+          disabled={!member.reviewable}
+          onClick={() => review(!member.reviewed)}
+        >
+          <CheckIcon style={{ width: 14, height: 14, verticalAlign: -2, marginRight: 6 }} />
+          {member.reviewed ? "Reviewed" : "Mark reviewed"}
+        </button>
+      )}
     </div>
   );
 }

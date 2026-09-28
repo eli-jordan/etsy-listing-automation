@@ -6530,6 +6530,31 @@ td > .aiflow {
   align-self: flex-start;
 }
 
+/* — Review and the batch index (batch plan PR 5; UI doc §2, §7, §8).
+   Moved from _batch.css in the same way. — */
+.bc-section {
+  margin-top: var(--space-6);
+}
+.bc-section > h2 {
+  font-size: 20px;
+  margin: 0 0 var(--space-3);
+}
+table.bc-table tr.bc-tr--link {
+  cursor: pointer;
+}
+table.bc-table tr.bc-tr--link:hover td {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+.bc-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bc-back svg {
+  width: 14px;
+  height: 14px;
+}
+
 /* Staging's AI readiness callout sits in the count strip's right side
    (staging.note.md), so it keeps to the strip's height. */
 .dv-callout.bc-ai-blocked {

@@ -20,6 +20,9 @@ function row(name: string, over: Partial<BatchRow> = {}): BatchRow {
     queue_position: null,
     proposal: null,
     stale_reasons: [],
+    reviewed: false,
+    reviewable: true,
+    deleted: false,
     ...over,
   };
 }
@@ -44,6 +47,7 @@ function batch(rows: BatchRow[], over: Partial<BatchDetail> = {}): BatchDetail {
     created_at: "2026-09-27T11:42:00",
     rows,
     concurrency: 1,
+    status: "drafting",
     ...over,
   };
 }
@@ -52,9 +56,13 @@ function batch(rows: BatchRow[], over: Partial<BatchDetail> = {}): BatchDetail {
 const MID_RUN = [
   row("night-hike-club", { proposal: "ready" }),
   row("after-rain-trail-2", { proposal: "stale", stale_reasons: ["brief edited since"] }),
-  row("aurora-switchbacks", { ai: "running", ai_steps: steps("done", "active", "pending") }),
-  row("lake-loop", { ai: "queued", queue_position: 1 }),
-  row("pine-ridge-run", { ai: "queued", queue_position: 2 }),
+  row("aurora-switchbacks", {
+    ai: "running",
+    ai_steps: steps("done", "active", "pending"),
+    reviewable: false,
+  }),
+  row("lake-loop", { ai: "queued", queue_position: 1, reviewable: false }),
+  row("pine-ridge-run", { ai: "queued", queue_position: 2, reviewable: false }),
   row("summit-coffee", {
     ai: "failed",
     ai_steps: steps("done", "failed", "pending"),
@@ -64,7 +72,15 @@ const MID_RUN = [
     creation: "failed",
     ai: null,
     error: "Couldn't write designs/trailhead-sunset.png: the disk is full. Free space, then Retry.",
+    reviewable: false,
   }),
+];
+
+/** The frame's review column: one reviewed, one not, one deleted. */
+const IN_REVIEW = [
+  row("night-hike-club", { reviewed: true }),
+  row("after-rain-trail-2", { proposal: "ready" }),
+  row("old-mill-run", { ai: "cancelled", deleted: true, reviewable: false }),
 ];
 
 function renderPage() {
@@ -72,6 +88,7 @@ function renderPage() {
     <MemoryRouter initialEntries={["/batches/b1"]}>
       <Routes>
         <Route path="/batches/:id" element={<BatchSummaryPage />} />
+        <Route path="/listing-templates" element={<p>Listing templates page</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -132,7 +149,7 @@ describe("BatchSummaryPage", () => {
     expect(uncreated.queryByRole("link", { name: "Open" })).toBeNull();
     expect(done.getByRole("link", { name: "Open" })).toHaveAttribute(
       "href",
-      "/listings/night-hike-club",
+      "/listings/night-hike-club?batch=b1",
     );
   });
 
@@ -216,5 +233,97 @@ describe("BatchSummaryPage", () => {
     renderPage();
 
     expect(await screen.findByRole("alert")).toHaveTextContent("No such batch.");
+  });
+
+  it("marks a row reviewed and back, and counts the reviewed listings", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW, { status: "in_review" }));
+    const reviewed = IN_REVIEW.map((r) =>
+      r.name === "after-rain-trail-2" ? { ...r, reviewed: true } : r,
+    );
+    const mark = vi
+      .spyOn(batchesApi, "setReviewed")
+      .mockResolvedValueOnce(batch(reviewed, { status: "complete" }))
+      .mockResolvedValueOnce(batch(IN_REVIEW, { status: "in_review" }));
+    renderPage();
+
+    await waitFor(() => expect(counts()).toContain("1 of 2 reviewed"));
+    fireEvent.click(
+      within(rowFor("after-rain-trail-2")).getByRole("button", { name: "Mark reviewed" }),
+    );
+
+    await waitFor(() => expect(counts()).toContain("2 of 2 reviewed"));
+    expect(mark).toHaveBeenCalledWith("b1", "after-rain-trail-2", true);
+    const undo = within(rowFor("after-rain-trail-2")).getByRole("button", { name: /Reviewed/ });
+    expect(undo).toHaveAttribute("title", "Mark needs review");
+    fireEvent.click(undo);
+
+    await waitFor(() => expect(counts()).toContain("1 of 2 reviewed"));
+    expect(mark).toHaveBeenLastCalledWith("b1", "after-rain-trail-2", false);
+  });
+
+  it("offers Reviewed only on rows the seller can review (UI doc §7)", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(MID_RUN));
+    renderPage();
+
+    await screen.findAllByText("night-hike-club");
+    for (const name of ["aurora-switchbacks", "lake-loop", "trailhead-sunset"]) {
+      expect(within(rowFor(name)).queryByRole("button", { name: /reviewed/i })).toBeNull();
+    }
+    expect(
+      within(rowFor("summit-coffee")).getByRole("button", { name: "Mark reviewed" }),
+    ).toBeInTheDocument();
+  });
+
+  it("strikes a deleted listing's row through, with nothing to open", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW, { status: "in_review" }));
+    renderPage();
+
+    await screen.findByText("old-mill-run");
+    const deleted = within(rowFor("old-mill-run"));
+    expect(screen.getByText("old-mill-run").closest("s")).not.toBeNull();
+    expect(deleted.getByText("Listing deleted. Its AI work was cancelled.")).toBeInTheDocument();
+    expect(deleted.queryByRole("link")).toBeNull();
+    expect(counts()).toContain("1 deleted");
+  });
+
+  it("shows a never-created row's kept upload as its thumbnail", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(MID_RUN));
+    renderPage();
+
+    await screen.findByText("trailhead-sunset");
+    const thumb = rowFor("trailhead-sunset").querySelector("img");
+    expect(thumb).toHaveAttribute("src", "/api/batches/b1/rows/trailhead-sunset/thumbnail");
+  });
+
+  it("renames the batch by double-clicking its label", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW));
+    const rename = vi
+      .spyOn(batchesApi, "renameBatch")
+      .mockResolvedValue(batch(IN_REVIEW, { label: "Autumn trail drop" }));
+    renderPage();
+
+    fireEvent.doubleClick(
+      await screen.findByRole("heading", { name: "heavyweight-tee · 27 Sep 11:42" }),
+    );
+    const field = screen.getByRole("textbox", { name: "Batch label" });
+    fireEvent.change(field, { target: { value: "Autumn trail drop" } });
+    fireEvent.keyDown(field, { key: "Enter" });
+
+    expect(await screen.findByRole("heading", { name: "Autumn trail drop" })).toBeInTheDocument();
+    expect(rename).toHaveBeenCalledWith("b1", "Autumn trail drop");
+  });
+
+  it("deletes the batch record after saying what stays, then returns to the templates", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW));
+    const remove = vi.spyOn(batchesApi, "deleteBatch").mockResolvedValue();
+    renderPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete batch record" }));
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent(/keeps every listing, design, brief and proposal/);
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete record" }));
+
+    expect(await screen.findByText("Listing templates page")).toBeInTheDocument();
+    expect(remove).toHaveBeenCalledWith("b1");
   });
 });

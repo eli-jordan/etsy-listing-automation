@@ -1,19 +1,27 @@
 import { ArrowClockwiseIcon } from "@phosphor-icons/react/dist/csr/ArrowClockwise";
+import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { ClockIcon } from "@phosphor-icons/react/dist/csr/Clock";
 import { MinusCircleIcon } from "@phosphor-icons/react/dist/csr/MinusCircle";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
 import { useEffect, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useNavigate, useParams } from "react-router-dom";
 import {
+  batchRowThumbnailUrl,
   controlBatch,
+  deleteBatch,
   getBatch,
+  renameBatch,
   retryBatchRow,
+  setReviewed,
   type BatchDetail,
   type BatchRow,
 } from "../api/batches";
 import { listingDesignThumbnailUrl } from "../api/listings";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { EditableName } from "../components/EditableName";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 
 /**
@@ -28,8 +36,12 @@ import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
  * queue runs on the server whether this tab is open or not, so the page
  * only polls while a row is queued or running.
  *
- * Reviewed, renaming the label and deleting the record come with review
- * (batch plan PR 5).
+ * Review (batch plan PR 5; spec *Review workflow*): the Reviewed column is
+ * the seller's own judgement, offered only where the server says the row
+ * is reviewable. The label renames by double-click, and Delete batch record
+ * removes only the batch's own history (spec, *Cancellation and deletion*).
+ * A deleted listing's row stays, struck through (A42). Open carries
+ * `?batch=`, which is what shows the editor's Back to batch (UI doc §8).
  */
 
 export const POLL_MS = 2000;
@@ -50,9 +62,10 @@ function createdAt(iso: string): string {
   return `${day} at ${time}`;
 }
 
-type Kind = "drafted" | "drafting" | "queued" | "retry" | "stopped" | "none";
+type Kind = "drafted" | "drafting" | "queued" | "retry" | "stopped" | "deleted" | "none";
 
 function kindOf(row: BatchRow): Kind {
+  if (row.deleted) return "deleted";
   if (row.creation === "failed") return "retry";
   if (row.creation !== "created") return "none";
   switch (row.ai) {
@@ -81,6 +94,14 @@ function failure(row: BatchRow): string {
 }
 
 function AiCell({ row }: { row: BatchRow }) {
+  if (row.deleted) {
+    return (
+      <span className="bc-status bc-status--info">
+        <MinusCircleIcon className="bc-icon" />
+        Listing deleted. Its AI work was cancelled.
+      </span>
+    );
+  }
   if (row.creation === "failed") {
     return (
       <span className="bc-status bc-status--error">
@@ -157,15 +178,52 @@ function ProposalCell({ row }: { row: BatchRow }) {
   return <span className="bc-muted">—</span>;
 }
 
+const DELETE_DETAILS =
+  "Deleting the batch record keeps every listing, design, brief and proposal it made. Its queued and running AI work is cancelled first, and its review flags go with the record.";
+
+function ReviewedCell({ row, onReview }: { row: BatchRow; onReview: (next: boolean) => void }) {
+  if (!row.reviewable) return <span className="bc-muted">—</span>;
+  if (row.reviewed) {
+    return (
+      <button
+        type="button"
+        className="bc-quiet bc-quiet--on"
+        title="Mark needs review"
+        onClick={() => onReview(false)}
+      >
+        <CheckIcon
+          className="bc-icon"
+          style={{ width: 12, height: 12, verticalAlign: -2, marginRight: 4 }}
+        />
+        Reviewed
+      </button>
+    );
+  }
+  return (
+    <button type="button" className="bc-quiet" onClick={() => onReview(true)}>
+      Mark reviewed
+    </button>
+  );
+}
+
+/** Where a row's listing opens: the editor, told which batch it came from. */
+function editorUrl(batch: string, row: BatchRow): string {
+  return `/listings/${encodeURIComponent(row.name)}?batch=${encodeURIComponent(batch)}`;
+}
+
 export function BatchSummaryPage() {
   const { id = "" } = useParams();
+  const navigate = useNavigate();
   const [batch, setBatch] = useState<BatchDetail | null>(null);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState(false);
 
   const rows = batch?.rows ?? [];
   const kinds = rows.map(kindOf);
   const count = (kind: Kind) => kinds.filter((k) => k === kind).length;
   const busy = count("drafting") + count("queued") > 0;
+  const listings = rows.filter((row) => row.creation === "created" && !row.deleted);
+  const reviewed = listings.filter((row) => row.reviewed).length;
 
   // The first load, then one every POLL_MS for as long as a row is queued
   // or running.
@@ -203,6 +261,13 @@ export function BatchSummaryPage() {
       .catch((exc: Error) => setError(exc.message));
   }
 
+  function deleteRecord() {
+    setDeleting(false);
+    deleteBatch(id)
+      .then(() => navigate("/listing-templates"))
+      .catch((exc: Error) => setError(exc.message));
+  }
+
   const total = rows.length || 1;
   const segments: [number, string][] = [
     [count("drafted"), "var(--color-accent-2)"],
@@ -224,7 +289,21 @@ export function BatchSummaryPage() {
           Listing templates
         </Link>
         <span className="page-head__sep">/</span>
-        <h1 className="page-head__title">{batch?.label ?? "Batch"}</h1>
+        {batch ? (
+          <>
+            <EditableName
+              value={batch.label}
+              onCommit={(label) => {
+                if (label.trim() && label !== batch.label) act(renameBatch(id, label));
+              }}
+              label="Batch label"
+              placeholder="Name this batch…"
+            />
+            <span className="page-head__meta">Double-click the label to rename it</span>
+          </>
+        ) : (
+          <h1 className="page-head__title">Batch</h1>
+        )}
         <div className="page-head__actions">
           {busy ? (
             <button
@@ -284,7 +363,18 @@ export function BatchSummaryPage() {
                 <strong>{count("stopped")}</strong> stopped
               </span>
             )}
+            {count("deleted") > 0 && (
+              <span className="bc-count bc-muted">
+                <strong>{count("deleted")}</strong> deleted
+              </span>
+            )}
             <span className="bc-spacer" />
+            <span className="bc-count">
+              <strong>
+                {reviewed} of {listings.length}
+              </strong>{" "}
+              reviewed
+            </span>
             {needRetry > 0 && (
               <button
                 type="button"
@@ -312,30 +402,38 @@ export function BatchSummaryPage() {
                 <th style={{ width: "22%" }}>Listing</th>
                 <th>AI drafting</th>
                 <th style={{ width: "17%" }}>SEO proposal</th>
+                <th style={{ width: "14%" }}>Reviewed</th>
                 <th className="bc-end"> </th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row, index) => {
-                const exists = row.creation === "created";
+                const open = row.creation === "created" && !row.deleted;
                 const retryable = kinds[index] === "retry";
                 return (
-                  <tr key={row.id} className={exists ? undefined : "bc-tr--muted"}>
+                  <tr key={row.id} className={open ? undefined : "bc-tr--muted"}>
                     <td>
                       <span className="bc-cell">
-                        {exists && (
-                          <img
-                            className="listing-thumb"
-                            src={listingDesignThumbnailUrl(row.design)}
-                            alt=""
-                          />
-                        )}
-                        {exists ? (
-                          <Link className="listing-row__link" to={`/listings/${row.name}`}>
+                        <img
+                          className="listing-thumb"
+                          src={
+                            row.creation === "created"
+                              ? listingDesignThumbnailUrl(row.design)
+                              : batchRowThumbnailUrl(id, row.id)
+                          }
+                          alt=""
+                        />
+                        {open ? (
+                          <Link className="listing-row__link" to={editorUrl(id, row)}>
                             {row.name}
                           </Link>
                         ) : (
-                          <span style={{ fontWeight: 600 }}>{row.name}</span>
+                          <span
+                            className={row.deleted ? "bc-muted" : undefined}
+                            style={{ fontWeight: 600 }}
+                          >
+                            {row.deleted ? <s>{row.name}</s> : row.name}
+                          </span>
                         )}
                       </span>
                     </td>
@@ -344,6 +442,12 @@ export function BatchSummaryPage() {
                     </td>
                     <td>
                       <ProposalCell row={row} />
+                    </td>
+                    <td>
+                      <ReviewedCell
+                        row={row}
+                        onReview={(next) => act(setReviewed(id, row.id, next))}
+                      />
                     </td>
                     <td className="bc-end">
                       {retryable && (
@@ -355,8 +459,8 @@ export function BatchSummaryPage() {
                           Retry
                         </button>
                       )}
-                      {exists && (
-                        <Link className="btn btn-ghost" to={`/listings/${row.name}`}>
+                      {open && (
+                        <Link className="btn btn-ghost" to={editorUrl(id, row)}>
                           Open
                         </Link>
                       )}
@@ -366,7 +470,30 @@ export function BatchSummaryPage() {
               })}
             </tbody>
           </table>
+
+          <div className="bc-row" style={{ marginTop: "var(--space-4)" }}>
+            <span className="bc-small bc-muted">
+              Deleting the batch record keeps every listing, design and brief it created.
+            </span>
+            <button type="button" className="bc-quiet" onClick={() => setDeleting(true)}>
+              <TrashIcon
+                className="bc-icon"
+                style={{ width: 12, height: 12, verticalAlign: -2, marginRight: 4 }}
+              />
+              Delete batch record
+            </button>
+          </div>
         </>
+      )}
+
+      {deleting && (
+        <ConfirmDialog
+          title={`Delete the record of ${batch?.label ?? "this batch"}?`}
+          confirmLabel="Delete record"
+          details={DELETE_DETAILS}
+          onConfirm={deleteRecord}
+          onCancel={() => setDeleting(false)}
+        />
       )}
     </>
   );
