@@ -15,15 +15,18 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
+from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from etsy_listings.cli import app as cli_app
 from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.clients.printify.fakes import FakePrintifyClient
-from etsy_listings.engine.context import RunContext
+from etsy_listings.engine.context import EventSink, RunContext
 from etsy_listings.engine.events import EngineRunEvent, EngineStageApplying
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.run import apply_listings, fully_applied, plan_listings
+from etsy_listings.ui.api.app import create_app
+from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.ai_runs import has_proposal, seed_proposal
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -59,6 +62,30 @@ def test_cli_apply_removes_the_proposal_after_a_full_success(
     result = CliRunner().invoke(cli_app.app, ["apply", LISTING, "--root", str(workspace_root)])
 
     assert result.exit_code == 0, result.output
+    assert not has_proposal(workspace_root)
+
+
+def test_ui_apply_removes_the_proposal_after_a_full_success(workspace_root: Path) -> None:
+    """The same engine call behind the runs resource: a CLI apply and a UI
+    apply leave the same proposal state (spec, *Deployment interaction*)."""
+    ctx = a_deployable_context(workspace_root)
+    seed_proposal(workspace_root)
+
+    def contexts(_workspace: Workspace, on_event: EventSink | None) -> RunContext:
+        return replace(ctx, on_event=on_event) if on_event is not None else ctx
+
+    app = create_app(ctx.workspace, context_factory=contexts)
+    with TestClient(app) as client:
+        started = client.post(
+            "/api/runs",
+            json={"kind": "apply", "scope": "listings", "listings": [LISTING], "expect": {}},
+        )
+        assert started.status_code == 202, started.text
+        run_id = started.json()["id"]
+        client.get(f"/api/runs/{run_id}/events")  # the stream ends with the run
+        assert client.get(f"/api/runs/{run_id}").json()["phase"] == "applied"
+        assert client.get(f"/api/listings/{LISTING}/proposal").status_code == 404
+
     assert not has_proposal(workspace_root)
 
 
