@@ -223,6 +223,19 @@ def _failure(row: BatchRow, exc: Exception) -> str:
     return f"Couldn't create {row.name}: {exc}"
 
 
+def row_upload(workspace: Workspace, batch: Batch, row_id: str) -> Path:
+    """The upload a row was made from, wherever it is kept now: beside the
+    batch once its creation failed (A46), else still in staging. What a row
+    that was never created shows as its thumbnail on the summary, since it
+    has no listing design to show. :class:`KeyError` for a row the batch
+    does not have; the path may not exist once the staging session has
+    gone."""
+    row = next((r for r in batch.rows if r.id == row_id), None)
+    if row is None:
+        raise KeyError(row_id)
+    return _input(workspace, batch, row)
+
+
 def _input(workspace: Workspace, batch: Batch, row: BatchRow) -> Path:
     kept = workspace.batch_upload_file(batch.id, row.sha256)
     return kept if kept.is_file() else workspace.staging_upload_file(batch.id, row.sha256)

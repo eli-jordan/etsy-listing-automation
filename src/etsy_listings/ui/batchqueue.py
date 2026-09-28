@@ -249,7 +249,15 @@ class BatchQueue:
         return self._requeue(batch_id, lambda row: row.id == row_id and row.ai in RETRYABLE)
 
     def _requeue(self, batch_id: str, which: Callable[[BatchRow], bool]) -> Batch | None:
-        batch = self._update(batch_id, which, ai="queued", ai_error=None, ai_steps=[])
+        # A42: a deleted listing's row is never queued again, by Resume or
+        # by Retry -- there is no listing left to draft.
+        batch = self._update(
+            batch_id,
+            lambda row: not row.deleted and which(row),
+            ai="queued",
+            ai_error=None,
+            ai_steps=[],
+        )
         self.wake()
         return batch
 
