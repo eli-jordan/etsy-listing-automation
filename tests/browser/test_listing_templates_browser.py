@@ -32,6 +32,11 @@ def test_save_a_listing_as_a_listing_template(page, workspace_root: Path) -> Non
     name.fill("heavyweight-tee")
     name.press("Enter")
 
+    # Naming it writes it, and the editor stays open on it by name (PR 6).
+    page.wait_for_url("**/listing-templates/heavyweight-tee")
+    page.get_by_text("listing-templates/heavyweight-tee/template.yaml").wait_for()
+    page.locator(".page-head__crumb", has_text="Listing templates").click()
+
     card = page.locator("article.bc-card", has_text="heavyweight-tee")
     card.wait_for(state="visible")
     assert "4 colours" in card.inner_text()
