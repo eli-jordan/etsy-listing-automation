@@ -25,6 +25,7 @@ exactly as in a listing (PRD 73).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
@@ -99,10 +100,15 @@ class ListingTemplate(BaseModel):
         )
 
     @classmethod
-    def load(cls, path: Path, *, currency: str) -> ListingTemplate:
+    def load(
+        cls, path: Path, *, currency: str, read: Callable[[Path], bytes] = Path.read_bytes
+    ) -> ListingTemplate:
+        """``read`` is how the file's bytes are fetched: the workspace passes
+        its retrying reader (A37), which ``config`` cannot import without a
+        cycle through the workspace package."""
         if not path.is_file():
             raise ConfigLoadError(path, "listing template file not found")
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw = yaml.safe_load(read(path).decode("utf-8")) or {}
         try:
             return cls.model_validate(raw, context={"currency": currency})
         except ValidationError as exc:

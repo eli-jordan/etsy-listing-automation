@@ -1,5 +1,7 @@
 """`write_bytes_atomic` (A37): the file is either the old bytes or the new,
-never a half-written one, and a failed write leaves nothing beside it."""
+never a half-written one, and a failed write leaves nothing beside it.
+`read_bytes_retrying` is its reader: a read that lands while Windows is
+replacing the file waits the replace out rather than seeing no file."""
 
 from __future__ import annotations
 
@@ -8,7 +10,9 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.workspace.atomic import write_bytes_atomic
+from etsy_listings.workspace.atomic import read_bytes_retrying, write_bytes_atomic
+
+from tests.support.refusals import refuse_reads
 
 
 def test_it_creates_the_directory_and_the_file(tmp_path: Path) -> None:
@@ -91,3 +95,35 @@ def test_a_replace_that_stays_refused_is_raised_and_leaves_no_temporary(
 
     assert path.read_bytes() == b"old"
     assert [p.name for p in tmp_path.iterdir()] == ["batch.json"]
+
+
+def test_a_read_refused_while_the_file_is_being_replaced_is_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "batch.json"
+    path.write_bytes(b"record")
+    refuse_reads(monkeypatch, 2)
+
+    assert read_bytes_retrying(path) == b"record"
+
+
+def test_a_missing_file_is_missing_at_once(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    sleeps = refuse_reads(monkeypatch, 0)
+
+    with pytest.raises(FileNotFoundError):
+        read_bytes_retrying(tmp_path / "batch.json")
+
+    assert sleeps == []
+
+
+def test_a_read_that_stays_refused_is_raised_after_about_a_second(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    path = tmp_path / "batch.json"
+    path.write_bytes(b"record")
+    sleeps = refuse_reads(monkeypatch, 1000)
+
+    with pytest.raises(PermissionError):
+        read_bytes_retrying(path)
+
+    assert 0.5 <= sum(sleeps) <= 2
