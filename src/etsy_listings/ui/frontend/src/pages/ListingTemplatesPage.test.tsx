@@ -76,15 +76,18 @@ describe("ListingTemplatesPage", () => {
     ]);
   });
 
-  it("keeps Start batch and New batch disabled until batches exist", async () => {
+  it("starts a batch from a card with its template chosen, or from the head", async () => {
     vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
       card({ name: "heavyweight-tee" }),
     ]);
     renderPage();
     await screen.findByText("heavyweight-tee");
 
-    expect(screen.getByRole("button", { name: "Start batch" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "New batch" })).toBeDisabled();
+    expect(screen.getByRole("link", { name: "Start batch" })).toHaveAttribute(
+      "href",
+      "/batches/new?template=heavyweight-tee",
+    );
+    expect(screen.getByRole("link", { name: "New batch" })).toHaveAttribute("href", "/batches/new");
   });
 
   it("deletes a template only once confirmed, and the card goes", async () => {

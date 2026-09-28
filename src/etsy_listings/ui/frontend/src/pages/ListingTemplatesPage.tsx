@@ -1,6 +1,7 @@
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { deleteListingTemplate, listListingTemplates } from "../api/listingTemplates";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { mediaLabel, ownedTile } from "../media";
@@ -11,8 +12,8 @@ import type { ListingTemplateSummary } from "../types";
  * one card per listing template, with its gallery, garment, colour count,
  * pricing and how many batches used it.
  *
- * This is the first slice of it (batch plan PR 1). Start batch and New batch
- * are drawn and disabled until staging exists (PR 2); Edit, Clone and the
+ * Start batch and New batch open New batch (batch plan PR 2), a card's with
+ * its template preselected. Edit, Clone and the
  * card-as-drop-target arrive with the listing-template editor (PR 6), and
  * Recent batches with the batch index (PR 5). Delete is here because a
  * template a seller can make is one they must be able to remove.
@@ -59,14 +60,12 @@ function TemplateCard({
         </span>
       </div>
       <div className="bc-card__foot">
-        <button
-          type="button"
+        <Link
           className="btn btn-secondary"
-          disabled
-          title="Batch creation is not available yet"
+          to={`/batches/new?template=${encodeURIComponent(template.name)}`}
         >
           Start batch
-        </button>
+        </Link>
         <span className="bc-spacer" />
         <button
           type="button"
@@ -121,14 +120,9 @@ export function ListingTemplatesPage() {
           <span className="page-head__meta">{plural(rows.length, "template", "templates")}</span>
         )}
         <div className="page-head__actions">
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled
-            title="Batch creation is not available yet"
-          >
+          <Link className="btn btn-primary" to="/batches/new">
             New batch
-          </button>
+          </Link>
         </div>
       </div>
 

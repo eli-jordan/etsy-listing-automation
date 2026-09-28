@@ -5,12 +5,15 @@ import { App } from "./App";
 import "./index.css";
 import { AppShell } from "./shell/AppShell";
 import { BatchDeployPage } from "./pages/BatchDeployPage";
+import { BatchSummaryPage } from "./pages/BatchSummaryPage";
 import { DashboardPage } from "./pages/DashboardPage";
 import { DeployPage } from "./pages/DeployPage";
 import { ListingEditorPage } from "./pages/ListingEditorPage";
 import { ListingTemplateNewPage } from "./pages/ListingTemplateNewPage";
 import { ListingTemplatesPage } from "./pages/ListingTemplatesPage";
 import { ListingsPage } from "./pages/ListingsPage";
+import { NewBatchPage } from "./pages/NewBatchPage";
+import { StagingPage } from "./pages/StagingPage";
 
 const container = document.getElementById("root");
 if (!container) {
@@ -39,6 +42,11 @@ createRoot(container).render(
               arrives with PR 6. */}
           <Route path="/listing-templates" element={<ListingTemplatesPage />} />
           <Route path="/listing-templates/new" element={<ListingTemplateNewPage />} />
+          {/* Batch creation (batch plan PR 2): choose and drop, review the
+              staged designs, then the batch the confirm made. */}
+          <Route path="/batches/new" element={<NewBatchPage />} />
+          <Route path="/batches/staging/:id" element={<StagingPage />} />
+          <Route path="/batches/:id" element={<BatchSummaryPage />} />
           {/* The calibrator, unmounted -- mounted here unchanged. */}
           <Route path="/templates" element={<App />} />
         </Route>

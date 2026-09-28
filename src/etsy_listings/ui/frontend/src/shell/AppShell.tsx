@@ -1,6 +1,6 @@
 import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet } from "react-router-dom";
+import { NavLink, Outlet, useLocation } from "react-router-dom";
 import { getWorkspace } from "../api/listings";
 import { ShellSidebar } from "./ShellSidebar";
 
@@ -21,6 +21,8 @@ export function AppShell() {
   // failure is silence, not an error banner: the shop's name is orientation,
   // and no page here stops working without it.
   const [shopName, setShopName] = useState<string | null>(null);
+  // A batch is made from a listing template, and its pages sit under it.
+  const inBatches = useLocation().pathname.startsWith("/batches/");
 
   useEffect(() => {
     getWorkspace()
@@ -69,7 +71,10 @@ export function AppShell() {
           {/* Between Listings and Mockup Templates (UI doc, *App sidebar*):
               a listing template is made from a listing, and names mockup
               templates in its gallery. */}
-          <NavLink to="/listing-templates" className={navClass}>
+          <NavLink
+            to="/listing-templates"
+            className={({ isActive }) => navClass({ isActive: isActive || inBatches })}
+          >
             <StackIcon />
             Listing Templates
           </NavLink>
