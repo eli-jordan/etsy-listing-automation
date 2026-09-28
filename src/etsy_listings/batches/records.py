@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -271,7 +271,29 @@ class BatchStore(_Store[Batch]):
     def rename_listing(self, old: str, new: str) -> None:
         """Rename's half of A42: every batch's row for ``old`` now names
         ``new``. Its design target is the design's file, which stays."""
-        self._each_row(lambda row: row.name == old and not row.deleted, lambda _: {"name": new})
+        with self.following_rename(old, new):
+            pass
+
+    @contextmanager
+    def following_rename(self, old: str, new: str) -> Iterator[None]:
+        """:meth:`rename_listing` around the move itself: every batch's lock
+        is held while the body moves the listing, and the rows follow only
+        if it returns. The listings API takes these **before** its listing
+        write locks, the order creating a row takes them in (a batch's lock,
+        then its row's name), so a rename and a Retry creating a row of the
+        same name cannot each wait on the other. No row names ``old`` while
+        the move is half done, so the queue cannot start one in between."""
+        ids = sorted(self._workspace.batch_ids())
+        with ExitStack() as held:
+            for batch_id in ids:
+                held.enter_context(self.lock(batch_id))
+            yield
+            for batch_id in ids:
+                self._change_rows(
+                    batch_id,
+                    lambda row: row.name == old and not row.deleted,
+                    lambda _: {"name": new},
+                )
 
     def mark_deleted(self, listing: str) -> None:
         """Delete's half of A42: the row stays, marked deleted, and leaves
@@ -289,10 +311,19 @@ class BatchStore(_Store[Batch]):
     ) -> None:
         for batch_id in self._workspace.batch_ids():
             with self.lock(batch_id):
-                batch = self.load(batch_id)
-                if batch is None or not any(which(row) for row in batch.rows):
-                    continue
-                batch.rows[:] = [
-                    row.model_copy(update=change(row)) if which(row) else row for row in batch.rows
-                ]
-                self.save(batch)
+                self._change_rows(batch_id, which, change)
+
+    def _change_rows(
+        self,
+        batch_id: str,
+        which: Callable[[BatchRow], bool],
+        change: Callable[[BatchRow], dict[str, object]],
+    ) -> None:
+        """Under ``batch_id``'s lock, which the caller holds."""
+        batch = self.load(batch_id)
+        if batch is None or not any(which(row) for row in batch.rows):
+            return
+        batch.rows[:] = [
+            row.model_copy(update=change(row)) if which(row) else row for row in batch.rows
+        ]
+        self.save(batch)

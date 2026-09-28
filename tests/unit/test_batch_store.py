@@ -86,6 +86,17 @@ def test_a_rename_matches_the_exact_name_not_its_casefold(store: BatchStore) -> 
     assert [r.name for r in _rows(store, "b1")] == ["cedar", "ridge"]
 
 
+def test_a_rename_that_fails_leaves_the_rows_alone(store: BatchStore) -> None:
+    """The listings API moves the directory inside `following_rename`; a
+    move refused there -- the new name taken -- must not rename the rows."""
+    _save(store, "b1", _row("cedar"))
+
+    with pytest.raises(FileExistsError), store.following_rename("cedar", "ridge"):
+        raise FileExistsError("ridge")
+
+    assert [r.name for r in _rows(store, "b1")] == ["cedar"]
+
+
 def test_a_case_only_rename_follows_the_listing(store: BatchStore) -> None:
     _save(store, "b1", _row("cedar"))
 

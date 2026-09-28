@@ -658,7 +658,10 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         # Blur commits an unchanged name constantly; that is not an error, and
         # it must not be the 409 below either.
         return _detail(workspace, old)
-    with target.locks.listing(old, new):
+    # A42: the batch rows follow the move. The batch locks come first --
+    # the order creating a batch row takes them in -- see
+    # `BatchStore.following_rename`.
+    with _batch_store(request).following_rename(old, new), target.locks.listing(old, new):
         _require_listing(workspace, old)
         if destination.exists():
             raise HTTPException(status_code=409, detail=f"a listing already exists named {new!r}")
@@ -670,7 +673,6 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         if snapshot.is_file():
             os.replace(snapshot, workspace.market_snapshot_file(new))
         _proposals(request).move(old, new)
-        _batch_store(request).rename_listing(old, new)
     _forget_ai_run(request, old)
     return _detail(workspace, new)
 
