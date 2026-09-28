@@ -33,7 +33,7 @@ from pydantic import ValidationError
 # By module: the draft endpoint's query parameters are called ``from_listing``
 # and ``from_template`` (the plan's route), which would shadow the functions.
 from etsy_listings import listing_templates as conversion
-from etsy_listings.batches import BatchStore
+from etsy_listings.batches import BatchStore, StagingStore
 from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing_template import ListingTemplate
@@ -74,6 +74,11 @@ def _workspace(request: Request) -> Workspace:
 def _locks(request: Request) -> WorkspaceLocks:
     locks: WorkspaceLocks = request.app.state.workspace_locks
     return locks
+
+
+def _batch_store(request: Request) -> BatchStore:
+    store: BatchStore = request.app.state.batch_store
+    return store
 
 
 def _require(workspace: Workspace, name: str) -> Path:
@@ -218,8 +223,7 @@ def list_listing_templates(request: Request) -> list[ListingTemplateSummary]:
     than failing the page; it can only get that way by a hand edit."""
     workspace = _workspace(request)
     facts = WorkspaceFacts.gather(workspace)
-    batch_store: BatchStore = request.app.state.batch_store
-    used = Counter(batch.listing_template for batch in batch_store.all())
+    used = Counter(batch.listing_template for batch in _batch_store(request).all())
     cards: list[ListingTemplateSummary] = []
     for name in workspace.listing_template_names():
         try:
@@ -351,9 +355,13 @@ def rename_listing_template(
     directory, need no rewrite. A taken name is a 409 and never suffixed
     (spec, *Storage and identity*).
 
-    Batch records keep the name they were made from: a batch holds its own
-    frozen copy (A37), so it has no link to follow, and its card count is
-    history, not ownership."""
+    Staging sessions and batch records made from it follow it by name --
+    the name, not the frozen copy they each keep (A37), which is untouched.
+    That name is the card's *Used by N batches* and the staging page's
+    *Using X*, the seller's link between a template and its batches. It
+    is rewritten after the move, under each record's lock; a crash between
+    the two leaves records naming a template that is gone, which is what a
+    delete leaves too, and harms nothing a batch needs."""
     workspace = _workspace(request)
     new = body.new_name
     destination = workspace.listing_template_dir(new)
@@ -367,6 +375,9 @@ def rename_listing_template(
                     status_code=409, detail=f"a listing template already exists named {new!r}"
                 )
             workspace.listing_template_dir(name).rename(destination)
+            staging_store: StagingStore = request.app.state.staging_store
+            staging_store.rename_listing_template(name, new)
+            _batch_store(request).rename_listing_template(name, new)
     return _detail(workspace, WorkspaceFacts.gather(workspace), new)
 
 

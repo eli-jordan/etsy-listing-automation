@@ -173,10 +173,17 @@ class _Store[R: _Record]:
     """Load and save one kind of record, with a lock per record for the
     read-modify-write every mutation is (A37)."""
 
-    def __init__(self, workspace: Workspace, model: type[R], file: Callable[[str], Path]) -> None:
+    def __init__(
+        self,
+        workspace: Workspace,
+        model: type[R],
+        file: Callable[[str], Path],
+        ids: Callable[[], list[str]],
+    ) -> None:
         self._workspace = workspace
         self._model = model
         self._file = file
+        self._ids = ids
         self._guard = threading.Lock()
         self._locks: dict[str, threading.Lock] = {}
 
@@ -203,10 +210,26 @@ class _Store[R: _Record]:
     def save(self, record: R) -> None:
         write_json_atomic(self._file(record.id), record.model_dump(mode="json", by_alias=True))
 
+    def rename_listing_template(self, old: str, new: str) -> None:
+        """A listing template renamed: every record made from ``old`` now
+        says ``new``, each under its own lock. Only the name moves -- the
+        frozen ``template`` document and its files are the record's own
+        snapshot and stay as they were (spec, *Frozen staging*), and the
+        label is the seller's. The name is what the Listing templates card
+        counts batches by and the staging page shows, so without this a
+        rename silently cut a template off from its batches."""
+        for record_id in self._ids():
+            with self.lock(record_id):
+                record = self.load(record_id)
+                if record is not None and record.listing_template == old:
+                    self.save(record.model_copy(update={"listing_template": new}))
+
 
 class StagingStore(_Store[StagingSession]):
     def __init__(self, workspace: Workspace) -> None:
-        super().__init__(workspace, StagingSession, workspace.staging_session_file)
+        super().__init__(
+            workspace, StagingSession, workspace.staging_session_file, workspace.staging_ids
+        )
 
     def remove(self, session: str) -> None:
         directory = self._workspace.staging_dir(session)
@@ -232,7 +255,7 @@ class StagingStore(_Store[StagingSession]):
 
 class BatchStore(_Store[Batch]):
     def __init__(self, workspace: Workspace) -> None:
-        super().__init__(workspace, Batch, workspace.batch_file)
+        super().__init__(workspace, Batch, workspace.batch_file, workspace.batch_ids)
 
     def all(self) -> list[Batch]:
         return [batch for id_ in self._workspace.batch_ids() if (batch := self.load(id_))]
