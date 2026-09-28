@@ -370,3 +370,162 @@ def test_an_expired_session_is_swept_when_the_server_starts(workspace: Workspace
     with TestClient(create_app(workspace)) as client:
         assert client.get(f"/api/staging/{stale.id}").status_code == 404
         assert client.get(f"/api/staging/{fresh.id}").status_code == 200
+
+
+def _confirmed(client: TestClient, *files: tuple[str, bytes]) -> dict[str, Any]:
+    staged = _staged(client, *files)
+    body: dict[str, Any] = client.post(f"/api/staging/{staged['id']}/confirm").json()
+    return body
+
+
+class TestIndex:
+    """Recent batches (UI doc §2; batch plan PR 5)."""
+
+    def test_a_batch_and_an_unconfirmed_session_are_listed_newest_first(
+        self, client: TestClient
+    ) -> None:
+        confirmed = _confirmed(client, ("a.png", png(1)), ("b.png", png(2)))
+        waiting = _staged(client, ("c.png", png(3)))
+
+        index = client.get("/api/batches")
+
+        assert index.status_code == 200
+        staging, batch = index.json()
+        assert (staging["kind"], staging["id"], staging["status"]) == (
+            "staging",
+            waiting["id"],
+            "staging",
+        )
+        assert (staging["designs"], staging["expires_at"]) == (1, waiting["expires_at"])
+        assert (batch["kind"], batch["id"], batch["status"]) == (
+            "batch",
+            confirmed["id"],
+            "drafting",
+        )
+        assert (batch["designs"], batch["listings"], batch["failures"]) == (2, 2, 0)
+        assert batch["expires_at"] is None
+
+    def test_a_session_kept_for_a_failed_row_is_the_batch_s_not_a_staging_row(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        """A46 keeps a confirmed session until every row is materialised; it
+        shares the batch's id, and Recent batches shows the batch once."""
+        staged = _staged(client, ("a.png", png(1)), ("b.png", png(2)))
+        store = StagingStore(workspace)
+        session = store.load(staged["id"])
+        assert session is not None
+        workspace.design_file("a").mkdir(parents=True)
+        client.post(f"/api/staging/{staged['id']}/confirm")
+        store.save(session)  # as if the failed row's upload could not be moved
+
+        index = client.get("/api/batches").json()
+
+        assert [(entry["kind"], entry["failures"]) for entry in index] == [("batch", 1)]
+
+    def test_an_expired_session_is_swept_when_the_index_is_listed(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        week_ago = datetime.now(UTC) - timedelta(days=7, minutes=1)
+        store = StagingStore(workspace)
+        stage_pngs(workspace, store, LISTING_TEMPLATE, uploads(("a.png", png(1))), now=week_ago)
+
+        assert client.get("/api/batches").json() == []
+        assert workspace.staging_ids() == []
+
+
+class TestRenameAndDelete:
+    def test_rename_changes_the_label_and_keeps_the_id(self, client: TestClient) -> None:
+        batch_id = _confirmed(client, ("a.png", png(1)))["id"]
+
+        renamed = client.patch(f"/api/batches/{batch_id}", json={"label": "Autumn drop"})
+        blank = client.patch(f"/api/batches/{batch_id}", json={"label": "  "})
+
+        assert renamed.status_code == 200
+        assert (renamed.json()["id"], renamed.json()["label"]) == (batch_id, "Autumn drop")
+        assert blank.json()["label"] == "Autumn drop"
+        assert client.get("/api/batches").json()[0]["label"] == "Autumn drop"
+        assert client.patch("/api/batches/0123abcd", json={"label": "x"}).status_code == 404
+
+    def test_delete_is_a_204_and_then_a_404(self, client: TestClient) -> None:
+        batch_id = _confirmed(client, ("a.png", png(1)))["id"]
+
+        assert client.delete(f"/api/batches/{batch_id}").status_code == 204
+        assert client.delete(f"/api/batches/{batch_id}").status_code == 404
+
+
+class TestReviewed:
+    def test_a_queued_row_is_refused_with_a_409(self, client: TestClient) -> None:
+        """No lifespan, so no queue: the row stays queued."""
+        batch = _confirmed(client, ("a.png", png(1)))
+        row = batch["rows"][0]
+        assert (row["reviewed"], row["reviewable"]) == (False, False)
+
+        response = client.put(
+            f"/api/batches/{batch['id']}/rows/{row['id']}/reviewed", json={"reviewed": True}
+        )
+
+        assert response.status_code == 409
+        assert response.json()["detail"] == "a has no listing to review yet"
+
+    def test_a_never_created_row_is_refused_and_an_unknown_one_is_a_404(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        staged = _staged(client, ("a.png", png(1)))
+        workspace.design_file("a").mkdir(parents=True)
+        batch = client.post(f"/api/staging/{staged['id']}/confirm").json()
+        url = f"/api/batches/{batch['id']}/rows"
+
+        failed = client.put(f"{url}/{batch['rows'][0]['id']}/reviewed", json={"reviewed": True})
+        unknown = client.put(f"{url}/nope/reviewed", json={"reviewed": True})
+
+        assert (failed.status_code, unknown.status_code) == (409, 404)
+
+    def test_a_stopped_row_is_marked_and_the_answer_is_the_batch(self, client: TestClient) -> None:
+        batch = _confirmed(client, ("a.png", png(1)))
+        client.post(f"/api/batches/{batch['id']}/cancel")
+        row = batch["rows"][0]["id"]
+
+        response = client.put(
+            f"/api/batches/{batch['id']}/rows/{row}/reviewed", json={"reviewed": True}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["rows"][0]["reviewed"] is True
+        assert response.json()["status"] == "complete"
+
+
+class TestListingMembership:
+    def test_a_batch_listing_names_its_batch_and_row(self, client: TestClient) -> None:
+        batch = _confirmed(client, ("a.png", png(1)))
+
+        membership = client.get("/api/listings/a/batch")
+
+        assert membership.status_code == 200
+        assert membership.json() == {
+            "batch_id": batch["id"],
+            "label": batch["label"],
+            "row_id": batch["rows"][0]["id"],
+            "reviewed": False,
+            "reviewable": False,
+        }
+
+    def test_a_listing_no_batch_made_is_null(self, client: TestClient) -> None:
+        assert client.get("/api/listings/take-a-hike/batch").json() is None
+
+
+def test_a_row_that_was_never_created_shows_its_kept_upload(
+    client: TestClient, workspace: Workspace
+) -> None:
+    """Its upload went beside the batch (A46), since the staging session has
+    gone; that is its thumbnail on the summary."""
+    staged = _staged(client, ("a.png", png(1)))
+    workspace.design_file("a").mkdir(parents=True)
+    batch = client.post(f"/api/staging/{staged['id']}/confirm").json()
+    assert workspace.staging_ids() == []
+    rows = f"/api/batches/{batch['id']}/rows"
+
+    response = client.get(f"{rows}/{batch['rows'][0]['id']}/thumbnail")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/png"
+    assert client.get(f"{rows}/nope/thumbnail").status_code == 404

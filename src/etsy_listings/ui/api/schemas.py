@@ -591,6 +591,18 @@ class BatchRowDetail(BaseModel):
     """The listing's cached proposal (A41): sections waiting and current,
     waiting but out of date, or every section dealt with."""
     stale_reasons: list[str] = []
+    reviewed: bool = False
+    """The seller's own judgement (spec, *Review workflow*)."""
+    reviewable: bool = False
+    """Whether Mark reviewed is offered: not on a queued, drafting, deleted
+    or never-created row (UI doc §7)."""
+    deleted: bool = False
+    """The listing was deleted; the row stays, struck through (A42)."""
+
+
+BatchStatus = Literal["staging", "drafting", "in_review", "complete", "stopped"]
+"""Recent batches' derived status (UI doc §2): ``staging`` for a session not
+confirmed yet, the rest `batches.standing`'s."""
 
 
 class BatchDetail(BaseModel):
@@ -601,6 +613,52 @@ class BatchDetail(BaseModel):
     rows: list[BatchRowDetail]
     concurrency: int = 1
     """``batch_ai.concurrency``: how many rows draft at once."""
+    status: BatchStatus = "drafting"
+
+
+class BatchPatch(BaseModel):
+    """Rename the batch (UI doc §7): its label only, never its identity."""
+
+    label: str
+
+
+class ReviewedRequest(BaseModel):
+    reviewed: bool
+
+
+class BatchIndexEntry(BaseModel):
+    """One row of Recent batches (UI doc §2): a confirmed batch, or a staging
+    session not confirmed yet, which reopens staging instead."""
+
+    kind: Literal["staging", "batch"]
+    id: str
+    label: str
+    listing_template: str
+    created_at: datetime
+    status: BatchStatus
+    designs: int
+    """Rows: the staged designs, or the batch's rows."""
+    listings: int = 0
+    """Rows with a listing now: created and not deleted."""
+    drafted: int = 0
+    reviewed: int = 0
+    undrafted: int = 0
+    """Listings **Cancel batch** left for Resume."""
+    failures: int = 0
+    """*N need retry*: a count beside the progress, never a status."""
+    expires_at: datetime | None = None
+    """A staging session's: seven days after its last edit (A46)."""
+
+
+class ListingBatch(BaseModel):
+    """The batch a listing was made by, for the editor's row above the head
+    (UI doc §8): Back to batch and Mark reviewed."""
+
+    batch_id: str
+    label: str
+    row_id: str
+    reviewed: bool
+    reviewable: bool
 
 
 # ──────────────────────────────────────────────────────────────────────────

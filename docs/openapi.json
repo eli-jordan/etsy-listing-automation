@@ -738,6 +738,18 @@
             },
             "title": "Rows",
             "type": "array"
+          },
+          "status": {
+            "default": "drafting",
+            "enum": [
+              "staging",
+              "drafting",
+              "in_review",
+              "complete",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
           }
         },
         "required": [
@@ -748,6 +760,113 @@
           "rows"
         ],
         "title": "BatchDetail",
+        "type": "object"
+      },
+      "BatchIndexEntry": {
+        "description": "One row of Recent batches (UI doc \u00a72): a confirmed batch, or a staging\nsession not confirmed yet, which reopens staging instead.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "designs": {
+            "title": "Designs",
+            "type": "integer"
+          },
+          "drafted": {
+            "default": 0,
+            "title": "Drafted",
+            "type": "integer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "failures": {
+            "default": 0,
+            "title": "Failures",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "staging",
+              "batch"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "listing_template": {
+            "title": "Listing Template",
+            "type": "string"
+          },
+          "listings": {
+            "default": 0,
+            "title": "Listings",
+            "type": "integer"
+          },
+          "reviewed": {
+            "default": 0,
+            "title": "Reviewed",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "staging",
+              "drafting",
+              "in_review",
+              "complete",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "undrafted": {
+            "default": 0,
+            "title": "Undrafted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label",
+          "listing_template",
+          "created_at",
+          "status",
+          "designs"
+        ],
+        "title": "BatchIndexEntry",
+        "type": "object"
+      },
+      "BatchPatch": {
+        "description": "Rename the batch (UI doc \u00a77): its label only, never its identity.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "BatchPatch",
         "type": "object"
       },
       "BatchRowDetail": {
@@ -799,6 +918,11 @@
             "title": "Creation",
             "type": "string"
           },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
           "design": {
             "title": "Design",
             "type": "string"
@@ -848,6 +972,16 @@
               }
             ],
             "title": "Queue Position"
+          },
+          "reviewable": {
+            "default": false,
+            "title": "Reviewable",
+            "type": "boolean"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
           },
           "sources": {
             "items": {
@@ -2070,6 +2204,40 @@
           "expect"
         ],
         "title": "ListingApplyRequest",
+        "type": "object"
+      },
+      "ListingBatch": {
+        "description": "The batch a listing was made by, for the editor's row above the head\n(UI doc \u00a78): Back to batch and Mark reviewed.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reviewable": {
+            "title": "Reviewable",
+            "type": "boolean"
+          },
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "row_id": {
+            "title": "Row Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch_id",
+          "label",
+          "row_id",
+          "reviewed",
+          "reviewable"
+        ],
+        "title": "ListingBatch",
         "type": "object"
       },
       "ListingDesignSummary": {
@@ -4387,6 +4555,19 @@
         "title": "RetractStagePlanDTO",
         "type": "object"
       },
+      "ReviewedRequest": {
+        "properties": {
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reviewed"
+        ],
+        "title": "ReviewedRequest",
+        "type": "object"
+      },
       "ScoredListing": {
         "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (ui-market-seo-interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (market-seo.md, *What the proposal\nsees*).",
         "properties": {
@@ -5947,7 +6128,67 @@
         ]
       }
     },
+    "/api/batches": {
+      "get": {
+        "description": "Recent batches (UI doc \u00a72): every batch, and every staging session\nnot confirmed yet, newest first, each with its derived status. Listing\nthem sweeps expired staging first (A46), so a row never offers a\nsession that has gone.",
+        "operationId": "list_batches_api_batches_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BatchIndexEntry"
+                  },
+                  "title": "Response List Batches Api Batches Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Batches",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
     "/api/batches/{batch_id}": {
+      "delete": {
+        "description": "Delete batch record (spec, *Cancellation and deletion*): its queued\nand running work is cancelled first, then only the record goes -- its\nrows, review flags and queue state, and the frozen template beside it.\nDesigns, listings, briefs and proposals are the workspace's and stay.",
+        "operationId": "delete_batch_api_batches__batch_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Batch",
+        "tags": [
+          "batches"
+        ]
+      },
       "get": {
         "operationId": "get_batch_api_batches__batch_id__get",
         "parameters": [
@@ -5984,6 +6225,57 @@
           }
         },
         "summary": "Get Batch",
+        "tags": [
+          "batches"
+        ]
+      },
+      "patch": {
+        "description": "Rename the batch (UI doc \u00a77): the label only, so its id -- and every\nlink to it -- stays. A blank label keeps the one it had, as staging's\ndoes.",
+        "operationId": "rename_batch_api_batches__batch_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Batch",
         "tags": [
           "batches"
         ]
@@ -6168,6 +6460,121 @@
           }
         },
         "summary": "Retry Batch Row",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/rows/{row}/reviewed": {
+      "put": {
+        "description": "Mark reviewed / Mark needs review (spec, *Review workflow*). Refused\nfor a row still queued or drafting, deleted, or never created.",
+        "operationId": "set_reviewed_api_batches__batch_id__rows__row__reviewed_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "title": "Row",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "The row has no listing to review yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Reviewed",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/rows/{row}/thumbnail": {
+      "get": {
+        "description": "A row that was never created has no listing design to show, so the\nsummary shows the upload it was made from, kept beside the batch for\nRetry (A46).",
+        "operationId": "batch_row_thumbnail_api_batches__batch_id__rows__row__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "title": "Row",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch Row Thumbnail",
         "tags": [
           "batches"
         ]
@@ -7144,7 +7551,7 @@
     },
     "/api/listings/{name}": {
       "delete": {
-        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot and the cached AI proposal go now\n(market-seo.md, *Cache*; A42): a listing pending deletion is one the\nseller is done researching, and otherwise only the wipe after the remote\ndeletion would remove them. An AI run still going is asked to stop\nfirst, so it does not write a proposal for a listing being deleted.",
+        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot and the cached AI proposal go now\n(market-seo.md, *Cache*; A42): a listing pending deletion is one the\nseller is done researching, and otherwise only the wipe after the remote\ndeletion would remove them. An AI run still going is asked to stop\nfirst, so it does not write a proposal for a listing being deleted, and\nthe listing's batch rows are marked deleted and leave the queue (A42).",
         "operationId": "delete_listing_api_listings__name__delete",
         "parameters": [
           {
@@ -7315,6 +7722,57 @@
         "summary": "Get Seo Readiness",
         "tags": [
           "ai-seo"
+        ]
+      }
+    },
+    "/api/listings/{name}/batch": {
+      "get": {
+        "description": "The batch that made ``name``, for the editor's row above the head\n(UI doc \u00a78), or ``null``. A row names its listing exactly, as the rename\nand delete hooks match it (A42); a deleted row is not the listing's.\nShould two batches both claim it, the newer wins.",
+        "operationId": "listing_batch_api_listings__name__batch_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ListingBatch"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Listing Batch Api Listings  Name  Batch Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Batch",
+        "tags": [
+          "batches"
         ]
       }
     },
@@ -7580,7 +8038,7 @@
     },
     "/api/listings/{name}/rename": {
       "post": {
-        "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name (PRD 60), so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render. The market\nsnapshot and the cached AI proposal (A42) move for the same reason.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
+        "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name (PRD 60), so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render. The market\nsnapshot and the cached AI proposal (A42) move for the same reason, and\nevery batch row naming the listing follows it (A42), so the batch\nsummary opens the new name.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
         "operationId": "rename_listing_api_listings__name__rename_post",
         "parameters": [
           {

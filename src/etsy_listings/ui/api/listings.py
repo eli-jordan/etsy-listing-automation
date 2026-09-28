@@ -42,6 +42,7 @@ from pydantic import ValidationError
 
 from etsy_listings import connections
 from etsy_listings.ai.proposals import ProposalStore
+from etsy_listings.batches import BatchStore
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.config.errors import ConfigLoadError
@@ -520,13 +521,17 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
     (market-seo.md, *Cache*; A42): a listing pending deletion is one the
     seller is done researching, and otherwise only the wipe after the remote
     deletion would remove them. An AI run still going is asked to stop
-    first, so it does not write a proposal for a listing being deleted.
+    first, so it does not write a proposal for a listing being deleted, and
+    the listing's batch rows are marked deleted and leave the queue (A42).
     """
     workspace, name = target.workspace, target.name
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
+    # A42: the rows first, so the queue cannot start one between the stop
+    # and the delete; a run already going is the one stopped next.
+    _batch_store(request).mark_deleted(name)
     _stop_ai_run(request, name)
     _forget_ai_run(request, name)
     with target.writing():
@@ -633,7 +638,9 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
     generated copy travel together, and `.cache/renders/{name}/` moves with them
     because the render cache is keyed by listing name too -- left behind it
     would orphan a tree nothing deletes and cost a full re-render. The market
-    snapshot and the cached AI proposal (A42) move for the same reason.
+    snapshot and the cached AI proposal (A42) move for the same reason, and
+    every batch row naming the listing follows it (A42), so the batch
+    summary opens the new name.
 
     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
     left that way deliberately: nothing reads them, they become true again at
@@ -663,12 +670,18 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         if snapshot.is_file():
             os.replace(snapshot, workspace.market_snapshot_file(new))
         _proposals(request).move(old, new)
+        _batch_store(request).rename_listing(old, new)
     _forget_ai_run(request, old)
     return _detail(workspace, new)
 
 
 def _proposals(request: Request) -> ProposalStore:
     store: ProposalStore = request.app.state.proposal_store
+    return store
+
+
+def _batch_store(request: Request) -> BatchStore:
+    store: BatchStore = request.app.state.batch_store
     return store
 
 
