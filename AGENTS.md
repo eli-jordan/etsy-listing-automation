@@ -205,6 +205,10 @@ src/etsy_listings/
                   query extraction (three unique, non-empty buyer searches);
                   `SeoRequest.market_block` carries market/'s block into the
                   proposal prompt
+                proposals.py -- `ProposalStore`, the latest proposal per
+                  listing in `.cache/proposals/` with each section's
+                  resolution (A41), and `proposal_staleness`, the one rule
+                  for "out of date" (the editor no longer computes it)
   market/       market-informed SEO's research, in memory: `research()` turns
                 three queries into at most 20 scored listings (percentiles,
                 top-20 review rationing, 5 calls in flight), the ranked

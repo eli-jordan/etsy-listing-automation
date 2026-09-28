@@ -1,16 +1,7 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { getWorkspace } from "../../../api/listings";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { SaveState } from "../../../hooks/useAutosave";
-import { getSeoReadiness } from "../../../api/seo";
-import type { ListingDetail, SeoProposalResponse } from "../../../types";
-import {
-  type AiSeoStorageScope,
-  type StoredAiSeoProposal,
-  isStale,
-  loadStoredProposal,
-  receiveProposal,
-  updateUnresolved,
-} from "./aiSeoStorage";
+import { getListingProposal, getSeoReadiness, resolveListingProposal } from "../../../api/seo";
+import type { ListingDetail, ListingProposal, ProposalResolution } from "../../../types";
 import { canToggleTag } from "./aiSeoTags";
 import { type AiRun, useAiRun } from "./useAiRun";
 import type { MarketPanelState } from "../market/MarketListingsPanel";
@@ -19,26 +10,36 @@ import { useMarketPanel } from "../market/useMarketPanel";
 /**
  * Listing Details' **AI Mode** (AI SEO implementation plan, PR7): readiness,
  * the AI run behind the button (`useAiRun`; market-seo.md, *AI runs*), the
- * browser-local pending proposal, staleness against the current editor
- * state, and the three independent per-field acceptance actions.
- * `ListingEditorPageContent` owns it, above the tabs, because a run outlives
- * the tab it was started from; `DetailsTab` renders it.
+ * listing's cached proposal, and the three independent per-field acceptance
+ * actions. `ListingEditorPageContent` owns it, above the tabs, because a run
+ * outlives the tab it was started from; `DetailsTab` renders it.
  *
  * The run is exposed whole as `run`: its `steps` drive the page head's
  * indicator, and `market` is the top listings panel's state, built from the
  * run's market node and events and the listing's saved snapshot
  * (`useMarketPanel`). What this hook adds is what AI Mode does with a run's two actionable
  * events: a drafted brief goes into the field through `onAdopt` (the server
- * already wrote it, so it is not autosaved again), and a proposal goes into
- * `aiSeoStorage`, which is what opens the drawers.
+ * already wrote it, so it is not autosaved again), and a proposal opens the
+ * drawers.
  *
- * `getWorkspace()` supplies an opaque root identity for PRD 4's browser-only
- * proposal scope, so two roots with the same shop name cannot restore each
- * other's pending choices. A proposal that arrives before it is kept until
- * it does.
+ * ## The proposal lives on the server (A41)
+ *
+ * The run caches its proposal before announcing it, so the editor reads it
+ * with `GET …/proposal` on open and again after every save, and records a
+ * choice or a dismissal with `PATCH …/resolution`. The server also decides
+ * whether it is stale, against the *saved* listing, so the batch summary and
+ * this editor agree; an edit shows up as stale once autosave lands it. A
+ * stale proposal stays usable: the drawer heading names what changed
+ * (PRD 74; UI doc §8).
+ *
+ * A resolution shows at once and is sent behind it. Every read and every
+ * resolution takes a ticket, and only the latest one's answer is kept, so a
+ * read that set off before a click cannot reopen the drawer it closed.
  */
 
 export type AiSeoPhase = "idle" | "loading" | "failed";
+
+type Section = keyof ProposalResolution;
 
 export interface AiSeoMode {
   /** Whether the AI Mode control can start a request. The button stays
@@ -47,13 +48,14 @@ export interface AiSeoMode {
   requirements: { label: string; ready: boolean }[];
   reason: string | null;
   phase: AiSeoPhase;
-  /** The current pending proposal, or `null` once every drawer has resolved
-   * (or none was ever requested). */
-  proposal: StoredAiSeoProposal | null;
-  /** Whether `proposal`'s choices are stale against the listing's current
-   * values -- visible but not selectable until regenerated. Always `false`
-   * when `proposal` is `null`. */
-  stale: boolean;
+  /** The listing's cached proposal while any of its sections is still
+   * pending, else `null` -- none was ever made, or every drawer has been
+   * resolved (the server keeps the record either way). */
+  proposal: ListingProposal | null;
+  /** What changed since `proposal` was generated, from the server, or
+   * `null` while it still describes the saved listing. Its choices stay
+   * usable either way. */
+  staleReason: string | null;
   /** Starts a run from the button, drafting the brief when the field is
    * empty, or replaces the current proposal with a fresh one (this is also
    * what a seller's "Regenerate" click on a stale proposal calls -- one
@@ -84,6 +86,8 @@ export interface AiSeoMode {
   closeTags: () => void;
 }
 
+const SECTIONS: Section[] = ["title", "tags", "lead"];
+
 export function useAiSeoMode(
   detail: ListingDetail,
   onUpdate: (patch: Record<string, unknown>) => void,
@@ -93,8 +97,6 @@ export function useAiSeoMode(
    * it again (`useAutosave`'s `adopt`). The drafted brief arrives this way. */
   onAdopt?: (patch: Record<string, unknown>) => void,
 ): AiSeoMode {
-  const [workspaceId, setWorkspaceId] = useState<string | null>(null);
-  const [workspaceFailed, setWorkspaceFailed] = useState(false);
   // Only what the readiness *endpoint* answered -- whether the control is
   // enabled also requires the client-observable prerequisites below,
   // computed straight from `detail` rather than mirrored into more state, so
@@ -105,7 +107,7 @@ export function useAiSeoMode(
   // this to `false` would cost).
   const [remoteReady, setRemoteReady] = useState(false);
   const [remoteReason, setRemoteReason] = useState<string | null>(null);
-  const [stored, setStored] = useState<StoredAiSeoProposal | null>(null);
+  const [record, setRecord] = useState<ListingProposal | null>(null);
   // `onUpdate`/`onFlush`/`detail` as a run's events should see them when they
   // arrive -- a run can take minutes, during which the seller may keep
   // editing, and the acceptance actions must always act on what is on screen
@@ -115,26 +117,31 @@ export function useAiSeoMode(
   const latestOnUpdate = useRef(onUpdate);
   const latestOnFlush = useRef(onFlush);
   const latestOnAdopt = useRef(onAdopt);
+  const latestRecord = useRef(record);
   useEffect(() => {
     latestDetail.current = detail;
     latestOnUpdate.current = onUpdate;
     latestOnFlush.current = onFlush;
     latestOnAdopt.current = onAdopt;
+    latestRecord.current = record;
   });
-  /** The workspace's storage id once known, for the run's event handlers. */
-  const workspaceRef = useRef<string | null>(null);
-  /** A proposal that arrived before the workspace id did. The id is asked
-   * for as soon as a saved listing has a design, and a proposal can beat
-   * that answer back, so it waits here for it. */
-  const awaiting = useRef<SeoProposalResponse | null>(null);
+  /** The newest read or resolution; an answer to any older one is dropped. */
+  const ticket = useRef(0);
 
-  const onProposal = useCallback((proposal: SeoProposalResponse) => {
-    const workspace = workspaceRef.current;
-    if (workspace === null) {
-      awaiting.current = proposal;
-      return;
-    }
-    setStored(receiveProposal({ workspace, listing: latestDetail.current.name }, proposal));
+  const read = useCallback((name: string) => {
+    const mine = ++ticket.current;
+    getListingProposal(name)
+      .then((cached) => {
+        if (mine === ticket.current) setRecord(cached);
+      })
+      .catch(() => {});
+  }, []);
+
+  // A live run's proposal is the record the server has just written, so it
+  // opens the drawers without a second round trip.
+  const onProposal = useCallback((proposal: ListingProposal) => {
+    ++ticket.current;
+    setRecord(proposal);
   }, []);
 
   // Only into an empty field: the seller may have started typing their own
@@ -151,48 +158,19 @@ export function useAiSeoMode(
   const hasDesign = Object.keys(detail.design).length > 0;
   const hasBrief = detail.brief.trim() !== "";
   const name = detail.name;
-  // The client-observable prerequisites, checked before any network call --
-  // the readiness endpoint and `getWorkspace()` for local-storage scoping.
+  // The client-observable prerequisites, checked before any network call.
   // An empty brief is not one of them: the button drafts it. A listing with
-  // no name or no design still never asks the network, which is what keeps
-  // an ordinary editor test whose fixture has neither from firing a `fetch`
-  // it never mocked.
+  // no name or no design still never asks the network -- it cannot have had
+  // a run, so it has no proposal either -- which is what keeps an ordinary
+  // editor test whose fixture has neither from firing a `fetch` it never
+  // mocked.
   const prerequisitesMet = name !== "" && hasDesign;
   const saved = save === undefined || save.kind === "saved";
   const canCheck = prerequisitesMet && saved;
 
-  useEffect(() => {
-    if (!prerequisitesMet) return;
-    let current = true;
-    getWorkspace()
-      .then((workspace) => {
-        if (!current) return;
-        workspaceRef.current = workspace.storage_id;
-        setWorkspaceId(workspace.storage_id);
-        setWorkspaceFailed(false);
-        const proposal = awaiting.current;
-        awaiting.current = null;
-        if (proposal !== null) {
-          const scope = { workspace: workspace.storage_id, listing: latestDetail.current.name };
-          setStored(receiveProposal(scope, proposal));
-        }
-      })
-      .catch(() => {
-        if (current) setWorkspaceFailed(true);
-      });
-    return () => {
-      current = false;
-    };
-  }, [prerequisitesMet]);
-
-  const listingScope = detail.name;
-  const scope: AiSeoStorageScope = useMemo(
-    () => ({ workspace: workspaceId ?? "", listing: listingScope }),
-    [workspaceId, listingScope],
-  );
-
   // A check after an edit can read the old file. Recheck when autosave
-  // succeeds, even if modified_at is unchanged.
+  // succeeds, even if modified_at is unchanged -- and read the proposal
+  // again with it, since staleness is judged against the saved listing.
   useEffect(() => {
     if (!canCheck) return;
     let current = true;
@@ -209,38 +187,29 @@ export function useAiSeoMode(
           setRemoteReason("Could not check AI setup.");
         }
       });
+    read(name);
     return () => {
       current = false;
     };
-  }, [canCheck, name, detail.modified_at, save]);
+  }, [canCheck, name, detail.modified_at, save, read]);
 
-  const ready = canCheck && remoteReady && workspaceId !== null;
-  const reason =
-    canCheck && !ready
-      ? workspaceFailed
-        ? "Could not identify the workspace."
-        : workspaceId === null
-          ? "Checking workspace..."
-          : (remoteReason ?? "Checking AI setup...")
-      : null;
+  const ready = canCheck && remoteReady;
+  const reason = canCheck && !ready ? (remoteReason ?? "Checking AI setup...") : null;
   const requirements = [
     { label: "Saved listing", ready: name !== "" && saved },
     { label: "Design selected", ready: hasDesign },
     { label: "SEO prompt and AI provider ready", ready },
   ];
 
-  // Restored during render, not from an effect, the same way `PreviewPanel`
+  // Dropped during render, not from an effect, the same way `PreviewPanel`
   // adjusts state while rendering rather than paying for a second render:
-  // whenever the workspace/listing scope actually changes, re-read
-  // `localStorage` for it immediately, so a listing switch never briefly
-  // shows the previous listing's drawers before an effect gets to run. A
-  // `useState` comparison, not a ref, because refs may not be read during
-  // render (`react-hooks/refs`) -- this is exactly the "adjusting state when
-  // a prop changes" case React's own docs use `useState` for.
-  const [loadedScope, setLoadedScope] = useState(scope);
-  if (loadedScope !== scope) {
-    setLoadedScope(scope);
-    setStored(workspaceId === null ? null : loadStoredProposal(scope));
+  // a listing switch never briefly shows the previous listing's drawers
+  // before the read for the new one comes back. A `useState` comparison, not
+  // a ref, because refs may not be read during render (`react-hooks/refs`).
+  const [loadedName, setLoadedName] = useState(name);
+  if (loadedName !== name) {
+    setLoadedName(name);
+    setRecord(null);
   }
 
   const startRun = run.start;
@@ -250,69 +219,81 @@ export function useAiSeoMode(
   );
   const phase: AiSeoPhase = run.busy ? "loading" : run.phase === "failed" ? "failed" : "idle";
 
-  const stale = stored !== null && isStale(stored, detail);
-
   const resolve = useCallback(
-    (patch: Partial<StoredAiSeoProposal["unresolved"]>) => {
-      setStored(updateUnresolved(scope, patch));
+    (section: Section, state: "accepted" | "dismissed") => {
+      const current = latestRecord.current;
+      if (current === null) return;
+      const listing = latestDetail.current.name;
+      const mine = ++ticket.current;
+      setRecord((shown) =>
+        shown !== null && shown.generated_at === current.generated_at
+          ? { ...shown, resolution: { ...shown.resolution, [section]: state } }
+          : shown,
+      );
+      resolveListingProposal(listing, { generated_at: current.generated_at, [section]: state })
+        .then((next) => {
+          if (mine !== ticket.current) return;
+          // Gone, or replaced by a newer proposal: show what is there now.
+          if (next === null) read(listing);
+          else setRecord(next);
+        })
+        .catch(() => {});
     },
-    [scope],
+    [read],
   );
 
   const chooseTitle = useCallback(
     (value: string) => {
-      if (stale) return;
       latestOnUpdate.current({ etsy: { title: value } });
       latestOnFlush.current();
-      resolve({ title: false });
+      resolve("title", "accepted");
     },
-    [resolve, stale],
+    [resolve],
   );
 
-  const rejectTitle = useCallback(() => resolve({ title: false }), [resolve]);
+  const rejectTitle = useCallback(() => resolve("title", "dismissed"), [resolve]);
 
   const chooseLead = useCallback(
     (value: string) => {
-      if (stale) return;
       latestOnUpdate.current({
         etsy: { description: { ...latestDetail.current.etsy.description, lead: value } },
       });
       latestOnFlush.current();
-      resolve({ lead: false });
+      resolve("lead", "accepted");
     },
-    [resolve, stale],
+    [resolve],
   );
 
-  const rejectLead = useCallback(() => resolve({ lead: false }), [resolve]);
+  const rejectLead = useCallback(() => resolve("lead", "dismissed"), [resolve]);
 
-  const toggleTag = useCallback(
-    (tag: string) => {
-      if (stale) return;
-      const tags = latestDetail.current.etsy.tags;
-      if (!canToggleTag(tags, tag)) return;
-      const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag];
-      latestOnUpdate.current({ etsy: { tags: next } });
-      latestOnFlush.current();
-    },
-    [stale],
-  );
+  const toggleTag = useCallback((tag: string) => {
+    const tags = latestDetail.current.etsy.tags;
+    if (!canToggleTag(tags, tag)) return;
+    const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag];
+    latestOnUpdate.current({ etsy: { tags: next } });
+    latestOnFlush.current();
+  }, []);
 
   const acceptBestTags = useCallback(() => {
-    if (stale || stored === null) return;
-    latestOnUpdate.current({ etsy: { tags: stored.proposal.tags.slice(0, 13) } });
+    const current = latestRecord.current;
+    if (current === null) return;
+    latestOnUpdate.current({ etsy: { tags: current.proposal.tags.slice(0, 13) } });
     latestOnFlush.current();
-    resolve({ tags: false });
-  }, [resolve, stale, stored]);
+    resolve("tags", "accepted");
+  }, [resolve]);
 
-  const closeTags = useCallback(() => resolve({ tags: false }), [resolve]);
+  const closeTags = useCallback(() => resolve("tags", "dismissed"), [resolve]);
+
+  const pending = record !== null && SECTIONS.some((s) => record.resolution[s] === "pending");
+  const proposal = pending ? record : null;
 
   return {
     available: ready,
     requirements,
     reason,
     phase,
-    proposal: stored,
-    stale,
+    proposal,
+    staleReason: proposal?.stale.is_stale ? proposal.stale.reasons.join(", ") : null,
     generate,
     draftsBrief: !hasBrief,
     cancel: run.cancel,

@@ -16,7 +16,7 @@ function mode(over: Partial<AiSeoMode> = {}): AiSeoMode {
     reason: null,
     phase: "idle",
     proposal: null,
-    stale: false,
+    staleReason: null,
     generate: vi.fn(),
     draftsBrief: false,
     cancel: vi.fn(),

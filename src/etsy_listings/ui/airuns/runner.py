@@ -23,9 +23,10 @@ between steps. What was written before it was set -- a brief, a snapshot --
 stays.
 
 **Writes.** The guarded ``brief`` is the only workspace file this package
-writes under ``listings/``. The snapshot lives in ``.cache/market/``, and is
-saved under the same lock so a rename cannot move the listing between the
-check and the write.
+writes under ``listings/``. The market snapshot (``.cache/market/``) and the
+proposal (``.cache/proposals/``, A41) are saved under the same lock, so a
+rename or delete cannot move or remove the listing between the check and
+the write.
 """
 
 from __future__ import annotations
@@ -44,6 +45,7 @@ from etsy_listings.ai.brief import BriefRequest
 from etsy_listings.ai.errors import ProviderCancelledError, SeoGenerationError
 from etsy_listings.ai.market_queries import MarketQueriesRequest
 from etsy_listings.ai.orchestrator import generate_brief, generate_market_queries, generate_proposal
+from etsy_listings.ai.proposals import ProposalChoices, ProposalStore, input_snapshot
 from etsy_listings.ai.providers import AiProvider
 from etsy_listings.clients.etsy.market import EtsyMarketClient
 from etsy_listings.config.garment_profile import GarmentProfile
@@ -61,12 +63,7 @@ from etsy_listings.ui.airuns.events import (
 )
 from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry
 from etsy_listings.ui.api.listings import replace_listing_yaml
-from etsy_listings.ui.api.seo import (
-    build_seo_request,
-    primary_design_image,
-    proposal_response,
-    proposal_snapshot,
-)
+from etsy_listings.ui.api.seo import build_seo_request, listing_proposal, primary_design_image
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import Workspace
@@ -111,6 +108,7 @@ class AiRunner:
     locks: WorkspaceLocks
     providers: ProviderFactory
     market_client: MarketClientFactory
+    proposals: ProposalStore
     now: Callable[[], datetime] = field(default=lambda: datetime.now(UTC))
     monotonic: Callable[[], float] = time.monotonic
     limit_seconds: float = RUN_LIMIT_SECONDS
@@ -293,7 +291,7 @@ class AiRunner:
         request = build_seo_request(
             workspace, run.listing, listing, profile, market_block=snapshot.block
         )
-        frozen = proposal_snapshot(workspace, run.listing, listing, request)
+        frozen = input_snapshot(workspace, run.listing, listing, profile)
         proposal = generate_proposal(
             request,
             _read_prompt(workspace.seo_prompt_file()),
@@ -301,8 +299,20 @@ class AiRunner:
             cancel_event=run.cancel_event,
         )
         self._check(run)
-        response = proposal_response(proposal, frozen)
-        run.emit(lambda seq: AiProposalEvent(seq=seq, **response.model_dump()))
+        # A41: cached before it is announced, so whoever hears the event can
+        # read it back -- and so it outlives this run and this server.
+        with self.locks.listing(run.listing):
+            if not workspace.listing_file(run.listing).is_file():
+                raise UserFacingError(f"the listing {run.listing!r} no longer exists")
+            record = self.proposals.put(
+                run.listing,
+                ProposalChoices.of(proposal),
+                frozen,
+                generated_at=datetime.now(UTC),
+                origin="manual",
+            )
+            announced = listing_proposal(workspace, run.listing, record)
+        run.emit(lambda seq: AiProposalEvent(seq=seq, **announced.model_dump()))
         run.step(
             "seo",
             "done",

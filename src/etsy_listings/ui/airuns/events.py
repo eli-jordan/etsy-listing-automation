@@ -18,7 +18,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, Field
 
 from etsy_listings.market.snapshot import MarketSnapshot
-from etsy_listings.ui.api.schemas import SeoProposalResponse
+from etsy_listings.ui.api.schemas import ListingProposal
 
 StepId = Literal["brief", "market", "seo"]
 StepState = Literal["pending", "active", "done", "skipped", "warning", "failed"]
@@ -71,9 +71,10 @@ class AiMarketEvent(BaseModel):
     snapshot: MarketSnapshot
 
 
-class AiProposalEvent(SeoProposalResponse):
-    """The validated proposal: :class:`SeoProposalResponse` unchanged, plus
-    ``type`` and ``seq``."""
+class AiProposalEvent(ListingProposal):
+    """The validated proposal, once it is cached (A41): what ``GET
+    /api/listings/{name}/proposal`` answers at that moment, plus ``type``
+    and ``seq``."""
 
     type: Literal["proposal"] = "proposal"
     seq: int

@@ -2,13 +2,14 @@ import { act } from "@testing-library/react";
 import { type MockInstance, vi } from "vitest";
 import * as aiRunsApi from "../api/aiRuns";
 import * as marketApi from "../api/market";
+import * as seoApi from "../api/seo";
 import type { AiRunStreamOptions } from "../api/aiRuns";
 import type { AiRun } from "../pages/editor/aiSeo/useAiRun";
 import type {
   AiRunEvent,
   AiRunSummary,
+  ListingProposal,
   MarketSnapshot,
-  SeoProposalResponse,
   WorkflowStep,
 } from "../types";
 
@@ -18,6 +19,12 @@ import type {
  * stream opened is kept so a test can push events down it. What a test
  * pushes is what the editor sees -- the same `step`/`brief`/`proposal`/
  * `phase` sequence `ui/airuns/runner.py` writes.
+ *
+ * It also stands in for the listing's cached proposal (A41) at `api/seo.ts`:
+ * a `proposal` event pushed down a stream is cached first, exactly as the
+ * runner writes the record before it announces it, and a resolution is
+ * recorded on it -- or refused, as the server refuses one for a proposal
+ * that has since been replaced.
  */
 
 export function aiRunSummary(over: Partial<AiRunSummary> = {}): AiRunSummary {
@@ -56,6 +63,13 @@ export interface FakeAiRuns {
   cancel: MockInstance<typeof aiRunsApi.cancelAiRun>;
   /** `GET …/market`: no snapshot unless a test gives one. */
   market: MockInstance<typeof marketApi.getMarketSnapshot>;
+  /** The server's cached proposal: none unless a test or a `proposal` event
+   * puts one there. */
+  cached: { proposal: ListingProposal | null };
+  /** `GET …/proposal`, answering {@link FakeAiRuns.cached}. */
+  loadProposal: MockInstance<typeof seoApi.getListingProposal>;
+  /** `PATCH …/proposal/resolution`, recorded on {@link FakeAiRuns.cached}. */
+  resolveProposal: MockInstance<typeof seoApi.resolveListingProposal>;
 }
 
 export function fakeAiRuns(): FakeAiRuns {
@@ -79,6 +93,24 @@ export function fakeAiRuns(): FakeAiRuns {
     }));
   const cancel = vi.spyOn(aiRunsApi, "cancelAiRun").mockResolvedValue(true);
   const market = vi.spyOn(marketApi, "getMarketSnapshot").mockResolvedValue(null);
+  const cached: FakeAiRuns["cached"] = { proposal: null };
+  const loadProposal = vi
+    .spyOn(seoApi, "getListingProposal")
+    .mockImplementation(async () => cached.proposal);
+  const resolveProposal = vi
+    .spyOn(seoApi, "resolveListingProposal")
+    .mockImplementation(async (_name, { generated_at, ...sections }) => {
+      const current = cached.proposal;
+      if (current === null || current.generated_at !== generated_at) return null;
+      const resolution = { ...current.resolution };
+      for (const [key, value] of Object.entries(sections)) {
+        if (value !== null && value !== undefined) {
+          resolution[key as keyof typeof resolution] = value;
+        }
+      }
+      cached.proposal = { ...current, resolution };
+      return cached.proposal;
+    });
   vi.spyOn(aiRunsApi, "openAiRunStream").mockImplementation((runId, options) => {
     const stream: FakeStream = { runId, options, closed: false };
     streams.push(stream);
@@ -100,13 +132,57 @@ export function fakeAiRuns(): FakeAiRuns {
     stream,
     emit: (...events) =>
       act(() => {
-        for (const event of events) stream().options.onEvent(event);
+        for (const event of events) {
+          if (event.type === "proposal") cached.proposal = proposalOf(event);
+          stream().options.onEvent(event);
+        }
       }),
     end: () => act(() => stream().options.onDone?.()),
     find,
     start,
     cancel,
     market,
+    cached,
+    loadProposal,
+    resolveProposal,
+  };
+}
+
+function proposalOf(event: Extract<AiRunEvent, { type: "proposal" }>): ListingProposal {
+  const { type, seq, ...proposal } = event;
+  void type;
+  void seq;
+  return proposal;
+}
+
+/** A current proposal, every section still open. */
+export function listingProposal(over: Partial<ListingProposal> = {}): ListingProposal {
+  return {
+    proposal: {
+      titles: ["Title A", "Title B", "Title C"],
+      tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
+      description_leads: ["Lead A", "Lead B", "Lead C"],
+      rationale: [],
+      warnings: [],
+      observed_text: "",
+    },
+    snapshot: {
+      brief: "A relaxed hiking tee.",
+      product_type: "tee",
+      etsy_category: "Graphic Tees",
+      materials: ["ring-spun cotton"],
+      colors: ["black"],
+      garment_brand: "Comfort Colors",
+      garment_model: "1717",
+      garment_profile: "comfort-colors-1717",
+      design: { default: "designs/take-a-hike.png" },
+      design_content_hash: null,
+    },
+    generated_at: "2026-09-23T00:00:00Z",
+    origin: "manual",
+    resolution: { title: "pending", tags: "pending", lead: "pending" },
+    stale: { is_stale: false, reasons: [] },
+    ...over,
   };
 }
 
@@ -134,7 +210,7 @@ export function marketEvent(snapshot: MarketSnapshot): AiRunEvent {
   return { type: "market", seq: ++seq, snapshot };
 }
 
-export function proposalEvent(proposal: SeoProposalResponse): AiRunEvent {
+export function proposalEvent(proposal: ListingProposal = listingProposal()): AiRunEvent {
   return { ...proposal, type: "proposal", seq: ++seq };
 }
 

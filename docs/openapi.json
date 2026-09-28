@@ -134,35 +134,26 @@
         "type": "object"
       },
       "AiProposalEvent": {
-        "description": "The validated proposal: :class:`SeoProposalResponse` unchanged, plus\n``type`` and ``seq``.",
+        "description": "The validated proposal, once it is cached (A41): what ``GET\n/api/listings/{name}/proposal`` answers at that moment, plus ``type``\nand ``seq``.",
         "properties": {
-          "description_leads": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Description Leads",
-            "type": "array"
-          },
-          "expires_at": {
-            "format": "date-time",
-            "title": "Expires At",
-            "type": "string"
-          },
           "generated_at": {
             "format": "date-time",
             "title": "Generated At",
             "type": "string"
           },
-          "observed_text": {
-            "title": "Observed Text",
+          "origin": {
+            "enum": [
+              "manual",
+              "batch"
+            ],
+            "title": "Origin",
             "type": "string"
           },
-          "rationale": {
-            "items": {
-              "$ref": "#/components/schemas/SeoRationaleEntry"
-            },
-            "title": "Rationale",
-            "type": "array"
+          "proposal": {
+            "$ref": "#/components/schemas/ProposalChoices"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/ProposalResolution"
           },
           "seq": {
             "title": "Seq",
@@ -171,44 +162,23 @@
           "snapshot": {
             "$ref": "#/components/schemas/SeoProposalSnapshot"
           },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Tags",
-            "type": "array"
-          },
-          "titles": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Titles",
-            "type": "array"
+          "stale": {
+            "$ref": "#/components/schemas/ProposalStaleness"
           },
           "type": {
             "const": "proposal",
             "default": "proposal",
             "title": "Type",
             "type": "string"
-          },
-          "warnings": {
-            "items": {
-              "$ref": "#/components/schemas/SeoWarningEntry"
-            },
-            "title": "Warnings",
-            "type": "array"
           }
         },
         "required": [
-          "titles",
-          "tags",
-          "description_leads",
-          "rationale",
-          "warnings",
-          "observed_text",
+          "proposal",
           "snapshot",
           "generated_at",
-          "expires_at",
+          "origin",
+          "resolution",
+          "stale",
           "seq"
         ],
         "title": "AiProposalEvent",
@@ -2382,6 +2352,46 @@
         "title": "ListingPlannedEvent",
         "type": "object"
       },
+      "ListingProposal": {
+        "description": "A listing's cached proposal as the editor and the batch summary read\nit (A41): the record, and whether it still describes the saved listing.\n``stale`` is computed from the saved listing on every read, never\nstored.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "manual",
+              "batch"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/ProposalChoices"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/ProposalResolution"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SeoProposalSnapshot"
+          },
+          "stale": {
+            "$ref": "#/components/schemas/ProposalStaleness"
+          }
+        },
+        "required": [
+          "proposal",
+          "snapshot",
+          "generated_at",
+          "origin",
+          "resolution",
+          "stale"
+        ],
+        "title": "ListingProposal",
+        "type": "object"
+      },
       "ListingSummary": {
         "properties": {
           "colour_count": {
@@ -3783,6 +3793,181 @@
         "title": "ProgressEvent",
         "type": "object"
       },
+      "ProposalChoices": {
+        "description": "What the seller chooses from: the validated `ai/models.py.SeoProposal`,\nfield for field, as JSON can carry it.",
+        "properties": {
+          "description_leads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Description Leads",
+            "type": "array"
+          },
+          "observed_text": {
+            "title": "Observed Text",
+            "type": "string"
+          },
+          "rationale": {
+            "items": {
+              "$ref": "#/components/schemas/SeoRationaleEntry"
+            },
+            "title": "Rationale",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "titles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SeoWarningEntry"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "titles",
+          "tags",
+          "description_leads",
+          "rationale",
+          "warnings",
+          "observed_text"
+        ],
+        "title": "ProposalChoices",
+        "type": "object"
+      },
+      "ProposalResolution": {
+        "description": "Each section's state (spec, *Durable AI proposals*): a section the\nseller accepted or dismissed stays resolved after a reload, so its drawer\ndoes not present itself as new again. ``pending`` is still open.",
+        "properties": {
+          "lead": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Lead",
+            "type": "string"
+          },
+          "tags": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Tags",
+            "type": "string"
+          },
+          "title": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ProposalResolution",
+        "type": "object"
+      },
+      "ProposalResolutionPatch": {
+        "description": "``PATCH /api/listings/{name}/proposal/resolution``: the sections to\nrecord, on the proposal generated at ``generated_at`` -- a regeneration\nthat landed meanwhile is a different proposal, and is a 409. ``pending``\nreopens a section.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "lead": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "accepted",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "accepted",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "accepted",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "generated_at"
+        ],
+        "title": "ProposalResolutionPatch",
+        "type": "object"
+      },
+      "ProposalStaleness": {
+        "properties": {
+          "is_stale": {
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_stale",
+          "reasons"
+        ],
+        "title": "ProposalStaleness",
+        "type": "object"
+      },
       "PublishSnapshot": {
         "description": "Domain facts for the review (A30): only the rows the stage's own\n``plan()`` would refuse over, so the price table's red marker is never a\nsecond copy of the below-cost rule.",
         "properties": {
@@ -4225,7 +4410,7 @@
         "type": "object"
       },
       "SeoProposalSnapshot": {
-        "description": "The submitted generation inputs, echoed back beside the proposal\n(implementation plan, PR5 item 4: \"input snapshot data\").\n\nThis is what a future frontend (PR7) compares its own current editor\nstate against to decide a pending proposal has gone stale\n(`docs/ui-listing-seo-interactions.md` section 7) -- everything\n`ai/models.py.SeoRequest` sent to the provider except the design image\nitself. Design identity and content are captured before generation, rather\nthan inferred from whichever editor state exists when the response arrives.",
+        "description": "The generation inputs, frozen before the provider starts: everything\n`ai/models.py.SeoRequest` sent except the design image itself, plus the\ndesign's identity and content hash. :func:`proposal_staleness` compares\none of these against the same inputs read from the listing now.",
         "properties": {
           "brief": {
             "title": "Brief",
@@ -6697,7 +6882,7 @@
     },
     "/api/listings/{name}": {
       "delete": {
-        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot goes now (market-seo.md, *Cache*): a\nlisting pending deletion is one the seller is done researching, and\notherwise only the wipe after the remote deletion would remove it.",
+        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot and the cached AI proposal go now\n(market-seo.md, *Cache*; A42): a listing pending deletion is one the\nseller is done researching, and otherwise only the wipe after the remote\ndeletion would remove them. An AI run still going is asked to stop\nfirst, so it does not write a proposal for a listing being deleted.",
         "operationId": "delete_listing_api_listings__name__delete",
         "parameters": [
           {
@@ -7026,9 +7211,114 @@
         ]
       }
     },
+    "/api/listings/{name}/proposal": {
+      "get": {
+        "description": "The listing's latest AI SEO proposal (A41; spec, *Durable AI\nproposals*), with which sections were resolved and whether it has gone\nstale. Written by every AI run before it announces the proposal, so a\nreload, a server restart or a batch run all find it here.",
+        "operationId": "get_listing_proposal_api_listings__name__proposal_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such listing, or no proposal cached for it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Listing Proposal",
+        "tags": [
+          "ai-seo"
+        ]
+      }
+    },
+    "/api/listings/{name}/proposal/resolution": {
+      "patch": {
+        "description": "Record accepted or dismissed sections (spec, *Durable AI proposals*),\nso a resolved drawer does not reopen as new after a reload. The chosen\nvalue itself reaches ``listing.yaml`` through ordinary autosave; this\nrecords only that the section was dealt with. Under the listing's write\nlock, so a delete or rename cannot land between the read and the write\nand leave a record behind for a listing that is gone.",
+        "operationId": "resolve_listing_proposal_api_listings__name__proposal_resolution_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalResolutionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such listing, or no proposal cached for it"
+          },
+          "409": {
+            "description": "The proposal was regenerated since the page read it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Listing Proposal",
+        "tags": [
+          "ai-seo"
+        ]
+      }
+    },
     "/api/listings/{name}/rename": {
       "post": {
-        "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name (PRD 60), so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
+        "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name (PRD 60), so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render. The market\nsnapshot and the cached AI proposal (A42) move for the same reason.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
         "operationId": "rename_listing_api_listings__name__rename_post",
         "parameters": [
           {

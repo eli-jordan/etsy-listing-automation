@@ -7,8 +7,8 @@ import type {
   AiRunPhase,
   AiRunSummary,
   ListingDetail,
+  ListingProposal,
   MarketSnapshot,
-  SeoProposalResponse,
   WorkflowStep,
 } from "../../../types";
 
@@ -28,9 +28,11 @@ import type {
  * Two events carry something the editor must *do*, not just show, and go to
  * the caller's handlers instead: a `brief` the server wrote into
  * `listing.yaml` (the field fills in without being autosaved again), and the
- * `proposal` (kept in `aiSeoStorage`, which opens the drawers). Replay calls
- * them again, so both must be idempotent -- see `useAiSeoMode`'s
- * `receiveProposal`.
+ * `proposal`, which opens the drawers. Both are handed over only while the
+ * run is still going. Once it has finished, the listing that loaded already
+ * has the brief, and the cached proposal (A41) is the truth about which
+ * drawers are open -- replaying the event would reopen ones the seller has
+ * resolved since.
  *
  * ## The auto chain (PRD 68)
  *
@@ -61,7 +63,7 @@ export interface AiRun {
   /** The run's market snapshot, once research has finished. */
   market: MarketSnapshot | null;
   /** The run's proposal, once it has one. */
-  proposal: SeoProposalResponse | null;
+  proposal: ListingProposal | null;
   /** Why the run failed, or was refused. */
   message: string | null;
   /** When the run started (ms since the epoch), from the server. */
@@ -78,7 +80,7 @@ export interface AiRun {
 export interface AiRunHandlers {
   /** The server wrote a drafted brief into the listing. */
   onBrief?: (text: string) => void;
-  onProposal?: (proposal: SeoProposalResponse) => void;
+  onProposal?: (proposal: ListingProposal) => void;
 }
 
 const LOST_STREAM = "Lost the connection to the AI run. Reload the page to see how it went.";
@@ -90,7 +92,7 @@ interface View {
   steps: WorkflowStep[];
   queries: string[] | null;
   market: MarketSnapshot | null;
-  proposal: SeoProposalResponse | null;
+  proposal: ListingProposal | null;
   message: string | null;
   startedAt: number | null;
 }
@@ -139,9 +141,8 @@ function applyEvent(view: View, event: AiRunEvent): View {
   }
 }
 
-/** The event is the response plus `type` and `seq`; the response is what
- * `aiSeoStorage` keeps. */
-function proposalOf(event: Extract<AiRunEvent, { type: "proposal" }>): SeoProposalResponse {
+/** The event is the cached proposal plus `type` and `seq` (A41). */
+function proposalOf(event: Extract<AiRunEvent, { type: "proposal" }>): ListingProposal {
   const { type, seq, ...proposal } = event;
   void type;
   void seq;
@@ -171,7 +172,8 @@ export function useAiRun(
     stream.current?.close();
     const mine = ++generation.current;
     // A finished run's brief is already in the file the editor loaded -- or
-    // the seller has changed it since. Only a run still going hands one over.
+    // the seller has changed it since -- and its proposal is cached with the
+    // seller's resolutions. Only a run still going hands either over.
     const live = run.phase === "running";
     setView(viewOf(run));
     stream.current = openAiRunStream(run.id, {
@@ -181,7 +183,9 @@ export function useAiRun(
         if (event.type === "brief" && event.written && live) {
           latest.current.handlers.onBrief?.(event.text);
         }
-        if (event.type === "proposal") latest.current.handlers.onProposal?.(proposalOf(event));
+        if (event.type === "proposal" && live) {
+          latest.current.handlers.onProposal?.(proposalOf(event));
+        }
       },
       onError: () => {
         if (mine !== generation.current) return;

@@ -26,6 +26,7 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings import connections
+from etsy_listings.ai.proposals import ProposalStore
 from etsy_listings.batches import BatchStore, StagingStore
 from etsy_listings.clients.etsy.market import EtsyMarketClient
 from etsy_listings.ui.airuns.registry import AiRunRegistry
@@ -66,12 +67,14 @@ def create_app(
     executor = RunExecutor(workspace=workspace, context_factory=context_factory, registry=registry)
     locks = WorkspaceLocks()
     ai_registry = AiRunRegistry()
+    proposal_store = ProposalStore(workspace)
     ai_runner = AiRunner(
         workspace=workspace,
         registry=ai_registry,
         locks=locks,
         providers=seo_provider_factory,
         market_client=market_client_factory,
+        proposals=proposal_store,
     )
     staging_store = StagingStore(workspace)
 
@@ -120,6 +123,9 @@ def create_app(
     # their per-record locks mean something.
     app.state.staging_store = staging_store
     app.state.batch_store = BatchStore(workspace)
+    # A41: the cached proposals, written by `ai_runner` and read and resolved
+    # through `seo.py`. One store, for the same reason.
+    app.state.proposal_store = proposal_store
 
     # Permissive CORS for local dev only -- the Vite dev server proxies /api in
     # production-shaped use, but running `uvicorn` and `vite` as two separate

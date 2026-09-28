@@ -8,12 +8,7 @@ import { StarIcon } from "@phosphor-icons/react/dist/csr/Star";
 import { StorefrontIcon } from "@phosphor-icons/react/dist/csr/Storefront";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
 import { useEffect, useState } from "react";
-import type {
-  MarketSnapshot,
-  PhraseScore,
-  ScoredListing,
-  SeoProposalResponse,
-} from "../../../types";
+import type { MarketSnapshot, PhraseScore, ScoredListing, ProposalChoices } from "../../../types";
 import { timeAgo } from "../timeAgo";
 
 /**
@@ -213,7 +208,7 @@ function Listings({ snapshot }: { snapshot: MarketSnapshot }) {
 }
 
 /** What the phrase ticks are read from. */
-export type Suggestions = Pick<SeoProposalResponse, "titles" | "tags" | "description_leads">;
+export type Suggestions = Pick<ProposalChoices, "titles" | "tags" | "description_leads">;
 
 /** The phrase-tick rule (docs/ui-market-seo-interactions.md, *Phrases view*):
  * the phrase is one of the suggested tags, or a suggested title or lead

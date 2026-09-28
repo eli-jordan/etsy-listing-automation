@@ -3,8 +3,10 @@ reads, and the helpers AI runs build a proposal with (AI SEO implementation
 plan, PR5; market-seo.md, *AI runs*; market-seo implementation plan, PR 8).
 
 ```
-GET  /api/listings/{name}/ai-seo/readiness  -> SeoReadinessResponse
-GET  /api/listings/{name}/market            -> MarketSnapshot | 404
+GET   /api/listings/{name}/ai-seo/readiness      -> SeoReadinessResponse
+GET   /api/listings/{name}/market                -> MarketSnapshot | 404
+GET   /api/listings/{name}/proposal              -> ListingProposal | 404
+PATCH /api/listings/{name}/proposal/resolution   -> ListingProposal | 404 | 409
 ```
 
 Generation itself is an AI run (``ui/airuns/``, served by
@@ -20,9 +22,9 @@ browser disconnecting -- were retired when the browser moved onto runs
   an empty brief is drafted by that click), so the button is lit exactly
   when ``POST /api/ai/runs`` would accept the run the click starts;
 - turning a saved `Listing` into the `SeoRequest` the orchestrator wants
-  (:func:`build_seo_request`, :func:`primary_design_image`), and the
-  proposal's frozen input snapshot and wire response
-  (:func:`proposal_snapshot`, :func:`proposal_response`);
+  (:func:`build_seo_request`, :func:`primary_design_image`), and a cached
+  proposal into its wire form, judged stale against the saved listing
+  (:func:`listing_proposal`; A41);
 - the provider factory ``create_app`` injects (:data:`AiProviderFactory`),
   the seam tests replace with fakes. CI never calls a real Codex or Claude
   CLI, per PR4's own rule.
@@ -31,7 +33,6 @@ browser disconnecting -- were retired when the browser moved onto runs
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -39,7 +40,14 @@ from fastapi import APIRouter, HTTPException, Request
 from etsy_listings.ai.claude import ClaudeProvider
 from etsy_listings.ai.codex import CodexProvider
 from etsy_listings.ai.grok import GrokProvider
-from etsy_listings.ai.models import GarmentContext, SeoProposal, SeoRequest
+from etsy_listings.ai.models import GarmentContext, SeoRequest
+from etsy_listings.ai.proposals import (
+    ProposalRecord,
+    ProposalReplacedError,
+    ProposalStore,
+    input_snapshot,
+    proposal_staleness,
+)
 from etsy_listings.ai.providers import AiProvider
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
@@ -47,22 +55,14 @@ from etsy_listings.market import snapshot as market_snapshot
 from etsy_listings.market.snapshot import MarketSnapshot
 from etsy_listings.ui.api.listings import Existing
 from etsy_listings.ui.api.schemas import (
-    SeoProposalResponse,
-    SeoProposalSnapshot,
-    SeoRationaleEntry,
+    ListingProposal,
+    ProposalResolutionPatch,
     SeoReadinessResponse,
-    SeoWarningEntry,
 )
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import InvalidRefError, Workspace
 
 router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
-
-_PROPOSAL_TTL = timedelta(days=1)
-"""The settled "Proposal persistence" decision: "Store unresolved proposals
-only in browser local storage ... for one day." The server never stores
-one; it only stamps ``expires_at`` so the browser does not have to compute
-the retention window itself from a client clock alone."""
 
 _PREFERRED_DESIGN_KEYS: tuple[str, ...] = ("default", "on-light", "on-dark")
 """Which artwork key becomes the one image a provider sees, when a listing's
@@ -200,50 +200,25 @@ def build_seo_request(
     )
 
 
-def proposal_snapshot(
-    workspace: Workspace, name: str, listing: Listing, seo_request: SeoRequest
-) -> SeoProposalSnapshot:
-    """Freeze the saved inputs before the provider starts its long request."""
-    return SeoProposalSnapshot(
-        brief=seo_request.brief,
-        product_type=seo_request.product_type,
-        etsy_category=seo_request.etsy_category,
-        materials=list(seo_request.materials),
-        colors=list(seo_request.colors),
-        garment_brand=seo_request.garment.brand,
-        garment_model=seo_request.garment.model,
-        garment_profile=listing.garment_profile,
-        design=dict(listing.design),
-        design_content_hash=workspace.design_content_hash(
-            listing.design, listing_dir=workspace.listing_dir(name)
-        ),
+def listing_proposal(workspace: Workspace, name: str, record: ProposalRecord) -> ListingProposal:
+    """``record`` on the wire, judged against the saved listing as it is now
+    (A41). Server-side, so the editor and the batch summary agree."""
+    listing = workspace.load_listing(name)
+    profile = WorkspaceFacts.gather(workspace).garment_profile(listing.garment_profile)
+    now = input_snapshot(workspace, name, listing, profile)
+    return ListingProposal(
+        proposal=record.proposal,
+        snapshot=record.snapshot,
+        generated_at=record.generated_at,
+        origin=record.origin,
+        resolution=record.resolution,
+        stale=proposal_staleness(record.snapshot, now),
     )
 
 
-def proposal_response(proposal: SeoProposal, snapshot: SeoProposalSnapshot) -> SeoProposalResponse:
-    generated_at = datetime.now(UTC)
-    return SeoProposalResponse(
-        titles=list(proposal.titles),
-        tags=list(proposal.tags),
-        description_leads=list(proposal.description_leads),
-        rationale=[
-            SeoRationaleEntry(
-                phrase=entry.phrase,
-                intent=entry.intent,
-                reason=entry.reason,
-                used_in=list(entry.used_in),
-            )
-            for entry in proposal.rationale
-        ],
-        warnings=[
-            SeoWarningEntry(message=warning.message, kind=warning.kind)
-            for warning in proposal.warnings
-        ],
-        observed_text=proposal.observed_text,
-        snapshot=snapshot,
-        generated_at=generated_at,
-        expires_at=generated_at + _PROPOSAL_TTL,
-    )
+def _proposals(request: Request) -> ProposalStore:
+    store: ProposalStore = request.app.state.proposal_store
+    return store
 
 
 @router.get("/{name}/ai-seo/readiness", response_model=SeoReadinessResponse)
@@ -278,3 +253,55 @@ def get_market_snapshot(target: Existing) -> MarketSnapshot:
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"no market snapshot for {target.name!r}")
     return snapshot
+
+
+@router.get(
+    "/{name}/proposal",
+    response_model=ListingProposal,
+    responses={404: {"description": "No such listing, or no proposal cached for it"}},
+)
+def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
+    """The listing's latest AI SEO proposal (A41; spec, *Durable AI
+    proposals*), with which sections were resolved and whether it has gone
+    stale. Written by every AI run before it announces the proposal, so a
+    reload, a server restart or a batch run all find it here."""
+    record = _proposals(request).load(target.name)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"no proposal for {target.name!r}")
+    return listing_proposal(target.workspace, target.name, record)
+
+
+@router.patch(
+    "/{name}/proposal/resolution",
+    response_model=ListingProposal,
+    responses={
+        404: {"description": "No such listing, or no proposal cached for it"},
+        409: {"description": "The proposal was regenerated since the page read it"},
+    },
+)
+def resolve_listing_proposal(
+    target: Existing, body: ProposalResolutionPatch, request: Request
+) -> ListingProposal:
+    """Record accepted or dismissed sections (spec, *Durable AI proposals*),
+    so a resolved drawer does not reopen as new after a reload. The chosen
+    value itself reaches ``listing.yaml`` through ordinary autosave; this
+    records only that the section was dealt with. Under the listing's write
+    lock, so a delete or rename cannot land between the read and the write
+    and leave a record behind for a listing that is gone."""
+    store = _proposals(request)
+    with target.writing():
+        try:
+            record = store.resolve(
+                target.name,
+                generated_at=body.generated_at,
+                title=body.title,
+                tags=body.tags,
+                lead=body.lead,
+            )
+        except ProposalReplacedError as exc:
+            raise HTTPException(
+                status_code=409, detail="this proposal was replaced by a newer one"
+            ) from exc
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"no proposal for {target.name!r}")
+    return listing_proposal(target.workspace, target.name, record)

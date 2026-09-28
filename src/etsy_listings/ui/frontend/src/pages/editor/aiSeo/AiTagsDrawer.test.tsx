@@ -11,7 +11,7 @@ describe("AiTagsDrawer", () => {
       <AiTagsDrawer
         tags={tags}
         selected={[]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -31,7 +31,7 @@ describe("AiTagsDrawer", () => {
       <AiTagsDrawer
         tags={tags}
         selected={["tag-0", "tag-1"]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -48,7 +48,7 @@ describe("AiTagsDrawer", () => {
       <AiTagsDrawer
         tags={tags}
         selected={["tag-0"]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -67,7 +67,7 @@ describe("AiTagsDrawer", () => {
       <AiTagsDrawer
         tags={tags}
         selected={[]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -86,7 +86,7 @@ describe("AiTagsDrawer", () => {
       <AiTagsDrawer
         tags={tags}
         selected={thirteen}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -100,13 +100,13 @@ describe("AiTagsDrawer", () => {
     expect(screen.getByRole("button", { name: /tag-13/ })).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("calls onAcceptBest and disables every choice plus Accept best 13 while stale", () => {
+  it("calls onAcceptBest", () => {
     const onAcceptBest = vi.fn();
     render(
       <AiTagsDrawer
         tags={tags}
         selected={[]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -119,23 +119,33 @@ describe("AiTagsDrawer", () => {
     expect(onAcceptBest).toHaveBeenCalled();
   });
 
-  it("disables tag choices and Accept best 13 when stale, and marks the drawer stale", () => {
+  it("keeps an out-of-date drawer's tags and Accept best 13 usable, with the reason as its heading", async () => {
+    const onToggle = vi.fn();
+    const onAcceptBest = vi.fn();
     render(
       <AiTagsDrawer
         tags={tags}
         selected={[]}
-        stale={true}
+        staleReason="colours changed since"
         rationale={[]}
         warnings={[]}
         observedText=""
-        onToggle={vi.fn()}
-        onAcceptBest={vi.fn()}
+        onToggle={onToggle}
+        onAcceptBest={onAcceptBest}
         onClose={vi.fn()}
       />,
     );
-    expect(screen.getByText(/out of date/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /accept best 13/i })).toBeDisabled();
-    expect(screen.getByRole("button", { name: /tag-0/ })).toBeDisabled();
+
+    expect(
+      screen.getByText("Out of date: colours changed since. Still usable"),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "tag AI suggestions" })).toHaveClass(
+      "seo-suggestion--stale",
+    );
+    await userEvent.click(screen.getByRole("button", { name: /tag-0/ }));
+    await userEvent.click(screen.getByRole("button", { name: /accept best 13/i }));
+    expect(onToggle).toHaveBeenCalledWith("tag-0");
+    expect(onAcceptBest).toHaveBeenCalled();
   });
 
   it("calls onClose when Close is activated", async () => {
@@ -144,7 +154,7 @@ describe("AiTagsDrawer", () => {
       <AiTagsDrawer
         tags={tags}
         selected={[]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -162,7 +172,7 @@ describe("AiTagsDrawer", () => {
       <AiTagsDrawer
         tags={tags}
         selected={[]}
-        stale={false}
+        staleReason={null}
         rationale={[
           {
             phrase: "gift for hikers",
@@ -193,7 +203,7 @@ describe("AiTagsDrawer", () => {
       <AiTagsDrawer
         tags={tags}
         selected={[]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""

@@ -8,6 +8,7 @@ import {
   type FakeAiRuns,
   aiRunSummary,
   fakeAiRuns,
+  listingProposal,
   marketEvent,
   phaseEvent,
   proposalEvent,
@@ -15,7 +16,7 @@ import {
   stepEvent,
 } from "../../test/aiRuns";
 import { MARKET_QUERIES, marketSnapshot } from "../../test/market";
-import type { ListingDetail, SeoProposalResponse } from "../../types";
+import type { ListingDetail, ListingProposal } from "../../types";
 import { DetailsTab as DetailsTabView } from "./DetailsTab";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
 
@@ -32,7 +33,7 @@ afterEach(() => {
 
 /** What the AI run behind the button sends once it has written the
  * suggestions: the proposal, then the end of the run. */
-async function runDelivers(body: SeoProposalResponse) {
+async function runDelivers(body: ListingProposal) {
   await waitFor(() => expect(runs.streams).toHaveLength(1));
   runs.emit(proposalEvent(body), phaseEvent("done"));
 }
@@ -519,32 +520,7 @@ describe("DetailsTab AI Mode", () => {
     });
   }
 
-  function proposal(): SeoProposalResponse {
-    return {
-      titles: ["Title A", "Title B", "Title C"],
-      tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
-      description_leads: ["Lead A", "Lead B", "Lead C"],
-      rationale: [],
-      warnings: [],
-      observed_text: "",
-      snapshot: {
-        brief: "A relaxed hiking tee.",
-        product_type: "tee",
-        etsy_category: "",
-        materials: [],
-        colors: ["black"],
-        garment_brand: "Comfort Colors",
-        garment_model: "1717",
-        garment_profile: "comfort-colors-1717",
-        design: { default: "designs/take-a-hike.png" },
-        design_content_hash: null,
-      },
-      generated_at: "2026-09-23T00:00:00Z",
-      // Relative to now -- see `aiSeoStorage.test.ts` for why a fixed pair is a
-      // fixture with an expiry date of its own.
-      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-    };
-  }
+  const proposal = () => listingProposal();
 
   it("shows disabled AI Mode without a design and brief", () => {
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
@@ -552,10 +528,6 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("asks readiness with an empty brief, and again after the listing changes", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
       .mockResolvedValueOnce({ ready: false, reason: "prompts/brief.md is missing" })
@@ -579,10 +551,6 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("rechecks readiness after save even when modified_at is unchanged", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
       .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
@@ -620,10 +588,6 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("keeps AI Mode disabled when the readiness endpoint says no", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
@@ -632,10 +596,6 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("renders AI Mode once the readiness endpoint says ready", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
@@ -644,10 +604,6 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("reveals all three drawers after a successful request and focuses the first title option", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
 
@@ -666,10 +622,6 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("returns focus to the AI Mode button once the last drawer resolves", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
 
@@ -691,10 +643,6 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("applies the chosen title through the normal autosave path", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const onUpdate = vi.fn();
     const onFlush = vi.fn();
@@ -710,11 +658,40 @@ describe("DetailsTab AI Mode", () => {
     expect(onFlush).toHaveBeenCalled();
   });
 
-  it("shows a Try again failure state without changing any listing field", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
+  it("keeps an out-of-date proposal's choices usable and names what changed", async () => {
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    runs.cached.proposal = listingProposal({
+      stale: { is_stale: true, reasons: ["brief edited since"] },
     });
+    const onUpdate = vi.fn();
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
+    const drawer = await screen.findByRole("region", { name: "title AI suggestions" });
+
+    expect(
+      within(drawer).getByText("Out of date: brief edited since. Still usable"),
+    ).toBeInTheDocument();
+    await userEvent.click(within(drawer).getByRole("button", { name: /Title B/ }));
+    expect(onUpdate).toHaveBeenCalledWith({ etsy: { title: "Title B" } });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens only the sections of the cached proposal the seller has not resolved", async () => {
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    runs.cached.proposal = listingProposal({
+      resolution: { title: "accepted", tags: "dismissed", lead: "pending" },
+    });
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    expect(
+      await screen.findByRole("region", { name: "description lead AI suggestions" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "title AI suggestions" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "tag AI suggestions" })).toBeNull();
+  });
+
+  it("shows a Try again failure state without changing any listing field", async () => {
     vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const onUpdate = vi.fn();
 
@@ -787,10 +764,6 @@ describe("DetailsTab top listings panel", () => {
   });
 
   it("ticks the phrases the pending suggestions use", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     runs.market.mockResolvedValue(marketSnapshot());
     runs.find.mockResolvedValue(aiRunSummary());
     const user = userEvent.setup();
@@ -800,28 +773,11 @@ describe("DetailsTab top listings panel", () => {
     expect(within(panel).queryByLabelText("In your suggestions")).toBeNull();
 
     await waitFor(() => expect(runs.streams).toHaveLength(1));
+    const suggested = listingProposal();
     runs.emit(
       proposalEvent({
-        titles: ["Retro Hiking Shirt", "Title B", "Title C"],
-        tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
-        description_leads: ["Lead A", "Lead B", "Lead C"],
-        rationale: [],
-        warnings: [],
-        observed_text: "",
-        snapshot: {
-          brief: "A relaxed hiking tee.",
-          product_type: "",
-          etsy_category: "",
-          materials: [],
-          colors: ["black"],
-          garment_brand: "",
-          garment_model: "",
-          garment_profile: "comfort-colors-1717",
-          design: { default: "designs/take-a-hike.png" },
-          design_content_hash: null,
-        },
-        generated_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+        ...suggested,
+        proposal: { ...suggested.proposal, titles: ["Retro Hiking Shirt", "Title B", "Title C"] },
       }),
     );
 
