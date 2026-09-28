@@ -19,6 +19,8 @@ import pytest
 from etsy_listings.batches import Batch, BatchRow, BatchStore, NotReviewable
 from etsy_listings.workspace.workspace import Workspace
 
+from tests.support.refusals import refuse_reads
+
 CREATED = datetime(2026, 9, 27, 11, 42, tzinfo=UTC)
 
 
@@ -206,3 +208,26 @@ def test_a_restore_brings_back_only_the_rows_for_that_listing_s_design(
 
     assert [r.deleted for r in _rows(store, "b1")] == [False]
     assert [r.deleted for r in _rows(store, "b2")] == [True]
+
+
+# ---------------------------------------------------------------- reading
+
+
+def test_a_batch_read_while_the_queue_replaces_it_is_still_there(
+    store: BatchStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows refuses to open a record mid-replace; the summary poll that
+    lands there waits the save out rather than finding no batch (A37)."""
+    _save(store, "b1", _row("cedar-trail"))
+    refuse_reads(monkeypatch, 3)
+
+    assert [r.name for r in _rows(store, "b1")] == ["cedar-trail"]
+
+
+def test_a_batch_that_stays_unreadable_is_no_batch(
+    store: BatchStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _save(store, "b1", _row("cedar-trail"))
+    refuse_reads(monkeypatch, 1000)
+
+    assert store.load("b1") is None

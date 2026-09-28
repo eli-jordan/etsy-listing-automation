@@ -25,7 +25,7 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from etsy_listings.workspace.atomic import write_json_atomic
+from etsy_listings.workspace.atomic import read_bytes_retrying, write_json_atomic
 from etsy_listings.workspace.workspace import Workspace, remove_tree
 
 SCHEMA = 1
@@ -201,7 +201,7 @@ class _Store[R: _Record]:
     def load(self, record: str) -> R | None:
         path = self._file(record)
         try:
-            raw = json.loads(path.read_text(encoding="utf-8"))
+            raw = json.loads(read_bytes_retrying(path).decode("utf-8"))
         except (OSError, ValueError):
             return None
         if not isinstance(raw, dict) or raw.get("schema") != SCHEMA:

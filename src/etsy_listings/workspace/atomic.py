@@ -51,6 +51,22 @@ def _replace(temporary: str, path: Path) -> None:
     os.replace(temporary, path)
 
 
+def read_bytes_retrying(path: Path) -> bytes:
+    """``path.read_bytes()``, waiting out a writer: the reader's half of
+    :func:`_replace`. Windows also refuses to *open* a file while another
+    thread is ``os.replace``-ing onto it, with the same bare
+    ``PermissionError``, so a summary poll that lands on the queue's save
+    would otherwise see the batch record vanish. The same bound applies; a
+    refusal still there after it is raised. ``FileNotFoundError`` is never
+    retried: a file that is not there is absent, at once."""
+    for _ in range(REPLACE_ATTEMPTS - 1):
+        try:
+            return path.read_bytes()
+        except PermissionError:
+            time.sleep(REPLACE_BACKOFF_SECONDS)
+    return path.read_bytes()
+
+
 def write_json_atomic(path: Path, document: object) -> None:
     """:func:`write_bytes_atomic` for a cache record (A37): indented UTF-8
     JSON, so a record is readable when somebody opens ``.cache`` to see why."""
