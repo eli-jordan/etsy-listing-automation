@@ -15,20 +15,30 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Callable, Iterator, Sequence
-from typing import Any
+from pathlib import Path
+from typing import Any, NoReturn
 
 import httpx
 import pytest
 
 from etsy_listings import connections
 from etsy_listings.ai.providers import AiProvider, FakeAiProvider
+from etsy_listings.clients.etsy import EtsyAuthError, HttpEtsyListingClient
 from etsy_listings.clients.printify import HttpCatalogClient, Transport
+from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError, Secrets
 from etsy_listings.ui.api.seo import default_ai_providers
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.workspace import Workspace, layout
 
 from tests.support.ai_runs import DRAFTED_BRIEF, QUERIES, proposal_payload
+from tests.support.builders import (
+    edit_garment_profile,
+    edit_listing,
+    set_etsy_listing_defaults,
+    set_etsy_shop_id,
+    set_shop_id,
+)
 
 SHOP_ENV_VAR = "PRINTIFY_SHOP_ID"
 """Which shop the write-side tests create their throwaway product in.
@@ -187,3 +197,117 @@ def printify_shop(printify_api: httpx.Client, prerequisite_missing) -> dict[str,
             f"set {SHOP_ENV_VAR} to one of {[(s['id'], s['title']) for s in shops]}"
         )
     return shops[0]
+
+
+# ---------------------------------------------- the throwaway shops (Phase 3)
+
+PrerequisiteMissing = Callable[[str], NoReturn]
+
+
+@pytest.fixture(scope="session")
+def credentials_workspace(prerequisite_missing: PrerequisiteMissing) -> Workspace:
+    """The already-set-up workspace named by ``ETSY_LISTINGS_ROOT`` -- the
+    source of the shop ids and the Etsy sign-in the write-side tests borrow
+    rather than fabricate. Distinct from each test's own workspace, which is
+    a fresh copy of the fixture that the test renders and applies into.
+    """
+    root = os.environ.get(layout.ROOT_ENV_VAR)
+    if not root:
+        prerequisite_missing(
+            f"{layout.ROOT_ENV_VAR} must point at a workspace that has already run "
+            f"`etsy-listings setup` and `etsy-listings auth etsy`"
+        )
+    workspace = Workspace.discover(root_override=to_native_path(root))
+    if workspace.defaults.printify.shop_id is None:
+        prerequisite_missing(f"{root}: no printify.shop_id -- run `etsy-listings setup` there")
+    if workspace.defaults.etsy.shop_id is None:
+        prerequisite_missing(f"{root}: no etsy.shop_id -- run `etsy-listings setup` there")
+    return workspace
+
+
+@pytest.fixture(scope="session")
+def etsy_client(
+    credentials_workspace: Workspace, prerequisite_missing: PrerequisiteMissing
+) -> HttpEtsyListingClient:
+    """The same connection `apply` uses, assembled the same way.
+
+    Built through ``connections`` rather than by hand: this fixture was the
+    fourth copy of that five-step sequence, and the one nobody would remember
+    to update -- it only runs where there are real credentials. What is left
+    here is the part that is genuinely the e2e layer's, which is deciding
+    what counts as a missing prerequisite.
+    """
+    root = credentials_workspace.root
+    transport = connections.etsy_transport(root)
+    if transport is None:
+        prerequisite_missing(f"{root}: no Etsy app key -- run `etsy-listings auth etsy` there")
+    if connections.etsy_token_store(root).load() is None:
+        prerequisite_missing(
+            f"{root}: no stored Etsy sign-in -- run `etsy-listings auth etsy` there"
+        )
+    try:
+        transport.ping()
+    except EtsyAuthError as exc:
+        prerequisite_missing(f"Etsy app key rejected: {exc}")
+    return HttpEtsyListingClient(transport)
+
+
+@pytest.fixture(scope="session")
+def printify_client(printify_token: str) -> PrintifyClient:
+    return connections.printify_client_for(printify_token)
+
+
+def point_at_throwaway_shops(
+    root: Path,
+    credentials_workspace: Workspace,
+    etsy_client: HttpEtsyListingClient,
+    prerequisite_missing: PrerequisiteMissing,
+) -> None:
+    """Configure a fresh copy of the fixture workspace for the shops named by
+    ``credentials_workspace``, so every stage of the fixture listing -- and
+    of a listing template saved from it -- can run against the real APIs."""
+    set_shop_id(root, credentials_workspace.defaults.printify.require_shop_id())
+    etsy_shop_id = credentials_workspace.defaults.etsy.require_shop_id()
+    set_etsy_shop_id(root, etsy_shop_id)
+    # A shipping profile is **required** for `etsy_listing` to run at all
+    # (decision 2: no listing- or shop-level name means a `Blocked`), and
+    # leaving it unset is what kept that stage out of every run of the
+    # Phase 3 test. Resolved from the shop rather than hard-coded, so this
+    # configures itself against whichever throwaway shop it is pointed at --
+    # and by name, which is also what exercises A25's name -> id resolution
+    # against the real API.
+    profiles = [p for p in etsy_client.shipping_profiles(etsy_shop_id) if not p.is_deleted]
+    if not profiles:
+        prerequisite_missing(
+            f"Etsy shop {etsy_shop_id} has no shipping profile -- create one in Shop Manager; "
+            f"`etsy_listing` cannot patch a listing without one (PRD 58)"
+        )
+    set_etsy_listing_defaults(root, who_made="i_did", shipping_profile=profiles[0].title)
+    # `i_did`, not the real `someone_else` default: this throwaway shop is not
+    # guaranteed to have a production partner declared, and the point of
+    # these tests is the publish/patch/media cycle, not decision 3's partner
+    # ladder (covered at the unit and behaviour layers already).
+
+    # The fixture garment profile's `XXL`/`XXXL` are the offline fakes' own
+    # naming, shared with every unit and behaviour test that uses this
+    # fixture -- not what the real Comfort Colors 1717 / Monster Digital
+    # catalog calls them (`2XL`/`3XL`/`4XL`). Overridden here, in each test's
+    # own copy only, so size resolution against the live catalog doesn't
+    # raise `UnknownSizeError`; size-naming itself is already covered offline
+    # and isn't this layer's job. The fixture listing's prices follow, which
+    # is also what a listing template saved from it carries.
+    edit_garment_profile(
+        root, "comfort-colors-1717", sizes=["S", "M", "L", "XL", "2XL", "3XL", "4XL"]
+    )
+    edit_listing(
+        root,
+        prices={
+            "S": "349 NOK",
+            "M": "349 NOK",
+            "L": "349 NOK",
+            "XL": "359 NOK",
+            "2XL": "369 NOK",
+            "3XL": "379 NOK",
+            "4XL": "379 NOK",
+        },
+    )
