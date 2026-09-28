@@ -5316,6 +5316,13 @@
             "title": "Id",
             "type": "string"
           },
+          "ignored": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ignored",
+            "type": "array"
+          },
           "label": {
             "title": "Label",
             "type": "string"
@@ -5343,7 +5350,8 @@
           "label",
           "template_saved_at",
           "expires_at",
-          "rows"
+          "rows",
+          "ignored"
         ],
         "title": "StagingDetail",
         "type": "object"
@@ -5434,6 +5442,17 @@
             ],
             "title": "Note"
           },
+          "reuse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reuse"
+          },
           "sources": {
             "items": {
               "type": "string"
@@ -5474,7 +5493,8 @@
           "state",
           "message",
           "note",
-          "suggestion"
+          "suggestion",
+          "reuse"
         ],
         "title": "StagingRowDetail",
         "type": "object"
@@ -8720,7 +8740,7 @@
     },
     "/api/staging": {
       "post": {
-        "description": "Stage loose PNGs (spec, *Accepted input*). Starlette has already\nspooled the parts to temporary files; `stage_pngs` streams each one on to\nits content-addressed upload with a running count (A45). A ZIP is\nrefused as *coming soon* until batch plan PR 7.",
+        "description": "Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has\nalready spooled the parts to temporary files; `stage_pngs` streams each\none on -- a PNG to its content-addressed upload, a ZIP to disk and then\nentry by entry out of it -- with a running count (A45).",
         "operationId": "create_staging_api_staging_post",
         "requestBody": {
           "content": {

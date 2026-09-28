@@ -220,6 +220,17 @@ describe("a listing-template card as a drop target (UI doc §2)", () => {
     expect(within(target).queryByText(/Drop to stage/)).not.toBeInTheDocument();
   });
 
+  it("names a ZIP being dragged as a ZIP (batch plan PR 7)", async () => {
+    renderRoutes();
+    await screen.findByText("heavyweight-tee");
+    const target = cardFor("heavyweight-tee");
+    const zip = new File(["PK"], "kittl-export.zip", { type: "application/zip" });
+
+    fireEvent.dragEnter(target, { dataTransfer: transfer([zip]) });
+
+    expect(within(target).getByText("Drop to stage a ZIP")).toBeInTheDocument();
+  });
+
   it("posts a drop straight to staging with that template, skipping New batch", async () => {
     const stage = vi
       .spyOn(batchesApi, "stageDesigns")

@@ -14,11 +14,12 @@ function row(over: Partial<StagingRow> & { id: string }): StagingRow {
     message: null,
     note: null,
     suggestion: null,
+    reuse: null,
     ...over,
   };
 }
 
-function session(rows: StagingRow[]): StagingDetail {
+function session(rows: StagingRow[], ignored: string[] = []): StagingDetail {
   return {
     id: "s1",
     listing_template: "heavyweight-tee",
@@ -26,6 +27,7 @@ function session(rows: StagingRow[]): StagingDetail {
     template_saved_at: "2026-09-27T11:38:00",
     expires_at: "2026-10-04T11:42:00",
     rows,
+    ignored,
   };
 }
 
@@ -94,6 +96,44 @@ describe("StagingPage", () => {
     fireEvent.click(screen.getByRole("button", { name: "Create 3 listings" }));
     await screen.findByText("summary page");
     expect(confirm).toHaveBeenCalledWith("s1");
+  });
+
+  it("counts a ZIP's ignored files and lists them on demand (UI doc §5)", async () => {
+    const ignored = ["__MACOSX/._cedar-trail.png", "readme.txt", "preview.jpg"];
+    vi.spyOn(batchesApi, "getStaging").mockResolvedValue(session([READY], ignored));
+    renderPage();
+
+    const summary = await screen.findByText(/other files ignored/);
+    expect(summary).toHaveTextContent("3 other files ignored");
+    const list = screen.getByText(ignored.join(" · "));
+    expect(list).not.toBeVisible();
+    fireEvent.click(summary);
+    expect(list).toBeVisible();
+  });
+
+  it("says nothing of ignored files when there were none", async () => {
+    vi.spyOn(batchesApi, "getStaging").mockResolvedValue(session([READY]));
+    renderPage();
+
+    await screen.findByText("Review 1 design");
+    expect(screen.queryByText(/ignored/)).not.toBeInTheDocument();
+  });
+
+  it("says a row reuses the design already holding its bytes", async () => {
+    const reused = row({
+      id: "r6",
+      sources: ["fjord-mornings-final.png"],
+      name: "fjord-mornings-final",
+      reuse: "fjord-mornings",
+      note: "Same image as designs/fjord-mornings.png. The listing reuses that file",
+    });
+    vi.spyOn(batchesApi, "getStaging").mockResolvedValue(session([reused]));
+    renderPage();
+
+    expect(
+      await screen.findByText(/Same image as designs\/fjord-mornings\.png/),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create 1 listing" })).toBeEnabled();
   });
 
   it("says nothing about AI while it can run, and blocks Create when it cannot", async () => {

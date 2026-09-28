@@ -11,6 +11,9 @@ browser.
 * The summary -> Open -> Mark reviewed in the editor -> Back to batch ->
   the summary shows the row reviewed, and the batch's record says so
   (batch plan PR 5; UI doc §7, §8).
+* Drop a ZIP with nested folders, a duplicate, a text file and a design
+  already in ``designs/`` -> the counts and rows match it, and the listing
+  made from the known design names that file (batch plan PR 7).
 
 The app is served with a :class:`~tests.support.ai_runs.ChainProvider` and
 the in-memory Etsy market, so the queue drafts for real without a real CLI.
@@ -19,6 +22,8 @@ the in-memory Etsy market, so the queue drafts for real without a real CLI.
 from __future__ import annotations
 
 import re
+import zipfile
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -166,3 +171,70 @@ def test_open_from_the_summary_mark_reviewed_and_go_back_to_the_batch(  # noqa: 
     expect(row.get_by_role("button", name="Reviewed")).to_be_visible()
     (batch,) = BatchStore(workspace).all()
     assert [r.reviewed for r in batch.rows] == [True]
+
+
+def _zip(*entries: tuple[str, bytes]) -> bytes:
+    buffer = BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for name, data in entries:
+            archive.writestr(name, data)
+    return buffer.getvalue()
+
+
+def test_drop_a_zip_with_folders_a_duplicate_and_a_text_file(  # noqa: ANN001
+    page, workspace_root: Path
+) -> None:
+    """Batch plan PR 7: the counts and rows match the ZIP -- folder names
+    dropped, the duplicate merged, the text file ignored and listed, and the
+    design already in ``designs/`` reused -- and the listings Create makes
+    say so on disk."""
+    workspace = Workspace.discover(root_override=workspace_root)
+    a_listing_template(workspace)
+    workspace.design_file("fjord-mornings").write_bytes(png(4))
+    archive = _zip(
+        ("Night Hike Club.png", png(1)),
+        ("exports/autumn/cedar-trail.png", png(2)),
+        ("exports/cedar-trail copy.png", png(2)),
+        ("exports/fjord-mornings-final.png", png(4)),
+        ("readme.txt", b"Exported with Kittl"),
+    )
+    base = page.url.rsplit("/", 1)[0]
+    page.goto(f"{base}/batches/new?template=heavyweight-tee")
+    page.get_by_label("Design files").set_input_files(
+        [{"name": "kittl-export.zip", "mimeType": "application/zip", "buffer": archive}]
+    )
+
+    page.get_by_role("heading", name="Review 3 designs").wait_for()
+    counts = page.locator(".bc-counts")
+    expect(counts).to_contain_text("3 ready")
+    expect(counts).to_contain_text("1 duplicate merged")
+    expect(counts).to_contain_text("1 other file ignored")
+    listed = counts.get_by_text("readme.txt")
+    expect(listed).to_be_hidden()
+    counts.get_by_text("other file ignored").click()
+    expect(listed).to_be_visible()
+
+    names = [
+        page.get_by_label(f"Listing name for {source}").input_value()
+        for source in (
+            "Night Hike Club.png",
+            "exports/autumn/cedar-trail.png",
+            "exports/fjord-mornings-final.png",
+        )
+    ]
+    assert names == ["night-hike-club", "cedar-trail", "fjord-mornings-final"]
+    rows = page.locator("table.bc-table tbody tr")
+    expect(rows.filter(has_text="cedar-trail.png")).to_contain_text(
+        "2 identical files, staged once"
+    )
+    expect(rows.filter(has_text="fjord-mornings-final.png")).to_contain_text(
+        "Same image as designs/fjord-mornings.png. The listing reuses that file"
+    )
+
+    page.get_by_role("button", name="Create 3 listings").click()
+    page.get_by_text("Briefs are written for you", exact=False).wait_for()
+    listing = workspace_root / "listings" / "fjord-mornings-final" / "listing.yaml"
+    written = yaml.safe_load(listing.read_text(encoding="utf-8"))
+    assert written["design"] == {"default": "designs/fjord-mornings.png"}
+    assert not (workspace_root / "designs" / "fjord-mornings-final.png").exists()
+    assert (workspace_root / "designs" / "cedar-trail.png").read_bytes() == png(2)

@@ -15,8 +15,9 @@ import type { ListingTemplateSummary } from "../types";
  * reason and the remedy, and nothing was kept. `?template=` preselects, as
  * Start batch on a card does.
  *
- * Loose PNGs only in this slice (batch plan PR 2): a ZIP is refused by the
- * server as coming soon until PR 7.
+ * One ZIP or loose PNGs (spec, *Accepted input*). What may be dropped
+ * together is the server's to judge: two ZIPs, a ZIP with loose files and
+ * an unsafe archive come back as refusals (A45), shown like any other.
  *
  * A drop on a listing-template card that the server refuses lands here too,
  * the refusal in the navigation's state (UI doc §2, closed question 2), so

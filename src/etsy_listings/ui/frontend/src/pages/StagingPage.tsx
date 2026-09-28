@@ -28,6 +28,11 @@ import { clock, dayMonth } from "../dates";
  * is shown as *Not created* and Create counts only the ready rows. The
  * session lives on the server, so a reload lands here again.
  *
+ * A ZIP's files that are not PNGs are only counted, with their names behind
+ * the count (spec, *Accepted input*), and a row whose bytes are already in
+ * `designs/` says it reuses that file in its note (spec, *Content
+ * deduplication*) -- both as the server says them.
+ *
  * AI readiness is said only when it fails (`staging.note.md`): a missing
  * prompt, provider or Etsy market access replaces the count strip's right
  * side with a blocking callout, and Create is disabled -- the server refuses
@@ -181,6 +186,7 @@ export function StagingPage() {
   const nameProblems = rows.filter((row) => row.state === "name").length;
   const invalid = rows.filter((row) => row.state === "invalid").length;
   const merged = rows.reduce((sum, row) => sum + row.sources.length - 1, 0);
+  const ignored = session?.ignored ?? [];
   const fixNames = `Fix ${nameProblems} ${nameProblems === 1 ? "name" : "names"}`;
   const aiBlocked = session?.ai_blocked ?? null;
 
@@ -245,6 +251,15 @@ export function StagingPage() {
                 <span className="bc-dot" />
                 <strong>{merged}</strong> {merged === 1 ? "duplicate" : "duplicates"} merged
               </span>
+            )}
+            {ignored.length > 0 && (
+              <details className="bc-disclosure bc-count">
+                <summary className="bc-muted">
+                  <strong>{ignored.length}</strong> other {ignored.length === 1 ? "file" : "files"}{" "}
+                  ignored ▾
+                </summary>
+                <span className="bc-mono bc-muted">{ignored.join(" · ")}</span>
+              </details>
             )}
             {aiBlocked && (
               <>

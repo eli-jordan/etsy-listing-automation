@@ -32,11 +32,17 @@ function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
 }
 
+const ZIP_TYPES = new Set(["application/zip", "application/x-zip-compressed"]);
+
 /** What a drag over a card is carrying, as far as a drag can tell: only the
  * kinds and types of its items, never their names, until the drop. */
-function dragged(transfer: DataTransfer): { count: number; allPngs: boolean } {
+function dragged(transfer: DataTransfer): { count: number; allPngs: boolean; zip: boolean } {
   const files = Array.from(transfer.items ?? []).filter((item) => item.kind === "file");
-  return { count: files.length, allPngs: files.every((item) => item.type === "image/png") };
+  return {
+    count: files.length,
+    allPngs: files.every((item) => item.type === "image/png"),
+    zip: files.length === 1 && ZIP_TYPES.has(files[0]?.type ?? ""),
+  };
 }
 
 function TemplateCard({
@@ -54,7 +60,7 @@ function TemplateCard({
   // Every card is a drop target, and the overlay exists only during a drag
   // (UI doc §2). A counter, not a flag: entering a child fires `dragleave`
   // on the card before `dragenter` on the child.
-  const [over, setOver] = useState<{ depth: number; count: number; allPngs: boolean } | null>(null);
+  const [over, setOver] = useState<(ReturnType<typeof dragged> & { depth: number }) | null>(null);
 
   function enter(event: DragEvent<HTMLElement>) {
     if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
@@ -79,9 +85,11 @@ function TemplateCard({
   const what =
     over === null
       ? ""
-      : over.allPngs
-        ? plural(over.count, "PNG", "PNGs")
-        : plural(over.count, "file", "files");
+      : over.zip
+        ? "a ZIP"
+        : over.allPngs
+          ? plural(over.count, "PNG", "PNGs")
+          : plural(over.count, "file", "files");
 
   return (
     <article

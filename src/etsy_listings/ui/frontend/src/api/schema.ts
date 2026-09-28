@@ -1151,10 +1151,10 @@ export interface paths {
     put?: never;
     /**
      * Create Staging
-     * @description Stage loose PNGs (spec, *Accepted input*). Starlette has already
-     *     spooled the parts to temporary files; `stage_pngs` streams each one on to
-     *     its content-addressed upload with a running count (A45). A ZIP is
-     *     refused as *coming soon* until batch plan PR 7.
+     * @description Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
+     *     already spooled the parts to temporary files; `stage_pngs` streams each
+     *     one on -- a PNG to its content-addressed upload, a ZIP to disk and then
+     *     entry by entry out of it -- with a running count (A45).
      */
     post: operations["create_staging_api_staging_post"];
     delete?: never;
@@ -3831,6 +3831,8 @@ export interface components {
       expires_at: string;
       /** Id */
       id: string;
+      /** Ignored */
+      ignored: string[];
       /** Label */
       label: string;
       /** Listing Template */
@@ -3886,6 +3888,8 @@ export interface components {
       name: string;
       /** Note */
       note: string | null;
+      /** Reuse */
+      reuse: string | null;
       /** Sources */
       sources: string[];
       /**
