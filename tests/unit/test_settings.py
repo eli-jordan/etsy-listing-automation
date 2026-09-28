@@ -148,3 +148,39 @@ def test_a_file_that_is_not_a_mapping_names_the_file(workspace: Workspace, text:
         workspace.load_settings()
 
     assert str(path) in str(caught.value)
+
+
+class TestBatchAi:
+    """``batch_ai.concurrency``: how many batch rows draft at once, across
+    every batch (spec, *Batch AI queue*; A40). No settings UI in the first
+    version, so the file is the only way to change it."""
+
+    def test_the_default_is_one_at_a_time(self, workspace: Workspace) -> None:
+        assert workspace.load_settings().batch_ai.concurrency == 1
+
+    @pytest.mark.parametrize("text", ["batch_ai:\n", "market_seo:\n  weights:\n"])
+    def test_an_empty_section_is_the_default(self, workspace: Workspace, text: str) -> None:
+        _write(workspace, text)
+        assert workspace.load_settings().batch_ai.concurrency == 1
+
+    def test_the_limit_is_read_from_the_file(self, workspace: Workspace) -> None:
+        _write(workspace, "batch_ai:\n  concurrency: 3\n")
+        assert workspace.load_settings().batch_ai.concurrency == 3
+
+    @pytest.mark.parametrize(
+        ("text", "key"),
+        [
+            ("batch_ai:\n  concurrency: 0\n", "batch_ai.concurrency"),
+            ("batch_ai:\n  concurency: 2\n", "batch_ai.concurency"),
+        ],
+        ids=["zero", "misspelt"],
+    )
+    def test_an_invalid_limit_names_the_key(
+        self, workspace: Workspace, text: str, key: str
+    ) -> None:
+        _write(workspace, text)
+
+        with pytest.raises(ConfigLoadError) as caught:
+            workspace.load_settings()
+
+        assert f"{key}:" in str(caught.value)

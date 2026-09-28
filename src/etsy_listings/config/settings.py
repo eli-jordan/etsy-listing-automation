@@ -1,12 +1,14 @@
 """``settings.yaml``: the workspace's tunable settings, next to ``shop.yaml``.
 
-Today it holds one block, the market scoring weights (market-seo.md,
-*Scoring*)::
+It holds two blocks: the market scoring weights (market-seo.md,
+*Scoring*) and the batch AI queue's limit (spec, *Batch AI queue*; A40)::
 
     market_seo:
       weights:
         reviews: 30
         ...
+    batch_ai:
+      concurrency: 1
 
 Everything is optional. A missing file, section or key falls back to the
 spec's defaults -- :class:`~etsy_listings.market.models.MarketWeights` owns
@@ -45,12 +47,24 @@ class MarketSeoSettings(BaseModel):
     _weights_absent = field_validator("weights", mode="before")(_absent_is_empty)
 
 
+class BatchAiSettings(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    concurrency: int = Field(1, ge=1)
+    """How many batch rows draft at once, across every batch (A40). Manual
+    editor runs do not count against it. One by default: a seller's
+    provider CLI is usually on a plan with a rate limit, and a queue that
+    ran every row at once would spend it on the first batch."""
+
+
 class Settings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     market_seo: MarketSeoSettings = Field(default_factory=MarketSeoSettings)
+    batch_ai: BatchAiSettings = Field(default_factory=BatchAiSettings)
 
     _market_seo_absent = field_validator("market_seo", mode="before")(_absent_is_empty)
+    _batch_ai_absent = field_validator("batch_ai", mode="before")(_absent_is_empty)
 
     @classmethod
     def load(cls, path: Path) -> Settings:
