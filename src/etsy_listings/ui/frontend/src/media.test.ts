@@ -265,6 +265,38 @@ describe("scenePath", () => {
   });
 });
 
+describe("pictureFor in the listing-template editor", () => {
+  /* UI doc §3: a listing template has no artwork, so its previews are
+     rendered with a calibrator test design, and its `./` files are its own. */
+  it("renders a template entry with a calibrator test design", () => {
+    expect(
+      pictureFor({ template: "flat-lay-01", colour: "black" }, { testDesign: "bundled-grid" }),
+    ).toBe("/api/templates/flat-lay-01/design-preview?test_design=bundled-grid&colour=black");
+  });
+
+  it("serves a listing template's own file at full size", () => {
+    expect(
+      pictureFor("./assets/shots/back.png", null, "full", {
+        kind: "listing-template",
+        name: "tee",
+      }),
+    ).toBe("/api/listing-templates/tee/media-files/assets/shots/back.png/file");
+  });
+
+  it("draws an unsaved template's file from where its source still keeps it", () => {
+    /* The *name it* state: `./assets/…` is only a plan until the save
+       copies it. */
+    const owner = {
+      kind: "listing" as const,
+      name: "take-a-hike",
+      copies: { "./assets/shots/back.png": "./shots/back.png" },
+    };
+    expect(pictureFor("./assets/shots/back.png", null, "tile", owner)).toBe(
+      "/api/listings/take-a-hike/media-files/shots/back.png/thumbnail",
+    );
+  });
+});
+
 describe("ownedTile", () => {
   /* A card's picture of one gallery entry, whoever's `./` files it names: a
      listing's while Save as listing template is still a draft, a listing

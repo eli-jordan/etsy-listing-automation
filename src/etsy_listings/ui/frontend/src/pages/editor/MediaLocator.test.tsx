@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MediaOwner } from "../../media";
 import type { ListingDetail, MediaFileSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 
@@ -40,6 +41,7 @@ function locator(
     media?: ListingDetail["media"];
     local?: MediaFileSummary[] | null;
     shared?: MediaFileSummary[];
+    owner?: MediaOwner | null;
   } = {},
 ) {
   const onToggleFile = vi.fn();
@@ -61,6 +63,7 @@ function locator(
       onAddMissingColours={vi.fn()}
       onToggleSwatchSource={vi.fn()}
       onFocus={onFocus}
+      {...(over.owner === undefined ? {} : { owner: over.owner })}
     />,
   );
   fireEvent.click(screen.getByRole("button", { name: "Files" }));
@@ -83,6 +86,21 @@ describe("MediaLocator's file list", () => {
     expect(within(group(/This listing/)).getByText("close-up.mp4")).toBeInTheDocument();
     expect(within(group(/Shared/)).getByText("size-guide.png")).toBeInTheDocument();
     expect(within(group(/Shared/)).getByText("videos/size-guide.mp4")).toBeInTheDocument();
+  });
+
+  it("calls a listing template's own files This template, drawn from its directory", () => {
+    /* UI doc, *Existing components the template editor needs*. */
+    const asset = { ...BACK, ref: "./assets/shots/back.png", name: "assets/shots/back.png" };
+    locator({ local: [asset], owner: { kind: "listing-template", name: "tee" } });
+
+    expect(screen.getAllByRole("group").map((g) => g.getAttribute("aria-label"))).toEqual([
+      "This template",
+      "Shared",
+    ]);
+    expect(group(/This template/).querySelector("img")).toHaveAttribute(
+      "src",
+      "/api/listing-templates/tee/media-files/assets/shots/back.png/thumbnail",
+    );
   });
 
   it("adds a file as the ref it is stored under, whichever group it is in", () => {

@@ -128,6 +128,11 @@ export function templatePhotoUrl(name: string, colour?: string | null): string {
   return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
 }
 
+/** A test design, small -- the listing-template editor's preview row. */
+export function designThumbnailUrl(id: string): string {
+  return `/api/designs/${encodeURIComponent(id)}/thumbnail`;
+}
+
 /**
  * A listing's real design, composited onto this template's *saved* geometry
  * -- unlike {@link templateThumbnailUrl}/{@link templatePhotoUrl}, which are
@@ -137,10 +142,14 @@ export function templatePhotoUrl(name: string, colour?: string | null): string {
  */
 export function templateDesignPreviewUrl(
   name: string,
-  design: string,
+  design: string | { testDesign: string },
   colour?: string | null,
 ): string {
-  const params = new URLSearchParams({ design });
+  // A listing's design by name, or -- the listing-template editor's preview
+  // (UI doc §3) -- a calibrator test design by its library id.
+  const params = new URLSearchParams(
+    typeof design === "string" ? { design } : { test_design: design.testDesign },
+  );
   if (colour) params.set("colour", colour);
   return `/api/templates/${encodeURIComponent(name)}/design-preview?${params.toString()}`;
 }

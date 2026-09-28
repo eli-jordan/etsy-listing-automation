@@ -2,7 +2,7 @@ import { useState } from "react";
 import { templateThumbnailUrl } from "../../api/calibrator";
 import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
-import { isInMedia, mediaKind, missingColours, pictureFor } from "../../media";
+import { isInMedia, mediaKind, missingColours, pictureFor, type MediaOwner } from "../../media";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import type { Focus } from "./focus";
 import { MAX_VIDEOS } from "./mediaEdits";
@@ -41,6 +41,10 @@ interface Props {
   onAddMissingColours: (template: string) => void;
   onToggleSwatchSource: (template: string) => void;
   onFocus: (focus: Focus) => void;
+  /** Whose `./` files `local` are: the listing by default, or a listing
+   * template, whose group reads *This template* (UI doc, *Existing
+   * components the template editor needs*). */
+  owner?: MediaOwner | null;
 }
 
 /** Which half of `media:` the locator is browsing. */
@@ -61,7 +65,7 @@ function clipLength(seconds: number): string {
 
 interface FileTileProps {
   asset: MediaFileSummary;
-  listing: string | null;
+  listing: MediaOwner | string | null;
   inListing: boolean;
   unavailable: string | null;
   onToggle: () => void;
@@ -122,6 +126,7 @@ export function MediaLocator({
   onAddMissingColours,
   onToggleSwatchSource,
   onFocus,
+  owner,
 }: Props) {
   const [mode, setMode] = useState<LocatorMode>("templates");
   const [query, setQuery] = useState("");
@@ -132,13 +137,13 @@ export function MediaLocator({
     .filter((t) => t.status === "calibrated")
     .filter((t) => t.name.toLowerCase().includes(needle));
   const matches = (a: MediaFileSummary) => a.name.toLowerCase().includes(needle);
-  const listing = detail.name || null;
+  const listing = owner === undefined ? detail.name || null : owner;
   const groups = [
     ...(local === null
       ? []
       : [
           {
-            label: "This listing",
+            label: owner?.kind === "listing-template" ? "This template" : "This listing",
             files: local,
           },
         ]),

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getTemplateSwatch, listTemplates } from "../../api/calibrator";
 import { listGarmentProfiles } from "../../api/listings";
-import { singleDesignName, templatePicture } from "../../media";
+import { type Artwork, singleDesignName, templatePicture } from "../../media";
 import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelection";
 
@@ -39,6 +39,9 @@ import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelect
 interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
+  /** What the preview composites, when it is not the listing's own design:
+   * the listing-template editor's preview design (UI doc §3). */
+  artwork?: Artwork | null;
 }
 
 /** The garment profile's colour-matrix, used to judge colours before the
@@ -57,7 +60,7 @@ function previewTemplate(
   return name;
 }
 
-export function VariantsTab({ detail, onUpdate }: Props) {
+export function VariantsTab({ detail, onUpdate, artwork }: Props) {
   const [profiles, setProfiles] = useState<GarmentProfileSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [swatches, setSwatches] = useState<Record<string, string>>({});
@@ -94,7 +97,7 @@ export function VariantsTab({ detail, onUpdate }: Props) {
       : (detail.colors[0] ?? colourNames[0] ?? null);
 
   const template = previewTemplate(profile, templates);
-  const design = singleDesignName(detail.design);
+  const design = artwork !== undefined ? artwork : singleDesignName(detail.design);
 
   // One request per colour, fired once the preview template and colour list
   // are known -- not per row-render, so scrolling or re-toggling a switch
