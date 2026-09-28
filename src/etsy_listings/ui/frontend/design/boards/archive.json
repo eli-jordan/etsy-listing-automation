@@ -7,43 +7,75 @@
   "description": "Retired directions, grouped by feature - history, not options.",
   "layout": {
     "rows": [
-      ["archive"],
+      [
+        "archive"
+      ],
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v1"],
+      [
+        "batch-deploy-lofi-v1"
+      ],
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v2"],
+      [
+        "batch-deploy-lofi-v2"
+      ],
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v3"],
+      [
+        "batch-deploy-lofi-v3"
+      ],
       {
         "space": 4
       },
-      ["batch-deploy-lofi-v4"],
+      [
+        "batch-deploy-lofi-v4"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-lofi-v1"],
+      [
+        "listing-seo-lofi-v1"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-v1"],
+      [
+        "listing-seo-v1"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-lofi-v2"],
+      [
+        "listing-seo-lofi-v2"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-v2"],
+      [
+        "listing-seo-v2"
+      ],
       {
         "space": 4
       },
-      ["listing-seo-v3"]
+      [
+        "listing-seo-v3"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "multi-artwork-v1"
+      ],
+      {
+        "space": 4
+      },
+      [
+        "multi-artwork-v2"
+      ]
     ],
     "scenes": {
       "archive": {
@@ -72,28 +104,118 @@
         ]
       },
       "batch-deploy-lofi-v2": {
-        "rows": [["listings", "review-bottom-sheet"]]
+        "rows": [
+          [
+            "listings",
+            "review-bottom-sheet"
+          ]
+        ]
       },
       "batch-deploy-lofi-v3": {
-        "rows": [["listings", "review-bottom-sheet"]]
+        "rows": [
+          [
+            "listings",
+            "review-bottom-sheet"
+          ]
+        ]
       },
       "batch-deploy-lofi-v4": {
-        "rows": [["listings", "review-bottom-sheet"]]
+        "rows": [
+          [
+            "listings",
+            "review-bottom-sheet"
+          ]
+        ]
       },
       "listing-seo-lofi-v1": {
-        "rows": [["readiness", "generating", "proposal", "stale", "description-source"]]
+        "rows": [
+          [
+            "readiness",
+            "generating",
+            "proposal",
+            "stale",
+            "description-source"
+          ]
+        ]
       },
       "listing-seo-v1": {
-        "rows": [["readiness", "loading", "review", "stale", "failed"]]
+        "rows": [
+          [
+            "readiness",
+            "loading",
+            "review",
+            "stale",
+            "failed"
+          ]
+        ]
       },
       "listing-seo-lofi-v2": {
-        "rows": [["readiness", "generating", "proposal", "stale", "description-source"]]
+        "rows": [
+          [
+            "readiness",
+            "generating",
+            "proposal",
+            "stale",
+            "description-source"
+          ]
+        ]
       },
       "listing-seo-v2": {
-        "rows": [["readiness", "loading", "review", "stale", "failed"]]
+        "rows": [
+          [
+            "readiness",
+            "loading",
+            "review",
+            "stale",
+            "failed"
+          ]
+        ]
       },
       "listing-seo-v3": {
-        "rows": [["readiness", "loading", "review", "stale", "failed"]]
+        "rows": [
+          [
+            "readiness",
+            "loading",
+            "review",
+            "stale",
+            "failed"
+          ]
+        ]
+      },
+      "multi-artwork-v1": {
+        "rows": [
+          [
+            "01-one-design",
+            "02-light-dark",
+            "03-colour-picker",
+            "04-colour-exception"
+          ],
+          [
+            "05-missing-light",
+            "06-one-slot-used",
+            "07-unclassified",
+            "08-back-to-one"
+          ]
+        ]
+      },
+      "multi-artwork-v2": {
+        "rows": [
+          [
+            "mode"
+          ],
+          [
+            "01-one-design",
+            "02-light-dark",
+            "03-colour-picker",
+            "04-colour-exception"
+          ],
+          [
+            "05-missing-light",
+            "06-one-slot-used",
+            "07-unclassified",
+            "08-back-to-one"
+          ]
+        ]
       }
     }
   },
@@ -229,6 +351,69 @@
     },
     {
       "frame": "listing-seo-v3/failed"
+    },
+    {
+      "frame": "multi-artwork-v1/01-one-design"
+    },
+    {
+      "frame": "multi-artwork-v1/02-light-dark"
+    },
+    {
+      "frame": "multi-artwork-v1/03-colour-picker"
+    },
+    {
+      "frame": "multi-artwork-v1/04-colour-exception"
+    },
+    {
+      "frame": "multi-artwork-v1/05-missing-light"
+    },
+    {
+      "frame": "multi-artwork-v1/06-one-slot-used"
+    },
+    {
+      "frame": "multi-artwork-v1/07-unclassified"
+    },
+    {
+      "frame": "multi-artwork-v1/08-back-to-one"
+    },
+    {
+      "frame": "multi-artwork-v2/01-one-design"
+    },
+    {
+      "frame": "multi-artwork-v2/02-light-dark"
+    },
+    {
+      "frame": "multi-artwork-v2/03-colour-picker"
+    },
+    {
+      "frame": "multi-artwork-v2/04-colour-exception"
+    },
+    {
+      "frame": "multi-artwork-v2/05-missing-light"
+    },
+    {
+      "frame": "multi-artwork-v2/06-one-slot-used"
+    },
+    {
+      "frame": "multi-artwork-v2/07-unclassified"
+    },
+    {
+      "frame": "multi-artwork-v2/08-back-to-one"
+    },
+    {
+      "frame": "multi-artwork-v2/mode/a-switch"
+    },
+    {
+      "frame": "multi-artwork-v2/mode/b-link"
+    },
+    {
+      "frame": "multi-artwork-v2/mode/c-menu"
+    },
+    {
+      "frame": "multi-artwork-v2/mode/d-linked"
+    },
+    {
+      "frame": "multi-artwork-v2/mode/e-select"
     }
   ]
 }

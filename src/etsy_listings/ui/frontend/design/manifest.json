@@ -20,6 +20,11 @@
       "description": "Hi-fi mockups: the three-step AI workflow indicator in the top bar and the related listings panel on Listing Details."
     },
     {
+      "name": "multi-artwork",
+      "title": "Multi-artwork Listings",
+      "description": "App-styled mockups built from the real editor components: one design or a linked light/dark pair, per-colour designs, and the deploy blockers they create."
+    },
+    {
       "name": "archive",
       "title": "Archive",
       "description": "Retired directions, grouped by feature - history, not options."
@@ -117,6 +122,28 @@
     {
       "name": "market-seo",
       "frames": 4
+    },
+    {
+      "name": "multi-artwork",
+      "frames": 8,
+      "brief": "design/scenes/multi-artwork/_brief.md",
+      "title": "Multi-artwork listings",
+      "description": "Multi-artwork listings - app-styled mockups of one design vs light/dark designs, plus per-colour designs, in the listing editor (round 3: linked pair, real editor components)",
+      "note": "**Multi-artwork, round 3.** Built from the app's real shell, page head (`EditorHead`, `EditableName`, `DeployControl`, `OpenOnMenu`), `IssuesBanner` and a fork of the real `VariantsTab`, with fake data.\n\n- The **design strip** is always a linked pair: For light shirts, then Link/Unlink, then For dark shirts. When linked, the dark card mirrors the light one (`design.default`). Unlink, or choose \"Use a different one\" on the dark card, to split them. **Link** goes back to one design and asks which file to keep.\n- Base slots open **Recent designs**. Per-colour designs use the full list.\n- Each **Variants row** shows the file its colour prints, and the card under the preview explains why.\n\nPrevious rounds: `multi-artwork-v1` and `-v2` on the Archive board."
+    },
+    {
+      "name": "multi-artwork-v1",
+      "frames": 8,
+      "brief": "design/scenes/multi-artwork-v1/_brief.md",
+      "title": "Multi-artwork listings · v1",
+      "description": "Multi-artwork listings v1 - first pass, before the mode-switch round (one design vs light/dark as a segmented control; modal picker everywhere)"
+    },
+    {
+      "name": "multi-artwork-v2",
+      "frames": 13,
+      "brief": "design/scenes/multi-artwork-v2/_brief.md",
+      "title": "Multi-artwork listings · v2",
+      "description": "Multi-artwork listings v2 - Recent designs panel for base slots, plus five mode-switch options (A switch, B link, C in the picker, D linked pair, E dropdown); D won"
     }
   ],
   "frames": [
@@ -701,6 +728,277 @@
       "title": "Market SEO — writing suggestions",
       "viewport": "laptop",
       "description": "Market research done and the top listings panel filled; SEO suggestions is the glowing last node."
+    },
+    {
+      "id": "multi-artwork-v1/01-one-design",
+      "file": "design/scenes/multi-artwork-v1/01-one-design.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v1",
+      "title": "Artwork — one design · v1",
+      "viewport": "laptop",
+      "description": "One design for every shirt: today's workflow, with the light/dark choice beside it and each row showing what it prints."
+    },
+    {
+      "id": "multi-artwork-v1/02-light-dark",
+      "file": "design/scenes/multi-artwork-v1/02-light-dark.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v1",
+      "title": "Artwork — light and dark shirts · v1",
+      "viewport": "laptop",
+      "description": "Both base designs chosen; each Variants row shows which design that colour prints, on its own cloth."
+    },
+    {
+      "id": "multi-artwork-v1/03-colour-picker",
+      "file": "design/scenes/multi-artwork-v1/03-colour-picker.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v1",
+      "title": "Artwork — choose a design for one colour · v1",
+      "viewport": "laptop",
+      "description": "Select different design on Moss: the library picker, thumbnails shown on moss cloth."
+    },
+    {
+      "id": "multi-artwork-v1/04-colour-exception",
+      "file": "design/scenes/multi-artwork-v1/04-colour-exception.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v1",
+      "title": "Artwork — colour with its own design · v1",
+      "viewport": "laptop",
+      "description": "Moss prints its own design; the row, the strip and the preview card say so and offer Use automatic design."
+    },
+    {
+      "id": "multi-artwork-v1/05-missing-light",
+      "file": "design/scenes/multi-artwork-v1/05-missing-light.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v1",
+      "title": "Artwork — design for light shirts missing · v1",
+      "viewport": "laptop",
+      "description": "Partial pair: Ivory and Natural need the empty light-shirt slot, so deploying is blocked until it is filled."
+    },
+    {
+      "id": "multi-artwork-v1/06-one-slot-used",
+      "file": "design/scenes/multi-artwork-v1/06-one-slot-used.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v1",
+      "title": "Artwork — only one base design used · v1",
+      "viewport": "laptop",
+      "description": "Partial pair that can deploy (no light shirts sold), with the warning that one design may be all it needs."
+    },
+    {
+      "id": "multi-artwork-v1/07-unclassified",
+      "file": "design/scenes/multi-artwork-v1/07-unclassified.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v1",
+      "title": "Artwork — colour not classified · v1",
+      "viewport": "laptop",
+      "description": "Heather isn't marked light or dark in the garment profile: deploy is blocked and the fix is named in the profile, not the listing."
+    },
+    {
+      "id": "multi-artwork-v1/08-back-to-one",
+      "file": "design/scenes/multi-artwork-v1/08-back-to-one.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v1",
+      "title": "Artwork — back to one design · v1",
+      "viewport": "laptop",
+      "description": "Choosing One design for all shirts from light/dark asks which base design to keep; nothing changes until one is picked."
+    },
+    {
+      "id": "multi-artwork-v2/01-one-design",
+      "file": "design/scenes/multi-artwork-v2/01-one-design.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Artwork — one design · v2",
+      "viewport": "laptop",
+      "description": "One design for every shirt: today's workflow, with the light/dark choice beside it and each row showing what it prints."
+    },
+    {
+      "id": "multi-artwork-v2/02-light-dark",
+      "file": "design/scenes/multi-artwork-v2/02-light-dark.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Artwork — light and dark shirts · v2",
+      "viewport": "laptop",
+      "description": "Both base designs chosen; each Variants row shows which design that colour prints, on its own cloth."
+    },
+    {
+      "id": "multi-artwork-v2/03-colour-picker",
+      "file": "design/scenes/multi-artwork-v2/03-colour-picker.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Artwork — choose a design for one colour · v2",
+      "viewport": "laptop",
+      "description": "Select different design on Moss: the library picker, thumbnails shown on moss cloth."
+    },
+    {
+      "id": "multi-artwork-v2/04-colour-exception",
+      "file": "design/scenes/multi-artwork-v2/04-colour-exception.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Artwork — colour with its own design · v2",
+      "viewport": "laptop",
+      "description": "Moss prints its own design; the row, the strip and the preview card say so and offer Use automatic design."
+    },
+    {
+      "id": "multi-artwork-v2/05-missing-light",
+      "file": "design/scenes/multi-artwork-v2/05-missing-light.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Artwork — design for light shirts missing · v2",
+      "viewport": "laptop",
+      "description": "Partial pair: Ivory and Natural need the empty light-shirt slot, so deploying is blocked until it is filled."
+    },
+    {
+      "id": "multi-artwork-v2/06-one-slot-used",
+      "file": "design/scenes/multi-artwork-v2/06-one-slot-used.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Artwork — only one base design used · v2",
+      "viewport": "laptop",
+      "description": "Partial pair that can deploy (no light shirts sold), with the warning that one design may be all it needs."
+    },
+    {
+      "id": "multi-artwork-v2/07-unclassified",
+      "file": "design/scenes/multi-artwork-v2/07-unclassified.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Artwork — colour not classified · v2",
+      "viewport": "laptop",
+      "description": "Heather isn't marked light or dark in the garment profile: deploy is blocked and the fix is named in the profile, not the listing."
+    },
+    {
+      "id": "multi-artwork-v2/08-back-to-one",
+      "file": "design/scenes/multi-artwork-v2/08-back-to-one.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Artwork — back to one design · v2",
+      "viewport": "laptop",
+      "description": "Choosing One design for all shirts from light/dark asks which base design to keep; nothing changes until one is picked."
+    },
+    {
+      "id": "multi-artwork-v2/mode/a-switch",
+      "file": "design/scenes/multi-artwork-v2/mode/a-switch.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Mode switch — A · switch · v2",
+      "viewport": "laptop",
+      "description": "Option A: a labelled on/off switch on the strip's head line, matching the colour switches below.",
+      "variantGroup": "multi-artwork-v2/mode",
+      "variant": "a"
+    },
+    {
+      "id": "multi-artwork-v2/mode/b-link",
+      "file": "design/scenes/multi-artwork-v2/mode/b-link.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Mode switch — B · link · v2",
+      "viewport": "laptop",
+      "description": "Option B: no control until needed - a quiet link beside the design offers different light/dark designs.",
+      "variantGroup": "multi-artwork-v2/mode",
+      "variant": "b"
+    },
+    {
+      "id": "multi-artwork-v2/mode/c-menu",
+      "file": "design/scenes/multi-artwork-v2/mode/c-menu.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Mode switch — C · in the picker · v2",
+      "viewport": "laptop",
+      "description": "Option C: the mode lives inside the Change panel, under Recent designs - invisible until a design is being changed.",
+      "variantGroup": "multi-artwork-v2/mode",
+      "variant": "c"
+    },
+    {
+      "id": "multi-artwork-v2/mode/d-linked",
+      "file": "design/scenes/multi-artwork-v2/mode/d-linked.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Mode switch — D · linked pair · v2",
+      "viewport": "laptop",
+      "description": "Option D: always two cards joined by a link button; unlinking, or picking a different dark design, splits them.",
+      "variantGroup": "multi-artwork-v2/mode",
+      "variant": "d"
+    },
+    {
+      "id": "multi-artwork-v2/mode/e-select",
+      "file": "design/scenes/multi-artwork-v2/mode/e-select.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork-v2",
+      "title": "Mode switch — E · dropdown · v2",
+      "viewport": "laptop",
+      "description": "Option E: a compact dropdown on the head line - Same design on every shirt / Different designs on light and dark shirts.",
+      "variantGroup": "multi-artwork-v2/mode",
+      "variant": "e"
+    },
+    {
+      "id": "multi-artwork/01-one-design",
+      "file": "design/scenes/multi-artwork/01-one-design.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork",
+      "title": "Artwork — one design",
+      "viewport": "laptop",
+      "description": "One design for every shirt: the pair is linked, so the dark-shirt card mirrors the light one; each row shows what it prints."
+    },
+    {
+      "id": "multi-artwork/02-light-dark",
+      "file": "design/scenes/multi-artwork/02-light-dark.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork",
+      "title": "Artwork — light and dark shirts",
+      "viewport": "laptop",
+      "description": "Unlinked pair with both designs chosen; each Variants row shows which design that colour prints, on its own cloth."
+    },
+    {
+      "id": "multi-artwork/03-colour-picker",
+      "file": "design/scenes/multi-artwork/03-colour-picker.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork",
+      "title": "Artwork — choose a design for one colour",
+      "viewport": "laptop",
+      "description": "Select different design on Moss: the library picker, thumbnails shown on moss cloth."
+    },
+    {
+      "id": "multi-artwork/04-colour-exception",
+      "file": "design/scenes/multi-artwork/04-colour-exception.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork",
+      "title": "Artwork — colour with its own design",
+      "viewport": "laptop",
+      "description": "Moss prints its own design; the row, the strip and the preview card say so and offer Use automatic design."
+    },
+    {
+      "id": "multi-artwork/05-missing-light",
+      "file": "design/scenes/multi-artwork/05-missing-light.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork",
+      "title": "Artwork — design for light shirts missing",
+      "viewport": "laptop",
+      "description": "Partial pair: Ivory and Natural need the empty light-shirt slot, so deploying is blocked until it is filled."
+    },
+    {
+      "id": "multi-artwork/06-one-slot-used",
+      "file": "design/scenes/multi-artwork/06-one-slot-used.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork",
+      "title": "Artwork — only one base design used",
+      "viewport": "laptop",
+      "description": "Partial pair that can deploy (no light shirts sold), with the warning that one design may be all it needs."
+    },
+    {
+      "id": "multi-artwork/07-unclassified",
+      "file": "design/scenes/multi-artwork/07-unclassified.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork",
+      "title": "Artwork — colour not classified",
+      "viewport": "laptop",
+      "description": "Heather isn't marked light or dark in the garment profile: deploy is blocked and the fix is named in the profile, not the listing."
+    },
+    {
+      "id": "multi-artwork/08-back-to-one",
+      "file": "design/scenes/multi-artwork/08-back-to-one.tsx",
+      "kind": "tsx",
+      "scene": "multi-artwork",
+      "title": "Artwork — back to one design",
+      "viewport": "laptop",
+      "description": "Pressing Link on an unlinked pair asks which design every shirt should print; nothing changes until one is picked."
     }
   ]
 }
