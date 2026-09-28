@@ -620,9 +620,13 @@ export interface paths {
      *     directory, need no rewrite. A taken name is a 409 and never suffixed
      *     (spec, *Storage and identity*).
      *
-     *     Batch records keep the name they were made from: a batch holds its own
-     *     frozen copy (A37), so it has no link to follow, and its card count is
-     *     history, not ownership.
+     *     Staging sessions and batch records made from it follow it by name --
+     *     the name, not the frozen copy they each keep (A37), which is untouched.
+     *     That name is the card's *Used by N batches* and the staging page's
+     *     *Using X*, the seller's link between a template and its batches. It
+     *     is rewritten after the move, under each record's lock; a crash between
+     *     the two leaves records naming a template that is gone, which is what a
+     *     delete leaves too, and harms nothing a batch needs.
      */
     post: operations["rename_listing_template_api_listing_templates__name__rename_post"];
     delete?: never;

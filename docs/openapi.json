@@ -7354,7 +7354,7 @@
     },
     "/api/listing-templates/{name}/rename": {
       "post": {
-        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). Its name is its directory (A35),\nso the rename is a directory move and its ``./`` refs, which name that\ndirectory, need no rewrite. A taken name is a 409 and never suffixed\n(spec, *Storage and identity*).\n\nBatch records keep the name they were made from: a batch holds its own\nfrozen copy (A37), so it has no link to follow, and its card count is\nhistory, not ownership.",
+        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). Its name is its directory (A35),\nso the rename is a directory move and its ``./`` refs, which name that\ndirectory, need no rewrite. A taken name is a 409 and never suffixed\n(spec, *Storage and identity*).\n\nStaging sessions and batch records made from it follow it by name --\nthe name, not the frozen copy they each keep (A37), which is untouched.\nThat name is the card's *Used by N batches* and the staging page's\n*Using X*, the seller's link between a template and its batches. It\nis rewritten after the move, under each record's lock; a crash between\nthe two leaves records naming a template that is gone, which is what a\ndelete leaves too, and harms nothing a batch needs.",
         "operationId": "rename_listing_template_api_listing_templates__name__rename_post",
         "parameters": [
           {
