@@ -139,6 +139,54 @@ class TestConfirm:
         assert _listing(workspace, "cedar-trail")["design"] == "designs/take-a-hike.png"
 
 
+class TestDesignReuse:
+    """Identical bytes already under ``designs/`` are reused, not written again
+    (spec, *Content deduplication*; A39; batch plan PR 7)."""
+
+    def test_a_design_already_in_designs_is_referenced_under_the_staged_name(
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+    ) -> None:
+        workspace.design_file("fjord-mornings").write_bytes(png(4))
+        id_ = _stage(workspace, staging, ("fjord-mornings-final.png", png(4)), DESIGNS[1])
+
+        batch = _confirm(workspace, staging, batches, id_)
+
+        assert [(row.name, row.design) for row in batch.rows] == [
+            ("fjord-mornings-final", "fjord-mornings"),
+            ("cedar-trail", "cedar-trail"),
+        ]
+        assert _listing(workspace, "fjord-mornings-final")["design"] == {
+            "default": "designs/fjord-mornings.png"
+        }
+        assert not workspace.design_file("fjord-mornings-final").exists()
+
+    def test_the_same_artwork_in_a_second_batch_makes_a_new_suffixed_listing(
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+    ) -> None:
+        _confirm(workspace, staging, batches, _stage(workspace, staging, DESIGNS[1]))
+
+        again = _confirm(workspace, staging, batches, _stage(workspace, staging, DESIGNS[1]))
+
+        (row,) = again.rows
+        assert (row.name, row.design, row.creation) == ("cedar-trail-2", "cedar-trail", "created")
+        assert _listing(workspace, "cedar-trail-2")["design"] == {
+            "default": "designs/cedar-trail.png"
+        }
+        assert sorted(_created(workspace)) == ["cedar-trail", "cedar-trail-2"]
+        assert not workspace.design_file("cedar-trail-2").exists()
+
+    def test_a_reusing_row_that_must_be_suffixed_at_confirm_keeps_the_design(
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+    ) -> None:
+        workspace.design_file("fjord-mornings").write_bytes(png(4))
+        id_ = _stage(workspace, staging, ("fjord-mornings-final.png", png(4)))
+        copy_listing(workspace.root, "fjord-mornings-final")
+
+        (row,) = _confirm(workspace, staging, batches, id_).rows
+
+        assert (row.name, row.design) == ("fjord-mornings-final-2", "fjord-mornings")
+
+
 class TestFailureAndRetry:
     def test_a_write_failure_on_one_row_leaves_the_others_and_retry_creates_it(
         self, workspace: Workspace, staging: StagingStore, batches: BatchStore

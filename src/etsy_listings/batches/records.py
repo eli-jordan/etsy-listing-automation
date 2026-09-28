@@ -66,6 +66,9 @@ class StagingSession(_Record):
     created_at: datetime
     updated_at: datetime
     rows: list[StagingRow]
+    ignored: list[str] = Field(default_factory=list)
+    """A ZIP's files that are not PNGs, by their path in it: counted and
+    listed on the staging page, never rows (spec, *Accepted input*)."""
 
     @property
     def expires_at(self) -> datetime:
@@ -121,8 +124,9 @@ class BatchRow(BaseModel):
     name: str
     design: str
     """The design's stem under ``designs/``, the row's *design target*
-    (A39). The listing's name today; a reused design (PR 7) is where the two
-    part."""
+    (A39). The listing's name, except where the row's bytes were already in
+    ``designs/`` and the listing reuses that file (spec, *Content
+    deduplication*)."""
     creation: Creation = "pending"
     claimed: bool = False
     """A39's recorded step: set before ``listings/<name>/`` is made, so a

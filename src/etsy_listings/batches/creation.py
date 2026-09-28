@@ -37,7 +37,7 @@ from pydantic import ValidationError
 
 from etsy_listings.batches.naming import allocate
 from etsy_listings.batches.records import Batch, BatchRow, BatchStore, StagingStore
-from etsy_listings.batches.staging import review, workspace_names
+from etsy_listings.batches.staging import review, taken_for, workspace_names
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.listing_template import ListingTemplate
@@ -137,8 +137,8 @@ def _start(
         # A38: the preview may be stale; the name is checked again under the
         # listing's lock and recorded before any file is written.
         with lock(row.name):
-            taken = set(workspace_names(workspace)) | allocated | (others - {row.name.casefold()})
-            name = allocate(row.name, taken)
+            taken = taken_for(workspace_names(workspace), row.reuse)
+            name = allocate(row.name, taken | allocated | (others - {row.name.casefold()}))
         allocated.add(name.casefold())
         staged = by_id[row.id]
         rows.append(
@@ -148,7 +148,9 @@ def _start(
                 sources=staged.sources,
                 base=row.name,
                 name=name,
-                design=name,
+                # Spec, *Content deduplication*: identical bytes already in
+                # designs/ are named, not written again.
+                design=row.reuse or name,
             )
         )
     batch = Batch(
@@ -260,6 +262,11 @@ def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def _holds(workspace: Workspace, design: str, sha256: str) -> bool:
+    path = workspace.design_file(design)
+    return path.is_file() and _sha256(path) == sha256
+
+
 def _is_ours(workspace: Workspace, row: BatchRow) -> bool:
     """May this row write at its recorded name? (A39)"""
     design = workspace.design_file(row.design)
@@ -299,8 +306,12 @@ def _create(
                 # save, so a crash cannot leave a listing the queue never sees.
                 return row.model_copy(update={"creation": "created", "error": None, "ai": "queued"})
         others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
-        name = allocate(row.base, set(workspace_names(workspace)) | others)
-        row = row.model_copy(update={"name": name, "design": name, "claimed": False})
+        # A design that already holds the row's bytes -- one it reuses, or
+        # one it wrote itself before its name was taken -- is kept.
+        design = row.design if _holds(workspace, row.design, row.sha256) else None
+        taken = taken_for(workspace_names(workspace), design)
+        name = allocate(row.base, taken | others)
+        row = row.model_copy(update={"name": name, "design": design or name, "claimed": False})
         batch.rows[index] = row
         batches.save(batch)
 

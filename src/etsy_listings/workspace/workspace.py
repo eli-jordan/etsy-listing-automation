@@ -526,6 +526,9 @@ class Workspace:
     def staging_upload_file(self, session: str, sha256: str) -> Path:
         return self.staging_dir(session) / layout.STAGING_UPLOADS_DIR / f"{_segment(sha256)}.png"
 
+    def staging_archive_file(self, session: str) -> Path:
+        return self.staging_dir(session) / layout.STAGING_ARCHIVE_FILE
+
     def staging_template_dir(self, session: str) -> Path:
         return self.staging_dir(session) / layout.FROZEN_TEMPLATE_DIR
 

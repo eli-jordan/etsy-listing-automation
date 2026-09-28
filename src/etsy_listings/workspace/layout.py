@@ -102,6 +102,9 @@ as ``<sha256>.png``. Cache, not workspace data: a session expires seven days
 after its last edit, and clearing ``.cache`` loses only unconfirmed uploads."""
 STAGING_SESSION_FILE = "session.json"
 STAGING_UPLOADS_DIR = "uploads"
+STAGING_ARCHIVE_FILE = "upload.zip"
+"""A dropped ZIP while its PNGs are read out of it, and gone before the
+session is saved (spec, *Frozen staging*; A45)."""
 FROZEN_TEMPLATE_DIR = "template"
 """Inside a staging session's or a batch's directory: the listing
 template's owned files as they were when staging began, where the frozen

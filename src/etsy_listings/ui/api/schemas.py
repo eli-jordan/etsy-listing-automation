@@ -534,6 +534,9 @@ class StagingRowDetail(BaseModel):
     message: str | None
     note: str | None
     suggestion: str | None
+    reuse: str | None
+    """The ``designs/`` stem with this row's exact bytes, which its listing
+    will name instead of writing its own (spec, *Content deduplication*)."""
 
 
 class AiReadinessBlock(BaseModel):
@@ -554,6 +557,9 @@ class StagingDetail(BaseModel):
     HH:MM*."""
     expires_at: datetime
     rows: list[StagingRowDetail]
+    ignored: list[str]
+    """A ZIP's files that are not PNGs, by their path in it: the count
+    strip's *N other files ignored* and its list (UI doc §5)."""
     ai_blocked: AiReadinessBlock | None = None
     """Set only while a prompt, a ready provider or Etsy market access is
     missing, which refuses Create; nothing is said when AI can run."""
