@@ -139,6 +139,21 @@ def test_the_progress_counts() -> None:
 # ------------------------------------------------------------ reviewable
 
 
+def test_a_row_a_deploy_cancelled_leaves_nothing_for_resume_and_needs_no_retry() -> None:
+    """A43: Resume never queues ``cancelled_by_deploy`` again, so it is not
+    work Cancel batch left (Stopped would offer a Resume that does nothing),
+    and nothing failed. The listing is deployed and waits for review."""
+    rows = [_row(1, reviewed=True), _row(2, ai="cancelled_by_deploy")]
+
+    standing_now = standing(rows)
+
+    assert standing_now.status == "in_review"
+    assert standing_now.undrafted == 0
+    assert standing_now.failures == 0
+    assert reviewable(rows[1])
+    assert _status(rows[0], rows[1].model_copy(update={"reviewed": True})) == "complete"
+
+
 def test_only_a_listing_the_seller_can_look_at_is_reviewable() -> None:
     """UI doc §7: not on queued, drafting, deleted or never-created rows."""
     for row in [_row(1), _row(2, ai="failed"), _row(3, ai="stopped"), _row(4, ai="cancelled")]:

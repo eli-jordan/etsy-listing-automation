@@ -1881,7 +1881,17 @@ export interface components {
     /** BatchRowDetail */
     BatchRowDetail: {
       /** Ai */
-      ai?: ("queued" | "running" | "done" | "failed" | "stopped" | "cancelled") | null;
+      ai?:
+        | (
+            | "queued"
+            | "running"
+            | "done"
+            | "failed"
+            | "stopped"
+            | "cancelled"
+            | "cancelled_by_deploy"
+          )
+        | null;
       /** Ai Error */
       ai_error?: string | null;
       /**
@@ -3612,6 +3622,11 @@ export interface components {
        * @default false
        */
       batch_pending: boolean;
+      /**
+       * Deploying
+       * @default false
+       */
+      deploying: boolean;
       /** Ready */
       ready: boolean;
       /** Reason */

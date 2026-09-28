@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import threading
 
-from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict
+from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
 
 
 def _registry() -> AiRunRegistry:
@@ -215,3 +215,48 @@ def test_a_subscriber_is_called_outside_the_run_s_lock() -> None:
     run.finish("done")
 
     assert seen == [["done", "pending", "pending"]]
+
+
+# ----------------------------------------------------------------- deploys
+
+
+def test_a_deploy_hold_refuses_new_runs_and_names_the_running_ones() -> None:
+    """A43: one step, so no run can start between the answer and the hold.
+    Listing names compare case-insensitively, as everywhere here."""
+    registry = _registry()
+    running = _create(registry, "take-a-hike")
+    _create(registry, "cedar-trail")
+
+    held = registry.hold_for_deploy(["Take-A-Hike"])
+
+    assert held == [running]
+    assert registry.deploying("take-a-hike")
+    assert not registry.deploying("cedar-trail")
+    running.finish("cancelled")
+    assert isinstance(registry.create("take-a-hike", draft_brief=False), Deploying)
+
+
+def test_two_holds_on_one_listing_need_two_releases() -> None:
+    registry = _registry()
+    registry.hold_for_deploy(["take-a-hike"])
+    registry.hold_for_deploy(["take-a-hike"])
+
+    registry.release_deploy(["take-a-hike"])
+    assert registry.deploying("take-a-hike")
+
+    registry.release_deploy(["take-a-hike"])
+    assert not registry.deploying("take-a-hike")
+    assert isinstance(registry.create("take-a-hike", draft_brief=False), AiRun)
+
+
+def test_a_run_settles_once_its_listeners_have_heard() -> None:
+    registry = _registry()
+    heard: list[bool] = []
+    registry.subscribe(lambda run: heard.append(run.wait_settled(timeout=0)))
+    run = _create(registry)
+
+    assert not run.wait_settled(timeout=0)
+    run.finish("done")
+
+    assert heard == [False]
+    assert run.wait_settled(timeout=0)

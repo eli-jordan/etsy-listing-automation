@@ -18,7 +18,7 @@ afterEach(() => {
 
 describe("getSeoReadiness", () => {
   it("returns the readiness payload on success", async () => {
-    const readiness: SeoReadinessResponse = { ready: true, batch_pending: false };
+    const readiness: SeoReadinessResponse = { ready: true, batch_pending: false, deploying: false };
     vi.spyOn(api, "GET").mockResolvedValue({
       data: readiness,
       error: undefined,

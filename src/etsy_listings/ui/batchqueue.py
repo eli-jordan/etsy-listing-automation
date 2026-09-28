@@ -29,12 +29,13 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Sequence
+from contextlib import contextmanager
 
 from etsy_listings.batches import AiState, AiStep, Batch, BatchRow, BatchStore
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.ui.airuns.events import AiPhaseEvent
-from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict
+from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry
 from etsy_listings.ui.airuns.runner import AiRunner
 from etsy_listings.workspace.workspace import Workspace
 
@@ -45,7 +46,9 @@ PENDING: frozenset[AiState] = frozenset({"queued", "running"})
 refused while one exists (spec, *Scheduling*)."""
 
 RESUMABLE: frozenset[AiState] = frozenset({"stopped", "cancelled"})
-RETRYABLE: frozenset[AiState] = frozenset({"failed", "stopped", "cancelled"})
+"""Not ``cancelled_by_deploy``: work a deploy cancelled must not resume onto
+the deployed listing (A43; spec, *Deployment interaction*)."""
+RETRYABLE: frozenset[AiState] = frozenset({"failed", "stopped", "cancelled", "cancelled_by_deploy"})
 
 _ENDED: dict[str, AiState] = {"done": "done", "failed": "failed", "cancelled": "cancelled"}
 
@@ -181,7 +184,9 @@ class BatchQueue:
             run = self._registry.create(
                 row.name, draft_brief=self._brief_is_empty(row.name), origin="batch"
             )
-            if isinstance(run, Conflict):
+            if not isinstance(run, AiRun):
+                # A manual run holds the listing, or a deploy does (A43): a
+                # row Retry queued mid-deploy starts once the deploy ends.
                 return False
             with self._state:
                 self._runs[run.id] = slot
@@ -208,10 +213,13 @@ class BatchQueue:
         if slot is not None and run.stop_reason != "shutdown":
             last = run.events[-1] if run.events else None
             message = last.message if isinstance(last, AiPhaseEvent) else None
+            ended = _ENDED[run.phase]
+            if ended == "cancelled" and run.stop_reason == "deploy":
+                ended = "cancelled_by_deploy"
             self._update(
                 slot[0],
                 lambda row: row.id == slot[1] and row.ai == "running",
-                ai=_ENDED[run.phase],
+                ai=ended,
                 ai_error=message if run.phase == "failed" else None,
                 ai_steps=[AiStep(**step.model_dump()) for step in run.steps],
             )
@@ -260,6 +268,46 @@ class BatchQueue:
         )
         self.wake()
         return batch
+
+    # --------------------------------------------------------------- deploys
+
+    @contextmanager
+    def yield_to_deploy(self, listings: Sequence[str]) -> Iterator[None]:
+        """A43: a UI deploy (plan or apply) takes ``listings`` from AI work
+        for as long as the ``with`` lasts (spec, *Deployment interaction*).
+
+        On entry no new run may start for them -- manual or batch; ``POST
+        /api/ai/runs`` answers ``deploying`` -- their queued rows become
+        ``cancelled_by_deploy``, every run still going on them, batch or
+        manual, is asked to stop, and this waits until each has finished
+        and its row has its outcome. Only then does the deploy read a
+        listing. On exit the listings are free again and the queue looks
+        again, for a row the seller retried meanwhile.
+
+        The runs are waited for without a limit of their own: a stop kills
+        a provider's process tree and research starts no new call, and the
+        runner's watchdog bounds any run to ``runner.RUN_LIMIT_SECONDS``.
+        """
+        names = list(listings)
+        # Holding first means every run the dispatcher could still start
+        # for these listings is either in `active` or refused.
+        active = self._registry.hold_for_deploy(names)
+        try:
+            keys = {name.casefold() for name in names}
+            for batch in self._batches.all():
+                self._update(
+                    batch.id,
+                    lambda row: row.name.casefold() in keys and row.ai == "queued",
+                    ai="cancelled_by_deploy",
+                )
+            for run in active:
+                run.request_stop("deploy")
+            for run in active:
+                run.wait_settled()
+            yield
+        finally:
+            self._registry.release_deploy(names)
+            self.wake()
 
     # ------------------------------------------------------------- reading
 

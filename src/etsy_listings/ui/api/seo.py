@@ -271,6 +271,11 @@ BATCH_PENDING_REASON = "This listing is drafting in a batch. AI Mode is back onc
 *Scheduling*: two runs must never own one listing)."""
 
 
+DEPLOYING_REASON = "This listing is deploying. AI Mode is back once the deploy finishes."
+"""The editor's hint while a UI plan or apply holds the listing (A43; UI doc
+§8, *Deploying takes precedence over AI*)."""
+
+
 def _proposals(request: Request) -> ProposalStore:
     store: ProposalStore = request.app.state.proposal_store
     return store
@@ -288,6 +293,8 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     `readiness()`, is a local probe (a file's existence, a fast
     `--help`/`login status` subprocess) that changes nothing.
     """
+    if request.app.state.ai_run_registry.deploying(target.name):
+        return SeoReadinessResponse(ready=False, reason=DEPLOYING_REASON, deploying=True)
     if request.app.state.batch_queue.pending(target.name):
         return SeoReadinessResponse(ready=False, reason=BATCH_PENDING_REASON, batch_pending=True)
     listing = target.workspace.load_listing(target.name)

@@ -24,7 +24,8 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
 from etsy_listings.engine.context import EventSink, RunContext
@@ -77,6 +78,15 @@ default every real server uses; a test wires one to in-memory fakes instead,
 by swapping this one callable -- nothing else here knows how a client is
 assembled."""
 
+YieldToDeploy = Callable[[Sequence[str]], AbstractContextManager[None]]
+"""How a run takes its listings from AI work before it reads them (A43):
+``BatchQueue.yield_to_deploy`` in every real server. It returns once the
+listings' AI work has stopped, and holds them until the ``with`` ends."""
+
+
+def _nothing_to_yield(listings: Sequence[str]) -> AbstractContextManager[None]:
+    return nullcontext()
+
 
 @dataclass
 class RunExecutor:
@@ -87,6 +97,7 @@ class RunExecutor:
     context_factory: ContextFactory
     registry: RunRegistry
     stages: list[AnyStage] = field(default_factory=lambda: list(STAGES))
+    yield_to_deploy: YieldToDeploy = _nothing_to_yield
     _thread: threading.Thread | None = field(default=None, init=False, repr=False)
     _stop: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
@@ -131,10 +142,14 @@ class RunExecutor:
 
     def _execute(self, run: Run) -> None:
         try:
-            if run.kind == "plan":
-                self._run_plan(run)
-            else:
-                self._run_apply(run)
+            # A43: deploying takes precedence over AI. A plan counts as a
+            # deploy (spec, *Deployment interaction*), since what it shows
+            # is what the apply after it will be checked against.
+            with self.yield_to_deploy(run.listings):
+                if run.kind == "plan":
+                    self._run_plan(run)
+                else:
+                    self._run_apply(run)
         except Exception:
             # Decision 5: a defect gets a traceback in the log and a generic
             # message on the page -- never the exception text itself, which

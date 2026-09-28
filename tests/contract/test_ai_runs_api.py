@@ -41,7 +41,7 @@ from tests.support.ai_runs import (
     wait_for,
 )
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import edit_listing
+from tests.support.builders import copy_listing, edit_listing
 
 
 def _context_factory(workspace: Workspace, on_event: EventSink | None) -> RunContext:
@@ -421,15 +421,19 @@ def test_delete_on_a_finished_run_is_409(client: TestClient) -> None:
 # --------------------------------------------------------- beside plan/apply
 
 
-def test_a_plan_run_finishes_while_an_ai_run_is_in_flight(
-    client: TestClient, provider: ChainProvider
+def test_a_plan_run_finishes_while_another_listing_s_ai_run_is_in_flight(
+    workspace_root: Path, client: TestClient, provider: ChainProvider
 ) -> None:
+    """A deploy never queues behind AI work. Its own listing's is cancelled
+    first (A43, ``tests/behaviour/test_deploy_precedence.py``); another
+    listing's is left to run beside it."""
+    copy_listing(workspace_root, "second")
     gate = provider.gate("seo")
     ai_run = _start(client)
     wait_for(lambda: provider.started["seo"].is_set())
 
     plan = client.post(
-        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": ["second"]}
     )
     assert plan.status_code == 202
     deadline = time.monotonic() + 15
