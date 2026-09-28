@@ -17,6 +17,8 @@ from etsy_listings.workspace.workspace import (
     remove_tree,
 )
 
+from tests.support.refusals import refuse_reads
+
 
 def test_discover_finds_root_from_nested_cwd(workspace_root: Path) -> None:
     nested = workspace_root / "listings" / "take-a-hike"
@@ -818,3 +820,20 @@ class TestListingTemplateLayout:
         assert path == ws.listing_template_assets_dir("heavyweight-tee").resolve() / "chart.png"
         with pytest.raises(InvalidNameError):
             ws.listing_template_media_file("heavyweight-tee", "template.yaml")
+
+
+def test_a_listing_template_read_while_it_is_replaced_still_loads(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``template.yaml`` is written atomically (A37), and Windows refuses to
+    open it while the editor's save is replacing it; the read waits that out
+    rather than reporting the template missing or unreadable."""
+    ws = Workspace.discover(root_override=workspace_root)
+    path = ws.listing_template_file("heavyweight-tee")
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "garment_profile: comfort-colors-1717\ncolors: [black]\nmedia: []\n", encoding="utf-8"
+    )
+    refuse_reads(monkeypatch, 3)
+
+    assert ws.load_listing_template("heavyweight-tee").colors == ["black"]

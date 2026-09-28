@@ -42,7 +42,7 @@ from etsy_listings.config.slug import ColourExceptions
 from etsy_listings.render.config import AnyTemplate, dump_template_config
 from etsy_listings.render.config import load_template_config as parse_template_config
 from etsy_listings.workspace import layout
-from etsy_listings.workspace.atomic import write_bytes_atomic
+from etsy_listings.workspace.atomic import read_bytes_retrying, write_bytes_atomic
 from etsy_listings.workspace.common_copy import (
     CommonCopyDocument,
     CommonCopyError,
@@ -483,7 +483,9 @@ class Workspace:
 
     def load_listing_template(self, template: str) -> ListingTemplate:
         return ListingTemplate.load(
-            self.listing_template_file(template), currency=self.defaults.etsy.currency
+            self.listing_template_file(template),
+            currency=self.defaults.etsy.currency,
+            read=read_bytes_retrying,
         )
 
     def write_listing_template(self, template: str, document: ListingTemplate) -> None:

@@ -32,7 +32,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from etsy_listings.ai.models import SeoProposal
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
-from etsy_listings.workspace.atomic import write_json_atomic
+from etsy_listings.workspace.atomic import read_bytes_retrying, write_json_atomic
 from etsy_listings.workspace.workspace import Workspace
 
 SCHEMA = 1
@@ -172,7 +172,8 @@ class ProposalStore:
         """``listing``'s proposal, or ``None`` for none -- and for a record
         this code cannot read, or one another listing's name wrote."""
         try:
-            raw = json.loads(self._workspace.proposal_file(listing).read_text(encoding="utf-8"))
+            path = self._workspace.proposal_file(listing)
+            raw = json.loads(read_bytes_retrying(path).decode("utf-8"))
         except (OSError, ValueError):
             return None
         if not isinstance(raw, dict) or raw.get("schema") != SCHEMA:
