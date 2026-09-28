@@ -232,30 +232,28 @@ class TestUnsafeArchives:
     even that one behind (A45: any refusal leaves nothing on disk)."""
 
     @pytest.mark.parametrize(
-        ("entry", "message"),
+        ("entry", "problem"),
         [
-            ("../escape.png", "../escape.png inside it points outside the ZIP."),
-            (
-                "exports/../../escape.png",
-                "exports/../../escape.png inside it points outside the ZIP.",
-            ),
-            ("/etc/escape.png", "/etc/escape.png inside it is an absolute path."),
-            ("\\escape.png", "\\escape.png inside it is an absolute path."),
-            ("C:/escape.png", "C:/escape.png inside it is an absolute path."),
-            (
-                "exports\\..\\escape.png",
-                "exports\\..\\escape.png inside it points outside the ZIP.",
-            ),
+            ("../escape.png", "points outside the ZIP"),
+            ("exports/../../escape.png", "points outside the ZIP"),
+            ("/etc/escape.png", "is an absolute path"),
+            ("\\escape.png", "is an absolute path"),
+            ("C:/escape.png", "is an absolute path"),
+            ("exports\\..\\escape.png", "points outside the ZIP"),
         ],
     )
     def test_a_name_that_leaves_the_archive_is_refused(
-        self, workspace: Workspace, store: StagingStore, entry: str, message: str
+        self, workspace: Workspace, store: StagingStore, entry: str, problem: str
     ) -> None:
-        archive = a_zip(("good.png", png(1)), (_info(entry), png(2)))
+        info = _info(entry)
+        archive = a_zip(("good.png", png(1)), (info, png(2)))
 
         with pytest.raises(StagingRefused) as refused:
             _stage(workspace, store, ("kittl-export.zip", archive))
 
+        # The name as `zipfile` reports it, which on Windows has its
+        # backslashes turned into slashes; refused either way.
+        message = f"{info.filename} inside it {problem}."
         assert (refused.value.message, refused.value.remedy) == (message, UNSAFE_REMEDY)
         assert _staging_left(workspace) == []
 
