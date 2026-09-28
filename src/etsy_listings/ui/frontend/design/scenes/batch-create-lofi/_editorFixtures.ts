@@ -1,7 +1,7 @@
 // ListingDetail fixtures for the listing-template editor and a batch-created
 // listing, plus a hand-set AI Mode state for the real DetailsTab.
 import type { AiSeoMode } from "../../../src/pages/editor/aiSeo/useAiSeoMode";
-import type { ListingDetail, SeoProposalResponse } from "../../../src/types";
+import type { ListingDetail, ListingProposal } from "../../../src/types";
 
 const prices = ["S", "M", "L", "XL", "2XL", "3XL"].map((size) => ({
   size,
@@ -114,21 +114,23 @@ export const batchListing: ListingDetail = templateDetail({
   ],
 });
 
-const proposal: SeoProposalResponse = {
-  titles: [
-    "After Rain Trail Tee, Misty Forest Hiking Shirt",
-    "Rainy Day Hiker Graphic Tee, Pacific Northwest Trail",
-    "After The Rain Mountain Path Shirt for Hikers",
-  ],
-  tags: [...tags, "misty forest", "rainy hike", "trail tee", "pnw hiker", "forest shirt", "rain gift", "mountain path"],
-  description_leads: [
-    "A calm, hand-drawn trail after the rain — mist in the pines and puddles on the path, for hikers who love quiet mornings.",
-    "Bring the hush of a forest after rain to an everyday tee, with a hand-drawn trail and the words “after rain.”",
-    "For rainy-day walkers and trail lovers: a soft, misty forest path drawn by hand on a relaxed garment-dyed tee.",
-  ],
-  rationale: [],
-  warnings: [],
-  observed_text: "after rain",
+const proposal: ListingProposal = {
+  proposal: {
+    titles: [
+      "After Rain Trail Tee, Misty Forest Hiking Shirt",
+      "Rainy Day Hiker Graphic Tee, Pacific Northwest Trail",
+      "After The Rain Mountain Path Shirt for Hikers",
+    ],
+    tags: [...tags, "misty forest", "rainy hike", "trail tee", "pnw hiker", "forest shirt", "rain gift", "mountain path"],
+    description_leads: [
+      "A calm, hand-drawn trail after the rain — mist in the pines and puddles on the path, for hikers who love quiet mornings.",
+      "Bring the hush of a forest after rain to an everyday tee, with a hand-drawn trail and the words “after rain.”",
+      "For rainy-day walkers and trail lovers: a soft, misty forest path drawn by hand on a relaxed garment-dyed tee.",
+    ],
+    rationale: [],
+    warnings: [],
+    observed_text: "after rain",
+  },
   snapshot: {
     brief: "Hand-drawn forest trail after rain, puddles on the path and mist in the pines. Words: “after rain”.",
     product_type: "tee",
@@ -142,7 +144,9 @@ const proposal: SeoProposalResponse = {
     design_content_hash: null,
   },
   generated_at: "2026-09-27T11:55:00Z",
-  expires_at: "2099-01-01T00:00:00Z",
+  origin: "batch",
+  resolution: { title: "pending", tags: "accepted", lead: "pending" },
+  stale: { is_stale: true, reasons: ["brief edited since"] },
 };
 
 const noop = () => {};
@@ -155,8 +159,8 @@ export const staleAiSeo: AiSeoMode = {
   requirements: [],
   reason: null,
   phase: "idle",
-  proposal: { proposal, unresolved: { title: true, tags: false, lead: true } },
-  stale: true,
+  proposal,
+  staleReason: "brief edited since",
   generate: noop,
   draftsBrief: false,
   cancel: noop,
