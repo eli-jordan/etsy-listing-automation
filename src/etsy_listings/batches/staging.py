@@ -35,6 +35,7 @@ from etsy_listings.config.listing_validation import check_design_resolution
 from etsy_listings.config.slug import slugify
 from etsy_listings.errors import UserFacingError
 from etsy_listings.listing_templates import owned_refs
+from etsy_listings.workspace.atomic import read_bytes_retrying
 from etsy_listings.workspace.workspace import Workspace, remove_tree
 
 # A45: safety limits, not settings. Module attributes so a test can lower them.
@@ -321,7 +322,9 @@ def designs_by_content(workspace: Workspace, sizes: dict[str, int]) -> dict[str,
     for path in sorted(workspace.design_files()):
         if path.stat().st_size not in lengths:
             continue
-        sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        # A confirm may be writing designs/ atomically at the same moment,
+        # which Windows answers with a PermissionError on open.
+        sha = hashlib.sha256(read_bytes_retrying(path)).hexdigest()
         if sha in sizes:
             found.setdefault(sha, path.stem)
     return found
