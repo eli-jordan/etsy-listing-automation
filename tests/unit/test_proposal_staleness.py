@@ -8,9 +8,15 @@ so the editor and the batch summary say the same thing about one proposal.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
-from etsy_listings.ai.proposals import SeoProposalSnapshot, proposal_staleness
+from etsy_listings.ai.proposals import SeoProposalSnapshot, input_snapshot, proposal_staleness
+from etsy_listings.workspace.facts import WorkspaceFacts
+from etsy_listings.workspace.workspace import Workspace
+
+from tests.support.builders import FIXTURE_LISTING
 
 
 def _snapshot(**over: object) -> SeoProposalSnapshot:
@@ -116,3 +122,23 @@ def test_a_different_design_is_one_reason_not_two() -> None:
     now = _snapshot(design={"default": "designs/other.png"}, design_content_hash="9a0b")
 
     assert proposal_staleness(_snapshot(), now).reasons == ["design changed since"]
+
+
+def test_a_garment_profile_that_no_longer_loads_reads_as_changed(workspace_root: Path) -> None:
+    """``input_snapshot`` is how "now" is read. A profile file that went
+    missing under the same name leaves its facts empty, which is stale
+    against a proposal made with them -- never silently current."""
+    workspace = Workspace.discover(root_override=workspace_root)
+    listing = workspace.load_listing(FIXTURE_LISTING)
+    profile = WorkspaceFacts.gather(workspace).garment_profile(listing.garment_profile)
+    frozen = input_snapshot(workspace, FIXTURE_LISTING, listing, profile)
+
+    now = input_snapshot(workspace, FIXTURE_LISTING, listing, None)
+
+    assert proposal_staleness(frozen, frozen).is_stale is False
+    assert proposal_staleness(frozen, now).reasons == [
+        "materials changed since",
+        "product type changed since",
+        "garment brand changed since",
+        "garment model changed since",
+    ]
