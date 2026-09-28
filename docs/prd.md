@@ -795,14 +795,19 @@ listing pull together outputs from several templates into one ordered media
 list, including interleaving a shared asset between two mockups.
 
 **A design may need more than one artwork file** — dark ink for light
-garments, light ink for dark ones. `listing.yaml`'s `design:` becomes a map
-keyed by artwork tag (`on-light`/`on-dark`) when more than one file is
-needed; a bare path stays valid shorthand for the common single-artwork case.
-Which garment colour is which tone is a garment-profile-level fact
-(`colors: { black: dark, ivory: light }`), classified once, by hand-editing
-the generated garment profile — `new` does not ask, and it is not inferred
-from Printify, which does not expose a colour hex value in this tool's
-catalog integration.
+garments, light ink for dark ones. `listing.yaml`'s `design:` is one map for
+the whole rule. Its reserved base is either `default` or `on-light`/`on-dark`,
+never both; reserved values may be `null` while an incomplete listing is being
+edited. Any other key is an enabled garment colour whose design ref overrides
+the base. An absent field, `null` and `{}` all mean no design. Which garment
+colour is which tone remains a garment-profile-level fact
+(`colors: { black: dark, ivory: light }`), classified once by hand-editing the
+generated garment profile — `new` does not ask, and it is not inferred from
+Printify, which does not expose a colour hex value in this tool's catalog
+integration. Mockup templates never override artwork: one
+listing-level resolution supplies both every mockup and Printify. The complete
+product behaviour and listing-editor interactions are in
+[multi-artwork-ui.md](multi-artwork-ui.md).
 
 ---
 
@@ -1406,7 +1411,7 @@ whether Norway is among them needs checking, not assuming).
 | 27 | Stage orchestration | `plan` determines whether rendering needs to run from input hashes; `apply` runs it. `render` remains available as an explicit command. AI Mode proposals are browser-only and never a stage. |
 | 28 | Template kinds | A template is exactly one of `colour-matrix` / `multiple` / `single`, never a mix — [docs/multi-placement-rendering.md](multi-placement-rendering.md). |
 | 29 | Multiple templates per listing | No garment-profile-level registry of *listing* templates — a listing's `media:` may reference any template that exists in `mockup-templates/`, always naming it explicitly as `{template, colour?}`; no default, no shorthand. Superseded once from an earlier `profile.templates: list[str]` registry, dropped because a template is a purely local, Etsy-facing asset Printify never sees. **Amended:** the garment profile may name one `preview_template`, a `colour-matrix` template the editor uses to judge colours. That is not a `media:` default and does not decide what renders. |
-| 30 | Multi-artwork | `listing.design:` polymorphic (bare path or a map keyed by artwork tag); `garment_profile.colors` classified by hand-editing the generated garment profile file (`new` does not ask), not inferred from Printify. **Amended (#73):** the paths are workspace-rooted refs, `designs/x.png`, not `../../designs/x.png`. |
+| 30 | Multi-artwork | `listing.design:` is one map. Its mutually exclusive reserved base is `default` or `on-light`/`on-dark`; reserved values may be `null` while editing. Every other key must name an enabled colour and directly overrides the base for that colour. A non-empty map requires a reserved base; absent/`null`/`{}` all mean no design. Resolution is colour key, then the hand-classified garment tone, then `default`. There is no separate `artwork:` field and templates never choose artwork independently: mockups and Printify use the same resolved file. The listing UI edits the map from the existing design library; profile classification stays YAML-managed and `new` remains single-artwork. Full behaviour: [multi-artwork-ui.md](multi-artwork-ui.md). **Amended (#73):** every path is a workspace-rooted ref such as `designs/x.png`, not `../../designs/x.png`. |
 | 31 | What renders | Driven purely by `media` references, not by `listing.colors` membership — a listing's colours drive which Printify variants sell, not which photos render. |
 | 32 | Frontend testing | Vitest + React Testing Library, v8 coverage provider, 80%-branch floor mirroring the Python gate, wired into `scripts/check.sh`. |
 | 33 | Pricing plan | A separate, reusable `pricing-plans/{name}.yaml` file holding a per-size price table plus optional per-colour overrides (same shape as the listing's own) and a `garment_profile:` back-reference. `Listing.resolved_price` precedence: `price_overrides` > `prices` > the plan's own (override-then-flat) resolution. Named "pricing plan", not "pricing profile", to avoid colliding with the existing `GarmentProfile` concept. |
