@@ -215,7 +215,8 @@ def test_the_record_is_schema_versioned_json_under_the_exact_name(
     raw = json.loads(workspace.proposal_file("Take-A-Hike").read_text(encoding="utf-8"))
 
     assert workspace.proposal_file("Take-A-Hike").name == "Take-A-Hike.json"
-    assert workspace.proposal_file("Take-A-Hike") != workspace.proposal_file("take-a-hike")
+    # Names, not paths: a WindowsPath compares case-insensitively.
+    assert workspace.proposal_file("take-a-hike").name == "take-a-hike.json"
     assert raw["schema"] == 1
     assert raw["listing"] == "Take-A-Hike"
 
