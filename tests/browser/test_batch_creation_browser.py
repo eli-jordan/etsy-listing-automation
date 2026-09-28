@@ -10,15 +10,32 @@ asserted on the ``listing.yaml`` and ``designs/*.png`` the UI wrote.
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 
 import pytest
 import yaml
 
 from etsy_listings.workspace.workspace import Workspace
 
+from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market
 from tests.support.batches import a_listing_template, png
 
 pytestmark = pytest.mark.browser
+
+
+@pytest.fixture
+def app_options(workspace_root: Path) -> dict[str, Any]:
+    """Staging refuses Create unless AI drafting could run (spec, *Design
+    validation*), so the app gets a ready provider, the in-memory Etsy
+    market and the three prompts."""
+    seed_prompts(workspace_root)
+    provider = ChainProvider()
+    market = seeded_market()
+    return {
+        "seo_provider_factory": lambda _workspace: [provider],
+        "market_client_factory": lambda _workspace: market,
+    }
+
 
 DESIGNS = {"Night Hike Club.png": 1, "cedar-trail.png": 2, "★★★.png": 3}
 

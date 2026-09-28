@@ -13,6 +13,12 @@ function row(name: string, over: Partial<BatchRow> = {}): BatchRow {
     design: name,
     creation: "created",
     error: null,
+    ai: "queued",
+    ai_steps: [],
+    ai_error: null,
+    queue_position: null,
+    proposal: null,
+    stale_reasons: [],
     ...over,
   };
 }
@@ -24,6 +30,7 @@ function batch(rows: BatchRow[]): BatchDetail {
     listing_template: "heavyweight-tee",
     created_at: "2026-09-27T11:42:00",
     rows,
+    concurrency: 1,
   };
 }
 

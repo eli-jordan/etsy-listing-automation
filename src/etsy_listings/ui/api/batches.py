@@ -1,6 +1,7 @@
-"""Staging and batch endpoints (batch plan PR 2; A37-A39, A45, A46): stage
-loose PNGs against a listing template, review and edit the session, cancel it
-or confirm it, then read the batch confirming made.
+"""Staging and batch endpoints (batch plan PR 2 and PR 4; A37-A40, A45, A46):
+stage loose PNGs against a listing template, review and edit the session,
+cancel it or confirm it, then read the batch confirming made and steer its
+AI queue -- cancel, resume, retry.
 
 The rules are `batches`'; this module decides only what each answer is on
 the wire:
@@ -8,7 +9,8 @@ the wire:
 * An upload refused before staging is a ``422`` whose ``detail`` is the
   sentence and the remedy (`StagingRefusal`), with nothing on disk.
 * A session that cannot be confirmed yet is a ``409`` with the sentence, and
-  nothing is created.
+  nothing is created. So is one whose AI could not run (spec, *Design
+  validation*), which the staging detail already says as ``ai_blocked``.
 * An id nobody holds -- a session, a batch or a row -- is a ``404``. An id
   that is not a single path segment is the app-wide ``400``.
 
@@ -19,12 +21,16 @@ confirm and an editor's create of the same name wait for each other (A38).
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
+from pydantic import ValidationError
 
+from etsy_listings.ai.proposals import ProposalStore
 from etsy_listings.batches import (
     Batch,
+    BatchRow,
     BatchStore,
     ConfirmRefused,
     StagingRefused,
@@ -38,19 +44,27 @@ from etsy_listings.batches import (
     upload_path,
 )
 from etsy_listings.config.errors import ConfigLoadError
+from etsy_listings.ui.airuns.registry import AiRunRegistry
 from etsy_listings.ui.api.schemas import (
+    AiReadinessBlock,
     BatchDetail,
     BatchRowDetail,
     StagingDetail,
     StagingPatch,
     StagingRefusal,
     StagingRowDetail,
+    WorkflowStep,
 )
+from etsy_listings.ui.api.seo import batch_readiness, listing_proposal
 from etsy_listings.ui.api.thumbnails import thumbnail_response
+from etsy_listings.ui.batchqueue import RETRYABLE, BatchQueue
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
+from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(tags=["batches"])
+
+ProposalState = Literal["ready", "stale", "resolved"]
 
 
 def _workspace(request: Request) -> Workspace:
@@ -81,9 +95,20 @@ def _session(request: Request, session_id: str) -> StagingSession:
     return session
 
 
-def _staging_detail(workspace: Workspace, session: StagingSession) -> StagingDetail:
+def _ai_blocked(request: Request) -> AiReadinessBlock | None:
+    workspace = _workspace(request)
+    return batch_readiness(
+        workspace,
+        request.app.state.seo_provider_factory(workspace),
+        has_market=request.app.state.market_client_factory(workspace) is not None,
+    )
+
+
+def _staging_detail(request: Request, session: StagingSession) -> StagingDetail:
+    workspace = _workspace(request)
     reviewed = review(workspace, session)
     return StagingDetail(
+        ai_blocked=_ai_blocked(request),
         id=session.id,
         listing_template=session.listing_template,
         label=session.label,
@@ -105,13 +130,50 @@ def _staging_detail(workspace: Workspace, session: StagingSession) -> StagingDet
     )
 
 
-def _batch_detail(batch: Batch) -> BatchDetail:
-    return BatchDetail(
-        id=batch.id,
-        label=batch.label,
-        listing_template=batch.listing_template,
-        created_at=batch.created_at,
-        rows=[
+def _queue(request: Request) -> BatchQueue:
+    queue: BatchQueue = request.app.state.batch_queue
+    return queue
+
+
+def _steps(request: Request, row: BatchRow) -> list[WorkflowStep]:
+    """A running row's live run, else its last run as it ended."""
+    if row.ai == "running":
+        registry: AiRunRegistry = request.app.state.ai_run_registry
+        run = registry.latest(row.name)
+        if run is not None and run.origin == "batch" and not run.finished:
+            return run.steps
+    return [WorkflowStep.model_validate(step.model_dump()) for step in row.ai_steps]
+
+
+def _proposal(
+    request: Request, row: BatchRow, facts: WorkspaceFacts
+) -> tuple[ProposalState | None, list[str]]:
+    """The row's listing's cached proposal, judged as the editor judges it
+    (A41), so the summary's *Stale: ...* is the drawer's."""
+    workspace = _workspace(request)
+    store: ProposalStore = request.app.state.proposal_store
+    record = store.load(row.name) if row.creation == "created" else None
+    if record is None:
+        return None, []
+    try:
+        wire = listing_proposal(workspace, row.name, record, facts=facts)
+    except (ConfigLoadError, OSError, ValidationError):
+        return None, []
+    if all(state != "pending" for state in wire.resolution.model_dump().values()):
+        return "resolved", []
+    if wire.stale.is_stale:
+        return "stale", wire.stale.reasons
+    return "ready", []
+
+
+def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
+    queue = _queue(request)
+    positions = {slot: place for place, slot in enumerate(queue.order(), start=1)}
+    facts = WorkspaceFacts.gather(_workspace(request))
+    rows = []
+    for row in batch.rows:
+        proposal, stale = _proposal(request, row, facts)
+        rows.append(
             BatchRowDetail(
                 id=row.id,
                 sources=row.sources,
@@ -119,9 +181,21 @@ def _batch_detail(batch: Batch) -> BatchDetail:
                 design=row.design,
                 creation=row.creation,
                 error=row.error,
+                ai=row.ai,
+                ai_steps=_steps(request, row),
+                ai_error=row.ai_error,
+                queue_position=positions.get((batch.id, row.id)),
+                proposal=proposal,
+                stale_reasons=stale,
             )
-            for row in batch.rows
-        ],
+        )
+    return BatchDetail(
+        id=batch.id,
+        label=batch.label,
+        listing_template=batch.listing_template,
+        created_at=batch.created_at,
+        rows=rows,
+        concurrency=queue.concurrency(),
     )
 
 
@@ -148,13 +222,13 @@ def create_staging(
         raise HTTPException(status_code=422, detail=refusal.model_dump()) from exc
     except ConfigLoadError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return _staging_detail(workspace, session)
+    return _staging_detail(request, session)
 
 
 @router.get("/api/staging/{session_id}", response_model=StagingDetail)
 def get_staging(request: Request, session_id: str) -> StagingDetail:
     """A reload reattaches here (spec, *Frozen staging*)."""
-    return _staging_detail(_workspace(request), _session(request, session_id))
+    return _staging_detail(request, _session(request, session_id))
 
 
 @router.patch("/api/staging/{session_id}", response_model=StagingDetail)
@@ -175,7 +249,7 @@ def patch_staging(request: Request, session_id: str, body: StagingPatch) -> Stag
         except KeyError as exc:
             raise HTTPException(status_code=404, detail=f"no staged row {exc.args[0]!r}") from exc
         store.save(session)
-    return _staging_detail(_workspace(request), session)
+    return _staging_detail(request, session)
 
 
 @router.delete("/api/staging/{session_id}", status_code=204)
@@ -210,6 +284,15 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
     second one (A39)."""
     workspace = _workspace(request)
     workspace.staging_dir(session_id)
+    if _batches(request).load(session_id) is None:
+        # Spec, *Design validation*: a batch is not knowingly created into a
+        # queue that cannot run. A confirm finishing a batch that exists
+        # already is not asked again -- its listings are half made.
+        blocked = _ai_blocked(request)
+        if blocked is not None:
+            raise HTTPException(
+                status_code=409, detail=f"AI drafting can't run yet. {blocked.message}"
+            )
     try:
         batch = confirm(
             workspace,
@@ -222,7 +305,8 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
         raise HTTPException(status_code=404, detail=f"no staging session {session_id!r}") from exc
     except ConfirmRefused as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
-    return _batch_detail(batch)
+    _queue(request).wake()
+    return _batch_detail(request, batch)
 
 
 def _batch(request: Request, batch_id: str) -> Batch:
@@ -235,16 +319,33 @@ def _batch(request: Request, batch_id: str) -> Batch:
 
 @router.get("/api/batches/{batch_id}", response_model=BatchDetail)
 def get_batch(request: Request, batch_id: str) -> BatchDetail:
-    return _batch_detail(_batch(request, batch_id))
+    return _batch_detail(request, _batch(request, batch_id))
 
 
-@router.post("/api/batches/{batch_id}/rows/{row}/retry", response_model=BatchDetail)
+@router.post(
+    "/api/batches/{batch_id}/rows/{row}/retry",
+    response_model=BatchDetail,
+    responses={409: {"description": "The row has nothing to retry"}},
+)
 def retry_batch_row(request: Request, batch_id: str, row: str) -> BatchDetail:
-    """Retry a row whose creation failed (UI doc §7). The AI half of Retry
-    arrives with the batch queue (batch plan PR 4)."""
-    _batch(request, batch_id)
-    try:
-        batch = retry_row(
+    """Retry one row (UI doc §7): its creation, if that failed -- which
+    queues it once it exists -- else its AI, keeping the saved brief (A40)."""
+    batch = _batch(request, batch_id)
+    target = next((r for r in batch.rows if r.id == row), None)
+    if target is None:
+        raise HTTPException(status_code=404, detail=f"no batch row {row!r}")
+    if target.creation == "failed":
+        _retry_creation(request, batch_id, {row})
+    elif target.ai in RETRYABLE:
+        _queue(request).retry(batch_id, row)
+    else:
+        raise HTTPException(status_code=409, detail=f"{target.name} has nothing to retry")
+    return _batch_detail(request, _batch(request, batch_id))
+
+
+def _retry_creation(request: Request, batch_id: str, rows: set[str]) -> None:
+    for row in rows:
+        retry_row(
             _workspace(request),
             _staging(request),
             _batches(request),
@@ -252,6 +353,30 @@ def retry_batch_row(request: Request, batch_id: str, row: str) -> BatchDetail:
             row,
             lock=_locks(request).listing,
         )
-    except KeyError as exc:
-        raise HTTPException(status_code=404, detail=f"no batch row {row!r}") from exc
-    return _batch_detail(batch)
+    _queue(request).wake()
+
+
+@router.post("/api/batches/{batch_id}/retry", response_model=BatchDetail)
+def retry_batch(request: Request, batch_id: str) -> BatchDetail:
+    """**Retry N failed**: every row whose creation or AI failed."""
+    batch = _batch(request, batch_id)
+    _retry_creation(request, batch_id, {r.id for r in batch.rows if r.creation == "failed"})
+    _queue(request).retry(batch_id)
+    return _batch_detail(request, _batch(request, batch_id))
+
+
+@router.post("/api/batches/{batch_id}/cancel", response_model=BatchDetail)
+def cancel_batch(request: Request, batch_id: str) -> BatchDetail:
+    """**Cancel batch** (spec, *Cancellation and deletion*): queued rows are
+    stopped and running ones asked to stop. Everything written stays."""
+    _batch(request, batch_id)
+    _queue(request).cancel(batch_id)
+    return _batch_detail(request, _batch(request, batch_id))
+
+
+@router.post("/api/batches/{batch_id}/resume", response_model=BatchDetail)
+def resume_batch(request: Request, batch_id: str) -> BatchDetail:
+    """**Resume**: stopped and cancelled rows join the queue again."""
+    _batch(request, batch_id)
+    _queue(request).resume(batch_id)
+    return _batch_detail(request, _batch(request, batch_id))

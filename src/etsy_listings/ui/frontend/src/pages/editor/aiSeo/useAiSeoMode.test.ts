@@ -102,7 +102,7 @@ describe("useAiSeoMode availability", () => {
   });
 
   it("is available with an empty brief, and the click drafts one", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
 
     const { result } = renderHook(() => useAiSeoMode(detail({ brief: "   " }), vi.fn(), vi.fn()));
 
@@ -117,7 +117,7 @@ describe("useAiSeoMode availability", () => {
   });
 
   it("asks the readiness endpoint once name/design/brief are present, and reflects its answer", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
 
@@ -125,7 +125,7 @@ describe("useAiSeoMode availability", () => {
   });
 
   it("stays unavailable when the readiness endpoint says not ready", async () => {
-    mockReadiness({ ready: false, reason: "no AI provider is ready" });
+    mockReadiness({ ready: false, reason: "no AI provider is ready", batch_pending: false });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
 
@@ -143,7 +143,7 @@ describe("useAiSeoMode availability", () => {
 
 describe("useAiSeoMode generation", () => {
   it("starts a run without drafting, and keeps the proposal it delivers", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     const body = proposal();
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
@@ -159,7 +159,7 @@ describe("useAiSeoMode generation", () => {
   });
 
   it("exposes the run, and when it started", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
     await waitFor(() => expect(result.current.available).toBe(true));
@@ -171,7 +171,7 @@ describe("useAiSeoMode generation", () => {
   });
 
   it("moves to a failed phase, says why, and stores nothing when the run fails", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
     await waitFor(() => expect(result.current.available).toBe(true));
@@ -186,7 +186,7 @@ describe("useAiSeoMode generation", () => {
   });
 
   it("cancels the run and returns to idle with no proposal", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
     await waitFor(() => expect(result.current.available).toBe(true));
@@ -202,7 +202,7 @@ describe("useAiSeoMode generation", () => {
   });
 
   it("does not reopen drawers the seller resolved when the run replays after a reload", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     const body = proposal();
     const first = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
     await waitFor(() => expect(first.result.current.available).toBe(true));
@@ -226,7 +226,7 @@ describe("useAiSeoMode generation", () => {
 
 describe("useAiSeoMode and the auto chain's brief", () => {
   it("puts a drafted brief into an empty field without saving it again", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     const onUpdate = vi.fn();
     const onAdopt = vi.fn();
     const { result } = renderHook(() =>
@@ -242,7 +242,7 @@ describe("useAiSeoMode and the auto chain's brief", () => {
   });
 
   it("leaves a brief the seller typed meanwhile alone", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     const onAdopt = vi.fn();
     const { result, rerender } = renderHook(
       (d: ListingDetail) => useAiSeoMode(d, vi.fn(), vi.fn(), undefined, onAdopt),
@@ -271,7 +271,7 @@ async function resolved(
 }
 
 async function readyHookWithProposal(onUpdate = vi.fn(), onFlush = vi.fn()) {
-  mockReadiness({ ready: true });
+  mockReadiness({ ready: true, batch_pending: false });
   const body = proposal();
 
   const { result, rerender } = renderHook(
@@ -332,7 +332,7 @@ describe("useAiSeoMode acceptance", () => {
 
   it("toggling a selected tag removes it again", async () => {
     const onUpdate = vi.fn();
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     const body = proposal();
 
     const { result } = renderHook((d: ListingDetail) => useAiSeoMode(d, onUpdate, vi.fn()), {
@@ -349,7 +349,7 @@ describe("useAiSeoMode acceptance", () => {
 
   it("does not add a 14th tag", async () => {
     const onUpdate = vi.fn();
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     const body = proposal();
     const thirteen = Array.from({ length: 13 }, (_, i) => `existing-${i}`);
 
@@ -427,7 +427,7 @@ describe("useAiSeoMode acceptance", () => {
 
 describe("useAiSeoMode stale state", () => {
   it("names what changed, from the server, and keeps every choice usable", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     runs.cached.proposal = proposal({
       stale: { is_stale: true, reasons: ["brief edited since", "colours changed since"] },
     });
@@ -458,7 +458,7 @@ describe("useAiSeoMode stale state", () => {
 
 describe("useAiSeoMode restoring from the server", () => {
   it("opens the listing's cached proposal on mount", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     const body = proposal();
     runs.cached.proposal = body;
 
@@ -469,7 +469,7 @@ describe("useAiSeoMode restoring from the server", () => {
   });
 
   it("keeps a resolved section closed", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     runs.cached.proposal = proposal({
       resolution: { title: "accepted", tags: "pending", lead: "dismissed" },
     });
@@ -481,7 +481,7 @@ describe("useAiSeoMode restoring from the server", () => {
   });
 
   it("has nothing pending when every section of the cached proposal is resolved", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     runs.cached.proposal = proposal({
       resolution: { title: "accepted", tags: "accepted", lead: "dismissed" },
     });
@@ -500,7 +500,7 @@ describe("useAiSeoMode restoring from the server", () => {
   });
 
   it("drops the previous listing's proposal when the editor moves to another", async () => {
-    mockReadiness({ ready: true });
+    mockReadiness({ ready: true, batch_pending: false });
     runs.cached.proposal = proposal();
     const { result, rerender } = renderHook(
       (d: ListingDetail) => useAiSeoMode(d, vi.fn(), vi.fn()),

@@ -32,6 +32,7 @@ export function aiRunSummary(over: Partial<AiRunSummary> = {}): AiRunSummary {
     id: "run-1",
     listing: "take-a-hike",
     draft_brief: false,
+    origin: "manual",
     phase: "running",
     steps: [
       { id: "brief", state: "skipped", detail: "You wrote the brief, so it was kept" },

@@ -42,6 +42,7 @@ from etsy_listings.ui.api.runs import router as runs_router
 from etsy_listings.ui.api.seo import AiProviderFactory, default_ai_providers
 from etsy_listings.ui.api.seo import router as seo_router
 from etsy_listings.ui.api.templates import router as templates_router
+from etsy_listings.ui.batchqueue import BatchQueue
 from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
 from etsy_listings.ui.runs.registry import RunRegistry
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
@@ -77,6 +78,10 @@ def create_app(
         proposals=proposal_store,
     )
     staging_store = StagingStore(workspace)
+    batch_store = BatchStore(workspace)
+    batch_queue = BatchQueue(
+        workspace=workspace, batches=batch_store, registry=ai_registry, runner=ai_runner
+    )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -90,12 +95,17 @@ def create_app(
         cancelling kills its provider subprocess tree, so a server stopping
         never waits out a model.
 
-        Expired staging sessions are swept on the way in (A46)."""
+        Expired staging sessions are swept on the way in (A46). The batch
+        queue starts with the app, returning rows a previous server left
+        running to the queue, and stops before the AI runs are cancelled, so
+        it starts nothing into a runner that is shutting down (A40)."""
         staging_store.sweep(now=datetime.now(UTC))
         executor.start()
+        batch_queue.start()
         try:
             yield
         finally:
+            batch_queue.stop()
             ai_runner.shutdown()
             executor.stop()
 
@@ -122,7 +132,11 @@ def create_app(
     # Batch creation's cache records (A37): one store of each per process, so
     # their per-record locks mean something.
     app.state.staging_store = staging_store
-    app.state.batch_store = BatchStore(workspace)
+    app.state.batch_store = batch_store
+    # A40: the batch AI queue, dispatching batch rows onto `ai_runner`.
+    # `market_client_factory` is also what staging's AI readiness asks.
+    app.state.batch_queue = batch_queue
+    app.state.market_client_factory = market_client_factory
     # A41: the cached proposals, written by `ai_runner` and read and resolved
     # through `seo.py`. One store, for the same reason.
     app.state.proposal_store = proposal_store

@@ -530,8 +530,8 @@ describe("DetailsTab AI Mode", () => {
   it("asks readiness with an empty brief, and again after the listing changes", async () => {
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
-      .mockResolvedValueOnce({ ready: false, reason: "prompts/brief.md is missing" })
-      .mockResolvedValueOnce({ ready: true });
+      .mockResolvedValueOnce({ ready: false, reason: "prompts/brief.md is missing", batch_pending: false })
+      .mockResolvedValueOnce({ ready: true, batch_pending: false });
     const { rerender } = render(
       <DetailsTab detail={readyDetail({ brief: "" })} onUpdate={vi.fn()} onFlush={vi.fn()} />,
     );
@@ -553,8 +553,8 @@ describe("DetailsTab AI Mode", () => {
   it("rechecks readiness after save even when modified_at is unchanged", async () => {
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
-      .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
-      .mockResolvedValueOnce({ ready: true });
+      .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty", batch_pending: false })
+      .mockResolvedValueOnce({ ready: true, batch_pending: false });
     const current = readyDetail();
     const { rerender } = render(
       <DetailsTab
@@ -588,7 +588,7 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("keeps AI Mode disabled when the readiness endpoint says no", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false, batch_pending: false });
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
     await waitFor(() => expect(seoApi.getSeoReadiness).toHaveBeenCalled());
@@ -596,7 +596,7 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("renders AI Mode once the readiness endpoint says ready", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true, batch_pending: false });
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
@@ -604,7 +604,7 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("reveals all three drawers after a successful request and focuses the first title option", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true, batch_pending: false });
     const body = proposal();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
@@ -622,7 +622,7 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("returns focus to the AI Mode button once the last drawer resolves", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true, batch_pending: false });
     const body = proposal();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
@@ -643,7 +643,7 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("applies the chosen title through the normal autosave path", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true, batch_pending: false });
     const onUpdate = vi.fn();
     const onFlush = vi.fn();
 
@@ -659,7 +659,7 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("keeps an out-of-date proposal's choices usable and names what changed", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true, batch_pending: false });
     runs.cached.proposal = listingProposal({
       stale: { is_stale: true, reasons: ["brief edited since"] },
     });
@@ -677,7 +677,7 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("opens only the sections of the cached proposal the seller has not resolved", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true, batch_pending: false });
     runs.cached.proposal = listingProposal({
       resolution: { title: "accepted", tags: "dismissed", lead: "pending" },
     });
@@ -692,7 +692,7 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("shows a Try again failure state without changing any listing field", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true, batch_pending: false });
     const onUpdate = vi.fn();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={vi.fn()} />);

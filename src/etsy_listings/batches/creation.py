@@ -279,7 +279,9 @@ def _create(
                     batch.rows[index] = row
                     batches.save(batch)
                 _write(workspace, batch, row, template)
-                return row.model_copy(update={"creation": "created", "error": None})
+                # Created is queued (spec, *Confirming a batch*), in the same
+                # save, so a crash cannot leave a listing the queue never sees.
+                return row.model_copy(update={"creation": "created", "error": None, "ai": "queued"})
         others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
         name = allocate(row.base, set(workspace_names(workspace)) | others)
         row = row.model_copy(update={"name": name, "design": name, "claimed": False})

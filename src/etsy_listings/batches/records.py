@@ -94,6 +94,22 @@ class StagingSession(_Record):
 
 Creation = Literal["pending", "created", "failed"]
 
+AiState = Literal["queued", "running", "done", "failed", "stopped", "cancelled"]
+"""Where a created row's AI work is (A40), set by the batch queue.
+``stopped`` is a queued row **Cancel batch** took out of the queue;
+``cancelled`` is a run that was stopped part-way. **Resume** queues both
+again."""
+
+
+class AiStep(BaseModel):
+    """One node of the row's last run as it ended -- the editor's
+    ``WorkflowStep``, kept here so a failed row still shows where it failed
+    after the server that ran it has gone."""
+
+    id: str
+    state: str
+    detail: str | None = None
+
 
 class BatchRow(BaseModel):
     id: str
@@ -113,6 +129,11 @@ class BatchRow(BaseModel):
     directory found there on resume -- with no ``listing.yaml`` yet -- is
     known to be this row's own."""
     error: str | None = None
+    ai: AiState | None = None
+    """``None`` until the listing exists; creating it queues it (spec,
+    *Confirming a batch*: only created rows enter the AI queue)."""
+    ai_error: str | None = None
+    ai_steps: list[AiStep] = Field(default_factory=list)
 
 
 class Batch(_Record):

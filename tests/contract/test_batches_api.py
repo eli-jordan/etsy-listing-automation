@@ -1,9 +1,12 @@
-"""The staging and batch endpoints' HTTP surface (batch plan PR 2; A37-A39,
-A45, A46): status codes, payload shape, and what is on disk after each answer.
+"""The staging and batch endpoints' HTTP surface (batch plan PR 2 and PR 4;
+A37-A40, A45, A46): status codes, payload shape, and what is on disk after
+each answer.
 
-The staging and creation rules are `batches`' and have their own behaviour
-tests; these pin what the browser is told, and that a reload finds the same
-session again.
+The staging, creation and queue rules are `batches`' and `ui.batchqueue`'s
+and have their own behaviour tests; these pin what the browser is told, and
+that a reload finds the same session again. The app is given a
+:class:`~tests.support.ai_runs.ChainProvider` and the in-memory Etsy market,
+so staging's AI readiness passes unless a test takes one away.
 """
 
 from __future__ import annotations
@@ -13,25 +16,44 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
+from etsy_listings.ai.models import ProviderReadiness
 from etsy_listings.batches import StagingStore, stage_pngs
 from etsy_listings.ui.api.app import create_app
 from etsy_listings.workspace.workspace import Workspace
 
+from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads
 
 
 @pytest.fixture
 def workspace(workspace_root: Path) -> Workspace:
+    seed_prompts(workspace_root)
     workspace = Workspace.discover(root_override=workspace_root)
     a_listing_template(workspace)
     return workspace
 
 
 @pytest.fixture
-def client(workspace: Workspace) -> TestClient:
-    return TestClient(create_app(workspace))
+def provider() -> ChainProvider:
+    return ChainProvider()
+
+
+def _app(workspace: Workspace, provider: ChainProvider, *, market: bool = True) -> FastAPI:
+    etsy = seeded_market() if market else None
+    return create_app(
+        workspace,
+        seo_provider_factory=lambda _workspace: [provider],
+        market_client_factory=lambda _workspace: etsy,
+    )
+
+
+@pytest.fixture
+def client(workspace: Workspace, provider: ChainProvider) -> TestClient:
+    """No lifespan, so no queue: a confirmed row stays queued."""
+    return TestClient(_app(workspace, provider))
 
 
 def _stage(client: TestClient, *files: tuple[str, bytes], template: str = LISTING_TEMPLATE) -> Any:  # noqa: ANN401
@@ -185,6 +207,145 @@ class TestConfirm:
     def test_an_unknown_batch_is_a_404(self, client: TestClient) -> None:
         assert client.get("/api/batches/0123abcd").status_code == 404
         assert client.post("/api/staging/0123abcd/confirm").status_code == 404
+
+
+class TestAiReadiness:
+    """Spec, *Design validation*: a batch is not knowingly created into a
+    queue that cannot run. Nothing is said while it can."""
+
+    def test_nothing_is_said_while_ai_can_run(self, client: TestClient) -> None:
+        assert _staged(client, ("a.png", png(1)))["ai_blocked"] is None
+
+    def test_a_missing_prompt_is_named_and_confirm_writes_nothing(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        staged = _staged(client, ("a.png", png(1)))
+        workspace.brief_prompt_file().unlink()
+
+        reloaded = client.get(f"/api/staging/{staged['id']}").json()
+        response = client.post(f"/api/staging/{staged['id']}/confirm")
+
+        assert reloaded["ai_blocked"] == {
+            "message": "prompts/brief.md is missing.",
+            "remedy": "Run `etsy-listings setup` to seed it, then come back. Your staging is kept.",
+        }
+        assert response.status_code == 409
+        assert response.json()["detail"] == (
+            "AI drafting can't run yet. prompts/brief.md is missing."
+        )
+        assert workspace.listing_names() == ["take-a-hike"]
+        assert workspace.batch_ids() == []
+        assert client.get(f"/api/staging/{staged['id']}").status_code == 200
+
+    def test_no_ready_provider_blocks(self, client: TestClient, provider: ChainProvider) -> None:
+        provider.ready = ProviderReadiness(ready=False, reason="codex: not signed in")
+
+        blocked = _staged(client, ("a.png", png(1)))["ai_blocked"]
+
+        assert blocked["message"] == "No AI provider is ready."
+        assert blocked["remedy"] == "Add one in Setup, then come back. Your staging is kept."
+
+    def test_no_etsy_market_access_blocks(
+        self, workspace: Workspace, provider: ChainProvider
+    ) -> None:
+        client = TestClient(_app(workspace, provider, market=False))
+
+        blocked = _staged(client, ("a.png", png(1)))["ai_blocked"]
+
+        assert blocked["message"] == "Etsy market access isn't set up."
+
+
+def _ai(client: TestClient, batch_id: str) -> list[tuple[str, str | None]]:
+    return [(r["name"], r["ai"]) for r in client.get(f"/api/batches/{batch_id}").json()["rows"]]
+
+
+class TestQueue:
+    def test_confirm_queues_every_created_row_in_order(self, client: TestClient) -> None:
+        staged = _staged(client, ("a.png", png(1)), ("b.png", png(2)))
+
+        batch = client.post(f"/api/staging/{staged['id']}/confirm").json()
+
+        assert [(r["ai"], r["queue_position"]) for r in batch["rows"]] == [
+            ("queued", 1),
+            ("queued", 2),
+        ]
+        assert batch["concurrency"] == 1
+
+    def test_a_manual_run_is_refused_while_the_row_is_queued_and_allowed_once_done(
+        self, workspace: Workspace, provider: ChainProvider
+    ) -> None:
+        gate = provider.gate("brief")
+        with TestClient(_app(workspace, provider)) as client:
+            staged = _staged(client, ("a.png", png(1)), ("b.png", png(2)))
+            batch = client.post(f"/api/staging/{staged['id']}/confirm").json()
+            wait_for(lambda: _ai(client, batch["id"]) == [("a", "running"), ("b", "queued")])
+
+            refused = client.post("/api/ai/runs", json={"listing": "b", "draft_brief": True})
+            readiness = client.get("/api/listings/b/ai-seo/readiness").json()
+            gate.set()
+            wait_for(lambda: _ai(client, batch["id"]) == [("a", "done"), ("b", "done")])
+            allowed = client.post("/api/ai/runs", json={"listing": "b", "draft_brief": False})
+
+        assert refused.status_code == 409
+        assert refused.json() == {"active_run": None, "reason": "batch_pending"}
+        assert readiness["ready"] is False
+        assert readiness["batch_pending"] is True
+        assert allowed.status_code == 202, allowed.text
+        assert allowed.json()["origin"] == "manual"
+
+    def test_a_row_shows_its_live_steps_then_its_proposal(
+        self, workspace: Workspace, provider: ChainProvider
+    ) -> None:
+        gate = provider.gate("queries")
+        with TestClient(_app(workspace, provider)) as client:
+            staged = _staged(client, ("a.png", png(1)))
+            batch_id = client.post(f"/api/staging/{staged['id']}/confirm").json()["id"]
+            wait_for(lambda: provider.started["queries"].is_set())
+
+            live = client.get(f"/api/batches/{batch_id}").json()["rows"][0]
+            gate.set()
+            wait_for(lambda: _ai(client, batch_id) == [("a", "done")])
+            done = client.get(f"/api/batches/{batch_id}").json()["rows"][0]
+            proposal = client.get("/api/listings/a/proposal").json()
+
+        assert [(s["id"], s["state"]) for s in live["ai_steps"]] == [
+            ("brief", "done"),
+            ("market", "active"),
+            ("seo", "pending"),
+        ]
+        assert live["proposal"] is None
+        assert done["proposal"] == "ready"
+        assert proposal["origin"] == "batch"
+
+    def test_cancel_resume_and_retry_answer_the_batch(self, client: TestClient) -> None:
+        staged = _staged(client, ("a.png", png(1)), ("b.png", png(2)))
+        batch_id = client.post(f"/api/staging/{staged['id']}/confirm").json()["id"]
+
+        cancelled = client.post(f"/api/batches/{batch_id}/cancel")
+        row = cancelled.json()["rows"][0]["id"]
+        retried = client.post(f"/api/batches/{batch_id}/rows/{row}/retry")
+        resumed = client.post(f"/api/batches/{batch_id}/resume")
+        nothing = client.post(f"/api/batches/{batch_id}/rows/{row}/retry")
+
+        assert [r["ai"] for r in cancelled.json()["rows"]] == ["stopped", "stopped"]
+        assert [r["ai"] for r in retried.json()["rows"]] == ["queued", "stopped"]
+        assert [r["ai"] for r in resumed.json()["rows"]] == ["queued", "queued"]
+        assert nothing.status_code == 409
+        assert client.post("/api/batches/0123abcd/cancel").status_code == 404
+
+    def test_retry_all_failed_creates_the_failed_row_and_queues_it(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        staged = _staged(client, ("a.png", png(1)))
+        blocker = workspace.design_file("a")
+        blocker.mkdir(parents=True)
+        batch = client.post(f"/api/staging/{staged['id']}/confirm").json()
+        assert batch["rows"][0]["ai"] is None
+        blocker.rmdir()
+
+        retried = client.post(f"/api/batches/{batch['id']}/retry").json()
+
+        assert [(r["creation"], r["ai"]) for r in retried["rows"]] == [("created", "queued")]
 
 
 def test_the_listing_template_card_carries_the_design_size_it_needs(client: TestClient) -> None:

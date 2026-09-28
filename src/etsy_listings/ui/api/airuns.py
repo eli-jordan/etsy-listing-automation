@@ -4,6 +4,7 @@
 ```
 POST   /api/ai/runs              {listing, draft_brief} -> 202 AiRunSummary
                                  | 409 {active_run} | 409 {reason}
+                                 | 409 {reason: "batch_pending"} (A40)
 GET    /api/ai/runs?listing=     the listing's current or most recent run, or 404
 GET    /api/ai/runs/{id}         AiRunDetail: phase, steps, events so far
 GET    /api/ai/runs/{id}/events  text/event-stream; replays after Last-Event-ID
@@ -41,9 +42,14 @@ from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict
 from etsy_listings.ui.airuns.runner import AiRunner
 from etsy_listings.ui.api.runs import last_event_id
 from etsy_listings.ui.api.seo import readiness
+from etsy_listings.ui.batchqueue import BatchQueue
 from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
+
+BATCH_PENDING = "batch_pending"
+"""The refusal's ``reason`` while batch work owns the listing (A40), a code
+the editor words itself rather than a sentence."""
 
 _EVENT_WAIT_TIMEOUT = 1.0
 """One SSE poll's longest block, as in ``ui/api/runs.py``."""
@@ -69,6 +75,7 @@ def _summary(run: AiRun) -> AiRunSummary:
         id=run.id,
         listing=run.listing,
         draft_brief=run.draft_brief,
+        origin=run.origin,
         phase=run.phase,
         steps=run.steps,
         created_at=run.created_at,
@@ -93,6 +100,11 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
     workspace: Workspace = request.app.state.workspace
     if not workspace.listing_file(body.listing).is_file():
         raise HTTPException(status_code=404, detail=f"no listing {body.listing!r}")
+    # A40: a queued or running batch row owns the listing's AI, even while
+    # no run holds it yet -- two runs must never own one listing.
+    queue: BatchQueue = request.app.state.batch_queue
+    if queue.pending(body.listing):
+        return _refused(AiRunRefusal(reason=BATCH_PENDING))
 
     active = registry.latest(body.listing)
     if active is not None and not active.finished:

@@ -214,6 +214,25 @@
         "title": "AiQueriesEvent",
         "type": "object"
       },
+      "AiReadinessBlock": {
+        "description": "Why a batch could not draft if it were created now (spec, *Design\nvalidation*; ``staging.note.md``): the sentence after *AI drafting can't\nrun yet.*, and what to do about it.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "remedy": {
+            "title": "Remedy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "remedy"
+        ],
+        "title": "AiReadinessBlock",
+        "type": "object"
+      },
       "AiRunDetail": {
         "properties": {
           "created_at": {
@@ -282,6 +301,14 @@
             "title": "Listing",
             "type": "string"
           },
+          "origin": {
+            "enum": [
+              "manual",
+              "batch"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
           "phase": {
             "enum": [
               "running",
@@ -304,6 +331,7 @@
           "id",
           "listing",
           "draft_brief",
+          "origin",
           "phase",
           "steps",
           "created_at",
@@ -373,6 +401,14 @@
             "title": "Listing",
             "type": "string"
           },
+          "origin": {
+            "enum": [
+              "manual",
+              "batch"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
           "phase": {
             "enum": [
               "running",
@@ -395,6 +431,7 @@
           "id",
           "listing",
           "draft_brief",
+          "origin",
           "phase",
           "steps",
           "created_at",
@@ -673,6 +710,11 @@
       },
       "BatchDetail": {
         "properties": {
+          "concurrency": {
+            "default": 1,
+            "title": "Concurrency",
+            "type": "integer"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -710,6 +752,44 @@
       },
       "BatchRowDetail": {
         "properties": {
+          "ai": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "running",
+                  "done",
+                  "failed",
+                  "stopped",
+                  "cancelled"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai"
+          },
+          "ai_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Error"
+          },
+          "ai_steps": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStep"
+            },
+            "title": "Ai Steps",
+            "type": "array"
+          },
           "creation": {
             "enum": [
               "pending",
@@ -742,11 +822,46 @@
             "title": "Name",
             "type": "string"
           },
+          "proposal": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ready",
+                  "stale",
+                  "resolved"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal"
+          },
+          "queue_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Position"
+          },
           "sources": {
             "items": {
               "type": "string"
             },
             "title": "Sources",
+            "type": "array"
+          },
+          "stale_reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Reasons",
             "type": "array"
           }
         },
@@ -4529,6 +4644,11 @@
       "SeoReadinessResponse": {
         "description": "Whether AI Mode can be enabled for one saved listing right now\n(implementation plan, \"Entry point\"). The frontend leaves the control\nvisible and disabled when ``ready`` is false; ``reason`` explains why\nto a developer or support reader.",
         "properties": {
+          "batch_pending": {
+            "default": false,
+            "title": "Batch Pending",
+            "type": "boolean"
+          },
           "ready": {
             "title": "Ready",
             "type": "boolean"
@@ -4924,6 +5044,16 @@
       },
       "StagingDetail": {
         "properties": {
+          "ai_blocked": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiReadinessBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "expires_at": {
             "format": "date-time",
             "title": "Expires At",
@@ -5444,7 +5574,7 @@
         "type": "object"
       },
       "WorkflowStep": {
-        "description": "One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s\n``WorkflowStep``).",
+        "description": "One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s\n``WorkflowStep``): an AI run's, or a batch row's.",
         "properties": {
           "detail": {
             "anyOf": [
@@ -5859,9 +5989,138 @@
         ]
       }
     },
+    "/api/batches/{batch_id}/cancel": {
+      "post": {
+        "description": "**Cancel batch** (spec, *Cancellation and deletion*): queued rows are\nstopped and running ones asked to stop. Everything written stays.",
+        "operationId": "cancel_batch_api_batches__batch_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/resume": {
+      "post": {
+        "description": "**Resume**: stopped and cancelled rows join the queue again.",
+        "operationId": "resume_batch_api_batches__batch_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/retry": {
+      "post": {
+        "description": "**Retry N failed**: every row whose creation or AI failed.",
+        "operationId": "retry_batch_api_batches__batch_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
     "/api/batches/{batch_id}/rows/{row}/retry": {
       "post": {
-        "description": "Retry a row whose creation failed (UI doc \u00a77). The AI half of Retry\narrives with the batch queue (batch plan PR 4).",
+        "description": "Retry one row (UI doc \u00a77): its creation, if that failed -- which\nqueues it once it exists -- else its AI, keeping the saved brief (A40).",
         "operationId": "retry_batch_row_api_batches__batch_id__rows__row__retry_post",
         "parameters": [
           {
@@ -5893,6 +6152,9 @@
               }
             },
             "description": "Successful Response"
+          },
+          "409": {
+            "description": "The row has nothing to retry"
           },
           "422": {
             "content": {
