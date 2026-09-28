@@ -111,9 +111,10 @@ BATCHES_DIR = "batches"
 it keeps the frozen listing template for Retry, plus the upload of any row
 whose creation failed, so the staging session can go (A46)."""
 PROPOSALS_DIR = "proposals"
-"""The latest AI SEO proposal per listing (A41), ``<listing-casefold>.json``:
-casefolded as the write locks and the AI run registry compare names, so a
-case-only rename keeps the file (A37). Moves and goes with the listing."""
+"""The latest AI SEO proposal per listing (A41), ``<listing>.json`` (A37, PRD
+4's layout): the exact name, like the market snapshot, so two listings that
+differ only in case -- possible on a case-sensitive filesystem -- never share
+a record. Moves and goes with the listing."""
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 

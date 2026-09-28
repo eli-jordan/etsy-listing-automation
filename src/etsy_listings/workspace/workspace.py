@@ -1010,10 +1010,9 @@ class Workspace:
         )
 
     def proposal_file(self, listing: str) -> Path:
-        """The listing's cached AI SEO proposal (A41). Keyed by the
-        casefolded name (A37); the record inside names its listing, which is
-        what tells two names differing only in case apart."""
-        return self.cache(layout.PROPOSALS_DIR, f"{_segment(listing).casefold()}.json")
+        """The listing's cached AI SEO proposal (A41), keyed by its exact
+        name as :meth:`market_snapshot_file` is (A37)."""
+        return self.cache(layout.PROPOSALS_DIR, f"{_segment(listing)}.json")
 
     def preview_dir(self, listing: str) -> Path:
         """Every preview this listing currently holds, one subdirectory per

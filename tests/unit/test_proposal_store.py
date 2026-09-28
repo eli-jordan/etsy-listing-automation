@@ -166,8 +166,8 @@ def test_moving_a_listing_with_no_proposal_is_nothing(store: ProposalStore) -> N
 
 
 def test_a_case_only_rename_keeps_the_record(store: ProposalStore) -> None:
-    """A37 keys the file by the casefolded name, so on a case-sensitive
-    filesystem a rename to another case is the same file, rewritten."""
+    """On a case-insensitive filesystem the two names are one file: the
+    move must not delete what it has just written."""
     _put(store)
 
     store.move("take-a-hike", "Take-A-Hike")
@@ -184,11 +184,11 @@ def test_remove_forgets_it(store: ProposalStore) -> None:
     assert store.load("take-a-hike") is None
 
 
-def test_another_listing_sharing_the_casefolded_file_does_not_inherit_it(
+def test_a_record_is_read_back_only_under_the_name_that_wrote_it(
     store: ProposalStore,
 ) -> None:
-    """Two listings differing only in case can coexist on Linux. They share a
-    file, but a record names its listing, so neither reads the other's."""
+    """On a case-insensitive filesystem both spellings open one file; the
+    record names its listing, so the other spelling still reads nothing."""
     _put(store, "Take-A-Hike")
 
     assert store.load("take-a-hike") is None
@@ -205,15 +205,17 @@ def test_an_unreadable_record_is_no_record(
     assert store.load("take-a-hike") is None
 
 
-def test_the_record_is_schema_versioned_json_under_the_casefolded_name(
+def test_the_record_is_schema_versioned_json_under_the_exact_name(
     workspace: Workspace, store: ProposalStore
 ) -> None:
+    """A37 and PRD 4's layout: ``.cache/proposals/<listing>.json``. Not the
+    casefold, which gave two listings differing only in case one file."""
     _put(store, "Take-A-Hike")
 
     raw = json.loads(workspace.proposal_file("Take-A-Hike").read_text(encoding="utf-8"))
 
-    assert workspace.proposal_file("Take-A-Hike") == workspace.proposal_file("take-a-hike")
-    assert workspace.proposal_file("take-a-hike").name == "take-a-hike.json"
+    assert workspace.proposal_file("Take-A-Hike").name == "Take-A-Hike.json"
+    assert workspace.proposal_file("Take-A-Hike") != workspace.proposal_file("take-a-hike")
     assert raw["schema"] == 1
     assert raw["listing"] == "Take-A-Hike"
 
@@ -226,3 +228,31 @@ def test_removing_a_listing_removes_its_proposal(
     workspace.remove_listing("take-a-hike")
 
     assert store.load("take-a-hike") is None
+
+
+def _case_sensitive(directory: Path) -> bool:
+    probe = directory / "Case-Probe"
+    probe.write_text("", encoding="utf-8")
+    try:
+        return not (directory / "case-probe").exists()
+    finally:
+        probe.unlink()
+
+
+def test_listings_differing_only_in_case_keep_their_own_proposals(
+    workspace: Workspace, store: ProposalStore, tmp_path: Path
+) -> None:
+    """Only a case-sensitive filesystem (Linux) can hold both listings.
+    Removing one, by either destructive path, leaves the other's record."""
+    if not _case_sensitive(tmp_path):
+        pytest.skip("this filesystem cannot hold two names differing only in case")
+    _put(store, "take-a-hike")
+    _put(store, "Take-A-Hike", choices=_choices("The Other Listing"))
+
+    workspace.remove_listing("take-a-hike")
+    store.move("Take-A-Hike", "Take-A-Hike-2")
+
+    assert store.load("take-a-hike") is None
+    other = store.load("Take-A-Hike-2")
+    assert other is not None
+    assert other.proposal.titles[0] == "The Other Listing"

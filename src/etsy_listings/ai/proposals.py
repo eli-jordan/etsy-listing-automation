@@ -1,7 +1,7 @@
 """The latest AI SEO proposal per listing, kept in server cache (A41; spec,
 *Durable AI proposals*; PRD 4 and 71 as amended by PRD 74).
 
-``.cache/proposals/<listing-casefold>.json`` holds one record per listing:
+``.cache/proposals/<listing>.json`` holds one record per listing:
 the ranked choices, the inputs frozen when they were generated, when, which
 run origin wrote it, and which of its three sections the seller has accepted
 or dismissed. Regeneration replaces it; there is no history and no expiry.
@@ -126,13 +126,14 @@ class ProposalResolution(BaseModel):
 
 
 class ProposalRecord(BaseModel):
-    """``.cache/proposals/<listing-casefold>.json`` (A41)."""
+    """``.cache/proposals/<listing>.json`` (A41)."""
 
     model_config = ConfigDict(populate_by_name=True)
 
     schema_version: int = Field(SCHEMA, alias="schema")
     listing: str
-    """The name as written, since the file is named by its casefold."""
+    """The listing that wrote it. On a case-insensitive filesystem another
+    spelling of the name opens the same file; this is what tells them apart."""
     proposal: ProposalChoices
     snapshot: SeoProposalSnapshot
     generated_at: datetime
@@ -157,7 +158,9 @@ class ProposalStore:
     @contextmanager
     def _lock(self, *listings: str) -> Iterator[None]:
         """Every named record's lock, taken in sorted order so two moves in
-        opposite directions cannot deadlock."""
+        opposite directions cannot deadlock. Keyed by casefold, as the
+        listing write locks are, so two spellings that may be one file on
+        disk are never written at once."""
         with ExitStack() as stack:
             for key in sorted({name.casefold() for name in listings}):
                 with self._guard:
@@ -241,10 +244,11 @@ class ProposalStore:
             record = self.load(old)
             if record is None:
                 return
+            # Unlink first: on a case-insensitive filesystem a case-only
+            # rename's two paths are one file, which a later unlink would
+            # delete straight after writing it.
+            self._workspace.proposal_file(old).unlink(missing_ok=True)
             self._save(record.model_copy(update={"listing": new}))
-            source = self._workspace.proposal_file(old)
-            if source != self._workspace.proposal_file(new):
-                source.unlink(missing_ok=True)
 
     def remove(self, listing: str) -> None:
         """Delete's half of A42, and A44's cleanup after a full apply."""
