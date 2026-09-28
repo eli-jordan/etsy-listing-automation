@@ -301,7 +301,10 @@ class AiRunner:
         self._check(run)
         # A41: cached before it is announced, so whoever hears the event can
         # read it back -- and so it outlives this run and this server.
+        # A delete asks the run to stop before it takes the lock, so a stop
+        # seen here is one the delete's own cleanup will not come back for.
         with self.locks.listing(run.listing):
+            self._check(run)
             if not workspace.listing_file(run.listing).is_file():
                 raise UserFacingError(f"the listing {run.listing!r} no longer exists")
             record = self.proposals.put(

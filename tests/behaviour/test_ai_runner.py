@@ -217,6 +217,25 @@ def test_a_listing_deleted_while_its_proposal_is_written_caches_nothing(chain: C
     assert not chain.workspace.proposal_file(LISTING).exists()
 
 
+def test_a_stop_while_the_proposal_waits_for_the_lock_caches_nothing(chain: Chain) -> None:
+    """A delete stops the run, then takes the listing's lock to clean up
+    (A42). A proposal that was already queued on that lock must not land
+    after the cleanup."""
+    gate = chain.provider.gate("seo")
+    run = chain.start(draft_brief=False)
+    wait_for(lambda: chain.provider.started["seo"].is_set())
+
+    with chain.locks.listing(LISTING):
+        gate.set()
+        wait_for(lambda: chain.provider.count("seo") == 1)
+        threading.Event().wait(0.2)  # the chain reaches the lock and waits
+        run.request_stop("cancelled")
+    wait_until_finished(run)
+
+    assert run.phase == "cancelled"
+    assert chain.proposals.load(LISTING) is None
+
+
 def test_extraction_and_the_proposal_see_the_drafted_brief_and_the_market(chain: Chain) -> None:
     edit_listing(chain.workspace.root, brief="")
 
