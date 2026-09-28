@@ -11,7 +11,7 @@ import {
   proposalEvent,
 } from "../../../test/aiRuns";
 import type { ListingDetail, ListingProposal, SeoReadinessResponse } from "../../../types";
-import { useAiSeoMode } from "./useAiSeoMode";
+import { BATCH_POLL_MS, useAiSeoMode } from "./useAiSeoMode";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
@@ -221,6 +221,42 @@ describe("useAiSeoMode generation", () => {
     runs.cached.proposal = cached;
 
     expect(second.result.current.proposal?.resolution.title).toBe("dismissed");
+  });
+});
+
+describe("useAiSeoMode while a batch owns the listing (A40)", () => {
+  const BATCH = "This listing is drafting in a batch. AI Mode is back once that is done.";
+
+  afterEach(() => vi.useRealTimers());
+
+  it("is disabled with the hint, follows the batch run live, and is back once it is done", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const readiness = vi
+      .spyOn(seoApi, "getSeoReadiness")
+      .mockResolvedValue({ ready: false, reason: BATCH, batch_pending: true });
+    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    await waitFor(() => expect(result.current.reason).toBe(BATCH));
+    expect(result.current.available).toBe(false);
+    expect(runs.streams).toHaveLength(0);
+
+    // The row's turn comes while the editor is open.
+    runs.find.mockResolvedValue(aiRunSummary({ id: "batch-run", origin: "batch" }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BATCH_POLL_MS);
+    });
+    await waitFor(() => expect(runs.streams).toHaveLength(1));
+    expect(runs.stream().runId).toBe("batch-run");
+    expect(result.current.run.busy).toBe(true);
+
+    runs.emit(proposalEvent(proposal()), phaseEvent("done"));
+    expect(result.current.proposal).not.toBeNull();
+    readiness.mockResolvedValue({ ready: true, batch_pending: false });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(BATCH_POLL_MS);
+    });
+
+    await waitFor(() => expect(result.current.available).toBe(true));
+    expect(runs.streams).toHaveLength(1);
   });
 });
 

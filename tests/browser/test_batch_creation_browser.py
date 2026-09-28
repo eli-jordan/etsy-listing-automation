@@ -1,10 +1,16 @@
-"""Browser test for batch creation (batch plan PR 2): New batch, the staging
-review, confirm and the summary, with the real endpoints and the files they
-write, in a real browser.
+"""Browser tests for batch creation (batch plan PR 2 and PR 4): New batch,
+the staging review, confirm, the summary and the batch AI queue, with the
+real endpoints, the files they write and the queue's runs, in a real
+browser.
 
-Drop three PNGs -> fix one name -> Create 3 listings -> the summary shows
-three rows, and each opens an editor whose design is the dropped file,
-asserted on the ``listing.yaml`` and ``designs/*.png`` the UI wrote.
+* Drop three PNGs -> fix one name -> Create 3 listings -> the summary shows
+  three rows, and each opens an editor whose design is the dropped file,
+  asserted on the ``listing.yaml`` and ``designs/*.png`` the UI wrote.
+* Create a batch of two -> both rows reach *done* on the summary -> the
+  editor has the batch run's suggestions waiting (A40, A41).
+
+The app is served with a :class:`~tests.support.ai_runs.ChainProvider` and
+the in-memory Etsy market, so the queue drafts for real without a real CLI.
 """
 
 from __future__ import annotations
@@ -14,10 +20,11 @@ from typing import Any
 
 import pytest
 import yaml
+from playwright.sync_api import expect
 
 from etsy_listings.workspace.workspace import Workspace
 
-from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market
+from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_prompts, seeded_market
 from tests.support.batches import a_listing_template, png
 
 pytestmark = pytest.mark.browser
@@ -69,8 +76,8 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
     page.get_by_text("Each listing is a local draft. Nothing goes to Printify or Etsy.").wait_for()
     create.click()
 
+    page.get_by_text("Work carries on if you close this tab.", exact=False).wait_for()
     rows = page.locator("table.bc-table tbody tr")
-    page.get_by_text("3 of 3 listings created").wait_for()
     assert rows.count() == 3
     names = ["night-hike-club", "cedar-trail", "summit-coffee"]
     for listing, seed in zip(names, DESIGNS.values(), strict=True):
@@ -89,3 +96,36 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
         design_file = page.locator(".design-row__file")
         design_file.wait_for()
         assert design_file.inner_text() == f"designs/{listing}.png"
+
+
+def test_a_batch_of_two_drafts_both_and_the_editor_has_the_suggestions_waiting(  # noqa: ANN001
+    page, workspace_root: Path
+) -> None:
+    a_listing_template(Workspace.discover(root_override=workspace_root))
+    base = page.url.rsplit("/", 1)[0]
+    page.goto(f"{base}/batches/new?template=heavyweight-tee")
+    page.get_by_label("Design files").set_input_files(
+        [
+            {"name": name, "mimeType": "image/png", "buffer": png(seed)}
+            for name, seed in {"lake-loop.png": 4, "pine-ridge-run.png": 5}.items()
+        ]
+    )
+    page.get_by_role("button", name="Create 2 listings").click()
+
+    done = page.get_by_text("Brief, market research and SEO done")
+    expect(done).to_have_count(2)
+    expect(page.locator(".bc-counts")).to_contain_text("2 drafted")
+    expect(page.get_by_text("Ready to review")).to_have_count(2)
+    for listing in ("lake-loop", "pine-ridge-run"):
+        written = yaml.safe_load(
+            (workspace_root / "listings" / listing / "listing.yaml").read_text(encoding="utf-8")
+        )
+        assert written["brief"] == DRAFTED_BRIEF
+
+    page.locator("table.bc-table tbody tr", has_text="lake-loop").get_by_role(
+        "link", name="Open"
+    ).click()
+    page.wait_for_url("**/listings/lake-loop")
+    page.locator(".tabs .seg-opt", has_text="Listing Details").click()
+    page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
+    page.get_by_role("region", name="tag AI suggestions").wait_for(state="visible")

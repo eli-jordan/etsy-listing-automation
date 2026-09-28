@@ -32,6 +32,14 @@ import { useMarketPanel } from "../market/useMarketPanel";
  * stale proposal stays usable: the drawer heading names what changed
  * (PRD 74; UI doc §8).
  *
+ * ## A batch's run (A40)
+ *
+ * While a batch row owns the listing, readiness says `batch_pending`: the
+ * control stays disabled with the server's hint, and every
+ * {@link BATCH_POLL_MS} this asks again and follows the listing's run once
+ * the row's turn comes, so the editor shows the batch run live and opens
+ * its drawers as a manual run's would.
+ *
  * A resolution shows at once and is sent behind it. Every read and every
  * resolution takes a ticket, and only the latest one's answer is kept, so a
  * read that set off before a click cannot reopen the drawer it closed.
@@ -88,6 +96,9 @@ export interface AiSeoMode {
 
 const SECTIONS: Section[] = ["title", "tags", "lead"];
 
+/** How often the editor looks again while batch work owns the listing. */
+export const BATCH_POLL_MS = 3000;
+
 export function useAiSeoMode(
   detail: ListingDetail,
   onUpdate: (patch: Record<string, unknown>) => void,
@@ -107,6 +118,9 @@ export function useAiSeoMode(
   // this to `false` would cost).
   const [remoteReady, setRemoteReady] = useState(false);
   const [remoteReason, setRemoteReason] = useState<string | null>(null);
+  const [batchPending, setBatchPending] = useState(false);
+  /** Bumped by the batch poll, to ask readiness again. */
+  const [poll, setPoll] = useState(0);
   const [record, setRecord] = useState<ListingProposal | null>(null);
   // `onUpdate`/`onFlush`/`detail` as a run's events should see them when they
   // arrive -- a run can take minutes, during which the seller may keep
@@ -179,19 +193,31 @@ export function useAiSeoMode(
         if (current) {
           setRemoteReady(response.ready);
           setRemoteReason(response.reason ?? null);
+          setBatchPending(response.batch_pending);
         }
       })
       .catch(() => {
         if (current) {
           setRemoteReady(false);
           setRemoteReason("Could not check AI setup.");
+          setBatchPending(false);
         }
       });
     read(name);
     return () => {
       current = false;
     };
-  }, [canCheck, name, detail.modified_at, save, read]);
+  }, [canCheck, name, detail.modified_at, save, read, poll]);
+
+  const follow = run.follow;
+  useEffect(() => {
+    if (!batchPending) return;
+    const timer = setInterval(() => {
+      follow();
+      setPoll((n) => n + 1);
+    }, BATCH_POLL_MS);
+    return () => clearInterval(timer);
+  }, [batchPending, follow]);
 
   const ready = canCheck && remoteReady;
   const reason = canCheck && !ready ? (remoteReason ?? "Checking AI setup...") : null;

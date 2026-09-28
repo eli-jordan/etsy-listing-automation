@@ -60,20 +60,6 @@ table.bc-table .bc-num {
   font-variant-numeric: tabular-nums;
   text-align: right;
 }
-/* — progress bar — */
-.bc-progress {
-  display: flex;
-  height: 6px;
-  border-radius: 99px;
-  overflow: hidden;
-  background: var(--color-neutral-300);
-  margin-bottom: var(--space-3);
-}
-.bc-progress > span {
-  display: block;
-  height: 100%;
-}
-
 /* — callouts reuse .dv-callout; this adds an action slot — */
 .bc-callout-actions {
   margin-left: auto;
@@ -242,11 +228,4 @@ table.bc-table .bc-num {
 }
 
 /* The editor's AI step indicator, left-aligned in a table cell. */
-.bc-aiflow-cell {
-  align-items: flex-start;
-}
-.bc-aiflow-cell .aiflow,
-td > .aiflow {
-  margin-left: 0;
-  align-self: flex-start;
-}
+

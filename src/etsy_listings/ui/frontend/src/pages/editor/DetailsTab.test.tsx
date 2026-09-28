@@ -530,7 +530,11 @@ describe("DetailsTab AI Mode", () => {
   it("asks readiness with an empty brief, and again after the listing changes", async () => {
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
-      .mockResolvedValueOnce({ ready: false, reason: "prompts/brief.md is missing", batch_pending: false })
+      .mockResolvedValueOnce({
+        ready: false,
+        reason: "prompts/brief.md is missing",
+        batch_pending: false,
+      })
       .mockResolvedValueOnce({ ready: true, batch_pending: false });
     const { rerender } = render(
       <DetailsTab detail={readyDetail({ brief: "" })} onUpdate={vi.fn()} onFlush={vi.fn()} />,
@@ -553,7 +557,11 @@ describe("DetailsTab AI Mode", () => {
   it("rechecks readiness after save even when modified_at is unchanged", async () => {
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
-      .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty", batch_pending: false })
+      .mockResolvedValueOnce({
+        ready: false,
+        reason: "the listing brief is empty",
+        batch_pending: false,
+      })
       .mockResolvedValueOnce({ ready: true, batch_pending: false });
     const current = readyDetail();
     const { rerender } = render(
