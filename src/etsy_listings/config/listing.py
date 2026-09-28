@@ -286,17 +286,33 @@ class Listing(BaseModel):
         object, not the ``str`` ref -- loading it is the caller's job, the same
         point ``design`` refs get resolved (see the ``pricing_plan`` field's
         docstring)."""
-        override = self.price_overrides.get(color, {}).get(size)
-        if override is not None:
-            return override
-        direct = self.prices.get(size)
-        if direct is not None:
-            return direct
-        if pricing_plan is not None:
-            plan_price = pricing_plan.resolved_price(color, size)
-            if plan_price is not None:
-                return plan_price
-        raise KeyError(
-            f"no price for size {size!r} (colour {color!r}): not in price_overrides, "
-            f"prices, or the referenced pricing plan"
+        return resolve_price(
+            self.prices, self.price_overrides, color, size, pricing_plan=pricing_plan
         )
+
+
+def resolve_price(
+    prices: Mapping[str, Money],
+    price_overrides: Mapping[str, Mapping[str, Money]],
+    color: str,
+    size: str,
+    *,
+    pricing_plan: PricingPlan | None = None,
+) -> Money:
+    """The one precedence rule for a price, for a listing and for a listing
+    template alike (A35 reuses the price models, so it reuses their
+    resolution): ``price_overrides`` > ``prices`` > the plan's own."""
+    override = price_overrides.get(color, {}).get(size)
+    if override is not None:
+        return override
+    direct = prices.get(size)
+    if direct is not None:
+        return direct
+    if pricing_plan is not None:
+        plan_price = pricing_plan.resolved_price(color, size)
+        if plan_price is not None:
+            return plan_price
+    raise KeyError(
+        f"no price for size {size!r} (colour {color!r}): not in price_overrides, "
+        f"prices, or the referenced pricing plan"
+    )

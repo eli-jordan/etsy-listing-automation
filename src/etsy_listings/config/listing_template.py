@@ -32,8 +32,9 @@ import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, ValidationInfo, model_validator
 
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.listing import MediaEntry, check_production_fields
-from etsy_listings.config.money import PriceField
+from etsy_listings.config.listing import MediaEntry, check_production_fields, resolve_price
+from etsy_listings.config.money import Money, PriceField
+from etsy_listings.config.pricing_plan import PricingPlan
 
 
 class TemplateDescriptionConfig(BaseModel):
@@ -87,6 +88,15 @@ class ListingTemplate(BaseModel):
             currency=(info.context or {}).get("currency"),
         )
         return self
+
+    def resolved_price(
+        self, color: str, size: str, *, pricing_plan: PricingPlan | None = None
+    ) -> Money:
+        """`Listing.resolved_price`'s rule: what a listing made from this
+        template would charge, which is what the editor's Pricing tab shows."""
+        return resolve_price(
+            self.prices, self.price_overrides, color, size, pricing_plan=pricing_plan
+        )
 
     @classmethod
     def load(cls, path: Path, *, currency: str) -> ListingTemplate:

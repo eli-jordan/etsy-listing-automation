@@ -127,6 +127,55 @@ class TestCreate:
         assert _create(client, name="draft").status_code == 400  # GET /draft's path
         assert not workspace.listing_templates_dir().exists()
 
+    def test_edits_made_before_naming_are_what_is_written(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        """The *name it* state is the editor (UI doc §1, §3): what the
+        seller changed before naming it is saved, and a file the edit
+        dropped is not copied."""
+        _local_picture(workspace, "./shots/back.png")
+        edit_listing(
+            workspace.root,
+            media=[{"template": "flat-lay-01", "colour": "black"}, "./shots/back.png"],
+        )
+        draft = client.get(f"/api/listing-templates/draft?from_listing={FIXTURE_LISTING}").json()
+
+        response = client.post(
+            "/api/listing-templates",
+            json={
+                "name": NAME,
+                "from_listing": FIXTURE_LISTING,
+                "document": {**_document(draft), "colors": ["black"], "media": [BLACK]},
+            },
+        )
+
+        assert response.json()["saved"] is True
+        assert workspace.load_listing_template(NAME).colors == ["black"]
+        assert not workspace.listing_template_assets_dir(NAME).exists()
+
+    def test_an_edited_document_is_checked_like_a_put(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        draft = client.get(f"/api/listing-templates/draft?from_listing={FIXTURE_LISTING}").json()
+
+        def create(document: dict[str, Any]) -> Any:  # noqa: ANN401
+            return client.post(
+                "/api/listing-templates",
+                json={"name": NAME, "from_listing": FIXTURE_LISTING, "document": document},
+            )
+
+        incomplete = create(
+            {**_document(draft), "colors": [], "media": ["common-media/size-guide.png"]}
+        )
+        malformed = create({**_document(draft), "brief": "no"})
+        unplanned = create({**_document(draft), "media": [BLACK, "./assets/elsewhere.png"]})
+
+        assert incomplete.json()["saved"] is False
+        assert "brief" in malformed.json()["field_errors"]
+        assert unplanned.status_code == 422
+        assert "./assets/elsewhere.png" in unplanned.json()["detail"]
+        assert not workspace.listing_templates_dir().exists()
+
     def test_a_clone_is_created_from_another_template(
         self, client: TestClient, workspace: Workspace
     ) -> None:
@@ -195,6 +244,26 @@ class TestReadAndDelete:
         assert response.json()["name"] == NAME
         assert response.json()["modified_at"] is not None
         assert client.get("/api/listing-templates/nothing-here").status_code == 404
+
+    def test_a_template_reads_back_with_what_the_listing_editor_s_tabs_show(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        """The listing-template editor mounts the listing editor's own tabs
+        (UI doc §3), so a template carries the same computed fields a
+        listing's detail does: resolved prices per size, the garment's
+        materials and the composed description."""
+        edit_listing(workspace.root, etsy={"description": {"lead": "", "text": "Cotton."}})
+        _create(client)
+
+        body = client.get(f"/api/listing-templates/{NAME}").json()
+
+        assert body["resolved_prices"][:2] == [
+            {"size": "S", "amount": "349 NOK"},
+            {"size": "M", "amount": "349 NOK"},
+        ]
+        assert body["garment_materials"] == ["cotton"]
+        assert body["garment_brand"] == "Comfort Colors"
+        assert body["description_composed"] == "Cotton."
 
     def test_delete_removes_the_template(self, client: TestClient, workspace: Workspace) -> None:
         _create(client)
@@ -268,6 +337,89 @@ class TestPut:
 
         assert response.json()["saved"] is True
         assert workspace.load_listing_template(NAME).colors == ["black"]
+
+
+class TestRename:
+    """Double-click the name, exactly like a listing (UI doc §3): the
+    directory moves whole, and a taken name is refused, never suffixed."""
+
+    def test_rename_moves_the_template_and_its_own_files(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        _local_picture(workspace, "./shots/back.png")
+        edit_listing(
+            workspace.root,
+            media=[{"template": "flat-lay-01", "colour": "black"}, "./shots/back.png"],
+        )
+        _create(client)
+
+        response = client.post(
+            f"/api/listing-templates/{NAME}/rename", json={"new_name": "everyday-tee"}
+        )
+
+        assert response.status_code == 200
+        assert response.json()["name"] == "everyday-tee"
+        assert workspace.listing_template_names() == ["everyday-tee"]
+        assert workspace.listing_template_media_file(
+            "everyday-tee", "assets/shots/back.png"
+        ).is_file()
+
+    def test_a_taken_name_is_a_409_and_nothing_moves(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        _create(client)
+        _create(client, name="everyday-tee", from_template=NAME)
+
+        response = client.post(
+            f"/api/listing-templates/{NAME}/rename", json={"new_name": "everyday-tee"}
+        )
+
+        assert response.status_code == 409
+        assert workspace.listing_template_names() == ["everyday-tee", NAME]
+
+    def test_the_same_name_is_not_a_clash(self, client: TestClient) -> None:
+        _create(client)
+
+        response = client.post(f"/api/listing-templates/{NAME}/rename", json={"new_name": NAME})
+
+        assert response.status_code == 200
+
+    def test_bad_names_and_missing_templates_are_refused(self, client: TestClient) -> None:
+        _create(client)
+        rename = f"/api/listing-templates/{NAME}/rename"
+
+        assert client.post(rename, json={"new_name": "../escape"}).status_code == 400
+        assert client.post(rename, json={"new_name": "draft"}).status_code == 400
+        missing = client.post("/api/listing-templates/gone/rename", json={"new_name": "x"})
+        assert missing.status_code == 404
+
+
+class TestMediaFiles:
+    def test_the_template_s_files_are_its_assets_only(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        """The Images tab's *This template* group (UI doc, *Existing
+        components*): what is under ``assets/``, never ``template.yaml``."""
+        _local_picture(workspace, "./shots/back.png")
+        edit_listing(
+            workspace.root,
+            media=[{"template": "flat-lay-01", "colour": "black"}, "./shots/back.png"],
+        )
+        _create(client)
+        Image.new("RGB", (40, 30)).save(workspace.listing_template_dir(NAME) / "stray.png")
+
+        response = client.get(f"/api/listing-templates/{NAME}/media-files")
+
+        assert response.status_code == 200
+        assert response.json() == [
+            {
+                "name": "assets/shots/back.png",
+                "file": f"listing-templates/{NAME}/assets/shots/back.png",
+                "ref": "./assets/shots/back.png",
+                "kind": "image",
+            }
+        ]
+        assert client.get("/api/listing-templates/gone/media-files").status_code == 404
 
 
 def _document(detail: dict[str, Any]) -> dict[str, Any]:

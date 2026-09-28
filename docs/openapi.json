@@ -1308,6 +1308,18 @@
       "CreateListingTemplateRequest": {
         "description": "Save as listing template (``from_listing``) or Clone\n(``from_template``) -- exactly one. There is no blank creation (spec).",
         "properties": {
+          "document": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document"
+          },
           "from_listing": {
             "anyOf": [
               {
@@ -2804,6 +2816,11 @@
             "title": "Colors",
             "type": "array"
           },
+          "description_composed": {
+            "default": "",
+            "title": "Description Composed",
+            "type": "string"
+          },
           "etsy": {
             "$ref": "#/components/schemas/TemplateEtsyConfig",
             "default": {
@@ -2820,6 +2837,53 @@
               }
             ],
             "title": "Garment"
+          },
+          "garment_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Brand"
+          },
+          "garment_materials": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Materials"
+          },
+          "garment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Model"
+          },
+          "garment_product_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Product Type"
           },
           "garment_profile": {
             "title": "Garment Profile",
@@ -2908,6 +2972,14 @@
               }
             ],
             "title": "Pricing Plan Name"
+          },
+          "resolved_prices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResolvedPrice"
+            },
+            "title": "Resolved Prices",
+            "type": "array"
           },
           "source": {
             "anyOf": [
@@ -6777,6 +6849,47 @@
         ]
       }
     },
+    "/api/designs/{design}/thumbnail": {
+      "get": {
+        "description": "A test design, small: what the listing-template editor's\npreview-design row shows beside *Preview design: \u2026* (UI doc \u00a73).",
+        "operationId": "design_thumbnail_api_designs__design__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "design",
+            "required": true,
+            "schema": {
+              "title": "Design",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Design Thumbnail",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
     "/api/etsy/sections": {
       "get": {
         "description": "The live shop's sections, for the Details tab's Section dropdown.\nEmpty (not a 500) for a workspace with no `shop_id` yet or no Etsy app\nkey pair -- both ordinary states short of `setup`/`auth etsy`, and the\nfrontend falls back to a plain text field exactly like it did before this\nendpoint existed.",
@@ -7236,6 +7349,106 @@
         "summary": "Put Listing Template",
         "tags": [
           "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/{name}/rename": {
+      "post": {
+        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). Its name is its directory (A35),\nso the rename is a directory move and its ``./`` refs, which name that\ndirectory, need no rewrite. A taken name is a 409 and never suffixed\n(spec, *Storage and identity*).\n\nBatch records keep the name they were made from: a batch holds its own\nfrozen copy (A37), so it has no link to follow, and its card count is\nhistory, not ownership.",
+        "operationId": "rename_listing_template_api_listing_templates__name__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameListingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/{template}/media-files": {
+      "get": {
+        "description": "The *This template* group (UI doc, *Existing components the template\neditor needs*): the listing template's own files, each with the ``./``\nref that names it from ``template.yaml``. Scoped to ``assets/``.",
+        "operationId": "list_listing_template_media_files_api_listing_templates__template__media_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaFileSummary"
+                  },
+                  "title": "Response List Listing Template Media Files Api Listing Templates  Template  Media Files Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Listing Template Media Files",
+        "tags": [
+          "media-files"
         ]
       }
     },
@@ -8985,7 +9198,7 @@
     },
     "/api/templates/{name}/design-preview": {
       "get": {
-        "description": "A listing's *real* artwork, composited onto this template's saved\ngeometry -- what the listing editor's Variants/Listing Images tabs show\nso a colour can be judged against the actual design, not a bare photo.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file`` -- deliberately not :func:`resolve_design`,\nwhich is the calibrator's own test-design library and never sees a\nlisting's real artwork.",
+        "description": "A listing's *real* artwork, composited onto this template's saved\ngeometry -- what the listing editor's Variants/Listing Images tabs show\nso a colour can be judged against the actual design, not a bare photo.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file`` -- deliberately not :func:`resolve_design`,\nwhich is the calibrator's own test-design library and never sees a\nlisting's real artwork.\n\n``test_design`` is that library's id instead, for the listing-template\neditor (UI doc \u00a73): a listing template has no artwork, so it is viewed\nthrough a calibrator test design, bundled grid by default. Exactly one of\nthe two -- they name files in different places, and guessing which one a\nbare name meant is how a test target would end up judged as artwork.",
         "operationId": "design_preview_api_templates__name__design_preview_get",
         "parameters": [
           {
@@ -9000,10 +9213,33 @@
           {
             "in": "query",
             "name": "design",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Design",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Design"
+            }
+          },
+          {
+            "in": "query",
+            "name": "test_design",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Test Design"
             }
           },
           {

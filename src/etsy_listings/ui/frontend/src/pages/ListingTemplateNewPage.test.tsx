@@ -27,6 +27,8 @@ function draft(over: Partial<ListingTemplateDraft> = {}): ListingTemplateDraft {
     issues: [],
     source: { kind: "listing", name: "take-a-hike" },
     assets: [{ ref: "./assets/shots/back.png", source_ref: "./shots/back.png" }],
+    resolved_prices: [],
+    description_composed: "",
     ...over,
   };
 }

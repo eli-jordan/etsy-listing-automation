@@ -21,6 +21,7 @@ a name: a template called that could be created and never opened.
 from __future__ import annotations
 
 from collections import Counter
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -33,6 +34,7 @@ from pydantic import ValidationError
 # and ``from_template`` (the plan's route), which would shadow the functions.
 from etsy_listings import listing_templates as conversion
 from etsy_listings.batches import BatchStore
+from etsy_listings.config.description import DescriptionConfig
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
@@ -45,7 +47,7 @@ from etsy_listings.listing_templates import (
     save,
     template_issues,
 )
-from etsy_listings.ui.api.listings import field_errors_of
+from etsy_listings.ui.api.listings import field_errors_of, pricing_summary
 from etsy_listings.ui.api.schemas import (
     CreateListingTemplateRequest,
     Issue,
@@ -55,6 +57,7 @@ from etsy_listings.ui.api.schemas import (
     ListingTemplateSource,
     ListingTemplateSummary,
     PixelSize,
+    RenameListingRequest,
 )
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace.facts import WorkspaceFacts
@@ -114,12 +117,29 @@ def _view(
     facts: WorkspaceFacts,
     template: ListingTemplate,
     issues: list[ValidationIssue],
+    *,
+    resolve: Callable[[str], Path],
 ) -> dict[str, Any]:
+    """The document, its issues, and what the listing editor's tabs compute
+    for a listing -- prices, materials, the composed description -- by the
+    listing's own rules (UI doc §3: the tabs are mounted unchanged).
+    ``resolve`` finds a ``./`` ref wherever the template's files are: its
+    own directory once saved, the files it will copy while a draft."""
+    profile = facts.garment_profile(template.garment_profile)
+    _, resolved_prices = pricing_summary(workspace, facts, template, resolve=resolve)
+    body = template.etsy.description
+    described = workspace.resolve_description(DescriptionConfig(text=body.text, ref=body.ref))
     return {
         **template.model_dump(mode="json"),
         "issues": [i.model_dump() for i in _wire(issues)],
         "garment": _garment(facts, template),
         "pricing_plan_name": _plan_name(template),
+        "resolved_prices": [p.model_dump() for p in resolved_prices],
+        "garment_materials": profile.materials if profile is not None else [],
+        "garment_product_type": profile.blueprint.display_title if profile is not None else None,
+        "garment_brand": profile.blueprint.brand if profile is not None else None,
+        "garment_model": profile.blueprint.model if profile is not None else None,
+        "description_composed": described.composed,
     }
 
 
@@ -129,7 +149,13 @@ def _detail(workspace: Workspace, facts: WorkspaceFacts, name: str) -> ListingTe
     modified = workspace.listing_template_file(name).stat().st_mtime
     return ListingTemplateDetail.model_validate(
         {
-            **_view(workspace, facts, template, issues),
+            **_view(
+                workspace,
+                facts,
+                template,
+                issues,
+                resolve=lambda ref: workspace.resolve_template_ref(ref, template=name),
+            ),
             "name": name,
             "modified_at": datetime.fromtimestamp(modified, tz=UTC),
         },
@@ -162,6 +188,27 @@ def _draft(
         ), conversion.from_template(workspace, template)
     except (UnreadableAssetError, ConfigLoadError) as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+def _edited(
+    draft: ListingTemplateDraft, document: dict[str, Any], *, currency: str
+) -> ListingTemplateDraft:
+    """``draft`` with the seller's edited document in place of the source's.
+    It copies only the files the edit still names, and a ``./`` ref it does
+    not plan to copy is refused: the draft has no directory yet, so such a
+    ref could only name a file that will never be there."""
+    template = ListingTemplate.model_validate(document, context={"currency": currency})
+    planned = {asset.ref for asset in draft.assets}
+    unplanned = [ref for ref in conversion.owned_refs(template) if ref not in planned]
+    if unplanned:
+        raise HTTPException(
+            status_code=422,
+            detail=f"{unplanned[0]} is not one of the files this listing template copies",
+        )
+    kept = set(conversion.owned_refs(template))
+    return ListingTemplateDraft(
+        template=template, assets=tuple(a for a in draft.assets if a.ref in kept)
+    )
 
 
 @router.get("", response_model=list[ListingTemplateSummary])
@@ -205,7 +252,16 @@ def listing_template_draft(
     facts = WorkspaceFacts.gather(workspace)
     return ListingTemplateDetail.model_validate(
         {
-            **_view(workspace, facts, draft.template, draft_issues(workspace, draft, facts=facts)),
+            **_view(
+                workspace,
+                facts,
+                draft.template,
+                draft_issues(workspace, draft, facts=facts),
+                resolve=lambda ref: (
+                    draft.source(ref)
+                    or workspace.resolve_ref(ref, listing_dir=workspace.draft_listing_dir())
+                ),
+            ),
             "name": "",
             "modified_at": None,
             "source": source.model_dump(),
@@ -229,6 +285,13 @@ def create_listing_template(
     if body.name == "draft":
         raise HTTPException(status_code=400, detail="'draft' is reserved; pick another name")
     _, draft = _draft(workspace, listing=body.from_listing, template=body.from_template)
+    if body.document is not None:
+        try:
+            draft = _edited(draft, body.document, currency=workspace.defaults.etsy.currency)
+        except ValidationError as exc:
+            return ListingTemplateSaveResult(
+                saved=False, issues=[], field_errors=field_errors_of(exc)
+            )
     facts = WorkspaceFacts.gather(workspace)
     with _locks(request).listing_template(body.name):
         try:
@@ -276,6 +339,35 @@ def put_listing_template(
     return ListingTemplateSaveResult(
         saved=True, issues=_wire(issues), template=_detail(workspace, facts, name)
     )
+
+
+@router.post("/{name}/rename", response_model=ListingTemplateDetail)
+def rename_listing_template(
+    request: Request, name: str, body: RenameListingRequest
+) -> ListingTemplateDetail:
+    """Move a listing template, whole, to a new name -- double-click the
+    name, exactly as a listing (UI doc §3). Its name is its directory (A35),
+    so the rename is a directory move and its ``./`` refs, which name that
+    directory, need no rewrite. A taken name is a 409 and never suffixed
+    (spec, *Storage and identity*).
+
+    Batch records keep the name they were made from: a batch holds its own
+    frozen copy (A37), so it has no link to follow, and its card count is
+    history, not ownership."""
+    workspace = _workspace(request)
+    new = body.new_name
+    destination = workspace.listing_template_dir(new)
+    if new == "draft":
+        raise HTTPException(status_code=400, detail="'draft' is reserved; pick another name")
+    with _locks(request).listing_template(name, new):
+        _require(workspace, name)
+        if new != name:
+            if destination.exists():
+                raise HTTPException(
+                    status_code=409, detail=f"a listing template already exists named {new!r}"
+                )
+            workspace.listing_template_dir(name).rename(destination)
+    return _detail(workspace, WorkspaceFacts.gather(workspace), new)
 
 
 @router.delete("/{name}", status_code=204)

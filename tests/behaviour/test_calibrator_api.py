@@ -343,6 +343,21 @@ class TestDesignLibrary:
         assert response.status_code == 400
         assert "no-such-design" in response.json()["detail"]
 
+    def test_a_test_design_has_a_thumbnail_to_pick_it_by(self, client: TestClient) -> None:
+        """The listing-template editor's preview-design row shows the test
+        design it previews with (UI doc §3)."""
+        client.post(
+            "/api/designs", files={"file": ("my-artwork.png", self._png_bytes(), "image/png")}
+        )
+
+        bundled = client.get("/api/designs/bundled-grid/thumbnail")
+        uploaded = client.get("/api/designs/my-artwork/thumbnail")
+
+        assert bundled.status_code == 200
+        assert bundled.headers["content-type"] == "image/png"
+        assert uploaded.status_code == 200
+        assert client.get("/api/designs/no-such-design/thumbnail").status_code == 400
+
     def test_upload_rejects_a_name_that_escapes_the_workspace(self, client: TestClient) -> None:
         response = client.post(
             "/api/designs",
@@ -599,6 +614,32 @@ class TestDesignPreview:
         with Image.open(BytesIO(full.content)) as img:
             full_size = img.size
         assert full_size[0] > thumb_size[0]
+
+    def test_renders_a_calibrator_test_design_for_the_listing_template_editor(
+        self, client: TestClient
+    ) -> None:
+        """UI doc §3: a listing template has no design of its own, so its
+        editor previews with the calibrator's test designs, bundled grid
+        first."""
+        response = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"test_design": "bundled-grid", "colour": "black"},
+        )
+        assert response.status_code == 200
+        assert response.content[:8] == b"\x89PNG\r\n\x1a\n"
+
+    def test_exactly_one_of_design_and_test_design(self, client: TestClient) -> None:
+        both = client.get(
+            "/api/templates/flat-lay-01/design-preview",
+            params={"design": "take-a-hike", "test_design": "bundled-grid"},
+        )
+        neither = client.get("/api/templates/flat-lay-01/design-preview")
+        unknown = client.get(
+            "/api/templates/flat-lay-01/design-preview", params={"test_design": "nope"}
+        )
+        assert both.status_code == 422
+        assert neither.status_code == 422
+        assert unknown.status_code == 400
 
     def test_unknown_design_404s(self, client: TestClient) -> None:
         response = client.get(

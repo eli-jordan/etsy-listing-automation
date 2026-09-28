@@ -471,6 +471,17 @@ class ListingTemplateDetail(ListingTemplate):
     pricing_plan_name: str | None = None
     source: ListingTemplateSource | None = None
     assets: list[ListingTemplateAsset] = []
+    # What the listing editor's tabs read off a `ListingDetail`, computed the
+    # same way, because the listing-template editor mounts those tabs
+    # unchanged (UI doc §3, *Existing components the template editor needs*).
+    resolved_prices: list[ResolvedPrice] = []
+    garment_materials: list[str] | None = None
+    garment_product_type: str | None = None
+    garment_brand: str | None = None
+    garment_model: str | None = None
+    description_composed: str = ""
+    """The body alone: a template has no lead, and each listing's own is
+    placed above it."""
 
 
 class ListingTemplateSaveResult(BaseModel):
@@ -491,6 +502,11 @@ class CreateListingTemplateRequest(BaseModel):
     name: str
     from_listing: str | None = None
     from_template: str | None = None
+    document: dict[str, Any] | None = None
+    """The seller's edits made before naming it, as ``template.yaml`` would
+    hold them: the *name it* state is the editor (UI doc §1, §3). Absent
+    means the draft as the source gives it. Checked as a ``PUT`` is (A36),
+    and its ``./`` refs must be files the draft copies."""
 
     @model_validator(mode="after")
     def _exactly_one_source(self) -> CreateListingTemplateRequest:
