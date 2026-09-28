@@ -496,7 +496,7 @@ def get_listing(target: Existing) -> ListingDetail:
 
 
 @router.patch("/{name}", response_model=ListingDetail)
-def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
+def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> ListingDetail:
     workspace, name = target.workspace, target.name
     path = workspace.listing_file(name)
     with target.writing():
@@ -507,6 +507,12 @@ def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
         except ValidationError as exc:
             return _detail(workspace, name, field_errors=field_errors_of(exc))
         replace_listing_yaml(path, merged)
+    if raw.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
+        # A42's delete, undone: Cancel on a pending delete (PRD 63) means the
+        # listing never went, so the batch rows the delete marked return.
+        design = merged.get("design")
+        default = design.get("default") if isinstance(design, dict) else None
+        _batch_store(request).restore_listing(name, default)
     return _detail(workspace, name)
 
 

@@ -21,6 +21,7 @@ from fastapi.testclient import TestClient
 
 from etsy_listings.ai.proposals import ProposalStore
 from etsy_listings.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.run import plan_listings
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.ui.api.app import create_app
@@ -202,6 +203,33 @@ def test_deleting_a_listing_cancels_its_run_and_leaves_a_deleted_row(
     assert [r["ai"] for r in _summary(client, batch_id)["rows"]] == ["cancelled", "cancelled"]
     assert provider.count("brief") == 1
     assert _review(client, batch_id, rows[0]["id"]).status_code == 409
+
+
+def test_cancelling_a_pending_delete_restores_the_row(
+    client: TestClient, workspace: Workspace
+) -> None:
+    """A listing with remotes is only marked ``lifecycle: deleted`` (PRD 63);
+    Cancel clears the mark before apply, and the listing never went. Its
+    row comes back, and a Resume can draft it again (A42)."""
+    batch_id = _batch(client, "night-hike-club", "cedar-trail")
+    _drafted(client, batch_id)
+    Lockfile.empty(tool_version="test", applied_at="2026-09-27T12:00:00").model_copy(
+        update={"remote": {"printify_product_id": "abc123"}}
+    ).write(workspace.lock_file("night-hike-club"))
+
+    pending = client.delete("/api/listings/night-hike-club")
+    assert pending.json()["status"] == "pending-delete"
+    assert _summary(client, batch_id)["rows"][0]["deleted"] is True
+
+    cancelled = client.patch("/api/listings/night-hike-club", json={"lifecycle": None})
+    assert cancelled.status_code == 200, cancelled.text
+
+    row = _summary(client, batch_id)["rows"][0]
+    assert (row["deleted"], row["reviewable"]) == (False, True)
+    assert client.get("/api/listings/night-hike-club/batch").json()["batch_id"] == batch_id
+    # An ordinary edit of a listing nobody deleted touches no row.
+    client.patch("/api/listings/cedar-trail", json={"lifecycle": None})
+    assert [r["deleted"] for r in _summary(client, batch_id)["rows"]] == [False, False]
 
 
 # ---------------------------------------------------------- delete batch

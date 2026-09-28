@@ -23,14 +23,13 @@ CREATED = datetime(2026, 9, 27, 11, 42, tzinfo=UTC)
 
 
 def _row(name: str, **fields: Any) -> BatchRow:  # noqa: ANN401
-    values: dict[str, Any] = {"creation": "created", "ai": "done"} | fields
+    values: dict[str, Any] = {"creation": "created", "ai": "done", "design": name} | fields
     return BatchRow(
         id=f"row-{name}",
         sha256="0" * 64,
         sources=[f"{name}.png"],
         base=name,
         name=name,
-        design=name,
         **values,
     )
 
@@ -193,3 +192,17 @@ def test_remove_forgets_the_record_and_its_directory(
     assert store.load("b1") is None
     assert workspace.batch_ids() == []
     assert not workspace.batch_dir("b1").exists()
+
+
+def test_a_restore_brings_back_only_the_rows_for_that_listing_s_design(
+    store: BatchStore,
+) -> None:
+    """A row for an earlier listing wiped under the same name names another
+    design, and stays deleted."""
+    _save(store, "b1", _row("cedar", deleted=True))
+    _save(store, "b2", _row("cedar", deleted=True, design="cedar-old"))
+
+    store.restore_listing("cedar", "designs/cedar.png")
+
+    assert [r.deleted for r in _rows(store, "b1")] == [False]
+    assert [r.deleted for r in _rows(store, "b2")] == [True]

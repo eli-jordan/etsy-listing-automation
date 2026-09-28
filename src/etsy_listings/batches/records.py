@@ -304,6 +304,23 @@ class BatchStore(_Store[Batch]):
             lambda row: {"deleted": True} | ({"ai": "cancelled"} if row.ai == "queued" else {}),
         )
 
+    def restore_listing(self, listing: str, design: str | None) -> None:
+        """A pending delete cancelled (PRD 63's Cancel clears ``lifecycle:
+        deleted`` before apply): the listing never went, so its rows are no
+        longer deleted. Only a row whose design target is the listing's
+        design (``design``, its ``design.default`` ref) comes back -- a row
+        for an earlier listing wiped under the same name is not this one's.
+        The AI state stays as the delete left it; Resume queues a
+        ``cancelled`` row again."""
+        self._each_row(
+            lambda row: (
+                row.deleted
+                and row.name == listing
+                and self._workspace.design_ref(row.design) == design
+            ),
+            lambda _: {"deleted": False},
+        )
+
     def _each_row(
         self,
         which: Callable[[BatchRow], bool],
