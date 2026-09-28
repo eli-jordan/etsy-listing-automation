@@ -157,6 +157,41 @@ def test_an_ok_apply_that_leaves_the_incomplete_marker_keeps_the_proposal(
     assert has_proposal(workspace_root)
 
 
+def test_a_stop_after_the_last_runnable_stage_still_removes_the_proposal(
+    workspace_root: Path,
+) -> None:
+    """A stop observed at a trailing no-op skipped no deploy work, so A44's
+    three full-success conditions still remove the deployed proposal."""
+    ctx = a_deployable_context(workspace_root)
+    first = apply_listings(ctx, [LISTING], real_stages())
+    assert first.outcomes[0].ok, first.outcomes[0].error
+    ctx.workspace.render_file(LISTING, "flat-lay-01", "black").unlink()
+    seed_proposal(workspace_root)
+    planned = plan_listings(ctx, [LISTING], real_stages()).outcomes[0].planned
+    assert planned is not None
+    runnable = sum(stage.will_run for stage in planned.plan.stage_plans)
+    assert 0 < runnable < len(planned.plan.stage_plans)
+    started = {"count": 0}
+
+    def count_started(event: EngineRunEvent) -> None:
+        if isinstance(event, EngineStageApplying):
+            started["count"] += 1
+
+    def stop_after_last_runnable_stage() -> bool:
+        return started["count"] == runnable
+
+    report = apply_listings(
+        ctx,
+        [LISTING],
+        real_stages(),
+        on_event=count_started,
+        should_stop=stop_after_last_runnable_stage,
+    )
+
+    assert report.outcomes[0].ok, report.outcomes[0].error
+    assert not has_proposal(workspace_root)
+
+
 def test_full_success_needs_the_marker_clear_whatever_else_holds(workspace_root: Path) -> None:
     """The marker is A44's third condition on its own: the same ``ok``,
     unblocked outcome is a full success with a clean lockfile and is not

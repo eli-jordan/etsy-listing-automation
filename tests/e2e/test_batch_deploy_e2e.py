@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import shutil
 from collections.abc import Callable, Iterator, Sequence
+from dataclasses import replace
 from pathlib import Path
 from typing import Any
 
@@ -41,8 +42,6 @@ from etsy_listings.ai.market_queries import default_market_queries_prompt_text
 from etsy_listings.ai.prompt import default_seo_prompt_text
 from etsy_listings.ai.providers import AiProvider
 from etsy_listings.clients.etsy import HttpEtsyListingClient
-from etsy_listings.clients.printify import HttpCatalogClient
-from etsy_listings.clients.printify import Transport as PrintifyTransport
 from etsy_listings.clients.printify.protocol import PrintifyClient
 from etsy_listings.engine.context import EventSink, RunContext
 from etsy_listings.engine.lock import Lockfile
@@ -93,19 +92,14 @@ def workspace(
 @pytest.fixture
 def client(
     workspace: Workspace,
-    printify_token: str,
-    printify_client: PrintifyClient,
-    etsy_client: HttpEtsyListingClient,
+    credentials_workspace: Workspace,
     etsy_market_workspace: Workspace,
     ai_providers: Callable[[Workspace], Sequence[AiProvider]],
 ) -> Iterator[TestClient]:
-    catalog = HttpCatalogClient(PrintifyTransport(printify_token))
+    context = connections.run_context(credentials_workspace)
 
     def real_context(ws: Workspace, on_event: EventSink | None) -> RunContext:
-        sink = {"on_event": on_event} if on_event is not None else {}
-        return RunContext(
-            workspace=ws, catalog=catalog, printify=printify_client, etsy=etsy_client, **sink
-        )
+        return replace(context, workspace=ws, on_event=on_event or context.on_event)
 
     app = create_app(
         workspace,

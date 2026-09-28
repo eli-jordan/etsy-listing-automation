@@ -177,7 +177,8 @@ def test_apply_listings_without_should_stop_behaves_as_before(workspace_root: Pa
     report = apply_listings(ctx, [LISTING], [_Stage("render")])  # type: ignore[list-item]
 
     assert not report.failed
-    assert (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
+    workspace = Workspace.discover(root_override=workspace_root)
+    assert workspace.lock_file(LISTING).is_file()
 
 
 def test_a_stop_before_etsy_listing_does_not_consume_renew(workspace_root: Path) -> None:
@@ -218,4 +219,5 @@ def test_a_stop_before_retract_keeps_the_listing(workspace_root: Path) -> None:
 
     apply_listings(a_context(workspace_root), [LISTING], [_Stage("render")], should_stop=stop)  # type: ignore[list-item]
 
-    assert (workspace_root / "listings" / LISTING / "listing.yaml").is_file()
+    workspace = Workspace.discover(root_override=workspace_root)
+    assert workspace.listing_file(LISTING).is_file()

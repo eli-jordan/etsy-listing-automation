@@ -35,6 +35,7 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
   Codex first, then Claude, then Grok.
 - ``orchestrator`` -- `run_task`, and the three entry points over it,
   `generate_proposal`, `generate_brief` and `generate_market_queries`.
+- ``proposals`` -- ``ProposalStore``, the durable latest proposal per listing.
 - ``errors`` -- the exception hierarchy `orchestrator` and both adapters
   raise, and `classify_process_failure`, the availability classifier.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
@@ -108,6 +109,7 @@ from etsy_listings.ai.prompt import (
     seed_prompt,
     sync_prompt,
 )
+from etsy_listings.ai.proposals import ProposalStore
 from etsy_listings.ai.providers import AiProvider, FakeAiProvider
 from etsy_listings.ai.validation import ProposalValidationError, validate_proposal
 
@@ -131,6 +133,7 @@ __all__ = [
     "PhraseRationale",
     "ProcessResult",
     "ProposalValidationError",
+    "ProposalStore",
     "ProposalWarning",
     "ProviderCancelledError",
     "ProviderGenerationError",

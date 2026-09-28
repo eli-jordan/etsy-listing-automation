@@ -101,8 +101,9 @@ def execute(
     stage identity attached here rather than reconstructed by a caller.
 
     **``should_stop`` is a graceful pause, not a failure (A33, decision 7's
-    shutdown paragraph).** Checked before each stage that has not started yet
-    -- never inside one, so a stage already running always finishes and
+    shutdown paragraph).** Checked before each stage that would run and has
+    not started yet -- idle stages are not work to stop -- and never inside
+    one, so a stage already running always finishes and
     records itself exactly as A29 already guarantees. Stopping early leaves
     ``incomplete`` exactly as it was: unlike a raise, nothing here failed, so
     no new marker is set; but the plan was not fully carried out either, so an
@@ -119,12 +120,12 @@ def execute(
     stopped = False
 
     for state in planned.states:
-        if should_stop():
-            stopped = True
-            break
         stage_plan = state.stage_plan
         if not stage_plan.will_run:
             continue
+        if should_stop():
+            stopped = True
+            break
         stage = state.stage
         on_event(EngineStageApplying(listing, stage.name))
         stage_name = stage.name

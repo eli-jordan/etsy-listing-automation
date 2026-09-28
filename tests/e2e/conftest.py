@@ -249,7 +249,9 @@ def etsy_client(
         transport.ping()
     except EtsyAuthError as exc:
         prerequisite_missing(f"Etsy app key rejected: {exc}")
-    return HttpEtsyListingClient(transport)
+    client = connections.etsy_listing_client(root)
+    assert isinstance(client, HttpEtsyListingClient)
+    return client
 
 
 @pytest.fixture(scope="session")

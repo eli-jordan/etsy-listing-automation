@@ -141,7 +141,7 @@ def _idle(client: TestClient) -> None:
     assert _queue(client).wait_idle(timeout=15)
 
 
-def test_a_plan_waits_for_the_running_row_to_stop_and_resume_leaves_it(
+def test_an_apply_waits_for_the_running_row_to_stop_and_resume_leaves_it(
     client: TestClient, provider: ChainProvider, deploys: Deploys
 ) -> None:
     gate = provider.gate("brief")
@@ -151,7 +151,7 @@ def test_a_plan_waits_for_the_running_row_to_stop_and_resume_leaves_it(
     seen: list[str] = []
     deploys.on_start = lambda: seen.append(run.phase)
 
-    assert _finished(client, _deploy(client, "plan", "night-hike-club")) == "ready"
+    assert _finished(client, _deploy(client, "apply", "night-hike-club")) == "applied"
 
     assert seen == ["cancelled"], "planning read the listing before the AI run had stopped"
     assert provider.cancelled == ["brief"]

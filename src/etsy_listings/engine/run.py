@@ -32,7 +32,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from etsy_listings import __about__
-from etsy_listings.ai.proposals import ProposalStore
+from etsy_listings.ai import ProposalStore
 from etsy_listings.config.money import Money
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.change import Plan
