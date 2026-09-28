@@ -5,6 +5,8 @@ and each run's event buffer -- pure state, no thread and no workspace.
 
 from __future__ import annotations
 
+import threading
+
 from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict
 
 
@@ -164,3 +166,52 @@ def test_forgetting_a_listing_leaves_a_running_run_to_end_on_its_own() -> None:
     registry.forget("take-a-hike")
 
     assert registry.latest("take-a-hike") is run
+
+
+def test_a_run_is_manual_unless_the_batch_queue_created_it() -> None:
+    """A40: a batch run is an ordinary run with origin ``batch``."""
+    registry = _registry()
+
+    assert _create(registry, "take-a-hike").origin == "manual"
+    batch = registry.create("sunset", draft_brief=True, origin="batch")
+    assert isinstance(batch, AiRun)
+    assert batch.origin == "batch"
+
+
+def test_every_subscriber_hears_each_run_finish_once() -> None:
+    """The batch queue's wake-up and its row update (A40): a run that
+    finishes -- batch or manual -- is handed to every subscriber, after its
+    terminal event, and a second ``finish`` is not heard again."""
+    registry = _registry()
+    heard: list[tuple[str, str]] = []
+    registry.subscribe(lambda run: heard.append((run.id, run.phase)))
+    manual = _create(registry, "take-a-hike")
+    batch = registry.create("sunset", draft_brief=True, origin="batch")
+    assert isinstance(batch, AiRun)
+
+    batch.finish("failed", "no provider")
+    batch.finish("done")
+    manual.finish("cancelled")
+
+    assert heard == [(batch.id, "failed"), (manual.id, "cancelled")]
+
+
+def test_a_subscriber_is_called_outside_the_run_s_lock() -> None:
+    """Another thread can read the run while a subscriber is still being
+    called, so a subscriber that takes the batch store's lock cannot
+    deadlock against a request that holds it and reads the run."""
+    registry = _registry()
+    seen: list[list[str]] = []
+
+    def read_from_another_thread(run: AiRun) -> None:
+        reader = threading.Thread(target=lambda: seen.append([s.state for s in run.steps]))
+        reader.start()
+        reader.join(timeout=5)
+
+    registry.subscribe(read_from_another_thread)
+    run = _create(registry)
+    run.step("brief", "done")
+
+    run.finish("done")
+
+    assert seen == [["done", "pending", "pending"]]

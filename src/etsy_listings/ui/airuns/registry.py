@@ -31,6 +31,10 @@ from etsy_listings.ui.airuns.events import (
 )
 
 StopReason = Literal["cancelled", "timeout", "shutdown"]
+RunOrigin = Literal["manual", "batch"]
+"""Who started the run: the editor's AI Mode, or the batch queue (A40). A
+batch run is otherwise an ordinary run -- same chain, same limit."""
+FinishListener = Callable[["AiRun"], None]
 
 
 def _now() -> datetime:
@@ -49,12 +53,17 @@ class AiRun:
     id: str
     listing: str
     draft_brief: bool
+    origin: RunOrigin = "manual"
     created_at: datetime = field(default_factory=_now)
     finished_at: datetime | None = None
     events: list[AnyAiRunEvent] = field(default_factory=list)
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
     stop_reason: StopReason | None = None
     condition: threading.Condition = field(default_factory=threading.Condition, repr=False)
+    on_finish: tuple[FinishListener, ...] = field(default=(), repr=False)
+    """Called once the run has finished, on the thread that finished it and
+    outside ``condition`` -- a listener takes other locks (the batch
+    store's), and a request holding one of those may be reading this run."""
     _phase: AiRunPhase = "running"
     _steps: dict[StepId, WorkflowStep] = field(
         default_factory=lambda: {i: WorkflowStep(id=i, state="pending") for i in STEP_IDS}
@@ -93,13 +102,16 @@ class AiRun:
         self.emit(lambda seq: AiStepEvent(seq=seq, id=step, state=state, detail=detail))
 
     def finish(self, phase: TerminalPhase, message: str | None = None) -> None:
-        """Emit the terminal ``phase`` event. Only the first call counts."""
+        """Emit the terminal ``phase`` event, then tell the listeners. Only
+        the first call counts."""
         with self.condition:
             if self.finished:
                 return
             self.emit(lambda seq: AiPhaseEvent(seq=seq, phase=phase, message=message))
             self._phase = phase
             self.finished_at = _now()
+        for listener in self.on_finish:
+            listener(self)
 
     def request_stop(self, reason: StopReason) -> bool:
         """Ask the run to stop: sets the cancel event, which kills a provider's
@@ -140,8 +152,17 @@ class AiRunRegistry:
         self._runs: dict[str, AiRun] = {}
         self._latest: dict[str, str] = {}
         self._id_source = id_source
+        self._listeners: list[FinishListener] = []
 
-    def create(self, listing: str, *, draft_brief: bool) -> AiRun | Conflict:
+    def subscribe(self, listener: FinishListener) -> None:
+        """Hear every run this registry creates from now on finish -- the
+        batch queue's wake-up, and how its rows learn their outcome (A40)."""
+        with self._lock:
+            self._listeners.append(listener)
+
+    def create(
+        self, listing: str, *, draft_brief: bool, origin: RunOrigin = "manual"
+    ) -> AiRun | Conflict:
         key = listing.casefold()
         with self._lock:
             previous = self._runs.get(self._latest.get(key, ""))
@@ -149,7 +170,13 @@ class AiRunRegistry:
                 if not previous.finished:
                     return Conflict(active_run=previous.id)
                 del self._runs[previous.id]
-            run = AiRun(id=self._id_source(), listing=listing, draft_brief=draft_brief)
+            run = AiRun(
+                id=self._id_source(),
+                listing=listing,
+                draft_brief=draft_brief,
+                origin=origin,
+                on_finish=tuple(self._listeners),
+            )
             self._runs[run.id] = run
             self._latest[key] = run.id
             return run
