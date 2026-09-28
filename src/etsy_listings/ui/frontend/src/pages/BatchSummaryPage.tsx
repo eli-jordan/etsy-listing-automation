@@ -21,6 +21,7 @@ import {
 } from "../api/batches";
 import { listingDesignThumbnailUrl } from "../api/listings";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { clock, dayMonth } from "../dates";
 import { EditableName } from "../components/EditableName";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 
@@ -54,12 +55,8 @@ function place(position: number): string {
 
 function createdAt(iso: string): string {
   const created = new Date(iso);
-  const time = created.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
   const today = created.toDateString() === new Date().toDateString();
-  const day = today
-    ? "today"
-    : `on ${created.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`;
-  return `${day} at ${time}`;
+  return `${today ? "today" : `on ${dayMonth(created)}`} at ${clock(created)}`;
 }
 
 type Kind = "drafted" | "drafting" | "queued" | "retry" | "stopped" | "deleted" | "none";

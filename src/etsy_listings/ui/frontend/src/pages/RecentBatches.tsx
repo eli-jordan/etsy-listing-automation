@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { listBatches, type BatchIndexEntry, type BatchStatus } from "../api/batches";
+import { clock, dayMonth } from "../dates";
 
 /**
  * Recent batches (UI doc §2; the `templates` frame): every batch and every
@@ -34,7 +35,7 @@ export function BatchStatusTag({ status }: { status: BatchStatus }) {
 }
 
 function day(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return dayMonth(new Date(iso));
 }
 
 function created(iso: string): string {
@@ -42,7 +43,7 @@ function created(iso: string): string {
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   if (when.toDateString() === new Date().toDateString()) {
-    return `Today ${when.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`;
+    return `Today ${clock(when)}`;
   }
   if (when.toDateString() === yesterday.toDateString()) return "Yesterday";
   return day(iso);
