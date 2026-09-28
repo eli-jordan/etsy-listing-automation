@@ -186,7 +186,7 @@ class TestConfirm:
         response = client.post(f"/api/staging/{staged['id']}/confirm")
 
         assert response.status_code == 409
-        assert response.json()["detail"] == "Fix 1 names to create the listings."
+        assert response.json()["detail"] == "Fix 1 name to create the listings."
         assert workspace.listing_names() == ["take-a-hike"]
 
     def test_retry_creates_a_failed_row(self, client: TestClient, workspace: Workspace) -> None:

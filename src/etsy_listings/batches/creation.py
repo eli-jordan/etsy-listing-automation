@@ -116,7 +116,10 @@ def _start(
         raise KeyError(session_id)
     reviewed = review(workspace, session)
     if reviewed.name_problems:
-        raise ConfirmRefused(f"Fix {reviewed.name_problems} names to create the listings.")
+        count = reviewed.name_problems
+        raise ConfirmRefused(
+            f"Fix {count} {'name' if count == 1 else 'names'} to create the listings."
+        )
     if not reviewed.creatable:
         raise ConfirmRefused("There is no design here that can become a listing.")
     template = ListingTemplate.model_validate(

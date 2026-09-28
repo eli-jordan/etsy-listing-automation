@@ -110,11 +110,19 @@ class TestConfirm:
     ) -> None:
         id_ = _stage(workspace, staging, DESIGNS[0], ("★★★.png", png(8)))
 
-        with pytest.raises(ConfirmRefused, match="Fix 1 names"):
+        with pytest.raises(ConfirmRefused, match="Fix 1 name to"):
             _confirm(workspace, staging, batches, id_)
 
         assert _created(workspace) == []
         assert batches.load(id_) is None
+
+    def test_two_name_problems_are_counted_in_the_plural(
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+    ) -> None:
+        id_ = _stage(workspace, staging, ("★★★.png", png(8)), ("☆☆☆.png", png(9)))
+
+        with pytest.raises(ConfirmRefused, match="Fix 2 names to create the listings."):
+            _confirm(workspace, staging, batches, id_)
 
     def test_a_name_claimed_between_staging_and_confirm_gets_a_fresh_suffix(
         self, workspace: Workspace, staging: StagingStore, batches: BatchStore
