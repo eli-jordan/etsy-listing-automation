@@ -187,8 +187,10 @@ def test_deleting_a_listing_cancels_its_run_and_leaves_a_deleted_row(
     batch_id = _batch(client, "night-hike-club", "cedar-trail")
     wait_for(lambda: provider.started["brief"].is_set())
 
-    assert client.delete("/api/listings/night-hike-club").status_code == 204
+    # The queued row first: deleted while the other still holds the one
+    # slot, so the queue never starts it. The running one is stopped.
     assert client.delete("/api/listings/cedar-trail").status_code == 204
+    assert client.delete("/api/listings/night-hike-club").status_code == 204
 
     wait_for(lambda: provider.cancelled == ["brief"])
     wait_for(lambda: _summary(client, batch_id)["rows"][0]["ai"] == "cancelled")
