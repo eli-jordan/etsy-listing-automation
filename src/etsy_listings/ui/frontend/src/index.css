@@ -2136,6 +2136,21 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 65%, transparent);
 }
 
+/* A colour's name in the own-design line: previews that colour. */
+.design-select__colour {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  cursor: pointer;
+}
+
+.design-select__colour:hover {
+  text-decoration: underline;
+}
+
 .design-pair {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
@@ -2444,6 +2459,50 @@ table.listings tbody tr:last-child td {
 
 .color-row--off .color-row__swatch {
   opacity: 0.45;
+}
+
+/* A colour's own design (interactions Part 2 §5): the tag beside its name,
+   and the chip of the file each sold colour prints, on its own cloth. */
+.color-row__own {
+  padding: 1px 7px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.color-row__chip {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid color-mix(in srgb, var(--color-text) 18%, transparent);
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  cursor: pointer;
+  transition: box-shadow 0.12s ease;
+}
+
+.color-row__chip img {
+  width: 88%;
+  height: 88%;
+  object-fit: contain;
+}
+
+.color-row__chip:hover,
+.color-row__chip:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--color-accent);
+}
+
+.color-row__chip--own {
+  box-shadow: 0 0 0 2px var(--color-accent-2);
+}
+
+.color-row__chip--empty {
+  background: transparent;
+  border: 1.5px dashed var(--color-warning);
 }
 
 /* A switch is a `<button role="switch">` here, not a styled checkbox --

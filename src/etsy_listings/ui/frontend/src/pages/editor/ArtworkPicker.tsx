@@ -8,8 +8,9 @@ import type { ListingDesignSummary } from "../../types";
  * The full design list, for whichever target is choosing a file (interactions
  * Part 1 §4, Part 2 §4): titled for it, hinting who prints it, with every
  * thumbnail on that target's cloth and the current file marked. Base slots
- * reach it through **Find a design…**; a colour's own design (multi-artwork
- * plan, PR 3) will open it directly.
+ * reach it through **Find a design…**; a colour's own design opens it
+ * directly, with no Recent panel, because an own design is rare and
+ * deliberate (Part 1 §6).
  */
 
 interface Props {

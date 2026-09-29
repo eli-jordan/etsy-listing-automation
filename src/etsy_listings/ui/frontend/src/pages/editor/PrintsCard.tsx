@@ -1,7 +1,15 @@
 import { listingDesignThumbnailUrl } from "../../api/listings";
 import { refName } from "../../media";
 import type { DesignMap } from "../../types";
-import { cap, isLinked, resolve, toneLabel, TILE, type Tone } from "./artwork";
+import {
+  canHaveOwnDesign,
+  cap,
+  clothFor,
+  resolve,
+  toneLabel,
+  wouldPrintAutomatically,
+  type Tone,
+} from "./artwork";
 
 /**
  * "What this colour prints", under the Variants stage (interactions Part 1
@@ -10,10 +18,13 @@ import { cap, isLinked, resolve, toneLabel, TILE, type Tone } from "./artwork";
  * The stage shows the file; this says in words where it came from, because
  * resolution has three sources and depends on shared garment data, and a
  * seller who cannot see why a colour prints a file cannot fix it when it is
- * wrong. Only the base-slot states offer an action here -- filling an empty
- * slot, which fixes every colour that needs it at once. A colour's own design
- * and its actions arrive with the colour-exception work (multi-artwork plan,
- * PR 3).
+ * wrong. Its actions follow the state (Part 2 §6): a colour's own design
+ * offers **Change** and **Use automatic design**, having already said what
+ * automatic would print, so going back needs no confirmation; an empty slot
+ * offers to fill the slot first, because that fixes every colour that needs
+ * it at once; anything else offers the colour its own design. A colour with
+ * no tone offers nothing -- tone is shared garment data, and an own design
+ * does not stand in for it (spec: *Artwork resolution*).
  */
 
 interface Props {
@@ -26,6 +37,10 @@ interface Props {
   swatch: string | undefined;
   /** Opens that slot's Recent designs panel in the strip above the tabs. */
   onChooseSlot: (tone: Tone) => void;
+  /** Opens the colour's own design picker. */
+  onPickColour: () => void;
+  /** Removes the colour's own design. */
+  onAutomatic: () => void;
 }
 
 export function PrintsCard({
@@ -36,6 +51,8 @@ export function PrintsCard({
   tones,
   swatch,
   onChooseSlot,
+  onPickColour,
+  onAutomatic,
 }: Props) {
   const name = cap(colour);
   if (!enabled) {
@@ -47,7 +64,6 @@ export function PrintsCard({
   }
 
   const resolution = resolve(design, colour, tones);
-  const tone = tones[colour];
   let title: string;
   let why: string;
   switch (resolution.kind) {
@@ -68,7 +84,9 @@ export function PrintsCard({
       if (resolution.source === "default") {
         why = "Automatic: the one design for all shirts.";
       } else if (resolution.source === "colour") {
-        why = `Its own design, for ${name} only.`;
+        why = `Its own design, for ${name} only.${automaticWouldPrint(
+          wouldPrintAutomatically(design, colour, tones),
+        )}`;
       } else {
         const slot = resolution.source === "on-light" ? "light" : "dark";
         why = `Automatic: the design for ${toneLabel(slot)}, because ${profile} marks ${colour} ${slot}.`;
@@ -78,8 +96,7 @@ export function PrintsCard({
   }
 
   const file = resolution.kind === "resolved" ? resolution.ref : null;
-  // Judged on its own cloth: the sampled swatch, else the tone's tile.
-  const cloth = swatch ?? (tone === undefined || isLinked(design) ? TILE.neutral : TILE[tone]);
+  const own = resolution.kind === "resolved" && resolution.source === "colour";
   return (
     <div
       className={
@@ -87,7 +104,10 @@ export function PrintsCard({
       }
     >
       {file !== null ? (
-        <span className="color-prints__thumb" style={{ background: cloth }}>
+        <span
+          className="color-prints__thumb"
+          style={{ background: clothFor(colour, swatch, design, tones) }}
+        >
           <img src={listingDesignThumbnailUrl(refName(file))} alt="" />
         </span>
       ) : (
@@ -100,17 +120,66 @@ export function PrintsCard({
           <div className="color-prints__note">Listing Images and Printify use this same file.</div>
         )}
       </div>
-      {resolution.kind === "slot-empty" && (
+      {resolution.kind !== "unclassified" && canHaveOwnDesign(design) && (
         <div className="color-prints__actions">
-          <button
-            type="button"
-            className="btn-like btn-like--primary btn-sm color-prints__btn"
-            onClick={() => onChooseSlot(resolution.tone)}
-          >
-            Choose design for {toneLabel(resolution.tone)}
-          </button>
+          {own ? (
+            <>
+              <button
+                type="button"
+                className="btn-like btn-sm color-prints__btn"
+                onClick={onPickColour}
+              >
+                Change
+              </button>
+              <button
+                type="button"
+                className="btn-like btn-like--ghost btn-sm color-prints__btn"
+                onClick={onAutomatic}
+              >
+                Use automatic design
+              </button>
+            </>
+          ) : resolution.kind === "slot-empty" ? (
+            <>
+              <button
+                type="button"
+                className="btn-like btn-like--primary btn-sm color-prints__btn"
+                onClick={() => onChooseSlot(resolution.tone)}
+              >
+                Choose design for {toneLabel(resolution.tone)}
+              </button>
+              <button
+                type="button"
+                className="btn-like btn-like--ghost btn-sm color-prints__btn"
+                onClick={onPickColour}
+              >
+                Select different design for {name}
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="btn-like btn-sm color-prints__btn"
+              onClick={onPickColour}
+            >
+              Select different design
+            </button>
+          )}
         </div>
       )}
     </div>
   );
+}
+
+/** " Back on automatic it would print …" -- nothing when automatic prints
+ * nothing, since there is then no file to name. */
+function automaticWouldPrint(fallback: ReturnType<typeof resolve>): string {
+  if (fallback.kind !== "resolved") return "";
+  const slot =
+    fallback.source === "on-light"
+      ? `, the design for ${toneLabel("light")}`
+      : fallback.source === "on-dark"
+        ? `, the design for ${toneLabel("dark")}`
+        : "";
+  return ` Back on automatic it would print ${refName(fallback.ref)}${slot}.`;
 }

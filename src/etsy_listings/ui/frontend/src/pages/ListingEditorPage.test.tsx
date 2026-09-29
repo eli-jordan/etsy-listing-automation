@@ -437,6 +437,76 @@ describe("ListingEditorPage", () => {
     expect(scrollTo).toHaveBeenCalled();
   });
 
+  it("previews a colour named in the strip's own-design line, from any tab", async () => {
+    /* Interactions Part 2 §1: the names in "Also printing their own design"
+       preview the colour, so the previewed colour is the shell's. */
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      {
+        name: "comfort-colors-1717",
+        sizes: ["S"],
+        colors: { black: "dark", moss: "dark" },
+        preview_template: "flat-lay-01",
+      },
+    ]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({
+        colors: ["black", "moss"],
+        design: { default: "designs/take-a-hike.png", moss: "designs/moss.png" },
+      }),
+    );
+    const { container } = renderAt("/listings/take-a-hike");
+    await screen.findByText(/Also printing their own design:/);
+    fireEvent.click(screen.getByText("Listing Details"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Moss" }));
+
+    const card = await waitFor(() => {
+      const el = container.querySelector(".color-prints");
+      if (el === null) throw new Error("no card yet");
+      return el as HTMLElement;
+    });
+    expect(card).toHaveTextContent("Moss prints moss");
+    expect(screen.getByText("moss").closest(".color-row")).toHaveClass("color-row--selected");
+  });
+
+  it("saves a colour's own design through autosave without starting AI", async () => {
+    /* Spec, *Representative artwork*: a colour's own design is print
+       treatment, never a new listing concept. */
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      {
+        name: "comfort-colors-1717",
+        sizes: ["S"],
+        colors: { black: "dark", moss: "dark" },
+        preview_template: "flat-lay-01",
+      },
+    ]);
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "take-a-hike", file: "designs/take-a-hike.png" },
+      { name: "moss-special", file: "designs/moss-special.png" },
+    ]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ colors: ["black", "moss"] }));
+    const patchSpy = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(
+      detail({
+        colors: ["black", "moss"],
+        design: { default: "designs/take-a-hike.png", moss: "designs/moss-special.png" },
+      }),
+    );
+    renderAt("/listings/take-a-hike");
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Select different design for Moss" }),
+    );
+    const dialog = await screen.findByRole("dialog", { name: "Design for Moss" });
+    fireEvent.click(await within(dialog).findByRole("button", { name: /moss-special/ }));
+
+    await waitFor(() =>
+      expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
+        design: { default: "designs/take-a-hike.png", moss: "designs/moss-special.png" },
+      }),
+    );
+    expect(runs.start).not.toHaveBeenCalled();
+  });
+
   it("shows Draft for an unpublished listing and no open-elsewhere menu", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ status: "draft" }));
     renderAt("/listings/take-a-hike");

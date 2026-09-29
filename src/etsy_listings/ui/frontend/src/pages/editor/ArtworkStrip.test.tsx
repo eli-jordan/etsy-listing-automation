@@ -42,11 +42,13 @@ function Harness({
   design,
   colours,
   onChange,
+  onPreview = () => undefined,
   initialOpen = null,
 }: {
   design: DesignMap;
   colours: string[];
   onChange: (next: DesignMap, picked: string | null) => void;
+  onPreview?: (colour: string) => void;
   initialOpen?: SlotTarget | null;
 }) {
   const [open, setOpen] = useState<SlotTarget | null>(initialOpen);
@@ -58,6 +60,7 @@ function Harness({
       open={open}
       onOpen={setOpen}
       onChange={onChange}
+      onPreview={onPreview}
     />
   );
 }
@@ -100,6 +103,22 @@ describe("ArtworkStrip reading a linked pair (interactions §1)", () => {
     expect(screen.getByText(/Also printing their own design:/)).toHaveTextContent(
       "Also printing their own design: Moss",
     );
+  });
+
+  it("previews a colour with its own design when its name is pressed", async () => {
+    const onPreview = vi.fn();
+    render(
+      <Harness
+        design={{ default: HIKE, moss: "designs/moss.png", navy: "designs/navy.png" }}
+        colours={ALL}
+        onChange={vi.fn()}
+        onPreview={onPreview}
+      />,
+    );
+    const line = await screen.findByText(/Also printing their own design:/);
+    expect(line).toHaveTextContent("Also printing their own design: Moss, Navy");
+    fireEvent.click(within(line).getByRole("button", { name: "Moss" }));
+    expect(onPreview).toHaveBeenCalledWith("moss");
   });
 
   it("offers a choice when there is no design yet", async () => {

@@ -11,6 +11,7 @@ import { refName } from "../../media";
 import type { DesignMap, ListingDesignSummary } from "../../types";
 import { ArtworkPicker } from "./ArtworkPicker";
 import {
+  cap,
   isLinked,
   linking,
   keepOne,
@@ -51,6 +52,8 @@ interface Props {
   onOpen: (target: SlotTarget | null) => void;
   /** The new `design:` map, and the file a pick chose, if a pick made it. */
   onChange: (next: DesignMap, picked: string | null) => void;
+  /** Previews a colour on the Variants stage: the own-design line's names. */
+  onPreview: (colour: string) => void;
 }
 
 /** How many the strip offers before the full list is needed. Four fills one
@@ -64,7 +67,15 @@ function targetLabel(target: SlotTarget): string {
   return target.kind === "one" ? "all shirts" : toneLabel(target.tone);
 }
 
-export function ArtworkStrip({ design, colours, garmentProfile, open, onOpen, onChange }: Props) {
+export function ArtworkStrip({
+  design,
+  colours,
+  garmentProfile,
+  open,
+  onOpen,
+  onChange,
+  onPreview,
+}: Props) {
   const [library, setLibrary] = useState<ListingDesignSummary[]>([]);
   const [tones, setTones] = useState<Record<string, Tone>>({});
   const [finding, setFinding] = useState<SlotTarget | null>(null);
@@ -144,7 +155,19 @@ export function ArtworkStrip({ design, colours, garmentProfile, open, onOpen, on
       {own.length > 0 && (
         <div className="design-select__head">
           <span className="design-select__own">
-            Also printing their own design: {listNames(own)}
+            Also printing their own design:{" "}
+            {own.map((colour, i) => (
+              <span key={colour}>
+                {i > 0 && ", "}
+                <button
+                  type="button"
+                  className="design-select__colour"
+                  onClick={() => onPreview(colour)}
+                >
+                  {cap(colour)}
+                </button>
+              </span>
+            ))}
           </span>
         </div>
       )}

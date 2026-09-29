@@ -326,6 +326,15 @@ export function ListingEditorShell({
    * so the card under the Variants stage can open one too (interactions
    * Part 2 §2). */
   const [openSlot, setOpenSlot] = useState<SlotTarget | null>(null);
+  /** The colour on the Variants stage. Here, not in the tab, so the strip's
+   * "Also printing their own design" names can preview one too -- and so
+   * leaving Variants and coming back keeps the colour the seller chose. */
+  const [previewed, setPreviewed] = useState<string | null>(null);
+
+  function preview(colour: string) {
+    setPreviewed(colour);
+    if (tab !== "variants") pickTab("variants");
+  }
 
   /** The card under the stage's fix for an empty slot: that slot's panel,
    * scrolled into view, because filling it fixes every colour that needs it. */
@@ -369,6 +378,7 @@ export function ListingEditorShell({
         open={openSlot}
         onOpen={setOpenSlot}
         onChange={onDesignChange}
+        onPreview={preview}
       />
 
       <div className="tabs seg">
@@ -394,7 +404,13 @@ export function ListingEditorShell({
       </div>
 
       {tab === "variants" && (
-        <VariantsTab detail={detail} onUpdate={update} onChooseSlot={chooseSlot} />
+        <VariantsTab
+          detail={detail}
+          onUpdate={update}
+          previewed={previewed}
+          onPreview={setPreviewed}
+          onChooseSlot={chooseSlot}
+        />
       )}
       {tab === "pricing" && <PricingTab detail={detail} onUpdate={update} onFlush={flush} />}
       {tab === "images" && <ImagesTab detail={detail} onUpdate={update} />}
