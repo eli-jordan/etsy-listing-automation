@@ -416,6 +416,46 @@ def test_the_print_area_file_is_the_one_each_colour_resolves_to(
     }
 
 
+def test_an_own_design_that_duplicates_the_base_file_plans_nothing(
+    workspace_root: Path, product_ctx: RunContext
+) -> None:
+    """A colour's own design holding the bytes it already printed changes no
+    garment: no re-render and nothing sent to Printify (A35, groups keyed by
+    content)."""
+    stages = [RenderStage(), PrintifyProductStage()]
+    lock = execute(product_ctx, build_plan(product_ctx, LISTING, a_lock(), stages), a_lock())
+
+    shutil.copy(workspace_root / DESIGN, workspace_root / "designs" / "moss-copy.png")
+    edit_listing(workspace_root, design={"default": DESIGN, "moss": "designs/moss-copy.png"})
+
+    plans = build_plan(product_ctx, LISTING, lock, stages).plan.stage_plans
+    assert [p.will_run for p in plans] == [False, False]
+
+
+def test_an_own_design_with_a_new_file_adds_one_print_area(
+    workspace_root: Path, product_ctx: RunContext, printify: FakePrintifyClient
+) -> None:
+    """Giving moss its own file moves moss's variants into a print area of
+    their own, and leaves every other colour's area as it was."""
+    lock = _apply_product(product_ctx, a_lock())
+    moss = workspace_root / "designs" / "moss-special.png"
+    moss.write_bytes((workspace_root / DESIGN).read_bytes() + b"\x00")
+    edit_listing(workspace_root, design={"default": DESIGN, "moss": "designs/moss-special.png"})
+
+    product_plan = _product_plan(product_ctx, lock)
+    assert product_plan.will_run is True
+    _apply_product(product_ctx, lock)
+
+    [updated] = printify.updated
+    areas = {
+        area.placeholders[0].images[0].id: sorted(area.variant_ids) for area in updated.print_areas
+    }
+    assert areas == {
+        _upload_id(workspace_root / DESIGN): sorted(_ids(0) + _ids(1) + _ids(2)),
+        _upload_id(moss): _ids(3),
+    }
+
+
 def test_a_design_file_that_is_missing_blocks_render(workspace_root: Path) -> None:
     """A ref naming no file is a refusal on this listing, not an OSError
     that ends a ``--all`` batch."""
@@ -482,6 +522,50 @@ def test_every_listing_images_layer_shows_its_colours_print_area_file(
         "colour-chart-01",
         None,
         {"black": printed["black"], "moss": printed["moss"]},
+    )
+
+
+def test_a_colours_own_design_shows_in_listing_images_as_printify_prints_it(
+    workspace_root: Path, product_ctx: RunContext, printify: FakePrintifyClient
+) -> None:
+    """Acceptance 5, for a colour's own design: moss's own file is the one
+    in moss's print area, on moss's own scene and on moss's layer of the
+    two-colour chart, beside black printing the design for dark shirts."""
+    base = _solid(workspace_root, "light-ink", (30, 30, 200))
+    own = _solid(workspace_root, "moss-special", (30, 200, 30))
+    edit_listing(
+        workspace_root,
+        design={
+            "on-light": "designs/light-ink.png",
+            "on-dark": "designs/light-ink.png",
+            "moss": "designs/moss-special.png",
+        },
+        media=[{"template": "flat-lay-01", "colour": "moss"}, {"template": "colour-chart-01"}],
+    )
+    _apply_product(product_ctx, a_lock())
+    [created] = printify.created
+    areas = {
+        area.placeholders[0].images[0].id: sorted(area.variant_ids) for area in created.print_areas
+    }
+    assert areas[_upload_id(own)] == _ids(3)
+    assert set(_ids(0)) <= set(areas[_upload_id(base)])
+
+    client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+
+    def shown(template: str, colour: str | None) -> bytes:
+        params = {"template": template} | ({"colour": colour} if colour else {})
+        response = client.get(f"/api/listings/{LISTING}/scene-preview", params=params)
+        assert response.status_code == 200, response.text
+        return response.content
+
+    assert shown("flat-lay-01", "moss") == expected_scene(
+        workspace_root, "flat-lay-01", "moss", {"moss": "designs/moss-special.png"}
+    )
+    assert shown("colour-chart-01", None) == expected_scene(
+        workspace_root,
+        "colour-chart-01",
+        None,
+        {"black": "designs/light-ink.png", "moss": "designs/moss-special.png"},
     )
 
 
