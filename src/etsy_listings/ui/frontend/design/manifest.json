@@ -1131,7 +1131,7 @@
       "scene": "editor-header",
       "title": "Header · file card",
       "viewport": "laptop",
-      "description": "The auto-save chip beside the status opened into the listing file card: listing.yaml path with Copy, when it saved, when it last deployed."
+      "description": "The auto-save chip beside the status opened into the listing file card: listing.yaml path with Copy, and when it saved."
     },
     {
       "id": "editor-header/header-marked",
