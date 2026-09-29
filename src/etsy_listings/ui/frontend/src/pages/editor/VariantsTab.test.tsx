@@ -27,7 +27,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     brief: "",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: {
       title: "",
@@ -295,7 +294,7 @@ describe("VariantsTab", () => {
             { template: "flat-lay-01", colour: "white" },
             "common-media/size-guide.png",
           ],
-          artwork: { white: "on-light" },
+          design: { default: "designs/a.png", white: "designs/w.png" },
           price_overrides: { white: { S: "399 NOK" } },
         })}
         onUpdate={onUpdate}
@@ -307,7 +306,7 @@ describe("VariantsTab", () => {
     expect(onUpdate).toHaveBeenCalledWith({
       colors: ["black"],
       media: [{ template: "flat-lay-01", colour: "black" }, "common-media/size-guide.png"],
-      artwork: {},
+      design: { default: "designs/a.png" },
       price_overrides: {},
     });
   });

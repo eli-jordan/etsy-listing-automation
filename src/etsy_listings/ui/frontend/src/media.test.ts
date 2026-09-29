@@ -67,6 +67,10 @@ describe("singleDesignName", () => {
   it("answers null for a listing with no design at all", () => {
     expect(singleDesignName({})).toBeNull();
   });
+
+  it("answers null for a light/dark slot not filled yet", () => {
+    expect(singleDesignName({ "on-dark": null })).toBeNull();
+  });
 });
 
 describe("mediaLabel", () => {

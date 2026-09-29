@@ -44,7 +44,7 @@ from etsy_listings import connections
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.listing import EMPTY_DRAFT, Listing
+from etsy_listings.config.listing import EMPTY_DRAFT, Listing, canonical_document
 from etsy_listings.config.listing_validation import (
     DELETED_ON_PUBLISHED,
     check_listing,
@@ -153,6 +153,8 @@ def _resolve_design_paths(
 ) -> dict[str, Path]:
     paths: dict[str, Path] = {}
     for key, ref in listing.design.items():
+        if ref is None:
+            continue
         try:
             paths[key] = workspace.resolve_ref(ref, listing_dir=listing_dir)
         except InvalidRefError:
@@ -289,7 +291,8 @@ def _sole_design_name(listing: Listing) -> str | None:
     """
     if len(listing.design) != 1:
         return None
-    return Path(next(iter(listing.design.values()))).stem
+    ref = next(iter(listing.design.values()))
+    return None if ref is None else Path(ref).stem
 
 
 def _summarize_listing(
@@ -545,7 +548,9 @@ def replace_listing_yaml(path: Path, document: Mapping[str, Any]) -> None:
     file while a blur is flushing, and an empty read is not a document.
     """
     temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(yaml.safe_dump(dict(document), sort_keys=False), encoding="utf-8")
+    temporary.write_text(
+        yaml.safe_dump(canonical_document(document), sort_keys=False), encoding="utf-8"
+    )
     os.replace(temporary, path)
 
 

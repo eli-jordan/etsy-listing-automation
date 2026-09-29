@@ -193,3 +193,46 @@ class TestWriteLock:
 
         assert sorted([rename.status_code, create.status_code]) == [200, 409]
         assert workspace.listing_file("fresh").is_file()
+
+
+class TestDesignWrittenAsAMap:
+    """Every write normalises ``design:`` to its map form (multi-artwork plan,
+    *Settled decisions*): a bare string or ``null`` still loads, and the next
+    write converges it on the one written form."""
+
+    def test_a_patch_writes_the_fixtures_bare_string_back_as_a_map(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        assert _listing(workspace)["design"] == "designs/take-a-hike.png"
+
+        client.patch(f"/api/listings/{NAME}", json={"brief": "Changed."})
+
+        assert _listing(workspace)["design"] == {"default": "designs/take-a-hike.png"}
+
+    def test_a_patch_of_null_writes_an_empty_map(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        body = client.patch(f"/api/listings/{NAME}", json={"design": None}).json()
+
+        assert body["field_errors"] == {}
+        assert _listing(workspace)["design"] == {}
+
+    def test_a_malformed_map_is_a_field_error_and_writes_nothing(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        before = _listing(workspace)
+        body = client.patch(
+            f"/api/listings/{NAME}",
+            json={"design": {"default": "designs/a.png", "on-dark": "designs/b.png"}},
+        ).json()
+
+        assert "default cannot be combined" in body["field_errors"]["design"]
+        assert _listing(workspace) == before
+
+    def test_a_create_writes_the_map_form(self, client: TestClient, workspace: Workspace) -> None:
+        document = {**_listing(workspace), "design": "designs/take-a-hike.png"}
+
+        response = client.post("/api/listings", json={"name": "fresh", "document": document})
+
+        assert response.status_code == 200, response.text
+        assert _listing(workspace, "fresh")["design"] == {"default": "designs/take-a-hike.png"}

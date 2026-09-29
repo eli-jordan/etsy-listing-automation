@@ -16,9 +16,9 @@ from pathlib import Path
 
 from etsy_listings.engine.lock import canonical_hash
 from etsy_listings.engine.stage import Blocked
-from etsy_listings.engine.stages.placement import ArtworkGroup
 from etsy_listings.engine.stages.product_document import (
     AppliedProduct,
+    ArtworkGroup,
     PricedVariant,
     PrintifyProductDesired,
     check_garment_unchanged,
@@ -39,7 +39,6 @@ def _desired(*variants: PricedVariant, **overrides: object) -> PrintifyProductDe
         "variants": variants or (BLACK_M, BLACK_S),
         "groups": (
             ArtworkGroup(
-                artwork="default",
                 colours=("black", "ivory"),
                 design=Path("design.png"),
                 design_hash="sha256:abc",
@@ -75,24 +74,20 @@ def test_the_document_does_not_depend_on_the_order_colours_were_resolved_in() ->
 def test_the_print_areas_do_not_depend_on_the_order_the_colours_were_written_in() -> None:
     """The same rule, one level up -- and the level the first version missed.
 
-    ``group_by_artwork`` deduplicates in first-seen order on purpose, so the
+    Groups come out in first-seen order on purpose, so the
     print areas follow the order the listing wrote ``colors:`` in. That is
     right for the payload and wrong for a document that is compared and
     hashed: moving a colour to the top of ``colors:`` reordered this list and
     made an unchanged product look changed. The test above only ever had one
     group, so it could not see this.
     """
-    on_light = ArtworkGroup(
-        artwork="on-light", colours=("ivory",), design=Path("l.png"), design_hash="sha256:l"
-    )
-    on_dark = ArtworkGroup(
-        artwork="on-dark", colours=("black",), design=Path("d.png"), design_hash="sha256:d"
-    )
+    on_light = ArtworkGroup(colours=("ivory",), design=Path("l.png"), design_hash="sha256:l")
+    on_dark = ArtworkGroup(colours=("black",), design=Path("d.png"), design_hash="sha256:d")
 
     one = _desired(groups=(on_light, on_dark)).applied()
     another = _desired(groups=(on_dark, on_light)).applied()
 
-    assert [area.artwork for area in one.print_areas] == ["on-dark", "on-light"]
+    assert [area.design_hash for area in one.print_areas] == ["sha256:d", "sha256:l"]
     assert one == another
     assert canonical_hash(one.model_dump(mode="json")) == canonical_hash(
         another.model_dump(mode="json")
@@ -114,6 +109,10 @@ def test_the_document_hashes_the_same_as_the_dict_it_replaced() -> None:
     re-adopt (PRD 48's guard adopts the existing product by title and
     description rather than duplicating it), not a silent one, which is
     exactly what pinning this literal is for.
+
+    ``artwork`` left print areas for A35, which keys them by the design's
+    content hash. That changes the literal but not the answer for an existing
+    lockfile: the old key is read past (`test_a_print_area_written_before_a35_reads_the_same`).
     """
     document = _desired(BLACK_M, BLACK_S).applied().model_dump(mode="json")
 
@@ -127,8 +126,19 @@ def test_the_document_hashes_the_same_as_the_dict_it_replaced() -> None:
             {"id": 1, "price": 34900, "colour_slug": "black"},
             {"id": 2, "price": 34900, "colour_slug": "black"},
         ],
-        "print_areas": [{"artwork": "default", "design_hash": "sha256:abc", "variant_ids": [1, 2]}],
+        "print_areas": [{"design_hash": "sha256:abc", "variant_ids": [1, 2]}],
     }
+
+
+def test_a_print_area_written_before_a35_reads_the_same() -> None:
+    """A lockfile from before A35 names each area's ``artwork`` key. Its hash
+    and variant ids are what this version computes, so it decodes equal and
+    an upgrade re-applies nothing."""
+    wanted = _desired(BLACK_M, BLACK_S).applied()
+    old = wanted.model_dump(mode="json")
+    old["print_areas"] = [{"artwork": "default", **area} for area in old["print_areas"]]
+
+    assert AppliedProduct.model_validate(old) == wanted
 
 
 def test_a_document_round_trips_through_json_unchanged() -> None:
@@ -195,7 +205,6 @@ def test_a_group_takes_only_the_variants_whose_colour_it_covers() -> None:
     knows which Printify ids those are."""
     desired = _desired(BLACK_M, BLACK_S, IVORY_S)
     dark_only = ArtworkGroup(
-        artwork="on-dark",
         colours=("black",),
         design=Path("dark.png"),
         design_hash="sha256:dark",

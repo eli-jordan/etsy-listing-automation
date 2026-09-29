@@ -1,4 +1,4 @@
-import type { ListingDetail, SeoProposalResponse } from "../../../types";
+import type { DesignMap, ListingDetail, SeoProposalResponse } from "../../../types";
 
 /**
  * Browser-local persistence for one listing's pending AI Mode proposal (AI
@@ -47,7 +47,7 @@ function storageKey(scope: AiSeoStorageScope): string {
  * that two listings that resolved to the same artwork map through a
  * different key insertion order (an unlikely but not-impossible outcome of
  * `config/listing.py`'s coercion) still compare equal. */
-function designIdentity(design: Record<string, string>): string {
+function designIdentity(design: DesignMap): string {
   return JSON.stringify(Object.entries(design).sort(([a], [b]) => a.localeCompare(b)));
 }
 

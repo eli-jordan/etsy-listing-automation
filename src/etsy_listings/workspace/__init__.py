@@ -25,7 +25,7 @@ probe itself, the one reader of a clip's facts.
 """
 
 from etsy_listings.workspace import layout
-from etsy_listings.workspace.facts import WorkspaceFacts
+from etsy_listings.workspace.facts import WorkspaceFacts, template_info
 from etsy_listings.workspace.userpath import to_native_path
 from etsy_listings.workspace.video import probe_video
 from etsy_listings.workspace.workspace import (
@@ -45,6 +45,8 @@ __all__ = [
     "ScenePhoto",
     # What a listing check reads off the tree, gathered once per request.
     "WorkspaceFacts",
+    # One loaded template as that check sees it, for a stage that has the config.
+    "template_info",
     # A video file's facts, never an exception (PRD 72).
     "probe_video",
     # The five refusals, each naming what it refused and why.

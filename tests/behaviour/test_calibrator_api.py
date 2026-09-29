@@ -716,7 +716,6 @@ class TestPreviewScale:
                     {"x": width * 0.95, "y": height * 0.95},
                     {"x": width * 0.55, "y": height * 0.95},
                 ],
-                "artwork": None,
             }
         ]
         response = client.post("/api/templates/colour-chart-01/preview?scale=editor", json=config)
@@ -836,7 +835,6 @@ def test_a_dot_dot_config_url_reaches_no_template_at_all(client: TestClient) -> 
 SINGLE_CONFIG: dict[str, object] = {
     "kind": "single",
     "colour": None,
-    "artwork": None,
     "bounding_box": [
         {"x": 0, "y": 0},
         {"x": 100, "y": 0},

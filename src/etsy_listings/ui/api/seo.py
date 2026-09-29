@@ -41,6 +41,7 @@ from etsy_listings.ai.codex import CodexProvider
 from etsy_listings.ai.grok import GrokProvider
 from etsy_listings.ai.models import GarmentContext, SeoProposal, SeoRequest
 from etsy_listings.ai.providers import AiProvider
+from etsy_listings.config.artwork import representative
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
 from etsy_listings.market import snapshot as market_snapshot
@@ -63,20 +64,6 @@ _PROPOSAL_TTL = timedelta(days=1)
 only in browser local storage ... for one day." The server never stores
 one; it only stamps ``expires_at`` so the browser does not have to compute
 the retention window itself from a client clock alone."""
-
-_PREFERRED_DESIGN_KEYS: tuple[str, ...] = ("default", "on-light", "on-dark")
-"""Which artwork key becomes the one image a provider sees, when a listing's
-design map carries more than one (PRD 30's ``on-light``/``on-dark`` split).
-The provider is reading the design once, for SEO copy and OCR text, not
-rendering it per colour -- there is no per-colour resolution to do here, only
-a deterministic single pick. ``"default"`` covers the common single-artwork
-case (`config/listing.py._coerce_design`'s own normalisation target);
-``on-light`` is preferred over ``on-dark`` next only because it has to be
-one of them, arbitrarily, and a fixed order beats letting `dict` iteration
-order decide. Anything not in this tuple falls back to the alphabetically
-first key (`primary_design_image` below), so reordering the mapping cannot
-change the image sent to a provider."""
-
 
 AiProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
 """`create_app`'s injection seam for this module, the same shape
@@ -117,10 +104,16 @@ def _providers(request: Request, workspace: Workspace) -> Sequence[AiProvider]:
 
 
 def primary_design_image(workspace: Workspace, name: str, listing: Listing) -> Path:
-    listing_dir = workspace.listing_dir(name)
-    key = next((k for k in _PREFERRED_DESIGN_KEYS if k in listing.design), min(listing.design))
+    """The one image a provider sees: the listing's representative artwork
+    (A35, spec *Representative artwork*) -- ``default``, then ``on-light``,
+    then ``on-dark``, never a colour's own file. The provider reads the
+    design once for SEO copy and OCR text; there is nothing per-colour to
+    resolve here."""
+    ref = representative(listing.design)
+    if ref is None:
+        raise HTTPException(status_code=409, detail="the listing has no selected design")
     try:
-        return workspace.resolve_ref(listing.design[key], listing_dir=listing_dir)
+        return workspace.resolve_ref(ref, listing_dir=workspace.listing_dir(name))
     except InvalidRefError as exc:
         # A seller's file to fix (PRD 73's legacy form, most likely), so a
         # 409 naming it, the way a missing garment profile is answered.
@@ -149,7 +142,7 @@ def readiness(
     callers answer 404 before they get here.
     """
     drafting = draft_brief and not listing.brief.strip()
-    if not listing.design:
+    if representative(listing.design) is None:
         return SeoReadinessResponse(ready=False, reason="the listing has no selected design")
     if not listing.brief.strip() and not drafting:
         return SeoReadinessResponse(ready=False, reason="the listing brief is empty")

@@ -9,6 +9,10 @@ export type ShadeBlend = ShadeConfig["blend"];
 
 export type Placement = components["schemas"]["Placement"];
 
+/** `Listing.design`: reserved base keys and colour keys, each a ref. Only
+ * `on-light`/`on-dark` may be `null` -- a slot not filled yet (A35). */
+export type DesignMap = Record<string, string | null>;
+
 export type TemplateKind = "colour-matrix" | "multiple" | "single";
 /** A19: the test design is an open library now, so a selection is an id
  * string, not a closed union -- the bundled targets keep their ids, an upload

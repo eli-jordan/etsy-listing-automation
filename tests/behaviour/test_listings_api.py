@@ -243,7 +243,7 @@ class TestGetListingDetail:
             workspace_root,
             design={
                 "default": "designs/take-a-hike.png",
-                "alternate": "designs/missing.png",
+                "moss": "designs/missing.png",
             },
         )
         first = client.get("/api/listings/take-a-hike").json()["design_content_hash"]
@@ -461,14 +461,26 @@ class TestGetListingDetail:
         assert [i["severity"] for i in issues if "./clip.mp4" in i["message"]] == ["info"]
         assert after == before
 
-    def test_warns_about_colours_the_garment_profile_does_not_classify(
-        self, client: TestClient
+    def test_blocks_on_colours_the_garment_profile_does_not_classify(
+        self, client: TestClient, workspace_root: Path
     ) -> None:
-        """The fixture garment profile has an empty `colors:` dict, so every
-        one of the listing's four colours is an unclassified proxy-warning."""
+        """Tone classification is mandatory shared garment data (A35): a colour
+        the profile leaves out blocks deploying and names the file to fix."""
+        edit_garment_profile(workspace_root, "comfort-colors-1717", colors={"black": "dark"})
+
         issues = client.get("/api/listings/take-a-hike").json()["issues"]
-        warning = next(i for i in issues if i["tab"] == "variants" and i["severity"] == "warn")
-        assert all(c in warning["message"] for c in ["black", "blue-jean", "ivory", "moss"])
+
+        assert {
+            "severity": "block",
+            "tab": "variants",
+            "where": "Fix it in garment-profiles/comfort-colors-1717.yaml",
+            "message": "Blue-jean, Ivory and Moss aren't marked light or dark in the "
+            "comfort-colors-1717 garment profile",
+        } in issues
+
+    def test_a_classified_listing_has_no_artwork_issue(self, client: TestClient) -> None:
+        issues = client.get("/api/listings/take-a-hike").json()["issues"]
+        assert not [i for i in issues if i["where"].startswith(("Artwork", "Fix it in"))]
 
     def test_an_applied_listing_carries_its_remote_ids(
         self, client: TestClient, workspace_root: Path
@@ -807,7 +819,7 @@ class TestListingDraft:
             if i["severity"] == "block"
         }
         assert "Variants › Garment profile" in blocks
-        assert "Design" in blocks
+        assert "Artwork" in blocks
         assert "Variants › Colours" in blocks
         assert "Pricing" in blocks
         assert "Listing Images" in blocks

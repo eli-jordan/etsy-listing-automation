@@ -189,16 +189,16 @@ def test_extraction_and_the_proposal_see_the_drafted_brief_and_the_market(chain:
     assert chain.provider.task("seo").design_image.name == "take-a-hike.png"
 
 
-def test_unconventional_design_keys_send_the_same_image_whatever_their_order(
-    chain: Chain,
-) -> None:
+def test_the_representative_design_is_sent_whatever_the_key_order(chain: Chain) -> None:
+    """The one image is the representative artwork -- ``on-light`` before
+    ``on-dark`` -- never whichever key a file happens to list first (A35)."""
     root = chain.workspace.root
     (root / "designs" / "alternate.png").write_bytes(b"alternate")
     primary, secondary = "designs/take-a-hike.png", "designs/alternate.png"
 
-    edit_listing(root, design={"z": secondary, "a": primary})
+    edit_listing(root, design={"on-dark": secondary, "on-light": primary})
     chain.run(draft_brief=False)
-    edit_listing(root, design={"a": primary, "z": secondary})
+    edit_listing(root, design={"on-light": primary, "on-dark": secondary, "moss": secondary})
     chain.run(draft_brief=False)
 
     images = [
@@ -414,7 +414,13 @@ def test_the_brief_is_the_only_write_under_listings(chain: Chain) -> None:
     changed = {path for path in after if after[path] != before_draft.get(path)}
     assert changed == {f"listings/{LISTING}/listing.yaml"}
     document_after = yaml.safe_load(listing_file.read_text(encoding="utf-8"))
-    assert document_after == {**document_before, "brief": DRAFTED_BRIEF}
+    # Every write normalises `design:` to its map form (multi-artwork plan),
+    # so the fixture's bare-string shorthand comes back as one.
+    assert document_after == {
+        **document_before,
+        "brief": DRAFTED_BRIEF,
+        "design": {"default": document_before["design"]},
+    }
 
 
 # -------------------------------------------------------------- cancellation

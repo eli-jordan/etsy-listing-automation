@@ -21,7 +21,7 @@ from etsy_listings.clients.printify.models import Blueprint, ShippingRates, Vari
 from etsy_listings.clients.printify.resolve import normalise
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
-from etsy_listings.config.listing import Listing
+from etsy_listings.config.listing import Listing, canonical_document
 from etsy_listings.config.media import MAX_IMAGES
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
@@ -509,7 +509,7 @@ def build_listing_stub(
     invented."""
     return {
         "garment_profile": garment_profile_slug,
-        "design": design_ref,
+        "design": {"default": design_ref},
         "colors": colours,
         "brief": brief,
         "pricing_plan": pricing_plan_ref,
@@ -531,5 +531,5 @@ def write_listing(workspace: Workspace, design_name: str, data: dict[str, Any]) 
     if path.is_file():
         raise FileExistsError(f"a listing already exists at {path}")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
+    path.write_text(yaml.safe_dump(canonical_document(data), sort_keys=False), encoding="utf-8")
     return path

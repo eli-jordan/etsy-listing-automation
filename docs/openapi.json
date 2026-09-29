@@ -1892,14 +1892,6 @@
         "additionalProperties": false,
         "description": "The full `Listing`, plus what the editor needs and nothing a listing\nitself would ever store: computed status, computed issues, and (only\nmeaningful right after a PATCH) which fields a rejected candidate failed\non.",
         "properties": {
-          "artwork": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "default": {},
-            "title": "Artwork",
-            "type": "object"
-          },
           "brief": {
             "title": "Brief",
             "type": "string"
@@ -1918,8 +1910,16 @@
           },
           "design": {
             "additionalProperties": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
+            "default": {},
             "title": "Design",
             "type": "object"
           },
@@ -2150,7 +2150,6 @@
         },
         "required": [
           "garment_profile",
-          "design",
           "colors",
           "brief",
           "media",
@@ -2754,17 +2753,6 @@
       "Placement": {
         "description": "One garment within a ``multiple``-kind scene.",
         "properties": {
-          "artwork": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artwork"
-          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,
@@ -3812,7 +3800,14 @@
           },
           "design": {
             "additionalProperties": {
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ]
             },
             "title": "Design",
             "type": "object"
@@ -4040,17 +4035,6 @@
       "SingleTemplate": {
         "description": "One photo, one garment -- a lifestyle shot, a folded product photo,\nanything that isn't part of a colour set.",
         "properties": {
-          "artwork": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Artwork"
-          },
           "bounding_box": {
             "maxItems": 4,
             "minItems": 4,

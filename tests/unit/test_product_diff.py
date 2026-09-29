@@ -16,9 +16,9 @@ from pathlib import Path
 from etsy_listings.clients.printify.models import Product, ProductVariant
 from etsy_listings.config.money import Money
 from etsy_listings.engine.change import Drift, FieldChange, ListChange, PriceChange
-from etsy_listings.engine.stages.placement import ArtworkGroup
 from etsy_listings.engine.stages.product_diff import compare
 from etsy_listings.engine.stages.product_document import (
+    ArtworkGroup,
     PricedVariant,
     PrintifyProductDesired,
 )
@@ -28,11 +28,10 @@ BLACK_S = PricedVariant(id=2, colour_slug="black", size="S", price=34900)
 WHITE_M = PricedVariant(id=3, colour_slug="white", size="M", price=34900)
 
 
-def _group(artwork: str = "default", *, design_hash: str = "sha256:abc") -> ArtworkGroup:
+def _group(design_hash: str = "sha256:abc", *colours: str) -> ArtworkGroup:
     return ArtworkGroup(
-        artwork=artwork,
-        colours=("black",),
-        design=Path(f"{artwork}.png"),
+        colours=colours or ("black",),
+        design=Path("default.png"),
         design_hash=design_hash,
     )
 
@@ -206,40 +205,52 @@ def test_an_unchanged_colour_set_is_not_a_change() -> None:
 
 
 def test_reordering_the_listings_colours_is_not_a_print_area_change() -> None:
-    """Print areas are matched by ``artwork``, never by position.
+    """Print areas are matched by design hash (A35), never by position.
 
     Positional matching read ``was.print_areas[index]``, and that list's order
     followed the order the listing wrote ``colors:`` in -- so moving a colour
     to the top reported every print area as changed and re-uploaded artwork
     nothing about which had moved.
     """
-    on_light, on_dark = _group("on-light"), _group("on-dark", design_hash="sha256:def")
+    on_light, on_dark = _group("sha256:abc"), _group("sha256:def")
     one = _desired(groups=(on_light, on_dark))
     other = _desired(groups=(on_dark, on_light))
 
     assert compare(other, one.applied(), _live(other)).changes == ()
 
 
-def test_changed_artwork_names_the_area_it_changed() -> None:
-    was = _desired(groups=(_group("on-light", design_hash="sha256:old"),)).applied()
-    desired = _desired(groups=(_group("on-light", design_hash="sha256:new"),))
+def test_a_changed_file_is_a_new_area_and_an_old_one_gone() -> None:
+    """An area *is* its file (A35): new bytes are a new area, and the old
+    file stops printing."""
+    was = _desired(groups=(_group("sha256:0123456789abcdef"),)).applied()
+    desired = _desired(groups=(_group("sha256:fedcba9876543210"),))
 
     changes = compare(desired, was, _live(desired)).changes
 
     assert changes == (
-        FieldChange(path="print_areas.on-light", before="sha256:old", after="sha256:new"),
+        FieldChange(path="print_areas.fedcba987654", before=None, after="sha256:fedcba9876543210"),
+        FieldChange(path="print_areas.0123456789ab", before="sha256:0123456789abcdef", after=None),
     )
 
 
-def test_an_artwork_that_no_longer_prints_is_reported() -> None:
-    """Positional matching could not see this: a shorter list simply stopped
-    being compared, so dropping a print area was silently no change."""
-    was = _desired(groups=(_group("on-light"), _group("on-dark"))).applied()
-    desired = _desired(groups=(_group("on-light"),))
+def test_a_file_printing_on_other_colours_names_its_area() -> None:
+    was = _desired(groups=(_group("sha256:abc", "black"),)).applied()
+    desired = _desired(WHITE_M, BLACK_M, groups=(_group("sha256:abc", "black", "white"),))
 
     changes = compare(desired, was, _live(desired)).changes
 
-    assert FieldChange(path="print_areas.on-dark", before="sha256:abc", after=None) in changes
+    assert FieldChange(path="print_areas.abc", before="sha256:abc", after="sha256:abc") in changes
+
+
+def test_a_file_that_no_longer_prints_is_reported() -> None:
+    """Positional matching could not see this: a shorter list simply stopped
+    being compared, so dropping a print area was silently no change."""
+    was = _desired(groups=(_group("sha256:abc"), _group("sha256:def"))).applied()
+    desired = _desired(groups=(_group("sha256:abc"),))
+
+    changes = compare(desired, was, _live(desired)).changes
+
+    assert FieldChange(path="print_areas.def", before="sha256:def", after=None) in changes
 
 
 # ------------------------------------------------------------------- drift

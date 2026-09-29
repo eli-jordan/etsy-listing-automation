@@ -33,7 +33,9 @@ what the comparison decided; it decides nothing itself.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
@@ -49,21 +51,24 @@ from etsy_listings.clients.printify.resolve import (
     resolve_print_provider,
     resolve_variants,
 )
+from etsy_listings.config.artwork import DesignMap, Tone
 from etsy_listings.config.money import Money
 from etsy_listings.engine.change import Verdict
 from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
+from etsy_listings.engine.lock import Lockfile, hash_file
 from etsy_listings.engine.stage import Blocked, StageApplyResult
 from etsy_listings.engine.stages.gates import (
+    check_artwork,
     check_copy_is_concrete,
     check_design_resolution,
     check_garment_profile_chosen,
     check_price_source,
+    resolved_design,
 )
-from etsy_listings.engine.stages.placement import DesignPlacement
 from etsy_listings.engine.stages.product_diff import compare
 from etsy_listings.engine.stages.product_document import (
     AppliedProduct,
+    ArtworkGroup,
     PricedVariant,
     PrintifyProductDesired,
     check_garment_unchanged,
@@ -165,8 +170,17 @@ class PrintifyProductStage:
         except CommonCopyError as exc:
             return Blocked(str(exc))
 
-        placement = DesignPlacement.resolve(workspace, listing, config, profile)
-        for path in placement.paths.values():
+        # A35: the colours this product sells must each resolve to a file.
+        # No scenes: which photo a mockup uses is the render stage's question.
+        blocked = check_artwork(config, profile, {})
+        if blocked is not None:
+            return blocked
+        listing_dir = workspace.listing_dir(listing)
+        paths = {
+            ref: workspace.resolve_ref(ref, listing_dir=listing_dir)
+            for ref in dict.fromkeys(ref for ref in config.design.values() if ref is not None)
+        }
+        for path in paths.values():
             blocked = check_design_resolution(path, profile)
             if blocked is not None:
                 return blocked
@@ -181,6 +195,15 @@ class PrintifyProductStage:
         if blocked is not None:
             return blocked
 
+        groups = _group_by_design(
+            config.design,
+            profile.colors,
+            [variant.colour_slug for variant in resolved.variants],
+            paths,
+        )
+        if isinstance(groups, Blocked):
+            return groups
+
         return PrintifyProductDesired(
             title=config.etsy.title,
             description=description,
@@ -188,7 +211,7 @@ class PrintifyProductStage:
             print_provider_id=resolved.print_provider_id,
             position=profile.placeholder,
             variants=resolved.variants,
-            groups=placement.group_by_artwork([v.colour_slug for v in resolved.variants]),
+            groups=groups,
             missing=resolved.missing,
             currency=workspace.defaults.etsy.currency,
         )
@@ -384,6 +407,37 @@ def resolve_variant_pricing(ctx: RunContext, listing: str) -> ResolvedVariantPri
         print_provider_id=provider.id,
         variants=variants,
         missing=resolution.missing,
+    )
+
+
+def _group_by_design(
+    design: DesignMap,
+    tones: Mapping[str, Tone],
+    colours: Sequence[str],
+    paths: Mapping[str, Path],
+) -> tuple[ArtworkGroup, ...] | Blocked:
+    """Partition ``colours`` by the file each prints -- one print area each.
+
+    Keyed by the file's **content hash**, not its ref or its ``design:`` key
+    (A35): two names for identical bytes are one area, and reshaping the map
+    without changing what any garment prints changes no area. Uploads are
+    content-addressed already, and no print area ever shares an image with
+    another. First-seen order, so the payload's print areas follow the order
+    the listing wrote its colours in.
+    """
+    digests: dict[str, str] = {}
+    groups: dict[str, tuple[Path, list[str]]] = {}
+    for colour in dict.fromkeys(colours):
+        ref = resolved_design(design, colour, tones, where="the Printify product")
+        if isinstance(ref, Blocked):
+            return ref
+        if ref not in digests:
+            digests[ref] = hash_file(paths[ref])
+        _, grouped = groups.setdefault(digests[ref], (paths[ref], []))
+        grouped.append(colour)
+    return tuple(
+        ArtworkGroup(design=path, design_hash=digest, colours=tuple(grouped))
+        for digest, (path, grouped) in groups.items()
     )
 
 

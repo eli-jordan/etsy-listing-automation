@@ -13,7 +13,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     brief: "",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: {
       title: "",
@@ -70,23 +69,26 @@ describe("selectColours", () => {
     expect(mediaLostBy(listing, [])).toBe(0);
   });
 
-  it("drops per-colour artwork and price overrides too", () => {
+  it("drops a colour's own design and price overrides too", () => {
     const patch = selectColours(
       detail({
-        artwork: { white: "on-light", black: "on-dark" },
+        design: { default: "designs/a.png", white: "designs/w.png", black: "designs/b.png" },
         price_overrides: { white: { S: "399 NOK" } },
       }),
       ["black"],
     );
-    expect(patch.artwork).toEqual({ black: "on-dark" });
+    expect(patch.design).toEqual({ default: "designs/a.png", black: "designs/b.png" });
     expect(patch.price_overrides).toEqual({});
   });
 
   it("leaves a colour-keyed field out of the patch when it had nothing to lose", () => {
     /* Rewriting a field to itself is a change the server would store and the
        next reader would have to reason about. */
-    const patch = selectColours(detail({ artwork: { black: "on-dark" } }), ["black"]);
-    expect("artwork" in patch).toBe(false);
+    const patch = selectColours(
+      detail({ design: { default: "designs/a.png", black: "designs/b.png" } }),
+      ["black"],
+    );
+    expect("design" in patch).toBe(false);
     expect("media" in patch).toBe(false);
   });
 

@@ -29,6 +29,13 @@ photo to composite over, the derived-map key, and the resolved layers.
 config nor re-resolves an artwork, which is what keeps the hash and the pixels
 describing the same thing.
 
+Which file each layer prints is `config/artwork.py`'s answer (A35), asked by
+the colour the layer depicts -- the same question the Printify stage asks per
+enabled colour, so a mockup never shows a print the shirt will not carry. A
+layer's design identity is that file's *content hash*: renaming a file, or
+reshaping ``design:`` without changing what any garment prints, re-renders
+nothing.
+
 A32: ``preview()`` renders full-size, ahead of ``apply()`` and through the
 same pipeline, to a content-addressed cache under ``.cache/previews/`` keyed
 by :func:`scene_hash` -- a *third*, narrower hash axis alongside
@@ -65,8 +72,11 @@ from etsy_listings.engine.lock import (
     to_workspace_relative_posix,
 )
 from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.gates import check_garment_profile_chosen
-from etsy_listings.engine.stages.placement import DesignPlacement
+from etsy_listings.engine.stages.gates import (
+    check_artwork,
+    check_garment_profile_chosen,
+    resolved_design,
+)
 from etsy_listings.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
@@ -78,6 +88,7 @@ from etsy_listings.render.maps import DerivedMapCache
 from etsy_listings.render.pipeline import Layer, render_scene
 from etsy_listings.render.swatch import sample_swatch
 from etsy_listings.render.types import RGBA
+from etsy_listings.workspace.facts import template_info
 from etsy_listings.workspace.workspace import Workspace, remove_tree
 
 PREVIEW_WORKERS = 2
@@ -140,20 +151,22 @@ class MediaColourMismatchError(ValueError):
 class ResolvedLayer:
     """One design, placed at one bounding box, inside a scene.
 
-    ``artwork`` has already been resolved through
-    :meth:`~etsy_listings.engine.stages.placement.DesignPlacement.artwork_for`
-    and ``design`` is the file it landed on -- so nothing downstream repeats
-    that resolution, and the answer that got hashed is the answer that gets
-    rendered.
+    ``design`` is the file :func:`~etsy_listings.config.artwork.resolve`
+    answered for this layer's colour (A35), already resolved -- so nothing
+    downstream repeats that resolution, and the answer that got hashed is the
+    answer that gets rendered.
     """
 
     colour: str | None
     """The garment colour this layer depicts -- a placement's own colour in a
-    ``multiple`` scene, the scene's colour otherwise. Context for artwork
-    resolution, and part of the recipe: repointing a placement at a different
+    ``multiple`` scene, the scene's colour otherwise. What artwork resolution
+    asks by, and part of the recipe: repointing a placement at a different
     colour changes what should be rendered even when the geometry does not."""
-    artwork: str
     design: Path
+    design_hash: str
+    """The design file's content hash -- the layer's design identity (A35).
+    Not its ref and not a ``design:`` key, so a renamed file or a reshaped
+    map that prints the same bytes hashes the same."""
     cfg: RenderConfig
 
 
@@ -198,9 +211,11 @@ class SceneWork:
     def recipe(self) -> dict[str, object]:
         """The part of this scene that decides its pixels, for the input hash.
 
-        Deliberately excludes file *contents* -- those are hashed separately
-        (``design_hash``, ``template_hash``, ``base_hash``), because the two
-        axes answer different questions and a path is not a hash.
+        Each layer carries its design's content hash, which *is* its design
+        identity (A35) -- there is no other name for which file a layer
+        prints that survives a rename. The template's and the photo's bytes
+        are hashed separately (``template_hash``, ``base_hash``), and no path
+        enters: a path is not a hash.
         """
         return {
             "template": self.template,
@@ -208,7 +223,7 @@ class SceneWork:
             "layers": [
                 {
                     "colour": layer.colour,
-                    "artwork": layer.artwork,
+                    "design_hash": layer.design_hash,
                     "render_config": layer.cfg.canonical_json(),
                 }
                 for layer in self.layers
@@ -232,7 +247,6 @@ class RenderDesired:
     Absolute and machine-specific, so it never enters a hash -- see
     ``_input_hash``, which names the fields that do."""
     works: tuple[SceneWork, ...]  # first-seen media order, deduped
-    design_hash: dict[str, str]  # artwork key -> sha256, only keys actually used
     template_hash: dict[str, str]  # template name -> sha256 of its template.yaml
     base_hash: dict[str, str]  # scene key -> sha256 of that scene's photo
     preview_exists: dict[str, bool] = field(default_factory=dict)
@@ -254,7 +268,6 @@ class RenderDesired:
 def _scene_payload(
     work: SceneWork,
     *,
-    design_hash: Mapping[str, str],
     template_hash: Mapping[str, str],
     base_hash: Mapping[str, str],
 ) -> dict[str, object]:
@@ -263,8 +276,8 @@ def _scene_payload(
     two-step construction, which has the same three dicts on hand before a
     :class:`RenderDesired` exists to call the method on.
 
-    Restricted to this one scene: only the design hashes for *its own*
-    layers, only *its* template's hash, only *its* photo's hash. A scene that
+    Restricted to this one scene: *its* layers' design hashes (carried in its
+    recipe), only *its* template's hash, only *its* photo's hash. A scene that
     shares nothing with another -- a different template, different artwork --
     hashes independently of it, which is the entire point of asking per scene
     rather than reading ``_input_hash``'s listing-wide answer (A32).
@@ -273,7 +286,6 @@ def _scene_payload(
         "template": work.template,
         "template_hash": template_hash[work.template],
         "base_hash": base_hash[work.key],
-        "design_hash": {layer.artwork: design_hash[layer.artwork] for layer in work.layers},
         "recipe": work.recipe(),
     }
 
@@ -297,7 +309,6 @@ def scene_hash(desired: RenderDesired, work: SceneWork) -> str:
     return canonical_hash(
         _scene_payload(
             work,
-            design_hash=desired.design_hash,
             template_hash=desired.template_hash,
             base_hash=desired.base_hash,
         )
@@ -415,29 +426,34 @@ def _render_path(workspace: Workspace, listing: str, scene: str) -> Path:
 # so the calibrator's preview reaches them the same way (A8).
 def _layer_specs(
     template_cfg: AnyTemplate, colour: str | None
-) -> list[tuple[str | None, str | None, RenderConfig]]:
-    """``(colour, artwork override, render config)`` per layer, in paint order."""
+) -> list[tuple[str | None, RenderConfig]]:
+    """``(depicted colour, render config)`` per layer, in paint order."""
     if isinstance(template_cfg, ColourMatrixTemplate):
         # Same geometry in every colour's photo: a colour framed differently
         # is a `single`-kind template instead, never a per-colour override.
-        return [(colour, None, template_cfg.render_config())]
+        return [(colour, template_cfg.render_config())]
     if isinstance(template_cfg, SingleTemplate):
-        return [(template_cfg.colour, template_cfg.artwork, template_cfg.render_config())]
+        return [(template_cfg.colour, template_cfg.render_config())]
     return [
-        (placement.colour, placement.artwork, template_cfg.render_config_for(placement))
+        (placement.colour, template_cfg.render_config_for(placement))
         for placement in template_cfg.placements
     ]
+
+
+DesignFor = Callable[[str | None, str], tuple[Path, str] | Blocked]
+"""``(depicted colour, template) -> (design file, its content hash)``, or the
+refusal when that colour resolves to no file."""
 
 
 def _resolve_scene(
     *,
     workspace: Workspace,
     listing: str,
-    placement: DesignPlacement,
+    design_for: DesignFor,
     template_name: str,
     template_cfg: AnyTemplate,
     colour: str | None,
-) -> SceneWork:
+) -> SceneWork | Blocked:
     kind = template_cfg.kind
     if (kind == "colour-matrix") != (colour is not None):
         raise MediaColourMismatchError(template_name, kind, colour)
@@ -447,13 +463,12 @@ def _resolve_scene(
         raise TemplateAssetError(template_name, colour, photo.path)
 
     layers = []
-    for layer_colour, override, cfg in _layer_specs(template_cfg, colour):
-        artwork = placement.artwork_for(layer_colour, template_override=override)
-        layers.append(
-            ResolvedLayer(
-                colour=layer_colour, artwork=artwork, design=placement.paths[artwork], cfg=cfg
-            )
-        )
+    for layer_colour, cfg in _layer_specs(template_cfg, colour):
+        design = design_for(layer_colour, template_name)
+        if isinstance(design, Blocked):
+            return design
+        path, digest = design
+        layers.append(ResolvedLayer(colour=layer_colour, design=path, design_hash=digest, cfg=cfg))
 
     return SceneWork(
         key=_scene_key(template_name, colour),
@@ -487,7 +502,6 @@ class RenderStage:
         if blocked is not None:
             return blocked
         profile = workspace.load_garment_profile(listing_cfg.garment_profile)
-        placement = DesignPlacement.resolve(workspace, listing, listing_cfg, profile)
 
         referenced: dict[tuple[str, str | None], None] = {}
         for entry in listing_cfg.media:
@@ -496,29 +510,58 @@ class RenderStage:
 
         template_configs: dict[str, AnyTemplate] = {}
         template_hash: dict[str, str] = {}
-        design_hash: dict[str, str] = {}
+        for template_name, _ in referenced:
+            if template_name in template_configs:
+                continue
+            config_path = workspace.template_config_file(template_name)
+            if not config_path.is_file():
+                raise TemplateNotFoundError(template_name, config_path)
+            # The file's own bytes, not the re-serialised model: hashing a
+            # normalised dump would miss an edit that pydantic round-trips
+            # away, and the question here is "did the file change?".
+            template_hash[template_name] = hash_file(config_path)
+            template_configs[template_name] = workspace.load_template_config(template_name)
+
+        # A35: every depicted colour must resolve before anything is hashed,
+        # and a failure is this stage refusing, never a raise.
+        blocked = check_artwork(
+            listing_cfg,
+            profile,
+            {
+                name: template_info(workspace, name, config)
+                for name, config in template_configs.items()
+            },
+        )
+        if blocked is not None:
+            return blocked
+
+        listing_dir = workspace.listing_dir(listing)
+        files: dict[str, tuple[Path, str]] = {}
+
+        def design_for(colour: str | None, template: str) -> tuple[Path, str] | Blocked:
+            ref = resolved_design(
+                listing_cfg.design, colour, profile.colors, where=f"template {template!r}"
+            )
+            if isinstance(ref, Blocked):
+                return ref
+            if ref not in files:
+                path = workspace.resolve_ref(ref, listing_dir=listing_dir)
+                files[ref] = (path, hash_file(path))
+            return files[ref]
+
         base_hash: dict[str, str] = {}
         works: list[SceneWork] = []
-
         for template_name, colour in referenced:
-            if template_name not in template_configs:
-                config_path = workspace.template_config_file(template_name)
-                if not config_path.is_file():
-                    raise TemplateNotFoundError(template_name, config_path)
-                # The file's own bytes, not the re-serialised model: hashing a
-                # normalised dump would miss an edit that pydantic round-trips
-                # away, and the question here is "did the file change?".
-                template_hash[template_name] = hash_file(config_path)
-                template_configs[template_name] = workspace.load_template_config(template_name)
-
             work = _resolve_scene(
                 workspace=workspace,
                 listing=listing,
-                placement=placement,
+                design_for=design_for,
                 template_name=template_name,
                 template_cfg=template_configs[template_name],
                 colour=colour,
             )
+            if isinstance(work, Blocked):
+                return work
             works.append(work)
 
             # Per scene, not per template. A colour-matrix set has one photo
@@ -527,14 +570,11 @@ class RenderStage:
             # any *other* colour's photo changed no hash at all -- so `plan`
             # reported "No changes." and the stale render stayed in the cache.
             base_hash[work.key] = hash_file(work.base_image)
-            for layer in work.layers:
-                design_hash[layer.artwork] = hash_file(layer.design)
 
         desired = RenderDesired(
             listing=listing,
             root=workspace.root,
             works=tuple(works),
-            design_hash=design_hash,
             template_hash=template_hash,
             base_hash=base_hash,
         )
@@ -873,12 +913,11 @@ class RenderStage:
 
     @staticmethod
     def _input_hash(desired: RenderDesired) -> str:
-        """The four axes that decide whether a re-render would differ: the
-        design bytes, the template.yaml bytes, the photo bytes, and the recipe
-        each scene resolved to. No absolute paths, no clock, no tool version
-        (A2)."""
+        """The axes that decide whether a re-render would differ: the
+        template.yaml bytes, the photo bytes, and the recipe each scene
+        resolved to -- which carries each layer's design bytes as its content
+        hash (A35). No absolute paths, no clock, no tool version (A2)."""
         payload: dict[str, object] = {
-            "design_hash": desired.design_hash,
             "template_hash": desired.template_hash,
             "base_hash": desired.base_hash,
             "scene_config": {work.key: work.recipe() for work in desired.works},

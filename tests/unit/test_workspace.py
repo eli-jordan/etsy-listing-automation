@@ -754,3 +754,23 @@ def test_market_caches_live_under_the_cache_directory(workspace_root: Path) -> N
     assert ws.market_snapshot_file("take-a-hike") == market / "snapshots" / "take-a-hike.json"
     with pytest.raises(InvalidNameError):
         ws.market_snapshot_file("../escape")
+
+
+def test_design_content_hash_tolerates_an_empty_slot(workspace_root: Path) -> None:
+    """A light/dark pair saved before both files are chosen still has an
+    identity, and emptying a slot changes it -- the whole map is hashed,
+    ``null`` slots included (multi-artwork plan, *Settled decisions*)."""
+    ws = Workspace.discover(start=workspace_root)
+    listing_dir = ws.listing_dir("take-a-hike")
+    partial = ws.design_content_hash(
+        {"on-light": None, "on-dark": "designs/take-a-hike.png"}, listing_dir=listing_dir
+    )
+    without = ws.design_content_hash(
+        {"on-dark": "designs/take-a-hike.png"}, listing_dir=listing_dir
+    )
+    empty_pair = ws.design_content_hash(
+        {"on-light": None, "on-dark": None}, listing_dir=listing_dir
+    )
+
+    assert partial is not None and empty_pair is not None
+    assert len({partial, without, empty_pair}) == 3

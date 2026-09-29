@@ -1824,13 +1824,6 @@ export interface components {
      *     on.
      */
     ListingDetail: {
-      /**
-       * Artwork
-       * @default {}
-       */
-      artwork: {
-        [key: string]: string;
-      };
       /** Brief */
       brief: string;
       /** Colors */
@@ -1840,9 +1833,12 @@ export interface components {
        * @default
        */
       description_composed: string;
-      /** Design */
+      /**
+       * Design
+       * @default {}
+       */
       design: {
-        [key: string]: string;
+        [key: string]: string | null;
       };
       /** Design Content Hash */
       design_content_hash?: string | null;
@@ -2209,8 +2205,6 @@ export interface components {
      * @description One garment within a ``multiple``-kind scene.
      */
     Placement: {
-      /** Artwork */
-      artwork?: string | null;
       /** Bounding Box */
       bounding_box: [
         components["schemas"]["Point"],
@@ -2628,7 +2622,7 @@ export interface components {
       colors: string[];
       /** Design */
       design: {
-        [key: string]: string;
+        [key: string]: string | null;
       };
       /** Design Content Hash */
       design_content_hash: string | null;
@@ -2754,8 +2748,6 @@ export interface components {
      *     anything that isn't part of a colour set.
      */
     SingleTemplate: {
-      /** Artwork */
-      artwork?: string | null;
       /** Bounding Box */
       bounding_box: [
         components["schemas"]["Point"],

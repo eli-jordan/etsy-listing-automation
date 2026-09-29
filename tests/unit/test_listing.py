@@ -12,6 +12,7 @@ from etsy_listings.config.listing import (
     EtsyListingConfig,
     Listing,
     TemplateMediaEntry,
+    canonical_document,
 )
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
@@ -85,6 +86,87 @@ def test_design_map_is_kept_as_is() -> None:
         "on-light": "designs/take-a-hike-dark-ink.png",
         "on-dark": "designs/take-a-hike-light-ink.png",
     }
+
+
+@pytest.mark.parametrize("absent", [None, {}])
+def test_no_design_loads_as_an_empty_map(absent: object) -> None:
+    listing = Listing.model_validate({**BASE, "design": absent}, context={"currency": "NOK"})
+    assert listing.design == {}
+
+
+def test_an_absent_design_loads_as_an_empty_map() -> None:
+    data = {key: value for key, value in BASE.items() if key != "design"}
+    assert Listing.model_validate(data, context={"currency": "NOK"}).design == {}
+
+
+def test_a_light_dark_pair_may_have_empty_slots() -> None:
+    """The editor saves each choice as it is made, so even a pair with
+    nothing chosen yet survives a reload (spec: *A partial light/dark pair*)."""
+    data = {**BASE, "design": {"on-light": None, "on-dark": None}}
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    assert listing.design == {"on-light": None, "on-dark": None}
+
+
+def test_a_colour_may_have_its_own_design() -> None:
+    data = {**BASE, "design": {"default": "designs/a.png", "black": "designs/b.png"}}
+    listing = Listing.model_validate(data, context={"currency": "NOK"})
+    assert listing.design == {"default": "designs/a.png", "black": "designs/b.png"}
+
+
+@pytest.mark.parametrize(
+    ("design", "message"),
+    [
+        (
+            {"default": "designs/a.png", "on-dark": "designs/b.png"},
+            "default cannot be combined with on-light or on-dark",
+        ),
+        ({"default": None}, "design.default has no file"),
+        ({"on-dark": "designs/b.png", "black": None}, "design.black has no file"),
+        ({"on-dark": ""}, "design.on-dark has no file"),
+        ({"default": "designs/a.png", "ivory": "designs/b.png"}, "not a colour this listing sells"),
+        ({"black": "designs/b.png"}, "no base design"),
+    ],
+)
+def test_a_malformed_design_map_is_a_field_error(design: object, message: str) -> None:
+    """Malformed rather than incomplete (spec: *Saving, blockers and
+    warnings*): each refuses the write, against the ``design`` field, so the
+    editor can show it inline."""
+    with pytest.raises(ValidationError) as exc:
+        Listing.model_validate({**BASE, "design": design}, context={"currency": "NOK"})
+    [error] = exc.value.errors()
+    assert error["loc"] == ("design",)
+    assert message in error["msg"]
+
+
+def test_a_design_map_always_serialises_as_a_map() -> None:
+    listing = Listing.model_validate(BASE, context={"currency": "NOK"})
+    assert listing.model_dump(mode="json")["design"] == {"default": "designs/take-a-hike.png"}
+
+
+@pytest.mark.parametrize(
+    ("written", "canonical"),
+    [
+        ("designs/a.png", {"default": "designs/a.png"}),
+        (None, {}),
+        ({}, {}),
+        (
+            {"on-light": None, "on-dark": "designs/b.png"},
+            {"on-light": None, "on-dark": "designs/b.png"},
+        ),
+    ],
+)
+def test_a_written_listing_carries_design_as_a_map(written: object, canonical: object) -> None:
+    """Bare strings and ``null`` still load; the next write normalises them,
+    so every listing converges on one written form (plan, *Settled
+    decisions*)."""
+    document = canonical_document({**BASE, "design": written})
+    assert document["design"] == canonical
+    assert document["colors"] == BASE["colors"]
+
+
+def test_a_written_listing_without_design_gains_none() -> None:
+    document = canonical_document({"colors": []})
+    assert "design" not in document
 
 
 def test_rejects_bare_number_price_naming_the_field() -> None:
@@ -242,15 +324,12 @@ def test_rejects_more_than_thirteen_tags() -> None:
         Listing.model_validate(data, context={"currency": "NOK"})
 
 
-def test_artwork_override_accepts_listed_colour() -> None:
+def test_the_removed_artwork_map_is_refused_by_name() -> None:
+    """A35 removed ``listing.artwork``: a colour's own file is written in
+    ``design:`` now. Named, rather than pydantic's generic extra-field error,
+    so an existing workspace learns where the setting went."""
     data = {**BASE, "artwork": {"black": "on-dark"}}
-    listing = Listing.model_validate(data, context={"currency": "NOK"})
-    assert listing.artwork == {"black": "on-dark"}
-
-
-def test_rejects_artwork_override_for_unlisted_colour() -> None:
-    data = {**BASE, "artwork": {"not-a-listed-colour": "on-dark"}}
-    with pytest.raises(ValidationError, match="not-a-listed-colour"):
+    with pytest.raises(ValidationError, match=r"design\.<colour>"):
         Listing.model_validate(data, context={"currency": "NOK"})
 
 
@@ -411,7 +490,7 @@ def test_the_empty_document_validates_as_an_ordinary_listing() -> None:
     [
         ({"media": [{"template": "flat-lay-01", "colour": "ivory"}]}, "ivory"),
         ({"price_overrides": {"ivory": {"S": "349 NOK"}}}, "ivory"),
-        ({"artwork": {"ivory": "on-light"}}, "ivory"),
+        ({"design": {"default": "designs/x.png", "ivory": "designs/y.png"}}, "ivory"),
         ({"prices": {"S": "349 USD"}}, "NOK"),
         ({"etsy": {"title": "x" * 141}}, "140"),
     ],

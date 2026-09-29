@@ -42,7 +42,6 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     brief: "A relaxed hiking tee.",
     prices: {},
     price_overrides: {},
-    artwork: {},
     pricing_plan: null,
     etsy: {
       title: "",

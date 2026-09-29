@@ -310,22 +310,192 @@ class TestTags:
 
 
 class TestColourInGarmentProfile:
-    def test_a_colour_the_profile_does_not_classify_warns(self) -> None:
-        issues = _check(_listing(colors=["black", "forest"]))
-        warnings = [i for i in issues if i.severity == "warn" and i.tab == "variants"]
-        assert len(warnings) == 1
-        assert "forest" in warnings[0].message
+    """Tone classification is mandatory shared garment data (spec: *Artwork
+    resolution*): an enabled colour the profile does not classify blocks
+    deploying, in either base mode, and names the file to fix. It replaced a
+    warning that Printify "may not offer" the colour."""
 
-    def test_every_colour_classified_raises_no_warning(self) -> None:
+    def test_an_unclassified_colour_blocks_naming_the_profile_file(self) -> None:
+        issues = _check(_listing(colors=["black", "forest"]))
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "variants"]
+        assert blocking == [
+            Issue(
+                "block",
+                "variants",
+                "Fix it in garment-profiles/comfort-colors-1717.yaml",
+                "Forest isn't marked light or dark in the comfort-colors-1717 garment profile",
+            )
+        ]
+
+    def test_several_unclassified_colours_are_one_issue(self) -> None:
+        issues = _check(_listing(colors=["forest", "black", "heather"]))
+        [blocking] = [i for i in issues if i.severity == "block" and i.tab == "variants"]
+        assert blocking.message == (
+            "Forest and Heather aren't marked light or dark in the comfort-colors-1717 "
+            "garment profile"
+        )
+
+    def test_every_colour_classified_raises_no_issue(self) -> None:
         issues = _check(_listing(colors=["black", "white"]))
-        assert not any(i.severity == "warn" and i.tab == "variants" for i in issues)
+        assert not any(i.tab == "variants" for i in issues)
 
     def test_no_garment_profile_skips_this_check(self) -> None:
         issues = _check(
             _listing(colors=["not-a-real-colour"], media=["common-media/size-guide.png"]),
             garment_profile=None,
         )
-        assert not any("classif" in i.message.lower() for i in issues)
+        assert not any("marked light or dark" in i.message for i in issues)
+
+
+def _with_design(listing: Listing, design: dict[str, str | None]) -> Listing:
+    return listing.model_copy(update={"design": design})
+
+
+LIGHT_INK = "designs/light-ink.png"
+DARK_INK = "designs/dark-ink.png"
+LINK_WHERE = "Artwork · Link the two designs if one is all this listing needs"
+
+
+class TestArtwork:
+    """The blockers and the warning of docs/ui-multi-artwork-interactions.md
+    Part 1 §10, with Part 2 §9's `where` text. Everything resolves through
+    `config/artwork.py`, so what blocks here is what the stages refuse."""
+
+    def test_no_design_blocks(self) -> None:
+        issues = _check(_with_design(_listing(), {}))
+        assert [i for i in issues if i.where == "Artwork"] == [
+            Issue("block", "variants", "Artwork", "No design is chosen for this listing yet")
+        ]
+
+    def test_an_empty_pair_is_no_design_and_nothing_else(self) -> None:
+        """Both slots empty says one thing, not one blocker per tone."""
+        issues = _check(_with_design(_listing(), {"on-light": None, "on-dark": None}))
+        assert issues == [
+            Issue("block", "variants", "Artwork", "No design is chosen for this listing yet")
+        ]
+
+    def test_a_design_that_is_set_does_not_block(self) -> None:
+        assert not [i for i in _check(_listing()) if i.where.startswith("Artwork")]
+
+    def test_a_needed_slot_left_empty_blocks_naming_its_colours(self) -> None:
+        listing = _with_design(_listing(colors=["black", "white"]), {"on-dark": LIGHT_INK})
+        blocking = [i for i in _check(listing) if i.severity == "block"]
+        assert blocking == [
+            Issue(
+                "block",
+                "variants",
+                "Artwork · For light shirts",
+                "White is a light shirt, but no design for light shirts is chosen",
+            )
+        ]
+
+    def test_several_colours_needing_a_slot_are_named_together(self) -> None:
+        profile = PROFILE.model_copy(
+            update={"colors": {"black": "dark", "white": "light", "ivory": "light"}}
+        )
+        listing = _with_design(_listing(colors=["white", "black", "ivory"]), {"on-light": DARK_INK})
+        [blocking] = [i for i in _check(listing, garment_profile=profile) if i.severity == "block"]
+        assert blocking.where == "Artwork · For dark shirts"
+        assert blocking.message == "Black is a dark shirt, but no design for dark shirts is chosen"
+        listing = _with_design(listing, {"on-dark": LIGHT_INK})
+        [blocking] = [i for i in _check(listing, garment_profile=profile) if i.severity == "block"]
+        assert blocking.message == (
+            "White and Ivory are light shirts, but no design for light shirts is chosen"
+        )
+
+    def test_one_slot_in_use_warns_and_deploys(self) -> None:
+        """Spec acceptance 7: a partial pair whose automatic colours are all
+        dark deploys, with a warning pointing at the unneeded configuration."""
+        listing = _with_design(_listing(colors=["black"]), {"on-light": None, "on-dark": LIGHT_INK})
+        issues = _check(listing)
+        assert issues == [
+            Issue(
+                "warn",
+                "variants",
+                LINK_WHERE,
+                "Only the design for dark shirts is in use — no light shirt you sell needs "
+                "the design for light shirts",
+            )
+        ]
+
+    def test_a_colour_exception_leaves_the_slot_calculation(self) -> None:
+        """A direct exception is considered before deciding which base slots
+        are needed (spec: *A partial light/dark pair*)."""
+        listing = _with_design(
+            _listing(colors=["black", "white"]),
+            {"on-dark": LIGHT_INK, "white": "designs/white-special.png"},
+        )
+        issues = _check(listing)
+        assert [i.severity for i in issues] == ["warn"]
+        assert issues[0].where == LINK_WHERE
+
+    def test_both_slots_in_use_is_quiet(self) -> None:
+        listing = _with_design(
+            _listing(colors=["black", "white"]), {"on-light": DARK_INK, "on-dark": LIGHT_INK}
+        )
+        assert _check(listing) == []
+
+    def test_a_depicted_colour_needs_its_slot_too(self) -> None:
+        """A `multiple` scene shows colours the listing may not sell, and each
+        layer prints what its colour resolves to (spec: *Artwork resolution*)."""
+        chart = TemplateInfo(kind="multiple", colours=frozenset({"black", "white"}))
+        listing = _with_design(
+            _listing(colors=["black"], media=[TemplateMediaEntry(template="chart")]),
+            {"on-dark": LIGHT_INK},
+        )
+        blocking = [i for i in _check(listing, templates={"chart": chart}) if i.severity == "block"]
+        assert [(i.where, i.message) for i in blocking] == [
+            (
+                "Artwork · For light shirts",
+                "White is a light shirt, but no design for light shirts is chosen",
+            )
+        ]
+
+    def test_an_unclassified_depicted_colour_blocks_in_light_dark_mode(self) -> None:
+        chart = TemplateInfo(kind="multiple", colours=frozenset({"black", "heather"}))
+        listing = _listing(colors=["black"], media=[TemplateMediaEntry(template="chart")])
+        paired = _with_design(listing, {"on-light": DARK_INK, "on-dark": LIGHT_INK})
+
+        [blocking] = [
+            i for i in _check(paired, templates={"chart": chart}) if i.severity == "block"
+        ]
+        assert blocking.message == (
+            "Heather isn't marked light or dark in the comfort-colors-1717 garment profile"
+        )
+        # One design for every shirt needs no tone for a colour it only depicts.
+        assert not [i for i in _check(listing, templates={"chart": chart}) if i.severity == "block"]
+
+    def test_a_colourless_single_scene_blocks_in_light_dark_mode(self) -> None:
+        """The tool does not guess which base file a photograph shows."""
+        listing = _listing(
+            colors=["black", "white"],
+            media=[
+                TemplateMediaEntry(template="flat-lay-01", colour="black"),
+                TemplateMediaEntry(template="sizing"),
+            ],
+        )
+        templates = {"flat-lay-01": FLAT_LAY, "sizing": SIZING}
+        paired = _with_design(listing, {"on-light": DARK_INK, "on-dark": LIGHT_INK})
+
+        assert _check(paired, templates=templates) == [
+            Issue(
+                "block",
+                "images",
+                "Listing Images › sizing",
+                "'sizing' doesn't say which shirt colour it shows, so it can't choose between "
+                "the designs for light and dark shirts. Name its colour in the calibrator, or "
+                "remove it from this listing.",
+            )
+        ]
+        assert _check(listing, templates=templates) == []
+
+    def test_a_single_scene_that_names_its_colour_resolves(self) -> None:
+        coloured = TemplateInfo(kind="single", colours=frozenset({"white"}))
+        listing = _with_design(
+            _listing(colors=["black", "white"], media=[TemplateMediaEntry(template="sizing")]),
+            {"on-light": DARK_INK, "on-dark": LIGHT_INK},
+        )
+        assert _check(listing, templates={"sizing": coloured}) == []
 
 
 class TestIndependentChecks:
@@ -372,15 +542,6 @@ class TestNothingChosenYet:
         blocking = [i for i in issues if i.severity == "block" and i.where.endswith("profile")]
         assert len(blocking) == 1
         assert "'no-such'" in blocking[0].message
-
-    def test_no_design_blocks(self) -> None:
-        listing = _listing().model_copy(update={"design": {}})
-        blocking = [i for i in _check(listing) if i.severity == "block" and i.where == "Design"]
-        assert len(blocking) == 1
-        assert "No design selected" in blocking[0].message
-
-    def test_a_design_that_is_set_does_not_block(self) -> None:
-        assert not [i for i in _check(_listing()) if i.where == "Design"]
 
     def test_no_price_source_blocks_on_the_pricing_tab(self) -> None:
         """The one rule shared with `Listing` itself, which refuses to *write*

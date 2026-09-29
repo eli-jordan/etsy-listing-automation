@@ -16,7 +16,6 @@ import { EditorShell } from "./EditorShell";
 const CONFIG: SingleTemplate = {
   kind: "single",
   colour: null,
-  artwork: null,
   bounding_box: [
     { x: 0, y: 0 },
     { x: 10, y: 0 },

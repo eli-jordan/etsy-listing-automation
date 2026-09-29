@@ -47,7 +47,7 @@ from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.listing_validation import TemplateInfo
 from etsy_listings.config.media import ProbeFailure, VideoFacts, media_kind
-from etsy_listings.render.config import ColourMatrixTemplate, MultipleTemplate
+from etsy_listings.render.config import AnyTemplate, ColourMatrixTemplate, MultipleTemplate
 from etsy_listings.workspace.video import probe_video
 from etsy_listings.workspace.workspace import InvalidNameError, InvalidRefError, Workspace
 
@@ -149,11 +149,18 @@ def _template_info_map(workspace: Workspace) -> dict[str, TemplateInfo]:
             config = workspace.load_template_config(name)
         except ConfigLoadError:
             continue
-        if isinstance(config, ColourMatrixTemplate):
-            colours = frozenset(workspace.template_colours(name))
-        elif isinstance(config, MultipleTemplate):
-            colours = frozenset(p.colour for p in config.placements if p.colour)
-        else:
-            colours = frozenset({config.colour}) if config.colour else frozenset()
-        result[name] = TemplateInfo(kind=config.kind, colours=colours)
+        result[name] = template_info(workspace, name, config)
     return result
+
+
+def template_info(workspace: Workspace, name: str, config: AnyTemplate) -> TemplateInfo:
+    """One loaded template as a listing check sees it. Public for the render
+    stage, which has already loaded the configs it ships and asks the same
+    artwork question of them (A35) without gathering the whole catalogue."""
+    if isinstance(config, ColourMatrixTemplate):
+        colours = frozenset(workspace.template_colours(name))
+    elif isinstance(config, MultipleTemplate):
+        colours = frozenset(p.colour for p in config.placements if p.colour)
+    else:
+        colours = frozenset({config.colour}) if config.colour else frozenset()
+    return TemplateInfo(kind=config.kind, colours=colours)

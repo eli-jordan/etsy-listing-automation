@@ -11,6 +11,7 @@ from etsy_listings.render.config import (
     RenderConfig,
     ShadeConfig,
     SingleTemplate,
+    dump_template_config,
     load_template_config,
 )
 
@@ -74,15 +75,42 @@ def test_multiple_template_dispatches_by_kind() -> None:
             "kind": "multiple",
             "placements": [
                 {"colour": "black", "bounding_box": _box_dicts(SQUARE_BOX)},
-                {"colour": "ivory", "bounding_box": _box_dicts(SQUARE_BOX), "artwork": "on-dark"},
+                {"colour": "ivory", "bounding_box": _box_dicts(SQUARE_BOX)},
             ],
         }
     )
     assert isinstance(template, MultipleTemplate)
     assert template.colour_coverage == "exact"
     assert [p.colour for p in template.placements] == ["black", "ivory"]
-    assert template.placements[1].artwork == "on-dark"
     assert template.render_config_for(template.placements[0]).bounding_box == SQUARE_BOX
+
+
+@pytest.mark.parametrize(
+    "data",
+    [
+        {
+            "kind": "multiple",
+            "placements": [
+                {"colour": "ivory", "bounding_box": _box_dicts(SQUARE_BOX), "artwork": "on-dark"}
+            ],
+        },
+        {"kind": "single", "artwork": "on-light", "bounding_box": _box_dicts(SQUARE_BOX)},
+    ],
+)
+def test_a_template_artwork_override_is_refused_naming_prd_30(data: dict[str, object]) -> None:
+    """A35: a colour resolves to the same file in every mockup scene and on
+    Printify, so a template no longer chooses artwork of its own. Refused by
+    name rather than silently ignored -- ignoring it would render a different
+    print from the one the file asked for."""
+    with pytest.raises(ValidationError, match="PRD 30"):
+        load_template_config(data)
+
+
+def test_a_null_artwork_written_by_the_old_calibrator_still_loads() -> None:
+    template = load_template_config(
+        {"kind": "single", "artwork": None, "bounding_box": _box_dicts(SQUARE_BOX)}
+    )
+    assert "artwork" not in dump_template_config(template)
 
 
 def test_multiple_template_colour_coverage_accepts_subset() -> None:

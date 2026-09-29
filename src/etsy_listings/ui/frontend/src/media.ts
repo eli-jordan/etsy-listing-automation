@@ -5,7 +5,7 @@ import {
   listingMediaFileUrl,
   listingMediaThumbnailUrl,
 } from "./api/listings";
-import type { MediaEntry, TemplateSummary } from "./types";
+import type { DesignMap, MediaEntry, TemplateSummary } from "./types";
 
 /**
  * What `media:` holds, and what it looks like.
@@ -85,10 +85,10 @@ export function mediaKind(entry: MediaEntry): "image" | "video" {
  * Here rather than beside the Design strip because every caller wants it for
  * the same reason: it is the second argument to {@link pictureFor}.
  */
-export function singleDesignName(design: Record<string, string>): string | null {
+export function singleDesignName(design: DesignMap): string | null {
   const values = Object.values(design);
   if (values.length !== 1) return null;
-  return refName(values[0] as string) || null;
+  return refName(values[0] ?? "") || null;
 }
 
 /** What to call one entry, in a tile label, a lightbox caption or an aria-label. */

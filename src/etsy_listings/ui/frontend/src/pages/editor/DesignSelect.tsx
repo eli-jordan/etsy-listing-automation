@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { listingDesignThumbnailUrl, listListingDesigns } from "../../api/listings";
 import { refName } from "../../media";
-import type { ListingDesignSummary } from "../../types";
+import type { DesignMap, ListingDesignSummary } from "../../types";
 
 /**
  * The design-select strip above the tab strip, from the mockup.
@@ -21,7 +21,7 @@ import type { ListingDesignSummary } from "../../types";
 
 interface Props {
   /** `Listing.design` verbatim: artwork key -> ref (PRD 73). */
-  design: Record<string, string>;
+  design: DesignMap;
   /** The new ref, ready to PATCH as `{ design: ref }`. */
   onPick: (ref: string) => void;
 }
@@ -43,7 +43,7 @@ export function DesignSelect({ design, onPick }: Props) {
   }, []);
 
   const keys = Object.keys(design);
-  const single = keys.length === 1 ? (design[keys[0] as string] as string) : null;
+  const single = keys.length === 1 ? (design[keys[0] as string] ?? null) : null;
   const multi = keys.length > 1;
 
   function pick(chosen: ListingDesignSummary) {

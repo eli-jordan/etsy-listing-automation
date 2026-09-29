@@ -34,6 +34,7 @@ from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (
     a_context,
     a_lock,
+    edit_garment_profile,
     edit_listing,
     set_copy,
     set_shop_id,
@@ -473,6 +474,10 @@ def test_a_refusal_does_not_cost_the_other_stages_their_plan(root, catalog, prin
 
 
 def test_a_colour_the_catalog_does_not_offer_is_refused(root, catalog, printify) -> None:
+    # Classified, so the artwork gate (A35) lets it through to the catalog.
+    edit_garment_profile(
+        root, "comfort-colors-1717", colors={"black": "dark", "chartreuse": "light"}
+    )
     edit_listing(
         root,
         colors=["black", "chartreuse"],

@@ -574,7 +574,7 @@ class SeoProposalSnapshot(BaseModel):
     garment_brand: str
     garment_model: str
     garment_profile: str
-    design: dict[str, str]
+    design: dict[str, str | None]
     design_content_hash: str | None
 
 

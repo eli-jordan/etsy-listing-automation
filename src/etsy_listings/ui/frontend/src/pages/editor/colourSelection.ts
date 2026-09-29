@@ -35,8 +35,10 @@ export function selectColours(detail: ListingDetail, next: string[]): Record<str
   );
   if (media.length !== detail.media.length) patch.media = media;
 
-  const artwork = withoutKeys(detail.artwork, gone);
-  if (artwork !== null) patch.artwork = artwork;
+  // A colour's own design goes with it: `design` keys other than the base
+  // keys must name an enabled colour (A35).
+  const design = withoutKeys(detail.design, gone);
+  if (design !== null) patch.design = design;
 
   const prices = withoutKeys(detail.price_overrides, gone);
   if (prices !== null) patch.price_overrides = prices;

@@ -113,4 +113,9 @@ def test_remove_featured_video_promotes_the_second(
     expected_media = [black, OWN, blue_jean, ivory, moss]
     _wait_for_media(page, workspace_root, expected_media)
     assert "Featured · shown 2nd" in (page.locator(".rtile").nth(1).text_content() or "")
-    assert _listing_on_disk(workspace_root) == {**before, "media": expected_media}
+    # Every write normalises `design:` to its map form (multi-artwork plan).
+    assert _listing_on_disk(workspace_root) == {
+        **before,
+        "media": expected_media,
+        "design": {"default": before["design"]},
+    }
