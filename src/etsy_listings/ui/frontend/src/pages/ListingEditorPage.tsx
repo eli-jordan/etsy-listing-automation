@@ -8,12 +8,13 @@ import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
 import { refName } from "../media";
-import type { Issue, IssueTab, ListingDetail } from "../types";
+import type { DesignMap, Issue, IssueTab, ListingDetail } from "../types";
 import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { DeployControl } from "./editor/DeployControl";
-import { DesignSelect } from "./editor/DesignSelect";
+import { ArtworkStrip } from "./editor/ArtworkStrip";
+import type { SlotTarget, Tone } from "./editor/artwork";
 import { DetailsTab } from "./editor/DetailsTab";
 import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
@@ -169,8 +170,11 @@ function ListingEditorPageContent({
   const [typedName, setTypedName] = useState("");
   const aiSeo = useAiSeoMode(detail, update, flush, save, adopt);
 
-  /** Everything picking a design sets off, in the one handler, because two of
-   * the three need the pick itself rather than a later render of its effect.
+  /** Everything a design strip change sets off, in the one handler, because
+   * two of the three need the pick itself rather than a later render of its
+   * effect. `picked` is the file a pick chose; Link and Unlink pick nothing,
+   * so they neither name a draft nor arm the AI chain (interactions §3, §5).
+   * Arming only when the *representative* file changes is PR 4's.
    *
    * The name is here rather than in `ListingEditorShell` because naming is
    * `useAutosave`'s (`commitName`), and only a draft that has none gets one:
@@ -181,10 +185,13 @@ function ListingEditorPageContent({
    * file, so the ordinary create flow becomes "pick a design" with nothing
    * else required. A name already taken is refused exactly as a typed one is,
    * and the page head says so. */
-  function pickDesign(ref: string) {
-    update({ design: ref });
+  function changeDesign(next: DesignMap, picked: string | null) {
+    // The whole map, always: `update` replaces `design` rather than merging
+    // into it, and the map is the one written form (multi-artwork plan).
+    update({ design: next });
+    if (picked === null) return;
     if (detail.name === "" && typedName.trim() === "") {
-      const named = refName(ref);
+      const named = refName(picked);
       // Shown as the name immediately, not only once the file exists. A
       // create is refused until the document will validate (no price source,
       // usually), and `useAutosave` holds the name for the edit that retries
@@ -205,7 +212,7 @@ function ListingEditorPageContent({
       detail={detail}
       update={update}
       flush={flush}
-      onPickDesign={pickDesign}
+      onDesignChange={changeDesign}
       aiSeo={aiSeo}
       head={
         <EditorHead
@@ -297,17 +304,17 @@ export function ListingEditorShell({
   detail,
   update,
   flush,
-  onPickDesign,
+  onDesignChange,
   aiSeo,
   head,
 }: {
   detail: ListingDetail;
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
-  /** Everything one design pick sets off -- the edit, naming an unnamed
-   * draft, and arming the AI chain. Built by `ListingEditorPageContent`, which is
-   * the layer that has `commitName`. */
-  onPickDesign: (ref: string) => void;
+  /** Everything one design strip change sets off -- the edit, and for a pick,
+   * naming an unnamed draft and arming the AI chain. Built by
+   * `ListingEditorPageContent`, which is the layer that has `commitName`. */
+  onDesignChange: (next: DesignMap, picked: string | null) => void;
   /** Owned by `ListingEditorPageContent`, not by this shell and not by
    * `DetailsTab`: a run outlives the tab it was started from -- switching to
    * Variants unmounts the tab. */
@@ -315,6 +322,17 @@ export function ListingEditorShell({
   head: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("variants");
+  /** Which base slot's Recent designs panel is open. Here, not in the strip,
+   * so the card under the Variants stage can open one too (interactions
+   * Part 2 §2). */
+  const [openSlot, setOpenSlot] = useState<SlotTarget | null>(null);
+
+  /** The card under the stage's fix for an empty slot: that slot's panel,
+   * scrolled into view, because filling it fixes every colour that needs it. */
+  function chooseSlot(tone: Tone) {
+    setOpenSlot({ kind: "slot", tone });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
 
   function pickTab(next: Tab) {
     flush();
@@ -344,7 +362,14 @@ export function ListingEditorShell({
       {/* Above the tabs, not inside one: the artwork is what both Variants
           (which colours suit it) and Listing Images (which mockups show it)
           are about. */}
-      <DesignSelect design={detail.design} onPick={onPickDesign} />
+      <ArtworkStrip
+        design={detail.design}
+        colours={detail.colors}
+        garmentProfile={detail.garment_profile}
+        open={openSlot}
+        onOpen={setOpenSlot}
+        onChange={onDesignChange}
+      />
 
       <div className="tabs seg">
         {TABS.map((t) => {
@@ -368,7 +393,9 @@ export function ListingEditorShell({
         })}
       </div>
 
-      {tab === "variants" && <VariantsTab detail={detail} onUpdate={update} />}
+      {tab === "variants" && (
+        <VariantsTab detail={detail} onUpdate={update} onChooseSlot={chooseSlot} />
+      )}
       {tab === "pricing" && <PricingTab detail={detail} onUpdate={update} onFlush={flush} />}
       {tab === "images" && <ImagesTab detail={detail} onUpdate={update} />}
       {tab === "details" && (

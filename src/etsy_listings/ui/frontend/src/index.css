@@ -2116,6 +2116,121 @@ table.listings tbody tr:last-child td {
   text-decoration: underline;
 }
 
+/* The linked pair (interactions Part 2 §1): two base-slot cards, for light
+   and for dark shirts, joined by the Link / Unlink pill. */
+.design-select--pair {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.design-select__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.design-select__own {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+}
+
+.design-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.design-row--slot {
+  padding: 6px 12px 6px 6px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-neutral-100);
+}
+
+/* Empty, and a colour the listing sells needs it. */
+.design-row--missing {
+  border-style: dashed;
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-neutral-100));
+}
+
+/* Linked: the dark card only mirrors the one design. */
+.design-row--mirrored {
+  border-style: dashed;
+  background: transparent;
+}
+
+.design-row--mirrored .design-tile {
+  opacity: 0.75;
+}
+
+.design-row--open {
+  border-color: var(--color-accent);
+}
+
+.design-row__title {
+  font-size: 11px;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+}
+
+.design-row__users {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.design-row__users--idle {
+  font-style: italic;
+}
+
+.design-row__same {
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.design-row--slot .design-row__change {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.design-link {
+  height: 30px;
+  padding: 0 11px 0 9px;
+  gap: 5px;
+  font-family: var(--font-body);
+  font-size: 11.5px;
+  font-weight: 700;
+  border-radius: 999px;
+  border: 1px solid var(--color-divider);
+  background: var(--color-bg);
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+
+.design-link:hover {
+  border-color: var(--color-accent);
+  color: var(--color-accent-700);
+}
+
+.design-link--on {
+  background: var(--color-accent-100);
+  border-color: var(--color-accent-300);
+  color: var(--color-accent-700);
+}
+
+.design-select--pair .add-panel {
+  margin-top: 0;
+}
+
 /* The inline picker the strip drops open, and the card grid inside it --
    also the shape the locator's non-matrix bodies use. */
 .add-panel {
@@ -4682,6 +4797,62 @@ table.listings tbody tr:last-child td {
   font-size: 10.5px;
   font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* The full design list for one target (interactions Part 2 §4): titled for
+   it, every thumbnail on its cloth, the current file marked. */
+.design-picker {
+  width: 460px;
+}
+
+.design-picker__hint {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+}
+
+.design-picker__search {
+  position: relative;
+}
+
+.design-picker__search svg {
+  position: absolute;
+  left: 11px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+.design-picker__search .input {
+  width: 100%;
+  padding-left: 32px;
+}
+
+.design-picker__row {
+  width: 100%;
+}
+
+.design-picker__row .modal-design-row__thumb {
+  width: 44px;
+  height: 44px;
+}
+
+.design-picker__row--on {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.design-picker__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.design-picker__current {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-accent-700);
 }
 
 .modal-empty {

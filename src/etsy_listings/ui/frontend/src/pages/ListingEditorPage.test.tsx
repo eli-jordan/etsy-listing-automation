@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as calibrator from "../api/calibrator";
@@ -267,7 +267,8 @@ describe("ListingEditorPage", () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
 
-    expect(await screen.findByText("designs/take-a-hike.png")).toBeInTheDocument();
+    expect(await screen.findByText("For all shirts")).toBeInTheDocument();
+    expect(screen.getByText("Prints on every colour you sell")).toBeInTheDocument();
   });
 
   it("saves a newly picked design", async () => {
@@ -278,14 +279,14 @@ describe("ListingEditorPage", () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     const patchSpy = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
-    await screen.findByText("designs/take-a-hike.png");
+    await screen.findByText("For all shirts");
 
     fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
     await waitFor(() =>
       expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
-        design: "designs/cosmic-cat.png",
+        design: { default: "designs/cosmic-cat.png" },
       }),
     );
   });
@@ -303,7 +304,7 @@ describe("ListingEditorPage", () => {
       .spyOn(listingsApi, "patchListing")
       .mockResolvedValue(detail({ design: { default: "designs/cosmic-cat.png" } }));
     renderAt("/listings/take-a-hike");
-    await screen.findByText("designs/take-a-hike.png");
+    await screen.findByText("For all shirts");
 
     fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
@@ -349,7 +350,7 @@ describe("ListingEditorPage", () => {
     vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
     const rename = vi.spyOn(listingsApi, "renameListing");
     renderAt("/listings/take-a-hike");
-    await screen.findByText("designs/take-a-hike.png");
+    await screen.findByText("For all shirts");
 
     fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
@@ -382,6 +383,58 @@ describe("ListingEditorPage", () => {
     // A warning-coloured count: the tab only says there is something to look
     // at, and none of it stops the save.
     expect(imagesTabButton.querySelector(".tab-badge--warn")).toHaveTextContent("1");
+  });
+
+  it("saves an unlinked pair and a pick for one slot through autosave", async () => {
+    /* Interactions Part 2 §3: every strip change is one `update(patch)` with
+       the whole new map. */
+    vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
+      { name: "take-a-hike", file: "designs/take-a-hike.png" },
+      { name: "light-ink", file: "designs/light-ink.png" },
+    ]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const patchSpy = vi.spyOn(listingsApi, "patchListing").mockResolvedValue(detail());
+    renderAt("/listings/take-a-hike");
+    await screen.findByText("For all shirts");
+
+    fireEvent.click(screen.getByRole("button", { name: "Unlink" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Change design for dark shirts/ }));
+    fireEvent.click(await screen.findByRole("button", { name: /light-ink/ }));
+
+    await waitFor(() =>
+      expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
+        design: { "on-light": "designs/take-a-hike.png", "on-dark": "designs/light-ink.png" },
+      }),
+    );
+    expect(patchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("opens a slot's Recent designs from the card under the Variants stage", async () => {
+    /* Interactions §10: the fix for an empty slot is one click from where
+       the seller notices it. */
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([
+      {
+        name: "comfort-colors-1717",
+        sizes: ["S"],
+        colors: { black: "dark", ivory: "light" },
+        preview_template: "flat-lay-01",
+      },
+    ]);
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+      detail({ colors: ["ivory"], design: { "on-light": null, "on-dark": "designs/x.png" } }),
+    );
+    const scrollTo = vi.spyOn(window, "scrollTo").mockImplementation(() => undefined);
+    const { container } = renderAt("/listings/take-a-hike");
+    const card = await waitFor(() => {
+      const el = container.querySelector(".color-prints");
+      if (el === null) throw new Error("no card yet");
+      return el as HTMLElement;
+    });
+
+    fireEvent.click(within(card).getByRole("button", { name: "Choose design for light shirts" }));
+
+    expect(screen.getByText("Recent designs for light shirts")).toBeInTheDocument();
+    expect(scrollTo).toHaveBeenCalled();
   });
 
   it("shows Draft for an unpublished listing and no open-elsewhere menu", async () => {
@@ -496,7 +549,7 @@ describe("ListingEditorPage at /listings/new", () => {
     renderAt("/listings/new");
     await screen.findByLabelText("Listing name");
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Choose design for all shirts/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
     await waitFor(() => expect(create).toHaveBeenCalledTimes(1));
@@ -505,7 +558,7 @@ describe("ListingEditorPage at /listings/new", () => {
     // in a follow-up patch: `useAutosave` merges what is pending into the
     // create candidate.
     expect(create.mock.calls[0]?.[0].document).toMatchObject({
-      design: "designs/cosmic-cat.png",
+      design: { default: "designs/cosmic-cat.png" },
     });
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "cosmic-cat" })).toBeInTheDocument(),
@@ -529,7 +582,7 @@ describe("ListingEditorPage at /listings/new", () => {
     renderAt("/listings/new");
     await screen.findByLabelText("Listing name");
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Choose design for all shirts/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
     await waitFor(() =>
@@ -554,7 +607,7 @@ describe("ListingEditorPage at /listings/new", () => {
     const input = await screen.findByLabelText("Listing name");
     fireEvent.change(input, { target: { value: "my-shi" } });
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Choose design for all shirts/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
     await waitFor(() => expect(describe).toHaveBeenCalled());
@@ -586,7 +639,7 @@ describe("ListingEditorPage at /listings/new", () => {
       expect(screen.getByRole("heading", { name: "my-shirt" })).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Change design for all shirts/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
 
     await waitFor(() => expect(listingsApi.patchListing).toHaveBeenCalled());

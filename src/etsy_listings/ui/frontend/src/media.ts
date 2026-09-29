@@ -45,7 +45,7 @@ export type PictureSize = "tile" | "full";
  *
  * Filename-derived rather than looked up, so a reel tile still labels itself
  * when the file has been deleted from `common-media/` since the listing named
- * it. One implementation: `DesignSelect` and the reel each had their own.
+ * it. One implementation: the design strip and the reel each had their own.
  */
 export function refName(ref: string): string {
   const file = ref.split("/").pop() ?? ref;
