@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
-import { mediaKind, mediaLabel, pictureFor } from "../../media";
+import { mediaKind, mediaLabel, pictureFor, type SceneSource } from "../../media";
 import type { MediaFileSummary, MediaEntry } from "../../types";
 import { MAX_IMAGES, MAX_VIDEOS, canReorder } from "./mediaEdits";
 import type { Focus } from "./focus";
@@ -26,7 +26,7 @@ import type { Focus } from "./focus";
 
 interface Props {
   media: readonly MediaEntry[];
-  design: string | null;
+  scene: SceneSource | null;
   swatchTemplate: string | null;
   selectedIndex: number | null;
   /** The listing a `./` ref belongs to, or `null` for a draft. */
@@ -42,7 +42,7 @@ interface Props {
 
 export function MediaReel({
   media,
-  design,
+  scene,
   swatchTemplate,
   selectedIndex,
   listing,
@@ -94,7 +94,7 @@ export function MediaReel({
               key={`${mediaLabel(entry)}-${index}`}
               entry={entry}
               index={index}
-              picture={pictureFor(entry, design, "tile", listing)}
+              picture={pictureFor(entry, scene, "tile", listing)}
               suppliesSwatch={
                 typeof entry !== "string" &&
                 swatchTemplate !== null &&

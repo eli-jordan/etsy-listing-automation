@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { getTemplateSwatch, listTemplates } from "../../api/calibrator";
 import { listGarmentProfiles } from "../../api/listings";
-import { singleDesignName, templatePicture } from "../../media";
+import { sceneSource, templatePicture } from "../../media";
 import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
+import type { Tone } from "./artwork";
 import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelection";
+import { PrintsCard } from "./PrintsCard";
 
 /**
  * Garment dropdown, sizes, colour list, and a preview of the colour under the
@@ -14,12 +16,13 @@ import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelect
  * `preview_template` (`render/swatch.py`'s `sample_swatch`, via
  * `GET .../swatch`). It answers "roughly what colour is this" for scanning
  * the whole list; "does this colour suit the design" is still the big
- * preview stage beside it, which overlays the listing's real artwork
- * (`GET .../design-preview`) rather than showing a bare photo -- and is
- * rendered large, because that judgement is about the ink on the cloth and
- * a postage stamp cannot carry it. The preview template is a colour-matrix
- * on the garment, not a `media:` entry, so a new listing can judge colours
- * before it has picked listing images (A13).
+ * preview stage beside it, which renders the colour with the file it
+ * resolves to in the saved listing (`GET .../scene-preview`, A35) rather
+ * than a bare photo -- and is rendered large, because that judgement is about
+ * the ink on the cloth and a postage stamp cannot carry it. The preview
+ * template is a colour-matrix on the garment, not a `media:` entry, so a new
+ * listing can judge colours before it has picked listing images (A13). The
+ * card under it says which file that is and why (`PrintsCard`).
  *
  * Two different states, deliberately distinguished, because conflating them
  * painted every enabled row in the selected-row highlight:
@@ -39,6 +42,9 @@ import { mediaLostBy, selectColours, selectGarmentProfile } from "./colourSelect
 interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
+  /** Opens a base slot's Recent designs panel in the strip above the tabs --
+   * the card under the stage's fix for a colour whose slot is empty. */
+  onChooseSlot?: (tone: Tone) => void;
 }
 
 /** The garment profile's colour-matrix, used to judge colours before the
@@ -57,7 +63,7 @@ function previewTemplate(
   return name;
 }
 
-export function VariantsTab({ detail, onUpdate }: Props) {
+export function VariantsTab({ detail, onUpdate, onChooseSlot = () => undefined }: Props) {
   const [profiles, setProfiles] = useState<GarmentProfileSummary[]>([]);
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [swatches, setSwatches] = useState<Record<string, string>>({});
@@ -94,7 +100,8 @@ export function VariantsTab({ detail, onUpdate }: Props) {
       : (detail.colors[0] ?? colourNames[0] ?? null);
 
   const template = previewTemplate(profile, templates);
-  const design = singleDesignName(detail.design);
+  const scene = sceneSource(detail.name, detail.design_content_hash);
+  const tones: Record<string, Tone> = profile?.colors ?? {};
 
   // One request per colour, fired once the preview template and colour list
   // are known -- not per row-render, so scrolling or re-toggling a switch
@@ -261,12 +268,16 @@ export function VariantsTab({ detail, onUpdate }: Props) {
                 {/* Beside the switch, not beside the name: the shade is what
                     the two bulk buttons above act on, so it reads as a
                     property of the decision rather than of the label. */}
-                {classification && (
+                {classification ? (
                   <span
                     className={classification === "dark" ? "tag tag-neutral" : "tag tag-accent"}
                   >
                     {classification}
                   </span>
+                ) : (
+                  // Shared garment data the listing cannot supply: which base
+                  // design it prints depends on it (spec, *Artwork resolution*).
+                  profile !== undefined && <span className="tag tag-dirty">no tone</span>
                 )}
                 <button
                   type="button"
@@ -287,13 +298,26 @@ export function VariantsTab({ detail, onUpdate }: Props) {
       <div className="variants-preview">
         <div className="preview-stage preview-stage--large">
           {template !== null && shown !== null ? (
-            <img src={templatePicture(template, shown, design)} alt={`${shown} on ${template}`} />
+            <img src={templatePicture(template, shown, scene)} alt={`${shown} on ${template}`} />
           ) : (
             <div className="image-placeholder">
               <span>Set preview_template on the garment profile to a colour-matrix mockup.</span>
             </div>
           )}
         </div>
+        {/* Once the profile has loaded: before then every colour of a
+            light/dark listing would read as having no tone. */}
+        {shown !== null && profile !== undefined && (
+          <PrintsCard
+            colour={shown}
+            enabled={detail.colors.includes(shown)}
+            design={detail.design}
+            profile={detail.garment_profile}
+            tones={tones}
+            swatch={swatches[shown]}
+            onChooseSlot={onChooseSlot}
+          />
+        )}
         <p className="variants-preview__hint">
           Click a colour to preview it — helps judge whether it suits the design.
         </p>

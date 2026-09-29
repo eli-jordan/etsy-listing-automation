@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
@@ -114,24 +114,49 @@ describe("VariantsTab's preview", () => {
     expect(container.querySelector(".preview-stage__tag")).toBeNull();
   });
 
-  it("overlays the listing's real design once it has exactly one", async () => {
-    renderWithFlatLay({ design: { default: "designs/take-a-hike.png" } });
+  it("renders the saved listing's scene, keyed by its saved design", async () => {
+    renderWithFlatLay({
+      design: { default: "designs/take-a-hike.png" },
+      design_content_hash: "abc123",
+    });
     const preview = await screen.findByAltText("black on flat-lay-01");
     expect(preview).toHaveAttribute(
       "src",
-      "/api/templates/flat-lay-01/design-preview?design=take-a-hike&colour=black",
+      "/api/listings/take-a-hike/scene-preview?template=flat-lay-01&colour=black&v=abc123",
     );
   });
 
-  it("falls back to the bare photo for a multi-artwork design", async () => {
+  it("asks for each colour's scene, so a light/dark pair is never a bare photo", async () => {
+    /* Spec, *Previews*: the stage must not fall back to a bare garment just
+       because the listing has two base files. The server resolves each
+       colour's file; the URL only names the colour. */
     renderWithFlatLay({
-      design: {
-        "on-light": "designs/take-a-hike-light.png",
-        "on-dark": "designs/take-a-hike-dark.png",
-      },
+      design: { "on-light": "designs/dark-ink.png", "on-dark": "designs/light-ink.png" },
+      design_content_hash: "pair",
     });
-    const preview = await screen.findByAltText("black on flat-lay-01");
-    expect(preview).toHaveAttribute("src", "/api/templates/flat-lay-01/photo?colour=black");
+    expect(await screen.findByAltText("black on flat-lay-01")).toHaveAttribute(
+      "src",
+      "/api/listings/take-a-hike/scene-preview?template=flat-lay-01&colour=black&v=pair",
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview ivory" }));
+
+    expect(await screen.findByAltText("ivory on flat-lay-01")).toHaveAttribute(
+      "src",
+      "/api/listings/take-a-hike/scene-preview?template=flat-lay-01&colour=ivory&v=pair",
+    );
+  });
+
+  it("shows the bare photo for an unnamed draft, which has no saved listing", async () => {
+    renderWithFlatLay({
+      name: "",
+      design: { default: "designs/take-a-hike.png" },
+      design_content_hash: "abc123",
+    });
+    expect(await screen.findByAltText("black on flat-lay-01")).toHaveAttribute(
+      "src",
+      "/api/templates/flat-lay-01/photo?colour=black",
+    );
   });
 
   it("shows a swatch dot sampled off the preview template", async () => {
@@ -425,5 +450,116 @@ describe("VariantsTab with nothing chosen yet", () => {
     render(<VariantsTab detail={detail({ garment_profile: "", colors: [] })} onUpdate={vi.fn()} />);
 
     await waitFor(() => expect(screen.getByText("Select a garment profile…")).toBeInTheDocument());
+  });
+});
+
+describe("VariantsTab's tone tags and the card under the stage", () => {
+  /* Interactions Part 1 §8 and Part 2 §5-§6: every colour row says its tone,
+     and the card under the stage says in words which file the previewed
+     colour prints and why -- base-slot states here; a colour's own design is
+     PR 3's. */
+  const PROFILE: GarmentProfileSummary = {
+    name: "bella-canvas-3001",
+    sizes: ["S"],
+    colors: { black: "dark", ivory: "light", navy: "dark" },
+    preview_template: "flat-lay-01",
+  };
+
+  function renderTab(over: Partial<ListingDetail> = {}, onChooseSlot = vi.fn()) {
+    vi.spyOn(listingsApi, "listGarmentProfiles").mockResolvedValue([PROFILE]);
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([template({ name: "flat-lay-01" })]);
+    const view = render(
+      <VariantsTab
+        detail={detail({
+          garment_profile: "bella-canvas-3001",
+          colors: ["black", "ivory", "navy"],
+          ...over,
+        })}
+        onUpdate={vi.fn()}
+        onChooseSlot={onChooseSlot}
+      />,
+    );
+    return { ...view, onChooseSlot };
+  }
+
+  function card(container: HTMLElement): HTMLElement {
+    const el = container.querySelector(".color-prints");
+    if (el === null) throw new Error("no prints card");
+    return el as HTMLElement;
+  }
+
+  it("marks a colour the garment profile has no tone for as no tone", async () => {
+    renderTab({ colors: ["black", "heather"] });
+    const row = (await screen.findByText("heather")).closest(".color-row");
+    expect(row?.querySelector(".tag.tag-dirty")).toHaveTextContent("no tone");
+  });
+
+  it("explains the one design for all shirts", async () => {
+    const { container } = renderTab({ design: { default: "designs/take-a-hike.png" } });
+    await screen.findByText("black");
+    expect(card(container)).toHaveTextContent("Black prints take-a-hike");
+    expect(card(container)).toHaveTextContent("Automatic: the one design for all shirts.");
+    expect(card(container)).toHaveTextContent("Listing Images and Printify use this same file.");
+    expect(within(card(container)).queryByRole("button")).toBeNull();
+  });
+
+  it("explains a base slot by the profile's tone for the colour", async () => {
+    const { container } = renderTab({
+      design: { "on-light": "designs/dark-ink.png", "on-dark": "designs/light-ink.png" },
+    });
+    await screen.findByText("black");
+    expect(card(container)).toHaveTextContent("Black prints light-ink");
+    expect(card(container)).toHaveTextContent(
+      "Automatic: the design for dark shirts, because bella-canvas-3001 marks black dark.",
+    );
+    const thumb = card(container).querySelector("img");
+    expect(thumb).toHaveAttribute("src", "/api/listing-designs/light-ink/thumbnail");
+  });
+
+  it("offers to fill an empty slot the previewed colour needs", async () => {
+    const { container, onChooseSlot } = renderTab({
+      design: { "on-light": null, "on-dark": "designs/light-ink.png" },
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "Preview ivory" }));
+
+    expect(card(container)).toHaveTextContent("Ivory has nothing to print");
+    expect(card(container)).toHaveTextContent(
+      "It’s a light shirt, and no design for light shirts is chosen yet.",
+    );
+    expect(card(container)).not.toHaveTextContent("Listing Images and Printify");
+    fireEvent.click(
+      within(card(container)).getByRole("button", { name: "Choose design for light shirts" }),
+    );
+    expect(onChooseSlot).toHaveBeenCalledWith("light");
+  });
+
+  it("says a colour with no tone blocks, names the profile file and offers nothing", async () => {
+    const { container } = renderTab({
+      colors: ["heather"],
+      design: { "on-light": "designs/dark-ink.png", "on-dark": "designs/light-ink.png" },
+    });
+    await screen.findByText("heather");
+    expect(card(container)).toHaveClass("color-prints--blocked");
+    expect(card(container)).toHaveTextContent("Heather can’t pick a design yet");
+    expect(card(container)).toHaveTextContent(
+      "The bella-canvas-3001 garment profile doesn’t say whether heather is a light or dark shirt. Mark it in garment-profiles/bella-canvas-3001.yaml — this listing can’t decide it.",
+    );
+    expect(within(card(container)).queryByRole("button")).toBeNull();
+  });
+
+  it("asks for a design when there is none", async () => {
+    const { container } = renderTab({ design: {} });
+    await screen.findByText("black");
+    expect(card(container)).toHaveTextContent("Black has nothing to print");
+    expect(card(container)).toHaveTextContent("Choose a design above.");
+  });
+
+  it("says a colour that is switched off is not sold, instead of a card", async () => {
+    const { container } = renderTab({ colors: ["black"], design: { default: "designs/a.png" } });
+    fireEvent.click(await screen.findByRole("button", { name: "Preview ivory" }));
+    expect(container.querySelector(".color-prints")).toBeNull();
+    expect(
+      screen.getByText("Ivory isn’t sold on this listing. Switch it on to choose what it prints."),
+    ).toBeInTheDocument();
   });
 });

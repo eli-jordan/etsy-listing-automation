@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { listTemplates } from "../../api/calibrator";
 import { listCommonMedia, listListingMediaFiles } from "../../api/listings";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
-import { mediaKind, mediaLabel, pictureFor, singleDesignName } from "../../media";
+import { mediaKind, mediaLabel, pictureFor, sceneSource } from "../../media";
 import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
@@ -70,7 +70,8 @@ export function ImagesTab({ detail, onUpdate }: Props) {
       .catch(() => setStatus("failed to load this listing's files"));
   }, [listing]);
 
-  const design = singleDesignName(detail.design);
+  // Each layer resolved from the saved listing, multi-colour scenes too (A35).
+  const scene = sceneSource(detail.name, detail.design_content_hash);
 
   /** Every edit is a patch or nothing: a rule that declines (the twentieth
    * image is already there) returns `null` rather than an unchanged document,
@@ -84,11 +85,11 @@ export function ImagesTab({ detail, onUpdate }: Props) {
   const lightboxItems: LightboxItem[] = detail.media.map((entry, index) => ({
     id: `${mediaLabel(entry)}-${index}`,
     label: mediaLabel(entry),
-    url: pictureFor(entry, design, "full", listing),
+    url: pictureFor(entry, scene, "full", listing),
     kind: mediaKind(entry),
   }));
 
-  const view = focus === null ? null : viewFocus(focus, detail, templates, design);
+  const view = focus === null ? null : viewFocus(focus, detail, templates, scene);
 
   function toggleFocused() {
     if (focus === null) return;
@@ -188,7 +189,7 @@ export function ImagesTab({ detail, onUpdate }: Props) {
 
         <MediaReel
           media={detail.media}
-          design={design}
+          scene={scene}
           swatchTemplate={detail.etsy.variation_images ?? null}
           selectedIndex={selectedIndex}
           listing={listing}

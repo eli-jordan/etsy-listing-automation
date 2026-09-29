@@ -2056,6 +2056,27 @@ table.listings tbody tr:last-child td {
   background: linear-gradient(135deg, var(--color-neutral-200), var(--color-neutral-300));
 }
 
+/* A thumbnail on the cloth it prints on: light ink on a light tile would be
+   invisible, and "does this ink suit the shirt" is the point of looking. */
+.design-tile {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.design-tile img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+}
+
+.design-tile--empty {
+  background: transparent;
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 30%, transparent);
+  box-shadow: none;
+}
+
 .design-row__text {
   flex: 1;
   min-width: 0;
@@ -4218,6 +4239,79 @@ table.listings tbody tr:last-child td {
   font-size: 11px;
   text-align: center;
   color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+/* What the previewed colour prints, and why (interactions Part 2 §6). */
+.color-prints {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+}
+
+.color-prints--blocked {
+  border-color: var(--color-warning);
+  background: color-mix(in srgb, var(--color-warning) 8%, var(--color-neutral-100));
+}
+
+.color-prints__thumb {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.color-prints__thumb img {
+  width: 84%;
+  height: 84%;
+  object-fit: contain;
+}
+
+.color-prints__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.color-prints__title {
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.color-prints__why {
+  font-size: 12.5px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+  max-width: 62ch;
+}
+
+.color-prints__note {
+  margin-top: 4px;
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.color-prints__actions {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  flex: none;
+}
+
+/* The same body-face override `.add-panel .btn-like` applies: Caprasimo is
+   for headings, not 12px row actions. */
+.color-prints__btn {
+  font-family: var(--font-body);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .image-placeholder {

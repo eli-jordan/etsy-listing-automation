@@ -179,6 +179,22 @@ export function listingMediaFileUrl(listing: string, name: string): string {
   return `/api/listings/${encodeURIComponent(listing)}/media-files/${mediaPath(name)}/file`;
 }
 
+/** One of the listing's scenes, each layer printing the file its colour
+ * resolves to in the *saved* listing (A35). `version` is ignored by the
+ * server: it is a signature of the saved design map, so a landed save is a new
+ * URL and the browser fetches the picture again. */
+export function listingScenePreviewUrl(
+  listing: string,
+  template: string,
+  colour: string | null,
+  version: string,
+): string {
+  const params = new URLSearchParams({ template });
+  if (colour) params.set("colour", colour);
+  params.set("v", version);
+  return `/api/listings/${encodeURIComponent(listing)}/scene-preview?${params.toString()}`;
+}
+
 /** The shared asset's own picture, downscaled for a list. A URL, like the two
  * thumbnails above. `name` is its path under `common-media/`, extension and
  * all -- `MediaFileSummary.name`. */

@@ -22,7 +22,7 @@ const SIZING: MediaFileSummary = {
 function reel(over: Partial<Parameters<typeof MediaReel>[0]> = {}) {
   const props = {
     media: [] as MediaEntry[],
-    design: null,
+    scene: null,
     swatchTemplate: null,
     selectedIndex: null,
     listing: "take-a-hike" as string | null,

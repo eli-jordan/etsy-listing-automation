@@ -688,6 +688,7 @@ describe("ImagesTab's search", () => {
 describe("ImagesTab's full-size carousel", () => {
   const reel = detail({
     design: { default: "designs/take-a-hike.png" },
+    design_content_hash: "abc123",
     colors: ["black", "white"],
     media: [
       { template: "flat-lay-01", colour: "black" },
@@ -723,11 +724,37 @@ describe("ImagesTab's full-size carousel", () => {
     const { container } = renderReel();
     fireEvent.mouseEnter(await tile("flat-lay-01 · black"));
 
-    // `design-preview` is the real pipeline at the photo's own resolution;
-    // `thumbnail` is a 160px picture to pick out of a list.
+    // `scene-preview` is the real pipeline at the photo's own resolution,
+    // each layer resolved from the saved listing (A35); `thumbnail` is a
+    // 160px picture to pick out of a list.
     expect(previewImage(container)).toHaveAttribute(
       "src",
-      "/api/templates/flat-lay-01/design-preview?design=take-a-hike&colour=black",
+      "/api/listings/take-a-hike/scene-preview?template=flat-lay-01&colour=black&v=abc123",
+    );
+  });
+
+  it("previews a multi-colour scene of a light/dark listing through the same resolver", async () => {
+    /* Spec, *Previews*: every generated scene shows the file each depicted
+       colour resolves to, a scene with several colours included -- so a
+       light/dark pair is never the bare photo. */
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([
+      summary({ name: "colour-chart-01", kind: "multiple", colours: [] }),
+    ]);
+    const { container } = render(
+      <ImagesTab
+        detail={detail({
+          design: { "on-light": "designs/dark-ink.png", "on-dark": "designs/light-ink.png" },
+          design_content_hash: "pair",
+          media: [{ template: "colour-chart-01" }],
+        })}
+        onUpdate={vi.fn()}
+      />,
+    );
+    fireEvent.mouseEnter(await tile("colour-chart-01"));
+
+    expect(previewImage(container)).toHaveAttribute(
+      "src",
+      "/api/listings/take-a-hike/scene-preview?template=colour-chart-01&v=pair",
     );
   });
 

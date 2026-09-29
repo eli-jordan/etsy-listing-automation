@@ -7,12 +7,8 @@ import {
   type MouseEvent,
   type PointerEvent,
 } from "react";
-import {
-  stageBlocked,
-  type ListingDetail,
-  type ListingSummary,
-  type RenderSnapshot,
-} from "../../types";
+import { stageBlocked, type ListingSummary, type RenderSnapshot } from "../../types";
+import { sceneSource } from "../../media";
 import { ComparisonView } from "../deploy/ComparisonView";
 import { buildComparison } from "../deploy/comparison";
 import { PriceTable } from "../deploy/PriceTable";
@@ -110,14 +106,6 @@ function comparisonPreviews(listing: string, previewsRendered: ReadonlySet<strin
       .filter((key) => key.startsWith(prefix))
       .map((key) => key.slice(prefix.length)),
   );
-}
-
-function listingDesign(
-  summary: Pick<ListingSummary, "design"> | null | undefined,
-): ListingDetail["design"] {
-  return summary?.design === null || summary?.design === undefined
-    ? {}
-    : { default: summary.design };
 }
 
 /** A real modal drawer, kept independent from the eventual review page so PR4
@@ -340,7 +328,12 @@ export function BatchListingDrawer({
               />
               <ComparisonView
                 comparison={comparison}
-                listing={{ name, design: listingDesign(summary) }}
+                listing={{
+                  name,
+                  // The server resolves every layer from the saved listing
+                  // (A35); nothing is edited here, so no version to key by.
+                  scene: sceneSource(name, ""),
+                }}
                 renderSnapshot={renderSnapshot}
                 previewsRendered={comparisonPreviews(name, previewsRendered)}
                 collapsed={collapsed}

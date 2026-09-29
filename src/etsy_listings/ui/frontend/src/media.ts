@@ -1,11 +1,12 @@
-import { templateDesignPreviewUrl, templatePhotoUrl, templateThumbnailUrl } from "./api/calibrator";
+import { templatePhotoUrl, templateThumbnailUrl } from "./api/calibrator";
 import {
   commonMediaFileUrl,
   commonMediaThumbnailUrl,
   listingMediaFileUrl,
   listingMediaThumbnailUrl,
+  listingScenePreviewUrl,
 } from "./api/listings";
-import type { DesignMap, MediaEntry, TemplateSummary } from "./types";
+import type { MediaEntry, TemplateSummary } from "./types";
 
 /**
  * What `media:` holds, and what it looks like.
@@ -78,17 +79,31 @@ export function mediaKind(entry: MediaEntry): "image" | "video" {
 }
 
 /**
- * The one design a render can overlay -- `null` for a multi-artwork listing
- * (`on-light`/`on-dark`), where there is no single "the design" to composite,
- * which is the same case `DesignSelect` treats as read-only.
+ * Which saved listing a scene render resolves its artwork from, and a
+ * signature of that listing's saved design (A35).
  *
- * Here rather than beside the Design strip because every caller wants it for
- * the same reason: it is the second argument to {@link pictureFor}.
+ * Every layer of a scene prints the file its colour resolves to -- a
+ * light/dark pair shows both files in one multi-colour scene -- so a picture
+ * is asked of the listing, not of one design name. It is the *saved* listing
+ * the server reads (multi-artwork plan, *Editor previews*), which is why the
+ * signature is `design_content_hash`: it comes from the last server response,
+ * so it changes when a design edit has landed rather than when it was made,
+ * and a URL is never cached holding the picture from before the save.
+ *
+ * `null` for an unnamed draft, which has no saved listing to resolve from,
+ * and for a listing with no design, which would only print nothing.
  */
-export function singleDesignName(design: DesignMap): string | null {
-  const values = Object.values(design);
-  if (values.length !== 1) return null;
-  return refName(values[0] ?? "") || null;
+export interface SceneSource {
+  listing: string;
+  version: string;
+}
+
+export function sceneSource(
+  listing: string,
+  designVersion: string | null | undefined,
+): SceneSource | null {
+  if (listing === "" || designVersion === null || designVersion === undefined) return null;
+  return { listing, version: designVersion };
 }
 
 /** What to call one entry, in a tile label, a lightbox caption or an aria-label. */
@@ -130,11 +145,10 @@ export function missingColours(
 /**
  * The picture for one thing `media:` can hold.
  *
- * A template entry is a *render*: the listing's real artwork composited onto
- * the template's saved geometry. `design` is null for a multi-artwork listing
- * (`on-light`/`on-dark`), where there is no single design to composite, and
- * that case falls back to the bare inkless photo. A shared asset is already
- * exactly the file Etsy would receive, so it is served as-is.
+ * A template entry is a *render*: each layer printing the file its colour
+ * resolves to, composited onto the template's saved geometry. With no
+ * `scene` to resolve from it is the bare inkless photo. A shared asset is
+ * already exactly the file Etsy would receive, so it is served as-is.
  *
  * At `tile` size a template entry is always the bare thumbnail, never a render:
  * a tile is picked out of a row, and running the real pipeline once per tile
@@ -145,12 +159,12 @@ export function missingColours(
  */
 export function pictureFor(
   entry: MediaEntry,
-  design: string | null,
+  scene: SceneSource | null,
   size: PictureSize = "full",
   listing: string | null = null,
 ): string {
   if (typeof entry === "string") return filePicture(entry, size, listing);
-  return templatePicture(entry.template, entry.colour ?? null, design, size);
+  return templatePicture(entry.template, entry.colour ?? null, scene, size);
 }
 
 /**
@@ -178,12 +192,12 @@ function filePicture(ref: string, size: PictureSize, listing: string | null): st
 export function templatePicture(
   template: string,
   colour: string | null,
-  design: string | null,
+  scene: SceneSource | null,
   size: PictureSize = "full",
 ): string {
   if (size === "tile") return templateThumbnailUrl(template, colour);
-  if (design === null) return templatePhotoUrl(template, colour);
-  return templateDesignPreviewUrl(template, design, colour);
+  if (scene === null) return templatePhotoUrl(template, colour);
+  return listingScenePreviewUrl(scene.listing, template, colour, scene.version);
 }
 
 /**

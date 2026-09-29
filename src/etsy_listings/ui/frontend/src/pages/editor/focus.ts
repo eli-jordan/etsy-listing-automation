@@ -6,6 +6,7 @@ import {
   refName,
   scenePath,
   templatePicture,
+  type SceneSource,
 } from "../../media";
 import type { Issue, MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 
@@ -52,14 +53,14 @@ export function viewFocus(
   focus: Focus,
   detail: ListingDetail,
   templates: readonly TemplateSummary[],
-  design: string | null,
+  scene: SceneSource | null,
 ): FocusView {
   if (focus.kind === "file") {
     const ref = focus.asset.ref;
     return {
       title: refName(ref),
       path: focus.asset.file,
-      picture: pictureFor(ref, design, "full", detail.name || null),
+      picture: pictureFor(ref, scene, "full", detail.name || null),
       kind: mediaKind(ref),
       // `check_videos` places each of its issues at the ref it is about.
       notes: detail.issues.filter((issue) => issue.where === `Listing Images › ${ref}`),
@@ -71,7 +72,7 @@ export function viewFocus(
   return {
     title: mediaLabel({ template: focus.template, colour: focus.colour }),
     path: scenePath(summary, focus.template, focus.colour),
-    picture: templatePicture(focus.template, focus.colour, design),
+    picture: templatePicture(focus.template, focus.colour, scene),
     kind: "image",
     notes: [],
     inListing: isInMedia(detail.media, focus.template, focus.colour),
