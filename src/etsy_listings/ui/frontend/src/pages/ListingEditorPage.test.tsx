@@ -801,6 +801,18 @@ describe("ListingEditorPage's AI chain follows the representative artwork (PRD 6
     expect(runs.start).not.toHaveBeenCalled();
   });
 
+  it("does not arm on Unlink of an empty design, which leaves both slots null", async () => {
+    const patch = open({});
+
+    fireEvent.click(await screen.findByRole("button", { name: "Unlink" }));
+
+    await settled(patch);
+    expect(patch).toHaveBeenCalledWith("take-a-hike", {
+      design: { "on-light": null, "on-dark": null },
+    });
+    expect(runs.start).not.toHaveBeenCalled();
+  });
+
   it("arms when Link keeps the dark-shirt file", async () => {
     open({ "on-light": LIGHT, "on-dark": DARK });
 
