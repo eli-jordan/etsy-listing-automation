@@ -147,6 +147,11 @@ src/etsy_listings/
                   `Workspace.load_common_copy`/`compose_description` are the
                   I/O and the one shared resolver around it (AI SEO plan PR2)
   config/       pydantic models, Money type, slugification     [done]
+                artwork.py — A35's resolver: which file a garment colour
+                  prints (`resolve`), the listing's `representative` file and
+                  `slot_users`. Pure; validation, the render and Printify
+                  stages and the AI workflow all ask it, and a failure is a
+                  value that becomes an `Issue` or a `Blocked`
                 description.py — `etsy.description`'s lead/text/ref model and
                   the pure `compose_description(lead, text)` join rule every
                   deployment reader shares (AI SEO plan PR2)
