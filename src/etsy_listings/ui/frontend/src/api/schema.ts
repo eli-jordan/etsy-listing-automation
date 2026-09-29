@@ -793,33 +793,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/api/templates/{name}/design-preview": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /**
-     * Design Preview
-     * @description A listing's *real* artwork, composited onto this template's saved
-     *     geometry -- what the listing editor's Variants/Listing Images tabs show
-     *     so a colour can be judged against the actual design, not a bare photo.
-     *
-     *     ``design`` is a name from ``GET /api/listing-designs``, resolved through
-     *     ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
-     *     which is the calibrator's own test-design library and never sees a
-     *     listing's real artwork.
-     */
-    get: operations["design_preview_api_templates__name__design_preview_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
   "/api/templates/{name}/kind": {
     parameters: {
       query?: never;
@@ -856,8 +829,8 @@ export interface paths {
     /**
      * Photo
      * @description The template's own photo, at its own resolution -- the bare-scene
-     *     counterpart of ``GET .../design-preview`` for a listing that has not
-     *     picked a design yet.
+     *     counterpart of ``GET /api/listings/{name}/scene-preview`` for a listing
+     *     that has not been saved with a design yet.
      *
      *     Same photo :func:`thumbnail` serves, same resolution rule
      *     (:func:`_thumbnail_source`), just not downscaled to list size: the
@@ -4445,41 +4418,6 @@ export interface operations {
             | components["schemas"]["ColourMatrixTemplate"]
             | components["schemas"]["MultipleTemplate"]
             | components["schemas"]["SingleTemplate"];
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
-        };
-      };
-    };
-  };
-  design_preview_api_templates__name__design_preview_get: {
-    parameters: {
-      query: {
-        design: string;
-        colour?: string | null;
-        scale?: "editor" | "full";
-      };
-      header?: never;
-      path: {
-        name: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
         };
       };
       /** @description Validation Error */

@@ -6678,86 +6678,6 @@
         ]
       }
     },
-    "/api/templates/{name}/design-preview": {
-      "get": {
-        "description": "A listing's *real* artwork, composited onto this template's saved\ngeometry -- what the listing editor's Variants/Listing Images tabs show\nso a colour can be judged against the actual design, not a bare photo.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file`` -- deliberately not :func:`resolve_design`,\nwhich is the calibrator's own test-design library and never sees a\nlisting's real artwork.",
-        "operationId": "design_preview_api_templates__name__design_preview_get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "name",
-            "required": true,
-            "schema": {
-              "title": "Name",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "design",
-            "required": true,
-            "schema": {
-              "title": "Design",
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "colour",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Colour"
-            }
-          },
-          {
-            "in": "query",
-            "name": "scale",
-            "required": false,
-            "schema": {
-              "default": "full",
-              "enum": [
-                "editor",
-                "full"
-              ],
-              "title": "Scale",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Design Preview",
-        "tags": [
-          "templates"
-        ]
-      }
-    },
     "/api/templates/{name}/kind": {
       "post": {
         "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.\n\nRefuses a template that already has a config. Kind decides the whole file\nshape (A11), so changing it would discard whatever calibration was done in\nthe old shape's fields -- and doing that silently, from a picker, is the\nkind of data loss nobody would think to look for.",
@@ -6832,7 +6752,7 @@
     },
     "/api/templates/{name}/photo": {
       "get": {
-        "description": "The template's own photo, at its own resolution -- the bare-scene\ncounterpart of ``GET .../design-preview`` for a listing that has not\npicked a design yet.\n\nSame photo :func:`thumbnail` serves, same resolution rule\n(:func:`_thumbnail_source`), just not downscaled to list size: the\nlisting editor's Variants and Listing Images previews are a large hero\nstage, not a row of tiles, and serving them the 160px list thumbnail is\nwhy that stage used to look tiny for a listing with no design picked yet.",
+        "description": "The template's own photo, at its own resolution -- the bare-scene\ncounterpart of ``GET /api/listings/{name}/scene-preview`` for a listing\nthat has not been saved with a design yet.\n\nSame photo :func:`thumbnail` serves, same resolution rule\n(:func:`_thumbnail_source`), just not downscaled to list size: the\nlisting editor's Variants and Listing Images previews are a large hero\nstage, not a row of tiles, and serving them the 160px list thumbnail is\nwhy that stage used to look tiny for a listing with no design picked yet.",
         "operationId": "photo_api_templates__name__photo_get",
         "parameters": [
           {

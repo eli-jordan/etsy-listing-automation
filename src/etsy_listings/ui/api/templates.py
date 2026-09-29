@@ -408,8 +408,8 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
 @router.get("/{name}/photo")
 def photo(template: Existing, colour: str | None = None) -> Response:
     """The template's own photo, at its own resolution -- the bare-scene
-    counterpart of ``GET .../design-preview`` for a listing that has not
-    picked a design yet.
+    counterpart of ``GET /api/listings/{name}/scene-preview`` for a listing
+    that has not been saved with a design yet.
 
     Same photo :func:`thumbnail` serves, same resolution rule
     (:func:`_thumbnail_source`), just not downscaled to list size: the
@@ -610,44 +610,6 @@ def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "ful
         name,
         colour=colour,
         layers=[(cfg, design) for cfg in _preview_configs(body)],
-        scale=scale,
-    )
-
-
-def _saved_render_configs(config: AnyTemplate) -> list[RenderConfig]:
-    """The layers to composite from *saved* ``template.yaml`` geometry --
-    what the listing editor's read-only preview wants, unlike
-    :func:`_preview_configs`'s unsaved, still-being-dragged geometry."""
-    if isinstance(config, MultipleTemplate):
-        return [config.render_config_for(p) for p in config.placements]
-    return [config.render_config()]
-
-
-@router.get("/{name}/design-preview")
-def design_preview(
-    template: Existing, design: str, colour: str | None = None, scale: PreviewScale = "full"
-) -> Response:
-    """A listing's *real* artwork, composited onto this template's saved
-    geometry -- what the listing editor's Variants/Listing Images tabs show
-    so a colour can be judged against the actual design, not a bare photo.
-
-    ``design`` is a name from ``GET /api/listing-designs``, resolved through
-    ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
-    which is the calibrator's own test-design library and never sees a
-    listing's real artwork.
-    """
-    workspace, name = template.workspace, template.name
-    config = load_template(workspace, name)
-    design_path = workspace.design_file(design)
-    if not design_path.is_file():
-        raise HTTPException(status_code=404, detail=f"no design {design!r}")
-
-    resolved_colour = colour if isinstance(config, ColourMatrixTemplate) else None
-    return render_scene_preview(
-        workspace,
-        name,
-        colour=resolved_colour,
-        layers=[(cfg, design_path) for cfg in _saved_render_configs(config)],
         scale=scale,
     )
 

@@ -128,23 +128,6 @@ export function templatePhotoUrl(name: string, colour?: string | null): string {
   return colour ? `${base}?colour=${encodeURIComponent(colour)}` : base;
 }
 
-/**
- * A listing's real design, composited onto this template's *saved* geometry
- * -- unlike {@link templateThumbnailUrl}/{@link templatePhotoUrl}, which are
- * a bare, inkless photo, or {@link renderPreview}, which composites a
- * calibrator test design against *unsaved* geometry. A plain URL for the
- * same reason those are: the browser owns loading and caching it.
- */
-export function templateDesignPreviewUrl(
-  name: string,
-  design: string,
-  colour?: string | null,
-): string {
-  const params = new URLSearchParams({ design });
-  if (colour) params.set("colour", colour);
-  return `/api/templates/${encodeURIComponent(name)}/design-preview?${params.toString()}`;
-}
-
 /** A colour-matrix colour's real garment shade, sampled off its own scene
  * photo -- for a quick-glance swatch dot next to the colour's name. */
 export async function getTemplateSwatch(name: string, colour: string): Promise<string> {
