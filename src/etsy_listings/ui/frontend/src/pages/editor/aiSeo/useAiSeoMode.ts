@@ -12,6 +12,7 @@ import {
   updateUnresolved,
 } from "./aiSeoStorage";
 import { canToggleTag } from "./aiSeoTags";
+import { representative } from "../artwork";
 import { type AiRun, useAiRun } from "./useAiRun";
 import type { MarketPanelState } from "../market/MarketListingsPanel";
 import { useMarketPanel } from "../market/useMarketPanel";
@@ -148,7 +149,10 @@ export function useAiSeoMode(
   const run = useAiRun(detail, save, { onBrief, onProposal });
   const market = useMarketPanel(detail.name, run);
 
-  const hasDesign = Object.keys(detail.design).length > 0;
+  // The representative artwork, not any key: it is the one image a run
+  // sends, and the server refuses a map without one (spec, *Representative
+  // artwork*).
+  const hasDesign = representative(detail.design) !== null;
   const hasBrief = detail.brief.trim() !== "";
   const name = detail.name;
   // The client-observable prerequisites, checked before any network call --

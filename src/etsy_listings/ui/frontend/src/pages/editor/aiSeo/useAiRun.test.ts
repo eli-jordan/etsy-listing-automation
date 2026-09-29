@@ -334,6 +334,22 @@ describe("useAiRun reattaching", () => {
     expect(runs.find).not.toHaveBeenCalled();
   });
 
+  it("asks nothing for a listing with no representative artwork", async () => {
+    /* Nothing without one can have had a run (spec, *Representative
+       artwork*): an empty pair, even with a colour's own design, has none. */
+    const empty = { "on-light": null, "on-dark": null, black: "designs/black.png" };
+    setup({ detail: detail({ design: empty }) });
+
+    await act(async () => {});
+    expect(runs.find).not.toHaveBeenCalled();
+  });
+
+  it("follows a listing whose only base file is the dark slot", async () => {
+    setup({ detail: detail({ design: { "on-light": null, "on-dark": "designs/x.png" } }) });
+
+    await waitFor(() => expect(runs.find).toHaveBeenCalledWith("take-a-hike"));
+  });
+
   it("stays idle when the reattach check fails", async () => {
     runs.find.mockRejectedValue(new Error("network down"));
     const view = setup();
@@ -456,6 +472,21 @@ describe("useAiRun auto chain (PRD 68)", () => {
     expect(runs.start).not.toHaveBeenCalled();
 
     view.rerender({ detail: detail({ brief: "" }), save: saved(2) });
+    await waitFor(() => expect(runs.start).toHaveBeenCalledTimes(1));
+  });
+
+  it("waits for a representative artwork before it fires", async () => {
+    const empty = { "on-light": null, "on-dark": null };
+    const view = picked({ design: empty });
+
+    view.rerender({ detail: detail({ brief: "", design: empty }), save: saved(2) });
+    await act(async () => {});
+    expect(runs.start).not.toHaveBeenCalled();
+
+    view.rerender({
+      detail: detail({ brief: "", design: { "on-light": "designs/x.png", "on-dark": null } }),
+      save: saved(3),
+    });
     await waitFor(() => expect(runs.start).toHaveBeenCalledTimes(1));
   });
 
