@@ -38,7 +38,7 @@ document lists.
 ## Flow at a glance
 
 ```text
-Listing editor ──Save as listing template──▶ New listing template (name it)
+Listing editor ──Create listing template──▶ New listing template (name it)
                                                    │
                                                    ▼
                                          Listing templates page
@@ -66,9 +66,8 @@ that the seller reviews and deploys through the existing deploy flow.
 
 ## 1. Creating a listing template
 
-**Entry point.** A **Save as listing template** button in the listing editor
-(shown in the [listing from a batch](#8-a-listing-opened-from-a-batch) frame,
-and present on every listing).
+**Entry point.** **Create listing template** in the listing editor's action
+row (see [the editor head](#the-editor-head)), present on every saved listing.
 
 **What happens.** The click creates the template straight away from the
 listing's reusable settings and opens it in the listing-template editor, with
@@ -99,8 +98,8 @@ A new **Listing Templates** item in the sidebar leads here.
 
 Each card shows the template's gallery, garment, colour count, pricing plan and
 how many batches have used it. Its footer holds **Start batch**, **Edit**, and
-icon buttons for **Clone** and **Delete**. These are the only places those
-actions live: the template editor deliberately has none.
+icon buttons for **Clone** and **Delete**. The template editor's action row
+offers Clone and Delete too; **Start batch** lives only on the card.
 
 Not obvious from the designs:
 
@@ -177,8 +176,10 @@ Not obvious from the designs:
 - **Listing Details has no Brief, Title, Tags, Description lead or AI Mode.**
   Those are written for each listing in a batch. A hint says each listing's own
   lead is placed above the template's description body.
-- **The head has no actions.** No status, Deploy, Clone, Delete or Start batch.
-  A template never deploys, and the other actions live on the template cards.
+- **The head has no status and no Deploy**: a template never deploys. Its
+  action row holds **Clone** and **Delete** once the template is saved (an
+  unsaved one has nothing to clone or delete), with the same confirmation as
+  the card's Delete. Start batch stays on the template card.
 
 ## 4. Starting a batch: New batch
 
@@ -298,15 +299,16 @@ Not obvious from the designs:
 
 Frame: [`listing-from-batch`](../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/listing-from-batch.tsx).
 
-The ordinary listing editor, opened on Listing Details, with a row above the
-head holding **Back to batch …**, **Save as listing template** and **Mark
-reviewed**.
+The ordinary listing editor, opened on Listing Details. **Back to batch**
+takes the breadcrumb's place in the head, and **Mark reviewed** joins the
+action row beside the listing's delete action
+([the editor head](#the-editor-head)).
 
 Not obvious from the designs:
 
 - **Back to batch only appears when the editor was opened from the batch
   summary.** Opening the same listing from the Listings page shows the normal
-  editor without it. Save as listing template is on every listing.
+  editor without it. Create listing template is on every saved listing.
 - **Mark reviewed** here and on the summary set the same flag.
 - **An out-of-date suggestion can be used directly.** The drawer heading reads
   *Out of date: brief edited since. Still usable*, and the choices stay
@@ -329,7 +331,7 @@ the record of why.
 | Listings table gains a batch filter | No filter; the batch summary is the review surface | The summary already lists and opens every listing |
 | Stale proposals accepted only after an explicit warning confirmation | Usable directly; the drawer heading is the warning | A dialog for every stale pick was friction without new information |
 | (unspecified) where past batches live | **Recent batches** table with derived status on the Listing templates page | Staging and batches need a place to reopen from |
-| (unspecified) Save as listing template interaction | Opens the new template straight away, name field focused | The editor itself shows what was kept |
+| (unspecified) Create listing template interaction | Opens the new template straight away, name field focused | The editor itself shows what was kept |
 
 ## Existing screens that change
 
@@ -344,12 +346,12 @@ A **Listing Templates** item between Listings and Mockup Templates.
 
 Three additions, shown in the `listing-from-batch` frame:
 
-1. **A row above the head** with Back to batch (only when opened from a batch),
-   Save as listing template (always) and Mark reviewed (only for a listing in
-   a cached batch). The head itself is unchanged: breadcrumb, `EditableName`,
-   status, save line and Deploy.
-   - Mockup: [`mockups/_ListingEditor.tsx`](../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_ListingEditor.tsx), `ListingFromBatch` (row at lines 71–84; head markup copied from `EditorHead`).
-   - App code: `EditorHead` in [`app/pages/ListingEditorPage.tsx`](../src/etsy_listings/ui/frontend/src/pages/ListingEditorPage.tsx) (line 245); the row sits above `ListingEditorShell` (line 296).
+1. **The head became two rows** (see [the editor head](#the-editor-head)).
+   Back to batch replaces the breadcrumb when opened from a batch; Create
+   listing template is always in the action row; Mark reviewed joins it for a
+   listing in a cached batch.
+   - Mockup: the [`editor-header`](../src/etsy_listings/ui/frontend/design/scenes/editor-header/) scene (`header`, `batch`, `batch-reviewed` and the state frames); earlier rounds are `editor-header-v1`…`v3` on the archive board.
+   - App code: `EditorHead` in [`app/pages/ListingEditorPage.tsx`](../src/etsy_listings/ui/frontend/src/pages/ListingEditorPage.tsx).
 2. **Stale suggestions stay usable.** Today the drawer disables its choices
    and says *Suggestions are out of date*. The mockup applies the new heading
    and re-enables the choices on top of the real drawer (the `useEffect` at
@@ -360,9 +362,35 @@ Three additions, shown in the `listing-from-batch` frame:
    replaces `aiSeoStorage`'s browser-local proposal store (see the spec's
    *Durable AI proposals*).
 
+#### The editor head
+
+Both editors share one head of two rows. It replaced a single crowded row
+(with *Save as listing template* floating on a row of its own above it)
+after four design rounds on the `editor-header` board.
+
+- **The identity row**: breadcrumb (or **Back to batch**), the name, the
+  status chip, the **auto-save chip**, and Deploy on the right. The auto-save
+  chip (*Saved 3 mins ago ▾*) opens a small card with the file's path
+  (`listings/<name>/listing.yaml`, or the template's `template.yaml`), a
+  **Copy** button, and when it saved. The path is no longer printed in the
+  head. While a file is not saved, the chip is the plain sentence saying why.
+- **The action row**: quiet icon + label actions. For a listing: **Open in ▾**
+  (Etsy, Printify, each only when the listing has an id there), **Create
+  listing template**, then Mark reviewed (batch listings only) and the
+  listing's lifecycle actions. The lifecycle actions are exactly the Listings
+  table's, served by the server: **Mark for deletion** (or **Delete** when
+  nothing is on Etsy or Printify), **Undo mark for deletion**, **Retire**,
+  **Un-retire**, **Renew**, with the table's own confirmation for deleting.
+  For a listing template: **Clone** and **Delete**, once saved.
+- **Back to batch** names its batch in its tooltip rather than its label, so
+  the identity row keeps its room for the name and Deploy.
+- **Open in** replaces *Open on* everywhere, the Listings table included.
+
 ### Listings page
 
-Unchanged. The batch filter was designed, then dropped in review.
+Unchanged, apart from the row menu now reading **Open in** (see
+[the editor head](#the-editor-head)). The batch filter was designed, then
+dropped in review.
 
 ## Existing components the template editor needs
 
