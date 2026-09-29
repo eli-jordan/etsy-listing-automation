@@ -187,12 +187,12 @@ class ListingSummary(BaseModel):
     name: str
     garment_profile: str
     design: str | None
-    """The design's name, as `GET /api/listing-designs/{name}/thumbnail`
-    takes it -- so the table can show the artwork without a second round
-    trip per row. ``None`` when `Listing.design` carries more than one
-    artwork key (``on-light``/``on-dark``): there is then no single picture
-    that stands for the listing, and an arbitrary pick would show the wrong
-    ink half the time."""
+    """The representative artwork's name, as
+    `GET /api/listing-designs/{name}/thumbnail` takes it -- so the table can
+    show the artwork without a second round trip per row. The first non-null
+    of ``default``, ``on-light``, ``on-dark`` (spec: *Representative
+    artwork*); a colour's own design is never promoted. ``None`` with no
+    base file chosen."""
     colour_count: int
     status: ListingStatus
     issue_counts: IssueCounts

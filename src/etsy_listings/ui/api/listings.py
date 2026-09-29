@@ -43,7 +43,7 @@ from pydantic import ValidationError
 from etsy_listings import connections
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
-from etsy_listings.config.artwork import Resolution, Resolved, resolve
+from etsy_listings.config.artwork import Resolution, Resolved, representative, resolve
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import EMPTY_DRAFT, Listing, canonical_document
 from etsy_listings.config.listing_validation import (
@@ -283,18 +283,16 @@ def _pricing_summary(
     return plan_name, prices
 
 
-def _sole_design_name(listing: Listing) -> str | None:
-    """The one design's name, or ``None`` when there isn't one.
+def _representative_name(listing: Listing) -> str | None:
+    """The representative artwork's name, or ``None`` when there isn't one.
 
-    ``Listing.design`` is artwork-key -> path, and a bare string normalises to
-    a single ``default`` entry -- the common case, and the only one with a
-    picture that stands for the whole listing. The stem is what
+    The spec's *Representative artwork* (A35's ``representative``): the
+    first non-null of ``default``, ``on-light``, ``on-dark``, never a
+    colour's own file. The stem is what
     ``GET /api/listing-designs/{name}/thumbnail`` takes, since
     ``workspace.design_file`` derives one fixed path per name.
     """
-    if len(listing.design) != 1:
-        return None
-    ref = next(iter(listing.design.values()))
+    ref = representative(listing.design)
     return None if ref is None else Path(ref).stem
 
 
@@ -338,7 +336,7 @@ def _summarize_listing(
     return ListingSummary(
         name=name,
         garment_profile=listing.garment_profile,
-        design=_sole_design_name(listing),
+        design=_representative_name(listing),
         colour_count=len(listing.colors),
         status=_status(
             workspace, name, live=live, lifecycle=listing.lifecycle, etsy_state=etsy_state
