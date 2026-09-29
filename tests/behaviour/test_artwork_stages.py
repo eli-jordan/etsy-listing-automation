@@ -409,3 +409,14 @@ def test_the_print_area_file_is_the_one_each_colour_resolves_to(
         _upload_id(workspace_root / DESIGN): sorted(_ids(0) + _ids(1) + _ids(2)),
         _upload_id(moss): _ids(3),
     }
+
+
+def test_a_design_file_that_is_missing_blocks_render(workspace_root: Path) -> None:
+    """A ref naming no file is a refusal on this listing, not an OSError
+    that ends a ``--all`` batch."""
+    edit_listing(workspace_root, design={"default": "designs/not-there.png"})
+
+    render_plan = _render_plan(a_context(workspace_root), a_lock())
+
+    assert render_plan.blocked is not None
+    assert "designs/not-there.png" in render_plan.blocked

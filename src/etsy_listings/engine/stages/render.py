@@ -546,6 +546,10 @@ class RenderStage:
                 return ref
             if ref not in files:
                 path = workspace.resolve_ref(ref, listing_dir=listing_dir)
+                if not path.is_file():
+                    # Refused, not raised: a missing file is this listing's
+                    # problem, and an OSError would end a `--all` batch.
+                    return Blocked(f"design file not found: {ref}")
                 files[ref] = (path, hash_file(path))
             return files[ref]
 
