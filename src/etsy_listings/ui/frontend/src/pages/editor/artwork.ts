@@ -131,6 +131,38 @@ export function keepOne(design: DesignMap, ref: string): DesignMap {
   return { [DEFAULT]: ref, ...colourKeys(design) };
 }
 
+/** Whether a colour can be given its own design: a colour key needs a
+ * reserved base key beside it, `null` slots included, or the server refuses
+ * the write as malformed (spec: *Saving, blockers and warnings*). An empty
+ * draft chooses its base design first. */
+export function canHaveOwnDesign(design: DesignMap): boolean {
+  return BASE_KEYS.some((key) => key in design);
+}
+
+/** A colour's own design: its key in `design`, in either mode, with the base
+ * keys untouched (interactions Part 1 §6). */
+export function pickForColour(design: DesignMap, colour: string, ref: string): DesignMap {
+  return { ...design, [colour]: ref };
+}
+
+/** Back to automatic: the colour's key goes, immediately (spec:
+ * *Colour-specific artwork*). A base key is never a colour's to remove. */
+export function automatic(design: DesignMap, colour: string): DesignMap {
+  if (BASE_KEYS.includes(colour)) return design;
+  return Object.fromEntries(Object.entries(design).filter(([key]) => key !== colour));
+}
+
+/** What the colour would print back on automatic -- said on the card before
+ * **Use automatic design** is pressed, so the action needs no confirmation
+ * (interactions Part 1 §7). */
+export function wouldPrintAutomatically(
+  design: DesignMap,
+  colour: string,
+  tones: Readonly<Record<string, Tone>>,
+): Resolution {
+  return resolve(automatic(design, colour), colour, tones);
+}
+
 export const toneLabel = (tone: Tone): string =>
   tone === "light" ? "light shirts" : "dark shirts";
 
@@ -152,3 +184,17 @@ export const TILE = {
   dark: "#262626",
   neutral: "var(--color-neutral-200)",
 } as const;
+
+/** The cloth a colour's own thumbnails sit on: its sampled garment swatch,
+ * else its tone's tile -- the row chip, the card under the stage and the
+ * colour's picker all judge a file on the shirt that prints it. */
+export function clothFor(
+  colour: string,
+  swatch: string | undefined,
+  design: DesignMap,
+  tones: Readonly<Record<string, Tone>>,
+): string {
+  if (swatch !== undefined) return swatch;
+  const tone = tones[colour];
+  return tone === undefined || isLinked(design) ? TILE.neutral : TILE[tone];
+}

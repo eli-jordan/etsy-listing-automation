@@ -1,15 +1,19 @@
 import { describe, expect, it } from "vitest";
 import {
+  automatic,
+  canHaveOwnDesign,
   isLinked,
   keepOne,
   linking,
   listNames,
   pickFor,
+  pickForColour,
   representative,
   resolve,
   slotFile,
   slotUsers,
   unlinked,
+  wouldPrintAutomatically,
 } from "./artwork";
 
 const A = "designs/take-a-hike-dark-ink.png";
@@ -142,5 +146,58 @@ describe("reading the map", () => {
     expect(listNames([])).toBe("");
     expect(listNames(["ivory"])).toBe("Ivory");
     expect(listNames(["black", "moss", "navy"])).toBe("Black, Moss and Navy");
+  });
+});
+
+/** Interactions Part 1 §6-§7: a colour's own design, and back. Written
+ * straight into `design.<colour>` and removed from it, in either mode, with
+ * the base keys untouched. */
+describe("a colour's own design", () => {
+  it("is written as the colour's key while linked", () => {
+    expect(pickForColour({ default: A }, "moss", MOSS)).toEqual({ default: A, moss: MOSS });
+  });
+
+  it("is written as the colour's key while unlinked, empty slots kept", () => {
+    expect(pickForColour({ "on-light": null, "on-dark": B }, "moss", MOSS)).toEqual({
+      "on-light": null,
+      "on-dark": B,
+      moss: MOSS,
+    });
+  });
+
+  it("replaces a colour's existing own design", () => {
+    expect(pickForColour({ default: A, moss: MOSS }, "moss", B)).toEqual({ default: A, moss: B });
+  });
+
+  it("goes back to automatic by removing the key, in either mode", () => {
+    expect(automatic({ default: A, moss: MOSS }, "moss")).toEqual({ default: A });
+    expect(automatic({ "on-light": A, "on-dark": null, moss: MOSS }, "moss")).toEqual({
+      "on-light": A,
+      "on-dark": null,
+    });
+  });
+
+  it("never removes a base key", () => {
+    expect(automatic({ default: A }, "default")).toEqual({ default: A });
+  });
+
+  it("needs a base key to sit beside: a colour key alone is malformed", () => {
+    expect(canHaveOwnDesign({})).toBe(false);
+    expect(canHaveOwnDesign({ default: A })).toBe(true);
+    expect(canHaveOwnDesign({ "on-light": null, "on-dark": null })).toBe(true);
+  });
+
+  it("says what automatic would print, before it is pressed", () => {
+    expect(wouldPrintAutomatically({ default: A, moss: MOSS }, "moss", TONES)).toEqual({
+      kind: "resolved",
+      ref: A,
+      source: "default",
+    });
+    expect(
+      wouldPrintAutomatically({ "on-light": A, "on-dark": B, moss: MOSS }, "moss", TONES),
+    ).toEqual({ kind: "resolved", ref: B, source: "on-dark" });
+    expect(
+      wouldPrintAutomatically({ "on-light": A, "on-dark": null, moss: MOSS }, "moss", TONES),
+    ).toEqual({ kind: "slot-empty", tone: "dark" });
   });
 });
