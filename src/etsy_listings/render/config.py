@@ -200,6 +200,28 @@ The plain union, for annotating variables and return types. Use
 wherever pydantic itself does the dispatch (a FastAPI ``response_model``, a
 request body, a ``TypeAdapter``)."""
 
+
+def scene_layers(
+    template: AnyTemplate, colour: str | None
+) -> list[tuple[str | None, RenderConfig]]:
+    """``(depicted colour, render config)`` per layer of one scene, in paint
+    order -- the colour each layer's artwork resolves by (A35, PRD 30).
+
+    A ``colour-matrix`` scene depicts the colour it is rendered for, a
+    ``single`` scene its own ``colour`` (``None`` when it names none), and a
+    ``multiple`` scene one colour per placement. Here, beside the three
+    shapes, because the render stage and the editor's scene preview both need
+    it and a second copy is how the two would come to show different files.
+    """
+    if isinstance(template, ColourMatrixTemplate):
+        # Same geometry in every colour's photo: a colour framed differently
+        # is a `single`-kind template instead, never a per-colour override.
+        return [(colour, template.render_config())]
+    if isinstance(template, SingleTemplate):
+        return [(template.colour, template.render_config())]
+    return [(p.colour, template.render_config_for(p)) for p in template.placements]
+
+
 TemplateConfig = Annotated[AnyTemplate, Field(discriminator="kind")]
 """``mockup-templates/{name}/template.yaml``, written by the calibrator. A
 discriminated union, not a wrapping model -- the file *is* one of the three

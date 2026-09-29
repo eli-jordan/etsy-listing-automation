@@ -77,12 +77,7 @@ from etsy_listings.engine.stages.gates import (
     check_garment_profile_chosen,
     resolved_design,
 )
-from etsy_listings.render.config import (
-    AnyTemplate,
-    ColourMatrixTemplate,
-    RenderConfig,
-    SingleTemplate,
-)
+from etsy_listings.render.config import AnyTemplate, RenderConfig, scene_layers
 from etsy_listings.render.io import load_design, load_template_base, save_png
 from etsy_listings.render.maps import DerivedMapCache
 from etsy_listings.render.pipeline import Layer, render_scene
@@ -420,26 +415,6 @@ def _render_path(workspace: Workspace, listing: str, scene: str) -> Path:
     return workspace.render_file(listing, template, colour)
 
 
-# The only thing left that reads a template's kind. Which photo a scene
-# composites over, and what its derived maps cache under, are the same
-# question asked at a different level -- `Workspace.scene_photo` answers both,
-# so the calibrator's preview reaches them the same way (A8).
-def _layer_specs(
-    template_cfg: AnyTemplate, colour: str | None
-) -> list[tuple[str | None, RenderConfig]]:
-    """``(depicted colour, render config)`` per layer, in paint order."""
-    if isinstance(template_cfg, ColourMatrixTemplate):
-        # Same geometry in every colour's photo: a colour framed differently
-        # is a `single`-kind template instead, never a per-colour override.
-        return [(colour, template_cfg.render_config())]
-    if isinstance(template_cfg, SingleTemplate):
-        return [(template_cfg.colour, template_cfg.render_config())]
-    return [
-        (placement.colour, template_cfg.render_config_for(placement))
-        for placement in template_cfg.placements
-    ]
-
-
 DesignFor = Callable[[str | None, str], tuple[Path, str] | Blocked]
 """``(depicted colour, template) -> (design file, its content hash)``, or the
 refusal when that colour resolves to no file."""
@@ -463,7 +438,7 @@ def _resolve_scene(
         raise TemplateAssetError(template_name, colour, photo.path)
 
     layers = []
-    for layer_colour, cfg in _layer_specs(template_cfg, colour):
+    for layer_colour, cfg in scene_layers(template_cfg, colour):
         design = design_for(layer_colour, template_name)
         if isinstance(design, Blocked):
             return design
