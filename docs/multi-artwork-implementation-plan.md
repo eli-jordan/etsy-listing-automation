@@ -287,7 +287,7 @@ partial pair, link back, and see the right file on every preview.
 | Item | Settled as | Why |
 |---|---|---|
 | `design-preview` callers | Three, not two: the Variants stage, Listing Images and the deploy comparison (`ComparisonView`, used by the deploy page and the batch-deploy drawer). All three moved to `scene-preview` before the endpoint was retired | A preview keyed by one design name is a second copy of resolution |
-| Size | About 3,280 changed lines excluding generated files, over G7's 3,000; accepted as a deviation | About 290 of them are the deleted `DesignSelect` and its test |
+| Size | About 3,300 changed lines excluding generated files, over G7's 3,000; accepted as a deviation | About 290 of them are the deleted `DesignSelect` and its test |
 | Narrow widths | At phone width the linked pair stacks, the Link pill centred between the cards | The existing mobile layout test forbids sideways scroll; narrow widths are otherwise still out of scope |
 | Button labels | The slot cards' buttons are named "Change / Choose design for all / light / dark shirts" and "Use a different design for dark shirts", replacing "Change design" | Each names its target; tests matching "Dark" or "Light" match them exactly, since the dark card's label contains the word |
 | Not here | The "Also printing their own design" names as preview links, and the row artwork chips | Both need a colour's own design, so PR 3 closes them |
