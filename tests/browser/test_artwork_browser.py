@@ -1,10 +1,11 @@
-"""Browser test for light and dark base artwork (multi-artwork plan, PR 2):
+"""Browser tests for a listing's artwork (multi-artwork plan, PRs 2 and 3):
 unlink, pick both files, reload and see both; link a pair of two files and
-choose one. Asserted on the `listing.yaml` the UI wrote and on pictures the
-browser actually decoded, like the rest of this layer.
+choose one; give Moss its own design and take it back. Asserted on the
+`listing.yaml` the UI wrote and on pictures the browser actually decoded,
+like the rest of this layer.
 
-Acceptance 2 (switch to light/dark and pick both) and 3 (a partial pair
-survives a reload).
+Acceptance 2 (switch to light/dark and pick both), 3 (a partial pair
+survives a reload) and 4 (a colour's own file, and back).
 """
 
 from __future__ import annotations
@@ -16,7 +17,9 @@ from typing import Any
 
 import pytest
 import yaml
+from PIL import Image
 
+from tests.behaviour.test_scene_preview_api import expected_scene
 from tests.support.builders import edit_listing
 
 pytestmark = pytest.mark.browser
@@ -119,3 +122,84 @@ def test_link_a_pair_of_two_files_and_choose_one(page: Any, workspace_root: Path
 
     _wait_for_design(page, workspace_root, {"default": LIGHT_INK})
     assert page.get_by_role("button", name="Unlink").is_visible()
+
+
+MOSS_SPECIAL = "designs/moss-special.png"
+
+
+def _shown(page: Any, image: Any) -> bytes:  # noqa: ANN401
+    """The picture ``image`` shows, once the browser has decoded it -- fetched
+    again by its URL, so it can be compared with the render it should be."""
+    page.wait_for_function("img => img.complete && img.naturalWidth > 0", arg=image)
+    src = image.get_attribute("src")
+    assert src is not None
+    response = page.request.get(page.url.split("/listings/")[0] + src)
+    assert response.ok, response.status
+    return bytes(response.body())
+
+
+def _stage_once_saved(page: Any, template: str, before: str) -> Any:  # noqa: ANN401
+    """The large preview of ``template``, once its URL no longer carries the
+    design signature ``before`` -- a save has landed and the picture is the
+    newly saved listing's."""
+    selector = f".preview-stage--large img[src*='template={template}']"
+    page.wait_for_function(
+        "([sel, before]) => { const img = document.querySelector(sel);"
+        " return img !== null && !img.src.endsWith('v=' + before); }",
+        arg=[selector, before],
+    )
+    return page.locator(selector).element_handle()
+
+
+def _signature(page: Any) -> str:  # noqa: ANN401
+    """The saved design's signature on the Variants stage's picture."""
+    stage = page.locator(".preview-stage--large img")
+    stage.wait_for(state="visible")
+    return (stage.get_attribute("src") or "").rsplit("v=", 1)[1]
+
+
+def test_give_moss_its_own_design_and_return_it_to_automatic(
+    page: Any,  # noqa: ANN401
+    workspace_root: Path,
+) -> None:
+    """Acceptance 4, and 5 for a colour's own design: Moss prints its own file
+    on the Variants stage and on its layer of a two-colour Listing Images
+    scene, then goes back to the design for all shirts."""
+    with Image.open(workspace_root / HIKE) as hike:
+        Image.new("RGBA", hike.size, (40, 200, 60, 255)).save(workspace_root / MOSS_SPECIAL)
+    edit_listing(
+        workspace_root,
+        design={"default": HIKE},
+        media=[{"template": "flat-lay-01", "colour": "moss"}, {"template": "colour-chart-01"}],
+    )
+    _open(page)
+    before = _signature(page)
+
+    page.get_by_role("button", name="Select different design for Moss").click()
+    dialog = page.get_by_role("dialog", name="Design for Moss")
+    dialog.get_by_role("button", name=re.compile("moss-special")).click()
+    _wait_for_design(page, workspace_root, {"default": HIKE, "moss": MOSS_SPECIAL})
+
+    row = page.locator(".color-row", has=page.get_by_text("moss", exact=True))
+    assert row.get_by_text("own design").is_visible()
+    shown = _shown(page, _stage_once_saved(page, "flat-lay-01", before))
+    assert shown == expected_scene(workspace_root, "flat-lay-01", "moss", {"moss": MOSS_SPECIAL})
+    own = _signature(page)
+
+    page.get_by_text("Listing Images", exact=True).click()
+    page.locator(".rtile img[alt*='colour-chart-01']").hover()
+    shown = _shown(page, _stage_once_saved(page, "colour-chart-01", before))
+    assert shown == expected_scene(
+        workspace_root, "colour-chart-01", None, {"black": HIKE, "moss": MOSS_SPECIAL}
+    )
+
+    # The strip names Moss; pressing it previews Moss back on Variants.
+    page.locator(".design-select__own").get_by_role("button", name="Moss").click()
+    card = page.locator(".color-prints")
+    assert "Back on automatic it would print take-a-hike" in card.inner_text()
+    card.get_by_role("button", name="Use automatic design").click()
+    _wait_for_design(page, workspace_root, {"default": HIKE})
+
+    assert row.get_by_text("own design").count() == 0
+    shown = _shown(page, _stage_once_saved(page, "flat-lay-01", own))
+    assert shown == expected_scene(workspace_root, "flat-lay-01", "moss", {"moss": HIKE})
