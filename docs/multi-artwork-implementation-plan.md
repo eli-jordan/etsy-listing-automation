@@ -107,7 +107,9 @@ shares an image with another, which avoids an unverified Printify behaviour.
 The cost is a one-off change on the first `plan` after upgrade: every render
 `input_hash` and every stored print area changes shape. Renders come out
 byte-identical, so the `outputs` axis is unchanged and Etsy uploads nothing.
-Printify receives one PUT with the same images. The PR 1 description says so.
+Printify receives nothing: a print area recorded before A35 carries the same
+design hash and variant ids, and its old `artwork` key is read past. The PR 1
+description says so.
 
 Rejected: rewriting `DesignPlacement` in the engine, which leaves validation and
 the API with a second copy of the rule; keying groups by source key, which
@@ -208,6 +210,16 @@ Everything that prints now asks one function.
   sends Printify one print area per file with the right variant ids.
 - Behaviour: the first plan after upgrade on an unchanged fixture re-renders
   byte-identical scenes and uploads nothing to Etsy.
+
+**As built.** Where the implementation settled a detail differently:
+
+| Item | Settled as | Why |
+|---|---|---|
+| `render/config.py` | A template's `artwork: null` still loads; only a non-null value is refused naming PRD 30. The next calibrator save drops the key | The calibrator wrote `artwork: null` into every `multiple` and `single` template, so refusing the key would break every existing workspace |
+| Upgrade | The first plan re-renders every listing once, byte-identical, and sends Printify nothing | `AppliedPrintArea` ignores the old `artwork` key; the stored design hash and variant ids are the ones A35 computes |
+| From PR 3 | `colourSelection` drops a switched-off colour's `design` key, replacing its `artwork` handling | Leaving the key makes the save a field error (a colour key must name an enabled colour) |
+| From PR 4 | Server-side AI readiness and `primary_design_image` require a representative artwork | A pair with both slots empty would otherwise crash the AI run |
+| Frontend | A `DesignMap` type; `singleDesignName`, `DesignSelect` and `designIdentity` accept `null` slots; `listingDocument` sends the map as it is | The regenerated schema allows `null` slots, and the server writes the map form anyway |
 
 **Success conditions**
 
