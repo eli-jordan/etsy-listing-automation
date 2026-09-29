@@ -295,8 +295,11 @@ PNG bytes, not uploaded names, identify artwork content.
 ## Confirming a batch
 
 Confirmation assigns a stable opaque batch ID and a human-readable label. The
-default label combines the listing-template name and date/time; it is editable
-before and after creation without changing batch identity.
+default label combines the listing-template name and date/time -- led by the
+ZIP's filename, without `.zip`, when the designs came in one ZIP
+(`<zip name> · <listing template> · <date>`), since that name is usually the
+collection the seller exported. It is editable before and after creation
+without changing batch identity.
 
 The application persists the batch record first, then attempts every valid row.
 For each row it:
