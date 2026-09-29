@@ -121,6 +121,14 @@ describe("ArtworkStrip reading a linked pair (interactions §1)", () => {
     expect(onPreview).toHaveBeenCalledWith("moss");
   });
 
+  it("notes, when linking two files, which colours keep their own design", async () => {
+    renderStrip({ "on-light": DARK_INK, "on-dark": LIGHT_INK, moss: "designs/moss.png" });
+    fireEvent.click(await screen.findByRole("button", { name: "Link" }));
+    expect(
+      screen.getByRole("dialog", { name: "Which design should every shirt print?" }),
+    ).toHaveTextContent("Moss keeps its own design.");
+  });
+
   it("offers a choice when there is no design yet", async () => {
     renderStrip({});
     await screen.findByText("Prints on every colour you sell");

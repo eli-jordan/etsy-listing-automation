@@ -5000,6 +5000,12 @@ table.listings tbody tr:last-child td {
   font-size: 11px;
 }
 
+.choose-base__note {
+  margin: 0;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+}
+
 /* — the deploy view (docs/deploy-changes.md, `pages/deploy/`) —
    Ported from the "Plan & Apply Designs" artifact's own `.dv-*` block, which
    already expressed itself entirely in this file's tokens (`--color-*`,

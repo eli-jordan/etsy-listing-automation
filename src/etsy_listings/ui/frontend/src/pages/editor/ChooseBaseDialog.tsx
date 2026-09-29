@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ConfirmDialog } from "../../components/ConfirmDialog";
 import { listingDesignThumbnailUrl } from "../../api/listings";
 import { refName } from "../../media";
-import { TILE, toneLabel, type Tone } from "./artwork";
+import { listNames, TILE, toneLabel, type Tone } from "./artwork";
 
 /**
  * Linking a light/dark pair that holds two different files: which one every
@@ -13,16 +13,22 @@ import { TILE, toneLabel, type Tone } from "./artwork";
  *
  * Each file sits on its slot's tile, captioned by the slot it fills now, so
  * the choice is about the ink as it looks on the shirt it was made for.
+ *
+ * Colours with their own design keep it through the change, and the dialog
+ * says so -- "Moss keeps its own design." -- because losing them is the
+ * obvious worry (interactions Part 1 §5).
  */
 
 interface Props {
   light: string;
   dark: string;
+  /** The enabled colours printing their own design. */
+  own: readonly string[];
   onKeep: (ref: string) => void;
   onCancel: () => void;
 }
 
-export function ChooseBaseDialog({ light, dark, onKeep, onCancel }: Props) {
+export function ChooseBaseDialog({ light, dark, own, onKeep, onCancel }: Props) {
   const [choice, setChoice] = useState<Tone | null>(null);
   const files: Record<Tone, string> = { light, dark };
   return (
@@ -67,6 +73,11 @@ export function ChooseBaseDialog({ light, dark, onKeep, onCancel }: Props) {
           );
         })}
       </div>
+      {own.length > 0 && (
+        <p className="choose-base__note">
+          {listNames(own)} keep{own.length === 1 ? "s its" : " their"} own design.
+        </p>
+      )}
     </ConfirmDialog>
   );
 }

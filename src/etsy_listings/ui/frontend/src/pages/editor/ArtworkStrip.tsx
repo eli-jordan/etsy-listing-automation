@@ -252,6 +252,7 @@ export function ArtworkStrip({
         <ChooseBaseDialog
           light={choosing.light}
           dark={choosing.dark}
+          own={own}
           onKeep={(ref) => {
             setChoosing(null);
             onChange(keepOne(design, ref), null);

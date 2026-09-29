@@ -5,10 +5,12 @@ import { ChooseBaseDialog } from "./ChooseBaseDialog";
 const LIGHT = "designs/take-a-hike-dark-ink.png";
 const DARK = "designs/take-a-hike-light-ink.png";
 
-function renderDialog() {
+function renderDialog(own: string[] = []) {
   const onKeep = vi.fn();
   const onCancel = vi.fn();
-  render(<ChooseBaseDialog light={LIGHT} dark={DARK} onKeep={onKeep} onCancel={onCancel} />);
+  render(
+    <ChooseBaseDialog light={LIGHT} dark={DARK} own={own} onKeep={onKeep} onCancel={onCancel} />,
+  );
   return { onKeep, onCancel };
 }
 
@@ -53,5 +55,20 @@ describe("ChooseBaseDialog", () => {
     fireEvent.keyDown(window, { key: "Escape" });
     expect(onCancel).toHaveBeenCalledTimes(2);
     expect(onKeep).not.toHaveBeenCalled();
+  });
+
+  it("says colours with their own design keep it, to answer the obvious worry", () => {
+    renderDialog(["moss"]);
+    expect(screen.getByText("Moss keeps its own design.")).toBeInTheDocument();
+  });
+
+  it("says it in the plural for more than one colour", () => {
+    renderDialog(["moss", "navy"]);
+    expect(screen.getByText("Moss and Navy keep their own design.")).toBeInTheDocument();
+  });
+
+  it("says nothing about own designs when there are none", () => {
+    renderDialog();
+    expect(screen.queryByText(/own design/)).toBeNull();
   });
 });
