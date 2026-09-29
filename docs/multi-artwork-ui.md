@@ -160,6 +160,13 @@ tone classification.
 There is no template or placement artwork override. A colour resolves to the
 same file in every mockup scene and on Printify.
 
+A mockup scene is resolved by the garment colour it depicts: the media entry's
+colour for a `colour-matrix` template, each placement's colour for a `multiple`
+template, and the template's own `colour` for a `single` template. A depicted
+colour follows the same order as an enabled one. A `single` template that names
+no colour prints `default` in single mode and cannot be resolved in light/dark
+mode; the tool does not guess which base file a photograph shows.
+
 ## Listing editor interactions
 
 ### Base artwork mode
@@ -220,7 +227,10 @@ deployment:
 - no base design has been selected;
 - an enabled colour is not classified `light` or `dark` in the garment profile;
 - an enabled automatic colour needs a light/dark base slot that has not been
-  filled; or
+  filled;
+- in light/dark mode, the listing's media uses a `single` mockup template that
+  does not name the garment colour it depicts, so no file can be resolved for
+  it; or
 - a selected artwork file fails the listing's ordinary file, alpha or
   resolution requirements.
 
