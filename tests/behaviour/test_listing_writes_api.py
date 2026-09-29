@@ -229,6 +229,36 @@ class TestDesignWrittenAsAMap:
         assert "default cannot be combined" in body["field_errors"]["design"]
         assert _listing(workspace) == before
 
+    def test_an_empty_light_dark_pair_survives_a_reload(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        """Acceptance 3: the mode with no files chosen yet is recorded by its
+        two ``null`` keys, and a GET hands them back as they were written."""
+        pair = {"on-light": None, "on-dark": None}
+
+        body = client.patch(f"/api/listings/{NAME}", json={"design": pair}).json()
+
+        assert body["field_errors"] == {}
+        assert _listing(workspace)["design"] == pair
+        assert client.get(f"/api/listings/{NAME}").json()["design"] == pair
+
+    def test_a_partial_pair_survives_a_reload(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        pair = {"on-light": None, "on-dark": "designs/take-a-hike.png"}
+
+        client.patch(f"/api/listings/{NAME}", json={"design": pair})
+
+        assert client.get(f"/api/listings/{NAME}").json()["design"] == pair
+
+    def test_a_malformed_map_answers_200_with_the_field_error(self, client: TestClient) -> None:
+        response = client.patch(
+            f"/api/listings/{NAME}", json={"design": {"moss": "designs/take-a-hike.png"}}
+        )
+
+        assert response.status_code == 200
+        assert "no base design" in response.json()["field_errors"]["design"]
+
     def test_a_create_writes_the_map_form(self, client: TestClient, workspace: Workspace) -> None:
         document = {**_listing(workspace), "design": "designs/take-a-hike.png"}
 

@@ -15,6 +15,8 @@ from pathlib import Path
 
 import pytest
 import yaml
+from fastapi.testclient import TestClient
+from PIL import Image
 
 from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
@@ -37,7 +39,10 @@ from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.etsy_media import EtsyMediaStage
 from etsy_listings.engine.stages.printify_product import PrintifyProductStage
 from etsy_listings.engine.stages.render import RenderStage
+from etsy_listings.ui.api.app import create_app
+from etsy_listings.workspace.workspace import Workspace
 
+from tests.behaviour.test_scene_preview_api import expected_scene
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (
     a_context,
@@ -420,3 +425,93 @@ def test_a_design_file_that_is_missing_blocks_render(workspace_root: Path) -> No
 
     assert render_plan.blocked is not None
     assert "designs/not-there.png" in render_plan.blocked
+
+
+# ------------------------------------------------------- previews = print
+
+
+def _solid(root: Path, name: str, rgb: tuple[int, int, int]) -> Path:
+    path = root / "designs" / f"{name}.png"
+    Image.new("RGBA", PRINT_AREA, (*rgb, 255)).save(path)
+    return path
+
+
+def test_every_listing_images_layer_shows_its_colours_print_area_file(
+    workspace_root: Path, product_ctx: RunContext, printify: FakePrintifyClient
+) -> None:
+    """Acceptance 5, for base slots: the file each Listing Images layer shows
+    is the file in that colour's Printify print area. Moss is marked light so
+    the two-colour chart shows both base files at once."""
+    tones = {**TONES, "moss": "light"}
+    edit_garment_profile(workspace_root, PROFILE, colors=tones)
+    light = _solid(workspace_root, "dark-ink", (200, 30, 30))
+    dark = _solid(workspace_root, "light-ink", (30, 30, 200))
+    edit_listing(
+        workspace_root,
+        design={"on-light": "designs/dark-ink.png", "on-dark": "designs/light-ink.png"},
+        media=[
+            *({"template": "flat-lay-01", "colour": c} for c in TONES),
+            {"template": "colour-chart-01"},
+        ],
+    )
+    _apply_product(product_ctx, a_lock())
+    [created] = printify.created
+    by_upload = {_upload_id(light): light, _upload_id(dark): dark}
+    printed: dict[str | None, str] = {}
+    for area in created.print_areas:
+        file = by_upload[area.placeholders[0].images[0].id]
+        for index, colour in enumerate(TONES):
+            if set(_ids(index)) <= set(area.variant_ids):
+                printed[colour] = str(file.relative_to(workspace_root))
+    assert set(printed) == set(TONES)
+
+    client = TestClient(create_app(Workspace.discover(root_override=workspace_root)))
+
+    def shown(template: str, colour: str | None) -> bytes:
+        params = {"template": template} | ({"colour": colour} if colour else {})
+        response = client.get(f"/api/listings/{LISTING}/scene-preview", params=params)
+        assert response.status_code == 200, response.text
+        return response.content
+
+    for colour in TONES:
+        assert shown("flat-lay-01", colour) == expected_scene(
+            workspace_root, "flat-lay-01", colour, {colour: printed[colour]}
+        )
+    assert shown("colour-chart-01", None) == expected_scene(
+        workspace_root,
+        "colour-chart-01",
+        None,
+        {"black": printed["black"], "moss": printed["moss"]},
+    )
+
+
+def test_a_partial_pair_that_every_colour_resolves_plans_with_the_warning(
+    workspace_root: Path, product_ctx: RunContext
+) -> None:
+    """Acceptance 7: only dark colours are sold, so the empty light slot is
+    needed by nobody. Nothing is blocked, and the editor warns that one base
+    slot is all the listing uses."""
+    edit_listing(
+        workspace_root,
+        design={"on-light": None, "on-dark": DESIGN},
+        colors=["black", "blue-jean", "moss"],
+        media=[{"template": "flat-lay-01", "colour": c} for c in ("black", "blue-jean", "moss")],
+    )
+
+    planned = build_plan(
+        product_ctx, LISTING, a_lock(), [RenderStage(), PrintifyProductStage()]
+    ).plan
+    detail = TestClient(create_app(Workspace.discover(root_override=workspace_root))).get(
+        f"/api/listings/{LISTING}"
+    )
+
+    assert [p.blocked for p in planned.stage_plans] == [None, None]
+    assert all(p.will_run for p in planned.stage_plans)
+    artwork = [i for i in detail.json()["issues"] if i["where"].startswith("Artwork")]
+    assert [(i["severity"], i["message"]) for i in artwork] == [
+        (
+            "warn",
+            "Only the design for dark shirts is in use — no light shirt you sell needs the "
+            "design for light shirts",
+        )
+    ]

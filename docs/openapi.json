@@ -5953,6 +5953,102 @@
         ]
       }
     },
+    "/api/listings/{name}/scene-preview": {
+      "get": {
+        "description": "One of this listing's scenes, each layer printing the file its depicted\ncolour resolves to in the *saved* listing (A35) -- the Variants stage and\nevery Listing Images picture, multi-colour scenes included (spec:\n*Previews*). Resolved here rather than from a design name in the URL,\nbecause the editor showing one file while Printify prints another is the\nthing a single resolver exists to prevent.\n\nA layer that resolves to nothing -- an empty slot, an unclassified colour,\na file since deleted -- is left bare rather than failing the picture: the\nissues banner already says why, and the rest of the scene is still worth\njudging. ``v`` is ignored; the editor sends a signature of the saved design\nso a landed save is a new URL and the browser fetches it again.",
+        "operationId": "scene_preview_api_listings__name__scene_preview_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "colour",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Colour"
+            }
+          },
+          {
+            "in": "query",
+            "name": "scale",
+            "required": false,
+            "schema": {
+              "default": "full",
+              "enum": [
+                "editor",
+                "full"
+              ],
+              "title": "Scale",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "v",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "V"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Scene Preview",
+        "tags": [
+          "listings"
+        ]
+      }
+    },
     "/api/pricing-plans": {
       "get": {
         "description": "Every plan, each flagged for whether it was built for this garment.\n\n``garment_profile`` is optional because a listing that has not chosen one\nyet has nothing to be compatible *with*: asking with an empty name says that\nhonestly, and the editor then drops the \"different garment\" note rather than\nlabelling every plan as differing from a garment nobody picked.",

@@ -43,6 +43,7 @@ from pydantic import ValidationError
 from etsy_listings import connections
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
+from etsy_listings.config.artwork import Resolution, Resolved, resolve
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import EMPTY_DRAFT, Listing, canonical_document
 from etsy_listings.config.listing_validation import (
@@ -70,6 +71,7 @@ from etsy_listings.newcmd.logic import (
     pricing_plan_ref,
     write_listing,
 )
+from etsy_listings.render.config import ColourMatrixTemplate, scene_layers
 from etsy_listings.ui.api.etsystate import etsy_states
 from etsy_listings.ui.api.schemas import (
     CommonCopySummary,
@@ -89,6 +91,7 @@ from etsy_listings.ui.api.schemas import (
     ResolvedPrice,
     WorkspaceSummary,
 )
+from etsy_listings.ui.api.templates import PreviewScale, load_template, render_scene_preview
 from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.ui.runs.executor import ContextFactory
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
@@ -707,6 +710,59 @@ def listing_preview_coloured(
 ) -> Response:
     """A ``colour-matrix``-kind scene: one preview per colour."""
     return _preview_response(request, target, template, colour)
+
+
+def _layer_file(workspace: Workspace, listing_dir: Path, resolution: Resolution) -> Path | None:
+    """The file one layer prints, or ``None`` to leave the garment bare."""
+    if not isinstance(resolution, Resolved):
+        return None
+    try:
+        path = workspace.resolve_ref(resolution.ref, listing_dir=listing_dir)
+    except InvalidRefError:
+        return None
+    return path if path.is_file() else None
+
+
+@router.get("/{name}/scene-preview")
+def scene_preview(
+    target: Existing,
+    template: str,
+    colour: str | None = None,
+    scale: PreviewScale = "full",
+    v: str | None = None,
+) -> Response:
+    """One of this listing's scenes, each layer printing the file its depicted
+    colour resolves to in the *saved* listing (A35) -- the Variants stage and
+    every Listing Images picture, multi-colour scenes included (spec:
+    *Previews*). Resolved here rather than from a design name in the URL,
+    because the editor showing one file while Printify prints another is the
+    thing a single resolver exists to prevent.
+
+    A layer that resolves to nothing -- an empty slot, an unclassified colour,
+    a file since deleted -- is left bare rather than failing the picture: the
+    issues banner already says why, and the rest of the scene is still worth
+    judging. ``v`` is ignored; the editor sends a signature of the saved design
+    so a landed save is a new URL and the browser fetches it again.
+    """
+    del v
+    workspace = target.workspace
+    try:
+        listing = workspace.load_listing(target.name)
+    except ConfigLoadError as exc:
+        raise HTTPException(
+            status_code=404, detail=f"listing {target.name!r} does not load"
+        ) from exc
+    config = load_template(workspace, template)
+    depicted = colour if isinstance(config, ColourMatrixTemplate) else None
+    profile = WorkspaceFacts.for_files(workspace).garment_profile(listing.garment_profile)
+    tones = profile.colors if profile is not None else {}
+    listing_dir = workspace.listing_dir(target.name)
+    layers = []
+    for layer_colour, cfg in scene_layers(config, depicted):
+        path = _layer_file(workspace, listing_dir, resolve(listing.design, layer_colour, tones))
+        if path is not None:
+            layers.append((cfg, path))
+    return render_scene_preview(workspace, template, colour=depicted, layers=layers, scale=scale)
 
 
 @support_router.get("/api/listing-draft", response_model=ListingDetail)

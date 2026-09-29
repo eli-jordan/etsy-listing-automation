@@ -128,7 +128,7 @@ def _photo_size(workspace: Workspace, name: str) -> tuple[int | None, int | None
     return int(width), int(height)
 
 
-def _load_config(workspace: Workspace, name: str) -> AnyTemplate:
+def load_template(workspace: Workspace, name: str) -> AnyTemplate:
     """This template's ``template.yaml``, or a 404 if it has none yet.
 
     An unusable *name* needs nothing here -- ``InvalidNameError`` becomes a
@@ -430,7 +430,7 @@ def photo(template: Existing, colour: str | None = None) -> Response:
 def get_config(template: Existing, response: Response) -> AnyTemplate:
     # Loaded first: `_load_config` is what turns a missing template.yaml into
     # the 404 the kind picker expects, and a stat() ahead of it was a 500.
-    config = _load_config(template.workspace, template.name)
+    config = load_template(template.workspace, template.name)
     modified_at = datetime.fromtimestamp(
         template.workspace.template_config_file(template.name).stat().st_mtime,
         tz=UTC,
@@ -550,21 +550,20 @@ def _encode_preview(image: Image.Image, scale: PreviewScale) -> Response:
     return Response(content=buffer.getvalue(), media_type=EDITOR_MEDIA_TYPE)
 
 
-def _render_preview_response(
+def render_scene_preview(
     workspace: Workspace,
     name: str,
     *,
     colour: str | None,
-    configs: list[RenderConfig],
-    design_path: Path,
+    layers: list[tuple[RenderConfig, Path]],
     scale: PreviewScale,
 ) -> Response:
-    """Composite ``design_path`` onto ``name``'s scene photo at ``configs``'
+    """Composite each layer's design onto ``name``'s scene photo at its
     geometry. Shared by the calibrator's live-drag preview (geometry from the
-    request body, design from its own test-design library) and the listing
-    editor's read-only preview (geometry from the saved ``template.yaml``,
-    design from a listing's real artwork) -- the two differ only in *where*
-    those two things come from, never in how the render itself runs.
+    request body, one test design for every layer) and the listing editor's
+    scene preview (saved geometry, each layer's file resolved from the saved
+    listing, A35) -- the two differ only in *where* those come from, never in
+    how the render itself runs. No layers is the bare photo.
     """
     photo = workspace.scene_photo(name, colour)
     if not photo.path.is_file():
@@ -578,20 +577,19 @@ def _render_preview_response(
     base: ScaledBase = PREVIEW_IMAGES.base(
         photo.path, EDITOR_MAX_EDGE if scale == "editor" else None
     )
-    design = PREVIEW_IMAGES.design(design_path)
-    scaled_configs = [_scaled(cfg, base.scale) for cfg in configs]
+    scaled = [(_scaled(cfg, base.scale), path) for cfg, path in layers]
     derived = workspace.template_derived_dir(name)
     image = render_scene(
         base.image,
-        [Layer(design=design, cfg=cfg) for cfg in scaled_configs],
+        [Layer(design=PREVIEW_IMAGES.design(path), cfg=cfg) for cfg, path in scaled],
         height=(
             PREVIEW_IMAGES.height(derived, photo.map_key, base)
-            if any(cfg.displace.enabled for cfg in scaled_configs)
+            if any(cfg.displace.enabled for cfg, _ in scaled)
             else None
         ),
         luminance=(
             PREVIEW_IMAGES.luminance(derived, photo.map_key, base)
-            if any(cfg.shade.enabled for cfg in scaled_configs)
+            if any(cfg.shade.enabled for cfg, _ in scaled)
             else None
         ),
     )
@@ -601,17 +599,17 @@ def _render_preview_response(
 @router.post("/{name}/preview")
 def preview(template: Existing, body: PreviewRequest, scale: PreviewScale = "full") -> Response:
     workspace, name = template.workspace, template.name
-    kind = _load_config(workspace, name).kind
+    kind = load_template(workspace, name).kind
     if not isinstance(body, PREVIEW_BODIES[kind]):
         raise HTTPException(status_code=400, detail=f"expected a {kind} preview body")
 
     colour = body.colour if isinstance(body, ColourMatrixPreviewRequest) else None
-    return _render_preview_response(
+    design = resolve_design(workspace, body.design)
+    return render_scene_preview(
         workspace,
         name,
         colour=colour,
-        configs=_preview_configs(body),
-        design_path=resolve_design(workspace, body.design),
+        layers=[(cfg, design) for cfg in _preview_configs(body)],
         scale=scale,
     )
 
@@ -639,18 +637,17 @@ def design_preview(
     listing's real artwork.
     """
     workspace, name = template.workspace, template.name
-    config = _load_config(workspace, name)
+    config = load_template(workspace, name)
     design_path = workspace.design_file(design)
     if not design_path.is_file():
         raise HTTPException(status_code=404, detail=f"no design {design!r}")
 
     resolved_colour = colour if isinstance(config, ColourMatrixTemplate) else None
-    return _render_preview_response(
+    return render_scene_preview(
         workspace,
         name,
         colour=resolved_colour,
-        configs=_saved_render_configs(config),
-        design_path=design_path,
+        layers=[(cfg, design_path) for cfg in _saved_render_configs(config)],
         scale=scale,
     )
 
@@ -664,7 +661,7 @@ def swatch(template: Existing, colour: str) -> SwatchResponse:
     kind 404s the same way a photo-less colour does.
     """
     workspace, name = template.workspace, template.name
-    config = _load_config(workspace, name)
+    config = load_template(workspace, name)
     if not isinstance(config, ColourMatrixTemplate):
         raise HTTPException(status_code=404, detail=f"{name!r} is not a colour-matrix template")
 

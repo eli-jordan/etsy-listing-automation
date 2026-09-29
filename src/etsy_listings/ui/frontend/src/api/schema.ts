@@ -586,6 +586,37 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/listings/{name}/scene-preview": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Scene Preview
+     * @description One of this listing's scenes, each layer printing the file its depicted
+     *     colour resolves to in the *saved* listing (A35) -- the Variants stage and
+     *     every Listing Images picture, multi-colour scenes included (spec:
+     *     *Previews*). Resolved here rather than from a design name in the URL,
+     *     because the editor showing one file while Printify prints another is the
+     *     thing a single resolver exists to prevent.
+     *
+     *     A layer that resolves to nothing -- an empty slot, an unclassified colour,
+     *     a file since deleted -- is left bare rather than failing the picture: the
+     *     issues banner already says why, and the rest of the scene is still worth
+     *     judging. ``v`` is ignored; the editor sends a signature of the saved design
+     *     so a landed save is a new URL and the browser fetches it again.
+     */
+    get: operations["scene_preview_api_listings__name__scene_preview_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/pricing-plans": {
     parameters: {
       query?: never;
@@ -4022,6 +4053,42 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  scene_preview_api_listings__name__scene_preview_get: {
+    parameters: {
+      query: {
+        template: string;
+        colour?: string | null;
+        scale?: "editor" | "full";
+        v?: string | null;
+      };
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */
