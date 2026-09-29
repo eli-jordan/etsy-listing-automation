@@ -1,0 +1,333 @@
+/* Styles for the editor-header directions only. Everything else is the
+   app's own stylesheet (theme.css imports src/index.css). */
+
+/* — the shared menu, on top of .row-menu__panel / .row-menu__item — */
+.hdr-anchor {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+.hdr-menu {
+  min-width: 330px;
+}
+.hdr-menu--left {
+  left: 0;
+  right: auto;
+}
+.hdr-menu--right {
+  right: 0;
+  left: auto;
+}
+.hdr-menu .row-menu__item {
+  justify-content: flex-start;
+  align-items: flex-start;
+  margin: 0;
+  font-weight: 400;
+  color: var(--color-text);
+  text-decoration: none;
+  cursor: pointer;
+  text-align: left;
+}
+.hdr-menu .row-menu__item:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: -2px;
+}
+.hdr-menu__icon {
+  display: inline-flex;
+  width: 20px;
+  height: 20px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.hdr-menu__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  line-height: 20px;
+}
+.hdr-menu__label {
+  font-weight: 600;
+  white-space: nowrap;
+}
+.hdr-menu__hint {
+  font-size: 11.5px;
+  line-height: 1.35;
+  font-weight: 400;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.hdr-menu__ext {
+  vertical-align: -2px;
+  margin-left: 2px;
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.hdr-menu__divider {
+  height: 1px;
+  margin: 5px 4px;
+  background: var(--color-divider);
+}
+.hdr-path {
+  font-family: ui-monospace, "Cascadia Mono", Menlo, monospace;
+  font-size: 11.5px;
+  overflow-wrap: anywhere;
+}
+
+/* — a head on one centred row — */
+.hdr-head {
+  align-items: center;
+}
+.hdr-head .page-head__actions .btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+}
+
+/* — icon-only square button (the ⋯ trigger), sized to the primary button — */
+.hdr-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  font-size: 20px;
+  color: var(--color-text);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.hdr-icon-btn--wide {
+  width: auto;
+  gap: 3px;
+  padding: 0 8px;
+  font-size: 17px;
+}
+.hdr-icon-btn__caret {
+  font-size: 11px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.hdr-icon-btn:hover,
+.hdr-icon-btn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-text) 7%, transparent);
+}
+.hdr-icon-btn:focus-visible,
+.hdr-name-btn:focus-visible,
+.hdr-link:focus-visible,
+.hdr-saved-btn:focus-visible,
+.hdr-copy:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* — B: the listing name as the menu trigger — */
+.hdr-name-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: -4px -8px;
+  padding: 4px 8px;
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.hdr-name-btn:hover,
+.hdr-name-btn[aria-expanded="true"] {
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  border-color: var(--color-divider);
+}
+.hdr-name-btn .page-head__title {
+  margin: 0;
+}
+.hdr-name-caret {
+  font-size: 15px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+}
+
+/* — C: the quiet second row of link-style actions — */
+.hdr-c-head {
+  border-bottom: none;
+  margin-bottom: 0;
+  padding-bottom: var(--space-2);
+}
+.hdr-subrow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+.hdr-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  margin: 0 -6px;
+  font: inherit;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.hdr-link:hover {
+  color: var(--color-accent-700);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+.hdr-link svg {
+  font-size: 15px;
+}
+.hdr-link svg.hdr-link__caret {
+  font-size: 11px;
+  margin-left: -1px;
+}
+.hdr-link[aria-expanded="true"] {
+  color: var(--color-accent-700);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+/* Destructive, so it stays as quiet as its neighbours until pointed at. */
+.hdr-link--danger:hover {
+  color: var(--color-danger-700);
+  background: color-mix(in srgb, var(--color-danger-700) 9%, transparent);
+}
+.hdr-subrow__sep {
+  width: 1px;
+  height: 14px;
+  background: var(--color-divider);
+}
+.hdr-subrow__end {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+/* — D: "Saved 3 mins ago" opens a small file card — */
+.hdr-saved-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 7px;
+  margin: 0 -7px;
+  font: inherit;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.hdr-saved-btn:hover,
+.hdr-saved-btn[aria-expanded="true"] {
+  border-color: var(--color-divider);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+.hdr-subrow__end .hdr-saved-btn {
+  margin: 0;
+}
+.hdr-filecard {
+  min-width: 400px;
+  padding: var(--space-3);
+}
+.hdr-filecard__title {
+  margin-bottom: var(--space-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.hdr-filecard__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+}
+.hdr-filecard__row .hdr-path {
+  flex: 1;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.hdr-filecard__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px var(--space-3);
+  margin: var(--space-3) 0 0;
+  font-size: 12.5px;
+}
+.hdr-filecard__facts dt {
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.hdr-filecard__facts dd {
+  margin: 0;
+}
+.hdr-copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.hdr-copy:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+/* — E: a status bar pinned to the bottom of the editor column — */
+.hdr-e-page {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - var(--space-6) * 2);
+}
+.hdr-e-page .editor {
+  flex: 1;
+}
+.hdr-statusbar {
+  position: sticky;
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: var(--space-4) calc(var(--space-8) * -1) calc(var(--space-6) * -1);
+  padding: var(--space-2) var(--space-8);
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 62%, transparent);
+  background: var(--color-surface);
+  border-top: 1px solid var(--color-divider);
+}
+.hdr-statusbar .hdr-path {
+  font-size: 12px;
+  color: var(--color-text);
+}
+.hdr-statusbar__end {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.hdr-details .field {
+  margin-bottom: var(--space-3);
+}
+.hdr-details .input {
+  width: 100%;
+}
