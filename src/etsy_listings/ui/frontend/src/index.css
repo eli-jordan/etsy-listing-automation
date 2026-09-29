@@ -4313,6 +4313,12 @@ table.listings tbody tr:last-child td {
   max-height: min(1024px, calc(100vh - 260px));
 }
 
+/* Variants: the "what this colour prints" card sits under the stage, and the
+   two are read together -- so the photo leaves room for it on a laptop. */
+.variants-preview .preview-stage--large img {
+  max-height: min(1024px, calc(100vh - 380px));
+}
+
 /* A button only so the keyboard can open the carousel -- it must look like
    the image it wraps and nothing else. */
 .preview-stage__open {
