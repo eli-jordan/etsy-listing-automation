@@ -163,6 +163,26 @@ class TestResolvesFromTheSavedListing:
 
 
 class TestRefusals:
+    def test_a_listing_that_will_not_load_is_404(
+        self, workspace_root: Path, client: TestClient
+    ) -> None:
+        (workspace_root / "listings" / LISTING / "listing.yaml").write_text(
+            "design: [not, a, map]\n", encoding="utf-8"
+        )
+        response = client.get(
+            f"/api/listings/{LISTING}/scene-preview", params={"template": "flat-lay-01"}
+        )
+        assert response.status_code == 404
+
+    def test_a_ref_that_escapes_its_root_is_the_bare_garment(
+        self, workspace_root: Path, client: TestClient
+    ) -> None:
+        edit_listing(workspace_root, design={"default": "../outside.png"})
+
+        assert _get(client, template="flat-lay-01", colour="black") == expected_scene(
+            workspace_root, "flat-lay-01", "black", {}
+        )
+
     def test_an_unknown_listing_is_404(self, client: TestClient) -> None:
         response = client.get(
             "/api/listings/nope/scene-preview", params={"template": "flat-lay-01"}
