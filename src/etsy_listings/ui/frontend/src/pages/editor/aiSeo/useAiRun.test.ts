@@ -64,6 +64,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    gestures: [],
     description_composed: "",
     ...over,
   };

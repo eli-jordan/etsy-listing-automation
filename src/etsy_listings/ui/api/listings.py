@@ -28,7 +28,7 @@ directory rather than the workspace as a whole.
 from __future__ import annotations
 
 import os
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -61,6 +61,7 @@ from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.engine.status import (
+    ListingGesture,
     ListingLifecycle,
     ListingStatus,
     edited_since_apply,
@@ -379,6 +380,7 @@ def _detail(
     listing = workspace.load_listing(name)
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
+    published = is_live_etsy_state(etsy_state) if etsy_listing_id is not None else False
     return _describe(
         workspace,
         WorkspaceFacts.gather(workspace),
@@ -396,6 +398,11 @@ def _detail(
         etsy_listing_id=etsy_listing_id,
         printify_product_id=printify_product_id,
         field_errors=field_errors,
+        # The table's row gestures, so the editor's action row offers the
+        # same lifecycle actions (PRD 66) without deciding them itself.
+        gestures=listing_gestures(
+            lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
+        ),
     )
 
 
@@ -411,6 +418,7 @@ def _describe(
     etsy_listing_id: int | None = None,
     printify_product_id: str | None = None,
     field_errors: dict[str, str] | None = None,
+    gestures: Sequence[ListingGesture] = (),
 ) -> ListingDetail:
     """A `Listing` as the editor reads it, whether or not it is on disk.
 
@@ -446,6 +454,7 @@ def _describe(
             "status": status,
             "issues": [i.model_dump() for i in issues],
             "field_errors": field_errors or {},
+            "gestures": list(gestures),
             "etsy_listing_id": etsy_listing_id,
             "printify_product_id": printify_product_id,
             "pricing_plan_name": plan_name,
