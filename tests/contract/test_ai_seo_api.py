@@ -96,8 +96,21 @@ def test_readiness_needs_both_prompts_the_run_reads(workspace_root: Path, prompt
     assert prompt in str(body["reason"])
 
 
-def test_readiness_is_hidden_without_a_selected_design(workspace_root: Path) -> None:
-    edit_listing(workspace_root, design={})
+@pytest.mark.parametrize(
+    "design",
+    [
+        {},
+        # Light/dark mode with neither slot filled: there is no representative
+        # artwork to send, and a colour's own file is never promoted to one
+        # (spec: *Representative artwork*).
+        {"on-light": None, "on-dark": None},
+        {"on-light": None, "on-dark": None, "moss": "designs/take-a-hike.png"},
+    ],
+)
+def test_readiness_is_hidden_without_a_representative_design(
+    workspace_root: Path, design: dict[str, str | None]
+) -> None:
+    edit_listing(workspace_root, design=design)
 
     body = _readiness(workspace_root)
 
