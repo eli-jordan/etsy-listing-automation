@@ -326,6 +326,17 @@ mode, and go back to automatic.
 - Acceptance 4 and 5 as above; the spec's *Colour-specific artwork* walked
   under G6.
 
+**As built.** Where the implementation settled a detail differently:
+
+| Item | Settled as | Why |
+|---|---|---|
+| Carried over from PR 2 | The "Also printing their own design" names preview the colour, and every sold row has its artwork chip | Both needed a colour's own design |
+| Previewed colour | Lifted from `VariantsTab` into `ListingEditorShell`; `VariantsTab` takes `previewed` / `onPreview`. A strip name pressed on another tab switches to Variants | The strip sits outside the tabs and has to preview a colour too |
+| Writing an own design | `update({design})` straight from `VariantsTab`, not the strip's design change | A colour's own design never arms AI or names a draft (spec: *Representative artwork*) |
+| An empty draft | No chip and no card action while `design` has no reserved base key | A colour key alone is a malformed write; the base design comes first |
+| Chip label | "Select different design for Moss", capitalised like the card's buttons, while row names stay lowercase | The card's "Select different design for Ivory" is the same action |
+| Tests that passed first time | Both print-area behaviour tests, the acceptance-5 scene test, and the Vitest profile-change test | PR 1 keyed print areas by content hash and made `selectColours` drop a colour's key, which the profile change goes through; PR 2's `scene-preview` resolves each layer |
+
 ---
 
 ### PR 4 — `feat(ai): representative artwork`
