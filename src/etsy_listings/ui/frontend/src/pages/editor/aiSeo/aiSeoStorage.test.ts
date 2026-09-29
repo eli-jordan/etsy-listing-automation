@@ -131,6 +131,36 @@ describe("isStale", () => {
     expect(isStale(stored, detail({ design: { default: "designs/other.png" } }))).toBe(true);
   });
 
+  describe("across a light/dark pair (multi-artwork plan, *AI staleness*)", () => {
+    /* Only arming follows the representative artwork; staleness compares
+       the whole map, `null` slots included, since every file in it is what
+       the proposal was judged against. */
+    const PAIR = { "on-light": "designs/light.png", "on-dark": null };
+    const generatedFrom = (design: Record<string, string | null>) =>
+      toStoredProposal(proposal({ snapshot: { ...proposal().snapshot, design } }));
+
+    it("is false for the same pair, empty slot and key order aside", () => {
+      const stored = generatedFrom(PAIR);
+      expect(
+        isStale(stored, detail({ design: { "on-dark": null, "on-light": "designs/light.png" } })),
+      ).toBe(false);
+    });
+
+    it("is true once the empty slot is filled, though the representative is unchanged", () => {
+      const stored = generatedFrom(PAIR);
+      expect(isStale(stored, detail({ design: { ...PAIR, "on-dark": "designs/dark.png" } }))).toBe(
+        true,
+      );
+    });
+
+    it("is true once a colour gets its own design", () => {
+      const stored = generatedFrom(PAIR);
+      expect(isStale(stored, detail({ design: { ...PAIR, black: "designs/black.png" } }))).toBe(
+        true,
+      );
+    });
+  });
+
   it("is true when design bytes change at the same reference", () => {
     const stored = toStoredProposal(proposal());
     expect(isStale(stored, detail({ design_content_hash: "new-content" }))).toBe(true);

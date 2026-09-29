@@ -46,7 +46,11 @@ function storageKey(scope: AiSeoStorageScope): string {
 /** A stable, order-independent identity for `ListingDetail.design`: sorted so
  * that two listings that resolved to the same artwork map through a
  * different key insertion order (an unlikely but not-impossible outcome of
- * `config/listing.py`'s coercion) still compare equal. */
+ * `config/listing.py`'s coercion) still compare equal. The whole map, `null`
+ * slots and colour keys included, like the server's `design_content_hash`:
+ * only arming follows the representative artwork, and a proposal judged
+ * against one pair is stale once any file in it moves (multi-artwork plan,
+ * *AI staleness*). */
 function designIdentity(design: DesignMap): string {
   return JSON.stringify(Object.entries(design).sort(([a], [b]) => a.localeCompare(b)));
 }
