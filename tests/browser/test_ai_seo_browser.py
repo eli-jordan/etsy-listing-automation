@@ -1220,6 +1220,86 @@ def test_a_design_attached_to_a_listing_with_a_brief_changes_nothing(
         assert provider.calls == []
 
 
+def _listing_thumbnail(page: Page, base_url: str) -> str:
+    """The listings table's picture for the fixture listing, once decoded."""
+    page.goto(f"{base_url}/listings")
+    row = page.locator("tr", has=page.get_by_role("button", name=LISTING, exact=True))
+    thumb = row.locator("img.listing-thumb")
+    thumb.wait_for(state="visible")
+    page.wait_for_function(
+        "img => img.complete && img.naturalWidth > 0", arg=thumb.element_handle()
+    )
+    return thumb.get_attribute("src") or ""
+
+
+def _wait_for_design(workspace_root: Path, page: Page, expected: object) -> None:
+    for _ in range(100):
+        if _listing_yaml(workspace_root).get("design") == expected:
+            return
+        page.wait_for_timeout(100)
+    raise AssertionError(f"design never reached {expected}")
+
+
+def test_only_the_representative_artwork_shows_in_the_table_and_starts_ai(
+    browser_type: Any, workspace_root: Path, prerequisite_missing: Any
+) -> None:
+    """Acceptance 8 (spec, *Representative artwork*): the listings table shows
+    the first non-null of ``default``, ``on-light``, ``on-dark``; changing the
+    alternate slot or giving a colour its own design starts no AI work;
+    changing the representative starts the chain, and the one image it sends
+    is that file."""
+    _seed_prompt(workspace_root)
+    _seed_brief_prompt(workspace_root)
+    for name in ("a-dark", "a-light", "b-dark", "b-light", "c-moss"):
+        write_design(workspace_root, (4000, 4000), name=name)
+    pair = {"on-light": "designs/a-light.png", "on-dark": "designs/a-dark.png"}
+    edit_listing(workspace_root, brief="", design=pair)
+    provider = _ready_provider()
+
+    with (
+        _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
+        _seo_page(browser_type, base_url, path="/listings") as page,
+    ):
+        assert "/listing-designs/a-light/thumbnail" in _listing_thumbnail(page, base_url)
+
+        page.goto(f"{base_url}/listings/{LISTING}")
+        page.get_by_role("heading", name=LISTING).wait_for(state="visible")
+
+        # The alternate slot: print treatment, not a new listing concept.
+        page.get_by_role("button", name="Change design for dark shirts").click()
+        page.locator(".add-panel").get_by_role("button", name=re.compile(r"^b-dark ")).click()
+        pair = {**pair, "on-dark": "designs/b-dark.png"}
+        _wait_for_design(workspace_root, page, pair)
+        page.wait_for_timeout(1000)  # long enough for an armed chain to fire
+        assert provider.calls == []
+
+        # A colour's own design: the same.
+        page.get_by_role("button", name="Select different design for Moss").click()
+        dialog = page.get_by_role("dialog", name="Design for Moss")
+        dialog.get_by_role("button", name=re.compile("c-moss")).click()
+        pair = {**pair, "moss": "designs/c-moss.png"}
+        _wait_for_design(workspace_root, page, pair)
+        page.wait_for_timeout(1000)
+        assert provider.calls == []
+
+        # The light slot holds the representative: changing it drafts the
+        # brief from the new file, and the proposal follows.
+        page.get_by_role("button", name="Change design for light shirts").click()
+        page.locator(".add-panel").get_by_role("button", name=re.compile(r"^b-light ")).click()
+        for _ in range(300):
+            if _listing_yaml(workspace_root).get("brief") == _DRAFTED_BRIEF:
+                break
+            page.wait_for_timeout(100)
+        else:  # pragma: no cover - only on a pathologically slow machine
+            raise AssertionError("the drafted brief never reached listing.yaml")
+        _open_details_tab(page)
+        page.locator(".seo-choice-list").first.wait_for(state="visible")
+        assert provider.calls == ["brief", "queries", "seo"]
+        assert {task.design_image.name for task in provider.tasks} == {"b-light.png"}
+
+        assert "/listing-designs/b-light/thumbnail" in _listing_thumbnail(page, base_url)
+
+
 def test_a_workspace_without_the_brief_prompt_says_so_and_stops(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
