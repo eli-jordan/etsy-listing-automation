@@ -2,12 +2,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   deleteListing,
-  listingDesignThumbnailUrl,
   listListings,
   patchListing,
 } from "../api/listings";
 import { createRun, currentWorkspaceRun, getRun } from "../api/runs";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ListingHover } from "../components/ListingHover";
 import { OpenInMenu } from "../components/OpenInMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
@@ -38,45 +38,6 @@ const FILTER_LABELS: Record<Filter, string> = { all: "All statuses", ...STATUS_L
 
 function gestureLabel(row: ListingSummary, gesture: Gesture): string {
   return gesture === "delete" ? deleteLabel(row) : GESTURE_LABELS[gesture];
-}
-
-/** The listing's artwork, or an empty tile when `design` is null -- which is
- * what a multi-artwork listing (`on-light`/`on-dark`) reports, since no single
- * picture stands for it. Decorative: the row's name is right beside it and is
- * what a screen reader should read, so `alt` is deliberately empty. */
-function DesignThumb({ design }: { design: string | null }) {
-  if (design === null) return <span className="listing-thumb listing-thumb--empty" />;
-  return (
-    <img className="listing-thumb" src={listingDesignThumbnailUrl(design)} alt="" loading="lazy" />
-  );
-}
-
-/** The card the row's name reveals on hover. Purely CSS-driven (see
- * `.listing-hover:hover .listing-popup`) rather than JS state: it shows only
- * what the server already sent for this row, so there is nothing to fetch and
- * no state worth re-rendering the table for. It exists because the table is
- * three narrow columns and the artwork and colour count have nowhere to go. */
-function ListingCard({ row }: { row: ListingSummary }) {
-  return (
-    <span className="listing-popup">
-      {row.design !== null && (
-        <img
-          className="listing-popup__thumb"
-          src={listingDesignThumbnailUrl(row.design)}
-          alt=""
-          loading="lazy"
-        />
-      )}
-      <span className="listing-popup__name">{row.name}</span>
-      <span className="listing-popup__garment">{row.garment_profile}</span>
-      <span className="listing-popup__meta">
-        <StatusTag status={row.status} />
-        <span>
-          {row.colour_count} {row.colour_count === 1 ? "colour" : "colours"}
-        </span>
-      </span>
-    </span>
-  );
 }
 
 function UndoMarkIcon() {
@@ -279,8 +240,7 @@ export function ListingsPage() {
             <tr key={row.name}>
               <td>
                 <div className="listing-cell">
-                  <span className="listing-hover">
-                    <DesignThumb design={row.design} />
+                  <ListingHover listing={row}>
                     <button
                       type="button"
                       className="listing-row__link"
@@ -288,8 +248,7 @@ export function ListingsPage() {
                     >
                       {row.name}
                     </button>
-                    <ListingCard row={row} />
-                  </span>
+                  </ListingHover>
                   {hasOpenTargets(row.etsy_listing_id, row.printify_product_id) && (
                     <OpenInMenu
                       etsyListingId={row.etsy_listing_id}

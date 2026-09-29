@@ -2,8 +2,9 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import * as batchesApi from "../api/batches";
+import * as listingsApi from "../api/listings";
 import type { BatchDetail, BatchRow } from "../api/batches";
-import type { WorkflowStep } from "../types";
+import type { ListingSummary, WorkflowStep } from "../types";
 import { BatchSummaryPage, POLL_MS } from "./BatchSummaryPage";
 
 function row(name: string, over: Partial<BatchRow> = {}): BatchRow {
@@ -381,5 +382,27 @@ describe("BatchSummaryPage", () => {
 
     expect(await screen.findByText("Listing templates page")).toBeInTheDocument();
     expect(remove).toHaveBeenCalledWith("b1");
+  });
+});
+
+describe("BatchSummaryPage, a created listing's name", () => {
+  it("reveals the Listings table's hover card, and Open is a quiet button", async () => {
+    vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW, { status: "in_review" }));
+    const summary = {
+      name: "night-hike-club",
+      garment_profile: "comfort-colors-1717",
+      design: "designs/night-hike-club.png",
+      colour_count: 4,
+      status: "draft",
+      issue_counts: { block: 0, warn: 0 },
+      gestures: ["delete"],
+    } as ListingSummary;
+    vi.spyOn(listingsApi, "listListings").mockResolvedValue([summary]);
+    renderPage();
+
+    const row = await waitFor(() => rowFor("night-hike-club"));
+    expect(await within(row).findByText("comfort-colors-1717")).toBeInTheDocument();
+    expect(within(row).getByText("4 colours")).toBeInTheDocument();
+    expect(within(row).getByRole("link", { name: "Open" })).toHaveClass("bc-quiet");
   });
 });
