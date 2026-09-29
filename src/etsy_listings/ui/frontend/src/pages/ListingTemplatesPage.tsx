@@ -1,5 +1,6 @@
 import { CopySimpleIcon } from "@phosphor-icons/react/dist/csr/CopySimple";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
+import { PlayIcon } from "@phosphor-icons/react/dist/csr/Play";
 import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { UploadSimpleIcon } from "@phosphor-icons/react/dist/csr/UploadSimple";
 import { type DragEvent, useEffect, useState } from "react";
@@ -8,7 +9,7 @@ import { stageDesigns, StagingRefused } from "../api/batches";
 import { deleteListingTemplate, listListingTemplates } from "../api/listingTemplates";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { TEMPLATE_DELETE_DETAILS, templateDeleteTitle } from "./listingTemplateDelete";
-import { mediaLabel, ownedTile } from "../media";
+import { mediaKind, mediaLabel, ownedTile } from "../media";
 import type { ListingTemplateSummary } from "../types";
 import { RecentBatches } from "./RecentBatches";
 
@@ -99,15 +100,33 @@ function TemplateCard({
       onDragLeave={leave}
       onDrop={drop}
     >
+      {/* The first three gallery entries as a fanned stack of prints (the
+          `template-cards` design frame): the first whole in front, the next
+          two fanned behind it. Mockups are square, and a strip of cells cut
+          each to a slice; a print shows the whole picture. */}
       <div className="bc-card__gallery">
-        {template.media.slice(0, 3).map((entry, index) => (
-          <img
-            key={`${mediaLabel(entry)}-${index}`}
-            src={ownedTile(entry, owner)}
-            alt=""
-            loading="lazy"
-          />
-        ))}
+        {template.media.length === 0 ? (
+          <span className="bc-card__no-gallery">No gallery images</span>
+        ) : (
+          <div className="bc-deck">
+            {template.media.slice(0, 3).map((entry, index) => (
+              <span
+                key={`${mediaLabel(entry)}-${index}`}
+                className={`bc-deck__print bc-deck__print--${index}`}
+              >
+                <img src={ownedTile(entry, owner)} alt="" loading="lazy" />
+                {mediaKind(entry) === "video" && (
+                  <span className="bc-deck__play" aria-label="Video">
+                    <PlayIcon weight="fill" aria-hidden="true" />
+                  </span>
+                )}
+              </span>
+            ))}
+          </div>
+        )}
+        {template.media.length > 1 && (
+          <span className="bc-deck__count">{plural(template.media.length, "item", "items")}</span>
+        )}
       </div>
       <div className="bc-card__body">
         <span className="bc-card__name">{template.name}</span>
