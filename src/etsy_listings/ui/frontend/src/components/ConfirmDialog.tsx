@@ -1,4 +1,4 @@
-import { useEffect, useId } from "react";
+import { type ReactNode, useEffect, useId } from "react";
 
 /**
  * An in-app confirm. `window.confirm` is browser chrome the rest of the
@@ -6,17 +6,36 @@ import { useEffect, useId } from "react";
  *
  * `details` is a collapsed disclosure, not always-on copy: the question is
  * the decision, the explanation is there for whoever wants it.
+ *
+ * `children` is a body for a question that needs an answer before it can be
+ * confirmed -- which file to keep when a light/dark pair is linked again
+ * (`ChooseBaseDialog`) -- and `confirmDisabled` holds the confirm back until
+ * it has one. One dialog rather than a second copy of the backdrop, the
+ * Escape handling and the action row (multi-artwork plan, *Link dialog*).
  */
 
 interface Props {
   title: string;
   confirmLabel: string;
   details?: string;
+  children?: ReactNode;
+  confirmDisabled?: boolean;
+  /** Extra class on the dialog box, for a body that needs more room. */
+  className?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
 
-export function ConfirmDialog({ title, confirmLabel, details, onConfirm, onCancel }: Props) {
+export function ConfirmDialog({
+  title,
+  confirmLabel,
+  details,
+  children,
+  confirmDisabled = false,
+  className,
+  onConfirm,
+  onCancel,
+}: Props) {
   const titleId = useId();
 
   useEffect(() => {
@@ -33,10 +52,11 @@ export function ConfirmDialog({ title, confirmLabel, details, onConfirm, onCance
   return (
     <div className="modal-root" role="dialog" aria-modal="true" aria-labelledby={titleId}>
       <div className="modal-backdrop" onClick={onCancel} aria-hidden="true" />
-      <div className="modal-dialog confirm-dialog">
+      <div className={["modal-dialog confirm-dialog", className].filter(Boolean).join(" ")}>
         <h2 id={titleId} className="confirm-dialog__title">
           {title}
         </h2>
+        {children}
         {details !== undefined && (
           <details className="confirm-dialog__details">
             <summary>Details</summary>
@@ -47,7 +67,13 @@ export function ConfirmDialog({ title, confirmLabel, details, onConfirm, onCance
           <button type="button" className="btn btn-ghost" onClick={onCancel}>
             Cancel
           </button>
-          <button type="button" className="btn btn-secondary" onClick={onConfirm} autoFocus>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onConfirm}
+            disabled={confirmDisabled}
+            autoFocus
+          >
             {confirmLabel}
           </button>
         </div>

@@ -4729,6 +4729,41 @@ table.listings tbody tr:last-child td {
   gap: var(--space-2);
 }
 
+/* Linking a light/dark pair: which of the two files every shirt prints. */
+.choose-base {
+  width: 440px;
+}
+
+.choose-base__body {
+  margin: 0;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+}
+
+.choose-base__options {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.choose-base__card {
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: var(--space-2);
+  padding: 8px;
+}
+
+.choose-base__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.choose-base__card .template-card__kind {
+  font-size: 11px;
+}
+
 /* — the deploy view (docs/deploy-changes.md, `pages/deploy/`) —
    Ported from the "Plan & Apply Designs" artifact's own `.dv-*` block, which
    already expressed itself entirely in this file's tokens (`--color-*`,
