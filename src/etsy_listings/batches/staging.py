@@ -18,6 +18,7 @@ and so is which ``designs/`` file a row's bytes already are.
 from __future__ import annotations
 
 import hashlib
+import re
 import shutil
 import uuid
 from collections.abc import Iterable, Iterator
@@ -125,11 +126,26 @@ def _is_zip(upload: Upload, head: bytes) -> bool:
     return head.startswith(_ZIP_MAGICS) or upload.filename.lower().endswith(".zip")
 
 
-def _receive(
-    workspace: Workspace, session: str, uploads: Iterable[Upload]
-) -> tuple[list[StagingRow], list[str]]:
-    """Every design in the upload, and the names of the ZIP's files that are
-    not PNGs. One ZIP, or loose PNGs, never both (spec, *Accepted input*)."""
+@dataclass(frozen=True)
+class _Receipt:
+    rows: list[StagingRow]
+    ignored: list[str]
+    """The names of the ZIP's files that are not PNGs."""
+    archive: str | None
+    """The ZIP's own name, without folders or ``.zip``; ``None`` for loose
+    PNGs. It leads the default label (spec, *Confirming a batch*)."""
+
+
+def _archive_name(filename: str) -> str:
+    """``C:\\exports\\Coding x Music.zip`` -> ``Coding x Music``: a browser
+    sends the bare name, but a name with folders is still only its last part."""
+    name = re.split(r"[\\/]", filename)[-1]
+    return name[: -len(".zip")] if name.lower().endswith(".zip") else name
+
+
+def _receive(workspace: Workspace, session: str, uploads: Iterable[Upload]) -> _Receipt:
+    """Every design in the upload. One ZIP, or loose PNGs, never both (spec,
+    *Accepted input*)."""
     heads = [(upload, upload.stream.read(len(PNG_MAGIC))) for upload in uploads]
     zips = [upload for upload, head in heads if _is_zip(upload, head)]
     if len(zips) > 1:
@@ -147,7 +163,7 @@ def _receive(
         received = _Received(workspace, session, total_limit=None)
         ignored = _receive_zip(workspace, session, upload, head, received)
         _limit(received, "It holds", "Split the export into {} ZIPs and start a batch for each.")
-        return list(received.rows.values()), ignored
+        return _Receipt(list(received.rows.values()), ignored, _archive_name(upload.filename))
     received = _Received(workspace, session, total_limit=MAX_UPLOAD_BYTES)
     for upload, head in heads:
         if head != PNG_MAGIC:
@@ -158,7 +174,7 @@ def _receive(
     if not received.rows:
         raise StagingRefused("No files were dropped.", "Choose at least one PNG.")
     _limit(received, "They hold", "Split them into {} batches.")
-    return list(received.rows.values()), []
+    return _Receipt(list(received.rows.values()), [], None)
 
 
 _SPLITS = {2: "two", 3: "three", 4: "four"}
@@ -207,11 +223,13 @@ def _freeze(workspace: Workspace, session: str, template: str, refs: list[str]) 
         shutil.copyfile(source, target)
 
 
-def _default_label(listing_template: str, now: datetime) -> str:
+def _default_label(listing_template: str, now: datetime, archive: str | None = None) -> str:
     """The listing template and the date and time, in the server's local
-    time -- the seller's, for a desktop tool (spec, *Confirming a batch*)."""
+    time -- the seller's, for a desktop tool -- led by the ZIP's name when
+    the designs came in one (spec, *Confirming a batch*)."""
     local = now.astimezone()
-    return f"{listing_template} · {local.day} {local:%b %H:%M}"
+    label = f"{listing_template} · {local.day} {local:%b %H:%M}"
+    return f"{archive} · {label}" if archive else label
 
 
 def stage_pngs(
@@ -237,7 +255,8 @@ def stage_pngs(
     session = uuid.uuid4().hex
     directory = workspace.staging_dir(session)
     try:
-        rows, ignored = _receive(workspace, session, uploads)
+        receipt = _receive(workspace, session, uploads)
+        rows, ignored = receipt.rows, receipt.ignored
         _freeze(workspace, session, listing_template, owned_refs(template))
         for row in rows:
             path = workspace.staging_upload_file(session, row.sha256)
@@ -253,7 +272,7 @@ def stage_pngs(
             listing_template=listing_template,
             template=template.model_dump(mode="json"),
             template_saved_at=datetime.fromtimestamp(saved_at, tz=UTC),
-            label=_default_label(listing_template, now),
+            label=_default_label(listing_template, now, receipt.archive),
             created_at=now,
             updated_at=now,
             rows=rows,
