@@ -14,7 +14,7 @@ import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { DeployControl } from "./editor/DeployControl";
 import { ArtworkStrip } from "./editor/ArtworkStrip";
-import type { SlotTarget, Tone } from "./editor/artwork";
+import { representative, type SlotTarget, type Tone } from "./editor/artwork";
 import { DetailsTab } from "./editor/DetailsTab";
 import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
@@ -170,11 +170,17 @@ function ListingEditorPageContent({
   const [typedName, setTypedName] = useState("");
   const aiSeo = useAiSeoMode(detail, update, flush, save, adopt);
 
-  /** Everything a design strip change sets off, in the one handler, because
-   * two of the three need the pick itself rather than a later render of its
-   * effect. `picked` is the file a pick chose; Link and Unlink pick nothing,
-   * so they neither name a draft nor arm the AI chain (interactions §3, §5).
-   * Arming only when the *representative* file changes is PR 4's.
+  /** Everything a design strip change sets off, in the one handler. Only a
+   * change to the **representative** artwork -- the first non-null of
+   * `default`, `on-light`, `on-dark` -- names a draft or arms the AI chain
+   * (spec: *Representative artwork*; interactions Part 1 §2-§5, Part 2 §3).
+   * It is the one image the brief and SEO workflow is sent, so it is the
+   * listing's concept; the alternate slot and a colour's own design are print
+   * treatment. So Unlink (the file moves to `on-light`) and a dark-slot pick
+   * beside a filled light slot set nothing off, and a Link that keeps the
+   * dark-shirt file does. Decided from the map, not from which control made
+   * it, so a new control cannot get the rule wrong; a colour's own design
+   * never reaches here at all (it is a Variants edit through `update`).
    *
    * The name is here rather than in `ListingEditorShell` because naming is
    * `useAutosave`'s (`commitName`), and only a draft that has none gets one:
@@ -185,13 +191,14 @@ function ListingEditorPageContent({
    * file, so the ordinary create flow becomes "pick a design" with nothing
    * else required. A name already taken is refused exactly as a typed one is,
    * and the page head says so. */
-  function changeDesign(next: DesignMap, picked: string | null) {
+  function changeDesign(next: DesignMap) {
     // The whole map, always: `update` replaces `design` rather than merging
     // into it, and the map is the one written form (multi-artwork plan).
     update({ design: next });
-    if (picked === null) return;
+    const chosen = representative(next);
+    if (chosen === null || chosen === representative(detail.design)) return;
     if (detail.name === "" && typedName.trim() === "") {
-      const named = refName(picked);
+      const named = refName(chosen);
       // Shown as the name immediately, not only once the file exists. A
       // create is refused until the document will validate (no price source,
       // usually), and `useAutosave` holds the name for the edit that retries
@@ -311,10 +318,11 @@ export function ListingEditorShell({
   detail: ListingDetail;
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
-  /** Everything one design strip change sets off -- the edit, and for a pick,
-   * naming an unnamed draft and arming the AI chain. Built by
-   * `ListingEditorPageContent`, which is the layer that has `commitName`. */
-  onDesignChange: (next: DesignMap, picked: string | null) => void;
+  /** Everything one design strip change sets off -- the edit, and when the
+   * representative artwork changes, naming an unnamed draft and arming the AI
+   * chain. Built by `ListingEditorPageContent`, which is the layer that has
+   * `commitName`. */
+  onDesignChange: (next: DesignMap) => void;
   /** Owned by `ListingEditorPageContent`, not by this shell and not by
    * `DetailsTab`: a run outlives the tab it was started from -- switching to
    * Variants unmounts the tab. */

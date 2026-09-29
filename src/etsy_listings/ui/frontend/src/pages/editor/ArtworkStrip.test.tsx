@@ -47,7 +47,7 @@ function Harness({
 }: {
   design: DesignMap;
   colours: string[];
-  onChange: (next: DesignMap, picked: string | null) => void;
+  onChange: (next: DesignMap) => void;
   onPreview?: (colour: string) => void;
   initialOpen?: SlotTarget | null;
 }) {
@@ -174,16 +174,17 @@ describe("ArtworkStrip's §3 transitions", () => {
   it("Unlink puts the current file in both slots", async () => {
     const { onChange } = renderStrip({ default: HIKE, moss: "designs/moss.png" });
     fireEvent.click(await screen.findByRole("button", { name: "Unlink" }));
-    expect(onChange).toHaveBeenCalledWith(
-      { "on-light": HIKE, "on-dark": HIKE, moss: "designs/moss.png" },
-      null,
-    );
+    expect(onChange).toHaveBeenCalledWith({
+      "on-light": HIKE,
+      "on-dark": HIKE,
+      moss: "designs/moss.png",
+    });
   });
 
   it("Unlink on an empty draft records the mode with two nulls", async () => {
     const { onChange } = renderStrip({});
     fireEvent.click(await screen.findByRole("button", { name: "Unlink" }));
-    expect(onChange).toHaveBeenCalledWith({ "on-light": null, "on-dark": null }, null);
+    expect(onChange).toHaveBeenCalledWith({ "on-light": null, "on-dark": null });
   });
 
   it("changes the design for all shirts from the Recent designs panel", async () => {
@@ -202,10 +203,7 @@ describe("ArtworkStrip's §3 transitions", () => {
     ).toHaveClass("template-card--active");
 
     fireEvent.click(screen.getByRole("button", { name: /camp-coffee/ }));
-    expect(onChange).toHaveBeenCalledWith(
-      { default: "designs/camp-coffee.png" },
-      "designs/camp-coffee.png",
-    );
+    expect(onChange).toHaveBeenCalledWith({ default: "designs/camp-coffee.png" });
     expect(screen.queryByText("Recent designs for all shirts")).not.toBeInTheDocument();
   });
 
@@ -218,20 +216,20 @@ describe("ArtworkStrip's §3 transitions", () => {
 
     fireEvent.click(screen.getByRole("button", { name: /take-a-hike-light-ink/ }));
 
-    expect(onChange).toHaveBeenCalledWith({ "on-light": HIKE, "on-dark": LIGHT_INK }, LIGHT_INK);
+    expect(onChange).toHaveBeenCalledWith({ "on-light": HIKE, "on-dark": LIGHT_INK });
   });
 
   it("picks for one slot of an unlinked pair", async () => {
     const { onChange } = renderStrip({ "on-light": null, "on-dark": LIGHT_INK });
     fireEvent.click(await screen.findByRole("button", { name: /Choose design for light shirts/ }));
     fireEvent.click(screen.getByRole("button", { name: /take-a-hike-dark-ink/ }));
-    expect(onChange).toHaveBeenCalledWith({ "on-light": DARK_INK, "on-dark": LIGHT_INK }, DARK_INK);
+    expect(onChange).toHaveBeenCalledWith({ "on-light": DARK_INK, "on-dark": LIGHT_INK });
   });
 
   it("Link keeps the one distinct file without asking", async () => {
     const { onChange } = renderStrip({ "on-light": null, "on-dark": LIGHT_INK });
     fireEvent.click(await screen.findByRole("button", { name: "Link" }));
-    expect(onChange).toHaveBeenCalledWith({ default: LIGHT_INK }, null);
+    expect(onChange).toHaveBeenCalledWith({ default: LIGHT_INK });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -254,7 +252,7 @@ describe("ArtworkStrip's §3 transitions", () => {
     fireEvent.click(screen.getByRole("radio", { name: /take-a-hike-light-ink/ }));
     fireEvent.click(screen.getByRole("button", { name: "Use one design" }));
 
-    expect(onChange).toHaveBeenCalledWith({ default: LIGHT_INK }, null);
+    expect(onChange).toHaveBeenCalledWith({ default: LIGHT_INK });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
@@ -282,10 +280,10 @@ describe("ArtworkStrip's full design list (interactions §4)", () => {
     expect(within(dialog).queryByRole("button", { name: /camp-coffee/ })).not.toBeInTheDocument();
     fireEvent.click(within(dialog).getByRole("button", { name: /trail-mix/ }));
 
-    expect(onChange).toHaveBeenCalledWith(
-      { "on-light": "designs/trail-mix.png", "on-dark": LIGHT_INK },
-      "designs/trail-mix.png",
-    );
+    expect(onChange).toHaveBeenCalledWith({
+      "on-light": "designs/trail-mix.png",
+      "on-dark": LIGHT_INK,
+    });
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 

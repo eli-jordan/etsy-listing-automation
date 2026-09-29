@@ -50,8 +50,10 @@ interface Props {
   garmentProfile: string;
   open: SlotTarget | null;
   onOpen: (target: SlotTarget | null) => void;
-  /** The new `design:` map, and the file a pick chose, if a pick made it. */
-  onChange: (next: DesignMap, picked: string | null) => void;
+  /** The new `design:` map. What it sets off beyond the edit -- naming a
+   * draft, arming AI -- is decided from the map, not from which control made
+   * it (spec: *Representative artwork*). */
+  onChange: (next: DesignMap) => void;
   /** Previews a colour on the Variants stage: the own-design line's names. */
   onPreview: (colour: string) => void;
 }
@@ -108,14 +110,14 @@ export function ArtworkStrip({
   const darkTarget: SlotTarget = { kind: "slot", tone: "dark" };
 
   function pick(target: SlotTarget, ref: string) {
-    onChange(pickFor(design, target, ref), ref);
+    onChange(pickFor(design, target, ref));
     onOpen(null);
     setFinding(null);
   }
 
   function link() {
     const outcome = linking(design);
-    if (outcome.kind === "linked") onChange(outcome.design, null);
+    if (outcome.kind === "linked") onChange(outcome.design);
     else setChoosing({ light: outcome.light, dark: outcome.dark });
   }
 
@@ -182,7 +184,7 @@ export function ArtworkStrip({
           onClick={() => {
             onOpen(null);
             if (split) link();
-            else onChange(unlinked(design), null);
+            else onChange(unlinked(design));
           }}
         >
           {split ? (
@@ -255,7 +257,7 @@ export function ArtworkStrip({
           own={own}
           onKeep={(ref) => {
             setChoosing(null);
-            onChange(keepOne(design, ref), null);
+            onChange(keepOne(design, ref));
           }}
           onCancel={() => setChoosing(null)}
         />
