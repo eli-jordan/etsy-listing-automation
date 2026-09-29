@@ -368,6 +368,14 @@ mode, and go back to automatic.
 - G1–G4, G6–G8. G5 is not required: no screen changes.
 - Acceptance 8 walked end to end in the browser layer.
 
+**As built.** Where the implementation settled a detail differently:
+
+| Item | Settled as | Why |
+|---|---|---|
+| Arming rule | Read from the map: arm, and name an unnamed draft, when `representative(next)` is non-null and differs from the current one. The strip's `onChange` no longer carries the picked file | Deciding from which control fired is what let every pick arm and no Link arm; the map says the same thing for every control. Re-picking the file already representative arms nothing |
+| Readiness | `useAiRun`'s reattach and the chain's trigger, and `useAiSeoMode`'s prerequisites, ask `representative() !== null` | An empty pair holding only a colour's own design otherwise asked the server for a run it refuses |
+| Pulled forward | Server readiness and `primary_design_image` (PR 1) and `designIdentity`'s `null` slots (PR 1) already held; PR 4 adds the tests that pin them | |
+
 ## Acceptance map
 
 | Spec acceptance | PR | Proving tests |
