@@ -2,7 +2,7 @@
 
 One pure function answers the question, and every reader asks it: listing
 validation, the render stage, the Printify stage, the editor's scene preview
-and the AI workflow. It used to be answered by ``DesignPlacement`` inside the
+and the AI workflow. It used to be answered by a class inside the
 engine, while validation and the API each guessed at it separately -- so the
 editor could show one file and Printify print another, and nothing that tested
 either reader alone would notice.
