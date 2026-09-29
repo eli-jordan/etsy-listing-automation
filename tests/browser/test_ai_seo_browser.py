@@ -1148,8 +1148,9 @@ _DRAFTED_BRIEF = DRAFTED_BRIEF
 
 def _pick_another_design(page: Page, name: str) -> None:
     """Attach a different design through the strip above the tabs, the way a
-    seller does -- `DesignSelect`'s **Change** button, then its card."""
-    page.get_by_role("button", name="Change design").click()
+    seller does -- the strip's **Change** (or, on an empty draft, **Choose**)
+    button, then its card."""
+    page.get_by_role("button", name=re.compile(r"^(Change|Choose) design for all shirts")).click()
     page.locator(".template-card", has_text=name).click()
 
 
@@ -1171,7 +1172,7 @@ def test_attaching_a_design_drafts_a_brief_and_leaves_suggestions_waiting(
         # The seller is on Variants -- the editor's own default tab -- when
         # they attach the design. Nothing about this flow requires them to
         # visit Listing Details first, which is the point of it.
-        page.locator(".design-row__name").wait_for(state="visible")
+        page.locator(".design-row__name").first.wait_for(state="visible")
         _pick_another_design(page, "second-design")
 
         # The run writes the drafted brief into the file itself, only
@@ -1209,7 +1210,7 @@ def test_a_design_attached_to_a_listing_with_a_brief_changes_nothing(
         _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
         _seo_page(browser_type, base_url) as page,
     ):
-        page.locator(".design-row__name").wait_for(state="visible")
+        page.locator(".design-row__name").first.wait_for(state="visible")
         _pick_another_design(page, "second-design")
 
         _open_details_tab(page)
@@ -1234,7 +1235,7 @@ def test_a_workspace_without_the_brief_prompt_says_so_and_stops(
         _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
         _seo_page(browser_type, base_url) as page,
     ):
-        page.locator(".design-row__name").wait_for(state="visible")
+        page.locator(".design-row__name").first.wait_for(state="visible")
         _pick_another_design(page, "second-design")
 
         _open_details_tab(page)
@@ -1356,7 +1357,7 @@ def test_the_page_head_names_the_brief_step_while_it_runs(
         _seo_server(workspace_root, prerequisite_missing, providers=[provider]) as base_url,
         _seo_page(browser_type, base_url) as page,
     ):
-        page.locator(".design-row__name").wait_for(state="visible")
+        page.locator(".design-row__name").first.wait_for(state="visible")
         _pick_another_design(page, "second-design")
 
         head = page.locator(".page-head .aiflow")

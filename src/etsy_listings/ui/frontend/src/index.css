@@ -6435,6 +6435,17 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
     flex-wrap: wrap;
   }
 
+  /* The linked pair stacks: narrow widths are not designed yet
+     (multi-artwork plan, Uncovered surfaces), but the page must not scroll
+     sideways. */
+  .design-pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .design-link {
+    justify-self: center;
+  }
+
   .page-head__name {
     width: 100%;
     min-width: 0;
