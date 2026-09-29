@@ -7,6 +7,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { stageDesigns, StagingRefused } from "../api/batches";
 import { deleteListingTemplate, listListingTemplates } from "../api/listingTemplates";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { TEMPLATE_DELETE_DETAILS, templateDeleteTitle } from "./listingTemplateDelete";
 import { mediaLabel, ownedTile } from "../media";
 import type { ListingTemplateSummary } from "../types";
 import { RecentBatches } from "./RecentBatches";
@@ -16,17 +17,14 @@ import { RecentBatches } from "./RecentBatches";
  * one card per listing template, with its gallery, garment, colour count,
  * pricing and how many batches used it.
  *
- * A card's footer holds Start batch, Edit, Clone and Delete -- the only
- * places those actions live, since the listing-template editor's head has
- * none (UI doc §3). Clone opens the same unsaved *name it* state Save as
- * does. Every card is also a drop target: a drop goes straight to staging
+ * A card's footer holds Start batch, Edit, Clone and Delete; the
+ * listing-template editor's action row offers Clone and Delete too, but
+ * Start batch lives only here (UI doc §2, §3). Clone opens the same unsaved
+ * *name it* state Create listing template does. Every card is also a drop target: a drop goes straight to staging
  * with that template, and a refused one lands on New batch with the template
  * chosen and the refusal shown (UI doc, closed question 2). Recent batches
  * sits below the cards (PR 5).
  */
-
-const DELETE_DETAILS =
-  "The listing template's folder and its own files are removed. Batches and listings made from it are unaffected: they keep their own copies.";
 
 function plural(count: number, one: string, many: string): string {
   return `${count} ${count === 1 ? one : many}`;
@@ -249,7 +247,7 @@ export function ListingTemplatesPage() {
       {templates !== null && (
         <p className="bc-small bc-muted bc-row" style={{ marginTop: "var(--space-3)" }}>
           <InfoIcon className="bc-icon" />
-          To make another template, open a finished listing and choose Save as listing template.
+          To make another template, open a finished listing and choose Create listing template.
         </p>
       )}
 
@@ -257,9 +255,9 @@ export function ListingTemplatesPage() {
 
       {deleting !== null && (
         <ConfirmDialog
-          title={`Delete ${deleting}?`}
+          title={templateDeleteTitle(deleting)}
           confirmLabel="Delete"
-          details={DELETE_DETAILS}
+          details={TEMPLATE_DELETE_DETAILS}
           onConfirm={() => confirmDelete(deleting)}
           onCancel={() => setDeleting(null)}
         />

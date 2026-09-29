@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import type { SaveState } from "../../hooks/useAutosave";
-import { SavedAgo } from "./SavedAgo";
+import { SavedChip } from "./SavedChip";
 
 /** What the editor's page head says about where this listing stands with the
  * disk.
@@ -38,19 +38,16 @@ export function metaFor(
     case "saving":
       return "Saving…";
     case "saved":
+      // The path, because this editor writes a file the user also edits by
+      // hand and runs the CLI against -- one click away, in the chip's card.
       return (
-        <>
-          {/* The path, because this editor writes a file the user also edits by
-              hand and runs the CLI against -- knowing which one is the point. */}
-          <span className="page-head__path">
-            {template ? `listing-templates/${name}/template.yaml` : `listings/${name}/listing.yaml`}
-          </span>
-          {" · "}
-          <span className="page-head__saved">
-            <span className="page-head__dot" aria-hidden="true" />
-            <SavedAgo savedAt={save.savedAt} />
-          </span>
-        </>
+        <SavedChip
+          path={
+            template ? `listing-templates/${name}/template.yaml` : `listings/${name}/listing.yaml`
+          }
+          savedAt={save.savedAt}
+          subject={subject}
+        />
       );
   }
 }

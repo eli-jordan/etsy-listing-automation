@@ -152,6 +152,15 @@ describe("ListingTemplateEditorPage, unsaved (UI doc §1)", () => {
     expect(document).not.toHaveProperty("brief");
   });
 
+  it("offers no Clone or Delete before the template is saved", async () => {
+    vi.spyOn(templatesApi, "getListingTemplateDraft").mockResolvedValue(draft());
+    renderAt("/listing-templates/new?from_listing=take-a-hike");
+
+    await screen.findByLabelText("Template name");
+    expect(screen.queryByRole("button", { name: "Clone" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Delete" })).toBeNull();
+  });
+
   it("clones from a listing template with the same unsaved state", async () => {
     const get = vi.spyOn(templatesApi, "getListingTemplateDraft").mockResolvedValue({
       ...draft(),
@@ -169,15 +178,37 @@ describe("ListingTemplateEditorPage, saved", () => {
     vi.spyOn(templatesApi, "getListingTemplate").mockResolvedValue(template());
     renderAt("/listing-templates/heavyweight-tee");
 
-    expect(
-      await screen.findByText("listing-templates/heavyweight-tee/template.yaml"),
-    ).toBeInTheDocument();
+    fireEvent.click(await screen.findByRole("button", { name: /^Saved / }));
+    expect(screen.getByText("listing-templates/heavyweight-tee/template.yaml")).toBeInTheDocument();
     expect(screen.getByText("Listing templates")).toBeInTheDocument();
     expect(screen.queryByText("Draft")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Deploy/ })).not.toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: "Save as listing template" }),
+      screen.queryByRole("button", { name: "Create listing template" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("clones the saved template into the unsaved name-it state (UI doc §3)", async () => {
+    vi.spyOn(templatesApi, "getListingTemplate").mockResolvedValue(template());
+    const { router } = renderAt("/listing-templates/heavyweight-tee");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Clone" }));
+
+    await waitFor(() => expect(router.state.location.pathname).toBe("/listing-templates/new"));
+    expect(router.state.location.search).toBe("?from_template=heavyweight-tee");
+  });
+
+  it("deletes the saved template after asking, and leaves for the templates page", async () => {
+    vi.spyOn(templatesApi, "getListingTemplate").mockResolvedValue(template());
+    const del = vi.spyOn(templatesApi, "deleteListingTemplate").mockResolvedValue();
+    renderAt("/listing-templates/heavyweight-tee");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete heavyweight-tee?" });
+    fireEvent.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+    expect(await screen.findByText("listing templates page")).toBeInTheDocument();
+    expect(del).toHaveBeenCalledWith("heavyweight-tee");
   });
 
   it("keeps the preview design out of the saved document, and resets it on remount", async () => {
@@ -210,7 +241,7 @@ describe("ListingTemplateEditorPage, saved", () => {
       template: null,
     });
     renderAt("/listing-templates/heavyweight-tee");
-    await screen.findByText("listing-templates/heavyweight-tee/template.yaml");
+    await screen.findByRole("button", { name: /^Saved / });
 
     await editBody("Linen.");
 
@@ -235,7 +266,7 @@ describe("ListingTemplateEditorPage, saved", () => {
       template: null,
     });
     const { router } = renderAt("/listing-templates/heavyweight-tee");
-    await screen.findByText("listing-templates/heavyweight-tee/template.yaml");
+    await screen.findByRole("button", { name: /^Saved / });
     await editBody("Linen.");
     await screen.findByText("1 to fix before this template saves");
 
@@ -261,7 +292,7 @@ describe("ListingTemplateEditorPage, saved", () => {
       .spyOn(templatesApi, "renameListingTemplate")
       .mockResolvedValue(template({ name: "everyday-tee" }));
     const { router } = renderAt("/listing-templates/heavyweight-tee");
-    await screen.findByText("listing-templates/heavyweight-tee/template.yaml");
+    await screen.findByRole("button", { name: /^Saved / });
 
     await act(async () => {
       fireEvent.doubleClick(screen.getByText("heavyweight-tee"));

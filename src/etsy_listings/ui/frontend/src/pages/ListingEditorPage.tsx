@@ -1,13 +1,8 @@
-import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
-import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
 import { type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { getListingBatch, setReviewed, type ListingBatch } from "../api/batches";
 import { getListing, getListingDraft } from "../api/listings";
 import { EditableName } from "../components/EditableName";
-import { OpenOnMenu } from "../components/OpenOnMenu";
-import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
 import { type MediaOwner, refName } from "../media";
@@ -21,8 +16,10 @@ import { DEFAULT_PREVIEW, type PreviewDesign, previewArtwork } from "./editor/pr
 import { DetailsTab } from "./editor/DetailsTab";
 import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
+import { BackToBatch, ListingActions } from "./editor/ListingActions";
 import { ImagesTab } from "./editor/ImagesTab";
 import { metaFor } from "./editor/saveMeta";
+import { useListingBatch } from "./editor/useListingBatch";
 import { VariantsTab } from "./editor/VariantsTab";
 
 /** Tabs container + issues banner + page head (phase 5).
@@ -164,6 +161,7 @@ function ListingEditorPageContent({
   /** The batch summary this editor was opened from (`?batch=`, UI doc §8):
    * a query parameter, so it survives a reload. */
   const fromBatch = useSearchParams()[0].get("batch");
+  const [member, setMember] = useListingBatch(detail.name);
   // AI Mode, and the AI run behind it, live here rather than inside a tab: a
   // run outlives the tab that was showing when it started, and the chain
   // that begins one begins at the design strip, above the tab strip (PRD
@@ -214,24 +212,39 @@ function ListingEditorPageContent({
       update={update}
       flush={flush}
       onPickDesign={pickDesign}
-      above={
-        detail.name !== "" && (
-          <AboveHeadRow
-            listing={detail.name}
-            fromBatch={fromBatch}
-            onSave={() => void flush().then(() => navigate(saveAsUrl(detail.name)))}
-            onBack={(batch) =>
-              void flush().then(() => navigate(`/batches/${encodeURIComponent(batch)}`))
-            }
-          />
-        )
-      }
       aiSeo={aiSeo}
       head={
         <EditorHead
           detail={detail}
           onBack={onBack}
           flush={flush}
+          crumb={
+            fromBatch !== null && (
+              <BackToBatch
+                batch={fromBatch}
+                member={member}
+                onBack={(batch) =>
+                  void flush().then(() => navigate(`/batches/${encodeURIComponent(batch)}`))
+                }
+              />
+            )
+          }
+          actions={
+            // Nothing to act on until the listing exists: an unnamed draft
+            // has no file to make a template from, and no lifecycle.
+            detail.name !== "" && (
+              <ListingActions
+                detail={detail}
+                member={member}
+                setMember={setMember}
+                update={update}
+                adopt={adopt}
+                flush={flush}
+                onCreateTemplate={() => void flush().then(() => navigate(saveAsUrl(detail.name)))}
+                onDeleted={() => navigate("/listings", { replace: true })}
+              />
+            )
+          }
           activity={<AiWorkflowIndicator steps={aiSeo.run.steps} running={aiSeo.run.busy} />}
           title={
             <EditableName
@@ -253,114 +266,21 @@ function ListingEditorPageContent({
   );
 }
 
-/** Where Save as listing template opens the unsaved template (UI doc §1). */
+/** Where Create listing template opens the unsaved template (UI doc §1). */
 function saveAsUrl(listing: string): string {
   return `/listing-templates/new?from_listing=${encodeURIComponent(listing)}`;
 }
 
-/** The listing's batch, if one made it: what Back to batch and Mark
- * reviewed need (`GET /api/listings/{name}/batch`). Asked again when the
- * name changes, since a rename carries the batch row with it (A42). */
-function useListingBatch(listing: string) {
-  const [member, setMember] = useState<ListingBatch | null>(null);
-  useEffect(() => {
-    let current = true;
-    getListingBatch(listing)
-      .then((found) => current && setMember(found))
-      // The row is extra: an editor whose batch will not load is still an
-      // editor, so this says nothing and offers nothing.
-      .catch(() => current && setMember(null));
-    return () => {
-      current = false;
-    };
-  }, [listing]);
-  return [member, setMember] as const;
-}
-
-/** The row above the head (UI doc §8 and *Listing editor*):
+/** The page head both flows share (UI doc, *The editor head*): an identity
+ * row over an action row.
  *
- * - **Back to batch …** only when the editor was opened from the batch
- *   summary (`?batch=`); the same listing opened from the Listings page
- *   shows the normal editor.
- * - **Save as listing template** on every listing that exists, since a
- *   template is made from its file. No dialog: `onSave` flushes the pending
- *   edit first, so the draft is made from what the seller is looking at.
- * - **Mark reviewed / Mark needs review** whenever a batch made the
- *   listing: the same flag the summary sets (spec, *Review workflow*), held
- *   back while the batch is still drafting it. */
-function AboveHeadRow({
-  listing,
-  fromBatch,
-  onSave,
-  onBack,
-}: {
-  listing: string;
-  fromBatch: string | null;
-  onSave: () => void;
-  onBack: (batch: string) => void;
-}) {
-  const [member, setMember] = useListingBatch(listing);
-  const [error, setError] = useState("");
-
-  function review(next: boolean) {
-    if (member === null) return;
-    setReviewed(member.batch_id, member.row_id, next)
-      .then((batch) => {
-        setError("");
-        const row = batch.rows.find((r) => r.id === member.row_id);
-        setMember({ ...member, reviewed: row?.reviewed ?? next });
-      })
-      .catch((exc: Error) => setError(exc.message));
-  }
-
-  const label = member !== null && member.batch_id === fromBatch ? ` ${member.label}` : "";
-
-  return (
-    <div className="bc-row" style={{ marginBottom: "var(--space-2)" }}>
-      {fromBatch !== null && (
-        <button
-          type="button"
-          className="btn btn-secondary bc-back"
-          onClick={() => onBack(fromBatch)}
-        >
-          <ArrowLeftIcon />
-          Back to batch{label}
-        </button>
-      )}
-      <span className="bc-spacer" />
-      {error && (
-        <span className="bc-small bc-status--error" role="alert">
-          {error}
-        </span>
-      )}
-      <button type="button" className="btn btn-ghost" onClick={onSave}>
-        Save as listing template
-      </button>
-      {member !== null && (
-        <button
-          type="button"
-          className="btn btn-secondary"
-          aria-pressed={member.reviewed}
-          title={
-            member.reviewed
-              ? "Mark needs review"
-              : member.reviewable
-                ? undefined
-                : "Available once the batch has drafted this listing"
-          }
-          disabled={!member.reviewable}
-          onClick={() => review(!member.reviewed)}
-        >
-          <CheckIcon style={{ width: 14, height: 14, verticalAlign: -2, marginRight: 6 }} />
-          {member.reviewed ? "Reviewed" : "Mark reviewed"}
-        </button>
-      )}
-    </div>
-  );
-}
-
-/** The page head both flows share: breadcrumb, a title node, the open menu
- * once there is something to open, the status pill, and a meta line.
+ * - **The identity row**: the breadcrumb (or `crumb`, Back to batch in its
+ *   place), the title node, the status pill, the meta -- the save sentence,
+ *   or once saved the auto-save chip with its file card -- what the editor is
+ *   doing on its own, and Deploy.
+ * - **The action row**: `actions`, the caller's quiet icon + label actions.
+ *   Absent when there are none (an unsaved draft has nothing to act on), and
+ *   the identity row then carries the head's rule itself.
  *
  * `Deploy changes →` (docs/deploy-changes.md decision 8) sits here rather
  * than in `ListingEditorPageContent`, because this is the one part of the
@@ -375,6 +295,8 @@ export function EditorHead({
   meta,
   flush,
   activity,
+  crumb,
+  actions,
   kind = "listing",
 }: {
   detail: ListingDetail;
@@ -386,39 +308,40 @@ export function EditorHead({
    * (PRD 68). `null` whenever nothing is running, which is most of the
    * time. */
   activity?: ReactNode;
-  /** A listing template's head has no actions (UI doc §3): no status, no
-   * Open on, no Deploy -- a template never deploys, and Clone, Delete and
-   * Start batch live on its card. */
+  /** Replaces the breadcrumb when truthy: Back to batch (UI doc §8). */
+  crumb?: ReactNode;
+  /** The action row's contents, when there are any. */
+  actions?: ReactNode;
+  /** A listing template's head has no status and no Deploy (UI doc §3): a
+   * template never deploys. Its actions are its caller's. */
   kind?: "listing" | "listing-template";
 }) {
   const listing = kind === "listing";
-  // Not keyed off `status`: a listing can carry a Printify product without an
-  // Etsy listing id, and an id it has is worth a link whatever state Etsy
-  // reports it in. `OpenOnMenu` hides the entry it has no id for.
-  const hasLinks = listing && hasOpenTargets(detail.etsy_listing_id, detail.printify_product_id);
 
   return (
-    <div className="page-head page-head--editor">
-      <span className="page-head__crumb" onClick={onBack}>
-        {listing ? "Listings" : "Listing templates"}
-      </span>
-      <span className="page-head__sep">/</span>
-      {title}
+    <div className={actions ? "editor-head editor-head--actions" : "editor-head"}>
+      <div className="page-head page-head--editor">
+        {crumb || (
+          <span className="page-head__crumb" onClick={onBack}>
+            {listing ? "Listings" : "Listing templates"}
+          </span>
+        )}
+        <span className="page-head__sep">/</span>
+        {title}
 
-      {hasLinks && (
-        <OpenOnMenu
-          etsyListingId={detail.etsy_listing_id}
-          printifyProductId={detail.printify_product_id}
-        />
-      )}
+        {listing && <StatusTag status={detail.status} />}
+        <span className="page-head__meta">{meta}</span>
+        {activity}
 
-      {listing && <StatusTag status={detail.status} />}
-      <span className="page-head__meta">{meta}</span>
-      {activity}
-
-      {listing && detail.name !== "" && (
-        <div className="page-head__actions dv-head-actions">
-          <DeployControl name={detail.name} flush={flush} />
+        {listing && detail.name !== "" && (
+          <div className="page-head__actions dv-head-actions">
+            <DeployControl name={detail.name} flush={flush} />
+          </div>
+        )}
+      </div>
+      {actions && (
+        <div className="action-row" role="group" aria-label="Actions">
+          {actions}
         </div>
       )}
     </div>
@@ -430,8 +353,6 @@ type ShellProps = {
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
   head: ReactNode;
-  /** The row above the head, when there is one. */
-  above?: ReactNode;
 } & (
   | {
       kind?: "listing";
@@ -457,7 +378,7 @@ type ShellProps = {
 );
 
 export function ListingEditorShell(props: ShellProps) {
-  const { detail, update, flush, head, above } = props;
+  const { detail, update, flush, head } = props;
   const template = props.kind === "listing-template";
   const aiSeo = props.kind === "listing-template" ? null : props.aiSeo;
   const [tab, setTab] = useState<Tab>("variants");
@@ -490,7 +411,6 @@ export function ListingEditorShell(props: ShellProps) {
           </div>,
           document.body,
         )}
-      {above}
       {head}
 
       {template ? (

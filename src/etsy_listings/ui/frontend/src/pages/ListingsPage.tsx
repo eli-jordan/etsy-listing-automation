@@ -8,29 +8,21 @@ import {
 } from "../api/listings";
 import { createRun, currentWorkspaceRun, getRun } from "../api/runs";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { OpenOnMenu } from "../components/OpenOnMenu";
+import { OpenInMenu } from "../components/OpenInMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
 import type { ListingStatus, ListingSummary } from "../types";
 import { BatchCandidateControl } from "./batchDeploy/BatchCandidateControl";
 import { candidateNames } from "./batchDeploy/batchDeployPresentation";
 import { TERMINAL_PHASES } from "./deploy/runPhases";
-
-type Gesture = ListingSummary["gestures"][number];
-
-const GESTURE_LABELS: Record<Gesture, string> = {
-  delete: "Delete",
-  retire: "Retire",
-  "un-retire": "Un-retire",
-  cancel: "Cancel",
-  renew: "Renew",
-};
-
-const MARK_FOR_DELETION_DETAILS =
-  "The listing stays in this table as pending-delete. The next apply will retract the Printify product — the Etsy draft goes with it — then remove the local files. Until then you can undo the mark.";
-
-const DELETE_DETAILS =
-  "The listing folder and its render cache are removed now. There is nothing on Printify or Etsy to retract. Designs, garment profiles and pricing plans stay.";
+import {
+  deleteDetails,
+  deleteLabel,
+  deleteTitle,
+  GESTURE_LABELS,
+  type Gesture,
+  LIFECYCLE_OF,
+} from "./listingLifecycle";
 
 /** The listings list (phase 5): table + search + status filter, from
  * the design mockup's listings section, backed by `GET /api/listings`. */
@@ -43,14 +35,6 @@ type Filter = "all" | ListingStatus;
 const FILTERS: Filter[] = ["all", ...(Object.keys(STATUS_LABELS) as ListingStatus[])];
 
 const FILTER_LABELS: Record<Filter, string> = { all: "All statuses", ...STATUS_LABELS };
-
-function hasRemotes(row: ListingSummary): boolean {
-  return row.etsy_listing_id != null || row.printify_product_id != null;
-}
-
-function deleteLabel(row: ListingSummary): string {
-  return hasRemotes(row) ? "Mark for deletion" : "Delete";
-}
 
 function gestureLabel(row: ListingSummary, gesture: Gesture): string {
   return gesture === "delete" ? deleteLabel(row) : GESTURE_LABELS[gesture];
@@ -184,9 +168,8 @@ export function ListingsPage() {
         setPendingDelete(row);
         return;
       }
-      const lifecycle = gesture === "retire" ? "retired" : gesture === "renew" ? "renew" : null;
       try {
-        await patchListing(row.name, { lifecycle });
+        await patchListing(row.name, { lifecycle: LIFECYCLE_OF[gesture] });
         refresh();
       } catch {
         setStatus(`could not ${GESTURE_LABELS[gesture].toLowerCase()} ${row.name}`);
@@ -308,7 +291,7 @@ export function ListingsPage() {
                     <ListingCard row={row} />
                   </span>
                   {hasOpenTargets(row.etsy_listing_id, row.printify_product_id) && (
-                    <OpenOnMenu
+                    <OpenInMenu
                       etsyListingId={row.etsy_listing_id}
                       printifyProductId={row.printify_product_id}
                     />
@@ -365,13 +348,9 @@ export function ListingsPage() {
 
       {pendingDelete !== null && (
         <ConfirmDialog
-          title={
-            hasRemotes(pendingDelete)
-              ? `Are you sure you want to mark ${pendingDelete.name} for deletion?`
-              : `Are you sure you want to delete ${pendingDelete.name}?`
-          }
+          title={deleteTitle(pendingDelete)}
           confirmLabel={deleteLabel(pendingDelete)}
-          details={hasRemotes(pendingDelete) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS}
+          details={deleteDetails(pendingDelete)}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setPendingDelete(null)}
         />

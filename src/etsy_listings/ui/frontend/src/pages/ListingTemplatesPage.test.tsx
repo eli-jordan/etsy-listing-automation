@@ -140,7 +140,7 @@ describe("ListingTemplatesPage", () => {
 
     expect(await screen.findByText("0 templates")).toBeInTheDocument();
     expect(
-      screen.getByText(/open a finished listing and choose Save as listing template/),
+      screen.getByText(/open a finished listing and choose Create listing template/),
     ).toBeInTheDocument();
   });
 
