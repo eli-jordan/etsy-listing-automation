@@ -112,6 +112,10 @@
           [
             "editor-header-icon-only",
             "editor-header-icon-only-batch"
+          ],
+          [
+            "template-card-hero-strip",
+            "template-card-even-squares"
           ]
         ]
       },
@@ -598,6 +602,12 @@
     },
     {
       "frame": "archive/editor-header-icon-only-batch"
+    },
+    {
+      "frame": "archive/template-card-hero-strip"
+    },
+    {
+      "frame": "archive/template-card-even-squares"
     }
   ]
 }
