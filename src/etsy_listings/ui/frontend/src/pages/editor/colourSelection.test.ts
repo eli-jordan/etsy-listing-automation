@@ -132,4 +132,27 @@ describe("selectGarmentProfile", () => {
       media: [{ template: "flat-lay-01", colour: "black" }],
     });
   });
+
+  it("keeps a colour's own design the new profile sells, and drops the rest", () => {
+    /* Spec, *Colour-specific artwork*: changing garment profile preserves
+       colour keys that exist in the new profile and removes the rest. */
+    const listing = detail({
+      colors: ["black", "moss", "white"],
+      design: {
+        "on-light": "designs/dark-ink.png",
+        "on-dark": "designs/light-ink.png",
+        moss: "designs/moss.png",
+        white: "designs/white.png",
+      },
+    });
+    expect(selectGarmentProfile(listing, "gildan-5000", ["black", "ivory", "moss"])).toEqual({
+      garment_profile: "gildan-5000",
+      colors: ["black", "ivory", "moss"],
+      design: {
+        "on-light": "designs/dark-ink.png",
+        "on-dark": "designs/light-ink.png",
+        moss: "designs/moss.png",
+      },
+    });
+  });
 });
