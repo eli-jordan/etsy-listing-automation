@@ -11,7 +11,9 @@ so staging's AI readiness passes unless a test takes one away.
 
 from __future__ import annotations
 
+import zipfile
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 from typing import Any
 
@@ -102,11 +104,44 @@ class TestStage:
         assert detail["remedy"].endswith("Nothing was uploaded or changed.")
         assert workspace.staging_ids() == []
 
-    def test_a_zip_is_refused_as_coming_soon(self, client: TestClient) -> None:
-        response = _stage(client, ("kittl-export.zip", b"PK\x03\x04..."))
+    def test_a_zip_answers_its_ignored_files_and_each_row_s_reused_design(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        workspace.design_file("fjord-mornings").write_bytes(png(4))
+        buffer = BytesIO()
+        with zipfile.ZipFile(buffer, "w") as archive:
+            archive.writestr("exports/fjord-mornings-final.png", png(4))
+            archive.writestr("exports/cedar-trail.png", png(2))
+            archive.writestr("readme.txt", b"Exported with Kittl")
+        response = client.post(
+            "/api/staging",
+            data={"listing_template": LISTING_TEMPLATE},
+            files=[("files", ("kittl-export.zip", buffer.getvalue(), "application/zip"))],
+        )
+
+        assert response.status_code == 200, response.text
+        body = response.json()
+        assert body["ignored"] == ["readme.txt"]
+        assert [(row["name"], row["reuse"]) for row in body["rows"]] == [
+            ("fjord-mornings-final", "fjord-mornings"),
+            ("cedar-trail", None),
+        ]
+
+    def test_two_zips_are_a_422_with_nothing_on_disk(
+        self, client: TestClient, workspace: Workspace
+    ) -> None:
+        response = client.post(
+            "/api/staging",
+            data={"listing_template": LISTING_TEMPLATE},
+            files=[
+                ("files", ("a.zip", b"PK\x03\x04", "application/zip")),
+                ("files", ("b.zip", b"PK\x03\x04", "application/zip")),
+            ],
+        )
 
         assert response.status_code == 422
-        assert "coming soon" in response.json()["detail"]["message"]
+        assert response.json()["detail"]["message"] == "These are 2 ZIPs, and a batch takes one."
+        assert workspace.staging_ids() == []
 
     def test_an_unknown_listing_template_is_a_404(self, client: TestClient) -> None:
         assert _stage(client, ("a.png", png(1)), template="nope").status_code == 404

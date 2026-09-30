@@ -6417,6 +6417,17 @@ table.bc-table .bc-end {
 .bc-count strong {
   font-variant-numeric: tabular-nums;
 }
+/* A ZIP's ignored files: a count that opens to their names (UI doc §5). */
+.bc-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.bc-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.bc-disclosure > summary:hover {
+  color: var(--color-accent-700);
+}
 .bc-dot {
   width: 8px;
   height: 8px;

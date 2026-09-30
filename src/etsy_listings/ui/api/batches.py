@@ -1,5 +1,5 @@
-"""Staging and batch endpoints (batch plan PR 2 and PR 4; A37-A40, A45, A46):
-stage loose PNGs against a listing template, review and edit the session,
+"""Staging and batch endpoints (batch plan PR 2, 4 and 7; A37-A40, A45, A46):
+stage one ZIP or loose PNGs against a listing template, review and edit the session,
 cancel it or confirm it, then read the batch confirming made and steer its
 AI queue -- cancel, resume, retry.
 
@@ -133,9 +133,11 @@ def _staging_detail(request: Request, session: StagingSession) -> StagingDetail:
                 message=row.message,
                 note=row.note,
                 suggestion=row.suggestion,
+                reuse=row.reuse,
             )
             for row in reviewed.rows
         ],
+        ignored=session.ignored,
     )
 
 
@@ -220,10 +222,10 @@ def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
 def create_staging(
     request: Request, listing_template: str = Form(...), files: list[UploadFile] | None = None
 ) -> StagingDetail:
-    """Stage loose PNGs (spec, *Accepted input*). Starlette has already
-    spooled the parts to temporary files; `stage_pngs` streams each one on to
-    its content-addressed upload with a running count (A45). A ZIP is
-    refused as *coming soon* until batch plan PR 7."""
+    """Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
+    already spooled the parts to temporary files; `stage_pngs` streams each
+    one on -- a PNG to its content-addressed upload, a ZIP to disk and then
+    entry by entry out of it -- with a running count (A45)."""
     workspace = _workspace(request)
     if not workspace.listing_template_file(listing_template).is_file():
         raise HTTPException(status_code=404, detail=f"no listing template {listing_template!r}")

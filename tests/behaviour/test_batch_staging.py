@@ -83,14 +83,6 @@ class TestValidation:
 
         assert _staging_left(workspace) == []
 
-    def test_a_zip_is_refused_until_zip_input_exists(
-        self, workspace: Workspace, store: StagingStore
-    ) -> None:
-        with pytest.raises(StagingRefused, match="ZIP"):
-            _stage(workspace, store, ("kittl-export.zip", b"PK\x03\x04rest"))
-
-        assert _staging_left(workspace) == []
-
 
 class TestLimits:
     def test_26_unique_pngs_are_refused_with_nothing_on_disk(
@@ -239,3 +231,70 @@ class TestLifetime:
         file.write_text(file.read_text().replace('"schema": 1', '"schema": 99'))
 
         assert store.load(session.id) is None
+
+
+class TestDesignReuse:
+    """Identical bytes already in ``designs/`` (spec, *Content
+    deduplication*; batch plan PR 7)."""
+
+    def test_a_row_with_the_bytes_of_an_existing_design_says_it_reuses_it(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        workspace.design_file("fjord-mornings").write_bytes(png(4))
+        session = _stage(workspace, store, ("fjord-mornings-final.png", png(4)), ("b.png", png(5)))
+
+        rows = _rows(workspace, store, session.id)
+        assert rows["fjord-mornings-final.png"]["name"] == "fjord-mornings-final"
+        assert rows["fjord-mornings-final.png"]["reuse"] == "fjord-mornings"
+        assert rows["fjord-mornings-final.png"]["note"] == (
+            "Same image as designs/fjord-mornings.png. The listing reuses that file"
+        )
+        assert rows["b.png"]["reuse"] is None
+
+    def test_a_same_sized_design_with_other_bytes_is_not_reused(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        other = bytearray(png(4))
+        other[-5] ^= 0xFF  # inside the IEND CRC: same length, other bytes
+        workspace.design_file("look-alike").write_bytes(bytes(other))
+        session = _stage(workspace, store, ("fjord.png", png(4)))
+
+        assert _rows(workspace, store, session.id)["fjord.png"]["reuse"] is None
+
+    def test_a_reusing_row_may_take_the_name_of_the_design_it_reuses(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        workspace.design_file("fjord-mornings").write_bytes(png(4))
+        session = _stage(workspace, store, ("Fjord Mornings.png", png(4)))
+
+        row = _rows(workspace, store, session.id)["Fjord Mornings.png"]
+        assert (row["name"], row["state"], row["reuse"]) == (
+            "fjord-mornings",
+            "ready",
+            "fjord-mornings",
+        )
+
+    def test_a_typed_name_may_be_the_design_it_reuses_but_not_another(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        workspace.design_file("fjord-mornings").write_bytes(png(4))
+        session = _stage(workspace, store, ("a.png", png(4)))
+        row_id = session.rows[0].id
+
+        store.save(session.renamed(row_id, "fjord-mornings", now=NOW))
+        assert _rows(workspace, store, session.id)["a.png"]["state"] == "ready"
+
+        store.save(session.renamed(row_id, "take-a-hike", now=NOW))
+        row = _rows(workspace, store, session.id)["a.png"]
+        assert (row["state"], row["message"]) == ("name", "take-a-hike is already a listing.")
+
+    def test_a_merged_row_that_reuses_a_design_says_both(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        workspace.design_file("fjord-mornings").write_bytes(png(4))
+        session = _stage(workspace, store, ("a.png", png(4)), ("b.png", png(4)))
+
+        assert _rows(workspace, store, session.id)["a.png"]["note"] == (
+            "2 identical files, staged once: a.png, b.png; "
+            "Same image as designs/fjord-mornings.png. The listing reuses that file"
+        )

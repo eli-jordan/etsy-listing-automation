@@ -8,8 +8,9 @@ confirming made of it. The stores are plain classes over `Workspace`; the UI
 server keeps one of each. Nothing here deploys, and nothing here calls a
 provider.
 
-* :func:`stage_pngs` -- the upload, validated and frozen, or a
-  :class:`StagingRefused` with nothing on disk.
+* :func:`stage_pngs` -- the upload, one ZIP or loose PNGs, validated and
+  frozen, or a :class:`StagingRefused` with nothing on disk. The ZIP's own
+  checks (A45) are ``archive``'s, reached only through it.
 * :func:`review` -- the names, checks and notes the staging page shows,
   worked out afresh on every read.
 * :func:`confirm` and :func:`retry_row` -- create the listings, idempotently
@@ -19,7 +20,7 @@ provider.
 
 A created row is queued for AI (``BatchRow.ai``); the queue that drafts it
 is the UI server's (``ui/batchqueue.py``, A40), since only that process runs
-AI. Deliberately withheld: ZIP input and dedupe against ``designs/`` (PR 7).
+AI.
 """
 
 from etsy_listings.batches.creation import ConfirmRefused, NameLock, confirm, retry_row, row_upload
