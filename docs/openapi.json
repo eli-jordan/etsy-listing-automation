@@ -3243,7 +3243,7 @@
         "type": "object"
       },
       "MarketSnapshot": {
-        "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (market-seo.md, *What the\nproposal sees*).",
+        "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (features/market-seo-20260924/spec.md, *What the\nproposal sees*).",
         "properties": {
           "block": {
             "title": "Block",
@@ -4657,7 +4657,7 @@
         "type": "object"
       },
       "ScoredListing": {
-        "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (ui-market-seo-interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (market-seo.md, *What the proposal\nsees*).",
+        "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (features/market-seo-20260924/interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal\nsees*).",
         "properties": {
           "favourites_per_day": {
             "anyOf": [
@@ -7805,7 +7805,7 @@
     },
     "/api/listings/{name}": {
       "delete": {
-        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot and the cached AI proposal go now\n(market-seo.md, *Cache*; A42): a listing pending deletion is one the\nseller is done researching, and otherwise only the wipe after the remote\ndeletion would remove them. An AI run still going is asked to stop\nfirst, so it does not write a proposal for a listing being deleted, and\nthe listing's batch rows are marked deleted and leave the queue (A42).",
+        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot and the cached AI proposal go now\n(features/market-seo-20260924/spec.md, *Cache*; A42): a listing pending deletion is one the\nseller is done researching, and otherwise only the wipe after the remote\ndeletion would remove them. An AI run still going is asked to stop\nfirst, so it does not write a proposal for a listing being deleted, and\nthe listing's batch rows are marked deleted and leave the queue (A42).",
         "operationId": "delete_listing_api_listings__name__delete",
         "parameters": [
           {
@@ -8032,7 +8032,7 @@
     },
     "/api/listings/{name}/market": {
       "get": {
-        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload (market-seo.md, *UI*). Written only by an AI run whose\nsearch succeeded, so a failed run leaves the previous one here. 404 until\nthe first search -- the panel is not rendered then -- and for a snapshot\nthat no longer reads as one, which the next run replaces.",
+        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose\nsearch succeeded, so a failed run leaves the previous one here. 404 until\nthe first search -- the panel is not rendered then -- and for a snapshot\nthat no longer reads as one, which the next run replaces.",
         "operationId": "get_market_snapshot_api_listings__name__market_get",
         "parameters": [
           {
@@ -8792,7 +8792,7 @@
                 }
               }
             },
-            "description": "Unprocessable Content"
+            "description": "Unprocessable Entity"
           }
         },
         "summary": "Create Staging",

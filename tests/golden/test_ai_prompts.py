@@ -1,5 +1,5 @@
 """The assembled text each provider call is handed, against golden files
-(market-seo-implementation-plan.md, PR 4): the query-extraction prompt, and
+(features/market-seo-20260924/plan.md, PR 4): the query-extraction prompt, and
 the proposal prompt with and without a market block.
 
 A short stand-in replaces the seller's prompt file, so these goldens pin the

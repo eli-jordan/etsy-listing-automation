@@ -1,6 +1,6 @@
-"""A description's lead: its first sentence (market-seo.md, *What the proposal
-sees*). It is all of another seller's description that the model or the
-panel ever sees."""
+"""A description's lead: its first sentence
+(features/market-seo-20260924/spec.md, *What the proposal sees*). It is all of
+another seller's description that the model or the panel ever sees."""
 
 from __future__ import annotations
 

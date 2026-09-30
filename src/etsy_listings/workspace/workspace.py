@@ -411,7 +411,7 @@ class Workspace:
     def remove_listing(self, listing: str) -> None:
         """Wipe ``listings/{name}/``, ``.cache/renders/{name}/`` (PRD 63),
         ``.cache/previews/{name}/`` (A32), the market snapshot
-        (market-seo.md, *Cache*) and the cached AI proposal (A42).
+        (features/market-seo-20260924/spec.md, *Cache*) and the cached AI proposal (A42).
 
         Designs, garment profiles and pricing plans stay -- they are reusable.
         """
@@ -703,7 +703,7 @@ class Workspace:
 
     def market_queries_prompt_file(self) -> Path:
         """``prompts/market-queries.md`` -- the seller-editable prompt that
-        extracts three buyer searches for market research (market-seo.md,
+        extracts three buyer searches for market research (features/market-seo-20260924/spec.md,
         *Query extraction*). Same split: this accessor only names the file."""
         return self.root / layout.PROMPTS_DIR / layout.MARKET_QUERIES_PROMPT_FILE
 
@@ -780,7 +780,7 @@ class Workspace:
         resolver every deployment reader (Printify, Etsy, snapshots, diffs,
         local validation) is required to call, rather than each re-deriving
         it. The editor reads :meth:`resolve_description` once for both its
-        preview and its issue check (docs/ai-seo-implementation-plan.md,
+        preview and its issue check (docs/features/ai-seo-20260922/plan.md,
         "Description and common-copy boundaries").
 
         Loads ``description.ref`` through :meth:`load_common_copy` when one is
@@ -1014,7 +1014,7 @@ class Workspace:
         return self.cache(layout.MARKET_DIR, layout.MARKET_STATS_DIR)
 
     def market_snapshot_file(self, listing: str) -> Path:
-        """The listing's latest market research (market-seo.md, *Cache*).
+        """The listing's latest market research (features/market-seo-20260924/spec.md, *Cache*).
         Keyed by listing name, like :meth:`renders_dir`, so a rename moves it
         and :meth:`remove_listing` removes it."""
         return self.cache(

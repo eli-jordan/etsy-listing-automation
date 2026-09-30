@@ -12,7 +12,7 @@ listings.py   EtsyListingClient -- Phase 3's stages: publish's poll target,
               the copy PATCH, media upload/reorder/variation-images, and
               video upload/attach/delete with its two refusals (PRD 72)
 market.py     EtsyMarketClient -- market-informed SEO's three unscoped
-              reads: search, batch stats, review counts (market-seo.md)
+              reads: search, batch stats, review counts (features/market-seo-20260924/spec.md)
 models.py     what every endpoint above returns
 fakes.py      in-memory doubles for the behaviour layer (A4), including the
               video gallery decision 9 measured

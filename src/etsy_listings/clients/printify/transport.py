@@ -28,7 +28,7 @@ failure observed against the live API is
 
 ``errors.reason`` is a human sentence naming the offending field, and is the
 only part of that envelope worth putting in front of a user
-(docs/api-findings.md).
+(docs/research/api-findings.md).
 """
 
 from __future__ import annotations
@@ -99,8 +99,8 @@ class PrintifyAuthError(UserFacingError, RuntimeError):
             f"present, it is expired, revoked, or missing a scope.\n"
             f"  Reading the catalog needs `catalog.read`; writing products needs the "
             f"shop and product scopes as well.\n"
-            f"  Regenerate it at printify.com/app/account/api (docs/setup.md "
-            f"section 1.3), or re-run `etsy-listings setup`, which verifies a token "
+            f"  Regenerate it at printify.com/app/account/api (docs/guides/setup.md), "
+            f"or re-run `etsy-listings setup`, which verifies a token "
             f"before storing it."
         )
 

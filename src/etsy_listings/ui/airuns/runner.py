@@ -1,4 +1,4 @@
-"""The thread that runs one AI run's chain (market-seo.md, *The chain*,
+"""The thread that runs one AI run's chain (features/market-seo-20260924/spec.md, *The chain*,
 *Failures* and *AI runs*).
 
 1. **Brief**, only when the run asks for a draft and the saved brief is
@@ -71,7 +71,7 @@ from etsy_listings.workspace.workspace import Workspace
 logger = logging.getLogger(__name__)
 
 RUN_LIMIT_SECONDS = 180.0
-"""The whole run's cap (market-seo.md, *Failures*). Each provider call keeps
+"""The whole run's cap (features/market-seo-20260924/spec.md, *Failures*). Each provider call keeps
 its own 60 seconds; market search has no limit of its own."""
 
 TIMEOUT_MESSAGE = "The AI run took longer than 3 minutes, so it was stopped. Try again."

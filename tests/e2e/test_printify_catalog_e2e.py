@@ -98,7 +98,7 @@ class TestTheCatalogAnswers:
 class TestWhatTheCatalogActuallyRequires:
     """What the catalog checks, measured rather than assumed.
 
-    ``clients/printify/catalog.py`` and docs/setup.md say every ``/v1/catalog/*.json`` call
+    ``clients/printify/catalog.py`` and docs/guides/setup.md say every ``/v1/catalog/*.json`` call
     needs a personal access token with the ``catalog.read`` scope. Two of them
     plainly do not: ``blueprints`` and ``print_providers`` are served with no
     ``Authorization`` header at all. That matters for how hard ``new`` should

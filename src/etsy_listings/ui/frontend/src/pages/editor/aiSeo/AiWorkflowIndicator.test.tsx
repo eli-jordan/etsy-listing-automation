@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { WorkflowStep } from "../../../types";
 import { AiWorkflowIndicator } from "./AiWorkflowIndicator";
 
-/** The page head's three nodes (docs/ui-market-seo-interactions.md,
+/** The page head's three nodes (docs/features/market-seo-20260924/interactions.md,
  * section 1). What a seller reads from it: which stage is running, which one
  * was skipped, warned or failed, and -- on hover or focus -- what each stage
  * does and what it did this run. */

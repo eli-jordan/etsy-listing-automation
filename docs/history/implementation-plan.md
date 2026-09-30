@@ -1,0 +1,899 @@
+# Implementation Plan: Etsy Listing Automation
+
+Historical snapshot, frozen on 2026-09-30. Its phases record the original
+sequencing rather than implementation status. Current behaviour belongs in
+[architecture](../architecture.md), [feature specifications](../README.md#features)
+and [reference](../reference/README.md). Decision rationale is being migrated
+to [ADRs](../adr/README.md); old decision ids remain here for citation review.
+
+Companion to [history/prd.md](prd.md). The PRD settles *what* the tool does and 74 product
+forks; this document settles *how* it is built — module boundaries, core contracts,
+and the order of work. Where the two disagree, the PRD wins and this file is wrong.
+
+Phase 3's detail lives in [features/etsy-listing-20260910/spec.md](../features/etsy-listing-20260910/spec.md), subsidiary to
+both. Delete and retire (PRD 61–67) live in
+[features/listing-lifecycle-20260916/spec.md](../features/listing-lifecycle-20260916/spec.md). Plan and apply from the listing
+editor (A29–A33) live in [features/deploy-20260917/spec.md](../features/deploy-20260917/spec.md). Workspace-wide
+review and apply (A34) live in
+[features/deploy-20260917/plan.md](../features/deploy-20260917/plan.md).
+Listing templates and batch creation (PRD 74, A35–A46) live in
+[features/batch-creation-20260927/plan.md](../features/batch-creation-20260927/plan.md).
+
+---
+
+## Architecture decision log
+
+Forty-six forks, resolved. Numbered `A#` so they can be cited from code
+comments and commit messages without colliding with the PRD's own decision log.
+
+| # | Fork | Decision |
+|---|---|---|
+| A1 | plan/apply engine | Staged pipeline. A fixed ordered list of `Stage` objects sharing one protocol; `local: bool` marks a stage as having no *remote* state, which suppresses drift reporting and keeps its `read_live()` out of A3's fan-out — it does not mean the stage reads nothing, since a local stage still owns outputs on disk that `plan` has to verify. Dependencies are list order, not a graph. |
+| A2 | State + diff | `state.lock.json` stores the **verbatim last-applied desired document**. Each stage writes its own `plan()` comparing desired/applied/live and emitting `Change` objects, over a shared vocabulary and shared comparison helpers. |
+| A3 | Concurrency | Sync core throughout. `plan`'s live-state reads fan out over a bounded thread pool; `apply` is strictly sequential. One thread-safe token-bucket limiter shared by every path. |
+| A4 | API layer | Narrow `Protocol` per API returning pydantic models. In-memory fakes drive the behavioural suite; a small set of cassette-replay contract tests pin payload shape; a manual `-m e2e` run exercises the real APIs on demand and doubles as the cassette recorder. |
+| A5 | UI stack | FastAPI JSON API + React/TypeScript built with Vite. TS client **generated** from the OpenAPI schema — never hand-written. SSE for progress. |
+| A6 | Run history | SQLite at `.cache/runs.db` in WAL mode, `runs` + `run_events`. One recorder shared by CLI and UI, so CLI runs appear in the dashboard. Disposable: drop-and-recreate rather than migrate. |
+| A7 | Renderer | Pure functions over ndarrays composed in fixed order. Frozen pydantic `RenderConfig`; its canonical JSON is the hash. Explicit determinism controls. Goldens per pass *and* end-to-end. Extended by A12 for `multiple`-kind scenes: a **separate** `render_scene()`/`export_many()`, not a generalisation of the single-layer `render()`/`export()` — zero regression risk to the pre-existing goldens, verified by an explicit byte-identity test. |
+| A8 | Workspace | The data tree is a separate directory you own, marked by `shop.yaml`, discovered by walking up from cwd. `--root` / `ETSY_LISTINGS_ROOT` override. All config paths resolve against the workspace root, never cwd. |
+| A9 | SEO proposal lifecycle | AI Mode is a saved-listing, request-scoped editing aid, not an engine stage or a deploy review gate. Ready local Codex and Claude Code adapters supply one validated proposal; unresolved choices are browser-local for one day, and only individually accepted title, tag, and description-lead values travel through normal autosave. No generated file, lockfile record, server-side proposal cache, or remote write exists. **Amended (A41, PRD 74):** the latest proposal per listing and its per-section resolution are kept server-side in `.cache/proposals/`, with no TTL; staleness is computed on the server and a stale proposal stays usable. Still no generated file, lockfile record or remote write. |
+| A10 | Build order | Strict PRD phase order, 0 to 6. |
+| A11 | Template kind schema | Discriminated pydantic union on `kind` (`ColourMatrixTemplate \| MultipleTemplate \| SingleTemplate`, `Field(discriminator="kind")`), loaded via `load_template_config()` — no wrapping model, since the file *is* one of the three shapes. PRD 28. |
+| A12 | Multi-layer rendering | `render_scene()`/`Layer`/`export_many()` in `render/pipeline.py`/`render/passes.py`, `multiple`-kind only. The existing single-layer `render()`/`export()` are untouched, not generalised — see A7. |
+| A13 | Template ownership + media addressing | No garment-profile-level registry of *listing* templates — `listing.media` always references `{template, colour?}` explicitly, naming any template that exists in `mockup-templates/`; no default, no bare-colour shorthand. A template is purely local and Etsy-facing (Printify never sees it), unlike `blueprint`/`print_provider`/`sizes`, which genuinely are Printify product-creation inputs — that's why listing templates don't live on the garment profile the way those do. The one field that does is `preview_template`: a single `colour-matrix` template the editor's Variants tab uses to judge colours. It is not a `media:` default, not hashed, not sent to Printify, and a listing that never names it in `media:` still renders whatever `media:` does (PRD 31). PRD 29. |
+| A14 | Artwork resolution | `listing.artwork[colour]` > template/placement override > `garment_profile.colors`-derived key > design map's sole key. Implemented once, in `engine/stages/placement.py::DesignPlacement.artwork_for`, and used by both stages that place a design — the render stage's mockup and the product stage's print file. It lived privately inside the render stage until Phase 2, when the product stage had to import it through the underscore; a mockup and a print file disagreeing about which ink a colour gets is a failure neither stage's own tests would catch, so the rule got its own module rather than a second implementation. The order itself is unchanged. PRD 30. |
+| A15 | Render cache namespacing | `.cache/renders/{listing}/{template}/...`, not `.cache/renders/{listing}/{colour}.png` — namespaced by template, since a listing can reference more than one `colour-matrix`-kind template and a bare colour is no longer unique across them. |
+| A16 | Pricing plan resolution | `Listing.pricing_plan` stays a bare ref string, resolved by the caller via `Workspace.resolve()`, exactly like `design:` — `Listing` itself never touches `Workspace` or does I/O. `resolved_price()` takes an already-loaded `PricingPlan` as an optional keyword argument rather than loading it itself. Keeps `Listing` as pure and workspace-ignorant as it is today; the cost is every future price-resolving call site must remember to load and pass the plan, same cost `design:` resolution already carries. PRD 34. |
+| A17 | Undocumented endpoint isolation | Printify's per-variant cost endpoint lives in `newcmd/unofficial_variant_costs.py`, outside the documented `CatalogClient` surface, so nothing built on that protocol can accidentally depend on an unauthenticated, undocumented API. Parsing (`parse_variant_costs`) is a pure function separated from the network call, fail-soft by construction. PRD 35. |
+| A18 | Wizard-time FX module placement | The one-off FX fetch lives in `newcmd/fx_rate.py`, not the package layout's reserved `fx/` (this doc's own deferred, cached full-margin module, PRD 10b) — avoids name collision with, and confusion against, that future work. PRD 36. |
+| A19 | Calibrator test design | A **library**, not the fixed `BundledDesign` literal it replaces. The three bundled targets stay and keep their ids; the preview endpoint resolves an arbitrary id against those plus PNGs the user has uploaded into the workspace, and an unknown id is a 400 rather than a `KeyError`. The literal was right while the only designs were the ones shipped in `api/static/`, but calibration is judged by eye, and the grid target answers "is the warp right?" while saying nothing about how a real ink weight sits on a real garment. The set has to be open for the second question. Uploads land in the workspace (`test-designs/`, kept apart from `designs/`), never the repo. |
+| A20 | Stage-produced remote state | `StageApplyResult` gains a `remote: dict[str, Any]`, merged into the lockfile's `remote` block the same way `outputs` already is, with each stage owning a documented key prefix (`printify_*`, `etsy_*`). Until Phase 2 no stage produced remote ids, so `apply` copied `lock.remote` through untouched and there was no channel at all — `printify_product` is the first stage that has to write one. A dict merged by the engine, rather than the stage mutating a lockfile it was handed, keeps the rule that a stage returns a value and the engine decides what becomes of it. |
+| A21 | Phase 2 concurrency scope | Retry-with-backoff lands in Phase 2, because it is needed the moment anything writes; the token buckets and the persisted daily budget stay in Phase 6 as planned. A3's `plan` thread-pool fan-out also stays unbuilt: with one remote stage and a single live read per listing there is nothing to overlap, and a pool that fans out over one call is machinery pretending to be an optimisation. Recorded as a decision rather than left as an omission, so the next reader does not take the empty pool for an oversight. |
+| A22 | One Printify package, two protocols | `catalog/` and `clients/printify/` are **one package**, `clients/printify/`, over one shared `Transport`. The authority split that justified two packages is real and is kept — but it is a property of the *protocols*, not of the directory: a caller holding `CatalogClient` cannot reach `create_product` because the method is not on its type. What the two packages actually duplicated was plumbing — a `TokenSource` alias, a lazy token resolve, a `401/403` branch, an auth error, a base URL, an `httpx.Client` — and the copies had already drifted: the catalog reader had **no retries at all**, so a 429 on `blueprints.json` failed a `new` run outright while the identical 429 on a write rode out its backoff (A21). One transport, two protocols, one auth error naming every scope the single token needs. |
+| A23 | Etsy auth, split four ways | `oauth.py` is pure (verifier, challenge, authorise URL, state check, response parsing), `callback.py` serves exactly one loopback request, `tokens.py` owns `.auth/etsy-tokens.json` and every rotation, `transport.py` carries both headers. The split is not tidiness. Refresh tokens **rotate on every use**, which makes the file write part of the protocol rather than a cache: it must land — atomically, `os.replace` over a temp file — before the new access token is used, or a crash mid-rotation burns the only credential that can recover without a browser. A `TokenStore` behind a lazily-resolved token source (A22's rule) keeps `plan` buildable with no credentials; an in-process lock with a double-check stops A3's read fan-out rotating twice; and an `invalid_grant` re-reads the file once before it is believed, because the rotation that invalidated it may have come from a second process. |
+| A24 | Phase 3's stage list | Three stages: `Publish`, `EtsyListing`, `EtsyMedia`. Everything except images travels in one `updateListing` PATCH, so one stage owns it — copy, tags, materials, section, the `who_made` trio, production partners, shipping profile, return policy and renewal. Named `etsy_listing`, not `etsy_copy`, which was accurate while copy was all it wrote. Rejected: splitting copy from settings, on the argument that a Phase 4 regeneration and a `shop.yaml` edit should be separately resumable. The `Change` vocabulary already distinguishes them by path (`etsy.title` against `etsy.shop_section`), and two PATCHes where one would do invents a half-written state one call cannot produce. PRD 52-59. |
+| A25 | Etsy shop reference data | Sections, shipping profiles, production partners and return policies resolve **once per run, in memory** (`clients/etsy/shopcatalog.py`) — never through the disk TTL cache Printify's catalog uses. A stale Printify variant id is a wrong product; a stale Etsy section id is a `400` that fails the entire PATCH, measured. The lists are small, shop-scoped and change when a human edits Shop Manager, which is exactly the moment a cache would be wrong. Deleted shipping profiles are filtered; an unresolved name reports every candidate it did find, and for partners reports the location too, since Printify's guidance produces generically-named partners. |
+| A26 | Ids minted mid-run | `execute` threads the accumulating `remote` block through a run while continuing to hand each stage the **previous** run's `applied`. The existing rule — every stage sees the world as it was before the run — is right for a last-applied document and wrong for an id an API just returned: a first `apply` that creates a product, publishes it and then cannot find the Etsy listing id it just minted is not safer, it is an `apply` that must be run twice. Rendered bytes take the other answer, the one the PRD already uses for copy: a file that does not exist yet is **pending**, so `plan` reports "4 images (pending render)" and `apply` hashes what it actually uploaded. |
+| A27 | Variation images belong to the media stage | Not a stage of their own. The links are a function of the image ids that stage mints, `updateVariationImages` overwrites all of them per call, and a separate stage would be one that must run whenever its neighbour does. Its applied document stores `{colour: manifest ref}` — stable and hashable, no remote ids — and `read_live` projects `getListingVariationImages` back into that space by reversing `value_id → value → slug` and `image_id → ref`. That projection is load-bearing: a replaced image leaves its link dangling and Etsy reports the dangling state as `200` with a full count, so comparing linked ids against the ids actually on the listing is the only thing that can notice. PRD 56. |
+| A28 | The Etsy client, split like Printify's | `EtsyShopClient` (reads, unscoped, `setup`'s four calls) and a new `EtsyListingClient` (the listing surface) over the one `Transport` — A22's rule, one host and one credential pair, authority a property of the type rather than of the directory. `RunContext` gains `etsy` and `require_etsy()` mirroring the Printify pair, optional for the same reason: `plan` in a Phase 1 workspace must not demand a credential. One defect is fixed while here — a missing Etsy scope is a `401`, not a `403`, and the transport currently reports it as "check your keystring", pointing at a credential that is fine. Phase 3 is the first phase where a scope error is plausible (`shops_r` for shipping profiles), so the auth error carries the server's own text from here on. |
+| A29 | A failed apply keeps what it did | `execute` hands the folded lockfile to a recording callback after **every** stage that succeeds, not once at the end. When a stage raises, the callback receives that lockfile with an `incomplete: {stage}` marker before the exception is re-raised, and the next run that finishes cleanly clears the marker. Before this, `apply_listings` wrote only after `execute` returned. A run that created a Printify product and then failed at `etsy_listing` therefore recorded nothing, and the next `plan` would try to create the product again, only for PRD 48's duplicate guard to refuse it. That is an `apply` no re-run can finish. The marker exists because a per-stage write moves the lockfile's mtime past `listing.yaml`'s, and `edited_since_apply` would then read a half-finished deploy as clean. `listing_status` treats a set marker as **dirty**, so no new status value is needed. The marker sits outside `applied` and is serialised only when set, so it never enters a hash and a clean lockfile is byte-identical to today's. |
+| A30 | Stages expose snapshots; the UI composes | The editor's before/after comparison needs every field, unchanged ones included, and a `Plan` carries only changes. Each stage may implement `snapshot(desired, live)`, which returns a public pydantic model of domain facts: variants as `{size, colour, price}`, `below_cost` rows, Etsy images as `{rank, image_id, ref?, url}`, render state per scene. The model is carried on `StagePlan.snapshot` and is **excluded from the fingerprint** (A31). Only the stage looks inside its own types (A1's erased `AnyStage`), so neither the engine nor the API assembles a listing. The frontend owns layout. Rejected: a server-side listing view, which puts presentation into the backend; and the API casting `StageState.live` per stage name, which couples it to five internal types behind `Any`, where the type checker cannot see a change. Highlighting still comes **only** from `Change` objects (A2), so the engine emits three things it did not before: `ListChange("colors")` from `product_diff`, one `MediaChange` per rank from `etsy_media`, and `last_applied_label`/`live_label` on `Drift`, filled from the shop catalog that A25 already resolved in this run. |
+| A31 | Apply refuses a plan nobody reviewed | `plan_fingerprint(plan)` is `canonical_hash` over the serialised `Plan` with every `snapshot` left out. `apply_listings(..., expect={listing: fingerprint})` re-plans each listing as it always has, and refuses **before executing anything** if the two fingerprints differ, returning the new plan. Rejected: executing a plan cached from review, which acts on live state that may have moved and cannot see a hand edit to `listing.yaml`; and hashing only the desired documents, which lets Etsy drift that appeared after review through unreviewed. The editor is not the only writer, because the CLI and hand edits change the same files, so a fingerprint beats any lock the UI could hold. |
+| A32 | Previews render during plan; apply promotes them | The render stage gains `preview()`. It renders, at full size and with two bounded workers, every scene it would (re)render to `Workspace.preview_file(listing, scene, scene_hash)`, where `scene_hash` covers the same inputs `input_hash` folds, restricted to one scene. `RenderStage.apply` copies in a preview whose hash matches rather than rendering again, retaining the preview so a mid-apply page refresh can still serve it; CLI `apply` benefits too. `build_plan` itself stays read-only: previews are a step the UI's plan run takes afterwards, a preview's existence never enters a `Plan`, and nothing is written under `.cache/renders/` or the lockfile. Promotion is safe because render passes are pure and the pins are exact (A7), so a promoted file is the bytes a render would have produced and the `outputs` axis cannot tell the difference. Rejected: downscaled previews, which cannot be promoted and so pay for every render twice. |
+| A33 | Runs in the UI server | A **run** is a server-side resource covering a resolved ordered set of listings (PRD 16 continue-on-error inside it). Locks are per listing, so a second run naming a busy listing gets `409` with the holder's id. A single FIFO executor thread runs one run at a time across the workspace, so any other run is `queued`. Parallelising later means more workers, not a new model. The engine reports planning, preview, apply and progress through one closed `EngineRunEvent` union and one sink; the UI is an adapter from those domain events to the pydantic SSE models exported into `openapi.json` (A5), while the CLI filters the same stream. A stage plan's decision is likewise one closed outcome — idle, work with its required reason, or blocked with its required message — never independent flags and nullable strings. Serialised stage plans are a stage-discriminated union whose stage literal determines its snapshot model. Plan progress remains **in pipeline order**: A21's fan-out stays unbuilt. A plan run can be cancelled before the next stage or preview submission; an apply run cannot (A3). Run commands and runtime state are closed unions: listing/workspace plan/apply commands carry only fields legal for that command, and plan/apply phases cannot be paired with the other kind. The executor thread is not a daemon; runs remain in memory only, and history stays Phase 6's `runs/` recorder. |
+| A34 | Workspace-scoped reviewed runs | Batch planning is a first-class `WorkspacePlan` command on A33's existing run resource. The server resolves `Workspace.listing_names()` when it accepts the command and records the resolved, ordered names on the run; the browser never submits its table rows as the meaning of `--all`. `WorkspaceApply` requires the exact ordered names, A31 fingerprints and `reviewed_run_id`; `ListingPlan` and `ListingApply` require a non-empty explicit listing set, and only apply commands carry fingerprints. These four request variants replace a nullable field bag plus post-parse validation, so an unreviewed workspace apply or a plan carrying apply-only fields is not representable. A workspace-scoped queued or active run conflicts with every listing-scoped run and vice versa; execution still uses the one A33 FIFO worker and stays sequential. The frontend folds one listing's events through one shared projection; individual deploy owns one projection, while batch owns an ordered map plus aggregate facts and preserves the immutable reviewed plan beside the apply overlay. Rejected: `listings: []` as an ambiguous all-listings sentinel; a separate batch resource duplicating locks, events and retention; re-resolving `--all` at apply time; and separate individual/batch interpretations of the same event vocabulary. |
+| A35 | Listing-template storage | `listing-templates/<name>/template.yaml` plus `assets/`, named only in `workspace/layout.py` and reached only through `Workspace` accessors; names are `_segment`-checked. `ListingTemplate` is its own pydantic model (`config/listing_template.py`, `extra="forbid"`) with no design, brief, title, tags, lead or lifecycle, reusing `MediaEntry` and the price models. `./` refs resolve against the template directory through a template-owner variant of `resolve_ref`. Rejected: a design-less `Listing`, which would leak into discovery and deploy. PRD 74. |
+| A36 | Template completeness | `check_listing_template` composes the existing listing checks minus design, brief and copy. Any `block` issue refuses the write, so no incomplete template ever exists on disk; `PUT` answers `200 {saved: false, issues}` and leaves the file alone. Saving never calls a provider. |
+| A37 | Batch cache records | Schema-versioned JSON under `.cache/staging/<id>/`, `.cache/batches/<id>.json` and `.cache/proposals/<listing>.json`, written through one `workspace/atomic.py` helper (tmp + `os.replace`). An unknown schema reads as absent, since cache is disposable. `StagingStore`/`BatchStore` live in `batches/`, `ProposalStore` in `ai/proposals.py` so the engine can reach it without the UI. Rejected: SQLite in the reserved `runs.db`. |
+| A38 | Name allocation | `batches/naming.allocate(base, taken)` returns `base` or the smallest free `base-N` (N ≥ 2) over the casefolded union of listing names, design stems and the batch's other names. Staging previews it and flags typed conflicts; confirm re-allocates per row under `WorkspaceLocks.listing(name)` and records the result before any file is written. PRD 60's no-overwrite rule is unchanged. |
+| A39 | Idempotent row creation | The batch record is written first, then each row runs design → template assets → `listing.yaml` → `created`, recording each step. Retry re-enters at the recorded step; an existing directory at the recorded name counts as the row's own work only if its `design` ref matches. A failure marks only that row. This is the first code that writes to `designs/`. |
+| A40 | Batch AI queue | A `BatchQueue` on `app.state` with one dispatcher thread. It starts ordinary `AiRun`s (`origin="batch"`) through the existing `AiRunner`, at most `batch_ai.concurrency` at a time, round-robin across batches; manual runs don't count. A `Conflict` leaves the row queued. `running` rows return to `queued` on startup. The manual `POST /api/ai/runs` is refused with `batch_pending` while the listing has batch work. It runs only inside the `ui` server, with no guard against a second server on one workspace. |
+| A41 | Durable proposals | `ProposalStore` keeps one record per listing (`proposal`, `snapshot`, `generated_at`, `origin`, per-section `resolution`), written by `AiRunner` before the proposal event for every run. `proposal_staleness` ports the frontend's `isStale` to the server and returns reasons. `_PROPOSAL_TTL` and browser-local proposals are removed; legacy keys are purged, not migrated. Amends A9. |
+| A42 | Rename and delete follow the listing | Rename moves the cached proposal and rewrites batch rows naming the old listing under the existing rename locks. Delete removes the proposal, stops any active run and marks batch rows `deleted`. Batch rows hold the current name; there is no hidden listing id. |
+| A43 | UI deploy precedence | Before the A33 executor plans or applies a listing it calls `BatchQueue.yield_to_deploy`: queued rows become `cancelled_by_deploy`, active AI runs are stopped and awaited, and `POST /api/ai/runs` answers `deploying` while the run holds the listing. Resume never re-queues `cancelled_by_deploy`. CLI `apply` does nothing about AI work, deliberately. |
+| A44 | Proposal cleanup after full success | `engine.run.fully_applied` requires `outcome.ok`, no blocked stage plan, and a lockfile without A29's `incomplete` marker (`ok` alone admits blocked stages). `apply_listings` then removes the listing's proposal, so CLI and UI behave the same. |
+| A45 | Upload and archive limits | Uploads stream to disk with a byte count. Limits: 64 MiB per PNG, 512 MiB per loose upload or ZIP, 1 GiB expanded, 2,000 entries, 100:1 per-entry ratio. ZIPs are read entry by entry, never `extractall`; traversal, absolute or backslash-rooted names, symlinks, encrypted and duplicate entries are refused; PNG is decided by magic bytes. The 25-design limit counts unique content hashes. A refusal leaves nothing on disk. |
+| A46 | Staging lifetime | A staging session expires seven days after its last edit; `StagingStore.sweep()` runs at server start and when the batch index is listed. Confirm deletes the staging directory once every row is materialised (inputs of failed rows are copied into the batch directory for Retry); Cancel deletes it at once. |
+
+### Toolchain
+
+uv + `pyproject.toml`, Python 3.12+, `src/` layout, hatchling, Typer, pydantic v2,
+httpx, OpenCV + Pillow (both **version-pinned** — PRD risk 9), ruff, pytest.
+
+The Vite build runs from a hatchling build hook only when `ui/frontend/dist` is
+absent, so wheels published from CI carry the built assets and installing them
+needs no node.
+
+---
+
+## Package layout
+
+```
+src/etsy_listings/
+  cli/                  Typer app; one module per command
+  workspace/            root discovery, path resolution, layout constants
+  config/               pydantic models: defaults, garment profile, listing, exceptions
+    money.py            Money type — parsing, currency validation; PriceField (A16)
+    pricing_plan.py     PricingPlan — reusable per-size price table (PRD 33)
+    slug.py             slugification rules + exceptions file + collision detection
+  prompts.py            which prompt backend can drive this terminal at all --
+                        shared by `new` and `setup`, a package-root leaf like
+                        terminal.py rather than a member of either
+  newcmd/               the `new` picker: logic.py (pure) + interactive.py (terminal
+                        sequencing)
+    unofficial_variant_costs.py    undocumented per-variant cost fetch, fail-soft,
+                        isolated from catalog/'s documented surface (A17, PRD 35)
+    fx_rate.py          one-off uncached FX fetch for the pricing-plan wizard only
+                        — not the reserved fx/ package below (A18, PRD 36)
+  setupcmd/             `setup` (PRD 43): logic.py (pure — skeleton, shop.yaml
+                        merge, .env editing) + interactive.py (sequencing, I/O)
+  authcmd/              `auth` (PRD 14, 49): every credential, verified before
+                        it is stored. logic.py (pure — PKCE, authorise URL,
+                        token bookkeeping) + interactive.py (the four
+                        credential questions, browser, callback). Shares
+                        setupcmd.logic's .env and .gitignore writers rather
+                        than keeping a second copy of either
+  engine/
+    stage.py            Stage protocol
+    change.py           Change vocabulary + comparison helpers
+    lock.py             state.lock.json model, read/write, hashing
+    context.py          RunContext (workspace, clients, limiter, event sink)
+    plan.py             builds a Plan across stages
+    apply.py            executes a Plan, resumable
+    stages/             render, printify_product, publish, etsy_listing,
+                        etsy_media
+  render/
+    config.py           frozen RenderConfig, TemplateConfig
+    passes.py           warp, displace, shade, export — pure functions
+    maps.py             derived height/luminance maps + _derived/ cache
+    pipeline.py         render()
+  clients/
+    printify/           everything said to Printify, catalog and shop alike (A22)
+      transport.py      token, retries, auth + error decoding -- the shared half
+      protocol.py       CatalogClient (reads) and PrintifyClient (writes)
+      models.py         reference data and shop state
+      catalog.py        blueprints/providers/variants/shipping (PRD 35)
+      products.py       shops, uploads, product CRUD
+      cache.py          TTL disk cache -- catalog only, deliberately
+      resolve.py        name to id, the only place a config name becomes an int
+      fakes.py          in-memory implementations of both protocols
+    etsy/               everything said to Etsy, over one transport (A23)
+      oauth.py          PKCE, authorise URL, state check — pure, no I/O
+      callback.py       the one-shot loopback server that catches the code
+      tokens.py         TokenStore: .auth/etsy-tokens.json, expiry, rotation
+      transport.py      both auth headers, retries, error decoding
+      shops.py          EtsyShopClient — `setup`'s four unscoped reads
+      listings.py       EtsyListingClient — the listing surface (A28)
+      shopcatalog.py    names to ids, resolved once per run, never cached (A25)
+      models.py         listing, image, inventory, shop, section, shipping
+                        profile, production partner, return policy
+      fakes.py          in-memory implementations of both protocols
+    limiter.py          token buckets, incl. persisted daily budget
+    retry.py            backoff policy
+  ai/                   SEO proposal contracts, prompt loading, provider adapters,
+                        orchestration, hard validation
+    proposals.py        ProposalStore + server-side staleness (A41)
+  listing_templates/    save-as and clone conversion, template-owned assets (A35)
+  batches/              staging, naming, archive intake, row creation, the
+                        StagingStore/BatchStore cache records (A37–A39, A45)
+  fx/                   USD to NOK fetch + .cache/fx.json with TTL
+  runs/                 SQLite recorder, schema, event types
+  ui/
+    api/                FastAPI app, routers, schemas, SSE
+      templates.py      kind assignment, colour report, config, preview,
+                        rail thumbnails
+      designs.py        the test-design library — bundled targets plus the
+                        user's own uploads (A19)
+    batchqueue.py       the batch AI queue and deploy precedence (A40, A43)
+    frontend/           Vite project, dist/ shipped as package data
+```
+
+The workspace gains one directory for the calibrator: `test-designs/`, holding
+uploaded preview targets. Deliberately not `designs/`, which is artwork that
+ships — a calibration target is not a product (A19).
+
+PRD 74 adds `listing-templates/`, workspace data beside `listings/` that listing
+discovery never scans (A35), and three disposable cache trees:
+`.cache/staging/`, `.cache/batches/` and `.cache/proposals/` (A37). Batch
+creation is the first code that writes `designs/` (A39).
+
+---
+
+## Core contracts
+
+### `Stage`
+
+```python
+class Stage(Protocol[D, A, L]):
+    name: str
+    local: bool                      # True => no remote state, so no drift
+    group: str | None                # the stage a reader shows this one under (PRD 72)
+    applied_model: type[A]           # what this stage's lockfile subtree decodes into
+
+    def desired(self, ctx: RunContext, listing, applied: A | None) -> D | Blocked: ...
+    def read_live(self, ctx: RunContext, listing, lock, applied: A | None) -> L | None: ...
+    def plan(self, desired: D, applied: A | None, live: L | None) -> Verdict: ...
+    def apply(self, ctx, desired: D, applied: A | None, live, lock) -> StageApplyResult: ...
+
+STAGES = [Render(), PrintifyProduct(), Publish(), EtsyListing(), EtsyMedia(), EtsyVideos()]
+```
+
+`applied` is the stage's **own subtree** of the lockfile, and every question
+gets it. `build_plan` looks it up and decodes it once — through
+`Lockfile.parse_applied_for(name, stage.applied_model)` — so no stage spells
+its own key, and none writes a parse of its own. There used to be a
+`last_applied(lock)` method, implemented by every stage as
+`lock.applied.get(self.name)`: the same lookup written out once per stage, on
+a protocol wide enough to reach every *other* stage's state.
+
+It arrives **decoded**, as the model the stage declared, not as the raw
+document. Two stages parsing for themselves had already written the rule two
+ways — one caught `ValidationError` and answered `None`, the other indexed the
+dict and raised `KeyError`, which is not a `UserFacingError` and so ended a
+whole `--all` batch. One decode answers `None` for both "never applied" and
+"will not decode", because a document we cannot read is one we cannot prove
+the live state matches.
+
+`apply` takes it for the same reason the other three do. It used to take the
+`StagePlan` instead, which no stage read — three `del`'d it on the first line
+and the protocol had already drifted, one stage typing it `object` while the
+rest said `StagePlan` — while the stage that genuinely needed its last-applied
+document went and decoded one itself, putting a second implementation of the
+above in the file that had just been handed the first. A plan is the engine's
+account of what a stage said; handing it back to that stage tells it nothing.
+
+`plan()` returns a `Verdict` rather than a `StagePlan`: the stage's name is
+the engine's to supply, and a name a stage stamps for itself is one it can
+stamp wrongly. A stage that cannot run says so as a value — `Blocked` from
+`desired()` for anything decidable before a live read, `Verdict.refused(...)`
+from `plan()` for the refusals only `live` can prove (PRD 40's below-cost
+check is the one that exists) — and the engine folds both into
+`StagePlan.blocked`, so every consumer renders one refusal and no stage can
+decline in silence.
+
+A stage's `apply` returns a `StageApplyResult` carrying three dicts, each
+merged into a different part of the next lockfile — by the **lockfile**, never
+by the stage and no longer by `apply`'s loop: `applied` **replaces**
+`lock.applied[stage.name]` (it is a whole document, so a field the stage has
+stopped emitting must not survive), while `outputs` and `remote` **merge** by
+key into their respective axes (A20) — ids handed back by an API, excluded
+from every hash, each stage owning a documented key prefix. See `Lockfile.fold`
+below.
+
+| Stage | `desired` | `read_live` | `apply` |
+|---|---|---|---|
+| `render` | design/artwork bytes hashes + template assets + resolved `RenderConfig`(s) per referenced scene (A11–A14) | which rendered files still exist under `.cache/renders/` | render each scene actually referenced by `media` into `.cache/renders/{listing}/{template}/` (A15) |
+| `printify_product` | title + description (PRD 44), blueprint/provider ids, enabled variant matrix with prices, print areas | `GET products/{id}`, incl. `visible` (below); `None` without a request when the lockfile has no product id | create (after the PRD 48 duplicate walk) or update product |
+| `publish` | sync flag set `{variants: true, title/description/images/tags: false}` | product `external` block | `POST publish.json`, poll for `external.id` |
+| `etsy_listing` | title, description, tags, materials, section, shipping profile, return policy, `who_made`/`when_made`/`is_supply`, production partners, `should_auto_renew` — names resolved to ids through A25 | `getListing` | one `updateListing` PATCH carrying only what changed (A24) |
+| `etsy_media` | ordered media manifest, each entry `(ref, content_hash \| pending, alt_text)`, plus the variation-image links when enabled | listing images + ids; `getListingVariationImages` when enabled | upload what changed (`overwrite: true` in place where the rank holds), assert order with `image_ids`, then `updateVariationImages` (PRD 56, 57) |
+
+Local stages have no *remote* state — that is what `local: bool` encodes, and it
+buys two things: drift is undefined for them, so the engine skips drift reporting
+rather than each stage having to remember; and their `read_live()` is cheap and
+local, so it never joins A3's live-fetch pool.
+
+It does not mean they observe nothing. `render` writes PNGs into a gitignored,
+fully derivable cache, which is precisely the kind of directory people delete.
+That output is live state in every sense that matters — it simply has no second
+writer to have drifted *from*. So every stage's `read_live()` is called, local
+ones included, and a difference a local stage finds is reported as work to redo
+rather than as drift.
+
+AI Mode is not a stage. It creates a request-scoped, browser-local proposal for
+a saved listing, and it neither reads nor writes lockfile or workspace output.
+Only a seller's accepted field edits enter the ordinary desired documents.
+
+This paragraph used to say local stages have no live state at all, which read as
+licence to skip the read entirely. `plan` duly reported "No changes." over a
+half-emptied render cache, and `apply` did nothing to refill it.
+
+### Draft-vs-live — PRD risk 5, and a correction
+
+This section used to read *"Draft-vs-live cannot be set through the API"*, and
+concluded that nothing this tool sends could affect whether a publish lands as a
+draft. **The premise was wrong, and Phase 2's recon caught it**
+([research/api-findings.md](../research/api-findings.md)).
+
+The reasoning was sound as far as the documentation went: Printify's API
+Reference (`developers.printify.com/docs/`) documents `visible` ("Used for
+publishing. Visibility in sales channel", defaults to `true`) and marks it
+**read-only**; it is absent from the `publish.json` body, which takes only
+`images`, `variants`, `title`, `description`, `tags`, `shipping_template`, and
+absent from the create/update product bodies and the Shop resource. From that,
+"Hide in Store" looked like a web-app-only action.
+
+Measured against the live API, `visible` **is** writable — accepted on
+`POST products.json`, accepted on `PUT`, and it reads back as sent. The
+reference is wrong about it, which is a good reason to keep measuring rather
+than reading.
+
+What that does *not* establish is the thing risk 5 cares about: whether a
+hidden product publishes to Etsy as a draft. That needs a connected Etsy shop
+and belongs to Phase 3. So the shop's Etsy-connection setting
+(`docs/guides/setup.md` §1.2) remains the documented lever and must still be set by a
+human before the first `apply` publishes — but `visible` is now a candidate
+second lever rather than a closed door.
+
+Meanwhile `visible` comes back on `GET products/{id}`, so
+`printify_product.read_live()` reads it and the stage surfaces a warning if a
+product it manages ever comes back `visible: true`. That tripwire stands, and
+may yet become a fix.
+
+**Still open, and only answerable once an Etsy shop is connected:** whether the
+shop's draft setting is a persistent per-shop default that holds for every
+future publish, or something that reverts and needs re-confirming. Carried in
+[research/api-findings.md](../research/api-findings.md)'s open questions.
+
+### `Change` vocabulary
+
+Per A2 each stage writes its own comparison, so the shared surface is the
+vocabulary and a handful of helpers — not a generic differ. Keeping the *mechanics*
+shared is what stops six near-identical routines diverging.
+
+```python
+@dataclass(frozen=True)
+class FieldChange:  path: str; before: Any; after: Any
+class ListChange:   path: str; added: list; removed: list; reordered: bool
+class PriceChange:  size: str; colour: str | None; before: Money; after: Money
+class MediaChange:  rank: int; before: str | None; after: str | None
+class StageRun:     stage: str; reason: str          # "design changed"
+class Drift:        path: str; last_applied: Any; live: Any
+
+# helpers every stage calls
+def scalar(path, desired, applied) -> FieldChange | None: ...
+def sequence(path, desired, applied) -> ListChange | None: ...
+def drift(path, applied, live) -> Drift | None: ...
+```
+
+`StagePlan(stage, will_run, changes, drift)` and
+`Plan(listing, is_live, etsy_listing_id, stage_plans)` are the units the CLI
+renderer and the UI's JSON serialiser both consume. **Neither entry point may
+compute a diff itself** — that is what guarantees the PRD's "one set of rules
+regardless of route".
+
+### Lockfile
+
+```json
+{
+  "schema_version": 1,
+  "tool_version": "0.3.1",
+  "applied_at": "2026-09-03T10:14:02Z",
+
+  "applied": {
+    "render":   { "input_hash": "sha256:...", "config": {}, "colors": ["black", "moss"] },
+    "printify_product": { "title": "...", "description": "...",
+                          "blueprint_id": 6, "print_provider_id": 29,
+                          "variants": [{"id": 17887, "price": 4990, "is_enabled": true}],
+                          "print_areas": [] },
+    "publish":  { "sync_flags": {"variants": true, "title": false, "images": false},
+                  "variants": {"17887": 4990} },
+    "etsy_listing": { "title": "...", "description": "...", "tags": [],
+                      "materials": ["cotton"],
+                      "shop_section": "Retro Tees", "shop_section_id": 4455667,
+                      "shipping_profile": "NOK standard tee",
+                      "shipping_profile_id": 314944410819,
+                      "return_policy": {"accepts_returns": true,
+                                        "accepts_exchanges": true, "within_days": 30},
+                      "return_policy_id": 1513785862328,
+                      "who_made": "someone_else", "when_made": "made_to_order",
+                      "is_supply": false,
+                      "production_partners": ["The Print Provider"],
+                      "production_partner_ids": [5785693],
+                      "should_auto_renew": false },
+    "etsy_media": { "manifest": [{"ref": "flat-lay-01:black", "hash": "sha256:..."}],
+                    "variation_images": {"black": "flat-lay-01:black"} }
+  },
+
+  "remote":  { "printify_product_id": "...",
+               "printify_upload_ids": {"default": "..."},
+               "printify_publish_locked": false,
+               "etsy_listing_id": 1234567890,
+               "etsy_listing_handle": "https://www.etsy.com/listing/...",
+               "etsy_image_ids": {"flat-lay-01:black": 111},
+               "etsy_listing_state": "draft" },
+  "outputs": { ".cache/renders/take-a-hike/black.png": "sha256:..." },
+  "stages_completed": ["render", "printify_product", "publish",
+                       "etsy_listing", "etsy_media"]
+}
+```
+
+`applied` is the last-applied desired document, verbatim and normalised — so
+`desired` vs `applied` is a comparison of two identically-shaped objects, and the
+diff can show real before/after text without re-deriving anything.
+
+**Hashing rules, enforced by a single `canonical_hash()` helper:** hash only the
+`applied` subtree; `applied_at`, `tool_version`, `remote` and absolute paths are
+excluded. Paths inside hashed content are always workspace-relative and
+forward-slashed. A test asserts that two runs with no input change produce
+byte-identical `applied` subtrees — this is the guard against the PRD's "every run
+shows a spurious diff" failure.
+
+`outputs` carries per-file **output** hashes and is the separate axis the PRD
+requires: `input_hash` decides whether to re-render, `outputs` decides whether to
+re-upload. A library upgrade that changes render bytes therefore triggers a
+re-upload, correctly and visibly.
+
+**`Lockfile` owns the merge, not just the file.** `fold(stage, result)` returns
+the next lockfile with that stage's result absorbed under the replace/merge
+rules above; `applied_for(stage)` hands a stage its own subtree back; and
+`stamped(tool_version, applied_at)` records what wrote it and when, once per
+run rather than once per stage. Those four axes used to be public dicts that
+`execute` copied and combined by hand, with the rules for doing so written
+down one module away in `StageApplyResult`'s docstring — rules stated in one
+place and implemented in another are rules that drift. `StageApplyResult`
+moved next to `fold` for the same reason. `execute` now decides only *which*
+stages run and in what order, which is the part that is genuinely its
+business (A3).
+
+### Runs
+
+```python
+def plan_listings(ctx, listings, stages, *, on_planned, on_failure) -> RunReport: ...
+def apply_listings(ctx, listings, stages, *, on_planned, on_failure) -> RunReport: ...
+```
+
+`engine/run.py`, one level above `build_plan`/`execute`: a whole run over a set
+of listings, owning each lockfile's lifecycle — read it, plan, execute, write
+it back — and PRD 16's continue-on-error. A `UserFacingError` abandons that
+listing and no other; anything else is a defect and propagates.
+
+This lived in `cli/app.py` as a private helper taking a callback until it was
+lifted here. None of it is presentation: the lockfile's path and lifecycle are
+engine concerns, so are the tool version and clock stamped into it, and PRD 16
+is a product rule that has to hold whichever entry point drives it — the CLI
+only added the words. It is the same seam `Plan`/`format_plan` already draws,
+one level up: `cli` formats the `RunReport`, Phase 5's UI will serialise it,
+and neither re-derives what a run does. PRD 16 is now assertable against a
+value instead of against terminal output.
+
+The two sinks exist because a batch has two moments worth watching, and output
+must interleave with the work rather than arriving after it. `on_planned` fires
+the instant a listing's plan is ready — before `apply` executes it, which is
+the only point at which the plan is known and none of its progress events have
+been emitted. `on_failure` fires when a listing is abandoned. The returned
+`RunReport` is the same information in one piece, for a caller that wants it
+that way, and `RunReport.failed` is what the CLI turns into an exit code.
+
+### Workspace
+
+```python
+class Workspace:
+    root: Path                       # dir containing shop.yaml
+    defaults: Defaults
+
+    @classmethod
+    def discover(cls, start: Path | None = None) -> Workspace: ...
+    def resolve(self, ref: str, relative_to: Path) -> Path: ...   # never escapes root
+    def cache(self, *parts: str) -> Path: ...
+
+    def pricing_plan_files(self) -> list[Path]: ...   # recursive discovery under pricing-plans/
+    def load_pricing_plan(self, path: Path) -> PricingPlan: ...   # attaches workspace currency
+```
+
+Discovery walks up from cwd for `shop.yaml`, honouring `--root` then
+`ETSY_LISTINGS_ROOT` first. `resolve()` rejects paths that escape the root, which
+also makes the UI's file-serving endpoints safe by construction.
+
+`pricing_plan_files()`/`load_pricing_plan()` are `Workspace`'s only
+pricing-plan-specific surface (A16) — everything else about a plan reference
+goes through the same `resolve()` used for `design:`, since a plan is
+addressed by path, not by name.
+
+---
+
+## Renderer
+
+```python
+def warp(design: NDArray, bounding_box: BoundingBox, output_size: tuple[int, int]) -> NDArray: ...
+def displace(img: NDArray, cfg: DisplaceConfig, height: NDArray) -> NDArray: ...
+def shade(img: NDArray, cfg: ShadeConfig, luminance: NDArray) -> NDArray: ...
+def export(base: NDArray, print_layer: NDArray) -> Image.Image: ...
+
+def render(design, template_base, cfg: RenderConfig, *, height=None, luminance=None) -> Image.Image:
+    x = warp(design, cfg.bounding_box, template_base_size)
+    if cfg.displace.enabled: x = displace(x, cfg.displace, height)
+    if cfg.shade.enabled:    x = shade(x, cfg.shade, luminance)
+    return export(template_base, x)
+```
+
+`multiple`-kind scenes (several garments in one photo) use a separate
+`render_scene()` over a list of `Layer`s, folded by `export_many()` — not a
+generalisation of the single-layer path above, so it carries zero regression
+risk to it (A12).
+
+Every pass is pure: no I/O, no globals, no clock. All inputs arrive as arrays or
+frozen config, which is what makes both the hash and the goldens meaningful.
+
+**Determinism controls** (PRD risk 9): OpenCV and Pillow pinned to exact versions;
+every `cv2` call passes explicit `interpolation` and `borderMode` rather than
+relying on defaults; PNG encode is deterministic with no timestamp chunks; colour
+handling is fixed at 8-bit sRGB with a documented alpha compositing order.
+
+**Derived maps** cache to `mockup-templates/{name}/_derived/`, keyed by
+`hash(source image bytes + map params)`, so a template edit invalidates them
+without a manual clear. The calibrator additionally holds them in memory for the
+life of a preview session.
+
+**Goldens** live at two levels. `tests/golden/passes/` renders each pass alone
+against a synthetic grid/ruler target, so a regression names the guilty pass;
+`tests/golden/e2e/` covers finished composites per template. Comparison is
+per-pixel with a small tolerance, and `--update-goldens` regenerates with the diff
+shown in the failure output.
+
+**Calibrator latency budget:** previews render at 1200px or less on the long edge
+with maps held in memory, targeting sub-300ms round trips so slider drags feel
+live. Final renders always run at full resolution.
+
+---
+
+## Clients, limiting and retries
+
+```python
+class PrintifyClient(Protocol):
+    def blueprints(self) -> list[Blueprint]: ...
+    def print_providers(self, blueprint_id: int) -> list[PrintProvider]: ...
+    def variants(self, blueprint_id: int, provider_id: int) -> VariantSet: ...
+    def get_product(self, product_id: str) -> Product | None: ...
+    def create_product(self, spec: ProductSpec) -> Product: ...
+    def update_product(self, product_id: str, spec: ProductSpec) -> Product: ...
+    def publish(self, product_id: str, flags: SyncFlags) -> None: ...
+    def clear_publish_lock(self, product_id: str) -> None: ...
+```
+
+`EtsyListingClient` mirrors this for `get_listing`, `update_listing`,
+`upload_image`, `delete_image`, `listing_inventory`, `variation_images` and
+`set_variation_images`; `EtsyShopClient` keeps the unscoped shop reads
+`setup` uses, plus `shipping_profiles` and `production_partners` for A25's
+resolver. Two protocols, one transport (A28).
+
+Three of those calls need the encoding pinned rather than merely typed, and
+each has a contract test for it: `image_ids` must be one comma-separated value
+(repeated keys answer `200` and reduce the listing to a single image),
+`updateListing` is form-encoded, and `updateVariationImages` is JSON.
+
+**Rate limiting.** One `TokenBucket` per named budget, all behind a single
+`threading.Lock` so the `plan` thread pool and the sequential `apply` path share
+them:
+
+| Budget | Limit |
+|---|---|
+| `printify:global` | 600/min |
+| `printify:catalog` | 100/min |
+| `printify:publish` | 200/30min |
+| `etsy:burst` | 10/sec |
+| `etsy:daily` | 10 000/day |
+
+`etsy:daily` must survive process restarts to be meaningful, so its counter is
+persisted in `runs.db` — the one place the run store does real work beyond
+history. `plan --all` reports what fraction of the daily budget it consumed, which
+is the PRD's risk 10 made visible rather than merely noted.
+
+**Retries.** Exponential backoff with jitter on 429 and 5xx, honouring
+`Retry-After`; no retry on other 4xx.
+
+**The HTTP method decides more than the status does.** A 429 is a refusal to
+process — Printify rejected the request before touching it — so resending is
+free whatever the verb. A 5xx or a dropped connection says the opposite: the
+write may well have landed. So idempotent methods are retried on both, and
+**POST only on 429**. Without that split, retrying a `create_product` that
+timed out is itself the duplicate-product bug the guard below exists to
+prevent.
+
+The last response is returned rather than raised, so the caller's own error
+decoding still sees the real `errors.reason` instead of a wrapper's summary.
+`sleep` and the jitter source are injected, which is what lets the whole
+policy be tested instantly and deterministically.
+
+`create_product` is the one non-idempotent call: it is guarded by the
+lockfile's `printify_product_id` plus a pre-flight walk of the shop's
+products, matching on title and description (PRD 48).
+
+That clause used to say "plus a pre-flight lookup", which assumed a key the
+product API does not have. There is none: `POST products.json` has no
+idempotency key and no conflict — an identical spec makes a second product —
+and `GET products.json` accepts `title`, `search` and `sku` parameters while
+ignoring all three. So the guard is a **walk**, not a query, matched
+client-side, and it is affordable only because it runs on the create path
+alone. PRD 44's requirement that title and description be concrete text is what
+makes that match key exist at all.
+
+**Publish polling.** Backoff 2s to 60s against a ~10 minute ceiling. On timeout the
+lockfile records the product as locked, which is what `unlock` later acts on.
+
+**Etsy OAuth.** PKCE (`S256`, which Etsy requires on every flow) via a
+localhost callback on the fixed registered port, with a `state` check.
+Authorise at `https://www.etsy.com/oauth/connect`, exchange and refresh at
+`https://api.etsy.com/v3/public/oauth/token`; scopes and callback URL are PRD
+50. Tokens are written to `.auth/etsy-tokens.json`, and the mode is set to
+`0600` where the platform means it — on the Windows filesystem this is
+developed against, that call sets a read-only bit and is not an access control.
+The docs say which of the two the user is getting rather than repeating a POSIX
+promise the file does not keep.
+
+Refresh happens on demand: when a run is about to speak to Etsy and the access
+token has under five minutes left, or once in response to a `401`. Nothing
+refreshes in the background, and a purely local `plan` still needs no
+credentials at all. The refresh token's 90-day life is the one clock a user can
+lose without noticing, so `auth --check` reports the days remaining and any
+command that refreshes warns under fourteen. Whether a refresh restarts those
+90 days is undocumented, so the stored `refresh_expires_at` is optimistic and
+an `invalid_grant` is the authoritative answer — surfaced as "run `auth`
+again", never as a bare OAuth error code.
+
+---
+
+## UI
+
+FastAPI serves JSON under `/api`; React talks to it through a client generated by
+`openapi-typescript` + `openapi-fetch`, regenerated in CI with a check that fails
+if the committed client is stale. Dev runs Vite with `/api` proxied to uvicorn;
+production mounts the built `dist/` with an SPA fallback.
+
+```
+GET  /api/status                          auth + shop identity
+GET  /api/listings                        grouped: draft | published | dirty, with drift flags
+GET  /api/listings/{name}
+POST   /api/runs                          {kind: plan|apply, listings: [...], expect?} -> run (A33)
+GET    /api/runs?listing=                 active and recent runs, in memory (history: Phase 6)
+GET    /api/runs/{id}                     run detail, including every event so far
+GET    /api/runs/{id}/events              SSE, resumable via Last-Event-ID
+DELETE /api/runs/{id}                     cancel a plan run; an apply run refuses
+POST   /api/runs/{id}/seen                a finished run's result has been looked at
+
+GET  /api/templates
+POST /api/templates/{name}/kind           writes the starting template.yaml
+GET  /api/templates/{name}/config
+PUT  /api/templates/{name}/config         writes template.yaml
+POST /api/templates/{name}/preview        returns PNG through the real renderer
+
+GET  /api/setup/state
+POST /api/setup/etsy/start                returns authorise URL
+GET  /api/setup/etsy/callback
+POST /api/setup/printify                  {token}
+GET  /api/setup/etsy/sections
+GET  /api/setup/etsy/return-policies
+POST /api/setup/defaults                  writes shop.yaml
+```
+
+Screens: **Setup wizard** (shown whenever no shop is connected), **Dashboard**
+(listings by state, drift indicators, run history, live progress), **Calibrator**
+(below), **Runner** (plan/apply per listing or batch, streamed output).
+
+### The calibrator's shape
+
+Three columns — template rail, canvas, inspector. The rail replaces what was a
+template dropdown: it sorts templates that are not finished above the ones that
+are, and says what each is missing. That ordering is the screen's whole
+argument, and a dropdown cannot make it.
+
+`TemplateSummary.status` is **derived on every read**, never persisted. A
+`calibrated:` flag in `template.yaml` would be product state no PRD decision
+covers, and it could disagree with the config sitting beside it. Only
+`multiple` has states beyond "has a config at all": `placements: []` is what
+assigning the kind writes, and a box can be positioned before anyone says which
+colour it depicts.
+
+**Every box is edited on the photo, and only there.** A `multiple` chart had a
+bounding-box panel beside the canvas listing its placements with corner fields,
+reorder buttons and a colour field. Everything on it except the colour was
+already a gesture on the canvas — select, add, duplicate, reorder, delete,
+drag — so the panel was a second place to look and a second place to be wrong
+about which box is which. The colour was the exception because it is the one
+fact about a box the photograph cannot show; it is a caption under the box now,
+clicked to edit, drawn under exactly the boxes whose outline is drawn.
+
+A box moves as a whole by dragging its interior or by the arrow keys, and
+deforms only by its corner handles. Placing a box is the commonest move there
+is, and dragging four corners the same distance by eye is not a way to do it.
+Both gestures belong to the canvas, so every kind has them.
+
+Every kind can also hide its box chrome. What that means differs — a chart
+hides the boxes you are *not* working on, a colour set and a single scene hide
+everything — but the reason is the same in all three: the outline and its
+handles sit on top of the very artwork being judged.
+
+The inspector names controls after what they do to a photograph rather than
+after the render pass behind them — "Follow fabric wrinkles" over `displace`,
+"Pick up garment shading" over `shade`, and preset names over blend modes. The
+raw values stay reachable under an *Advanced* disclosure, because the pass
+names are what the config, the goldens and every error message use.
+
+**Not surfaced yet, and owed:** `colour_coverage` (`exact`/`subset`) and the
+per-placement `artwork` override. Both change render output and both are
+currently editable only by hand in `template.yaml`. They were left out to keep
+the redesign's default view as clean as the wireframe intends, not because they
+stopped mattering; the *Advanced* disclosure is where they belong when they
+come back.
+
+Run endpoints call the same `engine` service functions the CLI calls, passing an
+event callback. There is no UI-only execution path.
+
+---
+
+## Run store
+
+```sql
+PRAGMA journal_mode = WAL;
+
+CREATE TABLE runs (
+  id TEXT PRIMARY KEY, kind TEXT, listing TEXT, status TEXT,
+  started_at TEXT, finished_at TEXT,
+  n_changes INT, n_drift INT, error TEXT
+);
+CREATE TABLE run_events (
+  run_id TEXT, seq INT, ts TEXT, stage TEXT, level TEXT, message TEXT,
+  PRIMARY KEY (run_id, seq)
+);
+CREATE TABLE quota (name TEXT PRIMARY KEY, window_start TEXT, used INT);
+```
+
+```python
+with recorder.run(kind="apply", listing="take-a-hike") as r:
+    execute(ctx, on_event=r.emit)
+```
+
+The SSE endpoint tails `run_events` on `seq > last_seen`, so a UI reconnect
+resumes exactly where it left off, and a run started from the CLI streams into an
+already-open dashboard.
+
+---
+
+## Phases
+
+Strict PRD order. Each phase lands behind its own exit criteria; nothing moves on
+until they pass.
+
+### Phase 0 — foundations
+
+Workspace discovery and path resolution; pydantic models for `shop.yaml`,
+garment profiles, listings, exceptions; the `Money` type with explicit-currency
+validation; slugification rules plus collision detection; catalog fetch, TTL cache
+and name-to-id resolution; `Change` vocabulary; lockfile model and
+`canonical_hash()`; `Stage` protocol; a `plan` skeleton that walks the stages and
+prints an empty plan.
+
+*Exit:* `plan` runs against a fixture workspace with no network beyond the catalog;
+bare-number and wrong-currency prices are rejected with actionable errors; the
+byte-identical-`applied` determinism test passes.
+
+### Phase 1 — renderer, calibrator, `new`
+
+Render passes, `RenderConfig`, derived maps and `_derived/` caching; the golden
+harness at both levels; the render stage wired into plan/apply; the FastAPI +
+React skeleton carrying **only** the calibrator; the `new` interactive picker.
+
+*Exit:* a folder of photos can be given a kind, calibrated in the browser
+against the bundled test design, and produce full-resolution mockups for every
+colour; goldens are committed; `new` writes a garment profile and listing with no integer IDs typed by hand.
+
+### Phase 2 — Printify
+
+`setup` (PRD 43), which is what puts `printify.shop_id` and a verified token in
+a workspace before any of the rest can run. Then: client, models and fakes;
+variant resolution from colour slug × size; product create/update; the
+design-resolution, immutable-garment and concrete-copy validation gates
+(PRD 37, 38, 44); the first cassette contract tests.
+
+Three smaller pieces land with it because Phase 2 is the first phase that needs
+them: `StageApplyResult.remote` (A20), since `printify_product` is the first
+stage to produce an id worth keeping; retry-with-backoff (A21), since it is the
+first stage that writes; and the duplicate-create walk (PRD 48).
+
+**Recon landed first**, before any of it:
+[research/api-findings.md](../research/api-findings.md) and `tests/e2e/test_printify_product_e2e.py`
+establish what the product endpoints actually require, and several answers are
+not the obvious ones — `variants` merges rather than replaces, `print_areas`
+coverage differs between create and update, the product returns the whole
+blueprint matrix, `visible` is writable. Build against that file, not against
+the API reference.
+
+*Exit:* `setup` takes an empty directory to a workspace `new` runs in, with a
+token it verified and a shop id it discovered; a product is created against a
+test shop carrying exactly the intended variant matrix, prices and print area;
+a second `apply` is a no-op; retiring a colour actually disables its variants;
+and a garment change, an undersized design, or empty concrete deployment copy
+is each refused at `plan` time with an actionable error.
+
+**Publishing is not in this phase's exit criteria, because this account cannot
+reach it.** With no Etsy shop connected, `publish.json` returns
+`400 code 8254`, so `external.id`, the publish lock, the selective-sync flags
+and `unlock` — PRD risks 2, 3, 5 and 6 — move to Phase 3, where the shop that
+can answer them exists. Phase 2 builds the product; Phase 3 publishes it.
+
+### Phase 3 — Etsy
+
+OAuth PKCE and `auth`; **publish with sync flags, polling for `external.id`,
+and `unlock`**, inherited from Phase 2 because they need the connected shop
+this phase creates; copy patch; full-replace media sync; renewal; the LIVE
+banner and drift reporting on live listings. Two commands move in this phase
+before any stage does: `auth` grows from a stub to the credential command PRD
+14 describes, and `setup` — whose Printify token capture moves out to it —
+grows the Etsy id resolution that `findShops` and friends make possible without
+a bearer token (PRD 49). Everything downstream then opens on a workspace that
+already knows which shop it patches.
+
+> **File the Etsy app registration now, not at the start of this phase.** It is a
+> form, not engineering work, and approval lead time is unknown — PRD risk 1. The
+> phase order is unchanged; only the paperwork moves earlier.
+
+**The full plan is [features/etsy-listing-20260910/spec.md](../features/etsy-listing-20260910/spec.md)** — the stage designs,
+the config shape, the build order and the recon behind each decision. What
+follows is the summary this document owes its own readers.
+
+> **Shipping was settled before any of this was written — PRD risk 13, now
+> closed (PRD 58).** Printify publishes its USD rates as bare numerals, so the
+> NOK shop received `kr 10,39` where `
+10.39` was meant, and
+> `shipping_template: false` does **not** stop it creating and attaching that
+> profile on first publish. The resolution is neither a shipping stage nor
+> rates in config: the tool names an Etsy shipping profile and asserts it, and
+> because `read_live` reads the listing's real `shipping_profile_id`, a profile
+> Printify re-attaches is ordinary drift that `plan` reports and `apply`
+> repairs. Free and paid shipping are two named profiles, not two code paths.
+> Prices need no such care: NOK passes through unconverted (PRD 39, 40).
+
+Three measurements shaped the stage list more than any design argument did,
+and each had already produced a plausible wrong implementation on paper: the
+first publish sends Printify's mockups regardless of `{images: false}`, an
+unknown number of them arriving over minutes; `image_ids` reorders and detaches
+without re-uploading, but destroys the listing's images when sent as repeated
+form keys; and `processing_min`/`processing_max` on `updateListing` answer
+`200` and change nothing. Build against
+[research/printify-etsy-integration.md](../research/printify-etsy-integration.md), not the API
+reference.
+
+*Exit:* a complete draft listing exists in Etsy with our copy, tags, media in
+rank order and colour swatches bound to the right variants; the live-edit check
+from the PRD passes; PRD risks 2, 3, 5, 6 and 13 are answered empirically,
+along with risk 12's confirmation (`29900` arrives as `299,00` — measured), and
+written into [research/printify-etsy-integration.md](../research/printify-etsy-integration.md).
+
+### Phase 4 — structured descriptions and AI Mode
+
+Structured descriptions gain a required `lead` and one optional body source:
+inline `text` or a portable `common-copy/` `ref`; the final description is
+composed once for every consumer. Setup seeds `prompts/seo.md` only when it is
+absent. AI Mode then uses ready local Codex or Claude Code CLIs to make one
+validated, request-scoped proposal for a saved listing, with a shared deadline,
+repair, recognised fallback, and cancellation cleanup. The UI exposes the
+proposal only as browser-local, independently accepted title, tag, and lead
+drawers; normal editor autosave owns every accepted value.
+
+*Exit:* invalid description sources and deployment copy are blocked with the
+offending field named; unavailable AI Mode stays visible but disabled; invalid,
+cancelled, or failed proposals change no listing, lockfile, workspace file, or
+remote state;
+and accepted choices survive through the normal autosave and deploy paths.
+
+### Phase 5 — full UI
+
+Setup wizard, dashboard, run history, plan/apply runner, SSE progress — built
+around the calibrator that already exists.
+
+*Exit:* a fresh machine goes from nothing to a connected shop entirely through the
+wizard; a CLI-triggered run appears live in an open dashboard.
+
+### Phase 6 — batch and polish
+
+Rate limiter wired everywhere including the persisted daily budget;
+continue-on-error batch with an end summary; `status`; FX fetch with age
+reporting; gross margin display; `catalog refresh`.
+
+*Exit:* `plan --all` over a multi-listing workspace completes, reports its share of
+the Etsy daily budget, and a single failing listing does not halt the batch.
+
+---
+
+## Testing
+
+| Layer | What it covers |
+|---|---|
+| Unit | slugification, `Money` parsing, hashing canonicalisation, path resolution, limiter maths |
+| Golden | per-pass renders on a grid target; end-to-end composites per template |
+| Behaviour | fake clients driving idempotency, drift, resume-after-failure, publish polling, `unlock`, batch continue-on-error |
+| Contract | cassette replay through the real httpx client — payload shape, auth headers, error decoding, retry behaviour |
+| E2E (`-m e2e`) | skipped by default; env-gated at a throwaway shop; creates a draft, asserts the round trip, re-applies to prove the no-op, tears down. Also the cassette recorder |
+
+The four PRD verification scenarios — idempotency, live-edit, render regression,
+offline pipeline — each map to a named test, not to a manual habit.
+
+---
+
+## Risks carried forward
+
+The PRD's ten stand. These are added by the decisions above:
+
+1. **Six hand-written differs drift apart** (A2). Mitigated by the shared `Change`
+   vocabulary and helpers, and by a test asserting every stage emits only known
+   change types with workspace-relative paths.
+2. **Node enters the build path** (A5). Mitigated by the conditional build hook and
+   CI-built wheels; the fallback if it becomes painful is committing `dist/`.
+3. **The generated TS client goes stale** (A5). Mitigated by a CI check that
+   regenerates and fails on a diff.
+4. **`runs.db` holds the Etsy daily quota** (A6), so deleting the cache silently
+   resets the counter. Acceptable — over-counting is the safe direction — but
+   worth remembering when debugging a 429.
+5. **Renderer determinism across machines** (A7). The pinned-versions and
+   explicit-flags rules only hold if enforced; a lint rule or review checklist for
+   bare `cv2` calls is cheap insurance.

@@ -1,5 +1,5 @@
 """Locks in the two measured behaviours `FakeEtsyListingClient` has to
-reproduce or it blesses a broken media stage (phase-3-etsy.md, "Testing"):
+reproduce or it blesses a broken media stage (features/etsy-listing-20260910/spec.md, "Testing"):
 `image_ids` as a full-replacement set that detaches omissions, and
 `overwrite: true` replacing an image in place rather than colliding with it.
 """

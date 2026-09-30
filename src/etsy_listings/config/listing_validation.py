@@ -31,7 +31,7 @@ network I/O and no workspace.
 
 Structured as a list of independent check functions rather than a monolith,
 since more checks are expected later (see the module's own docstring in
-phase-5-listings-ui.md).
+features/listings-ui-20260915/spec.md).
 """
 
 from __future__ import annotations

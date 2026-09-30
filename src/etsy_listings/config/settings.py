@@ -1,6 +1,6 @@
 """``settings.yaml``: the workspace's tunable settings, next to ``shop.yaml``.
 
-It holds two blocks: the market scoring weights (market-seo.md,
+It holds two blocks: the market scoring weights (features/market-seo-20260924/spec.md,
 *Scoring*) and the batch AI queue's limit (spec, *Batch AI queue*; A40)::
 
     market_seo:

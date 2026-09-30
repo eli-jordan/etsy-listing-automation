@@ -2,7 +2,7 @@
 projection that keeps a comparison honest.
 
 Every payload here is transcribed from a real response recorded on 2026-09-08
-(docs/api-findings.md), including the parts that make the naive
+(docs/research/api-findings.md), including the parts that make the naive
 implementation wrong: the product comes back carrying the *whole* blueprint
 matrix, the placed image gains nine fields we never sent, and an unused
 placeholder arrives empty rather than absent.
@@ -156,7 +156,7 @@ def test_create_posts_to_the_shop_and_returns_the_product() -> None:
 def test_a_create_body_lists_only_the_variants_being_created() -> None:
     """On create, `print_areas.variant_ids` covers the variants being created.
     On update it must cover every variant the product has -- the same payload
-    is rejected as an update of the product it made (docs/api-findings.md)."""
+    is rejected as an update of the product it made (docs/research/api-findings.md)."""
     seen: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:

@@ -1,5 +1,5 @@
 /**
- * Word-level formatting of one `FieldChange`'s before/after (docs/deploy-changes.md
+ * Word-level formatting of one `FieldChange`'s before/after (docs/features/deploy-20260917/spec.md
  * decision 4, spec's "Change highlighting" element).
  *
  * This is presentation over a decision the engine already made: a title only

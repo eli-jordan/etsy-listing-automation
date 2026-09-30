@@ -13,7 +13,7 @@ import type {
 } from "../../../types";
 
 /**
- * The editor's side of an AI run (market-seo.md, *AI runs*): the brief,
+ * The editor's side of an AI run (features/market-seo-20260924/spec.md, *AI runs*): the brief,
  * market research and the proposal as one server-side run per listing,
  * started here, followed through its event stream, and reattached to after a
  * reload or a return to the editor.

@@ -11,7 +11,7 @@ import {
 import { stagePlan as makeStagePlan, type StagePlanOverrides } from "../../test/helpers";
 
 /**
- * `RunEvent[] -> phase, per-stage runtime, plan, previews` (docs/deploy-changes.md,
+ * `RunEvent[] -> phase, per-stage runtime, plan, previews` (docs/features/deploy-20260917/spec.md,
  * frontend module table). One recorded sequence per scenario the Testing
  * table names: plan, blocked, nothing to do, stale, failed mid-apply,
  * reattach mid-apply.

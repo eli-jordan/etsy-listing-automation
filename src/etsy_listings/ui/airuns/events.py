@@ -1,5 +1,5 @@
 """The AI run's wire shapes: its events, and the summary and detail the
-endpoints return (market-seo.md, *AI runs*; the implementation plan's *Run
+endpoints return (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's *Run
 contract*).
 
 Every event carries ``type``, the SSE ``event:`` name a client switches on,

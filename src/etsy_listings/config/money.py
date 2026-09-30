@@ -96,7 +96,7 @@ class Money:
         # untrusted input) carries no shape pydantic can derive a JSON Schema
         # from on its own -- stated by hand instead, now that a `Listing`
         # (which nests `Money` under `prices`/`price_overrides`) is exposed
-        # through the listings API's OpenAPI schema (phase-5-listings-ui.md).
+        # through the listings API's OpenAPI schema (features/listings-ui-20260915/spec.md).
         return {"type": "string", "examples": ["349 NOK"]}
 
 

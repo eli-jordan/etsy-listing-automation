@@ -2,7 +2,7 @@ import { api } from "./client";
 import type { MarketSnapshot } from "../types";
 
 /**
- * A listing's latest market research (market-seo.md, *Cache*), which the top
+ * A listing's latest market research (features/market-seo-20260924/spec.md, *Cache*), which the top
  * listings panel reads on mount so a reload shows the last search again.
  */
 

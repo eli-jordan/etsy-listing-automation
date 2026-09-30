@@ -1,7 +1,7 @@
 """Printify's shop-scoped half over HTTP: the calls that write, and the ones
 that read state a shop owns rather than reference data everyone shares.
 
-Built against [docs/api-findings.md](../../../../docs/api-findings.md) rather
+Built against [docs/research/api-findings.md](../../../../docs/research/api-findings.md) rather
 than the API reference, because several of the answers are not the obvious
 ones and each has produced a plausible-looking wrong implementation:
 
@@ -98,7 +98,7 @@ class HttpPrintifyClient(PrintifyClient):
 
         ``visible: false`` because a product nobody has reviewed has no
         business being visible, and the field *is* writable despite the API
-        reference marking it read-only (docs/api-findings.md).
+        reference marking it read-only (docs/research/api-findings.md).
         """
         body = {
             "title": spec.title,

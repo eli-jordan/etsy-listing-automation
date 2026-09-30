@@ -1,5 +1,5 @@
 """The ``etsy_videos`` stage: a listing's videos, placed where `media:` puts
-them (PRD 72, phase-3-etsy.md decision 9).
+them (PRD 72, features/etsy-listing-20260910/spec.md decision 9).
 
 Etsy has no position for a video -- no rank, no ordering call. Where one
 shows follows from attach order, measured by eye in Shop Manager: the video

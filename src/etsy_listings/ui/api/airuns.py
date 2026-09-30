@@ -1,4 +1,4 @@
-"""The AI runs resource (market-seo.md, *AI runs*; the implementation plan's
+"""The AI runs resource (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's
 *Run contract*).
 
 ```

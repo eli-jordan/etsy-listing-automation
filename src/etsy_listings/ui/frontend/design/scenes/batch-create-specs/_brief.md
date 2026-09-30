@@ -2,7 +2,7 @@
 title: "Batch Creation — Thinking"
 ---
 
-# Batch listing creation thinking — brief and flow from docs/listing-batch-creation-spec.md (UNCONFIRMED: self-answered from the spec).
+# Batch listing creation thinking — brief and flow from docs/features/batch-creation-20260927/spec.md (UNCONFIRMED: self-answered from the spec).
 
 **Who / scene:** one print-on-demand seller at a laptop, focused, after exporting 5-25 finished designs (often a Kittl ZIP).
 

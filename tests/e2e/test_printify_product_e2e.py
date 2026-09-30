@@ -18,7 +18,7 @@ The four that would each have produced a plausible-looking, wrong stage:
   update, though on create it covers only the ones being created. The same
   payload that created the product is rejected as an update of it.
 - ``visible`` is writable, on create and on update, despite the API reference
-  marking it read-only -- see ``docs/api-findings.md``.
+  marking it read-only -- see ``docs/research/api-findings.md``.
 
 It talks to the API through raw ``httpx`` rather than a client, because the
 client is what this is recon *for*; when ``clients/printify/`` exists these
@@ -61,7 +61,7 @@ failure message."""
 
 PRICE = 2499
 """USD cents -- $24.99. The API says so nowhere; Printify's web app does, and
-``docs/api-findings.md`` records it (PRD 39)."""
+``docs/research/api-findings.md`` records it (PRD 39)."""
 
 
 # --------------------------------------------------------------- the design
@@ -381,7 +381,7 @@ class TestCreatingTheProduct:
         """``price`` and ``cost`` are bare integers, and neither the product
         nor the shop says of what. The answer -- USD cents -- is only visible in
         Printify's web app, which is why it is written down in
-        ``docs/api-findings.md`` rather than read off a response here. PRD 24
+        ``docs/research/api-findings.md`` rather than read off a response here. PRD 24
         requires every price to carry its currency, so the stage supplies the
         half the API withholds."""
         assert "currency" not in live
@@ -537,7 +537,7 @@ class TestWhatAnUpdateDoes:
         plan concluded from that that draft-vs-live cannot be set through the
         API. It can be set; whether setting it makes an Etsy publish land as a
         draft is a separate question this shop cannot answer -- see
-        ``docs/api-findings.md``."""
+        ``docs/research/api-findings.md``."""
         assert live["visible"] is True
         after = update({"visible": False})
         try:
@@ -660,7 +660,7 @@ class TestTheSecondRoundOfRecon:
     stage was written rather than after.
 
     Each of these was settled by a throwaway probe script and written into
-    docs/api-findings.md; they live here so the offline suite's transcripts
+    docs/research/api-findings.md; they live here so the offline suite's transcripts
     have something that re-takes them. A contract test can only prove we
     decode what Printify sent last time.
     """

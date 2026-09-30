@@ -9,7 +9,7 @@ import { useMarketPanel } from "../market/useMarketPanel";
 
 /**
  * Listing Details' **AI Mode** (AI SEO implementation plan, PR7): readiness,
- * the AI run behind the button (`useAiRun`; market-seo.md, *AI runs*), the
+ * the AI run behind the button (`useAiRun`; features/market-seo-20260924/spec.md, *AI runs*), the
  * listing's cached proposal, and the three independent per-field acceptance
  * actions. `ListingEditorPageContent` owns it, above the tabs, because a run
  * outlives the tab it was started from; `DetailsTab` renders it.

@@ -110,7 +110,7 @@ class DesignPlacement:
         )
 
     def artwork_for(self, colour: str | None, *, template_override: str | None = None) -> str:
-        """Resolution order (docs/multi-placement-rendering.md item 2):
+        """Resolution order (docs/features/multi-placement-rendering-20260903/spec.md item 2):
         1. ``listing.artwork[colour]`` -- explicit per-design override, wins even
            over the template's own override (deliberately -- see the doc).
         2. The template/placement's own ``artwork`` override.

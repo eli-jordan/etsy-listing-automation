@@ -5,7 +5,7 @@ import { ApplyFooter } from "./ApplyFooter";
 
 /**
  * The bottom bar's note and Apply's enabled/disabled/spinner state, one case
- * per row of the control-state table (docs/deploy-changes.md, §7's addition
+ * per row of the control-state table (docs/features/deploy-20260917/spec.md, §7's addition
  * plus the three new rows). `applied` gets its own component state (a
  * "Back" button in place of Apply), covered separately below.
  */

@@ -100,7 +100,7 @@ asked rather than by when.
 Not listed, because it is not on that path: `Design`, asked only when no
 design name was given. A test that wants it adds its own key. Light-vs-dark
 artwork tone is never asked by `new` at all -- it is a hand-edit to the
-generated garment profile (docs/multi-placement-rendering.md).
+generated garment profile (docs/features/multi-placement-rendering-20260903/spec.md).
 
 The two pricing keys look ambiguous and are not: a fragment that is the whole
 question wins outright, and otherwise the longest match does, so "Pricing plan

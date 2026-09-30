@@ -1,6 +1,6 @@
 """The request, task, proposal, rationale, warning, and readiness shapes one
 AI Mode request passes between its layers (AI SEO implementation plan, PR3,
-item 1; `docs/ui-listing-seo-interactions.md`).
+item 1; `docs/features/ai-seo-20260922/interactions.md`).
 
 Plain frozen dataclasses, not pydantic models. A `SeoProposal` is never
 loaded from a config file -- it is built by `ai/validation.py` from a
@@ -74,7 +74,7 @@ class GarmentContext:
 class SeoRequest:
     """The submitted generation inputs for one proposal request.
 
-    This is the request-scoped snapshot `docs/ai-seo-implementation-plan.md`'s
+    This is the request-scoped snapshot `docs/features/ai-seo-20260922/plan.md`'s
     "Proposal and stale-state rules" describes: listing brief, garment
     context, and the other editable listing values relevant to SEO copy.
     `design_image` is a workspace-resolved path, handed to a provider adapter
@@ -98,7 +98,7 @@ class SeoRequest:
     garment: GarmentContext
     design_image: Path
     market_block: str = ""
-    """`market.market_block()`'s delimited market data (market-seo.md, *What
+    """`market.market_block()`'s delimited market data (features/market-seo-20260924/spec.md, *What
     the proposal sees*), appended after the listing context. Empty when a
     search found nothing comparable -- the one case a proposal goes ahead
     without market data -- and then no block is sent at all."""

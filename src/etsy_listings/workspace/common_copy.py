@@ -26,7 +26,7 @@ names."""
 class CommonCopyError(ValueError):
     """A `description.ref` that does not resolve to usable common copy --
     missing, malformed front matter, or not targeted to `description`
-    (`docs/ui-listing-seo-interactions.md` section 6). The message always
+    (`docs/features/ai-seo-20260922/interactions.md` section 6). The message always
     names the ref, since a stage or the editor's banner surfaces it verbatim."""
 
 

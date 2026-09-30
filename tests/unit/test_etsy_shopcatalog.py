@@ -3,7 +3,7 @@ name (decision 2, PRD 53/54/59): a shop section, a shipping profile, a return
 policy addressed by its terms, and the production partner ladder (decision 3).
 
 Pure resolution logic over lists the fakes hand back, so this is the unit
-layer -- no workspace, no transport -- per phase-3-etsy.md's "Testing" table:
+layer -- no workspace, no transport -- per features/etsy-listing-20260910/spec.md's "Testing" table:
 "name normalisation and resolution failure messages".
 """
 

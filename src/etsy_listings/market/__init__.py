@@ -1,5 +1,5 @@
 """Market research: three buyer queries in, twenty scored comparable
-listings, a ranked phrase list and a market-data block out (market-seo.md,
+listings, a ranked phrase list and a market-data block out (features/market-seo-20260924/spec.md,
 *Market search*, *Scoring* and *What the proposal sees*).
 
 The names below are all in memory, and nothing here knows about HTTP or the

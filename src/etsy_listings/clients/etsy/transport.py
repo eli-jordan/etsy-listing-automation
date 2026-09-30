@@ -15,7 +15,7 @@ The retry policy, the backoff and the "return the last response rather than
 raising" rule are all shared with Printify (A21) -- one `retry.py`, because a
 429 means the same thing to both. Etsy adds one thing Printify does not: every
 response says how many calls are left this second, which :class:`RateGate`
-reads so the next call waits instead of spending a 429 (market-seo.md,
+reads so the next call waits instead of spending a 429 (features/market-seo-20260924/spec.md,
 *Quota*).
 """
 
@@ -106,7 +106,7 @@ class RateGate:
     Etsy's limits are per app, set in the developer portal, and change
     without the tool knowing -- so nothing is stored or configured here. Each
     response's ``x-remaining-this-second`` is the whole input: at 0, no call
-    is sent until a second has passed since that response (market-seo.md,
+    is sent until a second has passed since that response (features/market-seo-20260924/spec.md,
     *Quota*). A second from the response rather than the next wall-clock
     second, because Etsy does not say whether its window is fixed or sliding,
     and a full second is right under either.

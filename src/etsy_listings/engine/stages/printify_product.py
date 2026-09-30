@@ -1,6 +1,6 @@
 """The ``printify_product`` stage: the first one that writes to a remote API.
 
-Built against [docs/api-findings.md](../../../../docs/api-findings.md) rather
+Built against [docs/research/api-findings.md](../../../../docs/research/api-findings.md) rather
 than the API reference, because several of the answers are not the obvious
 ones and each has produced a plausible-looking wrong implementation:
 
@@ -334,7 +334,7 @@ class ResolvedVariantPricing:
 def resolve_variant_pricing(ctx: RunContext, listing: str) -> ResolvedVariantPricing:
     """Resolve a listing's garment and priced variant matrix from the catalog.
 
-    Shared with the `publish` stage (phase-3-etsy.md decision 1), which
+    Shared with the `publish` stage (features/etsy-listing-20260910/spec.md decision 1), which
     rebuilds its own desired variant matrix through this same function rather
     than reading this stage's lockfile subtree -- the cost is one extra
     resolution pass per listing per run (the catalog is disk-cached; the rest

@@ -129,7 +129,7 @@ def create_app(
     # Held around every read-merge-write of a listing (`listings.py`, and
     # PR 5's brief write) -- `ui/workspace_locks.py` says why.
     app.state.workspace_locks = locks
-    # AI runs (market-seo.md, *AI runs*): their own registry and a thread per
+    # AI runs (features/market-seo-20260924/spec.md, *AI runs*): their own registry and a thread per
     # run, never `run_executor`. `market_client_factory` is the test seam for
     # Etsy market search, as `seo_provider_factory` is for the providers.
     app.state.ai_run_registry = ai_registry

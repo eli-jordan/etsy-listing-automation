@@ -7,7 +7,7 @@ exist yet -- this drives the real pipeline: ``plan_listings``/
 :class:`~etsy_listings.clients.printify.HttpPrintifyClient` and
 :class:`~etsy_listings.clients.etsy.HttpEtsyListingClient`. The recon this
 phase was built from lives in
-[docs/printify-etsy-integration.md](../../docs/printify-etsy-integration.md);
+[docs/research/printify-etsy-integration.md](../../docs/research/printify-etsy-integration.md);
 this is what re-takes it once the code exists to take it with.
 
 **Needs two things the offline suite never does**: a Printify token (shared

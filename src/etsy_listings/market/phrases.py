@@ -1,4 +1,4 @@
-"""The ranked phrase list (market-seo.md, *What the proposal sees*, part 1).
+"""The ranked phrase list (features/market-seo-20260924/spec.md, *What the proposal sees*, part 1).
 
 For each tag the scored listings use: how many use it, and the sum of their
 scores normalised so the best phrase is 1. Code does the counting and
@@ -13,7 +13,7 @@ from collections.abc import Sequence
 from etsy_listings.market.models import PhraseScore, ScoredListing
 
 PHRASE_LIMIT = 40
-"""How many phrases are listed (market-seo.md)."""
+"""How many phrases are listed (features/market-seo-20260924/spec.md)."""
 
 
 def normalise(tag: str) -> str:

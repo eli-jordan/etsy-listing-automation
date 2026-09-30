@@ -111,7 +111,7 @@ class FakeEtsyListingClient:
     as a full-replacement set that detaches whatever it omits, and
     `overwrite: true` replacing an image in place -- a new id at the same
     rank, everything else untouched -- rather than colliding with what was
-    there (phase-3-etsy.md decision 5).
+    there (features/etsy-listing-20260910/spec.md decision 5).
 
     And the video gallery of decision 9, which behaviour tests can only see
     through :meth:`gallery`: the video attached longest is featured at

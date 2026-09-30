@@ -1,5 +1,5 @@
 """``GET /api/listings/{name}/ai-seo/readiness``: whether the **AI Mode**
-button may start a run (market-seo.md, *AI runs*; implementation plan, PR 6).
+button may start a run (features/market-seo-20260924/spec.md, *AI runs*; implementation plan, PR 6).
 
 The button drafts a brief when the saved one is empty, so readiness answers
 with the rules ``POST /api/ai/runs`` applies to ``draft_brief=true``: a

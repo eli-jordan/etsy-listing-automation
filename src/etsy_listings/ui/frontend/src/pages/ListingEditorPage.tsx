@@ -282,7 +282,7 @@ function saveAsUrl(listing: string): string {
  *   Absent when there are none (an unsaved draft has nothing to act on), and
  *   the identity row then carries the head's rule itself.
  *
- * `Deploy changes →` (docs/deploy-changes.md decision 8) sits here rather
+ * `Deploy changes →` (docs/features/deploy-20260917/spec.md decision 8) sits here rather
  * than in `ListingEditorPageContent`, because this is the one part of the
  * editor that reads the same on every tab -- an action anchored to a spot
  * that stayed empty in the mockup, not one that jumps around with the tab

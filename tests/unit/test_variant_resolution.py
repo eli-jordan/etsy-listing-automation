@@ -138,7 +138,7 @@ def test_a_slug_collision_is_raised_rather_than_silently_picking_one() -> None:
 
 
 def test_variants_outside_the_requested_matrix_are_left_out() -> None:
-    """The enabled subset is the product's real content (docs/api-findings.md).
+    """The enabled subset is the product's real content (docs/research/api-findings.md).
     Everything else on the blueprint is Printify's business, not ours."""
     resolution = resolve_variants(FULL, ["black"], ["S"], NO_EXCEPTIONS)
 

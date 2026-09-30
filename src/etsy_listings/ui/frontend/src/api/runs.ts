@@ -2,7 +2,7 @@ import { api } from "./client";
 import type { CreateRunRequest, RunDetail, RunSummary } from "../types";
 
 /**
- * The runs resource's REST surface (A33; docs/deploy-changes.md decision 7),
+ * The runs resource's REST surface (A33; docs/features/deploy-20260917/spec.md decision 7),
  * mirrored from `api/listings.ts`'s own shape: typed wrapper functions over
  * `openapi-fetch`, the only thing pages/components import. The sixth
  * endpoint, `GET /api/runs/{id}/events`, has no wrapper here -- it is

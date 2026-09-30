@@ -2,7 +2,7 @@
 Etsy shop, and polls until the resulting listing id exists.
 
 Three things measured in
-[docs/printify-etsy-integration.md](../../../../docs/printify-etsy-integration.md)
+[docs/research/printify-etsy-integration.md](../../../../docs/research/printify-etsy-integration.md)
 shape this stage:
 
 - **The lock is real and asynchronous.** ``POST publish.json`` answers

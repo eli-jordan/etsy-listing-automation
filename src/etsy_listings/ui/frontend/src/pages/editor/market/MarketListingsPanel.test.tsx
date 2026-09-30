@@ -4,7 +4,7 @@ import { expect, it } from "vitest";
 import { MARKET_QUERIES, marketSnapshot } from "../../../test/market";
 import { MarketListingsPanel } from "./MarketListingsPanel";
 
-/** The right-hand column of Listing Details (docs/ui-market-seo-interactions.md,
+/** The right-hand column of Listing Details (docs/features/market-seo-20260924/interactions.md,
  * section 2): what the last market search found, and what AI Mode was shown. */
 
 /** The element, or a failed test saying which one was missing. */

@@ -53,7 +53,7 @@ EPILOG = f"""
 
 Root paths accept cygwin, /cygdrive and native Windows forms.
 Secrets live in the [bold]workspace[/bold] .env (gitignored), never in this repo;
-the process environment overrides that file. See docs/setup.md section 4.
+the process environment overrides that file. See docs/guides/setup.md.
 """
 
 ROOT_HELP = (

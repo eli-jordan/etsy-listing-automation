@@ -5,7 +5,7 @@ values, no file paths (those are workspace-relative strings elsewhere, hashed
 separately as part of the render stage's desired state).
 
 A template is exactly one of three kinds -- never a mix (multi-placement
-redesign, see docs/multi-placement-rendering.md):
+redesign, see docs/features/multi-placement-rendering-20260903/spec.md):
 
 - ``colour-matrix`` -- one photo per colour, the design at the same
   ``bounding_box`` in every one. No per-colour override: a colour whose photo

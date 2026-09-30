@@ -1,116 +1,57 @@
 # Architecture
 
-Companion to [prd.md](prd.md) (*what*) and [implementation-plan.md](implementation-plan.md)
-(*how*). This document describes the system as it exists today.
-It shows mechanism, not a restatement of the directory listing, and it is kept
-in step with the code rather than with the plan.
+This is the living description of module boundaries, data flow and invariants.
+Feature requirements live in the [documentation index](README.md#features);
+decision rationale is being extracted into [ADRs](adr/README.md). The
+[original PRD and plan](README.md#history) are retained as historical snapshots.
 
-## The eight modules
+## Module boundaries
 
 ```mermaid
 graph TD
-    subgraph entry["Entry points — what a human drives"]
-        CLI["<b>cli</b><br/>Typer commands<br/>+ plan rendering"]
-        UI["<b>ui</b><br/>FastAPI + React<br/>calibrator"]
-    end
-
-    subgraph orchestration["Orchestration — what decides and executes"]
-        ENGINE["<b>engine</b><br/>Stage pipeline, three-way diff,<br/>lockfile, plan / apply"]
-        NEWCMD["<b>newcmd</b><br/>the <i>new</i> picker:<br/>catalog → garment profile + listing"]
-    end
-
-    subgraph tree["The data tree"]
-        WORKSPACE["<b>workspace</b><br/>root discovery, layout,<br/>path safety, config loading"]
-    end
-
-    subgraph capabilities["Capabilities — no knowledge of the tree"]
-        RENDER["<b>render</b><br/>pure passes,<br/>frozen RenderConfig"]
-        CATALOG["<b>catalog</b><br/>Printify reference data<br/>protocol + cache + fake"]
-        CONFIG["<b>config</b><br/>pydantic models, Money,<br/>slugification"]
-    end
-
-    CLI --> ENGINE
-    CLI --> NEWCMD
-    CLI --> UI
-    CLI --> WORKSPACE
-    UI --> RENDER
-    UI --> WORKSPACE
-    ENGINE --> RENDER
-    ENGINE --> CATALOG
-    ENGINE --> WORKSPACE
-    NEWCMD --> CATALOG
-    NEWCMD --> WORKSPACE
-    WORKSPACE --> CONFIG
+    CLI[CLI commands and wizards] --> ENGINE[Engine: plan, apply and lifecycle]
+    UI[UI: FastAPI and React] --> ENGINE
+    UI --> AI[AI runs and proposals]
+    AI --> MARKET[Market research]
+    UI --> BATCHES[Batch staging and creation]
+    ENGINE --> WORKSPACE[Workspace: paths and file access]
+    ENGINE --> CLIENTS[Clients: Printify and Etsy]
+    ENGINE --> RENDER[Pure render passes]
+    MARKET --> CLIENTS
+    BATCHES --> WORKSPACE
+    WORKSPACE --> CONFIG[Config models and validation]
     WORKSPACE --> RENDER
-    ENGINE --> CONFIG
-    NEWCMD --> CONFIG
-    CLI --> CONFIG
 ```
 
-Dependencies point strictly downward; there are no cycles. `render`, `catalog`
-and `config` know nothing about workspaces, listings or each other, which is
-what makes them testable in isolation — and what lets `render` be pure.
+This diagram shows the main flows, rather than every import. Entry points
+adapt the engine's domain events and reports; clients own HTTP; the workspace
+owns the data tree. Rendering takes arrays and frozen configuration, with file
+I/O at its boundary. Each package's `__init__.py` documents its public interface
+and what it deliberately withholds.
 
-`workspace` depends on both `config` and `render` for the same reason: it knows
-where every file lives, and asks whichever module owns a file's *shape* to
-parse it. `shop.yaml`, `listing.yaml` and the pricing plans are `config`'s;
-`template.yaml` is `render`'s, because it is render geometry and render
-settings from top to bottom. The arrow only ever points that way — `render`
-still has no idea a workspace exists.
-
-| Module | Owns | Deliberately does *not* |
+| Module | Owns | Boundary |
 |---|---|---|
-| `cli` | Typer commands; turning a `Plan` / `RunReport` into terminal text | Compare state, run a batch, or know the directory layout |
-| `ui` | The calibrator's HTTP API and its React front end | Contain a second execution path — it calls the same renderer |
-| `engine` | Stage protocol, the three-way diff, the lockfile and its hashing, and the shape of a run over N listings | Format output, or talk HTTP directly |
-| `newcmd` | Turning a catalog choice into a garment profile + listing stub | Prompt (that is a thin questionary shell over pure logic) |
-| `workspace` | Where every file lives, path safety, loading config | Know what a render or a Printify product is |
-| `render` | warp → displace → shade → export, and derived maps | Any I/O, globals or clock (A7) |
-| `catalog` | Printify blueprint/provider/variant reads, TTL cache, name→id | Anything shop-scoped or authenticated |
-| `config` | `shop.yaml` / garment profile / listing models, `Money`, slugs | Know where those files are on disk |
+| `cli` | Typer commands and terminal presentation | Uses engine reports rather than computing a second diff |
+| `newcmd`, `setupcmd`, `authcmd` | Picker and workspace/credential workflows | Prompt sequencing is separate from their testable logic |
+| `ui` | HTTP contracts, React presentation, deployment and AI run resources | Adapts engine events; the deploy and AI workers remain separate |
+| `engine` | Stage protocol, comparison, lockfile, lifecycle and runs | Stages return values; the engine decides execution and records progress |
+| `workspace` | Root discovery, layout, safe paths and file loading | Every caller accesses user data through this boundary |
+| `render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
+| `clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs | Shared transport per vendor; separate caller authority through protocols |
+| `config` | Validated documents, money, slugs and local listing refusals | No knowledge of where configuration lives on disk |
+| `ai` | Provider calls, prompts, validation and cached proposals | Suggestions become deployed content only when accepted into saved fields |
+| `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
+| `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to the UI server |
 
-`etsy_listings/connections.py` sits across from the table rather than in it:
-it is the one place that knows how to *build* the clients the table's modules
-hold — the transports, the Etsy token store, and the `RunContext` a run is
-given. Four callers each assembled a signed-in Etsy client themselves (`cli`,
-`setup`, `auth`, and the e2e fixtures), which made "which credential is
-resolved when" four answers instead of one. It resolves none of them eagerly:
-a workspace that has only ever rendered mockups still plans.
+`connections.py` builds clients and `RunContext` without resolving credentials
+until they are used. `credentials.py` owns credential capture, verification and
+storage. `prompts.py` chooses the terminal backend and handles cancellation;
+`terminal.py` is a standard-library leaf for encoding and presentation.
 
-Plus one leaf that is not a module: `etsy_listings/terminal.py` answers "can
-this stream print that character?" for anything that decorates output. Both
-`cli` (the `apply` swatches) and `newcmd` (the picker's local-garment-profile marker)
-need it, and while it lived in `cli` the second of those was an import
-pointing *up* through the layering — the one place the "no cycles" claim above
-was not actually true. It depends on nothing but the standard library, so
-anything may depend on it.
-
-Each package's `__init__.py` states its own interface: what it exports, and
-what it deliberately withholds. Those docstrings are the short version of this
-table, kept next to the code.
-
-Three boundaries carry most of the weight:
-
-- **`workspace` is the only module that knows the tree's shape.** Everything
-  else asks for "this listing's lockfile" rather than joining
-  `listings/<name>/state.lock.json`. That is also what makes the UI safe:
-  template names arriving from URLs are validated by the same rule that guards
-  every other path (A8), not by a second check in the web layer. Reading a
-  config file is part of that: `load_listing`, `load_garment_profile` and
-  `load_template_config` are how the tree's files are opened, so no caller
-  writes its own `yaml.safe_load(path.read_text(...))` against a path it
-  assembled.
-- **Only `engine` computes a diff.** `cli` and (later) `ui` consume `Plan` /
-  `StagePlan` / `Change` objects and render them. Neither compares state, which
-  is what guarantees the PRD's "one set of rules regardless of route". The same
-  rule applies one level up, to the shape of a *run*: `plan_listings` and
-  `apply_listings` own each lockfile's lifecycle and PRD 16's
-  continue-on-error, and an entry point only formats the `RunReport` they
-  return. Both of those lived in `cli/app.py` until they were lifted, which is
-  why the rule is worth stating twice.
-- **`render` is pure.** Arrays and frozen config in, an image out. The stage
-  around it does the I/O. This is what makes both the input hash and the
-  goldens meaningful.
+Three boundaries carry most of the weight. Only `workspace` knows the data
+tree, including how to enumerate it. Only `engine` computes deployment changes
+and folds a run's lockfile. Render passes are pure, so input hashes and golden
+images describe deterministic work shared by calibration and deployment.
 
 ## What `plan` and `apply` actually do
 
@@ -158,9 +99,18 @@ sequenceDiagram
     Engine->>Lock: write merged lockfile
 ```
 
-Today `STAGES` is `[Render()]`. Adding `Generate`, `PrintifyProduct`,
-`Publish`, `EtsyCopy` and `EtsyMedia` in later phases changes that list, not
-this flow.
+The normal pipeline is `RenderStage`, `PrintifyProductStage`, `PublishStage`,
+`EtsyListingStage`, `EtsyMediaStage`, then `EtsyVideosStage`, as exported by
+`engine/stages/__init__.py`. Lifecycle handling selects a retract or
+retire/resume path when needed. AI proposals are an editor workflow rather
+than an engine generation stage.
+
+After each successful stage, execute records the folded lockfile. Later stages
+receive newly minted remote ids while still comparing against the previous
+run's applied documents. A failure retains progress with an incomplete marker
+so the next run can resume. Reviewed UI applies replan and verify the plan
+fingerprint before executing; run resources stream progress and allow a
+browser to reattach.
 
 ## The three-way comparison
 
@@ -331,8 +281,9 @@ later. Each traces to a decision.
 - **`will_run` is derived from a reason, never computed beside one.** Two
   expressions of one rule are how a stage comes to run while reporting nothing
   to do.
-- **`apply` is strictly sequential; only `plan`'s read-only live fetches fan out**
-  over a thread pool (`A3`). Never parallelise writes.
+- **`apply` is strictly sequential.** The current planner also walks stages
+  in pipeline order. The original read-only fan-out design (`A3`) is not
+  implemented; it is not permission to parallelise writes.
 - **`plan` checks two things, not one: would the output differ, and is the
   output still there.** The render cache is gitignored and fully derivable, so
   it is a directory users delete. A stage's `read_live()` is called even when

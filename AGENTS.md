@@ -20,7 +20,7 @@ src/etsy_listings/
   newcmd/ setupcmd/ authcmd/   the `new`, `setup` and `auth` wizards
   connections.py credentials.py prompts.py terminal.py   client wiring, credential steps, prompt backend, encoding guard
 tests/          unit, golden, behaviour, browser, contract, e2e; shared doubles in tests/support/
-docs/           prd.md, implementation-plan.md, architecture.md, per-feature specs
+docs/           history/prd.md, history/implementation-plan.md, architecture.md, per-feature specs
 scripts/        check.sh, sloc.py, generate_test_assets.py
 ```
 
@@ -74,7 +74,7 @@ status [<listing>]     run history                                    [not built
 
 <important if="you are making or changing a numbered decision, or citing decisions in commits or comments">
 
-[docs/prd.md](docs/prd.md) says *what* the tool does (74 decisions); [docs/implementation-plan.md](docs/implementation-plan.md) says *how* (`A1`–`A46`). Per-feature specs ([multi-placement-rendering](docs/multi-placement-rendering.md), [phase-3-etsy](docs/phase-3-etsy.md), [listing-lifecycle](docs/listing-lifecycle.md), [deploy-changes](docs/deploy-changes.md), [listing-batch-creation-spec](docs/listing-batch-creation-spec.md)) carry detail and are not a third authority. Where any disagrees with the PRD, the PRD wins and the other is wrong — fix it. The batch-creation spec is overridden by [ui-batch-creation-interactions](docs/ui-batch-creation-interactions.md).
+[docs/history/prd.md](docs/history/prd.md) says *what* the tool does (74 decisions); [docs/history/implementation-plan.md](docs/history/implementation-plan.md) says *how* (`A1`–`A46`). Per-feature specs ([multi-placement-rendering](docs/features/multi-placement-rendering-20260903/spec.md), [phase-3-etsy](docs/features/etsy-listing-20260910/spec.md), [listing-lifecycle](docs/features/listing-lifecycle-20260916/spec.md), [deploy-changes](docs/features/deploy-20260917/spec.md), [listing-batch-creation-spec](docs/features/batch-creation-20260927/spec.md)) carry detail and are not a third authority. Where any disagrees with the PRD, the PRD wins and the other is wrong — fix it. The batch-creation spec is overridden by [ui-batch-creation-interactions](docs/features/batch-creation-20260927/interactions.md).
 
 Do not quietly revisit a numbered decision while implementing something adjacent. If one is unworkable, say so and change the document first, in its own commit. Cite decisions by number in commit messages and in code comments where a choice looks arbitrary without context.
 </important>
@@ -95,7 +95,8 @@ The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\h
 <important if="you are changing dependencies or versions in pyproject.toml">
 
 - OpenCV and Pillow are **pinned to exact versions**: renders are hashed and compared to goldens, and a bump that shifts output bytes re-uploads every listing's images. Do not loosen the pins.
-- `click` is pinned `<8.2` alongside typer `0.12.x`; bump both together.
+- Check Typer and Click compatibility together when changing either. Current
+  constraints and resolved versions live in `pyproject.toml` and `uv.lock`.
 - Node (any current LTS) is only needed for frontend work, not for installing the package.
 </important>
 
@@ -143,7 +144,7 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 Use `scripts/sloc.py`, not physical line count: it strips blanks, comments and docstrings, because this codebase is deliberately heavy on rationale. Extracting a shared abstraction is usually LOC-neutral (the props type or protocol costs what the duplication did); judge by whether there is now one place to change the thing.
 </important>
 
-<important if="you are editing docs/prd.md, docs/implementation-plan.md or other docs">
+<important if="you are editing docs/history/prd.md, docs/history/implementation-plan.md or other docs">
 
 Docs are prose with tables, not bullet soup. State a decision, then the reason it beat the alternative — rationale is what stops a decision being silently reversed. No filler, no hedging, no restating the obvious.
 </important>

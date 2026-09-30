@@ -1,5 +1,5 @@
 """What the packaged default prompts tell a model about market data
-(market-seo.md, *Query extraction* and *Authority*).
+(features/market-seo-20260924/spec.md, *Query extraction* and *Authority*).
 
 A prompt is prose, so these tests pin the rules the spec makes, not the
 wording around them: each assertion names a rule a later edit must not drop.
@@ -35,7 +35,7 @@ def test_the_queries_prompt_asks_for_exactly_three_buyer_searches() -> None:
 
 
 def test_each_query_ends_in_the_buyers_word_for_the_item_type() -> None:
-    """The job a taxonomy filter would do (market-seo.md, *Search*)."""
+    """The job a taxonomy filter would do (features/market-seo-20260924/spec.md, *Search*)."""
     text = " ".join(default_market_queries_prompt_text().replace("**", "").split())
 
     assert "end in the buyer's word for the item type" in text.lower()

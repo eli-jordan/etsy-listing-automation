@@ -1,4 +1,4 @@
-"""Query extraction (market-seo.md, *Query extraction*; PRD 71): the request
+"""Query extraction (features/market-seo-20260924/spec.md, *Query extraction*; PRD 71): the request
 shape, the packaged default `prompts/market-queries.md`, the response schema,
 and the validation three buyer search queries pass before market search
 spends Etsy calls on them.

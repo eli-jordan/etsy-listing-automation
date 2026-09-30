@@ -1,4 +1,4 @@
-"""Browser test for the deploy view (docs/deploy-changes.md, PR (5)'s "done
+"""Browser test for the deploy view (docs/features/deploy-20260917/spec.md, PR (5)'s "done
 when"): the one thing no other layer covers -- that the React app, the
 FastAPI runs endpoints and the real engine agree about a whole plan -> apply
 loop, streamed over SSE.

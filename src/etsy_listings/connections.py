@@ -202,7 +202,7 @@ def etsy_shop_client(root: Path) -> EtsyShopClient | None:
 
 def etsy_market_client(root: Path, *, http: httpx.Client | None = None) -> EtsyMarketClient | None:
     """The read-only market surface research searches through
-    (market-seo.md), or ``None`` when the workspace has no key pair.
+    (features/market-seo-20260924/spec.md), or ``None`` when the workspace has no key pair.
 
     **The key pair and nothing else** -- never a bearer, even when a sign-in
     exists. All three market calls are unscoped, and Etsy rotates the refresh

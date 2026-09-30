@@ -6,11 +6,11 @@ draft — idempotently, so re-running against unchanged inputs changes nothing.
 
 ## Documentation
 
-- [Getting started](docs/getting-started.md) — a hands-on walkthrough.
-- [Infrastructure setup](docs/setup.md) — the Printify and Etsy accounts and
+- [Getting started](docs/guides/getting-started.md) — a hands-on walkthrough.
+- [Infrastructure setup](docs/guides/setup.md) — the Printify and Etsy accounts and
   credentials the tool needs outside this repo.
-- [Product Requirements Document](docs/prd.md) — *what* the tool does.
-- [Implementation Plan](docs/implementation-plan.md) — *how* it is built.
+- [Documentation index](docs/README.md) — features, research, reference and history.
+- [Architecture decisions](docs/adr/README.md) — the draft migration of decision rationale.
 - [Architecture](docs/architecture.md) — module boundaries, data flow and the
   invariants the code relies on.
 
@@ -49,12 +49,15 @@ explicitly.
 ## Running the CLI
 
 ```bash
-uv run etsy-listings setup                  # initialise a workspace
+uv run etsy-listings auth --root ~/etsy-listings  # capture credentials before setup
+uv run etsy-listings setup --root ~/etsy-listings # initialise a workspace
 uv run etsy-listings new                    # interactive design/garment/provider picker
 uv run etsy-listings new <design-name>      # ...or name the design up front
 uv run etsy-listings plan <listing-name>    # diff against live state
 uv run etsy-listings plan --all
 uv run etsy-listings apply <listing-name>   # execute the plan; writes state.lock.json
+uv run etsy-listings apply --all
+uv run etsy-listings unlock <listing-name>  # clear a stuck Printify publish
 uv run etsy-listings ui --root <workspace>  # serves the UI at :8000
 ```
 

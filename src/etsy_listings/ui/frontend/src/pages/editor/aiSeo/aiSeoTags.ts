@@ -1,4 +1,4 @@
-/** The settled tag rules (`docs/ui-listing-seo-interactions.md` section 4),
+/** The settled tag rules (`docs/features/ai-seo-20260922/interactions.md` section 4),
  * factored out so the hook that applies a toggle and the drawer that renders
  * a suggestion's disabled state agree on exactly one definition of "full":
  * a tag already selected can always be removed; a new one can be added only

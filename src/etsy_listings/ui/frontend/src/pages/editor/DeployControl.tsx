@@ -4,7 +4,7 @@ import { currentRun } from "../../api/runs";
 import type { RunSummary } from "../../types";
 
 /**
- * The editor page-head's own control (docs/deploy-changes.md decision 8):
+ * The editor page-head's own control (docs/features/deploy-20260917/spec.md decision 8):
  * **Deploy changes →** when there is nothing to reattach to, or a link back
  * into whatever run this listing already has.
  *

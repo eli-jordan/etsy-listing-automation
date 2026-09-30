@@ -44,7 +44,7 @@ const router = createBrowserRouter(
       <Route path="/listings/new" element={<ListingEditorPage />} />
       <Route path="/listings/:name" element={<ListingEditorPage />} />
       {/* Its own route, not a mode of `ListingEditorPage` kept mounted
-          behind it (docs/deploy-changes.md decision 9) -- Back returns to
+          behind it (docs/features/deploy-20260917/spec.md decision 9) -- Back returns to
           `/listings/:name`, which re-fetches `ListingDetail` fresh rather
           than reusing state a deploy run may have changed server-side. */}
       <Route path="/listings/:name/deploy" element={<DeployPage />} />

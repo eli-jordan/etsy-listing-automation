@@ -150,7 +150,7 @@ class CodexProvider:
         return None
 
     def _check_read_only_capability(self) -> ProviderReadiness | None:
-        # Known limitation (docs/ai-seo-implementation-plan.md, PR4): this
+        # Known limitation (docs/features/ai-seo-20260922/plan.md, PR4): this
         # only confirms `--help` advertises the required flags, not that a
         # live `exec` invocation actually honours them. Same "no speculative
         # quota check" tradeoff as the auth check above -- readiness stays a

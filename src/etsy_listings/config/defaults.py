@@ -80,7 +80,7 @@ class EtsyReturnPolicyDefaults(BaseModel):
 
 class EtsyListingDefaults(BaseModel):
     """Every field a listing inherits, and nothing that identifies the shop
-    (phase-3-etsy.md, "Config, after this phase"). Overridable per listing in
+    (features/etsy-listing-20260910/spec.md, "Config, after this phase"). Overridable per listing in
     `listing.yaml`'s own `etsy:` block.
 
     `who_made` defaults to `someone_else` (PRD 52): the shirt genuinely was

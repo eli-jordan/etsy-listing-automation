@@ -1,6 +1,6 @@
 """The ``etsy_listing`` stage: one ``PATCH updateListing`` carrying copy,
 tags, materials, section, shipping profile, return policy, the `who_made`
-trio, production partners and renewal (phase-3-etsy.md, decision 1).
+trio, production partners and renewal (features/etsy-listing-20260910/spec.md, decision 1).
 
 Everything a name resolves to comes from :class:`EtsyShopCatalog` (A25),
 built fresh each call to ``desired`` -- cheap, since the catalog itself

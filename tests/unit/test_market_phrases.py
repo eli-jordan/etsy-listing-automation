@@ -1,4 +1,4 @@
-"""The ranked phrase list (market-seo.md, *What the proposal sees*, part 1).
+"""The ranked phrase list (features/market-seo-20260924/spec.md, *What the proposal sees*, part 1).
 
 Each tag the scored listings use, with how many listings use it and a phrase
 score: the sum of those listings' scores, normalised so the best phrase is 1.

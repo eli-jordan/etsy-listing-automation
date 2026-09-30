@@ -22,7 +22,7 @@ function shown(snapshot: MarketSnapshot): MarketPanelState {
 
 /**
  * Which state the top listings panel is in, or `null` for no panel at all
- * (docs/ui-market-seo-interactions.md, *Panel states*):
+ * (docs/features/market-seo-20260924/interactions.md, *Panel states*):
  *
  * - **loading** while the run's market node is active -- even over a saved
  *   snapshot, since a re-run drops to it straight away -- with the searches

@@ -810,7 +810,7 @@ export interface paths {
      *     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
      *
      *     Either way the market snapshot and the cached AI proposal go now
-     *     (market-seo.md, *Cache*; A42): a listing pending deletion is one the
+     *     (features/market-seo-20260924/spec.md, *Cache*; A42): a listing pending deletion is one the
      *     seller is done researching, and otherwise only the wipe after the remote
      *     deletion would remove them. An AI run still going is asked to stop
      *     first, so it does not write a proposal for a listing being deleted, and
@@ -884,7 +884,7 @@ export interface paths {
     /**
      * Get Market Snapshot
      * @description The listing's latest market research, as the top listings panel shows
-     *     it after a reload (market-seo.md, *UI*). Written only by an AI run whose
+     *     it after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose
      *     search succeeded, so a failed run leaves the previous one here. 404 until
      *     the first search -- the panel is not rendered then -- and for a snapshot
      *     that no longer reads as one, which the next run replaces.
@@ -2919,7 +2919,7 @@ export interface components {
      * MarketSnapshot
      * @description One research, as the panel reads it back: the result's fields, when
      *     the search ran, and the exact block the proposal was given. Holds each
-     *     listing's lead, never its full description (market-seo.md, *What the
+     *     listing's lead, never its full description (features/market-seo-20260924/spec.md, *What the
      *     proposal sees*).
      */
     MarketSnapshot: {
@@ -3522,9 +3522,9 @@ export interface components {
     /**
      * ScoredListing
      * @description One of the (at most) twenty listings scored, with everything the top
-     *     listings panel shows (ui-market-seo-interactions.md, *Where the data
+     *     listings panel shows (features/market-seo-20260924/interactions.md, *Where the data
      *     comes from*) -- and deliberately not the full description, which neither
-     *     the panel nor the model is given (market-seo.md, *What the proposal
+     *     the panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal
      *     sees*).
      */
     ScoredListing: {
@@ -6116,7 +6116,7 @@ export interface operations {
           "application/json": components["schemas"]["StagingDetail"];
         };
       };
-      /** @description Unprocessable Content */
+      /** @description Unprocessable Entity */
       422: {
         headers: {
           [name: string]: unknown;

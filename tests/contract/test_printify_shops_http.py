@@ -7,7 +7,7 @@ shop-scoped and writes. They share a transport, not a surface. The transcripts
 below are the ones the ``-m e2e`` layer re-takes against the live API.
 
 Every payload here is transcribed from a real response recorded on
-2026-09-08 -- see docs/api-findings.md. A contract fixture that is not a
+2026-09-08 -- see docs/research/api-findings.md. A contract fixture that is not a
 transcript is worse than no contract test.
 """
 
@@ -29,7 +29,7 @@ SHOPS_PAYLOAD = [
     {"id": 28819281, "title": "My new store", "sales_channel": "disconnected"},
 ]
 """What `GET /v1/shops.json` returns, verbatim: three fields and nothing
-else -- no currency, no settings (docs/api-findings.md)."""
+else -- no currency, no settings (docs/research/api-findings.md)."""
 
 ERROR_PAYLOAD = {
     "status": "error",

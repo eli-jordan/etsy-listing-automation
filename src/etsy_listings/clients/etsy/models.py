@@ -202,7 +202,7 @@ class Inventory(BaseModel):
 
 class Listing(BaseModel):
     """`getListing`'s response, narrowed to what the stages compare against
-    `applied` (the Etsy write surface table in phase-3-etsy.md).
+    `applied` (the Etsy write surface table in features/etsy-listing-20260910/spec.md).
 
     Read only through `GET /v3/application/listings/{id}` -- the *unscoped*
     path. The shop-scoped one exists for `PATCH`/`DELETE` and 404s on `GET`,
@@ -266,7 +266,7 @@ second pass would turn a seller's literal ``&amp;`` into ``&``."""
 
 class MarketCandidate(BaseModel):
     """Another seller's active listing, as `findAllListingsActive` returns
-    it: what market research filters, scores and quotes (market-seo.md).
+    it: what market research filters, scores and quotes (features/market-seo-20260924/spec.md).
 
     Every field but the two ids is optional, because one sparse row must not
     fail a search of twenty-five. The defaults are the values scoring would

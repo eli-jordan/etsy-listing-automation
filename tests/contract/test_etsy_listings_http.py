@@ -4,7 +4,7 @@ payload shape, both `image_ids` encodings, and the two asymmetric reads
 the images endpoint 404s for every id, valid or invented).
 
 Every payload here is transcribed from a real response recorded on
-2026-09-10 (docs/printify-etsy-integration.md, "Phase 3 recon"), including
+2026-09-10 (docs/research/printify-etsy-integration.md, "Phase 3 recon"), including
 the parts that make the naive implementation wrong: the comma-separated
 `image_ids` encoding versus the repeated-key one that destroys images.
 """
@@ -59,7 +59,7 @@ def _client(handler) -> HttpEtsyListingClient:  # noqa: ANN001 - a test handler
 
 def test_a_listing_is_read_from_the_unscoped_path() -> None:
     """The shop-scoped path 404s on GET -- only the unscoped single-listing
-    read works (docs/printify-etsy-integration.md)."""
+    read works (docs/research/printify-etsy-integration.md)."""
     seen: dict = {}
 
     def handler(request: httpx.Request) -> httpx.Response:
@@ -554,7 +554,7 @@ def test_return_policies_are_also_reachable_over_the_signed_in_connection() -> N
 # ------------------------------------------------------------------ videos
 #
 # Every payload and error text below is transcribed from the video recon of
-# 2026-09-25 (phase-3-etsy.md decision 9), against `duke-java-developer`'s
+# 2026-09-25 (features/etsy-listing-20260910/spec.md decision 9), against `duke-java-developer`'s
 # draft and the throwaway "ZZ video probe" draft.
 
 VIDEO_PAYLOAD = {

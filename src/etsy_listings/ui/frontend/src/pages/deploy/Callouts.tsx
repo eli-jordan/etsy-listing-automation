@@ -9,7 +9,7 @@ import { stageBlocked, stageWillRun, type DriftDTO, type PlanDTO } from "../../t
  * mock's own demo script always hid the whole comparison behind a single
  * blocked/not-blocked switch, but the doc is explicit that a plan can be
  * part blocked and part runnable, and *that* is what decides Apply, not
- * "is anything blocked at all" (docs/deploy-changes.md, the note under the
+ * "is anything blocked at all" (docs/features/deploy-20260917/spec.md, the note under the
  * control-states table). So the negative headline -- "This deploy can't go
  * ahead yet", no impact tags -- is reserved for the case nothing at all can
  * run; a plan that will do *something* gets the positive headline and its

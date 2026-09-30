@@ -12,8 +12,8 @@ import type { MarketSnapshot, PhraseScore, ScoredListing, ProposalChoices } from
 import { timeAgo } from "../timeAgo";
 
 /**
- * The right-hand column of Listing Details (docs/ui-market-seo-interactions.md,
- * section 2; market-seo.md, *UI*): what the last market search found, read
+ * The right-hand column of Listing Details (docs/features/market-seo-20260924/interactions.md,
+ * section 2; features/market-seo-20260924/spec.md, *UI*): what the last market search found, read
  * from the snapshot so it survives a reload. Read-only by design.
  *
  * It has a second job: showing the seller *why* the suggestions read as they
@@ -27,7 +27,7 @@ export type MarketPanelState =
   | { kind: "empty"; queries: string[] }
   | { kind: "failed"; reason: string };
 
-/** How many of the scored listings the proposal sees verbatim (market-seo.md). */
+/** How many of the scored listings the proposal sees verbatim (features/market-seo-20260924/spec.md). */
 const EXAMPLES = 8;
 
 function compact(n: number): string {
@@ -210,7 +210,7 @@ function Listings({ snapshot }: { snapshot: MarketSnapshot }) {
 /** What the phrase ticks are read from. */
 export type Suggestions = Pick<ProposalChoices, "titles" | "tags" | "description_leads">;
 
-/** The phrase-tick rule (docs/ui-market-seo-interactions.md, *Phrases view*):
+/** The phrase-tick rule (docs/features/market-seo-20260924/interactions.md, *Phrases view*):
  * the phrase is one of the suggested tags, or a suggested title or lead
  * contains it, ignoring case. */
 function inSuggestions(phrase: string, suggestions: Suggestions): boolean {

@@ -1,4 +1,4 @@
-"""The latest market research per listing, on disk (market-seo.md, *Cache*).
+"""The latest market research per listing, on disk (features/market-seo-20260924/spec.md, *Cache*).
 
 ``.cache/market/snapshots/{name}.json`` exists so the top listings panel can
 show a listing's comparables after a reload. It is written only by a run
@@ -30,7 +30,7 @@ from etsy_listings.workspace.workspace import Workspace
 class MarketSnapshot(BaseModel):
     """One research, as the panel reads it back: the result's fields, when
     the search ran, and the exact block the proposal was given. Holds each
-    listing's lead, never its full description (market-seo.md, *What the
+    listing's lead, never its full description (features/market-seo-20260924/spec.md, *What the
     proposal sees*)."""
 
     model_config = ConfigDict(frozen=True)

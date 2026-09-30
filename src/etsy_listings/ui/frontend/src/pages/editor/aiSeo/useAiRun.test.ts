@@ -16,7 +16,7 @@ import type { ListingDetail, MarketSnapshot } from "../../../types";
 import { type AiRunHandlers, useAiRun } from "./useAiRun";
 
 /**
- * The editor's side of an AI run (market-seo.md, *AI runs*): starting one,
+ * The editor's side of an AI run (features/market-seo-20260924/spec.md, *AI runs*): starting one,
  * following its events into `steps`, `queries`, `market` and `proposal`,
  * reattaching after a reload, cancelling -- and PRD 68's auto chain, which
  * a design pick arms and the first successful save fires.

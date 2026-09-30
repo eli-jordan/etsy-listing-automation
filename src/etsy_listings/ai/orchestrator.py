@@ -281,7 +281,7 @@ def generate_market_queries(
     cancel_event: threading.Event | None = None,
 ) -> MarketQueries:
     """Three buyer search queries for ``request``, using the seller's own
-    ``prompts/market-queries.md`` text (market-seo.md, *Query extraction*).
+    ``prompts/market-queries.md`` text (features/market-seo-20260924/spec.md, *Query extraction*).
 
     The third task over the same chain: Codex, then Claude, then Grok on a
     recognised unavailable failure, one same-provider repair, and its own 60 seconds

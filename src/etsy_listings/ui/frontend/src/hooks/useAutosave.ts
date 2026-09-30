@@ -117,7 +117,7 @@ interface UseAutosave {
    * and schedules (or extends) the debounced save. */
   update: (patch: Patch) => void;
   /** Shows a value the server has already written -- an AI run's drafted
-   * brief (market-seo.md, *AI runs*) -- without saving it again: local
+   * brief (features/market-seo-20260924/spec.md, *AI runs*) -- without saving it again: local
    * state only, nothing pending, the save state untouched. Sending it back
    * would be a second write of the same value, and would race the seller's
    * own next edit to that field. */

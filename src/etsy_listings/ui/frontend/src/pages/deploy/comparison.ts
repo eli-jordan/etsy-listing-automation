@@ -9,7 +9,7 @@ import {
 
 /**
  * Pure: `Plan` snapshots + `Change`s -> before/after blocks, impact tags,
- * price rows, image badges (docs/deploy-changes.md decisions 3/4, spec's
+ * price rows, image badges (docs/features/deploy-20260917/spec.md decisions 3/4, spec's
  * "Comparison"/"Price table" elements).
  *
  * This is the frontend half of A30: each stage exposed a snapshot of its own

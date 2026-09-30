@@ -251,7 +251,7 @@ class ListingDetail(Listing):
     printify_product_id: str | None = None
     pricing_plan_name: str | None = None
     """The resolved plan's filename stem, for display -- selecting a
-    different plan from the UI is deferred (phase-5-listings-ui.md)."""
+    different plan from the UI is deferred (features/listings-ui-20260915/spec.md)."""
     resolved_prices: list[ResolvedPrice] = []
     garment_materials: list[str] | None = None
     """Read-only fibre materials from the selected garment profile.

@@ -1,6 +1,6 @@
 """Normalize a provider's raw JSON, then hard-validate it against the agreed
 proposal contract before any UI response ever sees it (AI SEO implementation
-plan, PR3, item 5; `docs/ui-listing-seo-interactions.md` section 8).
+plan, PR3, item 5; `docs/features/ai-seo-20260922/interactions.md` section 8).
 
 Two passes, always in this order:
 
@@ -380,7 +380,7 @@ def validate_proposal(raw: Mapping[str, Any]) -> SeoProposal:
     Never partially builds a proposal: a caller either gets the full,
     contract-complete shape or an exception, so nothing downstream can
     mistake a still-invalid response for one that is safe to show
-    (`docs/ui-listing-seo-interactions.md` section 8: "Do not reveal a
+    (`docs/features/ai-seo-20260922/interactions.md` section 8: "Do not reveal a
     partial proposal as though it were safe to use").
     """
     normalized = normalize_raw_proposal(raw)

@@ -18,7 +18,7 @@ checking only the hash made ``plan`` report "No changes." over a half-empty
 render cache, and ``apply`` then did nothing to restore it.
 
 A template is exactly one of three kinds (multi-placement redesign,
-docs/multi-placement-rendering.md). A scene renders if, and only if, some
+docs/features/multi-placement-rendering-20260903/spec.md). A scene renders if, and only if, some
 entry in the listing's ``media:`` list references it -- rendering is driven
 purely by ``media``, not by ``listing.colors`` (item 4 of that doc).
 

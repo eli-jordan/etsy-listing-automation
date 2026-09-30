@@ -1,4 +1,4 @@
-"""Listings UI endpoints (phase-5-listings-ui.md): the dashboard/editor's
+"""Listings UI endpoints (features/listings-ui-20260915/spec.md): the dashboard/editor's
 ``/api/listings*`` surface, plus the read-only endpoints the editor's pickers
 need (garment profiles, pricing plans, designs).
 
@@ -561,7 +561,7 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
 
     Either way the market snapshot and the cached AI proposal go now
-    (market-seo.md, *Cache*; A42): a listing pending deletion is one the
+    (features/market-seo-20260924/spec.md, *Cache*; A42): a listing pending deletion is one the
     seller is done researching, and otherwise only the wipe after the remote
     deletion would remove them. An AI run still going is asked to stop
     first, so it does not write a proposal for a listing being deleted, and

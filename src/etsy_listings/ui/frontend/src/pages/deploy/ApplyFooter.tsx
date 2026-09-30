@@ -3,7 +3,7 @@ import type { ControlPhase } from "./deployState";
 /**
  * The bottom of the review: Apply, and a note that always says why it is in
  * whatever state it is in (spec's "Apply footer" element; the control-state
- * table, docs/deploy-changes.md §7's addition).
+ * table, docs/features/deploy-20260917/spec.md §7's addition).
  */
 
 function note(phase: ControlPhase, previewsTotal: number, previewsDone: number): string {

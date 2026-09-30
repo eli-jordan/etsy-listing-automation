@@ -1,4 +1,4 @@
-"""Scoring maths for market research (market-seo.md, *Scoring*).
+"""Scoring maths for market research (features/market-seo-20260924/spec.md, *Scoring*).
 
 Every metric becomes a 0-1 percentile within the set being scored, so one
 viral listing cannot swamp the rest and metrics on different scales add up.

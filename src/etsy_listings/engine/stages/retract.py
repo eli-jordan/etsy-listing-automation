@@ -9,7 +9,7 @@ writes and a way to recreate a product ``read_live`` just said was missing.
 
 **The 404 confirmation is polled, not a single GET.** The cascade this checks
 -- Printify DELETE on a still-connected product taking the Etsy draft with it
--- was measured to land as an immediate 404 (docs/listing-lifecycle.md, "The
+-- was measured to land as an immediate 404 (docs/features/listing-lifecycle-20260916/spec.md, "The
 cascade"), but a user hit the single-GET version reporting the listing
 survived, then found it gone in Shop Manager moments later: read-after-write
 on Etsy's side is not guaranteed instant. A short backoff tolerates that lag

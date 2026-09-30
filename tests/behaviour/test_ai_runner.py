@@ -1,4 +1,4 @@
-"""One AI run end to end on its own thread (market-seo.md, *The chain*,
+"""One AI run end to end on its own thread (features/market-seo-20260924/spec.md, *The chain*,
 *Failures* and *AI runs*; implementation plan, PR 5): brief, query
 extraction and market search, then the proposal.
 
@@ -6,7 +6,7 @@ Every test drives :class:`~etsy_listings.ui.airuns.runner.AiRunner` against
 the fixture workspace, a :class:`~tests.support.ai_runs.ChainProvider` and
 the in-memory Etsy market, and reads the run back through its events and
 steps -- the same things the SSE stream and the indicator read. The step
-sequences are the *Scenarios* table in ``ui-market-seo-interactions.md``.
+sequences are the *Scenarios* table in ``features/market-seo-20260924/interactions.md``.
 """
 
 from __future__ import annotations

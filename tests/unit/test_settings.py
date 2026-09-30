@@ -1,5 +1,5 @@
 """``settings.yaml``: the workspace's tunable settings, today only the market
-scoring weights (market-seo.md, *Scoring*; implementation plan, PR 3).
+scoring weights (features/market-seo-20260924/spec.md, *Scoring*; implementation plan, PR 3).
 
 A missing file or key falls back to the spec's defaults. Anything present
 but wrong fails naming the file and the key.

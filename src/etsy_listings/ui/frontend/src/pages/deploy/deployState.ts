@@ -9,7 +9,7 @@ export type { StageRuntimeStatus } from "./listingRunState";
 
 /**
  * Pure reducer: `RunEvent[] -> phase, per-stage runtime, plan, previews`
- * (docs/deploy-changes.md, Frontend module table).
+ * (docs/features/deploy-20260917/spec.md, Frontend module table).
  *
  * One rule ties every branch below to the event union `ui/runs/events.py`
  * defines: this module never decides *whether* something changed or *why* a
@@ -94,7 +94,7 @@ export function deployState(events: readonly RunEvent[]): DeployState {
   return events.reduce(applyRunEvent, initialDeployState);
 }
 
-/** The control-state table's own rows (docs/deploy-changes.md, the table
+/** The control-state table's own rows (docs/features/deploy-20260917/spec.md, the table
  * under decision 8/§7's addition) -- `"ready"` alone cannot tell Apply
  * what to do, because that depends on the *plan's* contents, not the run's
  * phase. Split out here, once, rather than recomputed by `ApplyFooter` and

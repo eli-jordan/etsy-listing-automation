@@ -1,7 +1,7 @@
 """The packaged default `prompts/seo.md`, the setup seed operation, and the
 delimited JSON context/response-schema wrapper the application appends
 around a seller's plain prompt text (AI SEO implementation plan, PR3, items
-2-4; `docs/ai-seo-implementation-plan.md`'s "Prompt" decision).
+2-4; `docs/features/ai-seo-20260922/plan.md`'s "Prompt" decision).
 
 Three responsibilities, kept in one module because they share the one
 contract they all have to agree on -- the proposal shape `RESPONSE_SCHEMA`
@@ -161,7 +161,7 @@ def _matches(path: Path, text: str) -> bool:
 
 def sync_prompt(path: Path, text: str, *, replace: bool) -> PromptSync:
     """Bring one prompt file into line with its packaged default ``text`` --
-    as far as the seller has allowed (market-seo.md, *Prompts and
+    as far as the seller has allowed (features/market-seo-20260924/spec.md, *Prompts and
     `setup --replace-prompts`*; PRD 71).
 
     A missing file is seeded (:func:`seed_prompt`). An existing file equal to
@@ -233,7 +233,7 @@ def build_task_prompt(
 
     ``data_block`` is one more block of supplied data, already delimited,
     placed after the context: the market data a proposal is given
-    (market-seo.md, *What the proposal sees*). It brings its own markers
+    (features/market-seo-20260924/spec.md, *What the proposal sees*). It brings its own markers
     because it has its own author, `market/block.py`, which also defuses any
     marker another seller's text tries to smuggle in. Empty means none, and
     then nothing is sent, for the reason an absent context is left out.

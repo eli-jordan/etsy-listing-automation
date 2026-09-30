@@ -44,7 +44,7 @@ export type SeoProposalSnapshot = components["schemas"]["SeoProposalSnapshot"];
 export type SeoRationaleEntry = components["schemas"]["SeoRationaleEntry"];
 export type SeoWarningEntry = components["schemas"]["SeoWarningEntry"];
 
-// ── AI runs (market-seo.md, *AI runs*; the implementation plan's Run contract) ─
+// ── AI runs (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's Run contract) ─
 
 export type AiRunSummary = components["schemas"]["AiRunSummary"];
 export type AiRunDetail = components["schemas"]["AiRunDetail"];
@@ -87,7 +87,7 @@ export type ListingTemplateDraft = ListingTemplateDetail;
 export type ListingTemplateSource = components["schemas"]["ListingTemplateSource"];
 export type ListingTemplateSaveResult = components["schemas"]["ListingTemplateSaveResult"];
 
-// ── Deploy changes (A29-A33, docs/deploy-changes.md) ────────────────────────
+// ── Deploy changes (A29-A33, docs/features/deploy-20260917/spec.md) ────────────────────────
 
 export type RunSummary =
   components["schemas"]["PlanRunSummary"] | components["schemas"]["ApplyRunSummary"];

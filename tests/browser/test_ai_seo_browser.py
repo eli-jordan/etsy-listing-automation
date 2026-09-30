@@ -659,7 +659,7 @@ def test_ai_mode_is_disabled_without_prompts_seo_md(
 # 3. Stale proposal: a submitted-input change keeps the proposal visible and
 #    its choices usable, with the drawer heading naming what changed, and
 #    regenerating preserves whatever was already accepted (UI doc §8; PRD 74;
-#    ui-listing-seo-interactions.md §7).
+#    features/ai-seo-20260922/interactions.md §7).
 # ===========================================================================
 
 
@@ -758,7 +758,7 @@ def test_a_changed_input_marks_the_proposal_out_of_date_and_it_stays_usable(
 # 4. Cancellation: the loading state exposes Cancel, which `DELETE`s the run;
 #    nothing is retained, no listing field changes, and the backend genuinely
 #    terminates the provider call rather than merely ignoring its result
-#    (market-seo.md, *AI runs*).
+#    (features/market-seo-20260924/spec.md, *AI runs*).
 # ===========================================================================
 
 
@@ -1162,7 +1162,7 @@ def test_attaching_a_design_drafts_a_brief_and_leaves_suggestions_waiting(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
     """The whole chain, from the Variants tab, without the seller asking for
-    any of it (`docs/ui-listing-seo-interactions.md` section 1a)."""
+    any of it (`docs/features/ai-seo-20260922/interactions.md` section 1a)."""
     _seed_prompt(workspace_root)
     _seed_brief_prompt(workspace_root)
     edit_listing(workspace_root, brief="")
@@ -1436,7 +1436,7 @@ def test_nothing_below_the_head_moves_when_the_indicator_comes_and_goes(
 def test_a_reload_mid_run_shows_the_same_run_again(
     browser_type: Any, workspace_root: Path, prerequisite_missing: Any
 ) -> None:
-    """Leaving or reloading never cancels a run (market-seo.md, *AI runs*):
+    """Leaving or reloading never cancels a run (features/market-seo-20260924/spec.md, *AI runs*):
     the editor reattaches, the events replay, and the page head, the busy
     button, *Generating for…* and Cancel come back as they were -- then the
     suggestions arrive in the reloaded page."""

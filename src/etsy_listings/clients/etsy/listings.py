@@ -1,10 +1,10 @@
 """The Etsy listing surface Phase 3's stages write through: `publish`'s poll
 target, `etsy_listing`'s single PATCH, `etsy_media`'s upload/reorder/
 variation-image calls, and the video upload/attach/delete `etsy_videos`
-places a listing's videos with (PRD 72, phase-3-etsy.md decision 9).
+places a listing's videos with (PRD 72, features/etsy-listing-20260910/spec.md decision 9).
 
 Built against
-[docs/printify-etsy-integration.md](../../../../docs/printify-etsy-integration.md)'s
+[docs/research/printify-etsy-integration.md](../../../../docs/research/printify-etsy-integration.md)'s
 Phase 3 recon rather than the API reference alone, because two of its
 findings make the obvious implementation wrong:
 

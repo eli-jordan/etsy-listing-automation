@@ -21,7 +21,7 @@ import { openRunStream, type RunStreamHandle } from "./deploy/runStream";
 import { TERMINAL_PHASES } from "./deploy/runPhases";
 
 /**
- * The deploy route: `/listings/:name/deploy` (docs/deploy-changes.md
+ * The deploy route: `/listings/:name/deploy` (docs/features/deploy-20260917/spec.md
  * decision 9). Reattaches to whatever run this listing already has, or
  * starts one -- the composing piece over the pure `deployState` reducer and
  * `comparison` builder, and the presentation modules that draw them.

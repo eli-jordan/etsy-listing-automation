@@ -24,7 +24,7 @@ import {
 
 /**
  * The route: reattach or start, composing the reducer/comparison/presentation
- * pieces (docs/deploy-changes.md decision 9). `openRunStream` is stubbed --
+ * pieces (docs/features/deploy-20260917/spec.md decision 9). `openRunStream` is stubbed --
  * its own wire-format parsing is `runStream.test.ts`'s job -- and its
  * `onEvent` callback is captured so a test can fire the exact events a real
  * run would, in order, the same shape `deployState.test.ts` already proves

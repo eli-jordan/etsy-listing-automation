@@ -1,4 +1,4 @@
-"""What market research produces (market-seo.md, *Scoring* and *What the
+"""What market research produces (features/market-seo-20260924/spec.md, *Scoring* and *What the
 proposal sees*), and the weights it scores with.
 
 All of it is in memory and frozen: research returns a :class:`MarketResult`
@@ -62,9 +62,9 @@ class MarketWeights(BaseModel):
 
 class ScoredListing(BaseModel):
     """One of the (at most) twenty listings scored, with everything the top
-    listings panel shows (ui-market-seo-interactions.md, *Where the data
+    listings panel shows (features/market-seo-20260924/interactions.md, *Where the data
     comes from*) -- and deliberately not the full description, which neither
-    the panel nor the model is given (market-seo.md, *What the proposal
+    the panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal
     sees*).
     """
 

@@ -161,7 +161,7 @@ class ShippingRates(BaseModel):
 class Shop(BaseModel):
     """One row of ``GET /v1/shops.json`` -- which is the whole of what that
     endpoint knows. No currency, no settings, no draft preference
-    (docs/api-findings.md).
+    (docs/research/api-findings.md).
 
     The call is scoped to the token, so its answer is also the answer to "which
     shops may this token write to?" -- which is what makes ``setup`` able to
@@ -214,7 +214,7 @@ class PlacedImage(BaseModel):
     ``imageId`` distinct from the upload id. Comparing all of them against a
     desired document is a permanent spurious diff, so the extras are dropped
     on the way in rather than filtered at every comparison
-    (docs/api-findings.md).
+    (docs/research/api-findings.md).
 
     The defaults are PRD 45's fixed placement: centred, fit inside the print
     area, unrotated. There is no configuration surface for them in v1 --

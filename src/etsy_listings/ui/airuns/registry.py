@@ -1,4 +1,4 @@
-"""``AiRun`` and the registry of them, in memory (market-seo.md, *AI runs*).
+"""``AiRun`` and the registry of them, in memory (features/market-seo-20260924/spec.md, *AI runs*).
 
 One active run per listing: a second ``create`` while one is running is a
 :class:`Conflict` naming it. A finished run stays the listing's latest until
