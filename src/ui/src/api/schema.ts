@@ -1444,7 +1444,7 @@ export interface paths {
      *     Not a render: the rail shows every template in the workspace at once, and
      *     running the real pipeline once per row would make opening the calibrator
      *     cost as much as calibrating. Which photo is shown is
-     *     :meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s
+     *     :meth:`~etsy_listings.core.workspace.workspace.Workspace.template_preview_photo`'s
      *     question, not this endpoint's.
      *
      *     ``colour`` narrows that to one photo of a ``colour-matrix`` set, for
@@ -1453,7 +1453,7 @@ export interface paths {
      *     ``media`` entry, and without this every colour of a set drew the same
      *     picture, since ``template_preview_photo`` deliberately answers "any one
      *     of them". Resolution goes through
-     *     :meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,
+     *     :meth:`~etsy_listings.core.workspace.workspace.Workspace.template_base_image`,
      *     which owns ADR-0004's filename convention and its trailing-segment
      *     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
      *
@@ -2671,11 +2671,11 @@ export interface components {
     /**
      * ListingFailedEvent
      * @description The engine's ``EngineListingFailed`` wire twin. ``message`` is the
-     *     :class:`~etsy_listings.errors.UserFacingError`'s own text, word for word
+     *     :class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word
      *     (decision 5) -- never the generic internal-error text, which belongs to a
      *     :class:`PhaseEvent` naming the whole run ``failed`` instead, since a
      *     defect is not about any one listing. ``stale_plan`` is set only when the
-     *     error was a :class:`~etsy_listings.engine.run.StalePlanError`.
+     *     error was a :class:`~etsy_listings.core.engine.run.StalePlanError`.
      */
     ListingFailedEvent: {
       /** Id */

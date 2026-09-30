@@ -27,7 +27,7 @@ change. The tool creates drafts; first publication remains the seller's action.
 Retirement and resumption apply to listings that have already left draft.
 
 The enforcing code lives in
-[`engine/stages`](../../src/etsy_listings/engine/stages) and the typed
-[`Etsy`](../../src/etsy_listings/clients/etsy) and
-[`Printify`](../../src/etsy_listings/clients/printify) clients. Rationale for
+[`engine/stages`](../../src/etsy_listings/core/engine/stages) and the typed
+[`Etsy`](../../src/etsy_listings/core/clients/etsy) and
+[`Printify`](../../src/etsy_listings/core/clients/printify) clients. Rationale for
 the integration boundary is in the [architecture decisions](../adr/README.md).

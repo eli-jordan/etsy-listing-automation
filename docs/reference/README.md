@@ -9,7 +9,7 @@ They are checked against current code, unlike the frozen project-wide plans.
 | Which system writes each remote field | [Remote field ownership](field-ownership.md) |
 | Price precedence, artwork selection and Etsy resource names | [Listing configuration rules](listing-configuration.md) |
 
-Configuration shapes live beside their validators in `src/etsy_listings/config/`
-and `src/etsy_listings/render/config.py`. API shapes are generated in
+Configuration shapes live beside their validators in `src/etsy_listings/core/config/`
+and `src/etsy_listings/core/render/config.py`. API shapes are generated in
 [`openapi.json`](../openapi.json). Consult those sources for exact fields
 rather than copying the historical examples as a current schema.
