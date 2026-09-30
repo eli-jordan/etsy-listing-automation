@@ -3,7 +3,7 @@
 **Status:** implemented interaction design; updated for the current editor.
 
 This document is the implementation companion to the drafting
-[packaged SEO prompt](../../../src/etsy_listings/ai/resources/seo.md). It describes what each interaction does
+[packaged SEO prompt](../../../src/etsy_listings/core/ai/resources/seo.md). It describes what each interaction does
 and why it matters, including loading, stale, invalid, and unavailable states.
 
 This document owns the AI Mode interaction contract. Market-informed SEO and
@@ -336,7 +336,7 @@ gitignored `.cache/market/` (ADR-0044), plus the listing's cached proposal in
 schema to plain seller-editable `prompts/seo.md`; it does not support prompt
 placeholders or executable prompt code.
 
-The [packaged default prompt](../../../src/etsy_listings/ai/resources/seo.md)
+The [packaged default prompt](../../../src/etsy_listings/core/ai/resources/seo.md)
 is seeded into the workspace by setup. The former repository-root drafting
 source is no longer present.
 

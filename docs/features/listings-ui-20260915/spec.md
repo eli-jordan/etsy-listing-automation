@@ -389,7 +389,7 @@ therefore costs no remote write and produces no drift.
 
 ### New pure validation module — build and test this first
 
-`src/etsy_listings/config/listing_validation.py` (or `engine/listing_health.py`
+`src/etsy_listings/core/config/listing_validation.py` (or `engine/listing_health.py`
 — name TBD during implementation, but it must not become a `Stage`). Input:
 the candidate `Listing` fields, the resolved `GarmentProfile`, and a map of
 `{template_name: TemplateSummary}` (from the calibrator's existing
