@@ -44,8 +44,10 @@ import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
  * is reviewable. The label renames by double-click, and Delete batch record
  * removes only the batch's own history (spec, *Cancellation and deletion*).
  * A deleted listing's row stays, struck through (A42). A row whose AI work a
- * deploy cancelled says so and keeps its own Retry (A43; UI doc §8). Open carries
- * `?batch=`, which is what shows the editor's Back to batch (UI doc §8).
+ * deploy cancelled says so and keeps its own Retry (A43; UI doc §8). A
+ * created listing's name is its link to the editor -- there is no separate
+ * Open -- and carries `?batch=`, which is what shows the editor's Back to
+ * batch (UI doc §8).
  */
 
 export const POLL_MS = 2000;
@@ -521,11 +523,6 @@ export function BatchSummaryPage() {
                         >
                           Retry
                         </button>
-                      )}
-                      {open && (
-                        <Link className="bc-quiet" to={editorUrl(id, row)}>
-                          Open
-                        </Link>
                       )}
                     </td>
                   </tr>

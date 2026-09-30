@@ -147,8 +147,9 @@ describe("BatchSummaryPage", () => {
     const uncreated = within(rowFor("trailhead-sunset"));
     expect(uncreated.getByText(/the disk is full/)).toBeInTheDocument();
     expect(uncreated.getByRole("button", { name: "Retry" })).toBeInTheDocument();
-    expect(uncreated.queryByRole("link", { name: "Open" })).toBeNull();
-    expect(done.getByRole("link", { name: "Open" })).toHaveAttribute(
+    // The name is the way into the editor; a row with no listing has none.
+    expect(uncreated.queryByRole("link")).toBeNull();
+    expect(done.getByRole("link", { name: "night-hike-club" })).toHaveAttribute(
       "href",
       "/listings/night-hike-club?batch=b1",
     );
@@ -386,7 +387,7 @@ describe("BatchSummaryPage", () => {
 });
 
 describe("BatchSummaryPage, a created listing's name", () => {
-  it("reveals the Listings table's hover card, and Open is a quiet button", async () => {
+  it("reveals the Listings table's hover card, and has no separate Open", async () => {
     vi.spyOn(batchesApi, "getBatch").mockResolvedValue(batch(IN_REVIEW, { status: "in_review" }));
     const summary = {
       name: "night-hike-club",
@@ -403,6 +404,6 @@ describe("BatchSummaryPage, a created listing's name", () => {
     const row = await waitFor(() => rowFor("night-hike-club"));
     expect(await within(row).findByText("comfort-colors-1717")).toBeInTheDocument();
     expect(within(row).getByText("4 colours")).toBeInTheDocument();
-    expect(within(row).getByRole("link", { name: "Open" })).toHaveClass("bc-quiet");
+    expect(within(row).queryByRole("link", { name: "Open" })).toBeNull();
   });
 });
