@@ -93,7 +93,12 @@ describe("ListingTemplatesPage", () => {
     const full = within(cardFor("heavyweight-tee"));
     expect(full.getByText("4 items")).toBeInTheDocument();
     expect(full.queryByLabelText("Video")).toBeNull();
-    expect(within(cardFor("with-video")).getByLabelText("Video")).toBeInTheDocument();
+    const video = cardFor("with-video");
+    expect(within(video).getByLabelText("Video")).toBeInTheDocument();
+    // Drawn from the clip itself: a video has no thumbnail to ask for.
+    expect(video.querySelector(".bc-deck__print video")?.getAttribute("src")).toMatch(
+      /size-guide.mp4/,
+    );
     // One picture is one print: nothing fanned, nothing to count.
     const single = cardFor("single-shot");
     expect(single.querySelectorAll(".bc-deck__print")).toHaveLength(1);

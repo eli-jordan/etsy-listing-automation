@@ -8,8 +8,9 @@ import { Link, useNavigate } from "react-router-dom";
 import { stageDesigns, StagingRefused } from "../api/batches";
 import { deleteListingTemplate, listListingTemplates } from "../api/listingTemplates";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { MutedClip } from "../components/MutedClip";
 import { TEMPLATE_DELETE_DETAILS, templateDeleteTitle } from "./listingTemplateDelete";
-import { mediaKind, mediaLabel, ownedTile } from "../media";
+import { mediaKind, mediaLabel, ownedTile, pictureFor } from "../media";
 import type { ListingTemplateSummary } from "../types";
 import { RecentBatches } from "./RecentBatches";
 
@@ -114,11 +115,17 @@ function TemplateCard({
                 key={`${mediaLabel(entry)}-${index}`}
                 className={`bc-deck__print bc-deck__print--${index}`}
               >
-                <img src={ownedTile(entry, owner)} alt="" loading="lazy" />
-                {mediaKind(entry) === "video" && (
-                  <span className="bc-deck__play" aria-label="Video">
-                    <PlayIcon weight="fill" aria-hidden="true" />
-                  </span>
+                {mediaKind(entry) === "video" ? (
+                  <>
+                    {/* A clip has no tile to ask for: its own first frames
+                        are the poster, as everywhere else a video shows. */}
+                    <MutedClip src={pictureFor(entry, null, "full", owner)} />
+                    <span className="bc-deck__play" aria-label="Video">
+                      <PlayIcon weight="fill" aria-hidden="true" />
+                    </span>
+                  </>
+                ) : (
+                  <img src={ownedTile(entry, owner)} alt="" loading="lazy" />
                 )}
               </span>
             ))}

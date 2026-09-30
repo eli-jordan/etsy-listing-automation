@@ -6463,7 +6463,8 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
   box-shadow: var(--shadow-md);
   transform-origin: 50% 90%;
 }
-.bc-deck__print img {
+.bc-deck__print img,
+.bc-deck__print video {
   display: block;
   width: 100%;
   height: 100%;
