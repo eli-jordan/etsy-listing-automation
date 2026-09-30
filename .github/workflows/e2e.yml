@@ -51,9 +51,9 @@ jobs:
           cache-dependency-path: src/ui/package-lock.json
 
       # Nothing in this layer serves the SPA. It is built anyway because
-      # hatch_build.py builds dist/ during the editable install when it is
-      # absent, and does it with `npm install` -- building first makes that
-      # hook a no-op, so every node install in CI comes from package-lock.json.
+      # hatch_build.py builds src/ui/dist/ (with `npm ci`) during the editable
+      # install when it is absent -- building first makes that hook a no-op,
+      # so the SPA is built once, here, from package-lock.json.
       - name: build the calibrator frontend
         working-directory: src/ui
         run: npm ci && npm run build
