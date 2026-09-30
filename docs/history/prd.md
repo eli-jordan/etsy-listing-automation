@@ -3,8 +3,8 @@
 Historical snapshot, frozen on 2026-09-30. Its phases record the original
 sequencing rather than implementation status. Current behaviour belongs in
 [feature specifications](../README.md#features), [architecture](../architecture.md)
-and [reference](../reference/README.md). Decision rationale is being migrated
-to [ADRs](../adr/README.md); old decision ids remain here for citation review.
+and [reference](../reference/README.md). Decision rationale lives
+in [ADRs](../adr/README.md); old decision ids remain here for historical lookup.
 
 ## Context
 

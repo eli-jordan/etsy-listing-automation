@@ -1,5 +1,7 @@
 # ADR-0003: AI proposes copy; the seller accepts it
 
+Status: accepted.
+
 AI Mode proposes title, tags and description lead for the seller to accept into ordinary listing fields. Generated suggestions do not enter the deployment lockfile or become remote writes: `plan` and `apply` consume only concrete saved copy. This keeps generation latency and non-determinism outside the idempotent engine.
 
 ## Amendments

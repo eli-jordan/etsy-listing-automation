@@ -6,9 +6,9 @@ This document is the implementation companion to the drafting
 [packaged SEO prompt](../../../src/etsy_listings/ai/resources/seo.md). It describes what each interaction does
 and why it matters, including loading, stale, invalid, and unavailable states.
 
-The [PRD](../../history/prd.md) remains the product authority. Its AI Mode and structured
-description decisions are settled here; this document records the interaction
-contract they require.
+This document owns the AI Mode interaction contract. Market-informed SEO and
+batch-creation amendments extend it with server-side runs and durable proposals;
+the [decision index](../../adr/README.md) records their rationale.
 
 ## Purpose
 

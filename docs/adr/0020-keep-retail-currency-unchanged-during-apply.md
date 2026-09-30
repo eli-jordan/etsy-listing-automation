@@ -1,5 +1,7 @@
 # ADR-0020: Keep retail currency unchanged during apply
 
+Status: accepted.
+
 Send NOK retail prices to Printify verbatim as NOK minor units. Converting through a live FX rate during apply would change an unchanged listing and surrender control of the Etsy price; changing Printify billing currency cannot solve this. Printify's own profit display then compares unlike currencies and is not a usable margin calculation.
 
 ## Amendment

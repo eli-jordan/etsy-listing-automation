@@ -10,9 +10,8 @@ frames in
 [`src/etsy_listings/ui/frontend/design/scenes/batch-deploy-lofi/`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-deploy-lofi)
 into the workspace-wide equivalent of `plan --all` and `apply --all`.
 
-It is subsidiary to [history/prd.md](../../history/prd.md) and
-[history/implementation-plan.md](../../history/implementation-plan.md). The PRD wins if they
-disagree. The implementation decision settled while writing this plan is A34:
+Requirements live in the [spec](spec.md) and [interactions](interactions.md).
+The implementation decision settled while writing this plan is A34:
 planning has a first-class workspace scope resolved by the server; applying
 uses the exact names and fingerprints from the reviewed plan.
 

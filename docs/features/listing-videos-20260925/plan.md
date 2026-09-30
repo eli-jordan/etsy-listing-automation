@@ -3,10 +3,9 @@
 Status: shipped. Delivered by [#71](https://github.com/eli-jordan/etsy-listing-automation/pull/71), [#72](https://github.com/eli-jordan/etsy-listing-automation/pull/72), [#73](https://github.com/eli-jordan/etsy-listing-automation/pull/73), [#74](https://github.com/eli-jordan/etsy-listing-automation/pull/74), [#76](https://github.com/eli-jordan/etsy-listing-automation/pull/76), [#77](https://github.com/eli-jordan/etsy-listing-automation/pull/77). This plan records the
 implementation sequence; later feature amendments describe current requirements.
 
-**Status:** proposed. Builds [PRD 72 and 73](../../history/prd.md) and
-[features/etsy-listing-20260910/spec.md decision 9](../etsy-listing-20260910/spec.md#9-videos-are-placed-by-attach-order--prd-71).
-Like the other implementation plans, it is not an authority: where it disagrees
-with those, they win and this document is wrong.
+Video requirements and measured placement live in the
+[Etsy integration specification](../etsy-listing-20260910/spec.md#9-videos-are-placed-by-attach-order--prd-71).
+This shipped plan records their implementation sequence.
 
 ## Outcome
 

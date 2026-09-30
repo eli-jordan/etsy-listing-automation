@@ -4,12 +4,10 @@ How the listing editor gets a **Deploy changes →** button: a real `plan`
 against Printify and Etsy, a before/after review a buyer would recognise, and
 an `apply` that runs exactly what was reviewed and streams its progress.
 
-Subsidiary to [history/prd.md](../../history/prd.md) and [history/implementation-plan.md](../../history/implementation-plan.md),
-in the same way [features/etsy-listing-20260910/spec.md](../etsy-listing-20260910/spec.md) is: the decisions are
-recorded there as **A29–A33**, and this document holds the reasoning, the
-module-by-module shape and the build order that a row in a decision log cannot
-carry. It is PRD 20's plan/apply runner, scoped to one listing from the editor.
-Where it disagrees with the PRD, the PRD wins.
+This specification owns the individual-listing deploy workflow. The
+[interactions](interactions.md) and [plan](plan.md) extend it to a reviewed
+workspace run. Recovery, snapshots, fingerprints, preview promotion and run
+resources have their rationale in the [decision index](../../adr/README.md).
 
 It builds two design artifacts into something that can ship:
 

@@ -1,11 +1,11 @@
 # Delete and retire
 
-Companion to [history/prd.md](../../history/prd.md) (PRD 61–67). This is the product: what a
+This specification owns listing lifecycle requirements: what a
 listing's end looks like, and why pause and retraction are not the same verb.
 
 Where this disagrees with [research/printify-etsy-integration.md](../../research/printify-etsy-integration.md)
 or [features/etsy-listing-20260910/spec.md](../etsy-listing-20260910/spec.md) on what Printify `DELETE` does to an
-Etsy draft, this file and the PRD are right — those two measured different
+Etsy draft, this later specification takes precedence — those two measured different
 sequences and then generalised (see *The cascade* below).
 
 ---

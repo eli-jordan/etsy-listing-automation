@@ -1,5 +1,7 @@
 # ADR-0045: Model images and videos as one gallery
 
+Status: accepted.
+
 Keep videos in the ordered `media` gallery rather than a separate list. Etsy exposes no video rank, but measured attachment order selects the featured video and anchors the second after the images present at attachment. A separate video stage follows image sync and temporarily changes image associations to place the second video, then restores them and swatches. Reattach by id for layout changes; upload for changed or missing bytes.
 
 ## Consequences

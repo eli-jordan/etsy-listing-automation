@@ -1,15 +1,9 @@
-# Phase 5: listings UI
+# Listings UI
 
-The app shell, the listings list, and the listing editor — the part of
-`docs/history/implementation-plan.md`'s `## UI` section's `/api/listings*` surface and
-Dashboard/editor screens this covers. Subsidiary to [history/prd.md](../../history/prd.md) and
-[history/implementation-plan.md](../../history/implementation-plan.md) the way
-[features/etsy-listing-20260910/spec.md](../etsy-listing-20260910/spec.md) is: detail those two point at rather than a
-third authority. Where it disagrees with the PRD, the PRD wins.
-
-Unlike `features/etsy-listing-20260910/spec.md`, none of this is numbered PRD/A decisions yet — this
-is a fresh plan for unbuilt work, not measurements behind an existing one. It
-was produced against a UI design mockup (three screens: app shell, listing
+This specification covers the app shell, listings table and listing editor.
+Later deploy, AI SEO, video and batch-creation features amend the surfaces they
+extend. The original interaction model was checked against a three-screen
+mockup (app shell, listing
 editor, and the mockup-template calibrator wrapped in new chrome) after
 checking the mockup's assumptions against the real domain model and resolving
 the places they disagreed.

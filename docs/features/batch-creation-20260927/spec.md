@@ -1,9 +1,6 @@
 # Listing template and batch creation specification
 
-**Status:** settled product requirements, subsidiary to [history/prd.md](../../history/prd.md)
-through PRD 74, like [features/etsy-listing-20260910/spec.md](../etsy-listing-20260910/spec.md) and
-[features/listing-lifecycle-20260916/spec.md](../listing-lifecycle-20260916/spec.md). Where this document and the PRD
-disagree, the PRD wins. The interactions are in
+**Status:** settled product requirements. The interactions are in
 [features/batch-creation-20260927/interactions.md](interactions.md), which
 wins over this document where they differ; its reviewed departures have been
 applied here. The build is planned in

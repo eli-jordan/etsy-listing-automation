@@ -1,5 +1,7 @@
 # ADR-0012: Render with pure passes and pinned dependencies
 
+Status: accepted.
+
 Compose pure render passes over arrays and frozen configuration, with explicit determinism controls and exact OpenCV and Pillow pins. Test both individual passes and complete output bytes so a changed golden identifies the responsible pass.
 
 ## Amendment

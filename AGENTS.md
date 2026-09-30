@@ -2,7 +2,9 @@
 
 Automation that takes a print-on-demand t-shirt design from a file to a reviewable Etsy draft: renders mockups locally, configures the product in Printify, patches the Etsy listing. Idempotent — re-running against unchanged inputs makes no remote changes. Python 3.12+ (uv, hatchling, Typer, pydantic v2, httpx, OpenCV + Pillow, ruff, mypy, pytest) with a React + TypeScript + Vite frontend.
 
-The PRD describes more than is built. Check the tree or [docs/architecture.md](docs/architecture.md) before assuming a module, command or test exists.
+Check the tree or [docs/architecture.md](docs/architecture.md) before assuming a
+module, command or test exists. [docs/README.md](docs/README.md) indexes current
+requirements, guides, research and decisions.
 
 ## Project map
 
@@ -20,7 +22,7 @@ src/etsy_listings/
   newcmd/ setupcmd/ authcmd/   the `new`, `setup` and `auth` wizards
   connections.py credentials.py prompts.py terminal.py   client wiring, credential steps, prompt backend, encoding guard
 tests/          unit, golden, behaviour, browser, contract, e2e; shared doubles in tests/support/
-docs/           history/prd.md, history/implementation-plan.md, architecture.md, per-feature specs
+docs/           guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
 scripts/        check.sh, sloc.py, generate_test_assets.py
 ```
 
@@ -72,11 +74,20 @@ status [<listing>]     run history                                    [not built
 ```
 </important>
 
-<important if="you are making or changing a numbered decision, or citing decisions in commits or comments">
+<important if="you are changing requirements, architecture decisions or documentation, or citing a decision">
 
-[docs/history/prd.md](docs/history/prd.md) says *what* the tool does (74 decisions); [docs/history/implementation-plan.md](docs/history/implementation-plan.md) says *how* (`A1`–`A46`). Per-feature specs ([multi-placement-rendering](docs/features/multi-placement-rendering-20260903/spec.md), [phase-3-etsy](docs/features/etsy-listing-20260910/spec.md), [listing-lifecycle](docs/features/listing-lifecycle-20260916/spec.md), [deploy-changes](docs/features/deploy-20260917/spec.md), [listing-batch-creation-spec](docs/features/batch-creation-20260927/spec.md)) carry detail and are not a third authority. Where any disagrees with the PRD, the PRD wins and the other is wrong — fix it. The batch-creation spec is overridden by [ui-batch-creation-interactions](docs/features/batch-creation-20260927/interactions.md).
+[Feature specifications](docs/README.md#features) own current requirements;
+[architecture](docs/architecture.md) owns current mechanism and invariants;
+[ADRs](docs/adr/README.md) record decision rationale and constraints. Later
+feature amendments override earlier requirements. Batch-creation interactions
+override that feature's spec where they differ. The frozen documents under
+`docs/history/` are context, not current authority.
 
-Do not quietly revisit a numbered decision while implementing something adjacent. If one is unworkable, say so and change the document first, in its own commit. Cite decisions by number in commit messages and in code comments where a choice looks arbitrary without context.
+Change an unworkable ADR explicitly, in its own documentation commit before
+implementation. Cite `ADR-NNNN` when a choice needs its rationale; keep a
+self-contained comment when it already explains the rule. New feature folders
+use the date their first document was created; shipped plans stay beside the
+feature with delivery PR links. See the [documentation authority rules](docs/README.md#documentation-authority).
 </important>
 
 <important if="you are running commands, installing tools, or touching paths, encodings or prompts on this Windows/cygwin machine">

@@ -3,8 +3,6 @@
 Status: shipped. Delivered by [#63](https://github.com/eli-jordan/etsy-listing-automation/pull/63), [#64](https://github.com/eli-jordan/etsy-listing-automation/pull/64), [#65](https://github.com/eli-jordan/etsy-listing-automation/pull/65), [#66](https://github.com/eli-jordan/etsy-listing-automation/pull/66), [#67](https://github.com/eli-jordan/etsy-listing-automation/pull/67), [#68](https://github.com/eli-jordan/etsy-listing-automation/pull/68), [#75](https://github.com/eli-jordan/etsy-listing-automation/pull/75), [#78](https://github.com/eli-jordan/etsy-listing-automation/pull/78), [#79](https://github.com/eli-jordan/etsy-listing-automation/pull/79). This plan records the
 implementation sequence; later feature amendments describe current requirements.
 
-**Status:** proposed implementation plan.
-
 It implements:
 
 - [Market-informed SEO](spec.md), the product spec;
@@ -13,7 +11,7 @@ It implements:
 - the Marver mockups that document references (the **Market-informed SEO**
   board, `src/etsy_listings/ui/frontend/design/scenes/market-seo/`).
 
-Like the spec, this plan is not an authority over [history/prd.md](../../history/prd.md).
+The spec and interactions own requirements; this shipped plan records delivery.
 
 ## Settled decisions
 

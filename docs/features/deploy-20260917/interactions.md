@@ -7,8 +7,8 @@ frames in
 This document describes what the seller does, what the interface does in
 response, and why each interaction exists. It extends the individual-listing
 deploy behavior in [features/deploy-20260917/spec.md](spec.md) to the all-listings
-case. It does not replace the product decisions in [history/prd.md](../../history/prd.md); where the
-documents disagree, the PRD wins.
+case. The [specification](spec.md) owns deployment requirements; this document
+describes the workspace-wide interaction contract.
 
 ## Purpose
 

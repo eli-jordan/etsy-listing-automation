@@ -3,8 +3,8 @@
 Historical snapshot, frozen on 2026-09-30. Its phases record the original
 sequencing rather than implementation status. Current behaviour belongs in
 [architecture](../architecture.md), [feature specifications](../README.md#features)
-and [reference](../reference/README.md). Decision rationale is being migrated
-to [ADRs](../adr/README.md); old decision ids remain here for citation review.
+and [reference](../reference/README.md). Decision rationale lives
+in [ADRs](../adr/README.md); old decision ids remain here for historical lookup.
 
 Companion to [history/prd.md](prd.md). The PRD settles *what* the tool does and 74 product
 forks; this document settles *how* it is built — module boundaries, core contracts,

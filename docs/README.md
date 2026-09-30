@@ -60,9 +60,21 @@ are historical sequencing, not a statement of what is implemented. Keep their
 decision ids intact while migrating existing citations; new requirements
 belong with their feature and new rationale belongs in an ADR.
 
-The ADR drafts are at the agreed review checkpoint. Citation conversion and
-the final authority pointers follow that review, so existing PRD/A citations
-still resolve during migration.
+## Documentation authority
+
+Feature specifications own current product requirements. Architecture describes
+current mechanism and development invariants; ADRs record rationale and
+constraints behind substantial decisions. Later feature amendments replace
+the earlier requirement they explicitly revise. Batch-creation interactions
+override that feature's spec where they differ. Keep affected current documents
+in agreement when changing behaviour; a shipped implementation plan records
+delivery and does not override its feature's requirements.
+
+Research provides dated evidence, and history provides the original project
+context. Neither overrides current requirements or decisions. The historical
+decision ids remain in the frozen originals, while current citations use
+`ADR-NNNN` where the rationale is needed. Smaller rules stay in their owning
+specification, reference or code rather than acquiring a duplicate index row.
 
 `openapi.json` is generated API reference, exported from FastAPI for the typed
 frontend client. Regenerate it from the code rather than editing it here.

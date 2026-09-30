@@ -10,7 +10,7 @@ draft — idempotently, so re-running against unchanged inputs changes nothing.
 - [Infrastructure setup](docs/guides/setup.md) — the Printify and Etsy accounts and
   credentials the tool needs outside this repo.
 - [Documentation index](docs/README.md) — features, research, reference and history.
-- [Architecture decisions](docs/adr/README.md) — the draft migration of decision rationale.
+- [Architecture decisions](docs/adr/README.md) — decision rationale and constraints.
 - [Architecture](docs/architecture.md) — module boundaries, data flow and the
   invariants the code relies on.
 

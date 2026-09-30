@@ -1,12 +1,13 @@
 # Market-informed SEO
 
-Companion to [history/prd.md](../../history/prd.md) (AI Mode: PRD 4, 13 and 68, as amended by PRD 71).
-This is the product: how an SEO proposal learns from listings that are already
+This specification owns how an SEO proposal learns from listings that are already
 selling on Etsy, and what that costs. The UI is described in
 [features/market-seo-20260924/interactions.md](interactions.md), and the build
 order in [features/market-seo-20260924/plan.md](plan.md).
 
-Where this disagrees with the PRD, the PRD wins.
+The [architecture decisions](../../adr/README.md) record the research and AI
+lifecycle rationale. Later batch-creation amendments add durable proposals and
+deployment precedence.
 
 ---
 

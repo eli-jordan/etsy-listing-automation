@@ -11,7 +11,7 @@ The product requirements are in
 does not repeat them, but it does record the places where the reviewed designs
 deliberately departed from that spec (see [Departures from the spec](#departures-from-the-spec)).
 Where the two disagree, this document wins over the spec; where this document is
-silent, the spec applies, and [history/prd.md](../../history/prd.md) (PRD 74) wins over both. The
+silent, the spec applies. The
 build is planned in
 [features/batch-creation-20260927/plan.md](plan.md).
 

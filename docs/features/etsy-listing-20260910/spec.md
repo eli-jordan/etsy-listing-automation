@@ -1,15 +1,12 @@
-# Phase 3: Etsy
+# Etsy listing integration
 
 How the listing half is built: publishing the Printify product, patching the
 Etsy listing it creates, and owning the media on it.
 
-Subsidiary to [history/prd.md](../../history/prd.md) and [history/implementation-plan.md](../../history/implementation-plan.md)
-in the way [features/multi-placement-rendering-20260903/spec.md](../multi-placement-rendering-20260903/spec.md) is —
-detail those two point at rather than a third authority. Where it disagrees
-with the PRD, the PRD wins. Its decisions are recorded there as **PRD 52–59**
-and **A24–A28**, and listing videos as **PRD 72**; what this document adds is
-the reasoning and the measurements behind them, which a one-row summary in a
-decision log cannot carry.
+This specification owns the integration requirements and measured mechanisms.
+The [decision index](../../adr/README.md) records the rationale for field
+ownership, media, shipping and videos. Later listing-lifecycle requirements
+define the connected-delete sequence rather than the earlier unpublish path.
 
 Built on [research/printify-etsy-integration.md](../../research/printify-etsy-integration.md), which
 measured the publish path against the real shops, and on Etsy's own API

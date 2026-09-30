@@ -25,7 +25,7 @@ the warning.
 
 | Topic | Decision | Source |
 |---|---|---|
-| Authority | The spec becomes a subsidiary of the PRD (PRD 74). The UI doc wins over the spec where they differ | grilling |
+| Authority | The UI doc wins over the spec where they differ | Reviewed interactions |
 | Listing templates | Their own resource under `listing-templates/<name>/`, never a listing kind. Snapshot instantiation with no live link. Created only by Save-as or Clone | spec *Listing templates* |
 | Save-as interaction | Opens the unsaved template straight away with the name field focused. Nothing is written until it is named, and there is no confirmation dialog | UI doc §1 |
 | Template editor | The listing editor minus design-specific parts. Autosaves only complete templates. The head has no actions | UI doc §3 |
@@ -273,29 +273,11 @@ added to this list, not substituted for it.
 
 ### Documentation commit (this branch, before PR 1) — done
 
-Applied on PR 81's branch alongside this plan:
-
-1. **PRD:** add **PRD 74**, which makes the spec a subsidiary document next to
-   `features/etsy-listing-20260910/spec.md` and `features/listing-lifecycle-20260916/spec.md`. Amend PRD 4 and 27 (proposals
-   are server-cached and the stale ones usable), PRD 60 (rename moves proposal
-   and batch ownership; the name allocator chooses a free name before creation and
-   never overwrites) and PRD 68, 69 and 71 (runs write a durable proposal; a batch run is
-   an ordinary run; the manual run is refused while batch work owns the listing),
-   each with an *amended by PRD 74* note.
-2. **Spec:** apply the UI doc's departures (no listings-table filter, stale
-   proposals usable directly, the Recent batches table, the Save-as interaction).
-   Replace the CLI half of *Deployment interaction* with this plan's A43 scope,
-   and define *full success* as A44 does. Update acceptance criteria 8, 9 and 11
-   to match, and drop the *Listings table* row from *Required UI surfaces*.
-3. **UI doc:** mark both open questions closed as drawn, and turn *Departures
-   from the spec* into a record of changes that have been applied.
-4. **history/implementation-plan.md:** add A35–A46 and the new workspace and cache
-   layout.
-5. **features/ai-seo-20260922/plan.md** and **features/ai-seo-20260922/interactions.md:**
-   replace browser-local persistence, the one-day TTL and "stale choices are
-   disabled" with A41 and the usable-stale heading.
-6. **AGENTS.md:** correct the decision counts (PRD 1–74, A1–A46) and list the
-   spec among the subsidiary documents.
+The initial documentation landed in
+[#82](https://github.com/eli-jordan/etsy-listing-automation/pull/82). It aligned
+template and batch requirements with durable proposals, rename ownership,
+stale-proposal acceptance and deploy precedence before the implementation PRs.
+The reviewed UI departures were folded into the spec at that checkpoint.
 
 ---
 

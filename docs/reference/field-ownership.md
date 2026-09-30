@@ -29,4 +29,4 @@ The enforcing code lives in
 [`engine/stages`](../../src/etsy_listings/engine/stages) and the typed
 [`Etsy`](../../src/etsy_listings/clients/etsy) and
 [`Printify`](../../src/etsy_listings/clients/printify) clients. Rationale for
-the integration boundary is in the [ADR drafts](../adr/README.md).
+the integration boundary is in the [architecture decisions](../adr/README.md).

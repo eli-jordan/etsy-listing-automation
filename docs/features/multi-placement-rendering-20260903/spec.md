@@ -1,7 +1,6 @@
 # Multi-Template Mockups: Kinds, Multi-Artwork, and the Calibrator
 
-Companion to [history/prd.md](../../history/prd.md) and [history/implementation-plan.md](../../history/implementation-plan.md).
-This document covers the change that let a listing use more than one mockup
+This specification covers the change that let a listing use more than one mockup
 template, and a design carry more than one artwork file (light-ink vs
 dark-ink). It supersedes an earlier draft of the same name that modelled
 templates as a single generic schema with a default placement plus sparse

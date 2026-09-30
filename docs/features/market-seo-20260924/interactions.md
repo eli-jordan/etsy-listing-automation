@@ -1,6 +1,6 @@
 # Market-informed SEO interactions
 
-**Status:** design agreed; not yet implemented. The build order is in
+**Status:** shipped interaction design. The delivery plan is in
 [features/market-seo-20260924/plan.md](plan.md).
 
 This document is the UI companion to [Market-informed SEO](spec.md). That

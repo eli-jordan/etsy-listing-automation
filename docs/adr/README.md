@@ -1,10 +1,20 @@
 # Architecture decisions
 
-Draft migration of the approved decisions from the original PRD and implementation plan. The numbering follows the commit that first introduced each decision, with ties resolved by document order. Amendments are folded into the current decision rather than given a second number.
+Accepted decisions extracted from the original PRD and implementation plan.
+The numbering follows the commit that first introduced each decision, with
+ties resolved by document order. Amendments are folded into the current
+decision rather than given a second number.
 
-Each linked file explains a decision and its rationale. This index contains no second summary of the same decision. Smaller rules belong in the feature specification or current reference that owns them. The old-to-new mapping is temporary migration data and will be removed before merge.
+Each linked file explains a decision and its rationale. This index contains no
+second summary of the same decision. Smaller rules belong in the feature
+specification or current reference that owns them.
 
-The citation rewrite follows review of these drafts. Existing PRD and A-number references still resolve in the [historical PRD](../history/prd.md) and [historical plan](../history/implementation-plan.md) during that review.
+Cite `ADR-NNNN` when a choice needs its rationale; keep the comment
+self-contained when it already explains the rule. Historical decision ids
+remain in the [original PRD](../history/prd.md) and
+[original plan](../history/implementation-plan.md), which are frozen context.
+When revisiting a decision, update its record explicitly and keep its history
+so the trade-off remains visible.
 
 | ADR | Decision | First recorded |
 |---|---|---|
