@@ -16,6 +16,7 @@ import {
   type StagingDetail,
   type StagingRow,
 } from "../api/batches";
+import { clock, dayMonth } from "../dates";
 
 /**
  * Staging review (UI doc §5; the `staging` and `staging-blocked` frames): one
@@ -34,11 +35,11 @@ import {
  */
 
 function time(iso: string): string {
-  return new Date(iso).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" });
+  return clock(new Date(iso));
 }
 
 function day(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+  return dayMonth(new Date(iso));
 }
 
 function Check({ row, onUse }: { row: StagingRow; onUse: (name: string) => void }) {

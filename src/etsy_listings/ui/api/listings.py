@@ -42,6 +42,7 @@ from pydantic import ValidationError
 
 from etsy_listings import connections
 from etsy_listings.ai.proposals import ProposalStore
+from etsy_listings.batches import BatchStore
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.config.errors import ConfigLoadError
@@ -495,7 +496,7 @@ def get_listing(target: Existing) -> ListingDetail:
 
 
 @router.patch("/{name}", response_model=ListingDetail)
-def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
+def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> ListingDetail:
     workspace, name = target.workspace, target.name
     path = workspace.listing_file(name)
     with target.writing():
@@ -506,6 +507,12 @@ def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
         except ValidationError as exc:
             return _detail(workspace, name, field_errors=field_errors_of(exc))
         replace_listing_yaml(path, merged)
+    if raw.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
+        # A42's delete, undone: Cancel on a pending delete (PRD 63) means the
+        # listing never went, so the batch rows the delete marked return.
+        design = merged.get("design")
+        default = design.get("default") if isinstance(design, dict) else None
+        _batch_store(request).restore_listing(name, default)
     return _detail(workspace, name)
 
 
@@ -520,13 +527,17 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
     (market-seo.md, *Cache*; A42): a listing pending deletion is one the
     seller is done researching, and otherwise only the wipe after the remote
     deletion would remove them. An AI run still going is asked to stop
-    first, so it does not write a proposal for a listing being deleted.
+    first, so it does not write a proposal for a listing being deleted, and
+    the listing's batch rows are marked deleted and leave the queue (A42).
     """
     workspace, name = target.workspace, target.name
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
+    # A42: the rows first, so the queue cannot start one between the stop
+    # and the delete; a run already going is the one stopped next.
+    _batch_store(request).mark_deleted(name)
     _stop_ai_run(request, name)
     _forget_ai_run(request, name)
     with target.writing():
@@ -633,7 +644,9 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
     generated copy travel together, and `.cache/renders/{name}/` moves with them
     because the render cache is keyed by listing name too -- left behind it
     would orphan a tree nothing deletes and cost a full re-render. The market
-    snapshot and the cached AI proposal (A42) move for the same reason.
+    snapshot and the cached AI proposal (A42) move for the same reason, and
+    every batch row naming the listing follows it (A42), so the batch
+    summary opens the new name.
 
     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
     left that way deliberately: nothing reads them, they become true again at
@@ -651,7 +664,10 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         # Blur commits an unchanged name constantly; that is not an error, and
         # it must not be the 409 below either.
         return _detail(workspace, old)
-    with target.locks.listing(old, new):
+    # A42: the batch rows follow the move. The batch locks come first --
+    # the order creating a batch row takes them in -- see
+    # `BatchStore.following_rename`.
+    with _batch_store(request).following_rename(old, new), target.locks.listing(old, new):
         _require_listing(workspace, old)
         if destination.exists():
             raise HTTPException(status_code=409, detail=f"a listing already exists named {new!r}")
@@ -669,6 +685,11 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
 
 def _proposals(request: Request) -> ProposalStore:
     store: ProposalStore = request.app.state.proposal_store
+    return store
+
+
+def _batch_store(request: Request) -> BatchStore:
+    store: BatchStore = request.app.state.batch_store
     return store
 
 

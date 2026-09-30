@@ -14,13 +14,15 @@ provider.
   worked out afresh on every read.
 * :func:`confirm` and :func:`retry_row` -- create the listings, idempotently
   (A39).
+* :func:`standing` -- a batch's derived status and progress counts, and
+  :func:`reviewable`, which rows Mark reviewed applies to (batch plan PR 5).
 
 A created row is queued for AI (``BatchRow.ai``); the queue that drafts it
 is the UI server's (``ui/batchqueue.py``, A40), since only that process runs
 AI. Deliberately withheld: ZIP input and dedupe against ``designs/`` (PR 7).
 """
 
-from etsy_listings.batches.creation import ConfirmRefused, NameLock, confirm, retry_row
+from etsy_listings.batches.creation import ConfirmRefused, NameLock, confirm, retry_row, row_upload
 from etsy_listings.batches.naming import allocate
 from etsy_listings.batches.records import (
     AiState,
@@ -28,9 +30,12 @@ from etsy_listings.batches.records import (
     Batch,
     BatchRow,
     BatchStore,
+    NotReviewable,
     StagingRow,
     StagingSession,
     StagingStore,
+    has_listing,
+    reviewable,
 )
 from etsy_listings.batches.staging import (
     RowReview,
@@ -41,6 +46,7 @@ from etsy_listings.batches.staging import (
     stage_pngs,
     upload_path,
 )
+from etsy_listings.batches.status import BatchStatus, Standing, standing
 
 __all__ = [
     # Records and their stores (A37).
@@ -64,6 +70,14 @@ __all__ = [
     # Creating the listings (A39).
     "confirm",
     "retry_row",
+    "row_upload",
     "ConfirmRefused",
     "NameLock",
+    # Where a batch stands (UI doc §2), and who may be reviewed (§7).
+    "standing",
+    "Standing",
+    "BatchStatus",
+    "reviewable",
+    "has_listing",
+    "NotReviewable",
 ]

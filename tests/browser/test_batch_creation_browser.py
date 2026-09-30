@@ -1,4 +1,4 @@
-"""Browser tests for batch creation (batch plan PR 2 and PR 4): New batch,
+"""Browser tests for batch creation (batch plan PR 2, PR 4 and PR 5): New batch,
 the staging review, confirm, the summary and the batch AI queue, with the
 real endpoints, the files they write and the queue's runs, in a real
 browser.
@@ -8,6 +8,9 @@ browser.
   asserted on the ``listing.yaml`` and ``designs/*.png`` the UI wrote.
 * Create a batch of two -> both rows reach *done* on the summary -> the
   editor has the batch run's suggestions waiting (A40, A41).
+* The summary -> Open -> Mark reviewed in the editor -> Back to batch ->
+  the summary shows the row reviewed, and the batch's record says so
+  (batch plan PR 5; UI doc §7, §8).
 
 The app is served with a :class:`~tests.support.ai_runs.ChainProvider` and
 the in-memory Etsy market, so the queue drafts for real without a real CLI.
@@ -15,6 +18,7 @@ the in-memory Etsy market, so the queue drafts for real without a real CLI.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +26,7 @@ import pytest
 import yaml
 from playwright.sync_api import expect
 
+from etsy_listings.batches import BatchStore
 from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_prompts, seeded_market
@@ -76,7 +81,7 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
     page.get_by_text("Each listing is a local draft. Nothing goes to Printify or Etsy.").wait_for()
     create.click()
 
-    page.get_by_text("Work carries on if you close this tab.", exact=False).wait_for()
+    page.get_by_text("Briefs are written for you", exact=False).wait_for()
     rows = page.locator("table.bc-table tbody tr")
     assert rows.count() == 3
     names = ["night-hike-club", "cedar-trail", "summit-coffee"]
@@ -91,7 +96,7 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
     for listing in names:
         page.goto(summary)
         rows.filter(has_text=listing).get_by_role("link", name="Open").click()
-        page.wait_for_url(f"**/listings/{listing}")
+        page.wait_for_url(re.compile(rf"/listings/{listing}\?batch="))
         # The editor's design row names the file the row wrote.
         design_file = page.locator(".design-row__file")
         design_file.wait_for()
@@ -125,7 +130,39 @@ def test_a_batch_of_two_drafts_both_and_the_editor_has_the_suggestions_waiting( 
     page.locator("table.bc-table tbody tr", has_text="lake-loop").get_by_role(
         "link", name="Open"
     ).click()
-    page.wait_for_url("**/listings/lake-loop")
+    page.wait_for_url(re.compile(r"/listings/lake-loop\?batch="))
     page.locator(".tabs .seg-opt", has_text="Listing Details").click()
     page.get_by_role("region", name="title AI suggestions").wait_for(state="visible")
     page.get_by_role("region", name="tag AI suggestions").wait_for(state="visible")
+
+
+def test_open_from_the_summary_mark_reviewed_and_go_back_to_the_batch(  # noqa: ANN001
+    page, workspace_root: Path
+) -> None:
+    workspace = Workspace.discover(root_override=workspace_root)
+    a_listing_template(workspace)
+    base = page.url.rsplit("/", 1)[0]
+    page.goto(f"{base}/batches/new?template=heavyweight-tee")
+    page.get_by_label("Design files").set_input_files(
+        [{"name": "lake-loop.png", "mimeType": "image/png", "buffer": png(4)}]
+    )
+    page.get_by_role("button", name="Create 1 listing").click()
+    expect(page.get_by_text("Brief, market research and SEO done")).to_have_count(1)
+    counts = page.locator(".bc-counts")
+    expect(counts).to_contain_text("0 of 1 reviewed")
+    summary = page.url
+
+    page.locator("table.bc-table tbody tr", has_text="lake-loop").get_by_role(
+        "link", name="Open"
+    ).click()
+    page.wait_for_url(re.compile(r"/listings/lake-loop\?batch="))
+    page.get_by_role("button", name="Mark reviewed").click()
+    expect(page.get_by_role("button", name="Reviewed")).to_have_attribute("aria-pressed", "true")
+    page.get_by_role("button", name=re.compile("^Back to batch")).click()
+
+    page.wait_for_url(summary)
+    expect(counts).to_contain_text("1 of 1 reviewed")
+    row = page.locator("table.bc-table tbody tr", has_text="lake-loop")
+    expect(row.get_by_role("button", name="Reviewed")).to_be_visible()
+    (batch,) = BatchStore(workspace).all()
+    assert [r.reviewed for r in batch.rows] == [True]

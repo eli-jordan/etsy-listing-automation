@@ -9,13 +9,6 @@
   font-size: 14px;
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
-.bc-section {
-  margin-top: var(--space-6);
-}
-.bc-section > h2 {
-  font-size: 20px;
-  margin: 0 0 var(--space-3);
-}
 /* — listing-template cards — */
 .bc-card__drop-hint {
   font-size: 11.5px;
@@ -50,12 +43,6 @@
 }
 
 /* — shared data table (staging + batch summary) — */
-table.bc-table tr.bc-tr--link {
-  cursor: pointer;
-}
-table.bc-table tr.bc-tr--link:hover td {
-  background: color-mix(in srgb, var(--color-text) 4%, transparent);
-}
 table.bc-table .bc-num {
   font-variant-numeric: tabular-nums;
   text-align: right;
@@ -216,16 +203,6 @@ table.bc-table .bc-num {
   font-size: 11.5px;
 }
 
-/* — listing editor opened from a batch — */
-.bc-back {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.bc-back svg {
-  width: 14px;
-  height: 14px;
-}
 
 /* The editor's AI step indicator, left-aligned in a table cell. */
 

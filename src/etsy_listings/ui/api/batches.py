@@ -33,14 +33,19 @@ from etsy_listings.batches import (
     BatchRow,
     BatchStore,
     ConfirmRefused,
+    NotReviewable,
     StagingRefused,
     StagingSession,
     StagingStore,
     Upload,
     confirm,
+    has_listing,
     retry_row,
     review,
+    reviewable,
+    row_upload,
     stage_pngs,
+    standing,
     upload_path,
 )
 from etsy_listings.config.errors import ConfigLoadError
@@ -48,7 +53,11 @@ from etsy_listings.ui.airuns.registry import AiRunRegistry
 from etsy_listings.ui.api.schemas import (
     AiReadinessBlock,
     BatchDetail,
+    BatchIndexEntry,
+    BatchPatch,
     BatchRowDetail,
+    ListingBatch,
+    ReviewedRequest,
     StagingDetail,
     StagingPatch,
     StagingRefusal,
@@ -152,7 +161,7 @@ def _proposal(
     (A41), so the summary's *Stale: ...* is the drawer's."""
     workspace = _workspace(request)
     store: ProposalStore = request.app.state.proposal_store
-    record = store.load(row.name) if row.creation == "created" else None
+    record = store.load(row.name) if has_listing(row) else None
     if record is None:
         return None, []
     try:
@@ -187,6 +196,9 @@ def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
                 queue_position=positions.get((batch.id, row.id)),
                 proposal=proposal,
                 stale_reasons=stale,
+                reviewed=row.reviewed,
+                reviewable=reviewable(row),
+                deleted=row.deleted,
             )
         )
     return BatchDetail(
@@ -196,6 +208,7 @@ def _batch_detail(request: Request, batch: Batch) -> BatchDetail:
         created_at=batch.created_at,
         rows=rows,
         concurrency=queue.concurrency(),
+        status=standing(batch.rows).status,
     )
 
 
@@ -336,7 +349,7 @@ def retry_batch_row(request: Request, batch_id: str, row: str) -> BatchDetail:
         raise HTTPException(status_code=404, detail=f"no batch row {row!r}")
     if target.creation == "failed":
         _retry_creation(request, batch_id, {row})
-    elif target.ai in RETRYABLE:
+    elif target.ai in RETRYABLE and not target.deleted:
         _queue(request).retry(batch_id, row)
     else:
         raise HTTPException(status_code=409, detail=f"{target.name} has nothing to retry")
@@ -380,3 +393,142 @@ def resume_batch(request: Request, batch_id: str) -> BatchDetail:
     _batch(request, batch_id)
     _queue(request).resume(batch_id)
     return _batch_detail(request, _batch(request, batch_id))
+
+
+# ------------------------------------------------ review and the batch index
+
+
+@router.get("/api/batches", response_model=list[BatchIndexEntry])
+def list_batches(request: Request) -> list[BatchIndexEntry]:
+    """Recent batches (UI doc §2): every batch, and every staging session
+    not confirmed yet, newest first, each with its derived status. Listing
+    them sweeps expired staging first (A46), so a row never offers a
+    session that has gone."""
+    staging = _staging(request)
+    staging.sweep(now=datetime.now(UTC))
+    batches = _batches(request).all()
+    confirmed = {batch.id for batch in batches}
+    entries = [_index_entry(batch) for batch in batches]
+    for session_id in _workspace(request).staging_ids():
+        # A batch keeps its session's id, and a confirmed session stays
+        # until every row is materialised (A46): that one is the batch's.
+        session = staging.load(session_id) if session_id not in confirmed else None
+        if session is not None:
+            entries.append(
+                BatchIndexEntry(
+                    kind="staging",
+                    id=session.id,
+                    label=session.label,
+                    listing_template=session.listing_template,
+                    created_at=session.created_at,
+                    status="staging",
+                    designs=len(session.rows),
+                    expires_at=session.expires_at,
+                )
+            )
+    return sorted(entries, key=lambda entry: (entry.created_at, entry.id), reverse=True)
+
+
+def _index_entry(batch: Batch) -> BatchIndexEntry:
+    counts = standing(batch.rows)
+    return BatchIndexEntry(
+        kind="batch",
+        id=batch.id,
+        label=batch.label,
+        listing_template=batch.listing_template,
+        created_at=batch.created_at,
+        status=counts.status,
+        designs=len(batch.rows),
+        listings=counts.listings,
+        drafted=counts.drafted,
+        reviewed=counts.reviewed,
+        undrafted=counts.undrafted,
+        failures=counts.failures,
+    )
+
+
+@router.patch("/api/batches/{batch_id}", response_model=BatchDetail)
+def rename_batch(request: Request, batch_id: str, body: BatchPatch) -> BatchDetail:
+    """Rename the batch (UI doc §7): the label only, so its id -- and every
+    link to it -- stays. A blank label keeps the one it had, as staging's
+    does."""
+    store = _batches(request)
+    with store.lock(batch_id):
+        batch = _batch(request, batch_id)
+        label = body.label.strip()
+        if label and label != batch.label:
+            batch = batch.model_copy(update={"label": label})
+            store.save(batch)
+    return _batch_detail(request, batch)
+
+
+@router.delete("/api/batches/{batch_id}", status_code=204)
+def delete_batch(request: Request, batch_id: str) -> Response:
+    """Delete batch record (spec, *Cancellation and deletion*): its queued
+    and running work is cancelled first, then only the record goes -- its
+    rows, review flags and queue state, and the frozen template beside it.
+    Designs, listings, briefs and proposals are the workspace's and stay."""
+    _batch(request, batch_id)
+    queue = _queue(request)
+    queue.cancel(batch_id)
+    store = _batches(request)
+    with store.lock(batch_id):
+        store.remove(batch_id)
+    queue.wake()
+    return Response(status_code=204)
+
+
+@router.put(
+    "/api/batches/{batch_id}/rows/{row}/reviewed",
+    response_model=BatchDetail,
+    responses={409: {"description": "The row has no listing to review yet"}},
+)
+def set_reviewed(request: Request, batch_id: str, row: str, body: ReviewedRequest) -> BatchDetail:
+    """Mark reviewed / Mark needs review (spec, *Review workflow*). Refused
+    for a row still queued or drafting, deleted, or never created."""
+    _batch(request, batch_id)
+    try:
+        batch = _batches(request).review(batch_id, row, reviewed=body.reviewed)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"no batch row {row!r}") from exc
+    except NotReviewable as exc:
+        raise HTTPException(
+            status_code=409, detail=f"{exc.args[0]} has no listing to review yet"
+        ) from exc
+    return _batch_detail(request, batch)
+
+
+@router.get("/api/batches/{batch_id}/rows/{row}/thumbnail")
+def batch_row_thumbnail(request: Request, batch_id: str, row: str) -> Response:
+    """A row that was never created has no listing design to show, so the
+    summary shows the upload it was made from, kept beside the batch for
+    Retry (A46)."""
+    batch = _batch(request, batch_id)
+    try:
+        path = row_upload(_workspace(request), batch, row)
+    except KeyError as exc:
+        raise HTTPException(status_code=404, detail=f"no batch row {row!r}") from exc
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail=f"batch row {row!r} has no upload kept")
+    return thumbnail_response(path)
+
+
+@router.get("/api/listings/{name}/batch", response_model=ListingBatch | None)
+def listing_batch(request: Request, name: str) -> ListingBatch | None:
+    """The batch that made ``name``, for the editor's row above the head
+    (UI doc §8), or ``null``. A row names its listing exactly, as the rename
+    and delete hooks match it (A42); a deleted row is not the listing's.
+    Should two batches both claim it, the newer wins."""
+    _workspace(request).listing_dir(name)  # a bad name is the app-wide 400
+    newest = sorted(_batches(request).all(), key=lambda b: (b.created_at, b.id), reverse=True)
+    for batch in newest:
+        for candidate in batch.rows:
+            if candidate.name == name and has_listing(candidate):
+                return ListingBatch(
+                    batch_id=batch.id,
+                    label=batch.label,
+                    row_id=candidate.id,
+                    reviewed=candidate.reviewed,
+                    reviewable=reviewable(candidate),
+                )
+    return None

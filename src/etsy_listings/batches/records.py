@@ -18,7 +18,7 @@ from __future__ import annotations
 import json
 import threading
 from collections.abc import Callable, Iterator
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Literal, Self
@@ -134,6 +134,34 @@ class BatchRow(BaseModel):
     *Confirming a batch*: only created rows enter the AI queue)."""
     ai_error: str | None = None
     ai_steps: list[AiStep] = Field(default_factory=list)
+    reviewed: bool = False
+    """The seller's own judgement (spec, *Review workflow*): set and cleared
+    only by Mark reviewed / Mark needs review, never by an edit, a proposal
+    or a deploy, and never read by ``plan`` or ``apply``."""
+    deleted: bool = False
+    """The listing was deleted (A42). The row stays, struck through, so the
+    batch still says what it made (UI doc §7); nothing follows or queues it
+    again."""
+
+
+DRAFTING: frozenset[AiState | None] = frozenset({"queued", "running"})
+
+
+def has_listing(row: BatchRow) -> bool:
+    """Does the row have a listing the seller can open? Created, and not
+    deleted since."""
+    return row.creation == "created" and not row.deleted
+
+
+def reviewable(row: BatchRow) -> bool:
+    """May the seller mark this row reviewed, or back? Only a listing they
+    can look at: not one still queued or drafting, deleted, or never created
+    (UI doc §7)."""
+    return has_listing(row) and row.ai not in DRAFTING
+
+
+class NotReviewable(ValueError):
+    """Mark reviewed on a row :func:`reviewable` refuses."""
 
 
 class Batch(_Record):
@@ -208,3 +236,111 @@ class BatchStore(_Store[Batch]):
 
     def all(self) -> list[Batch]:
         return [batch for id_ in self._workspace.batch_ids() if (batch := self.load(id_))]
+
+    def remove(self, batch: str) -> None:
+        """Delete batch record (spec, *Cancellation and deletion*): the
+        record and the directory beside it -- the frozen template and any
+        kept upload. Nothing outside ``.cache/batches/`` is touched."""
+        self._file(batch).unlink(missing_ok=True)
+        directory = self._workspace.batch_dir(batch)
+        if directory.is_dir():
+            remove_tree(directory)
+
+    def review(self, batch_id: str, row_id: str, *, reviewed: bool) -> Batch:
+        """Mark reviewed / Mark needs review (spec, *Review workflow*).
+        :class:`KeyError` for a batch or row nobody holds,
+        :class:`NotReviewable` for a row with no listing to look at yet."""
+        with self.lock(batch_id):
+            batch = self.load(batch_id)
+            rows = batch.rows if batch is not None else []
+            index = next((i for i, row in enumerate(rows) if row.id == row_id), None)
+            if batch is None or index is None:
+                raise KeyError(row_id)
+            if not reviewable(rows[index]):
+                raise NotReviewable(rows[index].name)
+            rows[index] = rows[index].model_copy(update={"reviewed": reviewed})
+            self.save(batch)
+            return batch
+
+    # A42: a row names its listing by its current name, exactly as a
+    # proposal record does -- two listings differing only in case can
+    # coexist on a case-sensitive filesystem, and one's rename or delete
+    # must not reach the other's row. A deleted row is not followed: a new
+    # listing given its old name is not its listing.
+
+    def rename_listing(self, old: str, new: str) -> None:
+        """Rename's half of A42: every batch's row for ``old`` now names
+        ``new``. Its design target is the design's file, which stays."""
+        with self.following_rename(old, new):
+            pass
+
+    @contextmanager
+    def following_rename(self, old: str, new: str) -> Iterator[None]:
+        """:meth:`rename_listing` around the move itself: every batch's lock
+        is held while the body moves the listing, and the rows follow only
+        if it returns. The listings API takes these **before** its listing
+        write locks, the order creating a row takes them in (a batch's lock,
+        then its row's name), so a rename and a Retry creating a row of the
+        same name cannot each wait on the other. No row names ``old`` while
+        the move is half done, so the queue cannot start one in between."""
+        ids = sorted(self._workspace.batch_ids())
+        with ExitStack() as held:
+            for batch_id in ids:
+                held.enter_context(self.lock(batch_id))
+            yield
+            for batch_id in ids:
+                self._change_rows(
+                    batch_id,
+                    lambda row: row.name == old and not row.deleted,
+                    lambda _: {"name": new},
+                )
+
+    def mark_deleted(self, listing: str) -> None:
+        """Delete's half of A42: the row stays, marked deleted, and leaves
+        the queue. A row still queued is cancelled here; a running one is
+        the delete's to stop, and its run's end records ``cancelled``."""
+        self._each_row(
+            lambda row: row.name == listing and has_listing(row),
+            lambda row: {"deleted": True} | ({"ai": "cancelled"} if row.ai == "queued" else {}),
+        )
+
+    def restore_listing(self, listing: str, design: str | None) -> None:
+        """A pending delete cancelled (PRD 63's Cancel clears ``lifecycle:
+        deleted`` before apply): the listing never went, so its rows are no
+        longer deleted. Only a row whose design target is the listing's
+        design (``design``, its ``design.default`` ref) comes back -- a row
+        for an earlier listing wiped under the same name is not this one's.
+        The AI state stays as the delete left it; Resume queues a
+        ``cancelled`` row again."""
+        self._each_row(
+            lambda row: (
+                row.deleted
+                and row.name == listing
+                and self._workspace.design_ref(row.design) == design
+            ),
+            lambda _: {"deleted": False},
+        )
+
+    def _each_row(
+        self,
+        which: Callable[[BatchRow], bool],
+        change: Callable[[BatchRow], dict[str, object]],
+    ) -> None:
+        for batch_id in self._workspace.batch_ids():
+            with self.lock(batch_id):
+                self._change_rows(batch_id, which, change)
+
+    def _change_rows(
+        self,
+        batch_id: str,
+        which: Callable[[BatchRow], bool],
+        change: Callable[[BatchRow], dict[str, object]],
+    ) -> None:
+        """Under ``batch_id``'s lock, which the caller holds."""
+        batch = self.load(batch_id)
+        if batch is None or not any(which(row) for row in batch.rows):
+            return
+        batch.rows[:] = [
+            row.model_copy(update=change(row)) if which(row) else row for row in batch.rows
+        ]
+        self.save(batch)

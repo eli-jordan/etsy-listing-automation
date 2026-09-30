@@ -70,6 +70,29 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/batches": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Batches
+     * @description Recent batches (UI doc §2): every batch, and every staging session
+     *     not confirmed yet, newest first, each with its derived status. Listing
+     *     them sweeps expired staging first (A46), so a row never offers a
+     *     session that has gone.
+     */
+    get: operations["list_batches_api_batches_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/batches/{batch_id}": {
     parameters: {
       query?: never;
@@ -81,10 +104,23 @@ export interface paths {
     get: operations["get_batch_api_batches__batch_id__get"];
     put?: never;
     post?: never;
-    delete?: never;
+    /**
+     * Delete Batch
+     * @description Delete batch record (spec, *Cancellation and deletion*): its queued
+     *     and running work is cancelled first, then only the record goes -- its
+     *     rows, review flags and queue state, and the frozen template beside it.
+     *     Designs, listings, briefs and proposals are the workspace's and stay.
+     */
+    delete: operations["delete_batch_api_batches__batch_id__delete"];
     options?: never;
     head?: never;
-    patch?: never;
+    /**
+     * Rename Batch
+     * @description Rename the batch (UI doc §7): the label only, so its id -- and every
+     *     link to it -- stays. A blank label keeps the one it had, as staging's
+     *     does.
+     */
+    patch: operations["rename_batch_api_batches__batch_id__patch"];
     trace?: never;
   };
   "/api/batches/{batch_id}/cancel": {
@@ -163,6 +199,49 @@ export interface paths {
      *     queues it once it exists -- else its AI, keeping the saved brief (A40).
      */
     post: operations["retry_batch_row_api_batches__batch_id__rows__row__retry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/rows/{row}/reviewed": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Set Reviewed
+     * @description Mark reviewed / Mark needs review (spec, *Review workflow*). Refused
+     *     for a row still queued or drafting, deleted, or never created.
+     */
+    put: operations["set_reviewed_api_batches__batch_id__rows__row__reviewed_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/rows/{row}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Batch Row Thumbnail
+     * @description A row that was never created has no listing design to show, so the
+     *     summary shows the upload it was made from, kept beside the batch for
+     *     Retry (A46).
+     */
+    get: operations["batch_row_thumbnail_api_batches__batch_id__rows__row__thumbnail_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -659,7 +738,8 @@ export interface paths {
      *     (market-seo.md, *Cache*; A42): a listing pending deletion is one the
      *     seller is done researching, and otherwise only the wipe after the remote
      *     deletion would remove them. An AI run still going is asked to stop
-     *     first, so it does not write a proposal for a listing being deleted.
+     *     first, so it does not write a proposal for a listing being deleted, and
+     *     the listing's batch rows are marked deleted and leave the queue (A42).
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
@@ -688,6 +768,29 @@ export interface paths {
      *     `--help`/`login status` subprocess) that changes nothing.
      */
     get: operations["get_seo_readiness_api_listings__name__ai_seo_readiness_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/batch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Batch
+     * @description The batch that made ``name``, for the editor's row above the head
+     *     (UI doc §8), or ``null``. A row names its listing exactly, as the rename
+     *     and delete hooks match it (A42); a deleted row is not the listing's.
+     *     Should two batches both claim it, the newer wins.
+     */
+    get: operations["listing_batch_api_listings__name__batch_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -827,7 +930,9 @@ export interface paths {
      *     generated copy travel together, and `.cache/renders/{name}/` moves with them
      *     because the render cache is keyed by listing name too -- left behind it
      *     would orphan a tree nothing deletes and cost a full re-render. The market
-     *     snapshot and the cached AI proposal (A42) move for the same reason.
+     *     snapshot and the cached AI proposal (A42) move for the same reason, and
+     *     every batch row naming the listing follows it (A42), so the batch
+     *     summary opens the new name.
      *
      *     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
      *     left that way deliberately: nothing reads them, they become true again at
@@ -1620,6 +1725,77 @@ export interface components {
       listing_template: string;
       /** Rows */
       rows: components["schemas"]["BatchRowDetail"][];
+      /**
+       * Status
+       * @default drafting
+       * @enum {string}
+       */
+      status: "staging" | "drafting" | "in_review" | "complete" | "stopped";
+    };
+    /**
+     * BatchIndexEntry
+     * @description One row of Recent batches (UI doc §2): a confirmed batch, or a staging
+     *     session not confirmed yet, which reopens staging instead.
+     */
+    BatchIndexEntry: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Designs */
+      designs: number;
+      /**
+       * Drafted
+       * @default 0
+       */
+      drafted: number;
+      /** Expires At */
+      expires_at?: string | null;
+      /**
+       * Failures
+       * @default 0
+       */
+      failures: number;
+      /** Id */
+      id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "staging" | "batch";
+      /** Label */
+      label: string;
+      /** Listing Template */
+      listing_template: string;
+      /**
+       * Listings
+       * @default 0
+       */
+      listings: number;
+      /**
+       * Reviewed
+       * @default 0
+       */
+      reviewed: number;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "staging" | "drafting" | "in_review" | "complete" | "stopped";
+      /**
+       * Undrafted
+       * @default 0
+       */
+      undrafted: number;
+    };
+    /**
+     * BatchPatch
+     * @description Rename the batch (UI doc §7): its label only, never its identity.
+     */
+    BatchPatch: {
+      /** Label */
+      label: string;
     };
     /** BatchRowDetail */
     BatchRowDetail: {
@@ -1637,6 +1813,11 @@ export interface components {
        * @enum {string}
        */
       creation: "pending" | "created" | "failed";
+      /**
+       * Deleted
+       * @default false
+       */
+      deleted: boolean;
       /** Design */
       design: string;
       /** Error */
@@ -1649,6 +1830,16 @@ export interface components {
       proposal?: ("ready" | "stale" | "resolved") | null;
       /** Queue Position */
       queue_position?: number | null;
+      /**
+       * Reviewable
+       * @default false
+       */
+      reviewable: boolean;
+      /**
+       * Reviewed
+       * @default false
+       */
+      reviewed: boolean;
       /** Sources */
       sources: string[];
       /**
@@ -2210,6 +2401,23 @@ export interface components {
        * @constant
        */
       scope: "listings";
+    };
+    /**
+     * ListingBatch
+     * @description The batch a listing was made by, for the editor's row above the head
+     *     (UI doc §8): Back to batch and Mark reviewed.
+     */
+    ListingBatch: {
+      /** Batch Id */
+      batch_id: string;
+      /** Label */
+      label: string;
+      /** Reviewable */
+      reviewable: boolean;
+      /** Reviewed */
+      reviewed: boolean;
+      /** Row Id */
+      row_id: string;
     };
     /** ListingDesignSummary */
     ListingDesignSummary: {
@@ -3188,6 +3396,11 @@ export interface components {
        */
       stage: "retract";
     };
+    /** ReviewedRequest */
+    ReviewedRequest: {
+      /** Reviewed */
+      reviewed: boolean;
+    };
     /**
      * ScoredListing
      * @description One of the (at most) twenty listings scored, with everything the top
@@ -4004,6 +4217,26 @@ export interface operations {
       };
     };
   };
+  list_batches_api_batches_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchIndexEntry"][];
+        };
+      };
+    };
+  };
   get_batch_api_batches__batch_id__get: {
     parameters: {
       query?: never;
@@ -4014,6 +4247,70 @@ export interface operations {
       cookie?: never;
     };
     requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_batch_api_batches__batch_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  rename_batch_api_batches__batch_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BatchPatch"];
+      };
+    };
     responses: {
       /** @description Successful Response */
       200: {
@@ -4155,6 +4452,81 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  set_reviewed_api_batches__batch_id__rows__row__reviewed_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+        row: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReviewedRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description The row has no listing to review yet */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  batch_row_thumbnail_api_batches__batch_id__rows__row__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+        row: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
       };
       /** @description Validation Error */
       422: {
@@ -4999,6 +5371,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["SeoReadinessResponse"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_batch_api_listings__name__batch_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingBatch"] | null;
         };
       };
       /** @description Validation Error */

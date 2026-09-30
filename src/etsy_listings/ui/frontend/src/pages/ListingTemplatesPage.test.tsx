@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
+import * as batchesApi from "../api/batches";
 import * as templatesApi from "../api/listingTemplates";
 import type { ListingTemplateSummary } from "../types";
 import { ListingTemplatesPage } from "./ListingTemplatesPage";
@@ -37,6 +38,10 @@ function cardFor(name: string): HTMLElement {
   return found;
 }
 
+// Recent batches has its own tests (`RecentBatches.test.tsx`).
+beforeEach(() => {
+  vi.spyOn(batchesApi, "listBatches").mockResolvedValue([]);
+});
 afterEach(() => vi.restoreAllMocks());
 
 describe("ListingTemplatesPage", () => {
