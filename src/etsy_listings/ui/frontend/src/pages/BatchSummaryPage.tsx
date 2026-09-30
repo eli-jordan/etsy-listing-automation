@@ -31,7 +31,7 @@ import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
  * The batch summary (UI doc §7; the `batch-summary` frame): the batch's one
  * review surface. A progress bar and a count strip sit above one row per
  * listing, with its AI drafting and its SEO proposal, and the queue's
- * controls -- Cancel batch, Resume, Retry N failed (A40).
+ * controls -- Cancel batch, Resume, Retry N failed.
  *
  * Running and failed rows mount the editor's own step indicator, so a batch
  * row and an open editor read the same way; a finished row says *done*
@@ -43,8 +43,8 @@ import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
  * the seller's own judgement, offered only where the server says the row
  * is reviewable. The label renames by double-click, and Delete batch record
  * removes only the batch's own history (spec, *Cancellation and deletion*).
- * A deleted listing's row stays, struck through (A42). A row whose AI work a
- * deploy cancelled says so and keeps its own Retry (A43; UI doc §8). A
+ * A deleted listing's row stays, struck through. A row whose AI work a
+ * deploy cancelled says so and keeps its own Retry (ADR-0050; UI doc §8). A
  * created listing's name is its link to the editor -- there is no separate
  * Open -- and carries `?batch=`, which is what shows the editor's Back to
  * batch (UI doc §8).
@@ -165,7 +165,7 @@ function AiCell({ row }: { row: BatchRow }) {
         </span>
       );
     case "cancelled_by_deploy":
-      // A43: a deploy of the listing cancelled its AI work, and Resume
+      // ADR-0050: a deploy of the listing cancelled its AI work, and Resume
       // leaves it so no proposal lands on the deployed listing.
       return (
         <span className="bc-status bc-status--info">
@@ -460,7 +460,7 @@ export function BatchSummaryPage() {
               {rows.map((row, index) => {
                 const open = row.creation === "created" && !row.deleted;
                 // A deploy's cancelled row has only its own Retry: Resume
-                // skips it, and it is not a failure for Retry N failed (A43).
+                // skips it, and it is not a failure for Retry N failed (ADR-0050).
                 const retryable = kinds[index] === "retry" || kinds[index] === "deployed";
                 return (
                   <tr key={row.id} className={open ? undefined : "bc-tr--muted"}>

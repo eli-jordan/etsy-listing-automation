@@ -1,15 +1,15 @@
-"""The two cache records batch creation keeps, and the stores over them (A37).
+"""The two cache records batch creation keeps, and the stores over them.
 
 A **staging session** is ``.cache/staging/<id>/session.json``: the frozen
 listing template, one row per unique upload, and the names the seller typed.
 A **batch** is ``.cache/batches/<id>.json``: the same frozen template and one
-row per listing it creates, with each row's allocated name and creation state
-(A39). Both are schema-versioned JSON written atomically, and a record whose
+row per listing it creates, with each row's allocated name and creation state.
+Both are schema-versioned JSON written atomically, and a record whose
 ``schema`` this code does not know -- or that will not parse -- is treated as
 absent: this is cache, and a record nobody can read is one nobody lost.
 
 A batch keeps its staging session's id. Confirming twice therefore finds the
-batch the first confirm wrote instead of making a second (A39), and the id is
+batch the first confirm wrote instead of making a second, and the id is
 as opaque as a fresh one would be.
 """
 
@@ -31,7 +31,7 @@ from etsy_listings.workspace.workspace import Workspace, remove_tree
 SCHEMA = 1
 
 STAGING_LIFETIME = timedelta(days=7)
-"""A46: a staging session expires seven days after its last edit."""
+"""staging expiry: a staging session expires seven days after its last edit."""
 
 
 class _Record(BaseModel):
@@ -58,7 +58,7 @@ class StagingRow(BaseModel):
     """The name the review starts from: the first source's stem through
     `slugify`, or what the seller typed."""
     typed: bool = False
-    """A typed name is flagged when it is taken, never changed (A38)."""
+    """A typed name is flagged when it is taken, never changed."""
     error: str | None = None
 
 
@@ -100,11 +100,11 @@ Creation = Literal["pending", "created", "failed"]
 AiState = Literal[
     "queued", "running", "done", "failed", "stopped", "cancelled", "cancelled_by_deploy"
 ]
-"""Where a created row's AI work is (A40), set by the batch queue.
+"""Where a created row's AI work is, set by the batch queue.
 ``stopped`` is a queued row **Cancel batch** took out of the queue;
 ``cancelled`` is a run that was stopped part-way. **Resume** queues both
 again. ``cancelled_by_deploy`` is work a UI deploy of the listing cancelled,
-queued or running (A43): Resume leaves it, so no proposal lands on a listing
+queued or running: Resume leaves it, so no proposal lands on a listing
 after its deploy, and only the row's own Retry queues it again."""
 
 
@@ -127,13 +127,13 @@ class BatchRow(BaseModel):
     than ``-2-2``."""
     name: str
     design: str
-    """The design's stem under ``designs/``, the row's *design target*
-    (A39). The listing's name, except where the row's bytes were already in
+    """The design's stem under ``designs/``, the row's *design target*.
+    The listing's name, except where the row's bytes were already in
     ``designs/`` and the listing reuses that file (spec, *Content
     deduplication*)."""
     creation: Creation = "pending"
     claimed: bool = False
-    """A39's recorded step: set before ``listings/<name>/`` is made, so a
+    """recorded step: set before ``listings/<name>/`` is made, so a
     directory found there on resume -- with no ``listing.yaml`` yet -- is
     known to be this row's own."""
     error: str | None = None
@@ -147,7 +147,7 @@ class BatchRow(BaseModel):
     only by Mark reviewed / Mark needs review, never by an edit, a proposal
     or a deploy, and never read by ``plan`` or ``apply``."""
     deleted: bool = False
-    """The listing was deleted (A42). The row stays, struck through, so the
+    """The listing was deleted. The row stays, struck through, so the
     batch still says what it made (UI doc §7); nothing follows or queues it
     again."""
 
@@ -179,7 +179,7 @@ class Batch(_Record):
 
 class _Store[R: _Record]:
     """Load and save one kind of record, with a lock per record for the
-    read-modify-write every mutation is (A37)."""
+    read-modify-write every mutation is."""
 
     def __init__(
         self,
@@ -245,7 +245,7 @@ class StagingStore(_Store[StagingSession]):
             remove_tree(directory)
 
     def sweep(self, *, now: datetime) -> None:
-        """A46: drop every session seven days past its last edit. A directory
+        """staging expiry: drop every session seven days past its last edit. A directory
         with no readable record is judged by its own age instead -- it is a
         staging still being written, or one a crash or a schema change left
         behind."""
@@ -293,14 +293,14 @@ class BatchStore(_Store[Batch]):
             self.save(batch)
             return batch
 
-    # A42: a row names its listing by its current name, exactly as a
+    # a row names its listing by its current name, exactly as a
     # proposal record does -- two listings differing only in case can
     # coexist on a case-sensitive filesystem, and one's rename or delete
     # must not reach the other's row. A deleted row is not followed: a new
     # listing given its old name is not its listing.
 
     def rename_listing(self, old: str, new: str) -> None:
-        """Rename's half of A42: every batch's row for ``old`` now names
+        """Rename's half of rename and delete hooks: every batch's row for ``old`` now names
         ``new``. Its design target is the design's file, which stays."""
         with self.following_rename(old, new):
             pass
@@ -327,7 +327,7 @@ class BatchStore(_Store[Batch]):
                 )
 
     def mark_deleted(self, listing: str) -> None:
-        """Delete's half of A42: the row stays, marked deleted, and leaves
+        """Delete's half of rename and delete hooks: the row stays, marked deleted, and leaves
         the queue. A row still queued is cancelled here; a running one is
         the delete's to stop, and its run's end records ``cancelled``."""
         self._each_row(
@@ -336,7 +336,7 @@ class BatchStore(_Store[Batch]):
         )
 
     def restore_listing(self, listing: str, design: str | None) -> None:
-        """A pending delete cancelled (PRD 63's Cancel clears ``lifecycle:
+        """A pending delete cancelled (ADR-0036's Cancel clears ``lifecycle:
         deleted`` before apply): the listing never went, so its rows are no
         longer deleted. Only a row whose design target is the listing's
         design (``design``, its ``design.default`` ref) comes back -- a row

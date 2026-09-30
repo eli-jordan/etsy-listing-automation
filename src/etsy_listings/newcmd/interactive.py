@@ -1,5 +1,5 @@
-"""The ``new`` picker's interactive shell (PRD 19). Thin by design -- every
-decision it makes is delegated to :mod:`etsy_listings.newcmd.logic`, which is
+"""The ``new`` picker's interactive shell. Thin by design -- every
+decision it makes is delegated to:mod:`etsy_listings.newcmd.logic`, which is
 what the behaviour tests exercise through a fake catalog. This module only
 sequences the questions; *how* a question gets asked is
 :mod:`etsy_listings.prompts`, which picks a backend that can actually
@@ -49,7 +49,7 @@ DEFAULT_PLACEHOLDER = "front"
 
 
 def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Blueprint:
-    """Pick from ``marker  brand  model  title`` rows.
+    """Pick from ``marker brand model title`` rows.
 
     Even ``--category tshirt`` leaves dozens of blueprints, and Printify's
     titles bury the useful word in the middle ("Unisex Garment-Dyed Heavy
@@ -81,7 +81,7 @@ def _report_print_area_choice(variant_set: VariantSet) -> None:
     """Say so when the garment profile's print area is one of several on offer.
 
     Printify's print areas are per-variant and genuinely differ by garment
-    size. The garment profile carries exactly one (PRD 8a), so `new` records the
+    size. The garment profile carries exactly one, so `new` records the
     largest -- a defensible default, but not one worth making silently, since
     it decides how big the design file has to be.
     """
@@ -125,7 +125,7 @@ def _pick_template(workspace: Workspace) -> str:
     A typo used to be accepted silently and produce a listing that failed
     much later at render time, with nothing pointing back at `new`. Reading
     the template is not optional anyway -- its kind decides the shape of a
-    valid `media` entry (`A11`) -- so it may as well be picked from the list.
+    valid `media` entry -- so it may as well be picked from the list.
     """
     names = workspace.template_names()
     if not names:
@@ -188,7 +188,7 @@ def _pick_or_create_pricing_plan(
     sizes: list[str],
 ) -> Path:
     """Returns the chosen/generated plan's absolute path -- turning that into
-    a ref is the caller's job (`pricing_plan_ref`, PRD 73)."""
+    a ref is the caller's job (`pricing_plan_ref`, ADR-0046)."""
     candidates = load_candidate_pricing_plans(workspace)
     choices = build_pricing_plan_choices(candidates, garment_profile_slug)
     rows = [c.label for c in choices] + [CREATE_NEW_PLAN_LABEL]

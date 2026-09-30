@@ -1,15 +1,15 @@
-"""The runs resource's six endpoints (A33, decision 7).
+"""The runs resource's six endpoints (ADR-0041, decision 7).
 
 ```
-POST   /api/runs              {kind, listings, expect?} -> 202 RunSummary | 409 {active_run}
-GET    /api/runs?listing=     active and recent runs for a listing
-GET    /api/runs/{id}         RunDetail: phase, listings, events so far
-GET    /api/runs/{id}/events  text/event-stream; replays after Last-Event-ID
-DELETE /api/runs/{id}         cancel a queued or running plan; 409 for apply
-POST   /api/runs/{id}/seen    the result of a finished run has been looked at
+POST /api/runs {kind, listings, expect?} -> 202 RunSummary | 409 {active_run}
+GET /api/runs?listing= active and recent runs for a listing
+GET /api/runs/{id} RunDetail: phase, listings, events so far
+GET /api/runs/{id}/events text/event-stream; replays after Last-Event-ID
+DELETE /api/runs/{id} cancel a queued or running plan; 409 for apply
+POST /api/runs/{id}/seen the result of a finished run has been looked at
 ```
 
-Every write here is a call into :mod:`etsy_listings.ui.runs.registry` -- this
+Every write here is a call into:mod:`etsy_listings.ui.runs.registry` -- this
 module never decides whether a run may start, only how that decision is
 carried over HTTP. Nothing here computes a diff or runs a run either
 (CLAUDE.md's invariants): the FIFO worker thread in ``ui/runs/executor.py``

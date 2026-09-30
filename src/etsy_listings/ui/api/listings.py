@@ -174,7 +174,7 @@ def _business_issues(
 ) -> list[Issue]:
     """*listing_dir* rather than a listing name, because the not-yet-created
     draft the editor opens on ``/listings/new`` has no name and no directory.
-    A workspace-rooted ref (PRD 73) resolves the same against any listing
+    A workspace-rooted ref resolves the same against any listing
     directory, so `Workspace.draft_listing_dir` answers for it exactly as a
     real one would."""
     raw_issues: list[ValidationIssue] = check_listing(
@@ -235,7 +235,7 @@ def _status(
         lifecycle=lifecycle,
         etsy_state=etsy_state,
         last_applied_lifecycle=_last_applied_lifecycle(lock),
-        # A29: a stage raised mid-apply, and the per-stage write already made
+        # ADR-0037: a stage raised mid-apply, and the per-stage write already made
         # the lockfile newer than the yaml -- `edited` alone would read this
         # as clean.
         incomplete=lock is not None and lock.incomplete is not None,
@@ -251,7 +251,7 @@ def _etsy_state(workspace: Workspace, etsy_listing_id: int | None) -> str | None
 
 
 class Priced(Protocol):
-    """What a price summary reads: a listing, or a listing template (A35),
+    """What a price summary reads: a listing, or a listing template,
     which carries the same price fields and the same resolution."""
 
     garment_profile: str
@@ -399,7 +399,7 @@ def _detail(
         printify_product_id=printify_product_id,
         field_errors=field_errors,
         # The table's row gestures, so the editor's action row offers the
-        # same lifecycle actions (PRD 66) without deciding them itself.
+        # same lifecycle actions without deciding them itself.
         gestures=listing_gestures(
             lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
         ),
@@ -486,7 +486,7 @@ def field_errors_of(exc: ValidationError) -> dict[str, str]:
 
 def _merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     """A shallow merge, except ``etsy:``, which merges one level deep -- the
-    editor's tabs each own a slice of it (title, tags, section, ...) and a
+    editor's tabs each own a slice of it (title, tags, section,...) and a
     shallow overwrite there would let a Details-tab autosave silently erase
     whatever the last PATCH wrote to a sibling field."""
     merged = dict(base)
@@ -494,7 +494,7 @@ def _merge(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
         if key == "etsy" and isinstance(value, dict) and isinstance(merged.get("etsy"), dict):
             merged["etsy"] = {**merged["etsy"], **value}
         elif key == "lifecycle" and value is None:
-            # Un-retire / Cancel: deleting the key, not writing `active` (PRD 62).
+            # Un-retire / Cancel: deleting the key, not writing `active`.
             merged.pop("lifecycle", None)
         else:
             merged[key] = value
@@ -545,7 +545,7 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
             return _detail(workspace, name, field_errors=field_errors_of(exc))
         replace_listing_yaml(path, merged)
     if raw.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
-        # A42's delete, undone: Cancel on a pending delete (PRD 63) means the
+        # delete, undone: Cancel on a pending delete means the
         # listing never went, so the batch rows the delete marked return.
         design = merged.get("design")
         default = design.get("default") if isinstance(design, dict) else None
@@ -555,24 +555,25 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
 
 @router.delete("/{name}", response_model=None)
 def delete_listing(target: Existing, request: Request) -> ListingSummary | Response:
-    """Delete from the listings table (PRD 63, 66).
+    """Delete from the listings table.
 
     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
 
     Either way the market snapshot and the cached AI proposal go now
-    (features/market-seo-20260924/spec.md, *Cache*; A42): a listing pending deletion is one the
+    (features/market-seo-20260924/spec.md, *Cache*; rename and delete hooks): a listing pending
+    deletion is one the
     seller is done researching, and otherwise only the wipe after the remote
     deletion would remove them. An AI run still going is asked to stop
     first, so it does not write a proposal for a listing being deleted, and
-    the listing's batch rows are marked deleted and leave the queue (A42).
+    the listing's batch rows are marked deleted and leave the queue.
     """
     workspace, name = target.workspace, target.name
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
-    # A42: the rows first, so the queue cannot start one between the stop
+    # the rows first, so the queue cannot start one between the stop
     # and the delete; a run already going is the one stopped next.
     _batch_store(request).mark_deleted(name)
     _stop_ai_run(request, name)
@@ -613,7 +614,7 @@ def _describe_draft(
     state to echo (unlike PATCH, which still has the listing on disk); one that
     will is described as it stands -- incomplete but structurally sound -- and
     carries its real ``issues``. There is no separate draft validation any
-    more: incompleteness is not a validation failure at all (PRD 70), so the
+    more: incompleteness is not a validation failure at all, so the
     only documents that land in the ``except`` below are genuinely malformed
     ones.
 
@@ -676,13 +677,13 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
 def rename_listing(target: Existing, body: RenameListingRequest, request: Request) -> ListingDetail:
     """Move a listing, whole, to a new name.
 
-    A listing's identity is its directory name (PRD 60), so the rename is a
+    A listing's identity is its directory name, so the rename is a
     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
     generated copy travel together, and `.cache/renders/{name}/` moves with them
     because the render cache is keyed by listing name too -- left behind it
     would orphan a tree nothing deletes and cost a full re-render. The market
-    snapshot and the cached AI proposal (A42) move for the same reason, and
-    every batch row naming the listing follows it (A42), so the batch
+    snapshot and the cached AI proposal move for the same reason, and
+    every batch row naming the listing follows it, so the batch
     summary opens the new name.
 
     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
@@ -701,7 +702,7 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         # Blur commits an unchanged name constantly; that is not an error, and
         # it must not be the 409 below either.
         return _detail(workspace, old)
-    # A42: the batch rows follow the move. The batch locks come first --
+    # the batch rows follow the move. The batch locks come first --
     # the order creating a batch row takes them in -- see
     # `BatchStore.following_rename`.
     with _batch_store(request).following_rename(old, new), target.locks.listing(old, new):
@@ -731,7 +732,7 @@ def _batch_store(request: Request) -> BatchStore:
 
 
 def _stop_ai_run(request: Request, name: str) -> None:
-    """A42: deleting a listing cancels its active AI run."""
+    """rename and delete hooks: deleting a listing cancels its active AI run."""
     run = request.app.state.ai_run_registry.latest(name)
     if run is not None:
         run.request_stop("cancelled")
@@ -746,7 +747,7 @@ def _forget_ai_run(request: Request, name: str) -> None:
 def _preview_response(
     request: Request, target: Target, template: str, colour: str | None
 ) -> Response:
-    """A32/A33: the preview a plan run already rendered for this scene, at its
+    """ADR-0040, ADR-0041: the preview a plan run already rendered for this scene, at its
     *current* hash. :func:`~etsy_listings.engine.preview.lookup_preview` owns
     the hash and the path; this is the HTTP adapter over it.
     """
@@ -769,7 +770,7 @@ def _preview_response(
 @router.get("/{name}/previews/{template}")
 def listing_preview(target: Existing, template: str, request: Request) -> Response:
     """A ``multiple``/``single``-kind scene: no per-colour photo, so no
-    colour segment (PRD 28's rule, mirrored from ``render_file``)."""
+    colour segment (ADR-0014's rule, mirrored from ``render_file``)."""
     return _preview_response(request, target, template, None)
 
 

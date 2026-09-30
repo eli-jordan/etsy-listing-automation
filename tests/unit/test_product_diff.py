@@ -164,7 +164,7 @@ NAVY_M = PricedVariant(id=3, colour_slug="navy", size="M", price=34900)
 
 
 def test_a_new_colour_is_reported_by_name() -> None:
-    """A30, decision 4: the diff names the colour rather than only a count,
+    """ADR-0038, decision 4: the diff names the colour rather than only a count,
     so the UI does not have to diff two colour lists itself to ring it."""
     was = _desired(BLACK_M).applied()
     desired = _desired(BLACK_M, NAVY_M)
@@ -366,7 +366,7 @@ def test_actions_say_update_when_a_product_is_there() -> None:
 
 
 def test_a_discontinued_cell_is_reported_never_fatal() -> None:
-    """PRD 46: a cell Printify has withdrawn is its fact, not the user's
+    """missing variant cells: a cell Printify has withdrawn is its fact, not the user's
     mistake -- but a listing quietly selling five sizes where it asked for six
     is worth saying out loud."""
     desired = _desired(missing=(("black", "XXXL"),))

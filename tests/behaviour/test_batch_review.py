@@ -1,6 +1,6 @@
 """Reviewing a batch, and a batch's listings living on after it (batch plan
 PR 5; spec *Review workflow*, *Cancellation and deletion* and *Error and
-recovery rules*; UI doc §2 and §7; A42).
+recovery rules*; UI doc §2 and §7; rename and delete hooks).
 
 Everything goes through the app the seller drives -- the staging, batch,
 listing and AI-run endpoints, with the batch queue running -- because what
@@ -210,9 +210,9 @@ def test_deleting_a_listing_cancels_its_run_and_leaves_a_deleted_row(
 def test_cancelling_a_pending_delete_restores_the_row(
     client: TestClient, workspace: Workspace
 ) -> None:
-    """A listing with remotes is only marked ``lifecycle: deleted`` (PRD 63);
+    """A listing with remotes is only marked ``lifecycle: deleted``;
     Cancel clears the mark before apply, and the listing never went. Its
-    row comes back, and a Resume can draft it again (A42)."""
+    row comes back, and a Resume can draft it again."""
     batch_id = _batch(client, "night-hike-club", "cedar-trail")
     _drafted(client, batch_id)
     Lockfile.empty(tool_version="test", applied_at="2026-09-27T12:00:00").model_copy(

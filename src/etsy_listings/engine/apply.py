@@ -1,4 +1,4 @@
-"""Executes a :class:`PlannedRun`, strictly sequentially (A3: apply never
+"""Executes a :class:`PlannedRun`, strictly sequentially (ADR-0009: apply never
 parallelises writes -- only ``plan``'s read-only live fetches may fan out)."""
 
 from __future__ import annotations
@@ -22,11 +22,11 @@ from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 
 RecordSink = Callable[[Lockfile], None]
 """Called with the stamped, folded lockfile after every stage `execute`
-completes -- and once more, marked incomplete, when a stage raises. A29: this
+completes -- and once more, marked incomplete, when a stage raises. ADR-0037: this
 is what makes a partial apply durable through a crash, not just through a
 clean return. `apply_listings` is the caller that supplies one that writes
 `state.lock.json`; a caller with no interest in recording gets the no-op
-default, which is every direct `execute` call that existed before A29."""
+default, which is every direct `execute` call that existed before ADR-0037."""
 
 
 def _ignore_record(lock: Lockfile) -> None:
@@ -64,9 +64,9 @@ def execute(
     Nor does anything here know the lockfile's shape. Each result is folded in
     by :meth:`Lockfile.fold`, which owns the replace-versus-merge rules for
     all four axes -- this loop only decides *which* stages run and in what
-    order, which is the part that is genuinely ``apply``'s business (A3).
+    order, which is the part that is genuinely ``apply``'s business.
 
-    **``remote`` is threaded live through the run; ``applied`` is not (A26).**
+    **``remote`` is threaded live through the run; ``applied`` is not.**
     A stage's own ``lock.applied`` stays exactly what it was before this run
     started, so stage order still cannot change what a stage sees there. But
     an id an earlier stage minted *this run* -- ``publish`` creating the Etsy
@@ -75,10 +75,10 @@ def execute(
     Printify product, publishes it, and then cannot find the listing id it
     just minted would need running twice.
 
-    **A29: ``record`` is called after every stage that succeeds, and once
+    **ADR-0037: ``record`` is called after every stage that succeeds, and once
     more if one raises.** Before this, the lockfile ``execute`` builds only
     ever reached disk if the whole loop returned -- so a stage raising after
-    ``printify_product`` created a product lost that id, and PRD 48's
+    ``printify_product`` created a product lost that id, and ADR-0023's
     duplicate-create guard then refused the next attempt outright, forever.
     ``record`` is called with the same lockfile ``fold`` just produced,
     stamped, so a crash between two stages still leaves the earlier one
@@ -96,15 +96,15 @@ def execute(
     stage at all (every ``StagePlan`` already satisfied) still clear it: the
     loop never runs, but the check after it does.
 
-    **A33: ``on_event`` brackets each stage's own ``apply``.** It emits one
+    **ADR-0041: ``on_event`` brackets each stage's own ``apply``.** It emits one
     closed engine-event vocabulary, including stage progress with listing and
     stage identity attached here rather than reconstructed by a caller.
 
-    **``should_stop`` is a graceful pause, not a failure (A33, decision 7's
+    **``should_stop`` is a graceful pause, not a failure (ADR-0041, decision 7's
     shutdown paragraph).** Checked before each stage that would run and has
     not started yet -- idle stages are not work to stop -- and never inside
     one, so a stage already running always finishes and
-    records itself exactly as A29 already guarantees. Stopping early leaves
+    records itself exactly as ADR-0037 already guarantees. Stopping early leaves
     ``incomplete`` exactly as it was: unlike a raise, nothing here failed, so
     no new marker is set; but the plan was not fully carried out either, so an
     existing marker from an earlier failed run is not cleared -- that only

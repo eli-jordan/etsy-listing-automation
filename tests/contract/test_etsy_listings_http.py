@@ -1,6 +1,6 @@
 """Contract layer for the listing surface Phase 3's stages write through:
 payload shape, both `image_ids` encodings, and the two asymmetric reads
-(`GET .../listings/{id}` works, `GET .../shops/{shop}/listings/{id}` 404s;
+(`GET.../listings/{id}` works, `GET.../shops/{shop}/listings/{id}` 404s;
 the images endpoint 404s for every id, valid or invented).
 
 Every payload here is transcribed from a real response recorded on
@@ -190,7 +190,7 @@ def test_includes_images_asks_for_the_images_param() -> None:
         (8503331196, 1),
         (8503331086, 2),
     ]
-    # A30: the deploy review's "On Etsy now" column reads this for a draft.
+    # ADR-0038: the deploy review's "On Etsy now" column reads this for a draft.
     assert listing.images[0].url_570xN == (
         "https://i.etsystatic.com/12345678/r/il/abcdef/1/il_570xN.8503331196.jpg"
     )
@@ -687,7 +687,7 @@ def test_a_mov_upload_is_sent_as_quicktime() -> None:
 
 
 def test_a_file_that_is_neither_mp4_nor_mov_is_refused_before_sending() -> None:
-    """PRD 72 allows only the two a browser previews; anything else reaching
+    """ADR-0045 allows only the two a browser previews; anything else reaching
     the client is a caller's bug, and sending it would spend an association."""
     sent: list[httpx.Request] = []
 

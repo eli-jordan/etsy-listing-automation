@@ -1,4 +1,4 @@
-"""Colour slugification: PRD 7a.
+"""Colour slugification: ADR-0004.
 
 A mockup filename must equal the slugified Printify colour name (``"Blue Jean"``
 -> ``blue-jean.png``), and ``listing.yaml`` refers to colours by that same slug.

@@ -28,9 +28,9 @@ listing. That stays with the facts, the design text, the image and the brief.
 ## The chain
 
 Every SEO proposal runs as one **AI run** (see [AI runs](#ai-runs)) of up to
-four steps. That includes the run PRD 68 starts automatically.
+four steps. That includes the run ADR-0003 starts automatically.
 
-1. **Brief.** Only when the run asks for a draft (PRD 68's automatic chain),
+1. **Brief.** Only when the run asks for a draft (ADR-0003's automatic chain),
    and written only into an empty field. When the seller presses AI Mode, the
    brief already exists and this step is skipped.
 2. **Query extraction.** A provider call that turns the brief and design into
@@ -193,7 +193,7 @@ supplied input.
 
 ## Cache
 
-Stored under `.cache/market/`, which is gitignored and fully derivable (PRD 22).
+Stored under `.cache/market/`, which is gitignored and fully derivable.
 
 | What | Key | Lifetime |
 |---|---|---|
@@ -209,8 +209,8 @@ deleted, as `.cache/renders/{name}/` is. It is read-only: the seller can't
 edit queries or exclude candidates in this version.
 
 Market research itself writes nothing to `listing.yaml`, `generated.yaml` or
-a lockfile. The only listing write in the whole chain is step 1's brief (PRD 4,
-as amended by PRD 71).
+a lockfile. The only listing write in the whole chain is step 1's brief (ADR-0003,
+as amended by ADR-0044).
 
 Because extraction isn't cached, a repeat request usually produces slightly
 different queries. The 7-day caches still absorb most of the Etsy calls, since
@@ -258,7 +258,7 @@ so the seller can tell an Etsy problem from a model problem.
 Query extraction failures follow the existing AI Mode rules (fallback, repair,
 *Try again*).
 
-PRD 4's 60-second deadline applies to each provider call (brief, query
+ADR-0003's 60-second deadline applies to each provider call (brief, query
 extraction, proposal) on its own. Market search has no limit of its own. The
 whole run is capped at **3 minutes**; when the cap is reached, the run is
 cancelled and fails with a timeout message.
@@ -271,12 +271,12 @@ A proposal is no longer one synchronous request. The chain is one server-side
 plan/apply worker thread, so AI work and deploys don't block each other.
 
 ```
-POST   /api/ai/runs                 {listing, draft_brief} -> 202 AiRunSummary | 409 {active_run} | 409 {reason}
-GET    /api/ai/runs?listing=        the listing's current or most recent run, or 404
-GET    /api/ai/runs/{id}            AiRunDetail: phase, steps, events so far
-GET    /api/ai/runs/{id}/events     text/event-stream; replays after Last-Event-ID
-DELETE /api/ai/runs/{id}            cancel; 409 if already terminal
-GET    /api/listings/{name}/market  the latest snapshot, or 404
+POST /api/ai/runs {listing, draft_brief} -> 202 AiRunSummary | 409 {active_run} | 409 {reason}
+GET /api/ai/runs?listing= the listing's current or most recent run, or 404
+GET /api/ai/runs/{id} AiRunDetail: phase, steps, events so far
+GET /api/ai/runs/{id}/events text/event-stream; replays after Last-Event-ID
+DELETE /api/ai/runs/{id} cancel; 409 if already terminal
+GET /api/listings/{name}/market the latest snapshot, or 404
 ```
 
 - **Readiness.** `POST` checks the same things AI Mode's readiness does, plus
@@ -296,7 +296,7 @@ GET    /api/listings/{name}/market  the latest snapshot, or 404
 - **The brief write.** The run re-reads the listing under the listing's
   write lock, which PATCH autosave and rename also take. It writes `brief`
   only if the saved brief is still empty, then emits `brief {text, written}`.
-- **Suggestions** still live in browser local storage (PRD 4). The browser
+- **Suggestions** still live in browser local storage (ADR-0003). The browser
   stores the `proposal` event there. Replay only covers a run that is in
   progress or has just finished.
 
@@ -355,8 +355,9 @@ snapshot, so it survives a reload. The design is in
   what CI runs. `E2E_REAL_AI=1` switches to the real Codex/Claude chain for a
   local run.
 
-## PRD changes
+## Related decisions
 
-Recorded in the PRD: #4, #13 and #68 are amended, the setup seeding exception
-is added, the config section gains `settings.yaml`, and decision #71 points
-here.
+[ADR-0003](../../adr/0003-ai-proposes-copy-the-seller-accepts-it.md)
+records the proposal boundary, and ADR-0044 records market evidence and the
+opt-in prompt replacement rule. `settings.yaml` contains the runtime
+market-scoring settings described above.

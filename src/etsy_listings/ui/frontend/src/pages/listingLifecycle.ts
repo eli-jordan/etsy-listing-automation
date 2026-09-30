@@ -1,6 +1,6 @@
 import type { ListingSummary } from "../types";
 
-/** A listing's lifecycle gesture (PRD 66), as the server offers it on both
+/** A listing's lifecycle gesture, as the server offers it on both
  * the Listings table's row and the editor's `ListingDetail`. */
 export type Gesture = ListingSummary["gestures"][number];
 
@@ -32,7 +32,7 @@ interface RemoteIds {
 }
 
 /** Whether deleting only *marks* the listing: anything on Printify or Etsy
- * has to be retracted by the next apply first (PRD 63). */
+ * has to be retracted by the next apply first. */
 export function hasRemotes(listing: RemoteIds): boolean {
   return listing.etsy_listing_id != null || listing.printify_product_id != null;
 }
@@ -51,7 +51,7 @@ export function deleteDetails(listing: RemoteIds): string {
   return hasRemotes(listing) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS;
 }
 
-/** What each non-delete gesture writes to `lifecycle` (PRD 62): `null`
+/** What each non-delete gesture writes to `lifecycle`: `null`
  * deletes the key, which is both Un-retire and Cancel. */
 export const LIFECYCLE_OF: Record<Exclude<Gesture, "delete">, "retired" | "renew" | null> = {
   retire: "retired",

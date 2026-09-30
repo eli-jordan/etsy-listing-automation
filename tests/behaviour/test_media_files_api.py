@@ -1,8 +1,8 @@
-"""Behaviour tests for the file locator's endpoints (PRD 72, 73): the two
+"""Behaviour tests for the file locator's endpoints: the two
 places a `media:` file ref can point -- `common-media/` and the listing's own
 directory -- listed with their kind and served with their real type.
 
-The listing-local half is a security boundary (A8): its listing name and file
+The listing-local half is a security boundary: its listing name and file
 path both arrive from URLs, and the directory it serves from also holds
 `listing.yaml` and the lockfile. Real files on disk, no network, no fakes.
 """
@@ -53,10 +53,10 @@ class TestCommonMedia:
         self, client: TestClient, shared: Path
     ) -> None:
         """The picker hands back the ref ready to write. A shared file's ref is
-        its workspace-relative path (PRD 73), and its name is its path under
+        its workspace-relative path, and its name is its path under
         `common-media/` -- what the picture endpoints take. Videos are listed
         too, told apart by `kind` rather than by the browser reading an
-        extension (PRD 72)."""
+        extension."""
         (shared / "charts").mkdir()
         (shared / "size-guide.png").write_bytes(b"")
         (shared / "charts" / "care.jpg").write_bytes(b"")
@@ -118,7 +118,7 @@ class TestCommonMedia:
         "name", ["..%2Fshop.yaml", "..%2Flistings%2Ftake-a-hike%2Flisting.yaml"]
     )
     def test_a_path_out_of_the_directory_is_refused(self, client: TestClient, name: str) -> None:
-        """A8: the name reaches `common_media_file`, whose segment rule is the
+        """ADR-0013: the name reaches `common_media_file`, whose segment rule is the
         boundary."""
         assert client.get(f"/api/common-media/{name}/file").status_code == 400
 
@@ -168,7 +168,7 @@ class TestListingMediaFiles:
     def test_lists_the_listings_own_files_with_the_ref_it_stores(
         self, client: TestClient, listing: Path
     ) -> None:
-        """The *This listing* group: a `./` ref (PRD 73), and never the two
+        """The *This listing* group: a `./` ref, and never the two
         files that sit beside the pictures."""
         (listing / "shots").mkdir()
         (listing / "shots" / "back.png").write_bytes(b"")

@@ -5,7 +5,7 @@ Three orderings matter here and none of them is arbitrary:
 - **The ``.gitignore`` is written before the first secret.** ``auth`` runs
   before ``setup``, so it may be the first thing ever written into this
   directory -- and a directory inside an existing repository is one where a
-  ``.env`` written a moment too early is already tracked (PRD 49).
+  ``.env`` written a moment too early is already tracked.
 - **Every credential is verified before it is stored**, against its own API:
   Printify's shop list, Etsy's ping, and for the bearer, the token exchange
   itself. Storing an unverified credential produces a workspace that looks
@@ -72,7 +72,7 @@ ALL_PARTS: tuple[Part, ...] = ("printify", "etsy", "anthropic")
 Printify first because it is the one every phase so far needs; Anthropic last
 because nothing needs it yet. A part can be run on its own (`auth etsy`) --
 one credential expiring is the ordinary case, and walking past two working
-ones to renew the third is what teaches people to avoid the command (PRD 14).
+ones to renew the third is what teaches people to avoid the command.
 """
 
 

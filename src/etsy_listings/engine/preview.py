@@ -1,6 +1,6 @@
-"""Render-stage previews as one surface (A30, A32).
+"""Render-stage previews as one surface.
 
-A30: only the stage that produced a type looks inside it. Preview is
+ADR-0038: only the stage that produced a type looks inside it. Preview is
 render-specific -- not on ``Stage`` -- and then three callers peeked anyway:
 ``preview_listing`` found the ``RenderStage``, the executor re-opened the
 snapshot, and the listings GET rebuilt ``desired`` and rehashed. One module
@@ -36,7 +36,7 @@ def _never_stop() -> bool:
 def needs_preview(planned: PlannedRun) -> bool:
     """Whether this listing's plan has a scene worth spending a preview
     render on -- ``RenderStage.snapshot``'s own ``stale``/``missing`` states,
-    minus whatever already has one (A32's ``preview`` field)."""
+    minus whatever already has one (ADR-0040's ``preview`` field)."""
     render_state = next((s for s in planned.states if s.stage.name == RenderStage.name), None)
     if render_state is None or isinstance(render_state.desired, Blocked):
         return False
@@ -58,7 +58,7 @@ def render_pending(
     """Render full-size previews for one already-planned listing.
 
     Finds the render stage's own state and asks *it*, rather than knowing
-    anything about scenes -- A30, concentrated here so ``run`` and the
+    anything about scenes -- ADR-0038, concentrated here so ``run`` and the
     executor do not each name ``RenderStage``. Empty when there is no render
     state (retract-only) or it is blocked.
     """

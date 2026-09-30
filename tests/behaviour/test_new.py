@@ -165,7 +165,7 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
 def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
     workspace_root: Path, monkeypatch, scripted
 ) -> None:
-    """A `single`-kind template has one output and no colour to name (PRD 28).
+    """A `single`-kind template has one output and no colour to name.
     `new` used to write one `{template, colour}` entry per colour regardless of
     kind, which is not a listing the renderer accepts."""
     from etsy_listings.config.listing import Listing

@@ -50,13 +50,13 @@ from etsy_listings.config.media import ProbeFailure, VideoFacts
 
 Severity = Literal["block", "warn", "info"]
 """``info`` is a note about what Etsy will do, not a problem with the listing
--- the one today is that Etsy strips a video's sound (PRD 72). The banner shows
+-- the one today is that Etsy strips a video's sound. The banner shows
 it quietly and `engine/stages/gates.py` never refuses on it."""
 Tab = Literal["variants", "pricing", "images", "details"]
 
 Production = Listing | ListingTemplate
 """What the production checks read: the fields a listing and a listing
-template share (A36). A check that takes one takes either, so a template is
+template share. A check that takes one takes either, so a template is
 judged by the very rules the listings made from it will be."""
 
 
@@ -107,7 +107,7 @@ MISSING_LISTING_YAML = (
 )
 
 RESOLUTION_TOLERANCE = 0.9
-"""A design must reach 90% of the print area on each axis (PRD 38).
+"""A design must reach 90% of the print area on each axis.
 
 Not slack for its own sake. The failure worth catching is the file that is a
 tenth of the size; a few percent short upscales invisibly, and a gate at
@@ -120,7 +120,7 @@ PRINTIFY_MAX_VARIANTS = 100
 
 The editor can predict the configured matrix without a catalog request: every
 selected colour asks for every size in the garment profile. Printify may offer
-fewer cells than that (PRD 46), so this is advice rather than a deployment
+fewer cells than that, so this is advice rather than a deployment
 refusal; the live catalog remains the authority on what can actually be sent.
 """
 
@@ -137,7 +137,7 @@ def required_design_pixels(profile: GarmentProfile) -> tuple[int, int]:
 def check_design_resolution(design: Path, profile: GarmentProfile) -> list[Issue]:
     """Refuse a design that will print soft, or print its background.
 
-    Never auto-upscaled and never converted (PRD 17): a silently upscaled
+    Never auto-upscaled and never converted: a silently upscaled
     design produces a blurry shirt discovered by customer complaint, which is
     the one failure mode this whole gate exists to make impossible.
 
@@ -215,11 +215,11 @@ def check_garment_profile_chosen(garment_profile: str) -> list[Issue]:
 def check_copy_is_concrete(*, title: str, lead: str) -> list[Issue]:
     """Refuse blank copy before a product is created.
 
-    The product carries the listing's own title and composed description (PRD
-    44) -- Printify's create call requires both, and they are the duplicate
-    guard's match key (PRD 48). ``lead`` rather than the full composed
+    The product carries the listing's own title and composed description -- Printify's
+    create call requires both, and they are the duplicate
+    guard's match key. ``lead`` rather than the full composed
     description: the description model's lead is required and its body is
-    optional (PRD's description model), so this is the same "deployment
+    optional, so this is the same "deployment
     blocked until it is non-empty" rule the lead itself carries, checked here
     for the one reason nothing downstream would catch it.
 
@@ -363,7 +363,7 @@ def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> list[
     """Nothing says what a variant costs.
 
     Public, and narrow-argument, like every other rule a stage shares: this one
-    became one when PRD 70 took it out of `Listing` itself. It used to block
+    became one when ADR-0043 took it out of `Listing` itself. It used to block
     the *write*, which made it the single incompleteness out of eight that a
     seller met as the tool refusing to save their work; now it blocks the
     deploy, through `engine/stages/gates.py.check_price_source`, exactly as the
@@ -505,7 +505,7 @@ axis, and a clip whose shorter side reaches 500 reaches it on both."""
 
 
 def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> list[Issue]:
-    """Refuse a video Etsy's help page would reject (PRD 72).
+    """Refuse a video Etsy's help page would reject.
 
     The help page, not the API, because the API is no guide: it accepted a
     3 s and a 20 s clip and answered a non-video with a bare ``500``
@@ -555,10 +555,10 @@ def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> list[Issue]
 
 
 def check_lifecycle_verb(lifecycle: str | None, *, published: bool) -> list[Issue]:
-    """Refuse the wrong end-of-life verb (PRD 62).
+    """Refuse the wrong end-of-life verb.
 
     ``deleted`` on something that has left Etsy ``draft`` would throw away
-    reviews, favourites and search history -- the same history PRD 37
+    reviews, favourites and search history -- the same history ADR-0017
     refused to discard to change a garment. ``retired`` on a never-live
     listing pauses nothing. Wrong verb is never rewritten as the right one.
     """
@@ -574,7 +574,7 @@ def check_lifecycle_verb(lifecycle: str | None, *, published: bool) -> list[Issu
 
 
 def check_listing_yaml_present(*, present: bool) -> list[Issue]:
-    """Refuse to infer retire or delete from a missing file (PRD 67).
+    """Refuse to infer retire or delete from a missing file.
 
     A directory that still has a lockfile is visible; a missing document is
     not consent. Never send ``state``, never delete remotes.
@@ -643,7 +643,7 @@ def check_listing_template(
     description_ref_error: str | None = None,
     videos: Mapping[str, VideoFacts | ProbeFailure] | None = None,
 ) -> list[Issue]:
-    """Every production issue with a listing template (A36): the checks
+    """Every production issue with a listing template: the checks
     :func:`check_listing` makes about garment, colours, price source,
     gallery, videos and mockup-template kinds, and none of its design, brief,
     copy or lifecycle checks -- a template has none of those fields, and their

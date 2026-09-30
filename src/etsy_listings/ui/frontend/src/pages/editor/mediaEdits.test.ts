@@ -122,7 +122,7 @@ describe("addEveryMissingColour", () => {
   });
 });
 
-describe("toggleSwatchSource (PRD 56)", () => {
+describe("toggleSwatchSource", () => {
   it("adds the colours the template lacks, because the engine refuses a gap", () => {
     const patch = toggleSwatchSource(state(), "flat-lay-01");
     expect(patch).toEqual({
@@ -201,11 +201,11 @@ describe("roomLeft", () => {
 
 /**
  * The gallery rules, as `config/listing.py`'s `_check_gallery` states them
- * (PRD 72): position 1 is an image, any video puts one at position 2, at most
+ * (ADR-0045): position 1 is an image, any video puts one at position 2, at most
  * two videos, and images and videos have separate caps. A click never writes
  * a gallery the server would refuse.
  */
-describe("the gallery rules (PRD 72)", () => {
+describe("the gallery rules", () => {
   const IMG = "common-media/sizing.png";
   const CLIP = "common-media/intro.mp4";
   const LOCAL = "./close-up.MOV";
@@ -286,7 +286,7 @@ describe("the gallery rules (PRD 72)", () => {
  * A drag inside the same rules. A move either lands a gallery
  * `_check_gallery` accepts or is no move at all -- the tile snaps back.
  */
-describe("reorder, within the gallery rules (PRD 72)", () => {
+describe("reorder, within the gallery rules", () => {
   const CLIP = "common-media/intro.mp4";
   const LOCAL = "./close-up.MOV";
 

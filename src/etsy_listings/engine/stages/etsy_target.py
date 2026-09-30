@@ -15,11 +15,11 @@ workspace where its neighbour rendered as a fact about the listing. Building
 the sentence from the caller's own phrase makes that shape structural rather
 than remembered.
 
-This module lives beside :mod:`~etsy_listings.engine.stages.gates` on the same
+This module lives beside:mod:`~etsy_listings.engine.stages.gates` on the same
 argument: it is stage-level knowledge that belongs to no single stage. It owns
 :data:`ETSY_LISTING_ID_KEY` for the same reason -- the key was `publish`'s only
 by accident of who writes it first, and two stages that merely *read* it had
-to import from the stage that does (A20 still holds: the ``etsy_*`` prefix is
+to import from the stage that does (ADR-0034 still holds: the ``etsy_*`` prefix is
 this module's, and `publish` is still the only writer).
 
 :class:`~etsy_listings.engine.stages.publish.PublishWithoutProductError` is
@@ -37,7 +37,7 @@ from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.stage import Blocked
 
 ETSY_LISTING_ID_KEY = "etsy_listing_id"
-"""The Etsy listing id in ``lock.remote`` (A20). Written by `publish`, read by
+"""The Etsy listing id in ``lock.remote``. Written by `publish`, read by
 `etsy_listing` and `etsy_media` -- which is why it is named here rather than in
 the stage that happens to mint it."""
 
@@ -48,7 +48,7 @@ class EtsyListingNotMintedError(RuntimeError):
     """``apply`` reached an Etsy stage with no listing id on record.
 
     `publish` runs first in the pipeline and either mints one -- visible here
-    the same run via A26's threading of ``lock.remote`` -- or raises. Reaching
+    the same run via ADR-0034's threading of ``lock.remote`` -- or raises. Reaching
     this is a wiring defect, not a configuration problem, so it is not
     user-facing and gets the traceback a defect deserves.
 

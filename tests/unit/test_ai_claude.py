@@ -68,7 +68,7 @@ def _provider(tmp_path: Path, *, binary: str = "claude") -> claude.ClaudeProvide
 def _task(tmp_path: Path) -> ProviderTask:
     """An ordinary SEO task, assembled the way `ui/api/seo.py` assembles one
     -- see `test_ai_codex.py._task` for why the seller prose is a plain
-    string here and not a file (PRD 68)."""
+    string here and not a file."""
     return build_seo_task("Write great SEO copy.", _request(tmp_path))
 
 
@@ -222,7 +222,7 @@ def test_readiness_says_nothing_about_a_prompt_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     """The same rule `test_ai_codex.py` states: a prompt file's existence is
-    a fact about a request, not about this CLI (PRD 68)."""
+    a fact about a request, not about this CLI."""
     monkeypatch.setattr(claude.shutil, "which", lambda name: "/usr/bin/claude")
     fake = _FakeRun(
         {

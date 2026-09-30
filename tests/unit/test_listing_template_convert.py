@@ -1,4 +1,4 @@
-"""Save as listing template and Clone, through `listing_templates` (A35, A36;
+"""Save as listing template and Clone, through `listing_templates` (ADR-0047, template completeness;
 spec *Creation and cloning*).
 
 Conversion is a plan, not a write: `from_listing` and `from_template` answer

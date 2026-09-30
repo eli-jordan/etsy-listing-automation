@@ -39,8 +39,7 @@ type Props = {
 } & (
   | {
       kind?: "listing";
-      /** AI Mode, owned by `ListingEditorShell` rather than by this tab (PRD
-       * 68): a request has to survive a tab switch, and the chain that starts
+      /** AI Mode, owned by `ListingEditorShell` rather than by this tab : a request has to survive a tab switch, and the chain that starts
        * one begins at the design strip above the tabs. */
       aiSeo: AiSeoMode;
     }

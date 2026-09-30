@@ -57,7 +57,7 @@ does not establish that a vendor endpoint behaves identically today.
 The [original PRD](history/prd.md) and [implementation plan](history/implementation-plan.md)
 are frozen snapshots of the project-wide plan as of 2026-09-30. Their phases
 are historical sequencing, not a statement of what is implemented. Keep their
-decision ids intact while migrating existing citations; new requirements
+decision ids intact; new requirements
 belong with their feature and new rationale belongs in an ADR.
 
 ## Documentation authority

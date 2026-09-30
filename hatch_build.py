@@ -1,5 +1,5 @@
 """Hatchling build hook: builds the calibrator frontend into
-``ui/frontend/dist/`` at wheel-build time, but only when it's absent (A5).
+``ui/frontend/dist/`` at wheel-build time, but only when it's absent.
 
 A CI-built wheel ships ``dist/`` already, so installing the package doesn't
 need node at all -- this hook exists for the case of building from a clean

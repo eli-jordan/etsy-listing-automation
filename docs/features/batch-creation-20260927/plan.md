@@ -46,10 +46,12 @@ the warning.
 
 ## Architecture decisions
 
-These are recorded in [history/implementation-plan.md](../../history/implementation-plan.md) as A35–A46. They are summarised here because every PR below
-cites them.
+The [ADRs](../../adr/README.md) record listing-template snapshots,
+workspace-wide scheduling, durable proposals, deployment precedence and
+review state (ADR-0047 through ADR-0051). The implementation details below
+explain how the delivered feature enforces those decisions.
 
-**A35 — Listing-template storage.** `listing-templates/<name>/template.yaml` plus
+**ADR-0047 — Listing-template storage.** `listing-templates/<name>/template.yaml` plus
 `assets/`. The names live in `workspace/layout.py` (`LISTING_TEMPLATES_DIR`,
 `TEMPLATE_FILE`, `TEMPLATE_ASSETS_DIR`); the only accessors are on `Workspace`
 (`listing_template_dir`, `listing_template_file`, `listing_template_names`,
@@ -63,7 +65,7 @@ cites them.
 discovery already scans only `listings/`, and a test pins that templates never
 appear in it.
 
-**A36 — Template completeness.** `check_listing_template(template, facts)` in
+**Template completeness.** `check_listing_template(template, facts)` in
 `config/listing_validation.py` composes the existing checks (garment profile,
 colours enabled and in profile, price source, media present, gallery, variation
 images, videos, template-kind colour match) and none of the design, brief or copy
@@ -72,17 +74,17 @@ incomplete template: `PUT` returns `200 {saved: false, issues}` and leaves the
 file alone, which the editor turns into the *Not saved* state. Saving never calls
 a provider.
 
-**A37 — Cache records.** A single helper, `workspace/atomic.py`
+**Cache records.** A single helper, `workspace/atomic.py`
 (`write_bytes_atomic`, `write_json_atomic`: tmp file in the same directory, then
 `os.replace`), replaces the per-module copies as they are touched. New layout
 names:
 
 ```text
-.cache/staging/<id>/session.json      # frozen template + rows + names
-.cache/staging/<id>/template/         # frozen template-owned assets
+.cache/staging/<id>/session.json # frozen template + rows + names
+.cache/staging/<id>/template/ # frozen template-owned assets
 .cache/staging/<id>/uploads/<sha256>.png
-.cache/batches/<id>.json              # batch record, rows, queue + review state
-.cache/batches/<id>/template/         # frozen template, kept for Retry
+.cache/batches/<id>.json # batch record, rows, queue + review state
+.cache/batches/<id>/template/ # frozen template, kept for Retry
 .cache/proposals/<listing>.json
 ```
 
@@ -91,12 +93,12 @@ as absent (cache is disposable). Stores are plain classes over `Workspace`:
 `StagingStore` and `BatchStore` in a new `batches/` package, and `ProposalStore` in
 `ai/proposals.py`, so the engine can reach it without importing the UI. Mutations
 go through the store under a per-record `threading.Lock`.
-A proposal file is named by the listing's exact name, as PRD 4's layout and the
+A proposal file is named by the listing's exact name, as ADR-0003's layout and the
 market snapshot are, not its casefold: a casefolded key makes two listings that
 differ only in case share one file on a case-sensitive filesystem, and on a
 case-insensitive one such listings cannot coexist anyway.
 
-**A38 — Name allocation.** `batches/naming.py`: `allocate(base, taken) -> str`
+**Name allocation.** `batches/naming.py`: `allocate(base, taken) -> str`
 returns `base` or the smallest free `base-N` (N ≥ 2), where `taken` is the
 casefolded union of listing names, design stems, the other rows' names and the
 names already allocated in this batch. Staging computes a preview and flags
@@ -104,7 +106,7 @@ typed conflicts with a suggestion. Confirm re-runs allocation per row while
 holding `WorkspaceLocks.listing(name)` and writes the result into the batch record
 *before* creating any file.
 
-**A39 — Idempotent row creation.** The batch record is written first, with each
+**Idempotent row creation.** The batch record is written first, with each
 row's allocated name, design target and `creation: pending`. Creating a row:
 (1) write or reuse `designs/<design>.png`; (2) copy the frozen template assets
 into `listings/<name>/`; (3) write `listing.yaml` atomically; (4) set
@@ -114,7 +116,7 @@ when its `design` ref equals the row's design target. Otherwise the row
 re-allocates a name. A write failure sets `creation: failed` with the message and
 the loop continues. This is the first code that writes to `designs/`.
 
-**A40 — Batch queue.** `ui/batchqueue.py` holds `BatchQueue` on `app.state`: one
+**ADR-0048 — Batch queue.** `ui/batchqueue.py` holds `BatchQueue` on `app.state`: one
 dispatcher thread woken by a `Condition` on row, batch and run changes. Each
 wake it reads `workspace.load_settings().batch_ai.concurrency`, counts running
 batch-origin runs, and picks the next `queued` row round-robin across batches in
@@ -129,7 +131,7 @@ brief is non-empty, so only research and SEO rerun. **Cancel batch** moves
 queued rows to `stopped` and requests a stop on running ones; **Resume** moves
 `stopped` and `cancelled` rows back to `queued`.
 
-**A41 — Durable proposals.** `ProposalStore` holds one record per listing:
+**ADR-0049 — Durable proposals.** `ProposalStore` holds one record per listing:
 `{proposal, snapshot, generated_at, origin, resolution: {title, tags, lead}}`.
 `AiRunner._chain` writes the record before it emits `AiProposalEvent`, for manual
 and batch runs alike. `ui/api/seo.py` loses `_PROPOSAL_TTL`. New endpoints:
@@ -143,14 +145,14 @@ gives *Stale: brief edited since*. The frontend deletes `aiSeoStorage`'s proposa
 store and clears its `ai-seo-proposal:*` and `ai-seo-received:*` keys once on
 load.
 
-**A42 — Listing rename and delete.** Rename, under the existing
+**Listing rename and delete.** Rename, under the existing
 `locks.listing(old, new)`, also moves `.cache/proposals/<old>.json` and rewrites
 every batch row whose `listing` is `old` (via `BatchStore.rename_listing`).
 Delete removes the proposal, requests a stop on any active run, and marks
 matching rows `deleted`. Batch rows reference listings by current name only;
 there is no hidden listing id.
 
-**A43 — UI deploy precedence.** Before the executor's `_run_plan` or `_run_apply`
+**ADR-0050 — UI deploy precedence.** Before the executor's `_run_plan` or `_run_apply`
 reads a listing, it calls `BatchQueue.yield_to_deploy(names)`. That marks the
 listings' queued rows `cancelled_by_deploy`, requests a stop on their active AI
 runs (batch or manual), and waits for those runs to finish. While the run holds
@@ -159,7 +161,7 @@ never re-queues `cancelled_by_deploy` rows; only an explicit per-row Retry does.
 The CLI is deliberately left out (grilling): a CLI apply during batch AI can end
 with a proposal on a deployed listing, and the seller regenerates or ignores it.
 
-**A44 — Proposal cleanup after full success.** `engine/run.py` gains
+**ADR-0050 — Proposal cleanup after full success.** `engine/run.py` gains
 `fully_applied(outcome, lockfile)`, which requires all three of: `outcome.ok`, no
 `stage_plan.blocked` in the planned stages, and the lockfile's `incomplete`
 marker clear. `ok` alone is not enough, because blocked stages count as `ok`
@@ -167,7 +169,7 @@ marker clear. `ok` alone is not enough, because blocked stages count as `ok`
 `ProposalStore.remove(listing)` after `after_apply` when that holds, so the CLI
 and UI clean up identically.
 
-**A45 — Upload and archive limits.** These are safety limits, not settings:
+**ADR-0051 — Upload and archive limits.** These are safety limits, not settings:
 
 | Limit | Value |
 |---|---|
@@ -186,7 +188,7 @@ PNG is decided by the entry's magic bytes; the extension doesn't matter. The
 25-design limit counts unique content hashes and is checked before a session is
 created. Any refusal leaves nothing on disk.
 
-**A46 — Staging lifetime.** A session expires seven days after `updated_at`.
+**Staging lifetime.** A session expires seven days after `updated_at`.
 `StagingStore.sweep()` runs on server start and whenever the staging or batch
 index is listed. Confirm keeps the uploads until every row has been
 materialised (created, or failed with its input copied into the batch
@@ -264,7 +266,7 @@ added to this list, not substituted for it.
 6. **Size.** `git diff --shortstat <base>...HEAD` under 5,000 lines, with the
    number in the PR description.
 7. **Decisions cited.** Commit messages and any arbitrary-looking code cite the
-   spec section, the UI doc section or A35–A46.
+   spec section, the UI doc section or ADR-0047, ADR-0048, ADR-0049, ADR-0050, ADR-0051.
 8. **Naming.** Code, API and UI say *listing template* (`listing_template`,
    `ListingTemplate`, `/listing-templates`), never bare *template*, which
    already means mockup templates.
@@ -285,9 +287,9 @@ The reviewed UI departures were folded into the spec at that checkpoint.
 
 **Target: about 3,500 lines.**
 
-1. `ListingTemplate` model, the layout names and `Workspace` accessors (A35).
+1. `ListingTemplate` model, the layout names and `Workspace` accessors (ADR-0047).
    The template-owner variant of `resolve_ref` is included.
-2. `check_listing_template` (A36).
+2. `check_listing_template`.
 3. `listing_templates/convert.py`:
    - `from_listing(listing, workspace) -> (ListingTemplate, assets)` copies the
      fields in the spec's copy table and drops the excluded ones.
@@ -329,19 +331,19 @@ Shipped as two PRs to stay under the size limit: **PR 2** is items 1–3 (the
 browser success condition belongs to PR 2b.
 
 1. `batches/` package:
-   - `StagingStore` and `BatchStore` (A37), with `write_json_atomic`.
-   - `naming.allocate` (A38).
+   - `StagingStore` and `BatchStore`, with `write_json_atomic`.
+   - `naming.allocate`.
    - `staging.stage_pngs(template, files)`: stream each upload to
-     `uploads/<sha256>.png` (A45 per-file and total limits); merge identical
+     `uploads/<sha256>.png` (ADR-0051 per-file and total limits); merge identical
      bytes within the upload into one row with both source names; enforce the
      25 limit; freeze the template document and its assets; validate each row
      with `check_design_resolution` against the frozen garment profile; compute
      `slugify` names and the suffix preview.
-   - `creation.create_rows(batch)` (A39).
+   - `creation.create_rows(batch)`.
 2. Staging operations: rename a row (typed-conflict flag plus a suggestion;
    empty names flagged), remove a row, edit the label, cancel, confirm. Confirm
    revalidates the frozen document's workspace-shared refs. The AI readiness
-   gate is added in PR 4. The sweep (A46) runs at startup.
+   gate is added in PR 4. The sweep runs at startup.
 3. API: `POST /api/staging` (loose PNGs only; a ZIP is refused with *coming
    soon* until PR 7), `GET/PATCH/DELETE /api/staging/{id}`,
    `POST …/confirm`, `GET /api/batches/{id}`.
@@ -366,7 +368,7 @@ browser success condition belongs to PR 2b.
   - a name claimed between staging and confirm gets a fresh suffix;
   - a write failure injected on one row leaves the other rows created, and
     Retry creates the failed one;
-  - repeating confirm or retry after a simulated crash between each A39 step
+  - repeating confirm or retry after a simulated crash between each idempotent row creation step
     never creates a second listing.
 - A behaviour test shows an edit to the template after staging does not reach
   the created listings, and deleting the template doesn't break confirm.
@@ -382,11 +384,11 @@ browser success condition belongs to PR 2b.
 straight away.
 
 1. `ai/proposals.py`: `ProposalStore`, and `proposal_staleness` ported from
-   `isStale` with a reason per changed input (A41).
+   `isStale` with a reason per changed input (ADR-0049).
 2. `AiRunner._chain` persists the proposal before emitting it. `_PROPOSAL_TTL`
    and `expires_at` handling are removed.
 3. The proposal endpoints. Rename and delete hooks for proposals (the batch half
-   of A42 comes in PR 5).
+   of rename and delete hooks comes in PR 5).
 4. Frontend:
    - `useAiSeoMode` loads the proposal from the server on open and records
      resolution through `PATCH`.
@@ -415,7 +417,7 @@ straight away.
    `_absent_is_empty` validator.
 2. `AiRun.origin: "manual" | "batch"` and a finish callback. Registry
    `create(..., origin=)`.
-3. `BatchQueue` (A40): dispatcher, round-robin, restart recovery, and the
+3. `BatchQueue` (ADR-0048): dispatcher, round-robin, restart recovery, and the
    `batch_pending` 409 on manual runs. It is wired into the app lifespan
    alongside `AiRunner.shutdown`.
 4. Row AI states `queued | running | done | failed | stopped | cancelled`, set
@@ -467,7 +469,7 @@ straight away.
    UI doc §2 table as its tests.
 3. Batch rename (the label only) and delete record. Delete cancels queued and
    running work first and never touches workspace files.
-4. The batch half of A42: rename rewrites rows; delete marks them `deleted` and
+4. The batch half of rename and delete hooks: rename rewrites rows; delete marks them `deleted` and
    cancels the run.
 5. Frontend:
    - **Recent batches** on the Listing templates page, with `BatchStatusTag`,
@@ -500,7 +502,7 @@ straight away.
 
 **Target: about 4,500 lines.**
 
-1. `PUT /api/listing-templates/{name}` with A36 valid-only semantics, plus
+1. `PUT /api/listing-templates/{name}` with template completeness valid-only semantics, plus
    `POST …/rename`. Template-owned file uploads and the media file list are
    scoped to the template's `assets/`.
 2. Frontend: `ListingTemplateEditorPage` reuses `ListingEditorShell` with a
@@ -540,12 +542,12 @@ straight away.
 
 **Target: about 2,800 lines.**
 
-1. `batches/archive.py` (A45): streaming, per-entry validation, recursive PNG
+1. `batches/archive.py` (ADR-0051): streaming, per-entry validation, recursive PNG
    discovery by magic bytes, a count of ignored non-PNG entries and their names,
    and refusal of mixed or multiple ZIPs.
 2. Dedupe against `designs/`: the row records `reuse: designs/<existing>.png`,
    and creation references that file instead of writing a new one. A different
-   image at an occupied path takes the listing's suffix (already true from A38).
+   image at an occupied path takes the listing's suffix (already true from name allocation).
 3. Staging UI: the *merged* and *ignored* counts, the expandable ignored list,
    and the reused-design note on a row. New batch drops the *coming soon*
    refusal.
@@ -567,13 +569,13 @@ straight away.
 
 **Target: about 1,800 lines.**
 
-1. `BatchQueue.yield_to_deploy(names)` (A43), called at the start of the
+1. `BatchQueue.yield_to_deploy(names)` (ADR-0050), called at the start of the
    executor's `_run_plan` and `_run_apply`, and the `deploying` 409 on
    `POST /api/ai/runs`.
 2. The `cancelled_by_deploy` row state: Resume skips it, per-row Retry
    re-queues it, and the summary shows *Cancelled for deploy*.
 3. `fully_applied` and the `ProposalStore.remove` call in `apply_listings`
-   (A44), so the CLI gets it with no CLI-specific code.
+   (ADR-0050), so the CLI gets it with no CLI-specific code.
 
 **Success conditions:**
 - A behaviour test shows a UI apply started while a row is running waits for the

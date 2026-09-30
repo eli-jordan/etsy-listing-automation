@@ -12,9 +12,9 @@ import {
  * price rows, image badges (docs/features/deploy-20260917/spec.md decisions 3/4, spec's
  * "Comparison"/"Price table" elements).
  *
- * This is the frontend half of A30: each stage exposed a snapshot of its own
+ * This is the frontend half of ADR-0038: each stage exposed a snapshot of its own
  * domain facts so the comparison could be composed here instead of on the
- * server, and A2 still holds one level up -- every `changed` flag below
+ * server, and ADR-0008 still holds one level up -- every `changed` flag below
  * traces to a `Change` object the engine already emitted, never to this
  * module comparing two snapshot values itself. A block's *content* (the
  * unchanged context alongside a change) comes from the snapshot; whether it
@@ -153,13 +153,13 @@ export interface Comparison {
   colours: ColoursBlock | null;
   price: PriceBlock | null;
   images: ImagesBlock | null;
-  /** `etsy_videos`, shown under Etsy media (PRD 72); `null` when neither
+  /** `etsy_videos`, shown under Etsy media; `null` when neither
    * side has a video. */
   videos: VideosBlock | null;
   priceRows: PriceRow[];
   /** `publish`'s own below-cost rows, verbatim -- never re-derived by
    * comparing a row's price against its cost here, which is exactly the
-   * second copy of the rule A30 exists to prevent. */
+   * second copy of the rule ADR-0038 exists to prevent. */
   belowCost: BelowCostRow[];
 }
 
@@ -335,12 +335,12 @@ function buildImages(stagePlan: StagePlanFor<"etsy_media"> | undefined): ImagesB
 const VIDEO_SLOTS = ["videos.featured", "videos.second"] as const;
 
 /**
- * The videos block. Every badge reads the stage's own changes (A2): a slot
+ * The videos block. Every badge reads the stage's own changes: a slot
  * change names the ref before and after (`etsy_videos._changes`), so a ref
  * that arrives in a slot without leaving another is new, and one that leaves
  * without arriving is removed -- a swap is neither. New bytes on the same ref
  * (`.contents`) replace its upload, so it is both. A video this tool never
- * uploaded is swept whenever the stage runs (PRD 72), which the outcome says.
+ * uploaded is swept whenever the stage runs, which the outcome says.
  */
 function buildVideos(stagePlan: StagePlanFor<"etsy_videos"> | undefined): VideosBlock | null {
   const snapshot = stagePlan?.snapshot;

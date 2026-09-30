@@ -2,7 +2,7 @@
 tags, materials, section, shipping profile, return policy, the `who_made`
 trio, production partners and renewal (features/etsy-listing-20260910/spec.md, decision 1).
 
-Everything a name resolves to comes from :class:`EtsyShopCatalog` (A25),
+Everything a name resolves to comes from :class:`EtsyShopCatalog`,
 built fresh each call to ``desired`` -- cheap, since the catalog itself
 fetches each of its four lists at most once and this stage asks for at most
 three of them. Every :class:`~etsy_listings.clients.etsy.shopcatalog.ShopCatalogError`
@@ -14,7 +14,7 @@ the entire request, measured).
 
 ``state`` is omitted on a ``draft`` -- Etsy's update enum is
 `active | inactive`, a draft cannot be re-drafted, and first publish stays
-Shop Manager (PRD non-goal 1). Pause and resume of something a human already
+Shop Manager. Pause and resume of something a human already
 published is the exception: ``lifecycle: retired`` sends ``inactive``;
 Un-retire (last applied was retired, now omitted) and ``renew`` send
 ``active``. A remote pause with the field omitted does not.
@@ -66,9 +66,9 @@ class ReturnPolicyApplied(BaseModel):
 
     def describe(self) -> str:
         """Mirrors :meth:`~etsy_listings.clients.etsy.models.ReturnPolicy.describe`
-        -- a return policy has no title of its own (PRD 59), so this is the
+        -- a return policy has no title of its own, so this is the
         same human sentence, built from the same three fields this stage
-        already carries, used as a drift label (A30) where the live side has
+        already carries, used as a drift label where the live side has
         only an id to compare with."""
         accepted = [
             name
@@ -85,7 +85,7 @@ class ReturnPolicyApplied(BaseModel):
 
 
 class AppliedEtsyListing(BaseModel):
-    """The verbatim last-applied document (A2). Names sit beside their ids
+    """The verbatim last-applied document. Names sit beside their ids
     (decision 2): the id is what was sent, the name is what a human reading
     the plan or the lockfile can actually check."""
 
@@ -133,7 +133,7 @@ class EtsyListingDesired:
     should_auto_renew: bool
     state: Literal["active", "inactive"] | None = None
     catalog: EtsyShopCatalog | None = None
-    """This run's already-built :class:`EtsyShopCatalog` (A25), carried
+    """This run's already-built :class:`EtsyShopCatalog`, carried
     only so :func:`_drift` can label a *live* id it did not itself resolve a
     name for -- through lookups (``shop_section_title`` and its siblings)
     that read whatever ``desired()`` already fetched and issue no request of
@@ -172,7 +172,7 @@ class EtsyListingDesired:
 
 
 class EtsyListingFacts(BaseModel):
-    """One side of the review (A30): the fields the mock shows unchanged
+    """One side of the review: the fields the mock shows unchanged
     context for, named rather than left as an id."""
 
     model_config = ConfigDict(frozen=True)
@@ -326,7 +326,7 @@ class EtsyListingStage:
     def snapshot(
         self, desired: EtsyListingDesired, live: EtsyListing | None
     ) -> EtsyListingSnapshot:
-        """Both sides, named (A30). The desired side already has names for
+        """Both sides, named. The desired side already has names for
         its section and shipping profile -- resolving them is what
         ``desired()`` does -- so only the live side needs the catalog's
         reverse lookup, and only when this run built one."""
@@ -368,7 +368,7 @@ class EtsyListingStage:
         ctx.emit(f"patching Etsy listing {listing_id}")
         body = desired.patch_body()
         # Birth-only: Etsy will not re-draft, and activating a draft is
-        # Shop Manager's (PRD non-goal 1). A desired state computed from
+        # Shop Manager's. A desired state computed from
         # yaml must not ride along on a listing that is still a draft.
         if live is not None and live.state == "draft":
             body.pop("state", None)
@@ -441,7 +441,7 @@ def _drift(
     re-attaching its own shipping profile after a republish (risk 13,
     decision 7).
 
-    ``catalog`` names a drifted id's *live* side (A30): the *last-applied*
+    ``catalog`` names a drifted id's *live* side: the *last-applied*
     side already has a name on ``was`` (``shop_section``, ``shipping_profile``,
     or ``return_policy``'s own fields), since this stage stores the name
     beside the id it resolved from. Only the id a fresh ``GET`` returned has

@@ -78,7 +78,7 @@ describe("startAiRun", () => {
     });
   });
 
-  it("words a deploy's refusal (A43)", async () => {
+  it("words a deploy's refusal", async () => {
     vi.spyOn(api, "POST").mockResolvedValue(answer(409, undefined, { reason: "deploying" }));
 
     await expect(startAiRun("take-a-hike", { draftBrief: false })).resolves.toEqual({

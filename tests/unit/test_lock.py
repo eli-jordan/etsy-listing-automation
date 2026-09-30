@@ -44,7 +44,7 @@ def test_canonical_hash_changes_with_content() -> None:
 
 
 def test_two_runs_with_no_input_change_produce_byte_identical_applied_subtrees() -> None:
-    """The PRD's core determinism guarantee: re-running against unchanged inputs
+    """The core determinism guarantee: re-running against unchanged inputs
     must make no remote changes, which starts with the lockfile hashing
     identically run over run."""
     lock_a = Lockfile(
@@ -130,7 +130,7 @@ def test_fold_replaces_that_stages_document_rather_than_merging_into_it() -> Non
 
 
 def test_fold_merges_remote_so_one_stages_ids_do_not_displace_anothers() -> None:
-    """A20. The Printify id arriving must not take the Etsy listing id with it."""
+    """ADR-0034. The Printify id arriving must not take the Etsy listing id with it."""
     lock = _lock(remote={"etsy_listing_id": 123456})
 
     folded = lock.fold(
@@ -255,7 +255,7 @@ def test_each_stage_only_ever_sees_its_own_subtree() -> None:
     assert parsed.title == "mine"
 
 
-# --------------------------------------------------- A29: the incomplete marker
+# --------------------------------------------------- ADR-0037: the incomplete marker
 
 
 def test_marked_incomplete_records_the_stage_that_raised() -> None:
@@ -322,7 +322,7 @@ def test_write_records_incomplete_when_set(tmp_path: Path) -> None:
 def test_a_clean_lockfile_writes_byte_identical_json_to_before_the_marker_existed(
     tmp_path: Path,
 ) -> None:
-    """A29 must not move `SCHEMA_VERSION` or disturb an unrelated listing's
+    """ADR-0037 must not move `SCHEMA_VERSION` or disturb an unrelated listing's
     lockfile -- the whole point of omitting the field rather than writing it
     as `null`."""
     path = tmp_path / "state.lock.json"

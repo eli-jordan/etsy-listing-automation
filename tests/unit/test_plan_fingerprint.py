@@ -1,4 +1,4 @@
-"""``plan_fingerprint`` (A31): the digest ``apply`` compares against ``expect``
+"""``plan_fingerprint``: the digest ``apply`` compares against ``expect``
 before running a single stage.
 
 Pure and unit-testable without a workspace, a lockfile or a fake client --
@@ -72,7 +72,7 @@ def test_the_same_plan_fingerprints_the_same() -> None:
 
 
 def test_a_snapshot_difference_alone_does_not_change_the_fingerprint() -> None:
-    """Snapshots are excluded (A31): they carry things that can change
+    """Snapshots are excluded: they carry things that can change
     between two otherwise-identical plans, like an Etsy CDN URL, and hashing
     one would make `apply` refuse a plan nobody actually disagreed with."""
     with_one_snapshot = _plan(snapshot=_Snapshot(note="first read"))
@@ -95,7 +95,7 @@ def test_a_real_change_changes_the_fingerprint() -> None:
 
 
 def test_drift_changes_the_fingerprint() -> None:
-    """Deliberate (A31): if Etsy drifted between review and apply, applying
+    """Deliberate: if Etsy drifted between review and apply, applying
     a cached plan would revert something the user never saw reverted."""
     baseline = _plan()
     drifted = _plan(drift=())

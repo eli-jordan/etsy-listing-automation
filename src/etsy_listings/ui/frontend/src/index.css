@@ -2423,7 +2423,7 @@ table.listings tbody tr:last-child td {
   background: color-mix(in srgb, var(--color-accent-2) 11%, transparent);
 }
 
-/* A note (PRD 72's stripped audio): nothing to fix, so no tint and muted
+/* A note (ADR-0045's stripped audio): nothing to fix, so no tint and muted
    text -- present, but never mistaken for a warning. */
 .issue--info .issue__text {
   color: color-mix(in srgb, var(--color-text) 65%, transparent);
@@ -2458,7 +2458,7 @@ table.listings tbody tr:last-child td {
 }
 
 /* What separates a deploy blocker from plain advice once both wear the
-   warning icon (PRD 70): words, beside where the issue lives, so the
+   warning icon: words, beside where the issue lives, so the
    difference never rests on colour. */
 .issue__deploy {
   margin-left: 8px;
@@ -4140,7 +4140,7 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 52%, transparent);
 }
 
-/* — the Etsy colour-swatch source (PRD 56), on a colour-matrix template this
+/* — the Etsy colour-swatch source, on a colour-matrix template this
      listing already uses — */
 .tmpl-swatch {
   align-self: stretch;
@@ -4286,7 +4286,7 @@ table.listings tbody tr:last-child td {
 }
 
 /* A video's face draws its own first frame; the badge says it is a clip and
-   how long (PRD 72). Same chip as the reel's position number. */
+   how long. Same chip as the reel's position number. */
 .loc-img__face {
   position: relative;
 }
@@ -4304,7 +4304,7 @@ table.listings tbody tr:last-child td {
   font-variant-numeric: tabular-nums;
 }
 
-/* The file list's two groups, one per root a ref can name (PRD 73). */
+/* The file list's two groups, one per root a ref can name. */
 .loc-group + .loc-group {
   margin-top: var(--space-3);
 }
@@ -4450,7 +4450,7 @@ table.listings tbody tr:last-child td {
   color: color-mix(in srgb, var(--color-text) 55%, transparent);
 }
 
-/* What the listing's check says about the file on the stage (PRD 72). */
+/* What the listing's check says about the file on the stage. */
 .preview-meta__note {
   display: block;
   margin-top: 3px;
@@ -4551,7 +4551,7 @@ table.listings tbody tr:last-child td {
   pointer-events: none;
 }
 
-/* A clip in the gallery (PRD 72): the play mark fades while it plays. */
+/* A clip in the gallery: the play mark fades while it plays. */
 .rtile__play {
   position: absolute;
   inset: 0;
@@ -4583,14 +4583,14 @@ table.listings tbody tr:last-child td {
   border-style: dashed;
 }
 
-/* A drop the gallery rules refuse: the tile will snap back (PRD 72). */
+/* A drop the gallery rules refuse: the tile will snap back. */
 .rtile--refused .rtile__face {
   border-color: var(--color-danger);
   border-style: dashed;
   cursor: no-drop;
 }
 
-/* This tile is what Etsy shows beside its colour option (PRD 56). */
+/* This tile is what Etsy shows beside its colour option. */
 .rtile__swatch {
   position: absolute;
   top: 5px;
@@ -5214,7 +5214,7 @@ table.listings tbody tr:last-child td {
   overflow: hidden;
   background: var(--color-neutral-100);
 }
-/* A stage and the ones the engine groups under it (PRD 72): one bordered
+/* A stage and the ones the engine groups under it: one bordered
    run of cells, as the CLI prints etsy_media/etsy_videos. */
 .dv-step-group {
   display: grid;
@@ -6386,7 +6386,7 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
   }
 }
 
-/* — Listing templates (A35; UI doc §2) —
+/* — Listing templates (ADR-0047; UI doc §2) —
    Moved from the batch-creation mockups' _batch.css, unchanged, as each
    surface ships. The `bc-` prefix is the mockups' and is kept so a frame and
    the app share one rule. */

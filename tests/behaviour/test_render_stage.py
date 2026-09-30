@@ -71,7 +71,7 @@ def test_second_plan_after_apply_is_a_no_op(workspace_root: Path) -> None:
 
 
 def test_apply_twice_produces_byte_identical_applied_subtree(workspace_root: Path) -> None:
-    """The PRD's idempotency check: apply twice in a row, the second is a no-op
+    """The idempotency check: apply twice in a row, the second is a no-op
     -- here specifically, the lockfile's hashed `applied` subtree is unchanged."""
     ctx = a_context(workspace_root)
     planned_a = build_plan(ctx, LISTING, a_lock(), STAGES)

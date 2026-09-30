@@ -8,7 +8,7 @@ found" against a path the user never named.
 
 Only *user-supplied* paths go through here -- CLI options and the
 ``ETSY_LISTINGS_ROOT`` environment variable. Paths written inside config files
-are workspace-relative by construction (A8) and never need it, and nothing
+are workspace-relative by construction and never need it, and nothing
 downstream of ``Workspace`` ever sees a POSIX-style path.
 
 Translate the **raw string**, before ``pathlib`` sees it: on Windows,

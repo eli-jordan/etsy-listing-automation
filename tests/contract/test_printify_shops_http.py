@@ -139,7 +139,7 @@ def test_the_token_is_resolved_lazily() -> None:
 
 def test_an_envelope_without_a_reason_falls_back_to_the_message() -> None:
     """Not every refusal carries `errors.reason` -- an auth-shaped body is
-    just `{"message": ...}`. Showing the raw JSON instead would bury the one
+    just `{"message":...}`. Showing the raw JSON instead would bury the one
     sentence that says what happened."""
     body = {"status": "error", "code": 8254, "message": "Shop is not connected"}
 
@@ -178,7 +178,7 @@ def test_an_empty_error_body_still_names_the_status() -> None:
 
 # ------------------------------------------------------------------- retries
 
-# A21. The policy itself is unit-tested in tests/unit/test_retry.py; what
+# ADR-0009. The policy itself is unit-tested in tests/unit/test_retry.py; what
 # these pin is that the client actually goes through it, and that the caller
 # still sees a real decoded error when the retries run out.
 

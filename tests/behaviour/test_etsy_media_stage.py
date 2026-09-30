@@ -1,4 +1,4 @@
-"""The `etsy_media` stage, against `FakeEtsyListingClient` (A4).
+"""The `etsy_media` stage, against `FakeEtsyListingClient`.
 
 Render files are written directly at the path `workspace.render_file()`
 computes rather than produced by running `RenderStage` -- this stage's own
@@ -178,7 +178,7 @@ def test_reordering_media_sends_a_new_image_ids_order_without_reuploading(
 
 
 def test_reordering_reports_a_media_change_per_rank_that_moved(workspace_root: Path, etsy) -> None:
-    """A30, decision 4: a rank whose ref differs from what was last applied,
+    """ADR-0038, decision 4: a rank whose ref differs from what was last applied,
     not a single "manifest changed" reason a badge cannot be drawn from."""
     _write_renders(workspace_root)
     ctx = _ctx(workspace_root, etsy)
@@ -327,8 +327,8 @@ def test_the_snapshot_names_every_desired_entry(workspace_root: Path, etsy) -> N
 def test_the_snapshot_names_every_live_image_with_its_url_and_ref(
     workspace_root: Path, etsy
 ) -> None:
-    """A30: the "On Etsy now" column reads Etsy's own `url_570xN`, and a
-    live image this tool itself uploaded is matched back to its ref (A27's
+    """ADR-0038: the "On Etsy now" column reads Etsy's own `url_570xN`, and a
+    live image this tool itself uploaded is matched back to its ref (ADR-0030's
     reversal, reused)."""
     edit_listing(workspace_root, media=[{"template": TEMPLATE, "colour": "black"}])
     _write_renders(workspace_root, colours=["black"])
@@ -400,7 +400,7 @@ def test_no_matching_colour_property_skips_the_feature_without_failing(
     assert etsy.get_listing_variation_images(SHOP_ID, ETSY_LISTING_ID) == []
 
 
-# ------------------------------------------------ videos and JPEGs (PRD 72)
+# ------------------------------------------------ videos and JPEGs
 
 VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
 ALL_COLOURS_MEDIA = [{"template": TEMPLATE, "colour": c} for c in COLOURS]

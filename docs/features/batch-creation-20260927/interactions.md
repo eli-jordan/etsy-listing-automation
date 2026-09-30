@@ -43,21 +43,21 @@ Listing editor ──Create listing template──▶ New listing template (name
                                                    ▼
                                          Listing templates page
                               ┌──────────────┼───────────────────────┐
-                    drop files on a card   New batch /          Recent batches
-                              │            Start batch          (click a title)
-                              │               │                      │
-                              │               ▼                      │
-                              │      New batch: pick template,       │
-                              │      drop ZIP or PNGs ──refused──▶ error, stay
-                              ▼               │                      │
+                    drop files on a card New batch / Recent batches
+                              │ Start batch (click a title)
+                              │ │ │
+                              │ ▼ │
+                              │ New batch: pick template, │
+                              │ drop ZIP or PNGs ──refused──▶ error, stay
+                              ▼ │ │
                         Staging review ◀──────┘◀── Staging row ──────┤
-                              │                                      │
-                       Create N listings                              │
-                              ▼                                      │
+                              │ │
+                       Create N listings │
+                              ▼ │
                         Batch summary ◀──── any other status row ────┘
-                              │   ▲
-                         name │   │ Back to batch
-                              ▼   │
+                              │ ▲
+                         name │ │ Back to batch
+                              ▼ │
                       Listing editor (from a batch)
 ```
 
@@ -323,7 +323,7 @@ Not obvious from the designs:
 
 Review changed these decisions after
 [features/batch-creation-20260927/spec.md](spec.md) was written.
-The spec and the PRD (PRD 74) have been amended to match; the table is kept as
+The spec and ADR-0047 have been amended to match; the table is kept as
 the record of why.
 
 | Spec says | Mockups do | Why |

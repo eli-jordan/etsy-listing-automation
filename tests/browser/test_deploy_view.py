@@ -196,7 +196,7 @@ def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
     """The workspace route preserves review while one listing goes stale.
 
     This deliberately changes one listing after its review and before Apply.
-    That exercises the public A31 fingerprint guard and the sequential
+    That exercises the public ADR-0039 fingerprint guard and the sequential
     continue-on-error contract through the browser, rather than mocking either
     the API response or the React event stream.
     """

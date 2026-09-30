@@ -3,7 +3,14 @@
 Status: shipped. Delivered by [#45](https://github.com/eli-jordan/etsy-listing-automation/pull/45), [#46](https://github.com/eli-jordan/etsy-listing-automation/pull/46), [#47](https://github.com/eli-jordan/etsy-listing-automation/pull/47), [#48](https://github.com/eli-jordan/etsy-listing-automation/pull/48), [#49](https://github.com/eli-jordan/etsy-listing-automation/pull/49), [#50](https://github.com/eli-jordan/etsy-listing-automation/pull/50), [#51](https://github.com/eli-jordan/etsy-listing-automation/pull/51), [#52](https://github.com/eli-jordan/etsy-listing-automation/pull/52). This plan records the
 implementation sequence; later feature amendments describe current requirements.
 
-**Amended by PRD 74 and A41.** Proposals are no longer browser state: the
+**Amended by the market and batch features (ADR-0044, ADR-0047 and ADR-0049).**
+The request-scoped endpoints and deadlines below describe the original
+implementation. Current requests use server-side AI runs with a three-minute
+deadline; brief drafting persists the brief and navigation does not cancel the
+run. See [market requirements](../market-seo-20260924/spec.md) and
+[batch interactions](../batch-creation-20260927/interactions.md).
+
+ Proposals are no longer browser state: the
 latest one per listing, and its per-section resolution, is kept in
 `.cache/proposals/` with no expiry, and a stale proposal stays usable. The
 persistence and stale-state rules below are superseded where they say
@@ -15,7 +22,7 @@ otherwise; see
 AI Mode is a manual, local editing aid within a *saved* listing's Details tab.
 It asks a locally authenticated coding-agent CLI for one complete SEO proposal,
 then lets the seller accept individual title, tag, and description-lead choices.
-The proposal itself is server-cached, not listing content (PRD 74). Accepted values follow the
+The proposal itself is server-cached, not listing content (ADR-0047). Accepted values follow the
 ordinary listing-editor autosave path; the model never writes `listing.yaml`, a
 lockfile, `generated.yaml`, or a remote listing.
 
@@ -38,7 +45,7 @@ different credentials boundary.
 | Topic | Decision |
 |---|---|
 | Entry point | AI Mode stays visible in Listing Details and is disabled until the listing is saved with a selected design, a non-empty brief, `prompts/seo.md`, and at least one ready provider. The brief is editable in Listing Details. |
-| Drafting on design attach | Attaching a design to a listing whose brief is empty drafts a brief from the artwork, writes it through the ordinary autosave path, and then starts one SEO request (PRD 68). The draft is requested from the design-strip's own pick handler, so it goes out immediately and needs no saved listing — `POST /api/ai/design-brief` takes the design path alone -- no listing name and no garment profile, since the brief prompt forbids describing the garment anyway. Only that transition starts it, only into an empty brief, and never again automatically after a failure. The chain belongs to the open editor: same request-scoped endpoints, same 60-second deadline per request, same abort-on-leave rule — there is still no server-side job, queue or proposal cache. |
+| Drafting on design attach | Attaching a design to a listing whose brief is empty drafts a brief from the artwork, writes it through the ordinary autosave path, and then starts one SEO request (ADR-0003). The draft is requested from the design-strip's own pick handler, so it goes out immediately and needs no saved listing — `POST /api/ai/design-brief` takes the design path alone -- no listing name and no garment profile, since the brief prompt forbids describing the garment anyway. Only that transition starts it, only into an empty brief, and never again automatically after a failure. The chain belongs to the open editor: same request-scoped endpoints, same 60-second deadline per request, same abort-on-leave rule — there is still no server-side job, queue or proposal cache. |
 | Brief prompt | `prompts/brief.md`, seeded by `setup` exactly as `prompts/seo.md` is, wrapped in the same delimited JSON context and response schema. A valid draft is one non-empty plain-text brief within a fixed length ceiling; there is no repair-specific handling beyond the one the shared orchestrator already gives every task. |
 | Providers | The chain tries Codex, then Claude, then Grok. Grok is the local `grok` CLI (`--prompt-file`, `--json-schema`, read-only `--tools`). `--json-schema` is what makes the answer JSON: the adapter reads `structuredOutput`, the schema-valid object, not the model's `text`. A recognised unavailable failure falls through to the next. Each CLI uses its currently configured account model; there is no model picker or provider settings UI. |
 | Provider process | Run in the real workspace with full coding-agent tools constrained to read-only mode, automatic non-interactive approval, no durable provider session, and access to all readable workspace files. This explicitly includes readable workspace secrets and caches. |
@@ -48,7 +55,7 @@ different credentials boundary.
 | Prompt | `prompts/seo.md` is plain seller-editable instruction text. The application appends delimited JSON context and a JSON response schema; it does not support placeholders or executable prompt code. `setup` seeds the default only when the file is absent, never overwriting seller content. |
 | Proposal | Exactly three titles, twenty unique ranked tags, three description leads, seven phrase rationales, warnings, and observed OCR text. The first thirteen tags are **Best 13**. OCR is disclosed in the proposal, not saved as design data. |
 | Validation | Normalize harmless formatting, then enforce Etsy title/tag limits, tag uniqueness, and the agreed hard affiliation/content checks before the UI sees a proposal. Trademark findings are warnings, not a hard refusal. |
-| Proposal persistence | **Amended (A41):** store the latest proposal per listing, with per-section resolution, in `.cache/proposals/`, with no expiry. Never in a workspace file. Editor changes to submitted generation inputs make a proposal stale, computed on the server; accepted values remain ordinary seller edits. |
+| Proposal persistence | **Amended (ADR-0049):** store the latest proposal per listing, with per-section resolution, in `.cache/proposals/`, with no expiry. Never in a workspace file. Editor changes to submitted generation inputs make a proposal stale, computed on the server; accepted values remain ordinary seller edits. |
 | Description model | `etsy.description` has a required `lead` and may contain exactly one sibling content source: `text` or `ref`. The final description is composed once and consumed everywhere. |
 | Common copy | `description.ref` is a portable POSIX workspace reference such as `common-copy/comfort-colors.md`; it may resolve only beneath `common-copy/`. The Markdown file has `title` and `targets` front matter, optional `summary`, and must target `description`. |
 | Legacy copy | Remove `<generate>` from the listing schema. Convert it to empty ordinary editable values. Convert a legacy scalar description to `description.text` unchanged with an empty lead; do not guess the opening paragraph. There is no runtime migration or compatibility reader. |
@@ -94,7 +101,7 @@ SEO API ── readiness ── prompt + provider checks
 SEO service ── typed request / deadline / cancellation
         |
         +── Codex CLI adapter ── recognised availability failure ──+
-        |                                                       |
+        | |
         +── Claude CLI adapter <────────────────────────────────+
         |
         v
@@ -110,15 +117,15 @@ server-cached proposal drawers ── seller selection ── normal autosave
 
 ```python
 class AiProvider(Protocol):
-    def readiness(self) -> ProviderReadiness: ...
-    def generate(self, task: ProviderTask, deadline: Deadline) -> RawProviderResult: ...
+    def readiness(self) -> ProviderReadiness:...
+    def generate(self, task: ProviderTask, deadline: Deadline) -> RawProviderResult:...
 ```
 
 A `ProviderTask` is assembled prompt text, a response schema, and the design
 image — everything a CLI invocation needs and nothing about *which* AI feature
 asked for it. That is what lets brief drafting and SEO generation share one
 adapter, one fallback order, one repair rule and one deadline instead of
-growing a second copy of each (PRD 68). Assembling the task from a seller's
+growing a second copy of each (ADR-0003). Assembling the task from a seller's
 prompt file is the caller's job, so an adapter no longer reads `prompts/seo.md`
 and no longer reports a missing one as *provider* unreadiness — a prompt file
 is a property of the request, not of the CLI.
@@ -146,11 +153,11 @@ state remains the provider's own responsibility.
 The request snapshots precisely the saved listing inputs: listing brief,
 selected design identity/content hash, garment context, and relevant editable
 listing values. The server captures the snapshot before generation and returns
-it with the proposal; the server stores both under the listing name (A41,
+it with the proposal; the server stores both under the listing name (ADR-0049,
 originally the browser under an opaque workspace-root identity). Changes to
 those editor inputs stale unresolved choices; prompt-file edits, unrelated
 workspace edits, and changes in other listings do not. A stale proposal remains
-visible and, since PRD 74, selectable: the drawer heading names what changed and
+visible and, since ADR-0047, selectable: the drawer heading names what changed and
 **Regenerate** stays available.
 
 Accepting a title or lead replaces that normal editor field. Tag candidates
@@ -183,11 +190,12 @@ the total remains below 3,000 changed lines.
 
 **Target: about 1,200 lines.**
 
-1. Amend PRD decision 4, the AI-generation section, workspace tree, examples,
+1. Amend ADR-0003, the AI-generation section, workspace tree, examples,
    phase table, and deployment gates to remove `generated.yaml`, `<generate>`,
    and `Generate()`.
-2. Amend `docs/history/implementation-plan.md` to remove the Generate stage and old A9
-   review decision, replacing them with the browser-only proposal lifecycle.
+2. Replace the original Generate stage and lockfile review workflow with
+   editing-time proposals. This was the initial browser-only lifecycle;
+   the batch feature later moved proposals into server cache (ADR-0049).
 3. Update `docs/features/ai-seo-20260922/interactions.md` for saved-listing-only entry,
    visible-disabled behavior, cancellation, provider fallback, the final
    description model, and direct conversion.

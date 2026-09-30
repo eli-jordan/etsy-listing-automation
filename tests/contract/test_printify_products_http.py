@@ -360,7 +360,7 @@ def _page(products: list[dict], *, page: int, last: int) -> dict:
 
 
 def test_the_walk_finds_a_product_matching_title_and_description() -> None:
-    """PRD 48. There is no natural key and no filter -- `title`, `search` and
+    """ADR-0023. There is no natural key and no filter -- `title`, `search` and
     `sku` are all accepted and ignored -- so the match is client-side."""
     found = _client(
         lambda _: httpx.Response(200, json=_page([PRODUCT_PAYLOAD], page=1, last=1))
@@ -447,7 +447,7 @@ def test_delete_removes_the_product() -> None:
 
 def test_delete_treats_a_gone_product_as_already_deleted() -> None:
     """A retract that already deleted the product, then failed because the
-    Etsy draft survived, re-applies after the user removed the draft (PRD 63).
+    Etsy draft survived, re-applies after the user removed the draft.
     The product is gone; crashing on that 404 leaves the local files stuck."""
     _client(lambda _: httpx.Response(404, json={"message": "Not Found"})).delete_product(
         SHOP_ID, PRODUCT_ID

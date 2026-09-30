@@ -1,4 +1,4 @@
-"""In-memory Etsy, for the behaviour layer (A4).
+"""In-memory Etsy, for the behaviour layer.
 
 Behaviour tests drive this; contract tests drive the HTTP client through
 `httpx`'s mock transport against transcripts. Asking either to do the other's

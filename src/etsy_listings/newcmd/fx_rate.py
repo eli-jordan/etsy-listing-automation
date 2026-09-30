@@ -1,10 +1,9 @@
 """One-off, uncached live FX-rate fetch for ``new``'s pricing-plan wizard only.
 
-This is **not** the PRD's deferred full-margin-model FX module (PRD 10b) --
-that one owns a TTL-cached ``.cache/fx.json`` and supersedes this once built.
-Deliberately not named/placed as that reserved future package (``fx/``): do
-not add caching here, that is exactly the scope this file exists to stay
-out of.
+The wizard uses one current rate while choosing a saved retail price. It does
+not cache rates or calculate a full margin model; deployment uses the saved
+amount without another conversion. The original broader FX design remains
+unbuilt, so it is not a dependency of this helper.
 """
 
 from __future__ import annotations

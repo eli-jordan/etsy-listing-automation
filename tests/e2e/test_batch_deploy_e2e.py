@@ -1,5 +1,5 @@
 """A batch-created listing, deployed against the real Printify and Etsy APIs
-(batch plan PR 8; spec, *Deployment interaction*; A43, A44). ``-m e2e``,
+(batch plan PR 8; spec, *Deployment interaction*; ADR-0050). ``-m e2e``,
 skipped by default.
 
 The Phase 3 test deploys the fixture listing; this one deploys a listing
@@ -15,7 +15,7 @@ between the batch and the deploy.
 What it adds over the offline suite is that a listing the batch path wrote
 is one the real pipeline accepts: every stage runs, nothing is blocked, and
 the Etsy draft carries the accepted title. And that the UI apply's full
-success removes the proposal (A44), against a real deploy.
+success removes the proposal, against a real deploy.
 
 **Costs state** exactly as the Phase 3 test does: one Printify product,
 published as an Etsy draft, deleted in teardown (which removes the draft
@@ -58,10 +58,10 @@ pytestmark = pytest.mark.e2e
 
 LISTING_TEMPLATE = "e2e-batch-tee"
 DESIGN = "e2e-batch-trail"
-"""The staged file's stem, and so the listing's name (A38)."""
+"""The staged file's stem, and so the listing's name."""
 PRINT_AREA = (4500, 5400)
 """The fixture garment profile's print area: a design any smaller is
-blocked before the product stage creates anything (PRD 38)."""
+blocked before the product stage creates anything."""
 AI_SECONDS = 240.0
 """The runner's own limit is 180 s; the rest is the queue's turn."""
 
@@ -230,7 +230,7 @@ def test_a_batch_created_listing_deploys_and_its_proposal_goes(
     assert live.title == title
     assert live.state == "draft"
 
-    # A44: the UI apply's full success removed the proposal. The batch
+    # ADR-0050: the UI apply's full success removed the proposal. The batch
     # record and its row stay, and deploying never marks a row reviewed.
     assert client.get(f"/api/listings/{DESIGN}/proposal").status_code == 404
     row = _row(client, batch_id)

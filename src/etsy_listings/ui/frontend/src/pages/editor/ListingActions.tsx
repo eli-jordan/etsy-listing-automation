@@ -70,7 +70,7 @@ const GESTURES: Record<Exclude<Gesture, "delete">, { label: string; icon: ReactN
  * The listing's action row: Open in, Create listing template, then Mark
  * reviewed for a batch's listing and the listing's lifecycle gestures --
  * exactly the Listings table's, as the server serves them on the detail
- * (PRD 66), with the table's confirmation for deleting.
+ *, with the table's confirmation for deleting.
  *
  * Delete goes through `DELETE`, like the table, after flushing: a wipe
  * leaves the editor for Listings; a mark adopts what the server answered.

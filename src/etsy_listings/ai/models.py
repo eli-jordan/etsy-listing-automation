@@ -35,7 +35,7 @@ WarningKind = Literal["general", "trademark"]
 @dataclass(frozen=True)
 class ProviderTask:
     """One complete unit of work for a provider CLI, with nothing in it that
-    says which AI feature asked (PRD 68).
+    says which AI feature asked.
 
     This is the seam that lets brief drafting and SEO generation share one
     Codex adapter, one Claude adapter, one fallback order, one repair rule
@@ -74,17 +74,16 @@ class GarmentContext:
 class SeoRequest:
     """The submitted generation inputs for one proposal request.
 
-    This is the request-scoped snapshot `docs/features/ai-seo-20260922/plan.md`'s
-    "Proposal and stale-state rules" describes: listing brief, garment
+    These are the inputs described in the AI and market feature specifications:
+    listing brief, garment
     context, and the other editable listing values relevant to SEO copy.
     `design_image` is a workspace-resolved path, handed to a provider adapter
-    to read directly (PRD: "sends the design image") -- this type carries no
+    to read directly -- this type carries no
     image bytes, and no design *identity/content hash*: the request endpoint
     captures that alongside this provider-facing request before generation,
-    so the browser can compare pending choices with the same saved inputs.
+    so the server can compare pending choices with the same saved inputs.
 
-    Deliberately excludes an explicit "exact design text" field: the PRD's
-    entry-point paragraph settles that the *brief* itself carries any
+    Deliberately excludes an explicit "exact design text" field: the brief carries any
     design wording that stylised lettering might obscure from OCR ("the
     brief carries exact design text"), so `brief` alone covers input
     authority #2 in `seo_prompt.md`'s ranked list.
@@ -162,7 +161,7 @@ class ProviderReadiness:
 
     `reason` is set only when `ready` is `False` -- the sentence a caller
     surfaces (or, at the readiness-endpoint layer PR5 builds, folds into
-    "AI Mode is hidden because ..."). A provider that cannot guarantee the
+    "AI Mode is hidden because..."). A provider that cannot guarantee the
     agreed read-only execution boundary answers `ready=False` here rather
     than being launched writable (implementation plan, "Provider adapters").
     """

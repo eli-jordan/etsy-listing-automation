@@ -1,7 +1,7 @@
 import type { Artwork } from "../../media";
 
 /** The design a listing template is being looked at through (UI doc §3):
- * one of the calibrator's test designs (A19) by its library id, or a
+ * one of the calibrator's test designs by its library id, or a
  * workspace design. Component state in `ListingEditorShell`, never part of
  * the document -- a listing template has no artwork, and each listing in a
  * batch gets its own. */

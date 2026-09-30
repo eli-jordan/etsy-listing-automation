@@ -1,6 +1,6 @@
 """The product stage's three-way comparison, as a function of three values.
 
-A2 says each stage writes its own ``plan()``; this is the product stage's,
+ADR-0008 says each stage writes its own ``plan()``; this is the product stage's,
 lifted out of it. Nothing here touches a workspace, a client, a lockfile or a
 clock -- :func:`compare` takes the desired document, the applied one and the
 live product, and answers what a run would do about them.
@@ -163,17 +163,17 @@ def _changes(
 
 
 def _colour_change(wanted: AppliedProduct, was: AppliedProduct) -> Change | None:
-    """A named colour added or removed (A30).
+    """A named colour added or removed.
 
     Read straight off each variant's own ``colour_slug`` -- carried on
     :class:`~etsy_listings.engine.stages.product_document.AppliedVariant`
     itself rather than looked up from this run's catalog resolution, which is
-    what lets a colour Printify has since discontinued (PRD 46) still be
+    what lets a colour Printify has since discontinued still be
     named in ``removed``: it has no cell left to resolve, but it still has the
     name it was applied under.
 
     Replaces a UI that would otherwise have to diff two colour lists itself
-    to ring a newly added one (A2, decision 4) -- the ``FieldChange`` below
+    to ring a newly added one (ADR-0008, decision 4) -- the ``FieldChange`` below
     only ever carried a count.
     """
     wanted_colours = sorted({v.colour_slug for v in wanted.variants})
@@ -290,7 +290,7 @@ def _actions(desired: PrintifyProductDesired, *, creating: bool) -> tuple[Action
         )
     ]
     if desired.missing:
-        # PRD 46: reported, never fatal. A cell Printify has discontinued is
+        # reported, never fatal. A cell Printify has discontinued is
         # its fact, not the user's mistake -- but a listing quietly selling
         # five sizes where it asked for six is worth saying out loud.
         listed = ", ".join(f"{colour}/{size}" for colour, size in desired.missing)

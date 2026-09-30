@@ -1,5 +1,5 @@
 """Name -> id resolution for the fields `shop.yaml`/`listing.yaml` refer to by
-name (decision 2, PRD 53/54/59): a shop section, a shipping profile, a return
+name (decision 2, per-listing shop sections): a shop section, a shipping profile, a return
 policy addressed by its terms, and the production partner ladder (decision 3).
 
 Pure resolution logic over lists the fakes hand back, so this is the unit
@@ -167,7 +167,7 @@ def test_terms_matching_nothing_list_what_the_shop_actually_has() -> None:
 
 
 def test_a_named_partner_resolves_through_the_same_normalisation_as_the_catalog() -> None:
-    """PRD 23's blueprint: trademark signs and case fold away. Etsy renders
+    """ADR-0005's blueprint: trademark signs and case fold away. Etsy renders
     partner names plainly, but the config author should not have to match its
     capitalisation exactly either."""
     catalog, _ = _catalog(
@@ -228,7 +228,7 @@ def test_an_unresolvable_named_partner_lists_the_shops_actual_ones() -> None:
         catalog.production_partner("Some Other Partner")
 
 
-# --------------------------------------------------------- once per run (A25)
+# --------------------------------------------------------- once per run
 
 
 def test_each_list_is_fetched_at_most_once_per_catalog() -> None:
@@ -246,7 +246,7 @@ def test_each_list_is_fetched_at_most_once_per_catalog() -> None:
     assert client.shipping_profile_calls == 1
 
 
-# --------------------------------------------------------- drift labels (A30)
+# --------------------------------------------------------- drift labels
 
 
 def test_shop_section_title_reads_an_id_back_once_the_list_is_fetched() -> None:

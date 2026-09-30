@@ -1,11 +1,11 @@
-"""A29: a failed apply keeps what it did.
+"""ADR-0037: a failed apply keeps what it did.
 
 ``execute`` used to fold every stage's result into a lockfile that only
 ``apply_listings`` wrote -- once, after the whole loop returned. A stage
 raising partway through left every earlier stage's work unrecorded, so a
 first `apply` that created a Printify product and then failed patching the
 Etsy listing looked, to the next `plan`, exactly like a listing that had
-never been touched. PRD 48's duplicate-create guard then refuses the
+never been touched. ADR-0023's duplicate-create guard then refuses the
 re-create, and no re-run can get past it.
 
 ``execute`` now takes a ``record`` callback and calls it with the stamped,
@@ -126,7 +126,7 @@ def test_record_is_called_after_every_stage_that_succeeds(workspace_root: Path) 
 
 
 def test_a_raising_stage_is_recorded_marked_incomplete_then_reraised(workspace_root: Path) -> None:
-    """The PRD 48 scenario: `printify_product` creates a product, then
+    """The ADR-0023 scenario: `printify_product` creates a product, then
     `etsy_listing` raises. The product id must survive the crash, and the
     lockfile must say the run did not finish."""
     ctx = a_context(workspace_root)
@@ -142,7 +142,7 @@ def test_a_raising_stage_is_recorded_marked_incomplete_then_reraised(workspace_r
     assert after_create.remote == {"printify_product_id": "p1"}
     assert after_create.incomplete is None, "nothing has failed yet at this point"
     assert after_failure.remote == {"printify_product_id": "p1"}, (
-        "the create must survive the crash -- this is the whole of PRD 48's guard"
+        "the create must survive the crash -- this is the whole of ADR-0023's guard"
     )
     assert after_failure.incomplete == IncompleteApply(stage="etsy_listing")
 
@@ -228,7 +228,7 @@ def _lock_path(root: Path, listing: str = LISTING) -> Path:
 def test_apply_listings_writes_the_lockfile_after_the_stage_before_the_failure(
     workspace_root: Path,
 ) -> None:
-    """The behaviour PRD 48 needs: `apply_listings` must not wait for the
+    """The behaviour ADR-0023 needs: `apply_listings` must not wait for the
     whole run to finish before anything reaches disk."""
     ctx = a_context(workspace_root)
     stages = [

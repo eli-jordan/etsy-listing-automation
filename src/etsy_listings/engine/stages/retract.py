@@ -1,5 +1,5 @@
 """Retract a never-live listing: Printify DELETE, confirm the Etsy draft
-went with it, then the run wipes local files (PRD 63).
+went with it, then the run wipes local files.
 
 Not in :data:`STAGES`. :func:`~etsy_listings.engine.lifecycle.walk` hands
 this stage to ``build_plan`` *instead* of the pipeline when

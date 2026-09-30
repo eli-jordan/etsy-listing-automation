@@ -9,7 +9,7 @@ describe("metaFor", () => {
   });
 
   it("points an unwritable document at the field that caused it", () => {
-    /* Since PRD 70 this state is never about incompleteness -- naming writes
+    /* Since ADR-0043 this state is never about incompleteness -- naming writes
        the listing, and what is missing blocks deploying it instead. What is
        left is a document that contradicts itself, and `field_errors` has
        already marked the field, so this line only reports the consequence. */

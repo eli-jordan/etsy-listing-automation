@@ -40,7 +40,7 @@ DesignSource = Literal["bundled", "upload"]
 
 
 class DesignSummary(BaseModel):
-    """One entry in the calibrator's test-design library (A19).
+    """One entry in the calibrator's test-design library.
 
     ``bundled-grid``: the grid/ruler target, for spotting warp/displacement
     errors. ``bundled-on-light``/``bundled-on-dark``: deterministic
@@ -59,7 +59,7 @@ TemplateStatus = Literal["needs-calibration", "calibrated"]
 """Whether a template is ready to render from. Derived on every read, never
 stored: the calibrator's rail sorts unfinished templates to the top, and a
 persisted ``calibrated:`` flag in ``template.yaml`` would be new product state
-no PRD decision covers -- as well as something that could disagree with the
+the configuration does not need -- as well as something that could disagree with the
 config sitting next to it."""
 
 
@@ -72,11 +72,11 @@ class TemplatePhoto(BaseModel):
     trailing-segment fallback for a vendor pack delivered as
     ``{template}-{colour}.png``. The listings editor shows it under its preview
     so the user knows which file to go and edit, and it used to *derive* that
-    caption from PRD 7a's convention in TypeScript, which named a file that was
+    caption from ADR-0004's convention in TypeScript, which named a file that was
     not there for exactly the pack the fallback exists for.
 
     ``colour`` is ``None`` for a ``multiple``/``single`` template's fixed
-    ``scene.png``: there is no per-colour name to derive one from (PRD 28).
+    ``scene.png``: there is no per-colour name to derive one from.
     """
 
     colour: str | None
@@ -122,7 +122,7 @@ class SwatchResponse(BaseModel):
 class ColourReportRow(BaseModel):
     """What one photo in a candidate ``colour-matrix`` set will be taken as.
 
-    Reporting only: PRD 7a makes the filename the source of truth, so there is
+    Reporting only: ADR-0004 makes the filename the source of truth, so there is
     no manual mapping to offer and nothing here changes a name.
     """
 
@@ -139,7 +139,7 @@ class ColourMatrixPreviewRequest(BaseModel):
     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
     than forbidden, since a natural client pattern is spreading a whole
-    ``GET .../config`` response (which includes ``kind``) into the body."""
+    ``GET.../config`` response (which includes ``kind``) into the body."""
 
     colour: str
     bounding_box: BoundingBox
@@ -175,7 +175,7 @@ than relying on shape-sniffing across all three."""
 # ──────────────────────────────────────────────────────────────────────────
 
 IssueSeverity = Literal["block", "warn", "info"]
-"""`listing_validation.Severity` on the wire. ``info`` (PRD 72's stripped
+"""`listing_validation.Severity` on the wire. ``info`` (ADR-0045's stripped
 audio) is shown quietly and counted nowhere: `IssueCounts` stays blocks and
 warnings, the two a seller has to act on."""
 IssueTab = Literal["variants", "pricing", "images", "details"]
@@ -213,7 +213,7 @@ class ListingSummary(BaseModel):
     does -- and a menu per row that each had to fetch its own ids would be one
     request per listing to render a list."""
     gestures: list[ListingGesture] = []
-    """Which buttons the listings table offers for this row (PRD 66). Computed
+    """Which buttons the listings table offers for this row. Computed
     server-side from the same facts as ``status``, so the CLI's future
     `status` and the table cannot disagree about the row. The editor's
     `ListingDetail` carries the same list for its action row."""
@@ -240,7 +240,7 @@ class ListingDetail(Listing):
     field_errors: dict[str, str] = {}
     gestures: list[ListingGesture] = []
     """The lifecycle actions the editor's action row offers: the listings
-    table's row gestures (PRD 66), from the same rule. Empty for the unsaved
+    table's row gestures, from the same rule. Empty for the unsaved
     draft, which has no lifecycle yet."""
     """Populated only when a PATCH's candidate failed `Listing.model_validate`
     -- the write was skipped and every other field here still describes the
@@ -303,7 +303,7 @@ class GarmentProfileSummary(BaseModel):
     colors: dict[str, Literal["light", "dark"]]
     preview_template: str | None = None
     """A ``colour-matrix`` template the Variants tab uses to judge colours
-    (A13). Null when the garment profile does not name one -- the editor
+    . Null when the garment profile does not name one -- the editor
     does not fall back to ``media:``."""
 
 
@@ -314,7 +314,7 @@ class PricingPlanSummary(BaseModel):
     """Whether this plan declares the exact garment profile asked for --
     mirrors `newcmd.logic.build_pricing_plan_choices`'s marker."""
     ref: str
-    """Workspace-rooted (PRD 73), ready to PATCH straight into `pricing_plan:`
+    """Workspace-rooted, ready to PATCH straight into `pricing_plan:`
     unchanged -- `newcmd.logic.pricing_plan_ref`'s write-side form, the same
     rule `MediaFileSummary.ref` follows for a shared image."""
 
@@ -327,7 +327,7 @@ class ListingDesignSummary(BaseModel):
 
 
 class MediaFileSummary(BaseModel):
-    """One file a listing can put in `media:` as a file ref (PRD 72, 73): a
+    """One file a listing can put in `media:` as a file ref: a
     shared one under ``common-media/``, or one of the listing's own. A bare
     file uploaded as-is, rather than a rendered mockup."""
 
@@ -340,7 +340,7 @@ class MediaFileSummary(BaseModel):
     ref: str
     """The ref to write into `media:` unchanged. A shared file's ref is its
     workspace-relative path, so it equals ``file``; a listing's own file is
-    spelled ``./close-up.mp4`` (PRD 73), which is why this is a field of its
+    spelled ``./close-up.mp4``, which is why this is a field of its
     own rather than something callers build."""
     kind: MediaKind
     """``image`` or ``video``, as `config.media.media_kind` classifies it --
@@ -351,7 +351,7 @@ class MediaFileSummary(BaseModel):
 class CommonCopySummary(BaseModel):
     """One `common-copy/*.md` file, for the Description tab's body-source
     selector (AI SEO implementation plan, PR6). A common-copy ref is
-    workspace-relative, like every other ref (PRD 73), so it is exactly what
+    workspace-relative, like every other ref, so it is exactly what
     `description.ref` stores, already usable as-is."""
 
     ref: str
@@ -380,11 +380,11 @@ class WorkspaceSummary(BaseModel):
 
     shop_name: str | None
     """`etsy.shop_name` from `shop.yaml`. ``None`` until `setup` reads it back
-    from Etsy (PRD 51), which a workspace that has only ever rendered mockups
+    from Etsy, which a workspace that has only ever rendered mockups
     never has."""
     storage_id: str
     """Opaque identity of the workspace root for browser-only pending proposals
-    (PRD 4). Distinct roots must not share a local-storage key merely because
+    . Distinct roots must not share a local-storage key merely because
     they use the same Etsy shop name."""
 
 
@@ -417,7 +417,7 @@ class RenameListingRequest(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Listing templates (A35, A36). The detail reuses `ListingTemplate` directly,
+# Listing templates (ADR-0047, template completeness). The detail reuses `ListingTemplate` directly,
 # as `ListingDetail` reuses `Listing`: the wire shape *is* template.yaml.
 # ──────────────────────────────────────────────────────────────────────────
 
@@ -441,7 +441,7 @@ class ListingTemplateSummary(BaseModel):
     sizes itself."""
     media: list[MediaEntry]
     batch_count: int = 0
-    """Batches made from this template, while their records last (A37)."""
+    """Batches made from this template, while their records last."""
     design_minimum: PixelSize | None = None
     """The smallest design the garment's print area takes -- New batch's size
     hint (UI doc §4). ``None`` when the garment profile will not load."""
@@ -490,7 +490,7 @@ class ListingTemplateDetail(ListingTemplate):
 
 
 class ListingTemplateSaveResult(BaseModel):
-    """What a create or ``PUT`` did (A36). Refusing an incomplete document is
+    """What a create or ``PUT`` did. Refusing an incomplete document is
     a 200 with ``saved: false``, as a listing's malformed PATCH is, because the
     editor shows the issues and keeps going; nothing was written."""
 
@@ -510,7 +510,7 @@ class CreateListingTemplateRequest(BaseModel):
     document: dict[str, Any] | None = None
     """The seller's edits made before naming it, as ``template.yaml`` would
     hold them: the *name it* state is the editor (UI doc §1, §3). Absent
-    means the draft as the source gives it. Checked as a ``PUT`` is (A36),
+    means the draft as the source gives it. Checked as a ``PUT`` is,
     and its ``./`` refs must be files the draft copies."""
 
     @model_validator(mode="after")
@@ -521,7 +521,7 @@ class CreateListingTemplateRequest(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Staging and batches (A37-A39; batch plan PR 2).
+# Staging and batches (cache-record persistence; batch plan PR 2).
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -571,7 +571,7 @@ class StagingDetail(BaseModel):
 
 
 class StagingRefusal(BaseModel):
-    """A ``422``'s ``detail`` for an upload refused before staging (A45)."""
+    """A ``422``'s ``detail`` for an upload refused before staging."""
 
     message: str
     remedy: str
@@ -602,12 +602,12 @@ class BatchRowDetail(BaseModel):
     id: str
     sources: list[str]
     name: str
-    """The name actually created, which confirm may have suffixed (A38)."""
+    """The name actually created, which confirm may have suffixed."""
     design: str
     creation: Literal["pending", "created", "failed"]
     error: str | None
     ai: AiState | None = None
-    """The row's AI work (A40, and A43's ``cancelled_by_deploy``); ``None``
+    """The row's AI work (ADR-0048, and ADR-0050's ``cancelled_by_deploy``); ``None``
     until its listing exists."""
     ai_steps: list[WorkflowStep] = []
     """The live run's nodes while running, else the last run's as it ended."""
@@ -616,7 +616,7 @@ class BatchRowDetail(BaseModel):
     """1 for the next row to start, across every batch; ``None`` unless
     queued."""
     proposal: Literal["ready", "stale", "resolved"] | None = None
-    """The listing's cached proposal (A41): sections waiting and current,
+    """The listing's cached proposal: sections waiting and current,
     waiting but out of date, or every section dealt with."""
     stale_reasons: list[str] = []
     reviewed: bool = False
@@ -625,7 +625,7 @@ class BatchRowDetail(BaseModel):
     """Whether Mark reviewed is offered: not on a queued, drafting, deleted
     or never-created row (UI doc §7)."""
     deleted: bool = False
-    """The listing was deleted; the row stays, struck through (A42)."""
+    """The listing was deleted; the row stays, struck through."""
 
 
 BatchStatus = Literal["staging", "drafting", "in_review", "complete", "stopped"]
@@ -675,7 +675,7 @@ class BatchIndexEntry(BaseModel):
     failures: int = 0
     """*N need retry*: a count beside the progress, never a status."""
     expires_at: datetime | None = None
-    """A staging session's: seven days after its last edit (A46)."""
+    """A staging session's: seven days after its last edit."""
 
 
 class ListingBatch(BaseModel):
@@ -690,7 +690,7 @@ class ListingBatch(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# Runs (A33). ``RunEvent`` itself, and the ``Plan``/``StagePlan`` DTOs it
+# Runs. ``RunEvent`` itself, and the ``Plan``/``StagePlan`` DTOs it
 # carries, live in ``ui/runs/events.py`` beside the engine types they mirror --
 # only the request/response envelope belongs here, next to every other
 # endpoint's shapes.
@@ -773,7 +773,7 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# AI SEO (AI SEO implementation plan, PR5; A41). A proposal is cached on the
+# AI SEO (AI SEO implementation plan, PR5; ADR-0049). A proposal is cached on the
 # server (`ai/proposals.py`) and reaches the browser two ways: as an AI
 # run's `proposal` event (`ui/airuns/events.py`) the moment it is written,
 # and from `GET /api/listings/{name}/proposal` after that. Both are
@@ -793,16 +793,16 @@ class SeoReadinessResponse(BaseModel):
     ready: bool
     reason: str | None = None
     batch_pending: bool = False
-    """A batch row owns this listing's AI (A40): the editor follows the
+    """A batch row owns this listing's AI: the editor follows the
     batch run instead of offering its own."""
     deploying: bool = False
-    """A UI plan or apply holds this listing (A43): the editor asks again
+    """A UI plan or apply holds this listing: the editor asks again
     until the deploy lets it go."""
 
 
 class ListingProposal(BaseModel):
     """A listing's cached proposal as the editor and the batch summary read
-    it (A41): the record, and whether it still describes the saved listing.
+    it: the record, and whether it still describes the saved listing.
     ``stale`` is computed from the saved listing on every read, never
     stored."""
 

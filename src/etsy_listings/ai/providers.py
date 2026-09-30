@@ -7,7 +7,7 @@ An adapter owns its own CLI invocation, structured-output parsing down to raw
 text, and provider-specific error classification -- it must not edit a
 listing, assemble a prompt, or implement SEO validation.
 
-`generate` takes a `ai/models.py.ProviderTask`, not a `SeoRequest`: PRD 68
+`generate` takes a `ai/models.py.ProviderTask`, not a `SeoRequest`: ADR-0003
 gives this codebase a second AI feature (drafting a listing brief from its
 design), and a provider was never the layer that knew which one it was
 serving. Assembled prompt text, a response schema and one image is the whole

@@ -1,11 +1,11 @@
 """Save as listing template and Clone: a plan of a template, then one write
-(A35, A36; spec *Creation and cloning*).
+(ADR-0047, template completeness; spec *Creation and cloning*).
 
 :func:`from_listing` and :func:`from_template` read and answer; they write
 nothing. What they answer is a :class:`ListingTemplateDraft` -- the document
 the template would hold and the files it would copy -- which is also exactly
 what the *name it* page shows before anything exists. Only :func:`save`
-touches the disk, and it refuses an incomplete draft (A36) and a name already
+touches the disk, and it refuses an incomplete draft and a name already
 taken, never suffixing one: the seller chooses the name (spec, *Storage and
 identity*).
 
@@ -78,7 +78,7 @@ def owned_refs(template: ListingTemplate) -> list[str]:
     """Every ``./`` ref a template names, once each, in order: its gallery
     files and a pricing plan kept beside the listing. The files a template
     owns -- what Save as copies in, and what staging freezes and batch
-    creation copies out into each listing (A39)."""
+    creation copies out into each listing."""
     refs = [entry for entry in template.media if isinstance(entry, str)]
     if template.pricing_plan is not None:
         refs.append(template.pricing_plan)
@@ -174,7 +174,7 @@ def from_template(workspace: Workspace, template: str) -> ListingTemplateDraft:
 def draft_issues(
     workspace: Workspace, draft: ListingTemplateDraft, *, facts: WorkspaceFacts
 ) -> list[Issue]:
-    """The draft's completeness (A36), judged against the files it will copy
+    """The draft's completeness, judged against the files it will copy
     -- they are the same bytes the saved template will hold."""
 
     def resolve(ref: str) -> Path:
@@ -194,7 +194,7 @@ def save(
     A taken name raises :class:`ListingTemplateExistsError` -- the
     *directory* is what is tested, so a half-written one left by a crash is
     taken too, and never written into. An incomplete draft answers its
-    issues, with a ``block`` among them, and writes nothing (A36); otherwise
+    issues, with a ``block`` among them, and writes nothing; otherwise
     the answer is the draft's remaining warnings and the template exists.
 
     The directory is made first, the assets copied into it, and

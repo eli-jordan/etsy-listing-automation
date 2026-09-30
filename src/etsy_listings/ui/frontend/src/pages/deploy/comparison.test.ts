@@ -414,9 +414,9 @@ describe("buildComparison: no Etsy listing yet", () => {
 });
 
 /**
- * The `etsy_videos` block (PRD 72). Its badges come from the stage's own
+ * The `etsy_videos` block. Its badges come from the stage's own
  * changes -- a slot change names the ref before and after -- never from
- * comparing the snapshot's two sides here (A2).
+ * comparing the snapshot's two sides here.
  */
 describe("buildComparison: videos", () => {
   const FEATURED = "common-media/size-guide.mp4";

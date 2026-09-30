@@ -11,7 +11,7 @@ frames in
 into the workspace-wide equivalent of `plan --all` and `apply --all`.
 
 Requirements live in the [spec](spec.md) and [interactions](interactions.md).
-The implementation decision settled while writing this plan is A34:
+The implementation decision settled while writing this plan is ADR-0042:
 planning has a first-class workspace scope resolved by the server; applying
 uses the exact names and fingerprints from the reviewed plan.
 
@@ -32,7 +32,7 @@ stable run URL. The review page then:
 - refreshes listing statuses after the run instead of predicting them in the
   browser.
 
-This work does not add process-restart persistence. A33 deliberately keeps UI
+This work does not add process-restart persistence. ADR-0041 deliberately keeps UI
 runs in memory until Phase 6's shared SQLite recorder exists. “Leave and come
 back” therefore means while the UI server remains running, exactly as it does
 for the individual deploy page.
@@ -43,13 +43,13 @@ Most of the hard behavior already exists and should be reused, not rebuilt.
 
 | Existing module | What batch deploy gets from it |
 |---|---|
-| `engine.run.plan_listings` / `apply_listings` | All-listing iteration, continue-on-user-error, sequential writes, lockfile ownership and A31 fingerprint checks. |
+| `engine.run.plan_listings` / `apply_listings` | All-listing iteration, continue-on-user-error, sequential writes, lockfile ownership and ADR-0039 fingerprint checks. |
 | `engine.EngineRunEvent` | Per-listing and per-stage planning/apply events through one sink. No batch-specific engine events are needed. |
 | `ui.runs` | FIFO execution, listing locks, event buffers, SSE replay, cancellation and unseen results. |
 | `PlanDTO` / `StagePlanDTO` | The same plans, snapshots, changes, drift and blocked messages used by individual deploy. |
 | `listingRunState.ts` | The event vocabulary and per-listing runtime semantics shared by individual and batch deploy. |
 | `comparison.ts`, `ComparisonView`, `PriceTable`, `StepStrip` | The established individual-listing explanation of a plan. The drawer composes these modules unchanged apart from narrowing `ComparisonView`'s listing context. |
-| preview rendering and promotion (A32) | Reviewable full-size images and byte-identical promotion during apply. Preview keys must become listing-scoped in batch state. |
+| preview rendering and promotion (ADR-0040) | Reviewable full-size images and byte-identical promotion during apply. Preview keys must become listing-scoped in batch state. |
 | `GET /api/listings` | Local candidate counts, display names/design context and the post-run status refresh. |
 
 The deletion test for the new batch module is useful here: deleting it should
@@ -92,7 +92,7 @@ There are two important seams:
    distinction explicitly. Pages and visual modules do not fold events
    independently.
 
-### A34: workspace scope and a frozen apply set
+### ADR-0042: workspace scope and a frozen apply set
 
 The current `CreateRunRequest` requires `listings: string[]`. That is correct
 for the individual editor, but wrong for `plan --all`: the browser's table can
@@ -132,7 +132,7 @@ and `expect` exactly match its ordered `listing_planned` events. Listings whose
 planning ended in `listing_failed` have no fingerprint and are shown under
 Needs attention, but are not apply targets. Blocked or clean plans do have a
 fingerprint and remain in the checked set; they execute no stages unless the
-fresh re-plan disagrees, in which case A31 marks them stale rather than allowing
+fresh re-plan disagrees, in which case ADR-0039 marks them stale rather than allowing
 new work through silently.
 
 `reviewed_run_id` is also needed for reload correctness. An apply run re-plans
@@ -148,7 +148,7 @@ latest workspace-scoped holder in addition to its per-listing holders.
 - Creating a workspace run conflicts with any queued/running listing run.
 - Creating a listing run conflicts with a queued/running workspace run.
 - A batch plan at `ready` is terminal and holds no execution lock; edits and
-  other runs may happen, and A31 detects the resulting stale plan at apply.
+  other runs may happen, and ADR-0039 detects the resulting stale plan at apply.
 - Creating the batch apply supersedes the batch plan as the current workspace
   run, while the plan remains addressable by id for replay.
 - `GET /api/runs?scope=workspace` returns the current batch run for the
@@ -230,7 +230,7 @@ It owns:
 
 The reducer stores engine answers; it does not compare desired and live values.
 All change highlights continue to come from `ChangeDTO` through
-`buildComparison` (A2/A30).
+`buildComparison` (ADR-0008, ADR-0038).
 
 Add a second pure presentation module for projections that are useful to more
 than one visual child:
@@ -319,7 +319,7 @@ Tests follow the existing split.
 
 ### Unit and frontend unit
 
-- request-shape validation and A34 target resolution;
+- request-shape validation and ADR-0042 target resolution;
 - workspace/listing conflict behavior in both directions;
 - exact reviewed-set validation, including omission, extra name, wrong
   fingerprint and missing/unfinished source plan;
@@ -370,7 +370,7 @@ Estimated change: 1,000–1,600 lines.
 
 Scope:
 
-- implement A34 request/summary models, timestamps and `reviewed_run_id`;
+- implement ADR-0042 request/summary models, timestamps and `reviewed_run_id`;
 - resolve workspace plan names server-side;
 - add workspace-vs-listing conflict and current-workspace-run lookup;
 - validate batch apply against the linked ready plan's exact names and
@@ -378,7 +378,7 @@ Scope:
 - retain the linked plan for apply replay;
 - update contract, registry and executor behavior tests;
 - regenerate the TypeScript schema; and
-- land A34 in the architecture log.
+- land ADR-0042 in the architecture log.
 
 Validation: targeted Python unit/behavior/contract tests, OpenAPI generation,
 ruff and mypy for touched modules, frontend typecheck for the generated types.
@@ -466,7 +466,7 @@ Dependencies: PR 4. Sequential final slice.
 ```text
 PR 1: workspace run contract
    ├── PR 2: pure batch state ───────┐
-   └── PR 3: presentation modules ──┤  parallel development
+   └── PR 3: presentation modules ──┤ parallel development
                                     v
                          PR 4: plan/review integration
                                     |
@@ -485,7 +485,7 @@ the stable review route and its replay model.
 - Apply cannot execute a listing or plan fingerprint absent from the linked
   review.
 - Planning performs no Printify, Etsy, listing-file or lockfile writes; preview
-  cache writes remain the A32 exception outside `build_plan`.
+  cache writes remain the ADR-0040 exception outside `build_plan`.
 - Writes remain sequential and continue past user-facing listing failures.
 - Reload and leave/return reconstruct the same review and progress from run
   events while the server remains alive.

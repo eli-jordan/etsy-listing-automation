@@ -40,7 +40,7 @@ def _env(root: Path, contents: str) -> None:
 def test_a_printify_transport_does_not_need_a_token_to_exist(workspace_root: Path) -> None:
     """The fixture workspace has no ``.env`` at all. `plan` builds a catalog
     client it may never call, so demanding a token here would fail every
-    workspace that has not needed one yet (A22)."""
+    workspace that has not needed one yet."""
     workspace = Workspace.discover(root_override=workspace_root)
 
     assert connections.catalog_client(workspace) is not None
@@ -86,7 +86,7 @@ def test_half_a_key_pair_reads_as_absent(workspace_root: Path) -> None:
 
 def test_the_token_store_is_the_one_in_this_workspace(workspace_root: Path) -> None:
     """Where the rotating refresh token lives is this module's answer, not
-    four modules' -- ``.auth/`` beside the workspace, never the repo (A23)."""
+    four modules' -- ``.auth/`` beside the workspace, never the repo."""
     store = connections.etsy_token_store(workspace_root)
 
     assert store.path == workspace_root / layout.AUTH_DIR / layout.ETSY_TOKENS_FILE
@@ -119,7 +119,7 @@ def test_a_run_can_borrow_credentials_without_borrowing_the_workspace_cache(
 ) -> None:
     """The E2E layer deploys a disposable workspace through credentials from
     a configured one. Its catalog state still belongs to the disposable
-    workspace: no stale user cache is read or written (A8)."""
+    workspace: no stale user cache is read or written."""
     workspace = Workspace.discover(root_override=workspace_root)
     expected = Blueprint(
         id=706,

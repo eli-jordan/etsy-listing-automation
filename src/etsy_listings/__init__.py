@@ -2,19 +2,19 @@
 
 Eight modules, dependencies pointing strictly downward (docs/architecture.md):
 
-===============  ============================================================
-``cli``          Typer commands; turning a ``Plan`` into terminal text.
-``ui``           The calibrator's FastAPI API and its React front end.
-``engine``       Stage pipeline, the three-way diff, the lockfile. The *only*
-                 module that computes a diff (A2).
-``newcmd``       The ``new`` picker: a catalog choice to a garment profile + listing.
-``workspace``    Where every file lives, path safety, loading config (A8).
-``render``       Pure passes and frozen config; ``template.yaml``'s models (A7).
-``catalog``      Printify reference data: protocol, TTL cache, fake.
-``config``       ``shop.yaml`` / garment profile / listing / pricing models, ``Money``.
-===============  ============================================================
+=============== ============================================================
+``cli`` Typer commands; turning a ``Plan`` into terminal text.
+``ui`` The calibrator's FastAPI API and its React front end.
+``engine`` Stage pipeline, the three-way diff, the lockfile. The *only*
+                 module that computes a diff.
+``newcmd`` The ``new`` picker: a catalog choice to a garment profile + listing.
+``workspace`` Where every file lives, path safety, loading config.
+``render`` Pure passes and frozen config; ``template.yaml``'s models.
+``catalog`` Printify reference data: protocol, TTL cache, fake.
+``config`` ``shop.yaml`` / garment profile / listing / pricing models, ``Money``.
+=============== ============================================================
 
-Plus :mod:`etsy_listings.terminal`, a standard-library-only leaf that answers
+Plus:mod:`etsy_listings.terminal`, a standard-library-only leaf that answers
 "can this stream print that character?" for anything that decorates output.
 
 Each package's ``__init__`` states its own interface and what it deliberately

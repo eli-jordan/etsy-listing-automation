@@ -8,11 +8,11 @@ import type { ColourReportRow, TemplateKind } from "../types";
  * Wireframe 2a makes this a takeover rather than a field in the inspector --
  * "the workspace is replaced by a single choice, so nothing else can be
  * touched yet". That is not decoration: kind decides the whole shape of
- * template.yaml (A11), so every other control on the page is either
+ * template.yaml, so every other control on the page is either
  * meaningless or actively wrong until it is answered.
  *
  * For a colour-matrix candidate it also shows what colour each filename will
- * be taken as. PRD 7a makes the filename the source of truth, so this reports
+ * be taken as. ADR-0004 makes the filename the source of truth, so this reports
  * the rule rather than offering a mapping to edit -- the fix for a bad name is
  * to rename the file.
  */

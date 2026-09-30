@@ -52,7 +52,7 @@ function Badge({ state }: { state: StepState }) {
 }
 
 /**
- * The page head's AI activity: PRD 68's brief, then market research, then the
+ * The page head's AI activity: ADR-0003's brief, then market research, then the
  * SEO proposal, as three connected nodes. Replaces the "Generating brief…" /
  * "Generating SEO…" spinner line. `openTip` pins one node's hover card open,
  * for the canvas only.

@@ -1,4 +1,4 @@
-"""Frozen render configuration. A7: canonical JSON of ``RenderConfig`` is what
+"""Frozen render configuration. ADR-0012: canonical JSON of ``RenderConfig`` is what
 gets hashed into the lockfile's render stage entry, so every field here must be
 something that can differ between two "the same design" runs -- no derived
 values, no file paths (those are workspace-relative strings elsewhere, hashed
@@ -43,12 +43,12 @@ def _validate_non_degenerate(
 
 BoundingBox = Annotated[tuple[Point, Point, Point, Point], AfterValidator(_validate_non_degenerate)]
 """Four corners of the print area on the template image, in pixel space,
-ordered top-left, top-right, bottom-right, bottom-left (PRD: homography to a
+ordered top-left, top-right, bottom-right, bottom-left (homography to a
 quad, not x/y/w/h, so angled and draped photos are representable)."""
 
 
 class DisplaceConfig(BaseModel):
-    """PRD: implemented but off by default -- over-strong displacement looks
+    """Implemented but off by default -- over-strong displacement looks
     melted, so it's tuned per template in the calibrator's live preview."""
 
     model_config = ConfigDict(frozen=True)
@@ -89,7 +89,7 @@ class RenderConfig(BaseModel):
 
 class ColourMatrixTemplate(BaseModel):
     """One photo per colour, same design position in all of them. Scene
-    images are ``{colour-slug}.png`` per colour (PRD 7a) -- there is no
+    images are ``{colour-slug}.png`` per colour -- there is no
     ``colours:`` list in the YAML, since the filenames present in the
     directory *are* the colour set."""
 

@@ -113,12 +113,12 @@ class SetupAnswers:
     etsy_shop_name: str | None = None
     etsy_shop_id: int | None = None
     etsy_shipping_profile: str | None = None
-    """By name (PRD 54). Free text: resolving it against the shop's live list
+    """By name. Free text: resolving it against the shop's live list
     needs `shops_r` and a bearer, which `setup` may not have -- that
     resolution happens once per run in `EtsyShopCatalog`, at plan time."""
     etsy_return_policy: dict[str, Any] | None = None
     """The three terms (`accepts_returns`, `accepts_exchanges`,
-    `within_days`), since Etsy gives the resource no title (PRD 59). Built
+    `within_days`), since Etsy gives the resource no title. Built
     from a live pick when the discovery step can reach the Etsy API."""
     etsy_production_partner: str | None = None
     """By name; omitted when the shop has exactly one (decision 3's
@@ -153,7 +153,7 @@ def shop_yaml_document(answers: SetupAnswers, existing: dict[str, Any] | None) -
     Two rules, and they are complements rather than a compromise:
 
     - **What ``setup`` never asked about is kept**, verbatim. See
-      :data:`ASKED_ETSY_KEYS` and :data:`ASKED_LISTING_DEFAULT_KEYS`.
+    :data:`ASKED_ETSY_KEYS` and :data:`ASKED_LISTING_DEFAULT_KEYS`.
     - **What it did ask about, the answer wins.** Asking a question and then
       discarding the answer is worse than either overwriting or not asking:
       it silently tells the user their input does not matter. The caller seeds

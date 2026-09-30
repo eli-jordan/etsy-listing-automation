@@ -1,4 +1,4 @@
-"""Listing-level lifecycle orchestration (PRD 61–67).
+"""Listing-level lifecycle orchestration.
 
 Delete, retire and renew are one product concept, and they used to be a
 scavenger hunt: ``plan`` chose the pipeline, ``run`` wiped files and edited
@@ -86,11 +86,11 @@ def walk(
     stages: Sequence[AnyStage],
 ) -> LifecycleWalk:
     """Missing yaml, wrong verb, or retract-only -- listing-level, so they
-    wrap the walk rather than living in any one stage (PRD 61–67)."""
+    wrap the walk rather than living in any one stage."""
     pipeline = list(stages)
     present = ctx.workspace.listing_file(listing).is_file()
     if not present:
-        # PRD 67: yaml gone, lockfile still there -- the row appears, Blocked.
+        # yaml gone, lockfile still there -- the row appears, Blocked.
         # No directory at all is not that: it is an unknown listing, and
         # load_listing raises the same ConfigLoadError it always did.
         if not ctx.workspace.lock_file(listing).is_file():
@@ -128,7 +128,7 @@ def _retract_succeeded(planned: PlannedRun) -> bool:
 
 
 def _omit_consumed_renew(ctx: RunContext, listing: str, planned: PlannedRun) -> None:
-    """``lifecycle: renew`` is a one-shot mark (PRD 62). Apply sends
+    """``lifecycle: renew`` is a one-shot mark. Apply sends
     ``state=active``, then deletes the key."""
     etsy_plan = next(
         (sp for sp in planned.plan.stage_plans if sp.stage == "etsy_listing"),

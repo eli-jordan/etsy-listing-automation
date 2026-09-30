@@ -6,7 +6,7 @@ official docs, confirmed working against a live 238-variant response
 Every caller in ``new``'s pricing-plan wizard must treat this as fail-soft:
 any network error, non-200, JSON-shape mismatch or missing field degrades to
 a blank price for the affected variant(s), never an exception that aborts
-``new`` (PRD 35).
+``new``.
 
 ``data[].id`` in the response matches the variant ``id`` from the public,
 documented ``variants.json`` catalog endpoint already fetched by
@@ -24,8 +24,8 @@ import httpx
 BASE_URL = "https://printify.com/product-catalog-service/api/v2"
 
 DEFAULT_DECORATION_METHOD = "dtg"
-"""Hardcoded, not derived from the provider's offered methods (PRD risk
-item). Confirmed correct for this workspace's real garment/provider; wrong
+"""Hardcoded, not derived from the provider's offered methods. Confirmed correct for this
+workspace's real garment/provider; wrong
 for a provider using a different method just fails soft to blank prices,
 per the module-wide policy above."""
 

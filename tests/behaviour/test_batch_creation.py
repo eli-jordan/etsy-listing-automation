@@ -1,5 +1,5 @@
 """Confirming a staging session (batch plan PR 2; spec *Confirming a batch*,
-*Frozen staging*; A38, A39, A46).
+*Frozen staging*; name allocation, idempotent row creation, staging expiry).
 
 What is on disk afterwards is the assertion: the listings, their designs and
 their files. A crash is simulated by failing the atomic rename every durable
@@ -141,7 +141,7 @@ class TestConfirm:
 
 class TestDesignReuse:
     """Identical bytes already under ``designs/`` are reused, not written again
-    (spec, *Content deduplication*; A39; batch plan PR 7)."""
+    (spec, *Content deduplication*; idempotent row creation; batch plan PR 7)."""
 
     def test_a_design_already_in_designs_is_referenced_under_the_staged_name(
         self, workspace: Workspace, staging: StagingStore, batches: BatchStore
@@ -207,7 +207,7 @@ class TestFailureAndRetry:
         failed = batch.rows[1]
         assert failed.error is not None
         assert failed.error.startswith("Couldn't write designs/cedar-trail.png: ")
-        # The input moved beside the batch, so staging could go (A46).
+        # The input moved beside the batch, so staging could go.
         assert not workspace.staging_dir(id_).exists()
 
         blocker.rmdir()

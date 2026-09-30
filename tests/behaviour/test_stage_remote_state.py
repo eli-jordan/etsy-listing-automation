@@ -1,9 +1,9 @@
-"""A20: how a stage hands back the ids an API gave it.
+"""ADR-0034: how a stage hands back the ids an API gave it.
 
 Until Phase 2 no stage produced one, so ``apply`` copied ``lock.remote``
 through untouched and there was no channel at all. ``printify_product`` is the
 first stage that has to write one -- the product id it just created is the
-only thing standing between a re-run and a duplicate product (PRD 48).
+only thing standing between a re-run and a duplicate product.
 
 The engine merges; the stage returns a value and does not touch the lockfile.
 That is the same rule ``applied`` and ``outputs`` already follow, and it is
@@ -38,7 +38,7 @@ class RecordingStage:
     remote: dict[str, Any] | None = None
     seen_remote: dict[str, Any] | None = None
     """Filled in by ``apply`` with the ``lock.remote`` it was actually handed
-    -- the seam A26's threading is tested through."""
+    -- the seam ADR-0034's threading is tested through."""
     seen_applied: dict[str, Any] | None = None
     """Filled in by ``apply`` with the ``lock.applied`` it was actually
     handed, to prove threading ``remote`` live does not also thread
@@ -152,13 +152,13 @@ def test_remote_state_stays_out_of_the_input_hash(workspace_root: Path) -> None:
     assert with_id.input_hash() == with_other.input_hash()
 
 
-# ------------------------------------------------------- threaded within a run (A26)
+# ------------------------------------------------------- threaded within a run
 
 
 def test_a_remote_id_minted_this_run_is_visible_to_the_next_stages_apply(
     workspace_root: Path,
 ) -> None:
-    """The case A26 exists for: a first `apply` that creates a Printify
+    """The case ADR-0034 exists for: a first `apply` that creates a Printify
     product, publishes it, and patches the resulting Etsy listing must not
     need running twice. `publish` mints the listing id in its own `apply`;
     `etsy_listing`'s `apply`, later in the same run, has to see it via
@@ -174,7 +174,7 @@ def test_a_remote_id_minted_this_run_is_visible_to_the_next_stages_apply(
 def test_a_stages_own_applied_document_is_still_from_before_this_run(
     workspace_root: Path,
 ) -> None:
-    """The other half of A26: threading `remote` live must not also thread
+    """The other half of ADR-0034: threading `remote` live must not also thread
     `applied` -- stage order must not change what `lock.applied` says, only
     ids handed back by an API this run. The first stage's own `apply` result
     is folded into the *returned* lockfile (that always happened), but the

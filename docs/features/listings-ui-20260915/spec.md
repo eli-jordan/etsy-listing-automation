@@ -70,7 +70,7 @@ left standing with the code disagreeing with them:
 - **`etsy.variation_images` gets a control.** The validation module warns
   about the swatch template's colour coverage, so the UI warned about a field
   nothing in the UI could set or clear. The mockup's per-template "Use for
-  Etsy colour swatches" toggle is in scope (PRD 56): it appears only on a
+  Etsy colour swatches" toggle is in scope (ADR-0030): it appears only on a
   `colour-matrix` template this listing's `media:` already references, and
   turning it on adds any missing colours — which is what makes the gate
   `EtsyMediaStage.desired()` enforces unreachable from the UI.
@@ -127,15 +127,14 @@ resolves a real `designs/*.png` through `Workspace.design_file` instead.
 A second manual pass found one decision that was too coarse and four plain
 bugs. The decision first, since the rest of the UI hangs off it.
 
-**`draft`/`published` became `draft`/`deployed`/`live`/`dirty`** (PRD,
-"Dashboard"). `published` was doing two jobs: "this tool has applied it" and
+**`draft`/`published` became `draft`/`deployed`/`live`/`dirty`.** `published` was doing two jobs: "this tool has applied it" and
 "a buyer can see it". Those are different pieces of news — the pipeline never
 activates a listing (non-goal 1), so an applied listing waits at Etsy as a
 draft until a person presses publish, and reporting that wait as *published*
 said the opposite of what was true. The rule is
 `engine/status.py`'s, not the API layer's, for the reason the
-"only `engine` computes a diff" invariant gives: Phase 6's `status` command
-answers the same question, and the two must not drift.
+"only `engine` computes a diff" invariant gives: any entry point displaying
+listing status must answer the same question.
 
 Two facts feed it, and the interesting part is where each comes from.
 
@@ -239,7 +238,7 @@ reading once the profile is no longer chosen before the editor opens.
 **Incompleteness is the issues banner's job, not a 400's.** Every refusal
 `_stub()` used to raise is a block issue instead: no design selected, no
 garment profile selected, no pricing plan and no prices. `_stub()` is gone.
-PRD 70 finished the thought: none of those three withholds the file either.
+ADR-0043 finished the thought: none of those three withholds the file either.
 `newcmd.logic.build_listing_stub` stays untouched and un-deduplicated — the CLI
 `new` picker pre-fills because it asked the questions; the editor has not.
 
@@ -284,7 +283,7 @@ exist on disk. The page head's meta line says so in those words rather than a
 bland "Not saved", and names the price source as the one thing standing in the
 way when it is.
 
-**Amended (PRD 70): naming writes it, and nothing else withholds it.** The
+**Amended (ADR-0043): naming writes it, and nothing else withholds it.** The
 price-source rule was the only incompleteness out of eight that blocked the
 *file* rather than only the deploy, which made it the one a seller met as the
 tool refusing to save their work. It moved out of `Listing` entirely — the
@@ -382,7 +381,7 @@ therefore costs no remote write and produces no drift.
   structurally valid `Listing` the moment it exists, even mid-edit.
 - **No file locking / conflict handling** for autosave racing a concurrent CLI
   `apply` — last-write-wins is an accepted simplification given this is a
-  single-operator tool (per the PRD's own framing).
+  single-operator tool.
 
 ## Backend
 
@@ -461,10 +460,10 @@ rather than relying on a shared handler (per `app.py`'s own precedent, which
 was a deliberate move *away* from a generic catch-all).
 
 ```
-GET   /api/listings                 -> list[ListingSummary]
-GET   /api/listings/{name}          -> ListingDetail
-POST  /api/listings                 -> create (simplified flow, see below)
-PATCH /api/listings/{name}          -> partial update; the autosave endpoint
+GET /api/listings -> list[ListingSummary]
+GET /api/listings/{name} -> ListingDetail
+POST /api/listings -> create (simplified flow, see below)
+PATCH /api/listings/{name} -> partial update; the autosave endpoint
 ```
 
 - `ListingSummary`: name, garment profile name, colour count, status
@@ -508,7 +507,7 @@ PATCH /api/listings/{name}          -> partial update; the autosave endpoint
   colours/garment profiles/pricing plans, which do get auto-slugified). This
   originally read "may need exporting, or a thin public wrapper" — it did not:
   calling the layout accessor (`workspace.listing_file`/`listing_dir`) and
-  letting it refuse is both the check and the security boundary (A8).
+  letting it refuse is both the check and the security boundary (ADR-0013).
 
 ### Supporting read-only endpoints
 
@@ -538,7 +537,7 @@ PATCH /api/listings/{name}          -> partial update; the autosave endpoint
   same photo (`template_preview_photo` is deliberately "any one of them"), so
   `flat-lay-01 · black` and `flat-lay-01 · blue-jean` drew pixel-identical
   reel tiles. The colour resolves through `workspace.template_base_image`,
-  which already owns PRD 7a's filename convention *and* its trailing-segment
+  which already owns ADR-0004's filename convention *and* its trailing-segment
   fallback — the endpoint must not glob for `{colour}.png` itself.
 - `GET /api/listing-designs/{name}/thumbnail` — **added by the amendment
   above**, for the listings row thumbnail, its hover card, and the editor's
@@ -551,12 +550,12 @@ PATCH /api/listings/{name}          -> partial update; the autosave endpoint
   listing could hold a shared asset (the fixture one does) but nothing in the
   UI could add one, and the reel drew it as raw text. The list hands back the
   ref `media:` stores as well as the display path, and leaving each caller to
-  rebuild it is how two spellings of one rule drift apart. Since PRD 73 the
+  rebuild it is how two spellings of one rule drift apart. Since ADR-0046 the
   two are the same string for a shared file (`common-media/x.png`); the ref
   was `../../common-media/x.png` when every ref was listing-relative. Backed by new `Workspace.common_media_files()` /
   `common_media_file()`, since only `workspace` knows a directory's layout,
   including how to list one; PNG-only and flat for the same reason
-  `design_files()` is. PRD 72 widened it to every image and video type,
+  `design_files()` is. ADR-0045 widened it to every image and video type,
   recursively, and moved it to `media_files.py` beside
   `GET /api/listings/{name}/media-files`, the listing's own `./` files; both
   rows carry `kind`, `/file` answers `Range` for `<video>`, and `/thumbnail`
@@ -576,45 +575,45 @@ codes.
 
 ```
 shell/
-  AppShell.tsx            sidebar nav (Dashboard/Listings/Mockup templates),
+  AppShell.tsx sidebar nav (Dashboard/Listings/Mockup templates),
                            from the design mockup's app-shell markup
 pages/
-  DashboardPage.tsx        one stat card per lifecycle state + "+ New listing"
-  ListingsPage.tsx         table + search + status filter pills, from the
+  DashboardPage.tsx one stat card per lifecycle state + "+ New listing"
+  ListingsPage.tsx table + search + status filter pills, from the
                            mockup's listings section; backed by
                            GET /api/listings. A row carries its design
                            thumbnail, a hover card, and — once it has an id
                            to open — the open-on-Etsy/Printify menu
-  ListingEditorPage.tsx    tabs container + issues banner + page head
+  ListingEditorPage.tsx tabs container + issues banner + page head
                            (name/status/path/autosave indicator/open-menu).
                            Mounted at both /listings/new and /listings/:name
   components/
-    EditableName.tsx       the page head's title: double-click to rename, or
+    EditableName.tsx the page head's title: double-click to rename, or
                            open in edit mode when there is no name yet
   editor/
-    DesignSelect.tsx        the design-select strip above the tabs: current
+    DesignSelect.tsx the design-select strip above the tabs: current
                            design + picker + "Find a design…" modal
-    VariantsTab.tsx        garment dropdown, sizes, Dark/Light bulk buttons
+    VariantsTab.tsx garment dropdown, sizes, Dark/Light bulk buttons
                            over a colour list (swatch dot + name + light/dark
                            badge beside the switch) beside a large preview
                            stage showing the focused colour's real render
-    ImagesTab.tsx           locator (mockup templates | files, grouped
-                           ./ and common-media/) + a large preview pane (real renders,
+    ImagesTab.tsx locator (mockup templates | files, grouped
+./ and common-media/) + a large preview pane (real renders,
                            opening the reel in the calibrator's Lightbox) +
                            reel (drag-reorder), plus the per-template Etsy
                            colour-swatch toggle
-    colourSelection.ts      the one write path for `colors:` — and the three
+    colourSelection.ts the one write path for `colors:` — and the three
                            colour-keyed fields that have to move with it
-    listingDocument.ts      which `ListingDetail` fields are really
+    listingDocument.ts which `ListingDetail` fields are really
                            `listing.yaml` — the document `POST
                            /api/listing-draft` and `POST /api/listings` send
-    DetailsTab.tsx          title/tags/description/section/materials, with
+    DetailsTab.tsx title/tags/description/section/materials, with
                            Etsy's own limits shown as counters
-    PricingTab.tsx          pricing-plan select and the per-size price table
+    PricingTab.tsx pricing-plan select and the per-size price table
 api/
-  listings.ts              wrapper functions, mirrors api/calibrator.ts
+  listings.ts wrapper functions, mirrors api/calibrator.ts
 hooks/
-  useAutosave.ts            debounced (~800ms after last change, also flushed
+  useAutosave.ts debounced (~800ms after last change, also flushed
                            on blur/tab switch/unmount) save, returns latest
                            ListingDetail including server-computed issues.
                            Three transports — draft, create, patch — plus

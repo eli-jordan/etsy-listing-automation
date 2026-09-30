@@ -1,4 +1,4 @@
-"""The ``Stage`` protocol. A1: a fixed ordered list of stages sharing one
+"""The ``Stage`` protocol. ADR-0007: a fixed ordered list of stages sharing one
 protocol; ``local`` marks a stage as having no *remote* state, so the engine
 skips drift reporting for it rather than each stage having to remember.
 Dependencies between stages are list order, not a dependency graph.
@@ -8,7 +8,7 @@ exists outside its lockfile entry -- the render stage's PNGs are on disk, and
 they can be deleted or edited between runs. ``read_live()`` is where a stage
 observes that, local or not; what ``local`` decides is that any difference is
 work to redo, not *drift* to warn about (there is no second writer to have
-drifted from), and that the read is cheap and local, so it never joins A3's
+drifted from), and that the read is cheap and local, so it never joins ADR-0009's
 live-fetch thread pool.
 """
 
@@ -71,7 +71,7 @@ class Stage(Protocol[D, A, L]):
 
     What a stage author must supply is deliberately smaller than it was. The
     engine now owns: looking up this stage's lockfile subtree, decoding it
-    (:meth:`~etsy_listings.engine.lock.Lockfile.parse_applied_for`), naming
+    ( :meth:`~etsy_listings.engine.lock.Lockfile.parse_applied_for`), naming
     the stage in the plan it produced, and turning a refusal into a blocked
     plan. Each of those was written out once per stage, and each had already
     been written two different ways with only two stages in the pipeline.
@@ -83,7 +83,7 @@ class Stage(Protocol[D, A, L]):
     group: str | None
     """The stage a reader shows this one under, or ``None`` for a stage of
     its own. ``etsy_videos`` is ``"etsy_media"``'s: one gallery, two stages
-    (PRD 72). Data the engine hands out on every
+    . Data the engine hands out on every
     :class:`~etsy_listings.engine.change.StagePlan`, so the CLI and the UI
     group by the same answer rather than each inferring one from a name.
     """
@@ -112,7 +112,7 @@ class Stage(Protocol[D, A, L]):
 
     ``applied`` is passed because some refusals are about what was applied
     last time -- changing the garment under an existing product is the one
-    that exists today (PRD 37)."""
+    that exists today."""
 
     def read_live(
         self, ctx: RunContext, listing: str, lock: Lockfile, applied: A | None
@@ -121,7 +121,7 @@ class Stage(Protocol[D, A, L]):
     """The state outside the lockfile: a remote object, or files on disk.
 
     Called for ``local`` stages too -- ``local`` means "no *remote* state", so
-    no drift reporting and no fan-out, never "reads nothing" (A1). ``applied``
+    no drift reporting and no fan-out, never "reads nothing". ``applied``
     arrives already decoded, so a stage no longer re-looks-up and re-parses
     its own subtree here having just been handed it. ``lock`` stays for the
     rest of the file: the ids under ``lock.remote`` are not live state and
@@ -129,7 +129,7 @@ class Stage(Protocol[D, A, L]):
 
     def plan(self, desired: D, applied: A | None, live: L | None) -> Verdict: ...
 
-    """Compare the three states. A2: every stage writes its own.
+    """Compare the three states. ADR-0008: every stage writes its own.
 
     It returns a :class:`~etsy_listings.engine.change.Verdict` rather than a
     ``StagePlan`` because the one thing a ``StagePlan`` has and a verdict does
@@ -137,7 +137,7 @@ class Stage(Protocol[D, A, L]):
     stage stamps for itself is a name it can stamp wrongly.
 
     A verdict may also *refuse*
-    (:meth:`~etsy_listings.engine.change.Verdict.refused`), for the refusals
+    ( :meth:`~etsy_listings.engine.change.Verdict.refused`), for the refusals
     that only ``live`` could have proved. It is the same refusal ``desired()``
     speaks and lands in the same place; what a verdict must never do is
     decline to run while reporting a mere ``reason``, which renders as
@@ -181,11 +181,11 @@ class Stage(Protocol[D, A, L]):
 
     # A stage may also implement:
     #
-    #     def snapshot(self, desired: D, live: L | None) -> BaseModel | None: ...
+    # def snapshot(self, desired: D, live: L | None) -> BaseModel | None:...
     #
     # a **public pydantic model of domain facts** for the before/after review
-    # (A30) -- never layout, and never a second copy of what a `Change`
-    # already decided (A2). Deliberately *not* a member of this Protocol:
+    # -- never layout, and never a second copy of what a `Change`
+    # already decided. Deliberately *not* a member of this Protocol:
     # `retract` has none, and a Protocol member has no optional form for
     # a class that reaches it structurally rather than by inheriting `Stage`
     # -- every stage here is exactly such a class. Declaring it anyway would
@@ -199,4 +199,4 @@ class Stage(Protocol[D, A, L]):
 
 AnyStage = Stage[Any, Any, Any]
 """A stage with its desired/applied/live types erased, for heterogeneous lists
-(the ``STAGES`` pipeline mixes stages with unrelated types by design -- A1)."""
+(the ``STAGES`` pipeline mixes stages with unrelated types by design -- ADR-0007)."""

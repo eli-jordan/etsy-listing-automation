@@ -4,7 +4,7 @@ Status: shipped. Delivered by [#71](https://github.com/eli-jordan/etsy-listing-a
 implementation sequence; later feature amendments describe current requirements.
 
 Video requirements and measured placement live in the
-[Etsy integration specification](../etsy-listing-20260910/spec.md#9-videos-are-placed-by-attach-order--prd-71).
+[Etsy integration specification](../etsy-listing-20260910/spec.md#9-videos-are-placed-by-attach-order).
 This shipped plan records their implementation sequence.
 
 ## Outcome
@@ -26,16 +26,16 @@ grouped *This listing* / *Shared*. There is no separate design pass.
 
 | Topic | Decision | Source |
 |---|---|---|
-| Where videos live | Entries in `media:`, which is the gallery in order. Position 1 is an image. Any video puts one at position 2. At most 2 videos and 20 images | PRD 72 |
-| Refs | No prefix is the workspace root and `./` is the listing directory. Subdirectories are allowed and `..` is refused. Covers `design:`, `pricing_plan:` and `media:` | PRD 73 |
-| Migration | `scripts/migrate_workspace_refs.py`, then `../` is refused and the error names the script. Shared images re-upload once | PRD 73 |
-| File types | Images `.png`, `.jpg`, `.jpeg`. Videos `.mp4`, `.mov` | PRD 72 |
-| Video gate | Block anything that is over 100 MB, outside 3–15 s, has a shorter side under 500 px, or has no decodable video stream. No aspect rule. Audio produces a note, not a warning | PRD 72 |
+| Where videos live | Entries in `media:`, which is the gallery in order. Position 1 is an image. Any video puts one at position 2. At most 2 videos and 20 images | ADR-0045 |
+| Refs | No prefix is the workspace root and `./` is the listing directory. Subdirectories are allowed and `..` is refused. Covers `design:`, `pricing_plan:` and `media:` | ADR-0046 |
+| Migration | `scripts/migrate_workspace_refs.py`, then `../` is refused and the error names the script. Shared images re-upload once | ADR-0046 |
+| File types | Images `.png`, `.jpg`, `.jpeg`. Videos `.mp4`, `.mov` | ADR-0045 |
+| Video gate | Block anything that is over 100 MB, outside 3–15 s, has a shorter side under 500 px, or has no decodable video stream. No aspect rule. Audio produces a note, not a warning | ADR-0045 |
 | Probe library | PyAV, pinned `av>=15`. It only reads metadata and never produces bytes that get hashed, so a floor pin is enough | grilling |
-| Stage | `etsy_videos`, after `etsy_media`, with its own applied model and `remote.etsy_video_ids`, displayed under "Etsy media" | PRD 72 |
+| Stage | `etsy_videos`, after `etsy_media`, with its own applied model and `remote.etsy_video_ids`, displayed under "Etsy media" | ADR-0045 |
 | Placement | Sweep foreign videos → attach the featured one → cut `image_ids`, attach the second, restore → re-assert swatches | decision 9 |
-| Drift | One of ours missing or `inactive` is re-uploaded. Hand-made position changes are invisible and accepted | PRD 72 |
-| Daily budget | Not predicted. The client rewords Etsy's `400` into the per-listing daily limit | PRD 72 |
+| Drift | One of ours missing or `inactive` is re-uploaded. Hand-made position changes are invisible and accepted | ADR-0045 |
+| Daily budget | Not predicted. The client rewords Etsy's `400` into the per-listing daily limit | ADR-0045 |
 
 ## PR sequence
 
@@ -48,7 +48,7 @@ PR 1 refs ─► PR 2 media kinds + gate ─► PR 3 Etsy client ─► PR 4 sta
 ```
 
 The stack is based on `t3code/support-listing-videos`, which carries the
-documentation (PRD 72/73, decision 9 and this plan). PR 1 targets that branch
+documentation (ADR-0045, ADR-0046, decision 9 and this plan). PR 1 targets that branch
 and each later PR targets the one before it.
 
 ### Definition of done — every PR
@@ -77,7 +77,7 @@ added to this list, not substituted for it.
 6. **Size.** `git diff --shortstat <base>...HEAD` totals under 3,000 lines. The
    number goes in the PR description.
 7. **Decisions cited.** Commit messages and any code comment where a choice
-   would look arbitrary cite PRD 72/73 or decision 9.
+   would look arbitrary cite ADR-0045, ADR-0046 or decision 9.
 
 Local environment note (macOS behind the corporate proxy):
 `UV_NATIVE_TLS=1 uv sync --python /opt/homebrew/bin/python3.13`, and
@@ -95,7 +95,7 @@ that talks to Etsy or Printify.
    - `./` → the listing directory
    - subdirectories allowed on both
    - `..`, absolute paths and backslashes refused with a `ConfigLoadError`
-   - it still goes through `resolve()`'s escape check (A8)
+   - it still goes through `resolve()`'s escape check (ADR-0013)
 
    A ref starting `../` is refused with a message naming
    `scripts/migrate_workspace_refs.py`.
@@ -119,7 +119,7 @@ that talks to Etsy or Printify.
      ruamel. The result is re-parsed and validated before an atomic
      `os.replace`
    - is idempotent
-   - leaves the lockfile untouched (PRD 73's accepted re-upload)
+   - leaves the lockfile untouched (ADR-0046's accepted re-upload)
 5. Convert every tracked fixture (`tests/fixtures/workspace/...`), plus the
    Python and frontend tests that spell `../../`. Import paths are not affected.
 6. Update `guides/getting-started.md`, `features/multi-placement-rendering-20260903/spec.md` and
@@ -136,7 +136,7 @@ that talks to Etsy or Printify.
   changes nothing, a file with nothing to migrate, and comments preserved.
 - After migrating a copy of the fixture workspace, `plan` reports
   `render`, `printify_product` and `publish` unchanged, and `etsy_media`
-  reports only the renamed shared refs. This is PRD 73's cost claim, pinned by
+  reports only the renamed shared refs. This is ADR-0046's cost claim, pinned by
   a behaviour test.
 - `grep -rn '\.\./\.\./' tests src --include='*.py' --include='*.ts*'` finds
   no listing refs; import paths are excluded.
@@ -152,7 +152,7 @@ that talks to Etsy or Printify.
    - a file ref is `image` or `video` by extension
    - an unknown extension is a model error
 2. Gallery rules in `Listing._validate`, since they are malformed rather than
-   incomplete (PRD 70):
+   incomplete (ADR-0043):
    - position 1 is not a video
    - there are more than two videos, or more than 20 images
    - a listing that has a video does not have one at position 2
@@ -281,7 +281,7 @@ that talks to Etsy or Printify.
    media", and the run events DTO carries `group` (the UI consumes it in
    PR 6). This follows the only-engine-diffs rule: the grouping is data the
    engine hands out, not something a reader infers from a name.
-4. `EtsyVideosSnapshot` for the deploy review (A30), holding desired and live
+4. `EtsyVideosSnapshot` for the deploy review (ADR-0038), holding desired and live
    videos with their `thumbnail_url`.
 5. An e2e extension to `test_phase3_publish_e2e.py`, in the same ordered
    sequence and on the draft it already creates. Add the featured and second
@@ -297,7 +297,7 @@ that talks to Etsy or Printify.
 |---|---|---|
 | 1 | A listing that names no video and last applied none asks nothing: no shop gate, no refusal, no document written. The first apply's e2e assertion still lists five stages | A workspace with no Etsy shop would otherwise gain a blocked line on every listing for a feature none of them uses |
 | 1 | `read_live` always reads `includes=Videos` once a listing id exists, videos or not | It is not handed `desired`, and a foreign video must be known before the sweep. One `GET` per listing per plan |
-| 1 | Step 3 cuts and restores `image_ids` from `media:`'s image refs and the `etsy_image_ids` `etsy_media` wrote this same apply (A26), not from a fresh `GET`; no cut when the anchor is already the image count | The response's image order is not the gallery's, and the fake keeps `rank` from upload time |
+| 1 | Step 3 cuts and restores `image_ids` from `media:`'s image refs and the `etsy_image_ids` `etsy_media` wrote this same apply (ADR-0034), not from a fresh `GET`; no cut when the anchor is already the image count | The response's image order is not the gallery's, and the fake keeps `rank` from upload time |
 | 1 | Drift re-uploads, whether the video is missing or `inactive`; a missing featured video also re-places the second | Decision 9's "uploads it again", and an id Etsy has stopped showing is not one to trust |
 | 1 | `WorkspaceFacts.for_files(workspace)` builds facts with no catalogue for the gate | The stage needs its clips probed, not every `template.yaml` parsed on every plan |
 | 2 | `stages/variation_links.py` holds `set_variation_images`, `swatch_refs` and `manifest_ref`, the last also what `etsy_media` keys its ids by | The video stage reads `etsy_media`'s ids back by ref, so the ref rule had to be shared too |
@@ -317,9 +317,9 @@ that talks to Etsy or Printify.
   - swatches re-asserted after a cut
   - a crash between the cut and the restore, healed by the next run
   - the budget error surfacing as a `UserFacingError` and continuing the
-    batch (PRD 16)
+    batch
 - A test that an `etsy_videos` failure leaves `etsy_media`'s ids recorded
-  (A29), so images are not re-uploaded.
+  (ADR-0037), so images are not re-uploaded.
 - The CLI plan output shows the videos under "Etsy media", pinned by a test.
 - The e2e run in the common list includes the new video steps passing against
   the real API.
@@ -345,7 +345,7 @@ that talks to Etsy or Printify.
 4. Frontend:
    - `media.ts` gains `mediaKind(entry)` and video picture URLs
    - `MediaLocator`'s "Images" mode becomes "Files": one list grouped *This
-     listing · ./* and *Shared · common-media/*, with a muted
+     listing ·./* and *Shared · common-media/*, with a muted
      `<video preload="metadata">` thumbnail, a duration badge and
      hover-to-play for videos
    - `mediaEdits` enforces the gallery rules for adding: position 1 stays an
@@ -409,7 +409,7 @@ that talks to Etsy or Printify.
 | 1 | While a video holds position 2, an image's move is made among the other entries and the featured video is put back at 2. Only a move the rules cannot take snaps back: a video on the thumbnail, an image on the featured slot, the featured video dragged past an image. A refused drop target is drawn refused while the tile is carried, through `mediaEdits.canReorder` | A plain splice pushed the featured video to 3 whenever an image moved to the thumbnail, so with a video in the listing the thumbnail could not be changed by drag at all |
 | 1 | The locator and the reel share `components/MutedClip` and `hooks/useHoverPlay` | Two copies of the poster-frame and hover-play rules had already started to exist |
 | 2 | The preview pane lists the listing check's issues for the focused file, matched by `where` being `Listing Images › {ref}`, the location `check_videos` gives each one | That is where the audio note is about; the banner above the tabs still shows it too |
-| 3 | `etsy_videos`' changes carry refs (see PR 4's table). New is a ref that arrives in a slot without leaving one; Removed is one that leaves without arriving; new bytes on a ref (`.contents`) are both. A video this tool never uploaded is Removed whenever the stage will run, since the run sweeps it. A **Videos** impact tag joins the headline | The badges read only the engine's changes and outcome (A2); a swap moves two refs and marks neither |
+| 3 | `etsy_videos`' changes carry refs (see PR 4's table). New is a ref that arrives in a slot without leaving one; Removed is one that leaves without arriving; new bytes on a ref (`.contents`) are both. A video this tool never uploaded is Removed whenever the stage will run, since the run sweeps it. A **Videos** impact tag joins the headline | The badges read only the engine's changes and outcome (ADR-0008); a swap moves two refs and marks neither |
 | 3 | "Nested under Etsy media" is the step strip: a stage whose `group` is in the plan is drawn inside that stage's labelled group. The batch view keys its tiles by stage name and shows an **Etsy videos** tile of its own | The strip is where a stage is drawn; the comparison's Videos block already sits below Images |
 
 **Success conditions (added to the common list):**

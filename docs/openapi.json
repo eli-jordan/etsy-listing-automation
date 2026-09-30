@@ -134,7 +134,7 @@
         "type": "object"
       },
       "AiProposalEvent": {
-        "description": "The validated proposal, once it is cached (A41): what ``GET\n/api/listings/{name}/proposal`` answers at that moment, plus ``type``\nand ``seq``.",
+        "description": "The validated proposal, once it is cached: what ``GET\n/api/listings/{name}/proposal`` answers at that moment, plus ``type``\nand ``seq``.",
         "properties": {
           "generated_at": {
             "format": "date-time",
@@ -1012,7 +1012,7 @@
         "type": "object"
       },
       "BelowCostRow": {
-        "description": "One variant priced under what Printify charges to make it -- the\nrow `plan()` already refuses over (:func:`_below_cost`), named for the\nbefore/after review (A30) rather than left as a bare variant id.",
+        "description": "One variant priced under what Printify charges to make it -- the\nrow `plan()` already refuses over ( :func:`_below_cost`), named for the\nbefore/after review rather than left as a bare variant id.",
         "properties": {
           "colour": {
             "title": "Colour",
@@ -1109,7 +1109,7 @@
         "type": "object"
       },
       "ColourMatrixPreviewRequest": {
-        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET .../config`` response (which includes ``kind``) into the body.",
+        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -1164,7 +1164,7 @@
         "type": "object"
       },
       "ColourMatrixTemplate": {
-        "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour (PRD 7a) -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
+        "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -1215,7 +1215,7 @@
         "type": "object"
       },
       "ColourReportRow": {
-        "description": "What one photo in a candidate ``colour-matrix`` set will be taken as.\n\nReporting only: PRD 7a makes the filename the source of truth, so there is\nno manual mapping to offer and nothing here changes a name.",
+        "description": "What one photo in a candidate ``colour-matrix`` set will be taken as.\n\nReporting only: ADR-0004 makes the filename the source of truth, so there is\nno manual mapping to offer and nothing here changes a name.",
         "properties": {
           "clean": {
             "title": "Clean",
@@ -1239,7 +1239,7 @@
         "type": "object"
       },
       "CommonCopySummary": {
-        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). A common-copy ref is\nworkspace-relative, like every other ref (PRD 73), so it is exactly what\n`description.ref` stores, already usable as-is.",
+        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). A common-copy ref is\nworkspace-relative, like every other ref, so it is exactly what\n`description.ref` stores, already usable as-is.",
         "properties": {
           "ref": {
             "title": "Ref",
@@ -1389,7 +1389,7 @@
         "type": "object"
       },
       "DesignSummary": {
-        "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
+        "description": "One entry in the calibrator's test-design library.\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
         "properties": {
           "id": {
             "title": "Id",
@@ -1417,7 +1417,7 @@
         "type": "object"
       },
       "DesiredImageSnapshot": {
-        "description": "One manifest entry, as this run wants to send it (A30).",
+        "description": "One manifest entry, as this run wants to send it.",
         "properties": {
           "file": {
             "title": "File",
@@ -1441,7 +1441,7 @@
         "type": "object"
       },
       "DesiredVideoSnapshot": {
-        "description": "One video as this run wants to place it (A30).",
+        "description": "One video as this run wants to place it.",
         "properties": {
           "after_images": {
             "anyOf": [
@@ -1471,7 +1471,7 @@
         "type": "object"
       },
       "DisplaceConfig": {
-        "description": "PRD: implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
+        "description": "Implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
           "enabled": {
             "default": false,
@@ -1617,7 +1617,7 @@
         "type": "object"
       },
       "EtsyListingFacts": {
-        "description": "One side of the review (A30): the fields the mock shows unchanged\ncontext for, named rather than left as an id.",
+        "description": "One side of the review: the fields the mock shows unchanged\ncontext for, named rather than left as an id.",
         "properties": {
           "description": {
             "anyOf": [
@@ -1775,7 +1775,7 @@
         "type": "object"
       },
       "EtsyMediaSnapshot": {
-        "description": "Domain facts for the review (A30): both manifests in full, so the\nfrontend can lay out thumbnails and compute *New* / moved / *Removed*\nbadges from ``ref`` identity, guided by the per-rank ``MediaChange``s\n``plan()`` already emits.",
+        "description": "Domain facts for the review: both manifests in full, so the\nfrontend can lay out thumbnails and compute *New* / moved / *Removed*\nbadges from ``ref`` identity, guided by the per-rank ``MediaChange``s\n``plan()`` already emits.",
         "properties": {
           "desired": {
             "items": {
@@ -1886,7 +1886,7 @@
         "type": "object"
       },
       "EtsyVideosSnapshot": {
-        "description": "Both sides for the deploy review (A30). The live side comes in Etsy's\nresponse order, which says nothing about the gallery (decision 9).",
+        "description": "Both sides for the deploy review. The live side comes in Etsy's\nresponse order, which says nothing about the gallery (decision 9).",
         "properties": {
           "desired": {
             "items": {
@@ -2664,7 +2664,7 @@
         "type": "object"
       },
       "ListingProposal": {
-        "description": "A listing's cached proposal as the editor and the batch summary read\nit (A41): the record, and whether it still describes the saved listing.\n``stale`` is computed from the saved listing on every read, never\nstored.",
+        "description": "A listing's cached proposal as the editor and the batch summary read\nit: the record, and whether it still describes the saved listing.\n``stale`` is computed from the saved listing on every read, never\nstored.",
         "properties": {
           "generated_at": {
             "format": "date-time",
@@ -3020,7 +3020,7 @@
         "type": "object"
       },
       "ListingTemplateSaveResult": {
-        "description": "What a create or ``PUT`` did (A36). Refusing an incomplete document is\na 200 with ``saved: false``, as a listing's malformed PATCH is, because the\neditor shows the issues and keeps going; nothing was written.",
+        "description": "What a create or ``PUT`` did. Refusing an incomplete document is\na 200 with ``saved: false``, as a listing's malformed PATCH is, because the\neditor shows the issues and keeps going; nothing was written.",
         "properties": {
           "field_errors": {
             "additionalProperties": {
@@ -3148,7 +3148,7 @@
         "type": "object"
       },
       "LiveImageSnapshot": {
-        "description": "One image Etsy actually has, projected back to a ref where possible\n(A30) -- ``ref`` is ``None`` for an image this tool never uploaded.",
+        "description": "One image Etsy actually has, projected back to a ref where possible\n-- ``ref`` is ``None`` for an image this tool never uploaded.",
         "properties": {
           "image_id": {
             "title": "Image Id",
@@ -3196,7 +3196,7 @@
         "type": "object"
       },
       "LiveVideoSnapshot": {
-        "description": "One video Etsy has on the listing (A30); ``ref`` is ``None`` for one\nthis tool never uploaded.",
+        "description": "One video Etsy has on the listing; ``ref`` is ``None`` for one\nthis tool never uploaded.",
         "properties": {
           "ref": {
             "anyOf": [
@@ -3350,7 +3350,7 @@
         "type": "object"
       },
       "MediaFileSummary": {
-        "description": "One file a listing can put in `media:` as a file ref (PRD 72, 73): a\nshared one under ``common-media/``, or one of the listing's own. A bare\nfile uploaded as-is, rather than a rendered mockup.",
+        "description": "One file a listing can put in `media:` as a file ref: a\nshared one under ``common-media/``, or one of the listing's own. A bare\nfile uploaded as-is, rather than a rendered mockup.",
         "properties": {
           "file": {
             "title": "File",
@@ -3466,7 +3466,7 @@
         "type": "object"
       },
       "PhaseEvent": {
-        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be (A33, decision 7).",
+        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be (ADR-0041, decision 7).",
         "properties": {
           "id": {
             "title": "Id",
@@ -3990,7 +3990,7 @@
         "type": "object"
       },
       "ProductSnapshot": {
-        "description": "Domain facts for the before/after review (A30): every variant on each\nside, unchanged ones included -- a ``Plan`` carries only what changed, and\nthe comparison needs the whole matrix to draw a price table from.",
+        "description": "Domain facts for the before/after review: every variant on each\nside, unchanged ones included -- a ``Plan`` carries only what changed, and\nthe comparison needs the whole matrix to draw a price table from.",
         "properties": {
           "desired": {
             "items": {
@@ -4082,7 +4082,7 @@
         "type": "object"
       },
       "ProductVariantSnapshot": {
-        "description": "One cell of the variant matrix, named rather than left as an id (A30).",
+        "description": "One cell of the variant matrix, named rather than left as an id.",
         "properties": {
           "colour": {
             "title": "Colour",
@@ -4340,7 +4340,7 @@
         "type": "object"
       },
       "PublishSnapshot": {
-        "description": "Domain facts for the review (A30): only the rows the stage's own\n``plan()`` would refuse over, so the price table's red marker is never a\nsecond copy of the below-cost rule.",
+        "description": "Domain facts for the review: only the rows the stage's own\n``plan()`` would refuse over, so the price table's red marker is never a\nsecond copy of the below-cost rule.",
         "properties": {
           "below_cost": {
             "default": [],
@@ -4435,7 +4435,7 @@
         "type": "object"
       },
       "RenderSceneSnapshot": {
-        "description": "One scene's domain facts for the before/after review (A30, A32).\n\n``state`` answers \"would this scene's rendered output change, and is it\neven there\" -- ``cached`` when neither is true, ``stale`` when the scene's\nown hash has moved since the last apply, ``missing`` when the file itself\nis absent (which wins over a hash comparison: a hash proves nothing about\na file that was deleted). ``preview`` answers a different question --\nwhether a full-size preview is already sitting in the cache for the\n*current* state, which is what tells a caller whether ``preview()`` has\nanything left to do for this scene.",
+        "description": "One scene's domain facts for the before/after review.\n\n``state`` answers \"would this scene's rendered output change, and is it\neven there\" -- ``cached`` when neither is true, ``stale`` when the scene's\nown hash has moved since the last apply, ``missing`` when the file itself\nis absent (which wins over a hash comparison: a hash proves nothing about\na file that was deleted). ``preview`` answers a different question --\nwhether a full-size preview is already sitting in the cache for the\n*current* state, which is what tells a caller whether ``preview()`` has\nanything left to do for this scene.",
         "properties": {
           "colour": {
             "anyOf": [
@@ -4481,7 +4481,7 @@
         "type": "object"
       },
       "RenderSnapshot": {
-        "description": "Every referenced scene, in media order -- what the before/after review\nneeds and a ``Plan`` (changes only) cannot supply (A30).",
+        "description": "Every referenced scene, in media order -- what the before/after review\nneeds and a ``Plan`` (changes only) cannot supply.",
         "properties": {
           "scenes": {
             "items": {
@@ -5412,7 +5412,7 @@
         "type": "object"
       },
       "StagingRefusal": {
-        "description": "A ``422``'s ``detail`` for an upload refused before staging (A45).",
+        "description": "A ``422``'s ``detail`` for an upload refused before staging.",
         "properties": {
           "message": {
             "title": "Message",
@@ -5651,7 +5651,7 @@
         "type": "object"
       },
       "TemplatePhoto": {
-        "description": "One scene photo in a template's directory: which colour it is, and where\nit actually is.\n\n``file`` is workspace-relative and forward-slashed, resolved through\n``Workspace.scene_photo`` -- the same rule the renderer uses, including the\ntrailing-segment fallback for a vendor pack delivered as\n``{template}-{colour}.png``. The listings editor shows it under its preview\nso the user knows which file to go and edit, and it used to *derive* that\ncaption from PRD 7a's convention in TypeScript, which named a file that was\nnot there for exactly the pack the fallback exists for.\n\n``colour`` is ``None`` for a ``multiple``/``single`` template's fixed\n``scene.png``: there is no per-colour name to derive one from (PRD 28).",
+        "description": "One scene photo in a template's directory: which colour it is, and where\nit actually is.\n\n``file`` is workspace-relative and forward-slashed, resolved through\n``Workspace.scene_photo`` -- the same rule the renderer uses, including the\ntrailing-segment fallback for a vendor pack delivered as\n``{template}-{colour}.png``. The listings editor shows it under its preview\nso the user knows which file to go and edit, and it used to *derive* that\ncaption from ADR-0004's convention in TypeScript, which named a file that was\nnot there for exactly the pack the fallback exists for.\n\n``colour`` is ``None`` for a ``multiple``/``single`` template's fixed\n``scene.png``: there is no per-colour name to derive one from.",
         "properties": {
           "colour": {
             "anyOf": [
@@ -6243,7 +6243,7 @@
     },
     "/api/batches": {
       "get": {
-        "description": "Recent batches (UI doc \u00a72): every batch, and every staging session\nnot confirmed yet, newest first, each with its derived status. Listing\nthem sweeps expired staging first (A46), so a row never offers a\nsession that has gone.",
+        "description": "Recent batches (UI doc \u00a72): every batch, and every staging session\nnot confirmed yet, newest first, each with its derived status. Listing\nthem sweeps expired staging first, so a row never offers a\nsession that has gone.",
         "operationId": "list_batches_api_batches_get",
         "responses": {
           "200": {
@@ -6525,7 +6525,7 @@
     },
     "/api/batches/{batch_id}/rows/{row}/retry": {
       "post": {
-        "description": "Retry one row (UI doc \u00a77): its creation, if that failed -- which\nqueues it once it exists -- else its AI, keeping the saved brief (A40).",
+        "description": "Retry one row (UI doc \u00a77): its creation, if that failed -- which\nqueues it once it exists -- else its AI, keeping the saved brief.",
         "operationId": "retry_batch_row_api_batches__batch_id__rows__row__retry_post",
         "parameters": [
           {
@@ -6645,7 +6645,7 @@
     },
     "/api/batches/{batch_id}/rows/{row}/thumbnail": {
       "get": {
-        "description": "A row that was never created has no listing design to show, so the\nsummary shows the upload it was made from, kept beside the batch for\nRetry (A46).",
+        "description": "A row that was never created has no listing design to show, so the\nsummary shows the upload it was made from, kept beside the batch for\nRetry.",
         "operationId": "batch_row_thumbnail_api_batches__batch_id__rows__row__thumbnail_get",
         "parameters": [
           {
@@ -7340,7 +7340,7 @@
         ]
       },
       "put": {
-        "description": "A36: write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\n(PR 6) keeps the unsaved values on its side.",
+        "description": "template completeness: write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\n(PR 6) keeps the unsaved values on its side.",
         "operationId": "put_listing_template_api_listing_templates__name__put",
         "parameters": [
           {
@@ -7395,7 +7395,7 @@
     },
     "/api/listing-templates/{name}/rename": {
       "post": {
-        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). Its name is its directory (A35),\nso the rename is a directory move and its ``./`` refs, which name that\ndirectory, need no rewrite. A taken name is a 409 and never suffixed\n(spec, *Storage and identity*).\n\nStaging sessions and batch records made from it follow it by name --\nthe name, not the frozen copy they each keep (A37), which is untouched.\nThat name is the card's *Used by N batches* and the staging page's\n*Using X*, the seller's link between a template and its batches. It\nis rewritten after the move, under each record's lock; a crash between\nthe two leaves records naming a template that is gone, which is what a\ndelete leaves too, and harms nothing a batch needs.",
+        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). Its name is its directory,\nso the rename is a directory move and its ``./`` refs, which name that\ndirectory, need no rewrite. A taken name is a 409 and never suffixed\n(spec, *Storage and identity*).\n\nStaging sessions and batch records made from it follow it by name --\nthe name, not the frozen copy they each keep, which is untouched.\nThat name is the card's *Used by N batches* and the staging page's\n*Using X*, the seller's link between a template and its batches. It\nis rewritten after the move, under each record's lock; a crash between\nthe two leaves records naming a template that is gone, which is what a\ndelete leaves too, and harms nothing a batch needs.",
         "operationId": "rename_listing_template_api_listing_templates__name__rename_post",
         "parameters": [
           {
@@ -7544,7 +7544,7 @@
     },
     "/api/listing-templates/{template}/media-files/{path}/thumbnail": {
       "get": {
-        "description": "A listing template's own file (its ``./`` root, A35) -- the pictures on\nits card. The same boundary as a listing's: the directory also holds\n``template.yaml``.",
+        "description": "A listing template's own file (its ``./`` root, ADR-0047) -- the pictures on\nits card. The same boundary as a listing's: the directory also holds\n``template.yaml``.",
         "operationId": "listing_template_media_thumbnail_api_listing_templates__template__media_files__path__thumbnail_get",
         "parameters": [
           {
@@ -7660,7 +7660,7 @@
     },
     "/api/listings/{listing}/media-files": {
       "get": {
-        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it (PRD 73). A ``404`` for a listing that does not\nexist, rather than an empty group that would look like one with nothing\nin it.",
+        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it. A ``404`` for a listing that does not\nexist, rather than an empty group that would look like one with nothing\nin it.",
         "operationId": "list_listing_media_files_api_listings__listing__media_files_get",
         "parameters": [
           {
@@ -7805,7 +7805,7 @@
     },
     "/api/listings/{name}": {
       "delete": {
-        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot and the cached AI proposal go now\n(features/market-seo-20260924/spec.md, *Cache*; A42): a listing pending deletion is one the\nseller is done researching, and otherwise only the wipe after the remote\ndeletion would remove them. An AI run still going is asked to stop\nfirst, so it does not write a proposal for a listing being deleted, and\nthe listing's batch rows are marked deleted and leave the queue (A42).",
+        "description": "Delete from the listings table.\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot and the cached AI proposal go now\n(features/market-seo-20260924/spec.md, *Cache*; rename and delete hooks): a listing pending\ndeletion is one the\nseller is done researching, and otherwise only the wipe after the remote\ndeletion would remove them. An AI run still going is asked to stop\nfirst, so it does not write a proposal for a listing being deleted, and\nthe listing's batch rows are marked deleted and leave the queue.",
         "operationId": "delete_listing_api_listings__name__delete",
         "parameters": [
           {
@@ -7981,7 +7981,7 @@
     },
     "/api/listings/{name}/batch": {
       "get": {
-        "description": "The batch that made ``name``, for the editor's row above the head\n(UI doc \u00a78), or ``null``. A row names its listing exactly, as the rename\nand delete hooks match it (A42); a deleted row is not the listing's.\nShould two batches both claim it, the newer wins.",
+        "description": "The batch that made ``name``, for the editor's row above the head\n(UI doc \u00a78), or ``null``. A row names its listing exactly, as the rename\nand delete hooks match it; a deleted row is not the listing's.\nShould two batches both claim it, the newer wins.",
         "operationId": "listing_batch_api_listings__name__batch_get",
         "parameters": [
           {
@@ -8078,7 +8078,7 @@
     },
     "/api/listings/{name}/previews/{template}": {
       "get": {
-        "description": "A ``multiple``/``single``-kind scene: no per-colour photo, so no\ncolour segment (PRD 28's rule, mirrored from ``render_file``).",
+        "description": "A ``multiple``/``single``-kind scene: no per-colour photo, so no\ncolour segment (ADR-0014's rule, mirrored from ``render_file``).",
         "operationId": "listing_preview_api_listings__name__previews__template__get",
         "parameters": [
           {
@@ -8187,7 +8187,7 @@
     },
     "/api/listings/{name}/proposal": {
       "get": {
-        "description": "The listing's latest AI SEO proposal (A41; spec, *Durable AI\nproposals*), with which sections were resolved and whether it has gone\nstale. Written by every AI run before it announces the proposal, so a\nreload, a server restart or a batch run all find it here.",
+        "description": "The listing's latest AI SEO proposal (ADR-0049; spec, *Durable AI\nproposals*), with which sections were resolved and whether it has gone\nstale. Written by every AI run before it announces the proposal, so a\nreload, a server restart or a batch run all find it here.",
         "operationId": "get_listing_proposal_api_listings__name__proposal_get",
         "parameters": [
           {
@@ -8292,7 +8292,7 @@
     },
     "/api/listings/{name}/rename": {
       "post": {
-        "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name (PRD 60), so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render. The market\nsnapshot and the cached AI proposal (A42) move for the same reason, and\nevery batch row naming the listing follows it (A42), so the batch\nsummary opens the new name.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
+        "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name, so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render. The market\nsnapshot and the cached AI proposal move for the same reason, and\nevery batch row naming the listing follows it, so the batch\nsummary opens the new name.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
         "operationId": "rename_listing_api_listings__name__rename_post",
         "parameters": [
           {
@@ -8761,7 +8761,7 @@
     },
     "/api/staging": {
       "post": {
-        "description": "Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has\nalready spooled the parts to temporary files; `stage_pngs` streams each\none on -- a PNG to its content-addressed upload, a ZIP to disk and then\nentry by entry out of it -- with a running count (A45).",
+        "description": "Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has\nalready spooled the parts to temporary files; `stage_pngs` streams each\none on -- a PNG to its content-addressed upload, a ZIP to disk and then\nentry by entry out of it -- with a running count.",
         "operationId": "create_staging_api_staging_post",
         "requestBody": {
           "content": {
@@ -8803,7 +8803,7 @@
     },
     "/api/staging/{session_id}": {
       "delete": {
-        "description": "Cancel staging: the uploads go at once (A46). The seller's own files\nwere never touched.",
+        "description": "Cancel staging: the uploads go at once. The seller's own files\nwere never touched.",
         "operationId": "cancel_staging_api_staging__session_id__delete",
         "parameters": [
           {
@@ -8878,7 +8878,7 @@
         ]
       },
       "patch": {
-        "description": "Edit the label, type names, remove rows. Every edit moves the\nsession's expiry to seven days from now (A46).",
+        "description": "Edit the label, type names, remove rows. Every edit moves the\nsession's expiry to seven days from now.",
         "operationId": "patch_staging_api_staging__session_id__patch",
         "parameters": [
           {
@@ -8931,7 +8931,7 @@
     },
     "/api/staging/{session_id}/confirm": {
       "post": {
-        "description": "Create N listings (UI doc \u00a76). Repeating it -- a double click, a retry\nafter a dropped response -- finishes the same batch rather than making a\nsecond one (A39).",
+        "description": "Create N listings (UI doc \u00a76). Repeating it -- a double click, a retry\nafter a dropped response -- finishes the same batch rather than making a\nsecond one.",
         "operationId": "confirm_staging_api_staging__session_id__confirm_post",
         "parameters": [
           {
@@ -9051,7 +9051,7 @@
     },
     "/api/templates/{name}/colour-report": {
       "get": {
-        "description": "What each photo will be taken as if this becomes a colour-matrix set.\n\nShown in the kind picker before committing, so a badly named file is seen\nwhile it is still cheap to think about. A row with ``clean: false`` is one\n``assign_kind`` will rename on disk (PRD 7a: the filename *is* the\nslugified colour, and a directory whose filenames disagree with the\ncolours they mean is the state that rule exists to prevent).",
+        "description": "What each photo will be taken as if this becomes a colour-matrix set.\n\nShown in the kind picker before committing, so a badly named file is seen\nwhile it is still cheap to think about. A row with ``clean: false`` is one\n``assign_kind`` will rename on disk (ADR-0004: the filename *is* the\nslugified colour, and a directory whose filenames disagree with the\ncolours they mean is the state that rule exists to prevent).",
         "operationId": "colour_report_api_templates__name__colour_report_get",
         "parameters": [
           {
@@ -9342,7 +9342,7 @@
     },
     "/api/templates/{name}/kind": {
       "post": {
-        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.\n\nRefuses a template that already has a config. Kind decides the whole file\nshape (A11), so changing it would discard whatever calibration was done in\nthe old shape's fields -- and doing that silently, from a picker, is the\nkind of data loss nobody would think to look for.",
+        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.\n\nRefuses a template that already has a config. Kind decides the whole file\nshape, so changing it would discard whatever calibration was done in\nthe old shape's fields -- and doing that silently, from a picker, is the\nkind of data loss nobody would think to look for.",
         "operationId": "assign_kind_api_templates__name__kind_post",
         "parameters": [
           {
@@ -9414,7 +9414,7 @@
     },
     "/api/templates/{name}/photo": {
       "get": {
-        "description": "The template's own photo, at its own resolution -- the bare-scene\ncounterpart of ``GET .../design-preview`` for a listing that has not\npicked a design yet.\n\nSame photo :func:`thumbnail` serves, same resolution rule\n(:func:`_thumbnail_source`), just not downscaled to list size: the\nlisting editor's Variants and Listing Images previews are a large hero\nstage, not a row of tiles, and serving them the 160px list thumbnail is\nwhy that stage used to look tiny for a listing with no design picked yet.",
+        "description": "The template's own photo, at its own resolution -- the bare-scene\ncounterpart of ``GET.../design-preview`` for a listing that has not\npicked a design yet.\n\nSame photo :func:`thumbnail` serves, same resolution rule\n( :func:`_thumbnail_source`), just not downscaled to list size: the\nlisting editor's Variants and Listing Images previews are a large hero\nstage, not a row of tiles, and serving them the 160px list thumbnail is\nwhy that stage used to look tiny for a listing with no design picked yet.",
         "operationId": "photo_api_templates__name__photo_get",
         "parameters": [
           {
@@ -9598,7 +9598,7 @@
     },
     "/api/templates/{name}/thumbnail": {
       "get": {
-        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo is shown is\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s\nquestion, not this endpoint's.\n\n``colour`` narrows that to one photo of a ``colour-matrix`` set, for\ncallers that are showing a *particular* variant rather than standing in\nfor the template: the listings editor's reel draws one tile per\n``media`` entry, and without this every colour of a set drew the same\npicture, since ``template_preview_photo`` deliberately answers \"any one\nof them\". Resolution goes through\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,\nwhich owns PRD 7a's filename convention and its trailing-segment\nfallback -- this endpoint must not glob for ``{colour}.png`` itself.\n\nHow it is downscaled and served is :mod:`etsy_listings.ui.api.thumbnails`'\nquestion -- the listings table asks the same one of a design.",
+        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo is shown is\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s\nquestion, not this endpoint's.\n\n``colour`` narrows that to one photo of a ``colour-matrix`` set, for\ncallers that are showing a *particular* variant rather than standing in\nfor the template: the listings editor's reel draws one tile per\n``media`` entry, and without this every colour of a set drew the same\npicture, since ``template_preview_photo`` deliberately answers \"any one\nof them\". Resolution goes through\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,\nwhich owns ADR-0004's filename convention and its trailing-segment\nfallback -- this endpoint must not glob for ``{colour}.png`` itself.\n\nHow it is downscaled and served is:mod:`etsy_listings.ui.api.thumbnails`'\nquestion -- the listings table asks the same one of a design.",
         "operationId": "thumbnail_api_templates__name__thumbnail_get",
         "parameters": [
           {

@@ -1,5 +1,5 @@
 """The ``RunEvent`` union the SSE route streams, and how a ``Plan``/``StagePlan``
-turns into JSON (A33, decision 7).
+turns into JSON (ADR-0041, decision 7).
 
 Two things are true about the engine's own ``Plan``/``StagePlan``/``Change``
 types that make them unfit to serialise directly. They are plain dataclasses,
@@ -13,9 +13,9 @@ rather than reusing whatever shape happened to be lying around.
 
 So every engine type gains a small DTO mirror here, each with an explicit
 ``kind``/``type`` literal a frontend can switch on, built by walking the real
-value once (:func:`_jsonable`) rather than leaning on pydantic to already know
+value once ( :func:`_jsonable`) rather than leaning on pydantic to already know
 what a ``Money`` is. This is *not* :func:`~etsy_listings.engine.run._canonical`
-reused: that helper exists to drop ``snapshot`` for the plan fingerprint (A31)
+reused: that helper exists to drop ``snapshot`` for the plan fingerprint
 and must never be tempted to keep it; this one exists to keep it, because the
 whole reason a plan run streams a ``listing_planned`` event is to show the
 snapshot the fingerprint is not allowed to see.
@@ -251,7 +251,7 @@ class _StagePlanDTO(BaseModel):
     group: str | None = None
     """The stage this one is shown under -- the engine's answer, carried
     so the review nests ``etsy_videos`` under ``etsy_media`` without
-    inferring it from a name (PRD 72)."""
+    inferring it from a name."""
 
 
 class RenderStagePlanDTO(_StagePlanDTO):
@@ -389,7 +389,7 @@ def plan_dto(plan: Plan) -> PlanDTO:
 class PhaseEvent(BaseModel):
     """The run (or one of the two run kinds) moved to a new phase. Always the
     first event of a run and always its last, whichever phase that turns out
-    to be (A33, decision 7)."""
+    to be (ADR-0041, decision 7)."""
 
     type: Literal["phase"] = "phase"
     id: int
@@ -496,4 +496,4 @@ discriminator annotation is needed to construct or inspect one."""
 RunEvent = Annotated[AnyRunEvent, Field(discriminator="type")]
 """The typed union :class:`~etsy_listings.ui.api.schemas.RunDetail` exposes,
 so ``openapi.json`` -- and ``gen:api`` after it -- carries every event shape a
-frontend needs to switch on by ``type`` (A33, decision 7)."""
+frontend needs to switch on by ``type`` (ADR-0041, decision 7)."""

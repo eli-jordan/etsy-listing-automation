@@ -22,20 +22,20 @@ remembered, because two of the answers are not the obvious ones.
 | title, description, tags, materials | `updateListing` | `listings_w` | PATCH; partial bodies honoured |
 | `shop_section_id` | `updateListing` | `listings_w` | A stale id fails the **whole** PATCH (measured) |
 | `shipping_profile_id` | `updateListing` | `listings_w` | Resolved from `getShopShippingProfiles` (`shops_r`) by `title` |
-| `return_policy_id` | `updateListing` | `listings_w` | Policies have no title; addressed by their terms instead (PRD 59) |
+| `return_policy_id` | `updateListing` | `listings_w` | Policies have no title; addressed by their terms instead |
 | `who_made`, `when_made`, `is_supply` | `updateListing` | `listings_w` | Etsy requires all three together |
 | `production_partner_ids` | `updateListing` | `listings_w` | Partners are read from `getShopProductionPartners` (`shops_r`) and **cannot be created through the API** — a Shop Manager job |
-| `should_auto_renew` | `updateListing` | `listings_w` | PRD 11 |
+| `should_auto_renew` | `updateListing` | `listings_w` | Etsy listing settings |
 | image upload, at a rank, with `alt_text` | `uploadListingImage` | `listings_w` | Alt text is set **at upload**; there is no image-update endpoint, so changing it means re-uploading that image |
-| image order and membership | `updateListing` `image_ids` | `listings_w` | Ordered full-replacement set — see PRD 57 |
+| image order and membership | `updateListing` `image_ids` | `listings_w` | Ordered full-replacement set — see ADR-0031 |
 | per-colour swatch images | `updateVariationImages` | `listings_w` | Overwrites all of them per call, and permits exactly **one** property |
 | video upload, or re-attach by `video_id` | `uploadListingVideo` `?is_multi_video=true` | `listings_w` | No rank and no position parameter; placement follows attach order (decision 9) |
 | video removal | `deleteListingVideo` | `listings_w` | Etsy keeps the file, so a deleted video can be re-attached by id |
-| — | `updateListingInventory` | `listings_w` | **Never called.** PRD 55 |
+| — | `updateListingInventory` | `listings_w` | **Never called.** ADR-0029 |
 
 Everything here fits inside the scopes already granted — `listings_r
 listings_w shops_r` — so nothing in this phase sends anyone back through
-consent (PRD 50). `getShopSections` needs no scope at all, which is why a
+consent (ADR-0026). `getShopSections` needs no scope at all, which is why a
 section can be resolved by name in a workspace whose OAuth consent has lapsed.
 
 ### Three measurements that shape the stages
@@ -44,7 +44,7 @@ section can be resolved by name in a workspace whose OAuth consent has lapsed.
   false}`**, an unknown number of them, arriving over minutes. So the media
   stage cannot count them, cannot wait for them, and must be able to displace
   whatever is there — including something that lands after it looked.
-- **`image_ids` reorders and detaches without re-uploading**, which the PRD
+- **`image_ids` reorders and detaches without re-uploading**, which the original API model
   assumed impossible. Sent comma-separated it does exactly the right thing;
   sent as repeated form keys it answers `200` and **destroys the listing's
   images**. Both encodings look identical from the response.
@@ -57,7 +57,7 @@ section can be resolved by name in a workspace whose OAuth consent has lapsed.
 
 ## Decisions
 
-### 1. Three stages, one PATCH each — A24
+### 1. Three stages, one PATCH each — ADR-0021
 
 `STAGES` becomes `[Render(), PrintifyProduct(), Publish(), EtsyListing(),
 EtsyMedia()]`.
@@ -79,16 +79,16 @@ distinguishes them without a stage boundary doing it, and two PATCHes where
 one would do introduces a state — copy written, settings not — that one call
 cannot produce.
 
-### 2. A human writes a name; the tool resolves the id — PRD 53, 54; A25
+### 2. A human writes a name; the tool resolves the id — per-listing shop sections; ADR-0033
 
 `shop.yaml` gains `etsy.shop_section` and `etsy.shipping_profile`, both
 names. `listing.yaml`'s `etsy:` block takes the same two keys as per-listing
-overrides. This is PRD 51's rule ("the name is what a human recognises, the id
+overrides. This is rule ("the name is what a human recognises, the id
 is what the API needs") applied one level down, and it is what makes the
 per-listing override worth having at all: `shop_section_id: 4455667` in forty
 listing files is forty numbers nobody can check.
 
-Resolution happens **once per run, in memory** (A25): a small
+Resolution happens **once per run, in memory** (ADR-0033): a small
 `EtsyShopCatalog` holding sections, shipping profiles and production partners,
 each fetched on first use. Not disk-cached, unlike Printify's catalog — a
 stale section id is a `400` that fails the entire PATCH, and the three lists
@@ -97,8 +97,8 @@ are small, shop-scoped and cheap. Deleted shipping profiles are filtered
 it did find, never a fall back to whatever Printify attached.
 
 Neither of the two entities Etsy gives no *name* keeps an id in the config
-either: a return policy is addressed by its terms (PRD 59, below), and a
-processing profile is not written at all (PRD 55).
+either: a return policy is addressed by its terms (return-policy matching, below), and a
+processing profile is not written at all (ADR-0029).
 
 The applied document stores **both** the name and the id — the id because it
 is what was sent, the name because `shop_section_id: 4455 → 5566` is not a
@@ -106,7 +106,7 @@ diff anyone can read. The cost is that renaming a section in Shop Manager and
 updating `shop.yaml` to match produces one no-op PATCH; that is the right
 trade against an unreadable plan.
 
-### 3. `who_made: someone_else`, and the partner it requires — PRD 52
+### 3. `who_made: someone_else`, and the partner it requires — ADR-0028
 
 `shop.yaml`'s `etsy.who_made` default becomes `someone_else`. The shirt was
 made by another company, and Etsy's listing form says so in as many words:
@@ -117,7 +117,7 @@ The API states the same rule far less helpfully. Sent without a partner:
 
 ```
 PATCH {who_made: someone_else, when_made: made_to_order, is_supply: false}
-400 "There was a problem with /marketplace :
+400 "There was a problem with /marketplace:
      Oh dear, you cannot sell this item on Etsy."
 ```
 
@@ -156,12 +156,12 @@ a printer this tool picks per garment, against a fulfilment relationship the
 shop declares once — so a rule that expected them to agree would have failed on
 the first shop it met.
 
-The resolution ladder is therefore the one the return policy uses (PRD 59),
+The resolution ladder is therefore the one the return policy uses,
 for the same reason: when Etsy offers exactly one, do not make anyone name it.
 
 1. **Named explicitly** — `production_partner:` on the listing, else the
    garment profile, else `listing_defaults` — matched against `partner_name` under the
-   same normalisation blueprint matching uses (PRD 23).
+   same normalisation blueprint matching uses (ADR-0005).
 2. **Omitted, and the shop has exactly one partner** — use it. The common case,
    and this shop's.
 3. **Omitted, and the shop has several** — an error listing them by name *and
@@ -173,10 +173,10 @@ a PATCH and a `400`. A shop with **no** partner at all gets a message naming
 the Shop Manager step, because the API is read-only for that resource: there is
 no `createShopProductionPartner`.
 
-### 4. The tool never writes Etsy inventory — PRD 55
+### 4. The tool never writes Etsy inventory — ADR-0029
 
 Recorded as an invariant, not a preference. Printify owns the variant matrix
-(PRD 41); `updateListingInventory` is a full-replace PUT over exactly that
+(ADR-0021); `updateListingInventory` is a full-replace PUT over exactly that
 document, including the disabled zero-price cells Etsy materialises to keep
 the grid rectangular. Echoing a Printify-authored matrix back through it to
 change one field per offering is the riskiest write this tool could make, and
@@ -197,11 +197,11 @@ out the top two:
    `readiness_state_id` also answered `200`, and proves nothing — the shop has
    one definition and it was already the value in place. Testing a real change
    needs a second profile made by hand, or `shops_w`, which costs every user a
-   second trip through consent (PRD 50).
+   second trip through consent (ADR-0026).
 3. **So: the tool reads processing time and never writes it.** It surfaces
    `readiness_state_id` and `processing_min`/`max` in `plan` and reports drift
    — the same treatment as the shop's draft setting, which it also cannot
-   verify (PRD risk 5).
+   verify.
 
 The practical cost is near zero, which is worth saying plainly rather than
 leaving as a disappointment: the shop has exactly one processing profile,
@@ -210,9 +210,9 @@ tool would change if it could. If a second profile is ever wanted per listing,
 the two routes are `shops_w` in the scopes or Shop Manager — and that is a
 decision to take then, with a reason, not now.
 
-### 5. Media: upload what changed, then set `image_ids` — PRD 57, superseding PRD 12
+### 5. Media: upload what changed, then set `image_ids` — ADR-0031, superseding ADR-0031
 
-PRD 12 mandates full delete-and-re-upload on the premise that "there is no
+ADR-0031 mandates full delete-and-re-upload on the premise that "there is no
 update-image endpoint" and therefore no way to reorder. The premise is false,
 so the decision built on it goes:
 
@@ -233,7 +233,7 @@ for exactly that — so nothing is destroyed by an ordering mistake. The
 encoding is the sharp edge, and it gets a contract test of its own rather than
 a comment: repeated keys answer `200` and leave one image standing.
 
-Retained from PRD 12: media sync is still driven by a per-file hash, still
+Retained from ADR-0031: media sync is still driven by a per-file hash, still
 full-replacement in meaning, and the manifest is still explicit and ordered.
 What changes is the mechanism, and that ids now survive a reorder — which is
 what makes decision 6 practical.
@@ -251,7 +251,7 @@ replacement mints a new image id, and every swatch link pointing at the old one
 silently dangles. That is measured, and it is why the variation links are
 re-asserted whenever any id changed.
 
-### 6. Per-colour variation images — PRD 56
+### 6. Per-colour variation images — ADR-0030
 
 `updateVariationImages` binds an `image_id` to a `(property_id, value_id)`
 pair, so Etsy's colour selector shows the shirt in that colour instead of a
@@ -265,13 +265,13 @@ of its three links is obvious.
 #### The join, with the values the probe actually returned
 
 ```
-listing.yaml                 Etsy inventory                    Etsy images
-─────────────────────────    ────────────────────────────      ───────────────
-colors: [black, ...]         property_id 513                   listing_image_id
-                             "Comfort Colors® Colors"            6234
+listing.yaml Etsy inventory Etsy images
+───────────────────────── ──────────────────────────── ───────────────
+colors: [black,...] property_id 513 listing_image_id
+                             "Comfort Colors® Colors" 6234
 media:
-  - template: flat-lay-01      value_id 50135267836
-    colour: black             value "Black"
+  - template: flat-lay-01 value_id 50135267836
+    colour: black value "Black"
 ```
 
 **Step 1 — find the colour property, by its values.** Not by its name: it is
@@ -285,8 +285,7 @@ feature reports and does nothing; it never guesses.
 
 **Step 2 — Etsy's value string → our colour slug.** `slugify("Black")` is
 `black`, through `config/slug.py` and its exceptions file. This is the same
-convention that already names `black.png` in a `colour-matrix` template (PRD
-7a), which is the quiet part worth noticing: one slug spans all three systems
+convention that already names `black.png` in a `colour-matrix` template (ADR-0004), which is the quiet part worth noticing: one slug spans all three systems
 — Printify's variant colour, the mockup filename, and Etsy's variation value —
 because Printify's colour names reach Etsy verbatim. A colour that needs an
 entry in `exceptions.yaml` for its filename needs no second entry here.
@@ -356,7 +355,7 @@ anyone has already written.
 
 #### What happens when it cannot be done
 
-Every one of these reports and continues, on PRD 46's principle — a swatch is
+Every one of these reports and continues, on principle — a swatch is
 a decoration, and refusing a listing over one would be the tool inventing a
 requirement Etsy does not have:
 
@@ -367,7 +366,7 @@ listing whose black and navy were shot once is legal.
 | Case | Result |
 |---|---|
 | A colour with no media entry in the named template | that colour gets no swatch |
-| A colour Printify never made a variant for (PRD 46) | absent from the inventory, so absent here |
+| A colour Printify never made a variant for | absent from the inventory, so absent here |
 | No property's values overlap `colors` | the whole feature is skipped, loudly |
 | Two properties overlap equally | skipped, loudly — never a coin toss |
 | The named template is not in `media` at all | a config error at plan time, not a skip |
@@ -401,7 +400,7 @@ colour not yet bound — never to compare one.
 of the image ids that stage mints, and a separate stage would be one that has
 to run whenever its neighbour does.
 
-### 7. Shipping: risk 13 closes by design, not by a flag — PRD 58
+### 7. Shipping: risk 13 closes by design, not by a flag — ADR-0032
 
 `shipping_template: false` does **not** stop Printify creating a US-origin
 profile carrying USD numerals as NOK and attaching it — measured, and roughly
@@ -416,14 +415,14 @@ comparison the whole tool is built on is exactly the mechanism this needs, so
 there is no "always re-write this field" special case and no dependence on a
 flag Printify honours only sometimes.
 
-Free versus paid shipping (the PRD's requirement that both work) therefore
+Free versus paid shipping (both supported shipping modes) therefore
 becomes a choice of *which named profile*, made in `shop.yaml` or per listing
 — not a code path, not a mode, and not something the tool computes.
 
 The flag is still sent `false`, because a hint that sometimes works is better
 than no hint.
 
-### 8. A stage may read what an earlier stage produced *this run* — A26
+### 8. A stage may read what an earlier stage produced *this run* — ADR-0034
 
 Three places in this phase need something an earlier stage in the same `apply`
 is about to make:
@@ -446,13 +445,13 @@ while continuing to hand each stage the previous run's `applied`. Narrow, and
 it says what it means — an id minted this run is the same id it will be next
 run.
 
-The rendered bytes take the other answer, the one the PRD already uses for
+The rendered bytes take the other answer, the one the render stage uses for
 copy: a file that does not exist yet is **pending**, not zero-length. The
 media stage's desired document carries a hash where the file exists and a
 pending marker where it does not, `plan` renders "4 images (pending render)",
 and `apply` hashes at upload time and records what it actually sent.
 
-### 9. Videos are placed by attach order — PRD 72
+### 9. Videos are placed by attach order
 
 Etsy's video surface is two calls. `uploadListingVideo` takes a file or the
 `video_id` of one the shop already has, and `deleteListingVideo` removes one.
@@ -507,7 +506,7 @@ the first:
 
 #### How the stage places them
 
-`media:` is the gallery (PRD 72), so the desired layout reads straight off it:
+`media:` is the gallery (ADR-0045), so the desired layout reads straight off it:
 the featured video is the one at position 2, and the second video's anchor is
 the number of images before it. `etsy_videos` runs after `etsy_media`, once
 the images are uploaded and ordered, and brings the listing to that layout:
@@ -588,17 +587,17 @@ etsy:
   # Every field a listing inherits, and nothing that identifies the shop.
   # Anything here may be overridden in a listing's own `etsy:` block.
   listing_defaults:
-    who_made: someone_else             # requires a production partner (PRD 52)
+    who_made: someone_else # requires a production partner (ADR-0028)
     when_made: made_to_order
     is_supply: false
     renewal: manual
-    shipping_profile: NOK standard tee # by name (PRD 54)
-    return_policy:                     # by its terms, not its id (PRD 59)
+    shipping_profile: NOK standard tee # by name
+    return_policy: # by its terms, not its id
       accepts_returns: true
       accepts_exchanges: true
       within_days: 30
-    production_partner: The Print Provider  # optional -- omit when the shop
-                                            # has exactly one (PRD 52)
+    production_partner: The Print Provider # optional -- omit when the shop
+                                            # has exactly one (ADR-0028)
 ```
 
 The `listing_defaults` block is what a listing inherits; everything outside it
@@ -612,25 +611,25 @@ about that listing — a shop-wide default for either would be a value that is
 right for the first listing and wrong from the second onwards.
 
 ```yaml
-# listings/take-a-hike/listing.yaml   (the etsy: block only)
+# listings/take-a-hike/listing.yaml (the etsy: block only)
 etsy:
   title: ""
   tags: []
   description:
     lead: ""
     ref: common-copy/comfort-colors.md
-  renewal: manual                      # overrides shop.yaml
-  section: Retro Tees                  # optional; listing-only, by name
-  shipping_profile: NOK heavy tee      # optional; overrides shop.yaml
-  variation_images: flat-lay-01        # optional; see below
+  renewal: manual # overrides shop.yaml
+  section: Retro Tees # optional; listing-only, by name
+  shipping_profile: NOK heavy tee # optional; overrides shop.yaml
+  variation_images: flat-lay-01 # optional; see below
 ```
 
 `setup` changes to match: it writes the `listing_defaults` block, and stops
 resolving a shop section altogether — `etsy.shop_section_id` leaves `shop.yaml`
-(an amendment to PRD 43/49, which had `setup` writing four ids; it now writes
+(an amendment to ADR-0025, which had `setup` writing four ids; it now writes
 two, plus a return policy it names by terms).
 
-### Referring to a return policy without an id — PRD 59
+### Referring to a return policy without an id — return-policy matching
 
 Etsy gives a return policy no title: the resource is `{return_policy_id,
 shop_id, accepts_returns, accepts_exchanges, return_deadline}` and nothing
@@ -673,7 +672,7 @@ disk-cached; the rest is arithmetic) and buys stage independence: a stage
 reading a neighbour's applied document is a stage that breaks when the
 neighbour's document changes shape.
 
-**PRD 40's price-above-cost assertion lands here**, as the PRD's amendment
+**ADR-0020's price-above-cost assertion lands here**, as the recorded amendment
 says it must: `variants[].cost` exists only on a product that already exists,
 and `read_live` has one in hand. Printify refuses to publish below cost, so
 the check turns a remote `400` into a plan-time refusal naming the size.
@@ -700,7 +699,7 @@ one cannot be manufactured on demand.
 | `apply` | one `PATCH updateListing` carrying only what changed |
 
 Blocked when: the workspace has no `etsy.shop_id`; title or the final composed
-description is not concrete and non-empty (PRD 44's gate, reused); a section,
+description is not concrete and non-empty (ADR-0022's gate, reused); a section,
 shipping profile or production partner name does not resolve; `who_made` is
 `someone_else` and no partner resolved, which Etsy refuses outright.
 
@@ -717,7 +716,7 @@ than silently reporting no drift because it read `None`.
 
 `state` is never sent. Etsy's update enum is `active | inactive`, a draft
 cannot be re-drafted, and the one thing this tool must never do by accident is
-activate a listing (PRD non-goal 1).
+activate a listing.
 
 ### `etsy_media`
 
@@ -729,15 +728,15 @@ activate a listing (PRD non-goal 1).
 | `apply` | upload the changed → `PATCH image_ids` (comma-separated) → `updateVariationImages` when enabled |
 | `remote` | `etsy_image_ids`, keyed by manifest ref so a reorder does not churn them |
 
-`GET .../listings/{listing}/images` is never used: it returns `404` for
+`GET.../listings/{listing}/images` is never used: it returns `404` for
 **every** id, valid or invented, so a 404 there says nothing. The listing read
 with `includes=Images` is the only working route, and it is the one every
 count in the findings document came from.
 
-The image count gate (≤20, PRD) stays a plan-time validation over the
+The image count gate (≤20) stays a plan-time validation over the
 manifest, not a check against what Etsy currently holds — Printify's stragglers
 would otherwise make a valid listing look over the cap. It counts images only;
-videos are PRD 72's, and have a cap of their own.
+videos are ADR-0045's, and have a cap of their own.
 
 ### `etsy_videos`
 
@@ -796,7 +795,7 @@ the one "Etsy media" heading.
 
 Names sit in `applied` beside their ids for decision 2's reason. Ids handed
 back by Etsy sit in `remote`, excluded from every hash, under this phase's
-documented `etsy_*` prefix (A20).
+documented `etsy_*` prefix (ADR-0034).
 
 ---
 
@@ -804,17 +803,17 @@ documented `etsy_*` prefix (A20).
 
 ```
 clients/etsy/
-  listings.py   EtsyListingClient + HttpEtsyListingClient   (new)
-  shopcatalog.py  per-run name resolution: sections, shipping profiles,
-                  production partners                        (new)
-  models.py     + Listing, ListingImage, Inventory, ShippingProfile,
-                  ProductionPartner                          (extended)
-  fakes.py      + an in-memory listing client                (extended)
-  shops.py      unchanged — `setup`'s four unscoped reads
+  listings.py EtsyListingClient + HttpEtsyListingClient (new)
+  shopcatalog.py per-run name resolution: sections, shipping profiles,
+                  production partners (new)
+  models.py + Listing, ListingImage, Inventory, ShippingProfile,
+                  ProductionPartner (extended)
+  fakes.py + an in-memory listing client (extended)
+  shops.py unchanged — `setup`'s four unscoped reads
 ```
 
 Two protocols over one transport, exactly as Printify's split works and for
-the same reason (A22): a caller holding `EtsyShopClient` cannot reach
+the same reason (ADR-0024): a caller holding `EtsyShopClient` cannot reach
 `updateListing`, because the method is not on its type.
 
 `RunContext` gains `etsy: EtsyListingClient | None` and `require_etsy()`,
@@ -855,7 +854,7 @@ and they need a second shipping profile to exist.** The shop has exactly one,
 the US-origin profile Printify made, and with only that one a republish leaving
 `shipping_profile_id` unchanged is equally consistent with "the flag worked"
 and "Printify reused its own" — precisely the ambiguity round 2 recorded.
-Creating one needs `shops_w`, outside `SCOPES` (PRD 50), so it is a Shop
+Creating one needs `shops_w`, outside `SCOPES` (ADR-0026), so it is a Shop
 Manager step. Publishing before then would cost a permanent Etsy draft to
 reproduce an answer we already have.
 
@@ -896,17 +895,17 @@ Each step is a commit, and each leaves the suite green.
 | # | Step | Notes |
 |---|---|---|
 | 1 | ~~Probe + findings update~~ | **Done** — 1–4 answered; 5–7 ride along with step 10 |
-| 2 | ~~Docs: PRD 52–59, A24–A28, risk 13 closed~~ | **Done** — folded into the two authority documents in their own commit |
+| 2 | ~~Docs: ADR-0028, ADR-0029, ADR-0030, ADR-0031, ADR-0032, ADR-0021, ADR-0033, ADR-0034, ADR-0030, ADR-0024, risk 13 closed~~ | **Done** — folded into the two authority documents in their own commit |
 | 3 | `clients/etsy/listings.py` + models + fakes | Protocol, HTTP impl, in-memory fake |
 | 4 | Contract cassettes | Payload shape, both `image_ids` encodings, error decoding, the 401-scope text |
 | 5 | `shopcatalog.py` — names to ids | Sections, shipping profiles, partners; unresolved names name the candidates |
 | 6 | Config + `setup` | `shop.yaml`/`listing.yaml` fields, `who_made` default, validation gates |
-| 7 | Engine: the `remote` handoff (A26) + `RunContext.etsy` | Behaviour test: one `apply` from nothing to a patched draft |
-| 8 | `publish` stage + `unlock` | Polling, the lock, PRD 40's cost assertion |
+| 7 | Engine: the `remote` handoff (ADR-0034) + `RunContext.etsy` | Behaviour test: one `apply` from nothing to a patched draft |
+| 8 | `publish` stage + `unlock` | Polling, the lock, ADR-0020's cost assertion |
 | 9 | `etsy_listing` stage | The single PATCH, drift, the blocked reasons |
 | 10 | `etsy_media` stage | Upload → `image_ids` → variation images |
 | 11 | CLI: LIVE banner, drift rendering, `unlock` | `Plan.is_live` already exists on the type |
-| 12 | e2e + the PRD's live-edit check | Against the throwaway shop |
+| 12 | e2e + the live-edit check | Against the throwaway shop |
 
 ---
 
@@ -945,7 +944,7 @@ API never reports it.
    orphans the Etsy draft (this recon). DELETE of a still-connected product
    takes the draft with it (e2e teardown, `404`). The tool takes the second
    path and never unpublishes first. `listings_d` stays outside `SCOPES`; live
-   listings are never deleted this way. PRD 63,
+   listings are never deleted this way. ADR-0036,
    [features/listing-lifecycle-20260916/spec.md](../listing-lifecycle-20260916/spec.md).
 4. **Where does a second video go when the images before it drop below its
    anchor?** Untested. It only arises for a moment: `etsy_media` removes the

@@ -1,7 +1,7 @@
 """The Etsy listing surface Phase 3's stages write through: `publish`'s poll
 target, `etsy_listing`'s single PATCH, `etsy_media`'s upload/reorder/
 variation-image calls, and the video upload/attach/delete `etsy_videos`
-places a listing's videos with (PRD 72, features/etsy-listing-20260910/spec.md decision 9).
+places a listing's videos with (ADR-0045, features/etsy-listing-20260910/spec.md decision 9).
 
 Built against
 [docs/research/printify-etsy-integration.md](../../../../docs/research/printify-etsy-integration.md)'s
@@ -18,7 +18,7 @@ findings make the obvious implementation wrong:
   for `PATCH`/`DELETE` only.
 
 Separate from :class:`~etsy_listings.clients.etsy.shops.EtsyShopClient` for
-the reason A22 gives: authority is a property of the type, so a caller
+the reason ADR-0024 gives: authority is a property of the type, so a caller
 resolving `setup`'s four unscoped reads cannot reach `updateListing` however
 much transport plumbing the two share. `shop_sections` and `return_policies`
 exist on **both** protocols despite being unscoped calls, because the two
@@ -77,14 +77,14 @@ class VideoSlotsFullError(EtsyApiError):
 
 class VideoBudgetExhaustedError(EtsyApiError):
     """A `400` carrying "maximum number of videos": the listing's daily
-    budget of associations is spent (PRD 72, decision 9).
+    budget of associations is spent (ADR-0045, decision 9).
 
     Re-worded because Etsy's own text says the listing is full, and the
     listing may hold no videos at all. The tool does not predict the budget;
     it explains the refusal when it comes. A
     :class:`~etsy_listings.errors.UserFacingError` through
     :class:`EtsyApiError`, so a batch reports this listing and carries on
-    (PRD 16).
+    .
     """
 
     def __init__(
@@ -113,7 +113,7 @@ def _video_refusal(exc: EtsyApiError) -> EtsyApiError:
 
 
 VIDEO_CONTENT_TYPES = {".mp4": "video/mp4", ".mov": "video/quicktime"}
-"""PRD 72's two video types -- of Etsy's seven, the two a browser previews --
+"""ADR-0045's two video types -- of Etsy's seven, the two a browser previews --
 and the content type each is sent as."""
 
 MULTI_VIDEO = {"is_multi_video": "true"}
@@ -300,7 +300,7 @@ class HttpEtsyListingClient:
         listing_image_id: int | None = None,
     ) -> ListingImage:
         """Upload at `rank`, with `alt_text` -- there is no image-update
-        endpoint, so alt text is only ever set here (PRD 57).
+        endpoint, so alt text is only ever set here.
 
         `overwrite` replaces the image already at that rank in place, keeping
         its count and neighbouring ranks untouched and minting a new id
@@ -369,7 +369,7 @@ class HttpEtsyListingClient:
     def update_variation_images(
         self, shop_id: int, listing_id: int, links: list[VariationImageLink]
     ) -> None:
-        """Overwrite every swatch link on the listing (PRD 56). An empty list
+        """Overwrite every swatch link on the listing. An empty list
         is a write that clears them, not a no-op -- measured."""
         body = {
             "variation_images": [
@@ -388,7 +388,7 @@ class HttpEtsyListingClient:
 
 def video_content_type(file_name: str) -> str:
     """The content type a video upload is sent as, or a :class:`ValueError`
-    for a file PRD 72 does not allow -- raised before a byte is sent, since
+    for a file ADR-0045 does not allow -- raised before a byte is sent, since
     anything else reaching the client is a caller's bug that would spend one
     of the listing's daily associations. The fake shares it, so a stage
     tested against the fake meets the same refusal."""

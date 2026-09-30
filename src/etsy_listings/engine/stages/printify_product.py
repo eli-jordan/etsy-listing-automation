@@ -14,7 +14,7 @@ ones and each has produced a plausible-looking wrong implementation:
   only the created ones on create, which is why ``apply`` branches and why an
   update reads the product first.
 - ``POST products.json`` has no idempotency key and no conflict, so nothing on
-  the server stops a re-run making a second product (PRD 48).
+  the server stops a re-run making a second product.
 
 The desired document is deliberately *not* the API's shape. It holds design
 **content hashes** where the payload holds upload ids: an upload id is remote
@@ -26,7 +26,7 @@ What is left here is what genuinely needs a context: resolving a listing into
 a desired product, reading the live one, and sending it. The two documents and
 the gate that reads one live in
 :mod:`~etsy_listings.engine.stages.product_document`, and the comparison over
-them in :mod:`~etsy_listings.engine.stages.product_diff` -- both pure, both
+them in:mod:`~etsy_listings.engine.stages.product_diff` -- both pure, both
 reachable without a workspace. ``plan()`` below assembles a ``Verdict`` from
 what the comparison decided; it decides nothing itself.
 """
@@ -73,14 +73,14 @@ from etsy_listings.workspace.common_copy import CommonCopyError
 
 PRODUCT_ID_KEY = "printify_product_id"
 UPLOAD_IDS_KEY = "printify_upload_ids"
-"""This stage's key prefix in ``lock.remote`` (A20). ``printify_upload_ids``
+"""This stage's key prefix in ``lock.remote``. ``printify_upload_ids``
 maps a design's content hash to the upload id Printify gave it -- keyed on
 content, not on artwork name, because uploads are content-addressed and a
 renamed file is the same upload."""
 
 
 class ProductVariantSnapshot(BaseModel):
-    """One cell of the variant matrix, named rather than left as an id (A30)."""
+    """One cell of the variant matrix, named rather than left as an id."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -90,7 +90,7 @@ class ProductVariantSnapshot(BaseModel):
 
 
 class ProductSnapshot(BaseModel):
-    """Domain facts for the before/after review (A30): every variant on each
+    """Domain facts for the before/after review: every variant on each
     side, unchanged ones included -- a ``Plan`` carries only what changed, and
     the comparison needs the whole matrix to draw a price table from."""
 
@@ -148,7 +148,7 @@ class PrintifyProductStage:
             return blocked
         profile = workspace.load_garment_profile(config.garment_profile)
 
-        # PRD 70: an unpriced listing is written, and refused here. Before the
+        # ADR-0043: an unpriced listing is written, and refused here. Before the
         # variants are built, because `resolved_price` raises `KeyError` rather
         # than refusing, and a `KeyError` ends a `--all` batch.
         blocked = check_price_source(
@@ -227,14 +227,14 @@ class PrintifyProductStage:
         )
 
     def snapshot(self, desired: PrintifyProductDesired, live: Product | None) -> ProductSnapshot:
-        """Every variant, both sides, named (A30).
+        """Every variant, both sides, named.
 
         The id -> (colour, size) lookup a live variant needs is
         ``desired.variants``, this run's own resolved matrix -- the same one
         ``apply`` sends -- since :class:`~etsy_listings.clients.printify.models.ProductVariant`
         carries no colour or size of its own. A live variant whose id has
         fallen out of that resolution (a garment change would have already
-        been blocked; a discontinued cell, PRD 46) has nothing to be named by
+        been blocked; a discontinued cell, missing variant cells) has nothing to be named by
         and is left off the live side rather than guessed at.
         """
         lookup = {variant.id: variant for variant in desired.variants}
@@ -284,7 +284,7 @@ class PrintifyProductStage:
         spec = _spec(desired, uploads)
 
         if live is None:
-            # PRD 48: the lockfile is the primary guard, and this walk closes
+            # ADR-0023: the lockfile is the primary guard, and this walk closes
             # the one window it cannot -- create succeeded, the process died
             # before the lockfile was written. Only on the create path, so a
             # no-op run never pays for it.

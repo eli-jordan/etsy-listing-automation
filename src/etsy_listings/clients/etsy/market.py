@@ -13,9 +13,9 @@ here:
 - :meth:`~EtsyMarketClient.review_count`: `getReviewsByListing`, one review
   asked for and only its total read.
 
-Read-only by type, like :mod:`shops`: a caller holding an
+Read-only by type, like:mod:`shops`: a caller holding an
 :class:`EtsyMarketClient` cannot reach a write however the transport underneath
-is shared (A22). All three calls are unscoped -- the app key pair is enough --
+is shared. All three calls are unscoped -- the app key pair is enough --
 so the client needs no sign-in (see ``connections.etsy_market_client``).
 
 Pacing and retries are the transport's: header pacing through

@@ -9,7 +9,7 @@ import { useRef, useState } from "react";
  * `StatusTag` and `OpenInMenu` do -- head chrome that no single page owns.
  *
  * Nothing here validates. What makes a legal listing name is what makes a legal
- * *directory* name, and only `workspace` knows that (A8), so a refusal arrives
+ * *directory* name, and only `workspace` knows that, so a refusal arrives
  * from the server as `error` and is shown beside the field.
  */
 
@@ -35,7 +35,7 @@ export interface EditableNameProps {
   placeholder?: string;
   label?: string;
   /** What is in the field right now, as it is typed. A listing that has no
-   * name yet can be given one by something other than this field (PRD 69,
+   * name yet can be given one by something other than this field (design-derived names,
    * where picking a design names a draft), and that must not overwrite a name
    * the seller is part-way through typing -- which `value` cannot show,
    * because an uncommitted name is not the listing's name. */

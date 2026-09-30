@@ -136,7 +136,7 @@ describe("KindPicker", () => {
     await screen.findByText("sand.png");
     fireEvent.click(screen.getByRole("radio", { name: /Single/ }));
     // A scene kind has one photo and no colours to read off filenames
-    // (PRD 28), so the report is not just irrelevant -- it is misleading.
+    //, so the report is not just irrelevant -- it is misleading.
     expect(screen.queryByText("sand.png")).not.toBeInTheDocument();
   });
 

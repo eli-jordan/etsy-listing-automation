@@ -64,7 +64,7 @@ class AiMarketEvent(BaseModel):
 
 
 class AiProposalEvent(ListingProposal):
-    """The validated proposal, once it is cached (A41): what ``GET
+    """The validated proposal, once it is cached: what ``GET
     /api/listings/{name}/proposal`` answers at that moment, plus ``type``
     and ``seq``."""
 

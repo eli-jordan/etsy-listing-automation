@@ -1,14 +1,14 @@
 """The two files a workspace needs before it is one, and the rules for
 editing them without disturbing what the user put there.
 
-Both were `setupcmd`'s until `auth` needed them too (PRD 49): `auth` writes
+Both were `setupcmd`'s until `auth` needed them too: `auth` writes
 credentials into `.env`, and it runs *before* `setup`, so it is also the
 command that must put the `.gitignore` in place -- a secret written into a
 directory that some enclosing repository is already tracking is not something
 a later `setup` run can take back.
 
 They live under `workspace/` rather than in whichever command reached for them
-first, because both are statements about the layout of a workspace (A8), and
+first, because both are statements about the layout of a workspace, and
 because a second copy of the ignore list is exactly the drift that rule
 exists to prevent.
 """

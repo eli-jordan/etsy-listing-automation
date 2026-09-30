@@ -1,5 +1,5 @@
 """Name -> id resolution. Config refers to blueprints and print providers by
-name (PRD 23); this is the only place that turns one into a Printify integer id.
+name; this is the only place that turns one into a Printify integer id.
 
 A print provider is named by its title -- "Monster Digital" identifies one.
 A *blueprint* is not: Printify titles 706 "Unisex Garment-Dyed T-shirt", which
@@ -93,7 +93,7 @@ def resolve_print_provider(name: str, providers: list[PrintProvider]) -> PrintPr
 class UnknownSizeError(UserFacingError, ValueError):
     """A size no colour of this garment is made in.
 
-    Distinct from a discontinued *cell* (PRD 46), which is Printify's business
+    Distinct from a discontinued *cell*, which is Printify's business
     and merely reported: a size absent from the entire catalog entry is a
     profile naming something this blank does not come in, and no amount of
     skipping produces the product the user asked for.
@@ -125,13 +125,13 @@ class VariantResolution:
     variants: tuple[ResolvedVariant, ...]
     missing: tuple[tuple[str, str], ...]
     """``(colour_slug, size)`` cells the catalog does not offer. Reported, not
-    fatal -- PRD 46."""
+    fatal -- missing variant cells."""
 
     def ids(self, *, colours: Collection[str] | None = None) -> tuple[int, ...]:
         """Variant ids, optionally narrowed to some colour slugs.
 
         ``print_areas.*.variant_ids`` wants ids and nothing else, and the
-        narrowing is what PRD 30's on-light/on-dark split needs to partition
+        narrowing is what on-light/on-dark split needs to partition
         one product's variants across two print areas.
         """
         return tuple(v.id for v in self.variants if colours is None or v.colour_slug in colours)
@@ -155,7 +155,7 @@ def resolve_variants(
     - a size no colour offers is a profile naming a size this blank is not
       made in -- fatal;
     - a single colour × size cell the catalog has dropped is Printify's doing
-      -- reported in :attr:`VariantResolution.missing` and skipped (PRD 46).
+      -- reported in :attr:`VariantResolution.missing` and skipped.
     """
     by_slug = {slug: name for name, slug in slug_map(variant_set.colors, exceptions).items()}
 

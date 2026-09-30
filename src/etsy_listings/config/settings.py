@@ -1,12 +1,12 @@
 """``settings.yaml``: the workspace's tunable settings, next to ``shop.yaml``.
 
 It holds two blocks: the market scoring weights (features/market-seo-20260924/spec.md,
-*Scoring*) and the batch AI queue's limit (spec, *Batch AI queue*; A40)::
+*Scoring*) and the batch AI queue's limit (spec, *Batch AI queue*; ADR-0048)::
 
     market_seo:
       weights:
         reviews: 30
-        ...
+...
     batch_ai:
       concurrency: 1
 
@@ -51,7 +51,7 @@ class BatchAiSettings(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     concurrency: int = Field(1, ge=1)
-    """How many batch rows draft at once, across every batch (A40). Manual
+    """How many batch rows draft at once, across every batch. Manual
     editor runs do not count against it. One by default: a seller's
     provider CLI is usually on a plan with a rate limit, and a queue that
     ran every row at once would spend it on the first batch."""

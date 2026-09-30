@@ -158,7 +158,7 @@ def test_shipping_profile_return_policy_and_production_partner_round_trip(tmp_pa
 
 def test_omitted_shipping_profile_and_partner_are_left_unset(tmp_path: Path) -> None:
     """Blank means "not known", never "delete it" -- same rule as the Etsy
-    shop id (PRD 51's reasoning, applied to the new name-based fields)."""
+    shop id (reasoning, applied to the new name-based fields)."""
     path = tmp_path / layout.SHOP_FILE
     path.write_text(logic.render_shop_yaml(logic.shop_yaml_document(ANSWERS, None)), "utf-8")
 

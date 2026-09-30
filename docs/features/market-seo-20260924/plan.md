@@ -15,8 +15,8 @@ The spec and interactions own requirements; this shipped plan records delivery.
 
 ## Settled decisions
 
-These come from the planning interview. They are recorded in PRD 71 (with
-amendments to PRD 4, 13 and 68), [features/market-seo-20260924/spec.md](spec.md) and the two
+These come from the planning interview. They are recorded in ADR-0044 (with
+amendments to ADR-0003), [features/market-seo-20260924/spec.md](spec.md) and the two
 interactions docs. This table is a summary; those documents are the authority.
 
 | Topic | Decision |
@@ -26,7 +26,7 @@ interactions docs. This table is a summary; those documents are the authority.
 | Concurrency | One active AI run per listing. A second `POST` gets 409 naming the active run. A finished run is kept until the next run for that listing replaces it. Nothing survives a restart. |
 | Leaving and cancelling | Leaving the editor or reloading does not cancel. The editor reattaches and the events replay. **Cancel** sends `DELETE`, which sets the run's cancel event and so kills the provider subprocess tree. A brief or snapshot already written stays. |
 | Brief write | The **server** writes the drafted brief into `listing.yaml`, only if the saved brief is still empty. It does this under a new per-listing write lock that PATCH autosave and rename also take. Then it emits `brief {text, written}`. The editor puts the text into the field without autosaving it again. |
-| Auto chain (PRD 68) | Picking a design while the brief is empty arms the chain in the editor. It fires once, the first time a successful save has a name, design and garment profile. It sends `draft_brief = (brief still empty)`. Picking another design re-arms it; leaving or reloading disarms it. |
+| Auto chain (ADR-0003) | Picking a design while the brief is empty arms the chain in the editor. It fires once, the first time a successful save has a name, design and garment profile. It sends `draft_brief = (brief still empty)`. Picking another design re-arms it; leaving or reloading disarms it. |
 | AI Mode button | Starts a run with `draft_brief` set when the brief is empty, so a failed automatic draft can be started again from the button. A brief that already has text is sent with `draft_brief=false`, and the Brief node shows as **skipped**. |
 | Deadlines | Each provider call (brief, extraction, proposal) keeps the orchestrator's 60s. Market search has no limit of its own. The whole run is capped at **3 minutes**. |
 | Old endpoints | `POST /api/ai/design-brief` and `POST /api/listings/{name}/ai-seo/proposal` are retired, with their clients and tests. `GET …/ai-seo/readiness` stays. |
@@ -45,12 +45,12 @@ Every PR from PR 5 on builds against this contract. PR 5 owns it and publishes
 it in `docs/openapi.json`.
 
 ```
-POST   /api/ai/runs                 {listing, draft_brief} -> 202 AiRunSummary | 409 {active_run} | 409 {reason}
-GET    /api/ai/runs?listing=        the listing's current or most recent run, or 404
-GET    /api/ai/runs/{id}            AiRunDetail: phase, steps, events so far
-GET    /api/ai/runs/{id}/events     text/event-stream; replays after Last-Event-ID
-DELETE /api/ai/runs/{id}            cancel; 409 if already terminal
-GET    /api/listings/{name}/market  MarketSnapshot | 404 when there is none   (PR 8)
+POST /api/ai/runs {listing, draft_brief} -> 202 AiRunSummary | 409 {active_run} | 409 {reason}
+GET /api/ai/runs?listing= the listing's current or most recent run, or 404
+GET /api/ai/runs/{id} AiRunDetail: phase, steps, events so far
+GET /api/ai/runs/{id}/events text/event-stream; replays after Last-Event-ID
+DELETE /api/ai/runs/{id} cancel; 409 if already terminal
+GET /api/listings/{name}/market MarketSnapshot | 404 when there is none (PR 8)
 ```
 
 `POST` refuses with 409 `{reason}` using the same readiness rules as today,
@@ -109,7 +109,7 @@ ones apply and adds its own conditions.
      deviation with a reason.
   5. Attach the before/after screenshots to the PR.
 - **G6. API compared with the spec** (PRs with API or client code).
-  1. Go through [features/market-seo-20260924/spec.md](spec.md), the PRD (#4, #13, #68, #71),
+  1. Go through [features/market-seo-20260924/spec.md](spec.md), ADR-0003 and ADR-0044,
      and the [Run contract](#run-contract) section by section.
   2. Check each rule: parameters, filters, scoring, caching, retries,
      failures, messages and payload shapes.
@@ -128,14 +128,14 @@ The PRs are stacked: each branches from the one before it. The estimates
 include tests.
 
 ```
-PR 1  etsy market client ──► PR 2  research pipeline ──► PR 3  caches + snapshot + settings
+PR 1 etsy market client ──► PR 2 research pipeline ──► PR 3 caches + snapshot + settings
                                                              │
-PR 4  prompts + extraction ◄─────────────────────────────────┘
+PR 4 prompts + extraction ◄─────────────────────────────────┘
   │
   ▼
-PR 5  AI runs backend ──► PR 6  frontend runs + auto chain ──► PR 7  workflow indicator
+PR 5 AI runs backend ──► PR 6 frontend runs + auto chain ──► PR 7 workflow indicator
                                                                   │
-                          PR 9  e2e ◄── PR 8  top listings panel ◄┘
+                          PR 9 e2e ◄── PR 8 top listings panel ◄┘
 ```
 
 ---
@@ -436,7 +436,7 @@ endpoints stay in this PR, so the frontend keeps working until PR 6.
 
 ---
 
-### PR 6 — `feat(ui): drive AI Mode and the PRD 68 chain through AI runs`
+### PR 6 — `feat(ui): drive AI Mode and the ADR-0003 chain through AI runs`
 
 **About 2,400 lines.** It moves the browser onto runs and retires the old
 endpoints. The page head keeps its current text indicator, now fed by run

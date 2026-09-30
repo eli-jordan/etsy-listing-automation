@@ -1,7 +1,7 @@
-"""Builds a :class:`Plan` by walking the stage pipeline. A1/A2/A3.
+"""Builds a :class:`Plan` by walking the stage pipeline. ADR-0007, ADR-0008, ADR-0009.
 
 Only this module (and ``apply``) may compute a diff -- the CLI renderer and the
-UI's future JSON serialiser both consume the resulting :class:`Plan` /
+UI's JSON serialiser both consume the resulting :class:`Plan` /
 :class:`StagePlan` / ``Change`` objects without comparing state themselves. That
 is what keeps the CLI and UI enforcing identical rules.
 
@@ -41,7 +41,7 @@ class StageState:
     """One stage, and the three states its ``plan()`` compared.
 
     Types erased, like :data:`AnyStage` -- the pipeline mixes stages with
-    unrelated desired/applied/live types by design (A1), and only the stage
+    unrelated desired/applied/live types by design, and only the stage
     that produced them ever looks inside.
 
     ``desired`` is the exception worth naming: it is a ``Blocked`` rather than
@@ -84,16 +84,14 @@ def build_plan(
     were deleted or edited since the last apply, and a plan that doesn't look
     is a plan that reports "no changes" over a half-empty render cache. What
     ``local`` buys is that the read is cheap and local, so it stays out of
-    A3's live-fetch thread pool (not implemented yet -- no stage in Phase 0/1
-    does remote I/O), and that a difference is reported as work to redo rather
-    than as drift. Each stage's own ``plan()`` computes the diff; this
+    the unimplemented live-fetch thread pool. A local difference is reported
+    as work to redo rather than as drift. Each stage's own ``plan()`` computes the diff; this
     function only orchestrates the walk and assembles the result.
 
-    ``on_event`` (A33) emits ``EngineStageChecking`` before each stage's own
+    ``on_event`` emits ``EngineStageChecking`` before each stage's own
     walk and ``EngineStagePlanned`` after it, with the resolved ``StagePlan``
-    -- snapshot included -- so a caller watching a plan run (the UI's, in a
-    later PR) can show one stage resolving after another, in pipeline order,
-    rather than pretending A3's fan-out exists (A21 stands). ``None`` -- the
+    -- snapshot included -- so the UI can show one stage resolving after
+    another, in pipeline order. The planner remains sequential. ``None`` -- the
     default every existing caller gets -- is a plain walk with nothing
     watching; a listing wrapped wholesale in ``_all_blocked`` still reports
     each stage's block through the same two calls, since a blocked stage is
@@ -154,7 +152,7 @@ def _walk(
         # Refused: no live read, because there is nothing this run could do
         # with the answer, and a blocked remote stage should not spend a
         # request finding that out. No snapshot either -- there is no desired
-        # document a snapshot could be a fact about (A30).
+        # document a snapshot could be a fact about.
         state = StageState(
             stage=stage,
             desired=desired,
@@ -182,7 +180,7 @@ def _walk(
 
 
 def _snapshot(stage: AnyStage, desired: Any, live: Any) -> BaseModel | None:
-    """A stage's optional ``snapshot()`` (A30).
+    """A stage's optional ``snapshot()``.
 
     Not part of ``Stage``'s formal surface (see ``stage.py``'s note on why),
     so looked up rather than called directly: a stage without one --

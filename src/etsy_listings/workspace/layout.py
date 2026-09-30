@@ -1,4 +1,4 @@
-"""The names of everything in a workspace tree. A8.
+"""The names of everything in a workspace tree. ADR-0013.
 
 Only :class:`etsy_listings.workspace.workspace.Workspace` reads these -- the
 rest of the codebase asks it for a path rather than joining names itself, so
@@ -18,7 +18,7 @@ AUTH_DIR = ".auth"
 ETSY_TOKENS_FILE = "etsy-tokens.json"
 """Inside :data:`AUTH_DIR`. Separate from ``.env`` because its contents are
 written by this tool rather than pasted by the user, and rewritten on every
-refresh (PRD 49)."""
+refresh."""
 CACHE_DIR = ".cache"
 PROMPTS_DIR = "prompts"
 SEO_PROMPT_FILE = "seo.md"
@@ -30,7 +30,7 @@ PR3)."""
 BRIEF_PROMPT_FILE = "brief.md"
 """Inside :data:`PROMPTS_DIR`, and everything said about
 :data:`SEO_PROMPT_FILE` applies unchanged. This is the prompt that drafts a
-listing brief from its design image when a design is attached (PRD 68); a
+listing brief from its design image when a design is attached; a
 workspace without it can still use AI Mode by hand, so its absence disables
 only the automatic draft."""
 MARKET_QUERIES_PROMPT_FILE = "market-queries.md"
@@ -44,7 +44,7 @@ TEST_DESIGNS_DIR = "test-designs"
 """Calibration aids, kept apart from ``designs/``. These are throwaway targets
 you judge a template's geometry and lighting against, not artwork any listing
 ships -- mixing them into ``designs/`` would put non-products in the one
-directory that is meant to hold only products (A19)."""
+directory that is meant to hold only products."""
 MOCKUP_TEMPLATES_DIR = "mockup-templates"
 COMMON_MEDIA_DIR = "common-media"
 COMMON_COPY_DIR = "common-copy"
@@ -55,7 +55,7 @@ holds text a `description.ref` resolves to, not pictures a listing's `media:`
 uploads."""
 LISTINGS_DIR = "listings"
 LISTING_TEMPLATES_DIR = "listing-templates"
-"""A35: a listing's reusable production settings, one directory per listing
+"""ADR-0047: a listing's reusable production settings, one directory per listing
 template. A sibling of :data:`LISTINGS_DIR`, never inside it, which is what
 keeps a listing template out of listing discovery, ``plan --all`` and deploy
 without a filter anywhere (spec, *Product invariants* 1)."""
@@ -66,21 +66,21 @@ GENERATED_FILE = "generated.yaml"
 LOCK_FILE = "state.lock.json"
 
 # Per mockup template set, inside MOCKUP_TEMPLATES_DIR/<name>/, and per
-# listing template, inside LISTING_TEMPLATES_DIR/<name>/ (A35). One name for
+# listing template, inside LISTING_TEMPLATES_DIR/<name>/. One name for
 # both files: the directory says which kind of template it is.
 TEMPLATE_FILE = "template.yaml"
 DERIVED_DIR = "_derived"
 LISTING_TEMPLATE_ASSETS_DIR = "assets"
 """Inside LISTING_TEMPLATES_DIR/<name>/: the listing-local media Save as
-listing template copied, which its ``./assets/...`` refs name (A35). A35
+listing template copied, which its ``./assets/...`` refs name. ADR-0047
 calls it ``TEMPLATE_ASSETS_DIR``; qualified here because a bare "template"
 means a mockup template (spec, *Terms*)."""
 
-# Inside CACHE_DIR (gitignored, fully derivable -- PRD 22)
+# Inside CACHE_DIR (gitignored, fully derivable -- render-cache storage)
 CATALOG_DIR = "catalog"
 RENDERS_DIR = "renders"
 PREVIEWS_DIR = "previews"
-"""A32: full-size renders `plan` produces ahead of `apply`, content-addressed
+"""ADR-0040: full-size renders `plan` produces ahead of `apply`, content-addressed
 by `scene_hash` under `PREVIEWS_DIR/<listing>/<template>/`. Sibling to
 `RENDERS_DIR` rather than nested inside it -- a preview is not yet an applied
 render, and `Workspace.remove_listing` needs to be able to wipe one without
@@ -95,7 +95,7 @@ MARKET_SEARCH_DIR = "search"
 MARKET_STATS_DIR = "stats"
 MARKET_SNAPSHOTS_DIR = "snapshots"
 STAGING_DIR = "staging"
-"""Batch creation's staging sessions (A37, A46), one directory per session:
+"""Batch creation's staging sessions, one directory per session:
 :data:`STAGING_SESSION_FILE`, the frozen listing template's own files in
 :data:`FROZEN_TEMPLATE_DIR` and every upload in :data:`STAGING_UPLOADS_DIR`
 as ``<sha256>.png``. Cache, not workspace data: a session expires seven days
@@ -104,18 +104,18 @@ STAGING_SESSION_FILE = "session.json"
 STAGING_UPLOADS_DIR = "uploads"
 STAGING_ARCHIVE_FILE = "upload.zip"
 """A dropped ZIP while its PNGs are read out of it, and gone before the
-session is saved (spec, *Frozen staging*; A45)."""
+session is saved (spec, *Frozen staging*; ADR-0051)."""
 FROZEN_TEMPLATE_DIR = "template"
 """Inside a staging session's or a batch's directory: the listing
 template's owned files as they were when staging began, where the frozen
 document's ``./`` refs resolve (spec, *Frozen staging*)."""
 BATCHES_DIR = "batches"
-"""Confirmed batches (A37): ``<id>.json`` is the record, and ``<id>/`` beside
+"""Confirmed batches: ``<id>.json`` is the record, and ``<id>/`` beside
 it keeps the frozen listing template for Retry, plus the upload of any row
-whose creation failed, so the staging session can go (A46)."""
+whose creation failed, so the staging session can go."""
 PROPOSALS_DIR = "proposals"
-"""The latest AI SEO proposal per listing (A41), ``<listing>.json`` (A37, PRD
-4's layout): the exact name, like the market snapshot, so two listings that
+"""The latest AI SEO proposal per listing, ``<listing>.json`` (cache-record persistence,
+ADR-0003's layout): the exact name, like the market snapshot, so two listings that
 differ only in case -- possible on a case-sensitive filesystem -- never share
 a record. Moves and goes with the listing."""
 RUNS_DB = "runs.db"

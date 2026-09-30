@@ -491,7 +491,7 @@ describe("useAutosave before the listing exists", () => {
   });
 
   it("keeps an edit made while the create was in flight", async () => {
-    /* The window PRD 68's drafted brief resolves in: a design pick names the
+    /* The window ADR-0003's drafted brief resolves in: a design pick names the
        draft and starts the create, and the brief arrives before the server
        answers. Clearing `pending` wholesale on success dropped it every time,
        silently -- the listing appeared, the brief did not, and nothing said
@@ -652,7 +652,7 @@ describe("useAutosave renaming", () => {
 });
 
 describe("useAutosave with a transport that writes only complete documents", () => {
-  /* A listing template's valid-only save (A36; batch plan PR 6 item 3): a
+  /* A listing template's valid-only save (template completeness; batch plan PR 6 item 3): a
      `saved: false` answer leaves the file alone, the editor keeps the values
      and explains, and the next edit retries with the whole document. */
   function transport(save: AutosaveTransport["save"]): AutosaveTransport {

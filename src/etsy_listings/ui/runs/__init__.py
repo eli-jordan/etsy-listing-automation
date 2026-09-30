@@ -1,4 +1,4 @@
-"""Live plan/apply runs, in memory, for the UI server (A33).
+"""Live plan/apply runs, in memory, for the UI server.
 
 Distinct from the top-level ``runs/`` package the code layout reserves for
 Phase 6's SQLite recorder of *finished* runs -- this one holds runs that are

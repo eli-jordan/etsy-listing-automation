@@ -41,7 +41,7 @@ export function App() {
   } | null>(null);
   const [status, setStatus] = useState("");
   const [savedAt, setSavedAt] = useState<number | null>(null);
-  // Which test artwork the previews render with (A19). A way of looking at a
+  // Which test artwork the previews render with. A way of looking at a
   // template rather than a property of one, so it lives here and never enters
   // template.yaml -- and it deliberately survives switching template, since
   // "show me all of these against my real artwork" is the point of changing it.
@@ -235,7 +235,7 @@ export function App() {
         <div className="app__workspace">
           {/* 2a: an uncalibrated template replaces the workspace with a single
               choice, so nothing else can be touched yet. Kind decides the
-              whole shape of template.yaml (A11) -- every other control is
+              whole shape of template.yaml (ADR-0014) -- every other control is
               meaningless or wrong until it is answered. */}
           {templateName && !config ? (
             <KindPicker

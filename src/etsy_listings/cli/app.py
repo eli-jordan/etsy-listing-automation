@@ -1,7 +1,7 @@
 """Typer CLI. One module per command; this module wires them into one app.
 
 ``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth`` and ``unlock`` are
-built, per A10's strict phase order. ``catalog refresh`` and ``status``
+built, per strict phase order. ``catalog refresh`` and ``status``
 remain for Phase 6.
 """
 
@@ -91,7 +91,7 @@ def _root_callback() -> None:
     re-running against unchanged inputs makes no remote changes.
     """
     # A no-op callback keeps `plan` addressed as a subcommand (`etsy-listings
-    # plan ...`) -- Typer otherwise collapses a single-command app so its
+    # plan...`) -- Typer otherwise collapses a single-command app so its
     # command name is invisible, which would silently change the CLI surface
     # the moment a second command is added.
 
@@ -181,7 +181,7 @@ def _echo_failure(listing: str, error: UserFacingError) -> None:
 
     Every refusal the user can act on -- a config error, a design too small, a
     colour that does not exist, copy still carrying a sentinel -- reaches here
-    instead of ending the run: PRD 16 is why one bad listing cannot halt fifty
+    instead of ending the run: continue-on-error is why one bad listing cannot halt fifty
     good ones. The engine decides that; this only says it out loud.
     """
     typer.echo(f"{listing}: {error}", err=True)
@@ -283,7 +283,7 @@ def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at t
 
     `auth` and `setup` are the two commands that run *before* a workspace
     exists, so neither can discover one by walking up for its marker file --
-    they take the directory they are given (PRD 49).
+    they take the directory they are given.
     """
     return typer.Option(
         None,
@@ -505,9 +505,8 @@ def ui(
 ) -> None:
     """Open the calibrator in a native window (Phase 1).
 
-    The dashboard/setup wizard/run runner described in the PRD's ``## UI``
-    section land in Phase 5. Pass ``--browser`` to serve HTTP only, as this
-    command did before the pywebview experiment.
+    The UI includes the dashboard, calibrator, listing editor and run runner.
+    Pass ``--browser`` to serve HTTP only rather than opening the desktop shell.
     """
     from etsy_listings.ui.desktop import run_calibrator
 

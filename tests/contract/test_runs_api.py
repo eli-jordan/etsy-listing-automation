@@ -1,4 +1,4 @@
-"""The runs resource's HTTP surface (A33): payload shape, status codes, SSE
+"""The runs resource's HTTP surface: payload shape, status codes, SSE
 framing and ``openapi.json`` -- through a real ``TestClient``, never a fake
 transport, because the thing under test *is* the wire format.
 

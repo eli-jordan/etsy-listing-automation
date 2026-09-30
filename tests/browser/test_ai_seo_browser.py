@@ -3,7 +3,7 @@ PR8; driven through AI runs since the market-SEO plan's PR 6): the one thing
 no other layer covers -- that the React drawers, the readiness endpoint, an
 AI run (brief, market research, proposal) and its event stream,
 `ai/orchestrator.py`'s fallback and repair logic, the server-side proposal
-cache (A41), and (for one test) the real Printify desired-document builder
+cache, and (for one test) the real Printify desired-document builder
 all agree, end to end, in a real browser against a real running app.
 
 Every test drives ``create_app(seo_provider_factory=...,
@@ -335,7 +335,7 @@ def _open_details_tab(page: Page) -> None:
     """`DetailsTab` -- and with it `useAiSeoMode` -- only mounts once the
     seller has actually switched to the **Listing Details** tab; the editor
     opens on a different tab by default (`test_listings_browser.py`'s own
-    `.tabs .seg-opt` pattern)."""
+    `.tabs.seg-opt` pattern)."""
     page.locator(".tabs .seg-opt", has_text="Listing Details").click()
     page.locator("#details-title").wait_for(state="visible")
 
@@ -352,9 +352,9 @@ def _wait_for_apply_enabled(page: Page) -> None:
 
 # ===========================================================================
 # 1. Independent title / tags / lead acceptance, and item 3's no-mutation
-#    guarantee -- proven through the real browser+backend stack, which is a
-#    stronger guarantee than the unit/API layers PR3/PR5 already covered
-#    (implementation plan, PR8 item 3's own docstring reasoning).
+# guarantee -- proven through the real browser+backend stack, which is a
+# stronger guarantee than the unit/API layers PR3/PR5 already covered
+# (implementation plan, PR8 item 3's own docstring reasoning).
 # ===========================================================================
 
 
@@ -485,7 +485,7 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
         assert written["etsy"]["description"]["lead"] == ""  # rejected, untouched
 
         # -- Every drawer resolved: nothing is pending, but the server keeps
-        # the proposal with each section recorded as resolved (A41), and the
+        # the proposal with each section recorded as resolved, and the
         # AI Mode control is usable again --
         assert _cached_proposal(page)["resolution"] == {
             "title": "accepted",
@@ -498,8 +498,8 @@ def test_full_workflow_independent_title_tags_and_lead_acceptance(
 
 # ===========================================================================
 # 2. AI Mode stays visible but disabled until its prerequisites are ready.
-#    The brief test starts empty and fills it through the real editor; the
-#    other two exercise provider and prompt readiness.
+# The brief test starts empty and fills it through the real editor; the
+# other two exercise provider and prompt readiness.
 # ===========================================================================
 
 
@@ -657,9 +657,9 @@ def test_ai_mode_is_disabled_without_prompts_seo_md(
 
 # ===========================================================================
 # 3. Stale proposal: a submitted-input change keeps the proposal visible and
-#    its choices usable, with the drawer heading naming what changed, and
-#    regenerating preserves whatever was already accepted (UI doc §8; PRD 74;
-#    features/ai-seo-20260922/interactions.md §7).
+# its choices usable, with the drawer heading naming what changed, and
+# regenerating preserves whatever was already accepted (UI doc §8; ADR-0047;
+# features/ai-seo-20260922/interactions.md §7).
 # ===========================================================================
 
 
@@ -707,7 +707,7 @@ def test_a_changed_input_marks_the_proposal_out_of_date_and_it_stays_usable(
 
         # A submitted generation input changes: the Section field feeds
         # `etsy_category`. The server judges staleness against the saved
-        # listing (A41), so the heading changes once autosave lands.
+        # listing, so the heading changes once autosave lands.
         section = page.get_by_label("Section")
         section.fill("Trail Gear")
         page.locator("#details-title").click()  # blur Section, flush autosave
@@ -756,9 +756,9 @@ def test_a_changed_input_marks_the_proposal_out_of_date_and_it_stays_usable(
 
 # ===========================================================================
 # 4. Cancellation: the loading state exposes Cancel, which `DELETE`s the run;
-#    nothing is retained, no listing field changes, and the backend genuinely
-#    terminates the provider call rather than merely ignoring its result
-#    (features/market-seo-20260924/spec.md, *AI runs*).
+# nothing is retained, no listing field changes, and the backend genuinely
+# terminates the provider call rather than merely ignoring its result
+# (features/market-seo-20260924/spec.md, *AI runs*).
 # ===========================================================================
 
 
@@ -817,8 +817,8 @@ def test_cancel_during_generation_retains_no_proposal_and_frees_the_listing(
 
 # ===========================================================================
 # 5. Malformed provider output: one same-provider repair attempt, and "Try
-#    again" -- never a partial proposal -- once repair also fails
-#    (implementation plan, "Validation"; PR3/PR4's repair contract).
+# again" -- never a partial proposal -- once repair also fails
+# (implementation plan, "Validation"; PR3/PR4's repair contract).
 # ===========================================================================
 
 
@@ -866,8 +866,8 @@ def test_malformed_output_is_repaired_once_then_try_again_recovers(
 
 # ===========================================================================
 # 6. Provider fallback: a recognised-unavailable failure from the first
-#    provider falls through to the next one in the chain, within the same
-#    request (implementation plan, "Timeout and retries"; PR4 item 3).
+# provider falls through to the next one in the chain, within the same
+# request (implementation plan, "Timeout and retries"; PR4 item 3).
 # ===========================================================================
 
 
@@ -899,10 +899,10 @@ def test_codex_unavailable_falls_through_to_claude(
 
 
 # ===========================================================================
-# 7. Proposal persistence: the proposal is cached on the server (A41; spec,
-#    *Durable AI proposals*), so a reload restores the drawers still open and
-#    none the seller resolved, and the browser-local copies an older version
-#    kept are purged on load.
+# 7. Proposal persistence: the proposal is cached on the server (ADR-0049; spec,
+# *Durable AI proposals*), so a reload restores the drawers still open and
+# none the seller resolved, and the browser-local copies an older version
+# kept are purged on load.
 # ===========================================================================
 
 
@@ -968,12 +968,12 @@ def test_generate_then_reload_and_the_suggestions_are_still_waiting(
 
 # ===========================================================================
 # 8. Common-copy description composition, through a real deployment: PR6's
-#    shared composer (`Workspace.compose_description`) resolves a
-#    `common-copy/` reference identically wherever it is consumed
-#    (implementation plan, "Description and common-copy boundaries") -- here
-#    proved through the *actual* `printify_product` desired-document builder
-#    (`engine/stages/printify_product.py`, PR2), driven by a real browser
-#    click on Apply, not a direct call into that stage's own tests.
+# shared composer (`Workspace.compose_description`) resolves a
+# `common-copy/` reference identically wherever it is consumed
+# (implementation plan, "Description and common-copy boundaries") -- here
+# proved through the *actual* `printify_product` desired-document builder
+# (`engine/stages/printify_product.py`, PR2), driven by a real browser
+# click on Apply, not a direct call into that stage's own tests.
 #
 # AI Mode itself plays no part in this one; it is item 2's own last bullet,
 # grouped with the rest of AI Mode's browser coverage because it exercises
@@ -1127,7 +1127,7 @@ def test_common_copy_description_composes_into_the_printify_desired_document(
 
 
 # ===========================================================================
-# Drafting on design attach (PRD 68)
+# Drafting on design attach
 #
 # The one thing no other layer can show: that picking a design in the real
 # design strip, on a tab that is not Listing Details, ends with suggestion

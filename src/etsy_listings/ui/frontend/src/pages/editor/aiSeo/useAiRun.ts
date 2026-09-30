@@ -30,11 +30,11 @@ import type {
  * `listing.yaml` (the field fills in without being autosaved again), and the
  * `proposal`, which opens the drawers. Both are handed over only while the
  * run is still going. Once it has finished, the listing that loaded already
- * has the brief, and the cached proposal (A41) is the truth about which
+ * has the brief, and the cached proposal is the truth about which
  * drawers are open -- replaying the event would reopen ones the seller has
  * resolved since.
  *
- * ## The auto chain (PRD 68)
+ * ## The auto chain
  *
  * {@link AiRun.arm} is called from the design strip's pick while the brief is
  * empty. The chain then fires **once**, on the first successful save after
@@ -68,14 +68,14 @@ export interface AiRun {
   message: string | null;
   /** When the run started (ms since the epoch), from the server. */
   startedAt: number | null;
-  /** Who started the run: this editor, or the batch queue (A40). `null`
+  /** Who started the run: this editor, or the batch queue. `null`
    * until there is a run. */
   origin: AiRunSummary["origin"] | null;
   start: (options: { draftBrief: boolean; automatic?: boolean }) => void;
   cancel: () => void;
   /** Attaches to the listing's run if one is running that this editor is
    * not following yet -- a batch run whose turn came while the editor was
-   * open (A40). */
+   * open. */
   follow: () => void;
   /** Arms the auto chain; see the module docstring. */
   arm: () => void;
@@ -151,7 +151,7 @@ function applyEvent(view: View, event: AiRunEvent): View {
   }
 }
 
-/** The event is the cached proposal plus `type` and `seq` (A41). */
+/** The event is the cached proposal plus `type` and `seq`. */
 function proposalOf(event: Extract<AiRunEvent, { type: "proposal" }>): ListingProposal {
   const { type, seq, ...proposal } = event;
   void type;

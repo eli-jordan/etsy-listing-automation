@@ -1,5 +1,5 @@
 """``Run``, and the registry that owns which listings or workspace are held by
-which run (A33/A34, decision 7).
+which run (ADR-0041, ADR-0042, decision 7).
 
 A run is in-memory only -- "Runs are in memory only, so a restart forgets
 them, and history stays Phase 6's ``runs/`` SQLite recorder" -- so this module
@@ -90,7 +90,7 @@ class Run:
 
     A workspace apply keeps ``reviewed_run_id`` so a client can replay the
     completed review alongside the apply events; the registry deliberately
-    retains that source run until a later workspace run supersedes it (A34).
+    retains that source run until a later workspace run supersedes it.
 
     The :class:`threading.Condition` is what bridges the worker thread (which
     appends events) and the SSE route's async generator (which waits for
@@ -246,7 +246,7 @@ class RunRegistry:
 
     Listing-scoped runs use ``_holder``. Workspace runs use the separate
     ``_workspace_holder`` because a terminal workspace plan remains the
-    current review until its linked apply replaces it (A34).
+    current review until its linked apply replaces it.
     """
 
     _lock: threading.Lock = field(default_factory=threading.Lock)

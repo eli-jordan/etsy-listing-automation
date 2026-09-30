@@ -2,7 +2,7 @@
 editor renders at.
 
 The render *stage* reads each image once per run, so it has never needed a
-cache and does not get one -- :mod:`etsy_listings.render.io` stays the plain
+cache and does not get one --:mod:`etsy_listings.render.io` stays the plain
 I/O boundary it is documented as. The calibrator is the opposite shape: it
 re-renders the same photo, against the same test design, several times a
 second while a box is being dragged. Without this, every one of those frames
@@ -17,13 +17,13 @@ preview need in memory?"):
   photo or replacing a test design invalidates it with no manual clear, the
   same rule ``DerivedMapCache`` uses on disk.
 * :class:`ScaledBase` -- the downscale. The editor renders at
-  :data:`EDITOR_MAX_EDGE` rather than the photo's true size, which is what
+:data:`EDITOR_MAX_EDGE` rather than the photo's true size, which is what
   makes dragging feel live; ``scale`` is what the caller multiplies bounding
   boxes by to get from the template's true pixel space (which is what
   ``template.yaml`` stores, and what the editor's overlay works in) into the
   smaller canvas actually being rendered.
 
-Cached arrays are handed out **read-only**. Every render pass is pure (A7), so
+Cached arrays are handed out **read-only**. Every render pass is pure, so
 nothing should ever want to write to one; the flag makes a future accident a
 loud ``ValueError`` here rather than a preview that is subtly wrong for
 whoever asks next.
@@ -160,7 +160,7 @@ def _stamp(path: Path) -> int:
 class PreviewImages:
     """Everything the preview endpoint has to load, memoised across requests.
 
-    One instance is shared by the app (:data:`PREVIEW_IMAGES`); tests build
+    One instance is shared by the app ( :data:`PREVIEW_IMAGES`); tests build
     their own so the memo cannot leak between them.
     """
 

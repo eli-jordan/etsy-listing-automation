@@ -29,18 +29,18 @@ import { wordDiff } from "./wordDiff";
  * import:
  *
  * - "On Etsy now" prefers the live `url` (Etsy's own CDN image). A `ref`
- *   with no `url` yet (freshly uploaded, or a hand-added Shop Manager image
- *   this tool never uploaded) falls back to the local render the same way
- *   the spec says to.
+ * with no `url` yet (freshly uploaded, or a hand-added Shop Manager image
+ * this tool never uploaded) falls back to the local render the same way
+ * the spec says to.
  * - "After apply" for a scene the render stage will re-render shows a
- *   spinner until `previewsRendered` names it, then the preview endpoint's
- *   own file. A scene whose render is already current (`state: "cached"`)
- *   shows today's picture directly -- there is nothing new to wait for.
- *   Neither of those endpoints exists for a bare shared-media ref, which
- *   renders through `pictureFor` like the editor's own reel does.
- * - A video (PRD 72) is drawn "after" from its own file, as a muted clip the
- *   browser gives a poster frame, and "now" from Etsy's `thumbnail_url` --
- *   the one picture of it the API offers.
+ * spinner until `previewsRendered` names it, then the preview endpoint's
+ * own file. A scene whose render is already current (`state: "cached"`)
+ * shows today's picture directly -- there is nothing new to wait for.
+ * Neither of those endpoints exists for a bare shared-media ref, which
+ * renders through `pictureFor` like the editor's own reel does.
+ * - A video is drawn "after" from its own file, as a muted clip the
+ * browser gives a poster frame, and "now" from Etsy's `thumbnail_url` --
+ * the one picture of it the API offers.
  */
 
 export interface ListingMediaContext {

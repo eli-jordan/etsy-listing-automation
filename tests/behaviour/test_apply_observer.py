@@ -1,4 +1,4 @@
-"""A33: the engine reports one typed event stream around stage application."""
+"""ADR-0041: the engine reports one typed event stream around stage application."""
 
 from __future__ import annotations
 

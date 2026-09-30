@@ -24,17 +24,18 @@ the publishing questions were measured against it; the answers live in
 documents touch the same subject, that one is later and wins — including on
 this one's claim that *errors have one shape*, which a wider sample falsified.
 
-What this produced elsewhere: PRD decisions **37** (a garment change is refused,
-not automated), **38** (a design must be within 10% of the print area), **39**
-(what Printify's price integers are denominated in) and **40** (NOK goes to
+What this produced elsewhere: ADR-0017 (a garment change is refused,
+not automated), ADR-0018 (a design must be within 10% of the print area), ADR-0019
+(what Printify's price integers are denominated in) and ADR-0020 (NOK goes to
 Printify verbatim); and a correction to the implementation plan's
 *Draft-vs-live* section, which was wrong about `visible`.
 
 A **second round** of measurement, taken before Phase 2's implementation began
 rather than after its recon, settled what the first round had not had to ask:
 shop discovery, whether SKUs are ours, what the product list can be searched
-by, and whether a variant entry may be partial. It produced PRD **42**–**48**
-and amended **40**. Those sections are marked below.
+by, and whether a variant entry may be partial. The resulting rules now live
+in the setup guide and ADR-0021 through ADR-0023, with the price check in
+ADR-0020. Those sections are marked below.
 
 **One conclusion in this document has since been corrected.** The first version
 read Printify's `USD` badge as a currency assertion and recorded prices as USD
@@ -47,7 +48,7 @@ See *Prices, costs, and the currency question* below.
 
 | Step | Call | Notes |
 |---|---|---|
-| 1 | `GET /v1/shops.json` | The shop id. Returns `{id, title, sales_channel}` per shop and nothing else — no currency, no settings. Scoped to the token: it lists exactly the shops those credentials can reach, which is what makes shop discovery a question `setup` can answer rather than one the user has to look up (PRD 42). |
+| 1 | `GET /v1/shops.json` | The shop id. Returns `{id, title, sales_channel}` per shop and nothing else — no currency, no settings. Scoped to the token: it lists exactly the shops those credentials can reach, which is what makes shop discovery a question `setup` can answer rather than one the user has to look up. |
 | 2 | `GET /v1/catalog/blueprints/{bp}/print_providers/{pp}/variants.json` | Colour × size → integer variant id, plus per-variant print-area dimensions. Already implemented (`catalog/`). |
 | 3 | `POST /v1/uploads/images.json` | The print file. `{file_name, contents}` where `contents` is base64. |
 | 4 | `POST /v1/shops/{shop}/products.json` | The product. **200**, not 201. |
@@ -67,16 +68,16 @@ Printify.
 
 ```jsonc
 {
-  "title":              "string",          // required
-  "description":        "string",          // required
-  "blueprint_id":       706,               // required, integer, immutable after create
-  "print_provider_id":  29,                // required, integer, immutable after create
-  "variants": [                            // required
+  "title": "string", // required
+  "description": "string", // required
+  "blueprint_id": 706, // required, integer, immutable after create
+  "print_provider_id": 29, // required, integer, immutable after create
+  "variants": [ // required
     { "id": 73196, "price": 2499, "is_enabled": true }
   ],
-  "print_areas": [                         // required
+  "print_areas": [ // required
     {
-      "variant_ids": [73196],              // see "the coverage rule" below
+      "variant_ids": [73196], // see "the coverage rule" below
       "placeholders": [
         { "position": "front",
           "images": [ { "id": "<upload id>", "x": 0.5, "y": 0.5,
@@ -84,7 +85,7 @@ Printify.
       ]
     }
   ],
-  "visible": false                         // optional, and *does* work — see below
+  "visible": false // optional, and *does* work — see below
 }
 ```
 
@@ -157,7 +158,7 @@ so it must read the product before it can write it.
 ### Several print areas may carry different artwork
 
 Partitioning the variants across two `print_areas` entries, each with its own
-image, is accepted. This is the API support PRD 30's `on-light` / `on-dark`
+image, is accepted. This is the API support `on-light` / `on-dark`
 artwork needs, and it was an open question until now: dark-ink and light-ink
 files on one product, split by colour, work.
 
@@ -166,7 +167,7 @@ files on one product, split by colour, work.
 `PUT {"blueprint_id": 6}` answers **200** and changes nothing. The quietest
 failure in this API.
 
-**The tool refuses this rather than working around it** (PRD 37). The only
+**The tool refuses this rather than working around it** (ADR-0017). The only
 automated route Printify leaves is delete-and-recreate, which would take the
 Etsy listing behind the product with it — reviews, favourites, search history —
 to save retyping a short YAML file. So `plan` fails, names both values, and says
@@ -210,7 +211,7 @@ measuring because the API reference does not make it obvious and because a
 SKU we controlled would have been the natural key the product API otherwise
 lacks.
 
-**We leave it to Printify anyway** (PRD 47). The only thing our own SKU bought
+**We leave it to Printify anyway** (ADR-0021). The only thing our own SKU bought
 was the duplicate guard below, and that guard has a workable key without it;
 against that, a SKU is one more piece of state to keep in sync on a matrix
 where every entry already has to carry a price.
@@ -227,13 +228,13 @@ a `200` and silently ignored, every one returning the full set. So finding a
 product by anything other than its id is a walk of every product in the shop,
 matched client-side.
 
-That is what shapes the duplicate guard (PRD 48). `POST products.json` has no
+That is what shapes the duplicate guard (ADR-0023). `POST products.json` has no
 idempotency key and no conflict — an identical spec makes a second product —
 so the window is: create succeeds, the process dies before the lockfile is
 written, and the next run creates a duplicate. The lockfile's
 `printify_product_id` closes it in every case but that one. The walk closes
 that one too, matching on **title and description**, which are exactly the
-concrete seller-owned values PRD 44 requires. It runs only when a create is
+concrete seller-owned values ADR-0022 requires. It runs only when a create is
 already pending, so a normal no-op `plan` never pays for it.
 
 Each product record in the list carries `id`, `title`, `description`,
@@ -257,7 +258,7 @@ and became a product on a 4200×4800 print area without a warning. Nothing
 downstream catches a blurry print, which is what makes the PRD's design
 validation (17) a real gate rather than a courtesy.
 
-The gate is now concrete (PRD 38): **a design must be within 10% of the
+The gate is now concrete (ADR-0018): **a design must be within 10% of the
 garment profile's print area** — at least 90% of its width and 90% of its height. That
 replaces "~300 DPI for the print area", which said the same thing less
 checkably: Printify's placeholder dimensions already are the pixels it wants at
@@ -279,7 +280,7 @@ outline.
 
 `variants[].cost` is a **documented, per-variant manufacturing cost** on every
 product response — 1304 for a Comfort Colors 1717 in S/M/L. That is not a
-replacement for `newcmd/unofficial_variant_costs.py` (A17, PRD 35), because
+replacement for `newcmd/unofficial_variant_costs.py` (ADR-0016), because
 `new` needs the cost *before* a product exists, but it is an independent
 cross-check on one: the workspace's generated pricing plan quotes $17.53 cost +
 shipping for S, and $13.04 manufacturing + $4.49 shipping is exactly that. The
@@ -292,7 +293,7 @@ cost. No server-side margin guard exists; ours is the only one there will be.
 not the shop. `price` and `cost` are bare integers in minor units of
 *something*.
 
-The web app answers it (PRD 39). The product's Pricing tab carries a **`USD`**
+The web app answers it (ADR-0019). The product's Pricing tab carries a **`USD`**
 badge and reads back the same numbers as the API — retail `USD 29.99` against
 `price: 2999`, production cost `USD 13.04` against `cost: 1304` — and states
 under the variant table:
@@ -342,7 +343,7 @@ that as negative profit. NOK clears it by roughly 10× (299 against 13.04), so
 it will not fire in normal use, which is exactly why `plan` should assert it:
 the check that never fires is the one that catches a mis-scaled price.
 
-Recorded as PRD **39** (restated) and **40**. Risk 12 is closed — not decided
+Recorded as ADR-0019 and ADR-0020. Risk 12 is closed — not decided
 between its two options, but dissolved, since both assumed a conversion that
 does not happen. What remains is an observation, not a choice: publish one
 product at `29900` into the NOK shop and read back what Etsy stored. Until then
@@ -500,12 +501,12 @@ was asked, and why, is the useful part; go there for what came back.
    every listing is born carrying Printify's generated mockups — 8 of them on
    the probe product, against Etsy's 20-image cap — and the media stage has to
    **delete** them before uploading ours, not merely add. That changes what the
-   stage does, so it needs answering before the stage is written (PRD 41).
+   stage does, so it needs answering before the stage is written (ADR-0021).
 8. **How do per-colour variation images get set?** Etsy shows a thumbnail per
    colour swatch, and Printify's connector sets those natively because its
    mockups are linked to variants. Ours are not: the `colour-matrix` renders are
    plain listing images. Etsy's `updateVariationImages`
-   (`POST .../variation-images`) is the endpoint — it binds `image_id` to a
+   (`POST.../variation-images`) is the endpoint — it binds `image_id` to a
    `property_id`/`value_id` pair, overwrites *all* variation images on every
    call, and permits only one property. Nothing in the plan accounts for it.
    Cosmetic on day one, but it is the difference between a colour selector that
@@ -545,9 +546,9 @@ Concretely, from the above:
   enabled: {variant_id: price}, print_areas: {variant_id_group: placement}}` —
   the *enabled subset*, nothing more. `title`/`description` are in there because
   the API demands them at create and because they are the duplicate guard's
-  match key (PRD 44, 48), not because Printify owns them: the publish flags stay
+  match key (ADR-0022, ADR-0023), not because Printify owns them: the publish flags stay
   `{title: false, description: false}` so they never reach Etsy through Printify
-  (PRD 41).
+  (ADR-0021).
 - `read_live` reads the product and projects it the same way: enabled variants
   only, placement fields down to the five we set, `visible` kept as a tripwire.
   Live variants also carry `cost` and `is_available`, which the projection drops
@@ -560,28 +561,28 @@ Concretely, from the above:
   create and update bodies genuinely differ (the coverage rule), and update
   needs the live variant list first.
 - The create branch walks `products.json` first and refuses if a product already
-  matches on title and description (PRD 48). Only that branch pays for it.
+  matches on title and description (ADR-0023). Only that branch pays for it.
 - The lockfile needs `remote.printify_product_id` (a **string**),
   `remote.printify_upload_id` per artwork, and the enabled variant set **with
   prices** — because omission cannot disable and a disable cannot omit a price.
 - A changed `blueprint`/`print_provider` is a hard error at `plan` time, not an
-  update and not a recreate (PRD 37).
+  update and not a recreate (ADR-0017).
 - Design validation gets the concrete rule it was missing: pixel dimensions
-  within 10% of the print area on each axis (PRD 38). It belongs at `plan` time,
+  within 10% of the print area on each axis (ADR-0018). It belongs at `plan` time,
   before the upload, since nothing after it will object.
 - Prices stay `Money` all the way to the stage boundary and are serialised to
-  minor units of the shop currency, unconverted (PRD 39, 40). No FX anywhere in
+  minor units of the shop currency, unconverted (ADR-0019, ADR-0020). No FX anywhere in
   `apply`.
 - **The price-above-cost assertion belongs to the publish stage, not this one**
-  (PRD 40, amended). Printify enforces it at publish, and `variants[].cost` only
+  (ADR-0020, amended). Printify enforces it at publish, and `variants[].cost` only
   exists on a product that already exists — before the first create there is no
   documented source for it at all, and the undocumented one is walled off from
-  the engine by design (A17). Phase 3 gets the check for free from its own
+  the engine by design (ADR-0016). Phase 3 gets the check for free from its own
   `read_live`; asserting it here would mean either skipping it on the run that
-  matters or breaching A17 to reach cost data.
+  matters or breaching ADR-0016 to reach cost data.
 - Placement is fixed: centred, `scale: 1.0`, `angle: 0`, into
-  `garment_profile.placeholder` (PRD 45). PRD 38's ≥90% gate is what makes that the
+  `garment_profile.placeholder`. ADR-0018's ≥90% gate is what makes that the
   right constant rather than a default nobody chose.
 - A colour × size cell the catalog does not offer is reported and skipped, not
-  fatal (PRD 46) — a discontinued combination is Printify's fact, not the
+  fatal — a discontinued combination is Printify's fact, not the
   user's mistake.

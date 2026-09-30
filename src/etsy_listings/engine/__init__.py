@@ -1,10 +1,10 @@
 """What decides and what executes: the stage pipeline, the three-way diff and
-the lockfile. A1/A2/A3.
+the lockfile. ADR-0007, ADR-0008, ADR-0009.
 
 **Only this module computes a diff.** ``cli`` renders the resulting
-:class:`Plan` as text and ``ui`` will serialise the same object as JSON;
-neither compares state itself, which is what guarantees the PRD's "one set of
-rules regardless of route" (PRD 20). Nothing here formats output or talks HTTP.
+:class:`Plan` as text and ``ui`` serialises the same object as JSON;
+neither compares state itself, which is what guarantees the "one set of
+rules regardless of route". Nothing here formats output or talks HTTP.
 
 :func:`build_plan` walks :data:`STAGES` in order, asking each for its desired
 and live state, handing it its own lockfile subtree, and letting the stage's
@@ -12,12 +12,12 @@ own ``plan()`` compare the three. It returns a :class:`PlannedRun`: the
 :class:`Plan` that ``cli`` and ``ui`` render, plus the states it resolved
 getting there. :func:`execute` consumes that rather than asking every stage a
 second time -- strictly sequentially, because ``apply`` never parallelises
-writes (A3).
+writes.
 
 :func:`plan_listings` and :func:`apply_listings` are the layer above: a whole
-run over a set of listings, owning each lockfile's lifecycle and PRD 16's
-continue-on-error. Entry points call those and format the
-:class:`RunReport`; ``build_plan``/``execute`` remain available for a caller
+run over a set of listings, owning each lockfile's lifecycle and continue-on-error.
+Entry points call those and format the :class:`RunReport`;
+``build_plan``/``execute`` remain available for a caller
 holding one listing's lockfile itself.
 
 A stage that cannot run says so as a value, never an exception: a refusal is
@@ -37,10 +37,10 @@ stage until Phase 3, and each had already been written two different ways with
 only two stages in the pipeline -- which is what a wide protocol costs when
 the pipeline is about to double.
 
-Listing-level lifecycle (PRD 61–67) -- which pipeline to walk, the published
+Listing-level lifecycle -- which pipeline to walk, the published
 fact :attr:`~etsy_listings.engine.change.Plan.is_live` is filled from, wipe
 after retract, consume ``renew`` -- lives in ``lifecycle``, not split across
-``plan`` and ``run``. Render previews (A32) live in ``preview``, so the
+``plan`` and ``run``. Render previews live in ``preview``, so the
 executor and the listings GET do not each peek at a ``RenderSnapshot``.
 """
 
@@ -117,8 +117,8 @@ from etsy_listings.engine.status import (
 
 __all__ = [
     # Running the pipeline over a set of listings -- what `cli` calls, and
-    # what the UI will. Continue-on-error and the lockfile's lifecycle live
-    # behind these two (PRD 16), not in the entry point that drives them.
+    # what the UI calls. Continue-on-error and the lockfile's lifecycle live
+    # behind these two, not in the entry point that drives them.
     "plan_listings",
     "apply_listings",
     "preview_listing",
@@ -148,7 +148,7 @@ __all__ = [
     # What planning hands to applying: the plan, and the state behind it.
     "PlannedRun",
     "StageState",
-    # What a stage is (A1: one protocol, order encodes dependency).
+    # What a stage is (ADR-0007: one protocol, order encodes dependency).
     "Stage",
     "AnyStage",
     "StageApplyResult",

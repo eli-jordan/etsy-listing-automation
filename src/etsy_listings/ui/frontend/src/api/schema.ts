@@ -81,7 +81,7 @@ export interface paths {
      * List Batches
      * @description Recent batches (UI doc §2): every batch, and every staging session
      *     not confirmed yet, newest first, each with its derived status. Listing
-     *     them sweeps expired staging first (A46), so a row never offers a
+     *     them sweeps expired staging first, so a row never offers a
      *     session that has gone.
      */
     get: operations["list_batches_api_batches_get"];
@@ -196,7 +196,7 @@ export interface paths {
     /**
      * Retry Batch Row
      * @description Retry one row (UI doc §7): its creation, if that failed -- which
-     *     queues it once it exists -- else its AI, keeping the saved brief (A40).
+     *     queues it once it exists -- else its AI, keeping the saved brief.
      */
     post: operations["retry_batch_row_api_batches__batch_id__rows__row__retry_post"];
     delete?: never;
@@ -237,7 +237,7 @@ export interface paths {
      * Batch Row Thumbnail
      * @description A row that was never created has no listing design to show, so the
      *     summary shows the upload it was made from, kept beside the batch for
-     *     Retry (A46).
+     *     Retry.
      */
     get: operations["batch_row_thumbnail_api_batches__batch_id__rows__row__thumbnail_get"];
     put?: never;
@@ -585,7 +585,7 @@ export interface paths {
     get: operations["get_listing_template_api_listing_templates__name__get"];
     /**
      * Put Listing Template
-     * @description A36: write the whole document only if it is complete. A malformed or
+     * @description template completeness: write the whole document only if it is complete. A malformed or
      *     incomplete one leaves ``template.yaml`` byte-for-byte as it was, so the
      *     server always holds the last complete version; the listing-template editor
      *     (PR 6) keeps the unsaved values on its side.
@@ -615,13 +615,13 @@ export interface paths {
     /**
      * Rename Listing Template
      * @description Move a listing template, whole, to a new name -- double-click the
-     *     name, exactly as a listing (UI doc §3). Its name is its directory (A35),
+     *     name, exactly as a listing (UI doc §3). Its name is its directory,
      *     so the rename is a directory move and its ``./`` refs, which name that
      *     directory, need no rewrite. A taken name is a 409 and never suffixed
      *     (spec, *Storage and identity*).
      *
      *     Staging sessions and batch records made from it follow it by name --
-     *     the name, not the frozen copy they each keep (A37), which is untouched.
+     *     the name, not the frozen copy they each keep, which is untouched.
      *     That name is the card's *Used by N batches* and the staging page's
      *     *Using X*, the seller's link between a template and its batches. It
      *     is rewritten after the move, under each record's lock; a crash between
@@ -683,7 +683,7 @@ export interface paths {
     };
     /**
      * Listing Template Media Thumbnail
-     * @description A listing template's own file (its ``./`` root, A35) -- the pictures on
+     * @description A listing template's own file (its ``./`` root, ADR-0047) -- the pictures on
      *     its card. The same boundary as a listing's: the directory also holds
      *     ``template.yaml``.
      */
@@ -744,7 +744,7 @@ export interface paths {
     /**
      * List Listing Media Files
      * @description The *This listing* group: the listing's own files, each with the
-     *     ``./`` ref that names it (PRD 73). A ``404`` for a listing that does not
+     *     ``./`` ref that names it. A ``404`` for a listing that does not
      *     exist, rather than an empty group that would look like one with nothing
      *     in it.
      */
@@ -804,17 +804,18 @@ export interface paths {
     post?: never;
     /**
      * Delete Listing
-     * @description Delete from the listings table (PRD 63, 66).
+     * @description Delete from the listings table.
      *
      *     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
      *     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
      *
      *     Either way the market snapshot and the cached AI proposal go now
-     *     (features/market-seo-20260924/spec.md, *Cache*; A42): a listing pending deletion is one the
+     *     (features/market-seo-20260924/spec.md, *Cache*; rename and delete hooks): a listing pending
+     *     deletion is one the
      *     seller is done researching, and otherwise only the wipe after the remote
      *     deletion would remove them. An AI run still going is asked to stop
      *     first, so it does not write a proposal for a listing being deleted, and
-     *     the listing's batch rows are marked deleted and leave the queue (A42).
+     *     the listing's batch rows are marked deleted and leave the queue.
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
@@ -862,7 +863,7 @@ export interface paths {
      * Listing Batch
      * @description The batch that made ``name``, for the editor's row above the head
      *     (UI doc §8), or ``null``. A row names its listing exactly, as the rename
-     *     and delete hooks match it (A42); a deleted row is not the listing's.
+     *     and delete hooks match it; a deleted row is not the listing's.
      *     Should two batches both claim it, the newer wins.
      */
     get: operations["listing_batch_api_listings__name__batch_get"];
@@ -908,7 +909,7 @@ export interface paths {
     /**
      * Listing Preview
      * @description A ``multiple``/``single``-kind scene: no per-colour photo, so no
-     *     colour segment (PRD 28's rule, mirrored from ``render_file``).
+     *     colour segment (ADR-0014's rule, mirrored from ``render_file``).
      */
     get: operations["listing_preview_api_listings__name__previews__template__get"];
     put?: never;
@@ -948,7 +949,7 @@ export interface paths {
     };
     /**
      * Get Listing Proposal
-     * @description The listing's latest AI SEO proposal (A41; spec, *Durable AI
+     * @description The listing's latest AI SEO proposal (ADR-0049; spec, *Durable AI
      *     proposals*), with which sections were resolved and whether it has gone
      *     stale. Written by every AI run before it announces the proposal, so a
      *     reload, a server restart or a batch run all find it here.
@@ -1000,13 +1001,13 @@ export interface paths {
      * Rename Listing
      * @description Move a listing, whole, to a new name.
      *
-     *     A listing's identity is its directory name (PRD 60), so the rename is a
+     *     A listing's identity is its directory name, so the rename is a
      *     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
      *     generated copy travel together, and `.cache/renders/{name}/` moves with them
      *     because the render cache is keyed by listing name too -- left behind it
      *     would orphan a tree nothing deletes and cost a full re-render. The market
-     *     snapshot and the cached AI proposal (A42) move for the same reason, and
-     *     every batch row naming the listing follows it (A42), so the batch
+     *     snapshot and the cached AI proposal move for the same reason, and
+     *     every batch row naming the listing follows it, so the batch
      *     summary opens the new name.
      *
      *     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
@@ -1154,7 +1155,7 @@ export interface paths {
      * @description Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
      *     already spooled the parts to temporary files; `stage_pngs` streams each
      *     one on -- a PNG to its content-addressed upload, a ZIP to disk and then
-     *     entry by entry out of it -- with a running count (A45).
+     *     entry by entry out of it -- with a running count.
      */
     post: operations["create_staging_api_staging_post"];
     delete?: never;
@@ -1179,7 +1180,7 @@ export interface paths {
     post?: never;
     /**
      * Cancel Staging
-     * @description Cancel staging: the uploads go at once (A46). The seller's own files
+     * @description Cancel staging: the uploads go at once. The seller's own files
      *     were never touched.
      */
     delete: operations["cancel_staging_api_staging__session_id__delete"];
@@ -1188,7 +1189,7 @@ export interface paths {
     /**
      * Patch Staging
      * @description Edit the label, type names, remove rows. Every edit moves the
-     *     session's expiry to seven days from now (A46).
+     *     session's expiry to seven days from now.
      */
     patch: operations["patch_staging_api_staging__session_id__patch"];
     trace?: never;
@@ -1206,7 +1207,7 @@ export interface paths {
      * Confirm Staging
      * @description Create N listings (UI doc §6). Repeating it -- a double click, a retry
      *     after a dropped response -- finishes the same batch rather than making a
-     *     second one (A39).
+     *     second one.
      */
     post: operations["confirm_staging_api_staging__session_id__confirm_post"];
     delete?: never;
@@ -1262,7 +1263,7 @@ export interface paths {
      *
      *     Shown in the kind picker before committing, so a badly named file is seen
      *     while it is still cheap to think about. A row with ``clean: false`` is one
-     *     ``assign_kind`` will rename on disk (PRD 7a: the filename *is* the
+     *     ``assign_kind`` will rename on disk (ADR-0004: the filename *is* the
      *     slugified colour, and a directory whose filenames disagree with the
      *     colours they mean is the state that rule exists to prevent).
      */
@@ -1341,7 +1342,7 @@ export interface paths {
      *     starting ``template.yaml`` for that shape.
      *
      *     Refuses a template that already has a config. Kind decides the whole file
-     *     shape (A11), so changing it would discard whatever calibration was done in
+     *     shape, so changing it would discard whatever calibration was done in
      *     the old shape's fields -- and doing that silently, from a picker, is the
      *     kind of data loss nobody would think to look for.
      */
@@ -1362,11 +1363,11 @@ export interface paths {
     /**
      * Photo
      * @description The template's own photo, at its own resolution -- the bare-scene
-     *     counterpart of ``GET .../design-preview`` for a listing that has not
+     *     counterpart of ``GET.../design-preview`` for a listing that has not
      *     picked a design yet.
      *
      *     Same photo :func:`thumbnail` serves, same resolution rule
-     *     (:func:`_thumbnail_source`), just not downscaled to list size: the
+     *     ( :func:`_thumbnail_source`), just not downscaled to list size: the
      *     listing editor's Variants and Listing Images previews are a large hero
      *     stage, not a row of tiles, and serving them the 160px list thumbnail is
      *     why that stage used to look tiny for a listing with no design picked yet.
@@ -1445,10 +1446,10 @@ export interface paths {
      *     picture, since ``template_preview_photo`` deliberately answers "any one
      *     of them". Resolution goes through
      *     :meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,
-     *     which owns PRD 7a's filename convention and its trailing-segment
+     *     which owns ADR-0004's filename convention and its trailing-segment
      *     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
      *
-     *     How it is downscaled and served is :mod:`etsy_listings.ui.api.thumbnails`'
+     *     How it is downscaled and served is:mod:`etsy_listings.ui.api.thumbnails`'
      *     question -- the listings table asks the same one of a design.
      */
     get: operations["thumbnail_api_templates__name__thumbnail_get"];
@@ -1546,7 +1547,7 @@ export interface components {
     };
     /**
      * AiProposalEvent
-     * @description The validated proposal, once it is cached (A41): what ``GET
+     * @description The validated proposal, once it is cached: what ``GET
      *     /api/listings/{name}/proposal`` answers at that moment, plus ``type``
      *     and ``seq``.
      */
@@ -1942,8 +1943,8 @@ export interface components {
     /**
      * BelowCostRow
      * @description One variant priced under what Printify charges to make it -- the
-     *     row `plan()` already refuses over (:func:`_below_cost`), named for the
-     *     before/after review (A30) rather than left as a bare variant id.
+     *     row `plan()` already refuses over ( :func:`_below_cost`), named for the
+     *     before/after review rather than left as a bare variant id.
      */
     BelowCostRow: {
       /** Colour */
@@ -1989,7 +1990,7 @@ export interface components {
      *     alone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,
      *     neither on ``SinglePreviewRequest``) -- extra fields are ignored rather
      *     than forbidden, since a natural client pattern is spreading a whole
-     *     ``GET .../config`` response (which includes ``kind``) into the body.
+     *     ``GET.../config`` response (which includes ``kind``) into the body.
      */
     ColourMatrixPreviewRequest: {
       /** Bounding Box */
@@ -2025,7 +2026,7 @@ export interface components {
     /**
      * ColourMatrixTemplate
      * @description One photo per colour, same design position in all of them. Scene
-     *     images are ``{colour-slug}.png`` per colour (PRD 7a) -- there is no
+     *     images are ``{colour-slug}.png`` per colour -- there is no
      *     ``colours:`` list in the YAML, since the filenames present in the
      *     directory *are* the colour set.
      */
@@ -2062,7 +2063,7 @@ export interface components {
      * ColourReportRow
      * @description What one photo in a candidate ``colour-matrix`` set will be taken as.
      *
-     *     Reporting only: PRD 7a makes the filename the source of truth, so there is
+     *     Reporting only: ADR-0004 makes the filename the source of truth, so there is
      *     no manual mapping to offer and nothing here changes a name.
      */
     ColourReportRow: {
@@ -2077,7 +2078,7 @@ export interface components {
      * CommonCopySummary
      * @description One `common-copy/*.md` file, for the Description tab's body-source
      *     selector (AI SEO implementation plan, PR6). A common-copy ref is
-     *     workspace-relative, like every other ref (PRD 73), so it is exactly what
+     *     workspace-relative, like every other ref, so it is exactly what
      *     `description.ref` stores, already usable as-is.
      */
     CommonCopySummary: {
@@ -2146,7 +2147,7 @@ export interface components {
     };
     /**
      * DesignSummary
-     * @description One entry in the calibrator's test-design library (A19).
+     * @description One entry in the calibrator's test-design library.
      *
      *     ``bundled-grid``: the grid/ruler target, for spotting warp/displacement
      *     errors. ``bundled-on-light``/``bundled-on-dark``: deterministic
@@ -2168,7 +2169,7 @@ export interface components {
     };
     /**
      * DesiredImageSnapshot
-     * @description One manifest entry, as this run wants to send it (A30).
+     * @description One manifest entry, as this run wants to send it.
      */
     DesiredImageSnapshot: {
       /** File */
@@ -2180,7 +2181,7 @@ export interface components {
     };
     /**
      * DesiredVideoSnapshot
-     * @description One video as this run wants to place it (A30).
+     * @description One video as this run wants to place it.
      */
     DesiredVideoSnapshot: {
       /** After Images */
@@ -2192,7 +2193,7 @@ export interface components {
     };
     /**
      * DisplaceConfig
-     * @description PRD: implemented but off by default -- over-strong displacement looks
+     * @description Implemented but off by default -- over-strong displacement looks
      *     melted, so it's tuned per template in the calibrator's live preview.
      */
     DisplaceConfig: {
@@ -2265,7 +2266,7 @@ export interface components {
     };
     /**
      * EtsyListingFacts
-     * @description One side of the review (A30): the fields the mock shows unchanged
+     * @description One side of the review: the fields the mock shows unchanged
      *     context for, named rather than left as an id.
      */
     EtsyListingFacts: {
@@ -2320,7 +2321,7 @@ export interface components {
     };
     /**
      * EtsyMediaSnapshot
-     * @description Domain facts for the review (A30): both manifests in full, so the
+     * @description Domain facts for the review: both manifests in full, so the
      *     frontend can lay out thumbnails and compute *New* / moved / *Removed*
      *     badges from ``ref`` identity, guided by the per-rank ``MediaChange``s
      *     ``plan()`` already emits.
@@ -2366,7 +2367,7 @@ export interface components {
     };
     /**
      * EtsyVideosSnapshot
-     * @description Both sides for the deploy review (A30). The live side comes in Etsy's
+     * @description Both sides for the deploy review. The live side comes in Etsy's
      *     response order, which says nothing about the gallery (decision 9).
      */
     EtsyVideosSnapshot: {
@@ -2692,7 +2693,7 @@ export interface components {
     /**
      * ListingProposal
      * @description A listing's cached proposal as the editor and the batch summary read
-     *     it (A41): the record, and whether it still describes the saved listing.
+     *     it: the record, and whether it still describes the saved listing.
      *     ``stale`` is computed from the saved listing on every read, never
      *     stored.
      */
@@ -2835,7 +2836,7 @@ export interface components {
     };
     /**
      * ListingTemplateSaveResult
-     * @description What a create or ``PUT`` did (A36). Refusing an incomplete document is
+     * @description What a create or ``PUT`` did. Refusing an incomplete document is
      *     a 200 with ``saved: false``, as a listing's malformed PATCH is, because the
      *     editor shows the issues and keeps going; nothing was written.
      */
@@ -2888,7 +2889,7 @@ export interface components {
     /**
      * LiveImageSnapshot
      * @description One image Etsy actually has, projected back to a ref where possible
-     *     (A30) -- ``ref`` is ``None`` for an image this tool never uploaded.
+     *     -- ``ref`` is ``None`` for an image this tool never uploaded.
      */
     LiveImageSnapshot: {
       /** Image Id */
@@ -2902,7 +2903,7 @@ export interface components {
     };
     /**
      * LiveVideoSnapshot
-     * @description One video Etsy has on the listing (A30); ``ref`` is ``None`` for one
+     * @description One video Etsy has on the listing; ``ref`` is ``None`` for one
      *     this tool never uploaded.
      */
     LiveVideoSnapshot: {
@@ -2961,7 +2962,7 @@ export interface components {
     };
     /**
      * MediaFileSummary
-     * @description One file a listing can put in `media:` as a file ref (PRD 72, 73): a
+     * @description One file a listing can put in `media:` as a file ref: a
      *     shared one under ``common-media/``, or one of the listing's own. A bare
      *     file uploaded as-is, rather than a rendered mockup.
      */
@@ -3043,7 +3044,7 @@ export interface components {
      * PhaseEvent
      * @description The run (or one of the two run kinds) moved to a new phase. Always the
      *     first event of a run and always its last, whichever phase that turns out
-     *     to be (A33, decision 7).
+     *     to be (ADR-0041, decision 7).
      */
     PhaseEvent: {
       /** Id */
@@ -3246,7 +3247,7 @@ export interface components {
     };
     /**
      * ProductSnapshot
-     * @description Domain facts for the before/after review (A30): every variant on each
+     * @description Domain facts for the before/after review: every variant on each
      *     side, unchanged ones included -- a ``Plan`` carries only what changed, and
      *     the comparison needs the whole matrix to draw a price table from.
      */
@@ -3279,7 +3280,7 @@ export interface components {
     };
     /**
      * ProductVariantSnapshot
-     * @description One cell of the variant matrix, named rather than left as an id (A30).
+     * @description One cell of the variant matrix, named rather than left as an id.
      */
     ProductVariantSnapshot: {
       /** Colour */
@@ -3390,7 +3391,7 @@ export interface components {
     };
     /**
      * PublishSnapshot
-     * @description Domain facts for the review (A30): only the rows the stage's own
+     * @description Domain facts for the review: only the rows the stage's own
      *     ``plan()`` would refuse over, so the price table's red marker is never a
      *     second copy of the below-cost rule.
      */
@@ -3429,7 +3430,7 @@ export interface components {
     };
     /**
      * RenderSceneSnapshot
-     * @description One scene's domain facts for the before/after review (A30, A32).
+     * @description One scene's domain facts for the before/after review.
      *
      *     ``state`` answers "would this scene's rendered output change, and is it
      *     even there" -- ``cached`` when neither is true, ``stale`` when the scene's
@@ -3458,7 +3459,7 @@ export interface components {
     /**
      * RenderSnapshot
      * @description Every referenced scene, in media order -- what the before/after review
-     *     needs and a ``Plan`` (changes only) cannot supply (A30).
+     *     needs and a ``Plan`` (changes only) cannot supply.
      */
     RenderSnapshot: {
       /** Scenes */
@@ -3887,7 +3888,7 @@ export interface components {
     };
     /**
      * StagingRefusal
-     * @description A ``422``'s ``detail`` for an upload refused before staging (A45).
+     * @description A ``422``'s ``detail`` for an upload refused before staging.
      */
     StagingRefusal: {
       /** Message */
@@ -3985,11 +3986,11 @@ export interface components {
      *     trailing-segment fallback for a vendor pack delivered as
      *     ``{template}-{colour}.png``. The listings editor shows it under its preview
      *     so the user knows which file to go and edit, and it used to *derive* that
-     *     caption from PRD 7a's convention in TypeScript, which named a file that was
+     *     caption from ADR-0004's convention in TypeScript, which named a file that was
      *     not there for exactly the pack the fallback exists for.
      *
      *     ``colour`` is ``None`` for a ``multiple``/``single`` template's fixed
-     *     ``scene.png``: there is no per-colour name to derive one from (PRD 28).
+     *     ``scene.png``: there is no per-colour name to derive one from.
      */
     TemplatePhoto: {
       /** Colour */

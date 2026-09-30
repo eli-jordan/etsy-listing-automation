@@ -1,4 +1,4 @@
-"""Staging one ZIP (batch plan PR 7; spec *Accepted input*; A45).
+"""Staging one ZIP (batch plan PR 7; spec *Accepted input*; ADR-0051).
 
 Every archive is built here, entry by entry, with ``zipfile`` and hand-set
 ``ZipInfo`` fields -- traversal, absolute names, symlink mode bits, the
@@ -250,7 +250,7 @@ UNSAFE_REMEDY = (
 
 class TestUnsafeArchives:
     """Each archive holds one good PNG first, so a refusal is seen to leave
-    even that one behind (A45: any refusal leaves nothing on disk)."""
+    even that one behind (ADR-0051: any refusal leaves nothing on disk)."""
 
     @pytest.mark.parametrize(
         ("entry", "problem"),

@@ -1,4 +1,4 @@
-"""`BatchStore`'s listing hooks and review flag (A42; spec *Review
+"""`BatchStore`'s listing hooks and review flag (rename and delete hooks; spec *Review
 workflow*; batch plan PR 5): a row follows its listing's current name, is
 marked deleted with it, and is marked reviewed only while there is a
 listing to review.
@@ -217,7 +217,7 @@ def test_a_batch_read_while_the_queue_replaces_it_is_still_there(
     store: BatchStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Windows refuses to open a record mid-replace; the summary poll that
-    lands there waits the save out rather than finding no batch (A37)."""
+    lands there waits the save out rather than finding no batch."""
     _save(store, "b1", _row("cedar-trail"))
     refuse_reads(monkeypatch, 3)
 

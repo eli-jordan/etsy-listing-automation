@@ -39,7 +39,7 @@ because "take-a-hike" appearing in a test is usually incidental -- it means
 
 APPLIED_AT = "2026-09-08T00:00:00Z"
 """A fixed stamp, not ``datetime.now()``. ``applied_at`` never enters a hash
-(A2), so a clock here buys nothing and costs determinism -- two lockfiles built
+, so a clock here buys nothing and costs determinism -- two lockfiles built
 in the same test would otherwise differ in a field that is supposed not to
 matter, which is exactly the thing the hashing rules are hard to reason about."""
 
@@ -168,7 +168,7 @@ def set_shop_id(root: Path, shop_id: int) -> Path:
     path = root / "shop.yaml"
     document = _read_yaml(path)
     # Merged, not replaced: the fixture's `preferred_print_provider` lives in
-    # this block too (PRD 51), and a helper that quietly dropped it would
+    # this block too, and a helper that quietly dropped it would
     # change what the product stage offers.
     document["printify"] = {**(document.get("printify") or {}), "shop_id": shop_id}
     _write_yaml(path, document)

@@ -1,5 +1,5 @@
-"""A44: a listing's cached proposal goes once it is fully applied (spec,
-*Deployment interaction*; PRD 74).
+"""ADR-0050: a listing's cached proposal goes once it is fully applied (spec,
+*Deployment interaction*; ADR-0047).
 
 *Full success* is three things at once: the listing's outcome is ``ok``, no
 stage of its plan was blocked, and its lockfile carries no ``incomplete``
@@ -47,7 +47,7 @@ def test_a_full_apply_removes_the_listing_s_proposal(workspace_root: Path) -> No
 def test_cli_apply_removes_the_proposal_after_a_full_success(
     workspace_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The CLI does nothing about AI work (A43) but gets the cleanup all the
+    """The CLI does nothing about AI work but gets the cleanup all the
     same, because the cleanup is the engine's: ``cli/app.py`` has no
     proposal code, only the context it hands ``apply_listings``."""
     ctx = a_deployable_context(workspace_root)
@@ -128,7 +128,7 @@ def test_a_failed_apply_keeps_the_proposal(
 def test_an_ok_apply_that_leaves_the_incomplete_marker_keeps_the_proposal(
     workspace_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A failed apply marks the lockfile incomplete (A29). A retry that
+    """A failed apply marks the lockfile incomplete. A retry that
     returns ``ok`` without walking every stage -- stopped at a stage
     boundary, as a server shutdown stops one -- leaves the marker set."""
     ctx = a_deployable_context(workspace_root)
@@ -160,7 +160,7 @@ def test_an_ok_apply_that_leaves_the_incomplete_marker_keeps_the_proposal(
 def test_a_stop_after_the_last_runnable_stage_still_removes_the_proposal(
     workspace_root: Path,
 ) -> None:
-    """A stop observed at a trailing no-op skipped no deploy work, so A44's
+    """A stop observed at a trailing no-op skipped no deploy work, so ADR-0050's
     three full-success conditions still remove the deployed proposal."""
     ctx = a_deployable_context(workspace_root)
     first = apply_listings(ctx, [LISTING], real_stages())
@@ -193,7 +193,7 @@ def test_a_stop_after_the_last_runnable_stage_still_removes_the_proposal(
 
 
 def test_full_success_needs_the_marker_clear_whatever_else_holds(workspace_root: Path) -> None:
-    """The marker is A44's third condition on its own: the same ``ok``,
+    """The marker is ADR-0050's third condition on its own: the same ``ok``,
     unblocked outcome is a full success with a clean lockfile and is not
     with a marked one."""
     ctx = a_deployable_context(workspace_root)

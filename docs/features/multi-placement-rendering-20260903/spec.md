@@ -53,7 +53,7 @@ bounding_box:
 shade: { enabled: true, opacity: 0.6, blend: soft-light }
 ```
 
-Scene images: `{colour-slug}.png` per colour (PRD 7a) — no `colours:` list in
+Scene images: `{colour-slug}.png` per colour (ADR-0004) — no `colours:` list in
 the YAML, since the filenames present in the directory *are* the colour set.
 
 ### `kind: multiple` — several garments in one photo
@@ -65,7 +65,7 @@ colour_coverage: subset
 shade: { enabled: true, opacity: 0.6, blend: soft-light }
 placements:
   - { colour: black, bounding_box: [...] }
-  - { colour: moss,  bounding_box: [...], artwork: on-dark }
+  - { colour: moss, bounding_box: [...], artwork: on-dark }
 ```
 
 `artwork:` on one placement is a rare, explicit override — that photo shows
@@ -122,7 +122,7 @@ design:
   on-light: designs/take-a-hike-dark-ink.png
   on-dark: designs/take-a-hike-light-ink.png
 artwork:
-  moss: on-dark   # optional per-colour override
+  moss: on-dark # optional per-colour override
 ```
 
 **Resolution order** (`engine/stages/placement.py::DesignPlacement.artwork_for`),
@@ -154,7 +154,7 @@ registry; a template lives purely in `mockup-templates/{name}/`, and any
 listing may reference any of them. The one template name it does carry is
 `preview_template` — a single `colour-matrix` used by the editor to judge
 colours, never written into `media:` and never what decides which scenes
-render (PRD 29, A13).
+render (ADR-0015).
 
 **Listing media always references a template explicitly** — there is no bare
 `mockup: <colour>` shorthand:
@@ -162,9 +162,9 @@ render (PRD 29, A13).
 ```python
 class TemplateMediaEntry(BaseModel):
     template: str
-    colour: str | None = None   # required for colour-matrix kind, must be absent otherwise
+    colour: str | None = None # required for colour-matrix kind, must be absent otherwise
 
-MediaEntry = TemplateMediaEntry | str   # str = a shared asset path
+MediaEntry = TemplateMediaEntry | str # str = a shared asset path
 ```
 
 ```yaml

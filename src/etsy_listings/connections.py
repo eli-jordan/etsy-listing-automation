@@ -13,7 +13,7 @@ once:
 ``plan`` constructs a catalog client it may never call, and a workspace that
 has only ever rendered mockups has no ``.env`` at all. Demanding a token at
 construction time would break every one of them, so Printify's token arrives
-through a callable and Etsy's bearer through the store (A22, A23).
+through a callable and Etsy's bearer through the store.
 
 **Absent is not broken.** :func:`etsy_listing_client` answers ``None`` for a
 workspace that has never run `auth etsy`, because that is an ordinary state of
@@ -71,7 +71,7 @@ def printify_transport(root: Path) -> Transport:
 
     Shared by both clients because it is one host and one token: they differ
     in what they are allowed to *ask*, which is a matter of which protocol the
-    caller holds, not of which socket the bytes leave through (A22).
+    caller holds, not of which socket the bytes leave through.
     """
 
     def token() -> str:
@@ -232,11 +232,11 @@ def run_context(
     The optional clients are what let one context serve every phase: a
     workspace with no Printify shop and no Etsy sign-in still plans and still
     renders, and the stages that need a client report themselves blocked
-    rather than the run failing to start (A20, A26).
+    rather than the run failing to start.
 
     ``credentials_root`` is the E2E seam for a disposable data workspace that
     borrows a configured workspace's secrets. Only credentials come from it;
-    the catalog cache remains under ``workspace`` (A8).
+    the catalog cache remains under ``workspace``.
     """
     sink = {"on_event": on_event} if on_event is not None else {}
     root = credentials_root or workspace.root

@@ -2,7 +2,7 @@ import { api } from "./client";
 import type { components } from "./schema";
 
 /**
- * Staging and batches (batch plan PR 2, 4 and 5; A37-A40, A42, A45): typed
+ * Staging and batches (batch plan PR 2, 4 and 5; ADR-0048, rename and delete hooks, ADR-0051): typed
  * wrappers over `/api/staging` and `/api/batches`, in
  * `api/listingTemplates.ts`'s shape.
  */
@@ -94,7 +94,7 @@ export async function getBatch(id: string): Promise<BatchDetail> {
   return data;
 }
 
-/** Retry one row: its creation if that failed, else its AI (A40). */
+/** Retry one row: its creation if that failed, else its AI. */
 export async function retryBatchRow(id: string, row: string): Promise<BatchDetail> {
   const { data, error } = await api.POST("/api/batches/{batch_id}/rows/{row}/retry", {
     params: { path: { batch_id: id, row } },
@@ -109,7 +109,7 @@ const CONTROLS = {
   retry: "/api/batches/{batch_id}/retry",
 } as const;
 
-/** The batch's queue controls (A40): Cancel batch, Resume, and Retry N
+/** The batch's queue controls: Cancel batch, Resume, and Retry N
  * failed. Each answers the batch as it is afterwards. */
 export async function controlBatch(
   id: string,

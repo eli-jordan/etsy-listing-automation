@@ -1,10 +1,10 @@
-"""Pure render passes: warp -> displace -> shade -> export/export_many. A7.
+"""Pure render passes: warp -> displace -> shade -> export/export_many. ADR-0012.
 
 No I/O, no globals, no clock. Every array is 8-bit sRGB; RGBA where alpha
 matters (the design and its warped/displaced/shaded print layer), RGB for the
 opaque mockup base photo. Every ``cv2`` call passes explicit ``interpolation``
 and ``borderMode`` -- relying on defaults makes output depend on the library
-version (CLAUDE.md invariant; PRD risk 9), so ``tests/unit/test_no_bare_cv2.py``
+version (docs/architecture.md, Rendering invariants), so ``tests/unit/test_no_bare_cv2.py``
 greps this module for the ones that aren't.
 """
 
@@ -89,7 +89,7 @@ def _soft_light(base: FloatMap, light: FloatMap) -> FloatMap:
 def shade(img: RGBA, cfg: ShadeConfig, luminance: FloatMap) -> RGBA:
     """Blend the mockup's own lighting/fold shadows over the design so the
     print picks up the garment's shape. ``multiply`` crushes dark garments;
-    ``soft-light``/``grey-pivot`` exist for those (PRD)."""
+    ``soft-light``/``grey-pivot`` exist for those ."""
     if not cfg.enabled or cfg.opacity <= 0:
         return img
 

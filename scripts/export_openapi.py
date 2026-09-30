@@ -1,11 +1,10 @@
 """Exports the FastAPI app's OpenAPI schema to docs/openapi.json, which
-openapi-typescript then turns into the frontend's typed client (A5: "TS
+openapi-typescript then turns into the frontend's typed client (ADR-0011: "TS
 client generated from the OpenAPI schema -- never hand-written").
 
 Run with ``uv run python scripts/export_openapi.py`` whenever an endpoint's
-shape changes, then ``npm run gen:api`` in ui/frontend/. CI should run both
-and fail on a diff (A5 risk 3) -- not yet wired since there's no CI in this
-repo yet.
+shape changes, then ``npm run gen:api`` in ui/frontend/. CI checks frontend
+types but does not currently regenerate this contract to detect a stale export.
 """
 
 from __future__ import annotations

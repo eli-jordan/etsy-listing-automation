@@ -1,14 +1,14 @@
 """Listing templates: a listing's reusable production settings, saved as their
-own workspace resource (A35, A36; spec *Listing templates*).
+own workspace resource (ADR-0047, template completeness; spec *Listing templates*).
 
 The model is `config.ListingTemplate` and the files are `Workspace`'s
 (``listing_template_*``). This package is what happens between them: turning
 a listing -- or another listing template -- into a draft
-(:func:`from_listing`, :func:`from_template`), judging it complete, and
-writing it (:func:`save`), which is the only step that touches the disk.
+( :func:`from_listing`, :func:`from_template`), judging it complete, and
+writing it ( :func:`save`), which is the only step that touches the disk.
 
 Deliberately withheld: instantiating a template into listings. That is
-`batches`' (A39), which freezes a template before it creates anything and
+`batches`', which freezes a template before it creates anything and
 asks :func:`owned_refs` which files go with it.
 """
 
@@ -32,7 +32,7 @@ __all__ = [
     "from_listing",
     "from_template",
     "owned_refs",
-    # Completeness (A36), for a draft and for a named template.
+    # Completeness, for a draft and for a named template.
     "draft_issues",
     "template_issues",
     # The one write, and its two refusals.

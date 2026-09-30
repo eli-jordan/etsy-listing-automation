@@ -1,8 +1,8 @@
-"""The `etsy_listing` stage, against `FakeEtsyListingClient` (A4).
+"""The `etsy_listing` stage, against `FakeEtsyListingClient`.
 
 Isolated from `publish`: the Etsy listing id this stage needs is seeded
 straight into the lockfile's `remote` block rather than produced by running
-`publish` first, since A26's within-run threading is `publish`'s own test's
+`publish` first, since ADR-0034's within-run threading is `publish`'s own test's
 job -- what belongs here is this stage's own resolution, comparison and PATCH.
 """
 
@@ -286,7 +286,7 @@ def test_a_policy_accepting_neither_describes_as_none() -> None:
 
 def test_the_drift_names_a_live_section_when_the_catalog_knows_it(root: Path) -> None:
     """Mirrors the shipping-profile case, for `shop_section_id` -- the third
-    id whose live side only the catalog can name (A30)."""
+    id whose live side only the catalog can name."""
     edit_listing(
         root,
         etsy={
@@ -314,7 +314,7 @@ def test_the_drift_names_a_live_section_when_the_catalog_knows_it(root: Path) ->
 
 
 def test_the_drift_names_the_last_applied_profile(root: Path, etsy) -> None:
-    """A30: the last-applied side always has a name -- this stage stores it
+    """ADR-0038: the last-applied side always has a name -- this stage stores it
     beside the id it resolved -- with no catalog lookup needed for it."""
     ctx = _ctx(root, etsy)
     lock = _apply(ctx, _lock_with_listing_id())
@@ -327,7 +327,7 @@ def test_the_drift_names_the_last_applied_profile(root: Path, etsy) -> None:
 
 def test_the_drift_names_the_live_profile_when_the_catalog_knows_it(root: Path) -> None:
     """The live side has only an id -- naming it needs the shop catalog this
-    run already fetched resolving the *desired* shipping profile (A30)."""
+    run already fetched resolving the *desired* shipping profile."""
     other_profile = ShippingProfile(shipping_profile_id=999, title="US origin")
     etsy = FakeEtsyListingClient(
         shipping_profiles=[SHIPPING_PROFILE, other_profile], policies=[RETURN_POLICY]

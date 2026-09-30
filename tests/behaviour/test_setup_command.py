@@ -253,7 +253,7 @@ def test_a_blank_etsy_shop_id_is_omitted_rather_than_invented(tmp_path: Path, sc
 
 def test_a_connected_printify_shop_finds_the_etsy_shop_by_name(tmp_path: Path, scripted) -> None:
     """Printify names a connected shop after the Etsy shop it publishes to,
-    so the selection the user just made *is* the answer (PRD 51)."""
+    so the selection the user just made *is* the answer."""
     scripted(HAPPY_PATH)
     etsy = FakeEtsyShopClient([ETSY_SHOP])
 
@@ -304,7 +304,7 @@ def test_a_near_miss_on_the_name_is_not_taken_as_the_shop(tmp_path: Path, script
 
 def test_a_typed_shop_name_is_resolved_to_its_id(tmp_path: Path, scripted) -> None:
     """The last resort, and still not a number: the user names the shop, the
-    search turns it into an id (PRD 51)."""
+    search turns it into an id."""
     scripted({**HAPPY_PATH, "Etsy shop name": "TakeAHikeTees"})
     etsy = FakeEtsyShopClient([ETSY_SHOP])
 
@@ -334,7 +334,7 @@ def test_a_name_etsy_has_never_heard_of_leaves_the_ids_unset(
 
 def test_the_currency_comes_from_the_etsy_shop(tmp_path: Path, scripted) -> None:
     """A workspace configured in a currency the shop does not sell in is a
-    disagreement nothing surfaces until a price lands wrong (PRD 51)."""
+    disagreement nothing surfaces until a price lands wrong."""
     script = scripted({**HAPPY_PATH, "currency": "USD"})
     etsy = FakeEtsyShopClient(owned=EtsyShop(shop_id=1, shop_name="A shop", currency_code="USD"))
 
@@ -351,7 +351,7 @@ def test_the_currency_comes_from_the_etsy_shop(tmp_path: Path, scripted) -> None
 def test_a_shop_with_exactly_one_return_policy_needs_no_question(
     tmp_path: Path, scripted, capsys
 ) -> None:
-    """PRD 59's zero-config path: the shop's only policy is used without
+    """zero-config path: the shop's only policy is used without
     asking, and `shop.yaml` need not name it at all -- the stages resolve it
     live the same way."""
     scripted(HAPPY_PATH)

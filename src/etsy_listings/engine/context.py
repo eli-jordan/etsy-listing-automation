@@ -2,7 +2,7 @@
 
 Phase 0/1 only carry a workspace and a catalog client. Later phases (2: Printify,
 3: Etsy, 6: rate limiting) extend this with the shop-scoped clients and the
-shared token-bucket limiter from A3 -- added as new optional fields so existing
+shared token-bucket limiter from ADR-0009 -- added as new optional fields so existing
 stages and tests are unaffected.
 """
 

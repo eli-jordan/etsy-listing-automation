@@ -1,4 +1,4 @@
-"""The `printify_product` stage, against in-memory clients (A4).
+"""The `printify_product` stage, against in-memory clients.
 
 What is asserted is behaviour Printify actually has: the product comes back
 carrying variants nobody asked for, an update merges rather than replaces, and
@@ -158,7 +158,7 @@ agree with a broken conversion."""
 
 
 def test_prices_reach_printify_as_minor_units_of_the_shop_currency(root, catalog, printify) -> None:
-    """PRD 39/40: NOK goes to Printify verbatim. `349 NOK` is `34900`, not a
+    """ADR-0019, ADR-0020: NOK goes to Printify verbatim. `349 NOK` is `34900`, not a
     converted USD figure -- no rate reaches `apply`, and none reaches a hash.
 
     Asserted per variant rather than as "34900 turns up somewhere in the
@@ -183,7 +183,7 @@ def test_prices_reach_printify_as_minor_units_of_the_shop_currency(root, catalog
 
 
 def test_the_snapshot_names_every_desired_variant(root, catalog, printify) -> None:
-    """A30: the before/after review needs the whole matrix, colour and size
+    """ADR-0038: the before/after review needs the whole matrix, colour and size
     named, not the raw variant ids `apply` sends."""
     stage_plan = _stage_plan(_ctx(root, catalog, printify), a_lock())
 
@@ -213,7 +213,7 @@ def test_the_snapshot_names_every_live_variant_once_the_product_exists(
 def test_the_snapshot_skips_a_live_variant_the_current_resolution_dropped(
     root, catalog, printify
 ) -> None:
-    """A garment change is blocked (PRD 37), but dropping a *colour* is not
+    """A garment change is blocked, but dropping a *colour* is not
     -- so a live variant the current resolution no longer names is real, and
     the only thing to do with it is leave it off rather than guess a name."""
     ctx = _ctx(root, catalog, printify)
@@ -357,7 +357,7 @@ def test_an_update_reads_the_product_before_writing_it(root, catalog, printify) 
 
 
 def test_an_unpriced_listing_blocks_the_stage(root, catalog, printify) -> None:
-    """PRD 70 moved the price-source refusal out of `Listing`, so an unpriced
+    """ADR-0043 moved the price-source refusal out of `Listing`, so an unpriced
     listing is now a file on disk -- and this is where it has to stop.
 
     Without the gate it would reach `resolved_price`, which raises `KeyError`
@@ -382,7 +382,7 @@ def test_an_empty_title_blocks_the_stage(root, catalog, printify) -> None:
 
 
 def test_a_common_copy_ref_composes_into_the_product_description(root, catalog, printify) -> None:
-    """The product carries the listing's own composed description (PRD 44);
+    """The product carries the listing's own composed description;
     it must be exactly what `Workspace.compose_description` produces, not the
     raw lead alone."""
     common_copy = root / "common-copy"
@@ -489,7 +489,7 @@ def test_a_colour_the_catalog_does_not_offer_is_refused(root, catalog, printify)
 def test_a_lost_lockfile_adopts_the_existing_product_rather_than_duplicating(
     root, catalog, printify
 ) -> None:
-    """PRD 48. Create succeeded, the process died before the lockfile was
+    """ADR-0023. Create succeeded, the process died before the lockfile was
     written, and the next run has no id. Creating again would leave two
     products for one listing, and Printify prevents nothing."""
     ctx = _ctx(root, catalog, printify)
@@ -553,7 +553,7 @@ def test_a_product_that_came_back_visible_is_reported(root, catalog, printify) -
 
 
 def test_a_discontinued_cell_is_reported_rather_than_fatal(root, catalog, printify) -> None:
-    """PRD 46. Printify dropped `Moss / XXXL`; the listing is not wrong for
+    """missing variant cells. Printify dropped `Moss / XXXL`; the listing is not wrong for
     having asked, and the product is created without it."""
     dropped = VariantSet(
         variants=tuple(

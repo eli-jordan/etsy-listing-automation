@@ -21,7 +21,7 @@ import { NewBatchPage } from "./pages/NewBatchPage";
 import { StagingPage } from "./pages/StagingPage";
 import { purgeLegacyProposals } from "./pages/editor/aiSeo/legacyProposals";
 
-// A41: proposals live on the server now; the old browser-local copies go.
+// ADR-0049: proposals live on the server now; the old browser-local copies go.
 purgeLegacyProposals(localStorage);
 
 const container = document.getElementById("root");
@@ -48,7 +48,7 @@ const router = createBrowserRouter(
           `/listings/:name`, which re-fetches `ListingDetail` fresh rather
           than reusing state a deploy run may have changed server-side. */}
       <Route path="/listings/:name/deploy" element={<DeployPage />} />
-      {/* A35: listing templates. The same two-routes-one-component shape
+      {/* ADR-0047: listing templates. The same two-routes-one-component shape
           as a listing: /new is the unsaved *name it* state (UI doc §1). */}
       <Route path="/listing-templates" element={<ListingTemplatesPage />} />
       <Route path="/listing-templates/new" element={<ListingTemplateEditorPage />} />

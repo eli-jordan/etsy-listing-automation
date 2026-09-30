@@ -18,7 +18,7 @@ import yaml
 
 FRONT_MATTER_DELIMITER = "---"
 DESCRIPTION_TARGET = "description"
-"""The only supported target today (PRD's description model). A file that
+"""The only supported target today. A file that
 does not name it is not usable as a description body, whatever else it
 names."""
 

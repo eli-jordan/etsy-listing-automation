@@ -1,4 +1,4 @@
-"""Pure logic behind the ``new`` picker (PRD 19): everything that doesn't touch
+"""Pure logic behind the ``new`` picker: everything that doesn't touch
 a terminal, so it's testable through the fake catalog client with no
 interactive prompting -- ``newcmd/interactive.py`` only sequences the
 questions, and ``prompts.py`` picks a backend that can actually drive
@@ -32,9 +32,8 @@ from etsy_listings.workspace.workspace import Workspace
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "tshirt": ("t-shirt", "tee", "shirt"),
 }
-"""PRD: the catalog endpoint exposes no category facet, so filtering is
-client-side keyword matching over title/brand/model -- flagged in the PRD as
-something to verify for a better mechanism; unchanged here (risk 7)."""
+"""The catalog endpoint exposes no category facet, so filtering is
+client-side keyword matching over title/brand/model."""
 
 SIZE_ORDER = ["XS", "S", "M", "L", "XL", "XXL", "2XL", "XXXL", "3XL", "4XL", "5XL", "6XL"]
 """Both spellings of the big sizes, adjacent, because Printify uses the
@@ -128,7 +127,7 @@ def local_blueprint_keys(workspace: Workspace) -> set[tuple[str, str]]:
     profile for, normalised for comparison.
 
     Keyed on brand+model rather than title, because that is what a garment
-    profile now identifies a blueprint by (PRD 23) -- and it is what makes
+    profile now identifies a blueprint by -- and it is what makes
     the marker survive Printify retitling a garment.
 
     A garment profile that will not parse is skipped rather than fatal: it
@@ -151,7 +150,7 @@ def build_blueprint_choices(
     *,
     marker: str = LOCAL_MARKER,
 ) -> list[Choice[Blueprint]]:
-    """Blueprints as aligned ``marker  brand  model  title`` rows.
+    """Blueprints as aligned ``marker brand model title`` rows.
 
     Brand and model are what identify a garment to anyone who buys blanks --
     "Gildan 18500" is the thing you look up, while Printify's titles bury it
@@ -180,8 +179,7 @@ def sort_sizes(sizes: set[str]) -> list[str]:
 
 
 def resolve_colour_slugs(variant_set: VariantSet, exceptions: ColourExceptions) -> dict[str, str]:
-    """Colour name -> slug, applying exceptions.yaml and raising on collision
-    (PRD: "new reports any collisions it finds while building a garment profile")."""
+    """Colour name -> slug, applying exceptions.yaml and raising on collision."""
     return slug_map(variant_set.colors, exceptions)
 
 
@@ -198,7 +196,7 @@ def garment_profile_slug_for(blueprint: Blueprint) -> str:
 
 
 def blueprint_ref(blueprint: Blueprint) -> BlueprintRef:
-    """The catalog entry as a garment profile records it (PRD 23).
+    """The catalog entry as a garment profile records it.
 
     Brand and model are written verbatim, ® and all, because that is what the
     catalog says; resolution normalises both sides, so a human editing the
@@ -246,7 +244,7 @@ def build_garment_profile(
 
 
 def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Choice[Path]]:
-    """Designs as ``date  name`` rows, newest first.
+    """Designs as ``date name`` rows, newest first.
 
     The date is in the row rather than implied by the order because "newest
     first" is invisible otherwise -- and fzf reorders the rows the moment a
@@ -256,7 +254,7 @@ def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Cho
     filesystem-dependent.
 
     A design that already has a listing is marked: ``new`` refuses to
-    overwrite one (:func:`write_listing`), so the row would otherwise look
+    overwrite one ( :func:`write_listing`), so the row would otherwise look
     like a choice and behave like a dead end. Marked as a trailing note rather
     than through :func:`marked_choices` -- this callout is a warning, and
     sorting warnings to the top would be exactly wrong.
@@ -282,8 +280,7 @@ def write_garment_profile_if_absent(
     workspace: Workspace, slug: str, garment_profile: GarmentProfile
 ) -> bool:
     """Returns True if a new garment profile was written, False if one already
-    existed and was left untouched (PRD: "writes garment-profiles/{slug}.yaml
-    if absent; reuses it silently if present")."""
+    existed and was left untouched."""
     path = workspace.garment_profile_file(slug)
     if path.is_file():
         return False
@@ -296,7 +293,7 @@ def write_garment_profile_if_absent(
 
 
 def load_template_kind(workspace: Workspace, template: str) -> str:
-    """Which of the three kinds ``template`` is (`A11`).
+    """Which of the three kinds ``template`` is.
 
     ``new`` has to know: the shape of a valid ``media`` entry depends on it,
     and writing the wrong shape produces a listing that only fails later, at
@@ -315,10 +312,10 @@ def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list
     Which 20 is genuinely arbitrary, so it is the first 20 in offer order and
     ``new`` says that it truncated. Every colour still appears in ``colors:``
     -- that decides which Printify variants sell, not which photos get
-    rendered (PRD 31).
+    rendered.
 
     ``multiple`` and ``single`` get exactly one entry and **no** ``colour``:
-    each produces one output, so there is nothing to disambiguate (PRD 28).
+    each produces one output, so there is nothing to disambiguate.
     """
     if kind == "colour-matrix":
         return [{"template": template, "colour": colour} for colour in colours[:MAX_IMAGES]]
@@ -326,7 +323,7 @@ def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list
 
 
 # ----------------------------------------------------------------------
-# Pricing plans (PRD 33-36): the picker's rows, the "create new plan" cost
+# Pricing plans: the picker's rows, the "create new plan" cost
 # calculation, and writing the resulting file. Pure logic only -- terminal
 # sequencing lives in newcmd/interactive.py, the same split as everything
 # else in this module.
@@ -363,7 +360,7 @@ def build_pricing_plan_choices(
     """Rows for the picker: plans declaring this exact garment profile sort
     first and carry the marker -- an *exact*
     ``plan.garment_profile == garment_profile_slug`` match, since a plan
-    declares its garment directly (PRD 33), unlike the blueprint picker's
+    declares its garment directly, unlike the blueprint picker's
     marker, which infers "already used here"."""
     compatible = {path for path, plan in plans if plan.garment_profile == garment_profile_slug}
     return marked_choices(
@@ -377,7 +374,7 @@ def build_pricing_plan_choices(
 
 def pricing_plan_ref(plan_path: Path, *, root: Path) -> str:
     """The write-side counterpart to :meth:`Workspace.resolve_ref` -- a
-    workspace-rooted POSIX ref (PRD 73), e.g. ``'pricing-plans/tee-basic.yaml'``.
+    workspace-rooted POSIX ref, e.g. ``'pricing-plans/tee-basic.yaml'``.
     Needed because (unlike ``design``, which has one fixed directory) discovery
     under ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the
     way ``designs/{name}.png`` is."""
@@ -397,7 +394,7 @@ def compute_starting_prices(
     """size -> starting ``Money``, plus human-readable note lines for the
     generated file's comment block. Never raises -- every failure mode
     (missing cost, missing shipping, no fx rate) degrades to a 0-price entry
-    and a note explaining why (PRD 35/36).
+    and a note explaining why.
 
     Manufacturing + shipping cost is per (colour, size) variant, but a plan
     has no colour axis: usually every colour offering a size costs the same,
@@ -503,8 +500,8 @@ def build_listing_stub(
     media: list[dict[str, str]],
 ) -> dict[str, Any]:
     """A starting ``listing.yaml`` document: prices come from the referenced
-    pricing plan (per-size/per-colour adjustment is a manual edit, PRD step
-    2), the media entries :func:`build_media_entries` decided, and blank
+    pricing plan (per-size/per-colour adjustment is a manual edit), the media entries
+    :func:`build_media_entries` decided, and blank
     title, description and tags -- ordinary editable values, nothing
     invented."""
     return {

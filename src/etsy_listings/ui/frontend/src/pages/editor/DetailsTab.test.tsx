@@ -40,7 +40,7 @@ async function runDelivers(body: ListingProposal) {
 
 /** The tab with AI Mode attached, exactly as `ListingEditorShell` mounts it.
  *
- * `useAiSeoMode` moved out of `DetailsTab` and up to the shell (PRD 68): a
+ * `useAiSeoMode` moved out of `DetailsTab` and up to the shell: a
  * run has to survive a tab switch, and the chain that starts one begins
  * at the design strip above the tabs. Every test below is still about what
  * the tab *does* with AI Mode, so the harness supplies the same wiring the

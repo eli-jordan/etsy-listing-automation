@@ -17,7 +17,7 @@ import type { ListingTemplateSummary } from "../types";
  *
  * One ZIP or loose PNGs (spec, *Accepted input*). What may be dropped
  * together is the server's to judge: two ZIPs, a ZIP with loose files and
- * an unsafe archive come back as refusals (A45), shown like any other.
+ * an unsafe archive come back as refusals, shown like any other.
  *
  * A drop on a listing-template card that the server refuses lands here too,
  * the refusal in the navigation's state (UI doc §2, closed question 2), so

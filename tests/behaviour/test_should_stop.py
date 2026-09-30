@@ -1,9 +1,9 @@
-"""A33: a graceful ``should_stop`` boundary, threaded through ``execute``,
+"""ADR-0041: a graceful ``should_stop`` boundary, threaded through ``execute``,
 ``plan_listings`` and ``apply_listings`` -- what the UI's runs executor uses
 to honour a plan run's cancel and a shutdown's "finish the stage you're in,
 start no other" (decision 7).
 
-Distinct from A29's partial-apply tests (``test_partial_apply.py``): those are
+Distinct from ADR-0037's partial-apply tests (``test_partial_apply.py``): those are
 about what a *failure* records; this is about what a deliberate, error-free
 pause leaves behind, which is why the ``incomplete`` marker behaves
 differently in each case.
@@ -105,7 +105,7 @@ def test_should_stop_finishes_the_current_stage_and_starts_no_other(workspace_ro
 def test_a_graceful_stop_does_not_clear_a_previous_incomplete_marker(workspace_root: Path) -> None:
     """Unlike a clean finish, a run that never got to walk every stage cannot
     know the marker's stage is now satisfied -- clearing it here would be
-    exactly the false "clean" reading A29's marker exists to prevent."""
+    exactly the false "clean" reading ADR-0037's marker exists to prevent."""
     ctx = a_context(workspace_root)
     lock = a_lock().marked_incomplete("printify_product")
 
@@ -183,7 +183,7 @@ def test_apply_listings_without_should_stop_behaves_as_before(workspace_root: Pa
 
 def test_a_stop_before_etsy_listing_does_not_consume_renew(workspace_root: Path) -> None:
     """``lifecycle: renew`` is consumed only by the apply that sent
-    ``state=active`` (PRD 62). A stop that skipped ``etsy_listing`` sent
+    ``state=active``. A stop that skipped ``etsy_listing`` sent
     nothing, so the mark must still be there for the next apply."""
     edit_listing(workspace_root, lifecycle="renew")
     checks = {"count": 0}

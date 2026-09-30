@@ -27,22 +27,22 @@ is shaped by one of them, and the spec has been corrected to match
 
 | The spec assumed | What the code does | Consequence |
 |---|---|---|
-| `plan` fans live reads out over a thread pool, so stages resolve out of order | A21 left the pool unbuilt; `build_plan` walks stages one at a time | Plan progress is reported in pipeline order (A33) |
-| An endpoint can project `PlannedRun.states` into listing views | Stage types are erased (`AnyStage`); only the stage that produced a type looks inside it | Stages expose snapshots and the frontend composes (A30) |
+| `plan` fans live reads out over a thread pool, so stages resolve out of order | ADR-0009 left the pool unbuilt; `build_plan` walks stages one at a time | Plan progress is reported in pipeline order (ADR-0041) |
+| An endpoint can project `PlannedRun.states` into listing views | Stage types are erased (`AnyStage`); only the stage that produced a type looks inside it | Stages expose snapshots and the frontend composes (ADR-0038) |
 | The live side has the listing's images | `EtsyMediaLive` keeps a `frozenset` of image ids; `ListingImage` drops the URL | `etsy_media` keeps rank and URL |
-| A failed stage leaves earlier stages done, and Plan again continues | `apply_listings` writes the lockfile only after `execute` returns | Nothing is recorded, and PRD 48 then refuses the re-create (A29) |
-| `apply` can be tied to the plan the user saw | `apply_listings` re-plans internally, blind to any earlier plan | A fingerprint and `expect` (A31) |
+| A failed stage leaves earlier stages done, and Plan again continues | `apply_listings` writes the lockfile only after `execute` returns | Nothing is recorded, and ADR-0023 then refuses the re-create (ADR-0037) |
+| `apply` can be tied to the plan the user saw | `apply_listings` re-plans internally, blind to any earlier plan | A fingerprint and `expect` (ADR-0039) |
 | The status pill turns Live after apply | A first apply leaves an Etsy **draft**; only a human activates (non-goal 1) | The pill is re-derived from the server |
-| The below-cost refusal is the Printify product stage's | PRD 40's amendment put it in `publish`, whose `read_live` has `variant_costs` | The mock's blocked example belongs to `publish` |
-| Drift can be shown by name | `Drift` carries ids; only the *last-applied* name is in the lockfile | `Drift` gains labels from the in-run catalog (A30) |
-| There is somewhere to run a plan from the UI | No runs endpoint, no SSE, no executor exists | The runs resource (A33) |
+| The below-cost refusal is the Printify product stage's | ADR-0020's amendment put it in `publish`, whose `read_live` has `variant_costs` | The mock's blocked example belongs to `publish` |
+| Drift can be shown by name | `Drift` carries ids; only the *last-applied* name is in the lockfile | `Drift` gains labels from the in-run catalog (ADR-0038) |
+| There is somewhere to run a plan from the UI | No runs endpoint, no SSE, no executor exists | The runs resource (ADR-0041) |
 | Browser tests can drive an apply | `create_app(workspace)` builds real clients through `connections` | The app factory takes a context factory |
 
 ---
 
 ## Decisions
 
-### 1. A failed apply keeps what it did — A29
+### 1. A failed apply keeps what it did — ADR-0037
 
 The deploy view's failure case says: steps before the failure stay done, and
 Plan again continues from wherever the shop now is. The engine does not
@@ -50,7 +50,7 @@ support that today. `execute` folds each stage's result into a local
 `Lockfile`, and `apply_listings` writes it only once `execute` returns. When
 `etsy_listing` raises after `printify_product` created a product, the product
 id is never recorded. The next plan sees no product and plans to create one,
-and PRD 48's duplicate-create guard then refuses, because a product with that
+and ADR-0023's duplicate-create guard then refuses, because a product with that
 title and description already exists. No re-run can get past that, from the
 CLI or from the UI.
 
@@ -77,11 +77,11 @@ the listing directory as it does now, so there is nothing to mark.
 This lands first, as its own PR, because it is a correctness fix for the CLI
 as much as a prerequisite for the UI.
 
-### 2. Planning reports stage by stage, in pipeline order — A33, A21 stands
+### 2. Planning reports stage by stage, in pipeline order — ADR-0041, ADR-0009 stands
 
 The spec's step strip resolves stages "in whatever order its read finishes",
-justified by A3's thread pool. A21 deferred that pool, deliberately and on the
-record, so it does not exist. We are not reopening A21 here: a pool buys
+justified by ADR-0009's thread pool. ADR-0009 deferred that pool, deliberately and on the
+record, so it does not exist. We are not reopening ADR-0009 here: a pool buys
 little with one live read per stage, and it would pull thread-safety work
 into every client and the Etsy token refresh.
 
@@ -100,7 +100,7 @@ concept as callback names and made the UI reconstruct an event vocabulary from
 nested closures. The union makes adding or handling an event exhaustive, and
 the CLI filters the same stream for the two events it renders.
 
-### 3. Stages expose snapshots; the frontend composes the comparison — A30
+### 3. Stages expose snapshots; the frontend composes the comparison — ADR-0038
 
 The comparison needs every field, unchanged ones included, and a `Plan`
 carries only changes. The spec's R1 had the plan endpoint project
@@ -113,7 +113,7 @@ view assembled on the server is presentation living in the backend.
 Instead each stage may implement
 
 ```python
-def snapshot(self, desired: D, live: L | None) -> BaseModel | None: ...
+def snapshot(self, desired: D, live: L | None) -> BaseModel | None:...
 ```
 
 returning a **public pydantic model of domain facts**, never layout.
@@ -127,7 +127,7 @@ desired document, has `None`.
 | `printify_product` | `desired` and `live` variants: `{size, colour, price}` | Variant id → size/colour needs the resolved matrix, which only it holds |
 | `publish` | `below_cost: [{size, colour, price, cost}]` | Uses its own `_below_cost`, so the price table's red marker is not a second copy of the rule |
 | `etsy_listing` | `desired` and `live`: `title`, `description`, `tags`, `materials`, `shop_section`, `shipping_profile` | Already holds both documents |
-| `etsy_media` | `desired: [{rank, ref, file}]`, `live: [{rank, image_id, ref?, url}]` | `ref?` maps a live id back through `lock.remote`'s image ids, the way A27 already does |
+| `etsy_media` | `desired: [{rank, ref, file}]`, `live: [{rank, image_id, ref?, url}]` | `ref?` maps a live id back through `lock.remote`'s image ids, the way ADR-0030 already does |
 
 The frontend turns these facts into the two columns, the price table and the
 thumbnails, and decides every visual treatment. The CLI ignores snapshots.
@@ -143,9 +143,9 @@ its `ref`. A listing with **no Etsy listing id at all** gets a single "After
 apply" column with a *Not on Etsy yet* note. If a Printify product already
 exists, its live variants still fill the price table's before side.
 
-### 4. Highlights come only from `Change` objects — A30, A2
+### 4. Highlights come only from `Change` objects — ADR-0038, ADR-0008
 
-A2 does not move: the frontend never works out *whether* something changed.
+ADR-0008 does not move: the frontend never works out *whether* something changed.
 Snapshots make unchanged context drawable, but every tint, badge and `+`
 comes from a `Change`. Three places emit what they did not before:
 
@@ -153,7 +153,7 @@ comes from a `Change`. Three places emit what they did not before:
 |---|---|---|
 | `ListChange("colors", added, removed)` | `product_diff._changes` | The UI diffing two colour lists to ring a new colour (R2) |
 | One `MediaChange(rank, before, after)` per rank that differs | `etsy_media.plan` | A single "manifest changed" reason, from which *New / was 2 / Removed* badges cannot be drawn |
-| `Drift.last_applied_label` / `live_label` | `etsy_listing._drift`, from the `EtsyShopCatalog` A25 resolved this run | The API fetching shipping profiles again to name an id (R3) |
+| `Drift.last_applied_label` / `live_label` | `etsy_listing._drift`, from the `EtsyShopCatalog` ADR-0033 resolved this run | The API fetching shipping profiles again to name an id (R3) |
 
 `MediaChange` already exists in `engine/change.py` and has no emitter. The
 drift labels are optional and default to `None`, so `publish`'s and
@@ -167,7 +167,7 @@ reuses the same word-level marking (added post-spec: the comparison originally
 had no block for it at all, so a pending description edit showed no
 before/after in the review despite genuinely changing what Apply would send).
 
-### 5. Apply refuses a plan nobody reviewed — A31
+### 5. Apply refuses a plan nobody reviewed — ADR-0039
 
 `engine/run.py` gains `plan_fingerprint(plan: Plan) -> str`: `canonical_hash`
 over a canonical dict of the `Plan` (money as strings, tuples as lists), with
@@ -175,7 +175,7 @@ every `StagePlan.snapshot` removed. `apply_listings` takes an optional
 `expect: Mapping[str, str]`. For each listing it re-plans exactly as it does
 today, compares the new fingerprint with the expected one, and on a mismatch
 raises a `StalePlanError` (a `UserFacingError`) carrying the new `PlannedRun`,
-**before `execute` is called**. PRD 16 applies, so in a many-listing run the
+**before `execute` is called**. continue-on-error applies, so in a many-listing run the
 next listing still goes ahead.
 
 The check lives in the engine because only the engine runs a run. An API
@@ -187,7 +187,7 @@ drifts between review and apply, the apply would revert something the user
 never saw reverted. A preview being rendered in between does not change the
 fingerprint, because preview existence never enters a `Plan` (§6).
 
-### 6. Previews render during plan, and apply promotes them — A32
+### 6. Previews render during plan, and apply promotes them — ADR-0040
 
 The "After apply" column should show the images apply will upload, including
 scenes that have not been rendered yet. A plan must stay read-only for the CLI
@@ -212,7 +212,7 @@ render. If one exists its exact bytes are copied into `render_file(...)`;
 otherwise the scene renders as today. The content-addressed preview stays in
 place so a deploy page refreshed during later apply stages can still display
 the reviewed image. Render passes are pure and OpenCV and Pillow are pinned
-exactly (A7), so a promoted file is the same bytes a fresh render would have
+exactly (ADR-0012), so a promoted file is the same bytes a fresh render would have
 produced. The `outputs` hash axis cannot tell the difference, and nothing is
 uploaded twice. CLI `apply` gets promotion for free whenever a UI plan ran
 first. `Workspace.remove_listing` also removes
@@ -234,23 +234,23 @@ resolved through `Workspace.preview_file` and the current snapshot's hash,
 never through a path from the URL, because the layout accessors are the
 security boundary.
 
-### 7. Runs live in the UI server — A33
+### 7. Runs live in the UI server — ADR-0041
 
 A run is the unit the UI starts, watches, reattaches to and, for a plan,
 cancels.
 
 ```
-POST   /api/runs              {kind: "plan"|"apply", listings: [name], expect?: {name: fp}}
+POST /api/runs {kind: "plan"|"apply", listings: [name], expect?: {name: fp}}
                               -> 202 RunSummary | 409 {active_run: id}
-GET    /api/runs?listing=     active and recent runs for a listing
-GET    /api/runs/{id}         RunDetail: phase, listings, events so far
-GET    /api/runs/{id}/events  text/event-stream; replays after Last-Event-ID
-DELETE /api/runs/{id}         cancel a queued or running plan; 409 for apply
-POST   /api/runs/{id}/seen    the result of a finished run has been looked at
+GET /api/runs?listing= active and recent runs for a listing
+GET /api/runs/{id} RunDetail: phase, listings, events so far
+GET /api/runs/{id}/events text/event-stream; replays after Last-Event-ID
+DELETE /api/runs/{id} cancel a queued or running plan; 409 for apply
+POST /api/runs/{id}/seen the result of a finished run has been looked at
 ```
 
 **Many listings in the backend, one from the editor.** `listings` is a list
-from the start, and PRD 16's continue-on-error holds inside a run because the
+from the start, and continue-on-error holds inside a run because the
 run calls `plan_listings`/`apply_listings`, which already do. The editor
 always sends one. A batch runner later changes the frontend, not the API.
 
@@ -260,7 +260,7 @@ queued run, the request is refused with `409` and the holder's id, which the
 editor uses to reattach instead. Locks are released when the run finishes,
 fails or is cancelled. Runs execute on **one** FIFO executor thread, so a run
 for another listing waits in a `queued` phase (*Waiting for another run…*).
-Serial execution keeps A3's strictly-sequential writes and sidesteps Etsy's
+Serial execution keeps ADR-0009's strictly-sequential writes and sidesteps Etsy's
 refresh-token rotation racing itself. Raising the worker count later is the
 whole of parallelising, because the lock model is already per listing.
 
@@ -303,7 +303,7 @@ the CLI and the UI. Anything else ends the run `failed` with *Internal error,
 see the server log*, and the traceback is logged. That is still a defect, and
 it still gets a traceback.
 
-**Typing plans and the stream (A5).** `StagePlanDTO` is a discriminated union
+**Typing plans and the stream (ADR-0011).** `StagePlanDTO` is a discriminated union
 keyed by the finite stage name; that name determines the concrete snapshot
 model (or no snapshot for `retract`). A stage/snapshot mismatch is rejected by
 the schema and the generated frontend no longer redeclares or casts snapshot
@@ -323,7 +323,7 @@ blocks cleanly), and browser tests pass one wired to the in-memory fakes.
 **Shutdown.** The executor thread is not a daemon. On shutdown (the native
 window closing, Ctrl-C on `ui --browser`) a stop flag is set: a queued run is
 cancelled, a plan run stops at its next boundary, and an apply run finishes
-the stage it is in, which records itself (A29), and starts no other. The
+the stage it is in, which records itself (ADR-0037), and starts no other. The
 native window's close handler shows *Finishing Etsy listing…* until the thread
 joins. Runs are in memory only, so a restart forgets them, and history stays
 Phase 6's `runs/` SQLite recorder.
@@ -400,22 +400,22 @@ deploys.
 
 | Module | Change | Decision |
 |---|---|---|
-| `engine/lock.py` | `incomplete: IncompleteApply \| None`, omitted when `None`; `marked_incomplete(stage)`, `completed()` | A29 |
-| `engine/apply.py` | `execute(ctx, planned, lock, on_event, record)`: record after each fold; on raise, record the marked lockfile, emit `stage_failed`, re-raise; `stage_applying`/`stage_applied` | A29, A33 |
-| `engine/status.py` | `listing_status(..., incomplete=bool)`, where a set marker means dirty | A29 |
-| `engine/change.py` | `StagePlan.snapshot: BaseModel \| None`; `Drift.last_applied_label`, `live_label` | A30 |
-| `engine/stage.py` | Optional `snapshot()` documented on the protocol; `RenderStage.preview` stays specific to that stage, not part of the protocol | A30, A32 |
-| `engine/plan.py` | `build_plan(..., on_event)`: `stage_checking` before each walk, `snapshot()` after `plan()`, `stage_planned` after | A30, A33 |
-| `engine/run.py` | `EngineRunEvent` and its sink; `plan_fingerprint`; `apply_listings(..., expect)` and `StalePlanError`; `preview_listing`; the lockfile writer passed to `execute` | A29, A31–A33 |
-| `engine/stages/product_diff.py` | `ListChange("colors")` | A30 |
-| `engine/stages/printify_product.py` | `snapshot()` | A30 |
-| `engine/stages/publish.py` | `snapshot()` with `below_cost` | A30 |
-| `engine/stages/etsy_listing.py` | `snapshot()`; drift labels from the catalog | A30 |
-| `engine/stages/etsy_media.py` | `EtsyMediaLive.images: tuple[{rank, image_id, url}]`; per-rank `MediaChange`; `snapshot()` | A30 |
-| `engine/stages/render.py` | `scene_hash`; `snapshot()`; `preview()`; promotion in `apply()` | A32 |
-| `clients/etsy/models.py` | `ListingImage.url_570xN` | A30 |
-| `workspace/workspace.py` | `preview_file(...)`, `preview_dir(listing)`; `remove_listing` removes previews | A32 |
-| `cli/render.py` | print drift labels when present | A30 |
+| `engine/lock.py` | `incomplete: IncompleteApply \| None`, omitted when `None`; `marked_incomplete(stage)`, `completed()` | ADR-0037 |
+| `engine/apply.py` | `execute(ctx, planned, lock, on_event, record)`: record after each fold; on raise, record the marked lockfile, emit `stage_failed`, re-raise; `stage_applying`/`stage_applied` | ADR-0037, ADR-0041 |
+| `engine/status.py` | `listing_status(..., incomplete=bool)`, where a set marker means dirty | ADR-0037 |
+| `engine/change.py` | `StagePlan.snapshot: BaseModel \| None`; `Drift.last_applied_label`, `live_label` | ADR-0038 |
+| `engine/stage.py` | Optional `snapshot()` documented on the protocol; `RenderStage.preview` stays specific to that stage, not part of the protocol | ADR-0038, ADR-0040 |
+| `engine/plan.py` | `build_plan(..., on_event)`: `stage_checking` before each walk, `snapshot()` after `plan()`, `stage_planned` after | ADR-0038, ADR-0041 |
+| `engine/run.py` | `EngineRunEvent` and its sink; `plan_fingerprint`; `apply_listings(..., expect)` and `StalePlanError`; `preview_listing`; the lockfile writer passed to `execute` | ADR-0037, ADR-0039, ADR-0040, ADR-0041 |
+| `engine/stages/product_diff.py` | `ListChange("colors")` | ADR-0038 |
+| `engine/stages/printify_product.py` | `snapshot()` | ADR-0038 |
+| `engine/stages/publish.py` | `snapshot()` with `below_cost` | ADR-0038 |
+| `engine/stages/etsy_listing.py` | `snapshot()`; drift labels from the catalog | ADR-0038 |
+| `engine/stages/etsy_media.py` | `EtsyMediaLive.images: tuple[{rank, image_id, url}]`; per-rank `MediaChange`; `snapshot()` | ADR-0038 |
+| `engine/stages/render.py` | `scene_hash`; `snapshot()`; `preview()`; promotion in `apply()` | ADR-0040 |
+| `clients/etsy/models.py` | `ListingImage.url_570xN` | ADR-0038 |
+| `workspace/workspace.py` | `preview_file(...)`, `preview_dir(listing)`; `remove_listing` removes previews | ADR-0040 |
+| `cli/render.py` | print drift labels when present | ADR-0038 |
 
 ## UI server
 
@@ -464,10 +464,10 @@ The control-state table in the spec gains three rows and changes one:
 Republished into the Deploy Changes Spec alongside this document:
 
 1. Planning resolves stages **in pipeline order**. The out-of-order rationale
-   is replaced by A21's.
+   is replaced by ADR-0009's.
 2. The status pill is **re-derived** after apply, and a first deploy reads
    Deployed.
-3. The below-cost refusal belongs to **`publish`** (PRD 40's amendment).
+3. The below-cost refusal belongs to **`publish`** (ADR-0020's amendment).
 4. **Back is enabled during apply** and does not cancel it. The editor offers
    *View progress*, and the *leave site?* prompt is gone.
 5. R1 becomes **stage snapshots composed by the frontend**, not a server-side
@@ -490,7 +490,7 @@ Five stacked PRs, each green on its own, with CI's hermetic tier and
 
 | PR | Contents | Done when |
 |---|---|---|
-| ① Partial apply | A29: `execute` recording, `incomplete` marker, status reads it | A stage failing after a create leaves the product id recorded, the next plan does not re-create, and the listing reads dirty |
+| ① Partial apply | ADR-0037: `execute` recording, `incomplete` marker, status reads it | A stage failing after a create leaves the product id recorded, the next plan does not re-create, and the listing reads dirty |
 | ② Engine for review | `EngineRunEvent`; plan-time events; `snapshot()` on all five stages; `ListChange("colors")`, per-rank `MediaChange`, drift labels; `EtsyMediaLive` images and `url_570xN`; `plan_fingerprint`, `expect`, `StalePlanError`; CLI prints labels | `plan` output is unchanged except for names in place of ids, and every new emission has a behaviour test |
 | ③ Previews | `scene_hash`, `preview_file`, `RenderStage.preview`, promotion, pruning, `preview_listing` | A preview followed by `apply` renders nothing and yields byte-identical `outputs` |
 | ④ Runs | `ui/runs/`, `ui/api/runs.py`, preview endpoint, `context_factory`, lifespan and desktop shutdown, `openapi.json` and `gen:api` | A plan run and an apply run stream their full event sequence through `TestClient` |
@@ -523,10 +523,10 @@ is unit-tested.
 ## What stays open
 
 - **A batch runner.** The API takes many listings, but no screen sends more
-  than one. PRD 20's dashboard runner is its own piece of work.
-- **A3's fan-out.** Still A21's call. If it is built, only the plan-time
+  than one. ADR-0008's dashboard runner is its own piece of work.
+- **ADR-0009's fan-out.** Still ADR-0009's call. If it is built, only the plan-time
   events' order changes, and nothing else here depends on it.
 - **Run history across restarts.** Phase 6's recorder.
-- **Cancelling an apply.** Deliberately absent (A3). A stage boundary is the
+- **Cancelling an apply.** Deliberately absent (ADR-0009). A stage boundary is the
   only safe point, and the shutdown path already uses it. A user-facing
   *Stop after this step* is possible later without changing the model.

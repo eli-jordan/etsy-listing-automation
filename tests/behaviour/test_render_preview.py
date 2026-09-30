@@ -1,5 +1,5 @@
 """``RenderStage.preview``/``apply`` promotion and pruning, ``snapshot()``'s
-per-scene state, and ``engine.run.preview_listing`` (A32) -- through the real
+per-scene state, and ``engine.run.preview_listing`` -- through the real
 engine (`build_plan`/`execute`) against the fixture workspace, the same way
 ``test_render_stage.py`` covers plan/apply. Byte-identity between a promoted
 preview and a fresh render is the golden layer's job

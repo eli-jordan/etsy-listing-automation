@@ -3,7 +3,7 @@
 ``clients/printify/cache.py`` wraps a catalog client.
 
 Two caches, both under ``.cache/market/`` (gitignored, fully derivable --
-PRD 22):
+render-cache storage):
 
 - **search** -- one file per query *and* search parameters, since the same
   words asked with another page size or sort order are a different answer;

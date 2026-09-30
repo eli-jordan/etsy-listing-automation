@@ -24,7 +24,7 @@ stays.
 
 **Writes.** The guarded ``brief`` is the only workspace file this package
 writes under ``listings/``. The market snapshot (``.cache/market/``) and the
-proposal (``.cache/proposals/``, A41) are saved under the same lock, so a
+proposal (``.cache/proposals/``, ADR-0049) are saved under the same lock, so a
 rename or delete cannot move or remove the listing between the check and
 the write.
 """
@@ -210,7 +210,7 @@ class AiRunner:
 
     def _chain(self, run: AiRun) -> None:
         # A batch run can be asked to stop before its thread starts (Cancel
-        # batch landing just after the queue claimed the row, A40).
+        # batch landing just after the queue claimed the row, ADR-0048).
         self._check(run)
         workspace = self.workspace
         listing, profile = self._load(run)
@@ -302,7 +302,7 @@ class AiRunner:
             cancel_event=run.cancel_event,
         )
         self._check(run)
-        # A41: cached before it is announced, so whoever hears the event can
+        # ADR-0049: cached before it is announced, so whoever hears the event can
         # read it back -- and so it outlives this run and this server.
         # A delete asks the run to stop before it takes the lock, so a stop
         # seen here is one the delete's own cleanup will not come back for.

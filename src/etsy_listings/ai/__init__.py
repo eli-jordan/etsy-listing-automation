@@ -1,7 +1,7 @@
 """Local AI Mode: request/task contracts, the three packaged default prompts,
 delimited-context prompt assembly, hard validation, and the local
 Codex/Claude CLI adapters behind `AiProvider` (AI SEO implementation plan,
-PR3 and PR4; PRD 68 for brief drafting).
+PR3 and PR4; ADR-0003 for brief drafting).
 
 Two features, one machine. **SEO generation** produces a proposal a seller
 reviews suggestion by suggestion; **brief drafting** produces the one input
@@ -20,7 +20,7 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
 - ``brief`` -- everything drafting-specific in one small module:
   ``BriefRequest``, ``DesignBrief``, the packaged default ``brief.md``,
   ``build_brief_task`` and ``validate_brief``.
-- ``market_queries`` -- query extraction for market-informed SEO (PRD 71),
+- ``market_queries`` -- query extraction for market-informed SEO,
   shaped like ``brief``: ``MarketQueriesRequest``, ``MarketQueries``, the
   packaged default ``market-queries.md``, ``build_market_queries_task`` and
   ``validate_market_queries`` (three unique, non-empty queries).

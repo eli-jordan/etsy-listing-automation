@@ -103,7 +103,7 @@ function Badge({ state }: { state: StepState }) {
 }
 
 /**
- * The page head's AI activity: PRD 68's brief, then market research, then the
+ * The page head's AI activity: ADR-0003's brief, then market research, then the
  * SEO proposal, as three connected nodes with a one-line label
  * (docs/features/market-seo-20260924/interactions.md, section 1). Ported from
  * `design/screens/marketSeo/AiWorkflowIndicator.tsx`, without the canvas-only

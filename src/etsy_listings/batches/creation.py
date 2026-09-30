@@ -1,5 +1,5 @@
 """Confirming a staging session: the batch record, then one listing per row
-(spec *Confirming a batch*; A38, A39, A46).
+(spec *Confirming a batch*; name allocation, idempotent row creation, staging expiry).
 
 The record is written first, with every row's allocated name and
 ``creation: pending``, and before any file. Each row then:
@@ -15,11 +15,11 @@ crash re-enters at whatever the disk and the record say is done. A directory
 already at the row's name is the row's own when its ``listing.yaml`` names the
 row's design, or when it has none and the record says the row claimed it;
 anything else there belongs to somebody else, and the row takes a fresh
-suffix instead (A39). A failure is recorded on its row with the sentence and
+suffix instead. A failure is recorded on its row with the sentence and
 the next row carries on.
 
 The staging session goes once every row is materialised -- created, or failed
-with its upload copied beside the batch for Retry (A46).
+with its upload copied beside the batch for Retry.
 """
 
 from __future__ import annotations
@@ -51,7 +51,7 @@ from etsy_listings.workspace.workspace import Workspace
 
 NameLock = Callable[[str], AbstractContextManager[object]]
 """A listing name's write lock -- the UI's ``WorkspaceLocks.listing`` -- held
-while a row's name is checked and its files are written (A38)."""
+while a row's name is checked and its files are written."""
 
 
 def _no_lock(_: str) -> AbstractContextManager[object]:
@@ -127,14 +127,14 @@ def _start(
     )
     frozen = workspace.staging_template_dir(session_id)
     _revalidate(workspace, template, frozen, session.listing_template)
-    # Kept for Retry after the staging session has gone (A37).
+    # Kept for Retry after the staging session has gone.
     shutil.copytree(frozen, workspace.batch_template_dir(session_id), dirs_exist_ok=True)
     by_id = {row.id: row for row in session.rows}
     others = {row.name.casefold() for row in reviewed.creatable}
     allocated: set[str] = set()
     rows: list[BatchRow] = []
     for row in reviewed.creatable:
-        # A38: the preview may be stale; the name is checked again under the
+        # the preview may be stale; the name is checked again under the
         # listing's lock and recorded before any file is written.
         with lock(row.name):
             taken = taken_for(workspace_names(workspace), row.reuse)
@@ -192,7 +192,7 @@ def create_rows(
     lock: NameLock = _no_lock,
     only: set[str] | None = None,
 ) -> Batch:
-    """Create every row still to create (A39), recording each outcome as it
+    """Create every row still to create, recording each outcome as it
     lands, then drop the staging session if nothing needs it any more."""
     with batches.lock(batch_id):
         batch = batches.load(batch_id)
@@ -227,7 +227,7 @@ def _failure(row: BatchRow, exc: Exception) -> str:
 
 def row_upload(workspace: Workspace, batch: Batch, row_id: str) -> Path:
     """The upload a row was made from, wherever it is kept now: beside the
-    batch once its creation failed (A46), else still in staging. What a row
+    batch once its creation failed, else still in staging. What a row
     that was never created shows as its thumbnail on the summary, since it
     has no listing design to show. :class:`KeyError` for a row the batch
     does not have; the path may not exist once the staging session has
@@ -245,7 +245,7 @@ def _input(workspace: Workspace, batch: Batch, row: BatchRow) -> Path:
 
 def _keep_input(workspace: Workspace, batch: Batch, row: BatchRow) -> None:
     """A failed row's upload moves beside the batch, so Retry still has it
-    once the staging session is gone (A46). If even that fails, the staging
+    once the staging session is gone. If even that fails, the staging
     session stays."""
     source = workspace.staging_upload_file(batch.id, row.sha256)
     target = workspace.batch_upload_file(batch.id, row.sha256)
@@ -268,7 +268,7 @@ def _holds(workspace: Workspace, design: str, sha256: str) -> bool:
 
 
 def _is_ours(workspace: Workspace, row: BatchRow) -> bool:
-    """May this row write at its recorded name? (A39)"""
+    """May this row write at its recorded name?"""
     design = workspace.design_file(row.design)
     if design.is_file() and _sha256(design) != row.sha256:
         return False

@@ -1,4 +1,4 @@
-"""Which design prints on which colour. A14, and the one rule two stages share.
+"""Which design prints on which colour. artwork resolution, and the one rule two stages share.
 
 Two stages put a design somewhere, and they must agree about which one: the
 render stage composites it onto a mockup photo, and the product stage ships it
@@ -68,7 +68,7 @@ class ArtworkGroup:
     Colours rather than Printify variant ids: which ink a colour gets is a
     fact about the listing, and turning it into ids is the product stage's
     business. A group per artwork rather than one print area for everything,
-    because PRD 30's ``on-light``/``on-dark`` split is exactly this -- two
+    because ``on-light``/``on-dark`` split is exactly this -- two
     files on one product, partitioned by colour. A single-artwork listing is
     simply the one-group case.
     """
@@ -92,7 +92,7 @@ class DesignPlacement:
     profile: GarmentProfile
     paths: dict[str, Path]
     """Artwork key -> the design file it names, resolved through
-    :meth:`Workspace.resolve_ref` (PRD 73), so a ``design:`` ref cannot escape
+    :meth:`Workspace.resolve_ref`, so a ``design:`` ref cannot escape
     the root."""
 
     @classmethod

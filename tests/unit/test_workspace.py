@@ -97,7 +97,7 @@ def test_resolve_rejects_symlink_escape(workspace_root: Path, tmp_path: Path) ->
 
 
 class TestResolveRef:
-    """PRD 73: every path in `listing.yaml` is a ref with two roots."""
+    """ADR-0046: every path in `listing.yaml` is a ref with two roots."""
 
     @pytest.fixture
     def ws(self, workspace_root: Path) -> Workspace:
@@ -222,8 +222,8 @@ def test_common_media_files_lists_every_image_and_video_recursively(
     workspace_root: Path,
 ) -> None:
     """The other half of `media:` -- a file ref to something shared across
-    listings, rather than a rendered mockup. Every type `media:` accepts
-    (PRD 72), in subdirectories too, sorted by path."""
+        listings, rather than a rendered mockup. Every type `media:` accepts
+    , in subdirectories too, sorted by path."""
     shared = workspace_root / "common-media"
     (shared / "videos").mkdir(parents=True)
     for name in ("size-guide.png", "care.JPG", "photo.jpeg", "videos/intro.mp4", "clip.MOV"):
@@ -259,7 +259,7 @@ def test_common_media_file_takes_the_path_under_common_media_as_is(
 def test_common_media_file_refuses_a_path_that_could_leave_common_media(
     workspace_root: Path, name: str
 ) -> None:
-    """It takes names from URLs (A8): a security boundary."""
+    """It takes names from URLs: a security boundary."""
     ws = Workspace.discover(root_override=workspace_root)
     with pytest.raises(InvalidNameError):
         ws.common_media_file(name)
@@ -286,9 +286,9 @@ def test_common_media_files_is_empty_when_the_directory_is_absent(workspace_root
 
 
 class TestListingMediaFiles:
-    """A listing's own files, the `./` half of `media:` (PRD 72, 73).
+    """A listing's own files, the `./` half of `media:`.
 
-    A security boundary (A8): the listing name and the path both arrive from
+    A security boundary: the listing name and the path both arrive from
     URLs, and the directory also holds `listing.yaml` and the lockfile, which
     are no business of a picture endpoint."""
 
@@ -417,7 +417,7 @@ def test_listing_names_ignores_directories_without_a_listing_file(workspace_root
 
 
 def test_listing_names_includes_a_lockfile_only_directory(workspace_root: Path) -> None:
-    """PRD 67: yaml gone, lockfile still there -- the row still appears."""
+    """missing listing files: yaml gone, lockfile still there -- the row still appears."""
     orphan = workspace_root / "listings" / "orphan"
     orphan.mkdir()
     (orphan / "state.lock.json").write_text("{}", encoding="utf-8")
@@ -447,12 +447,12 @@ def test_template_names_can_include_uncalibrated_directories(workspace_root: Pat
 
 
 def test_a_templates_photos_are_everything_but_the_scene(workspace_root: Path) -> None:
-    """What a colour-matrix set offers, read off its filenames -- PRD 7a makes
+    """What a colour-matrix set offers, read off its filenames -- ADR-0004 makes
     the filename *be* the slugified colour, which is why this is a directory
     listing rather than a lookup table.
 
     Here rather than in the calibrator, which used to glob for it: the shape
-    of a template directory is layout, and layout is this module's alone (A8).
+    of a template directory is layout, and layout is this module's alone.
     """
     ws = Workspace.discover(root_override=workspace_root)
 
@@ -464,7 +464,7 @@ def test_template_base_image_falls_back_to_a_trailing_segment_match(
     workspace_root: Path,
 ) -> None:
     """A vendor photo pack sharing one uninformative prefix across every file
-    (PRD 7a) still resolves each colour, without renaming anything."""
+    still resolves each colour, without renaming anything."""
     pack = workspace_root / "mockup-templates" / "vendor-pack"
     pack.mkdir()
     (pack / "comfort-colors-flat-lay-black.png").write_bytes(b"")
@@ -548,7 +548,7 @@ def test_a_template_directory_that_is_not_there_answers_empty_not_raises(
 def test_test_design_names_lists_uploaded_targets_by_their_id(workspace_root: Path) -> None:
     """The id the library offers is the filename stem, which is what
     ``test_design_file`` resolves back -- so the two have to agree, and they
-    agree by being written here together (A19)."""
+    agree by being written here together."""
     ws = Workspace.discover(root_override=workspace_root)
     assert ws.test_design_names() == []
 
@@ -590,7 +590,7 @@ def test_workspace_loads_garment_profile_and_exceptions(workspace_root: Path) ->
     assert ws.load_exceptions().root == {}  # absent exceptions.yaml means "no exceptions"
 
 
-# --- pricing plans: discovery (PRD 34) --------------------------------------
+# --- pricing plans: discovery --------------------------------------
 
 
 def test_pricing_plans_dir_is_a_workspace_top_level_directory(workspace_root: Path) -> None:
@@ -641,7 +641,7 @@ def test_load_pricing_plan_attaches_the_workspace_currency(workspace_root: Path)
 
 def test_renders_dir_is_the_parent_of_every_render_for_that_listing(workspace_root: Path) -> None:
     """Renaming a listing has to move this, so it is an accessor rather than a
-    path the rename endpoint spells for itself (A8)."""
+    path the rename endpoint spells for itself."""
     ws = Workspace.discover(root_override=workspace_root)
     assert ws.renders_dir("take-a-hike") == workspace_root / ".cache" / "renders" / "take-a-hike"
     assert ws.render_file("take-a-hike", "flat-lay-01", "black").parent.parent == ws.renders_dir(
@@ -655,7 +655,7 @@ def test_renders_dir_refuses_a_name_that_is_not_a_path_segment(workspace_root: P
         ws.renders_dir("../escape")
 
 
-# --- preview accessors (A32) --------------------------------------------
+# --- preview accessors --------------------------------------------
 
 
 def test_preview_dir_sits_beside_the_render_cache(workspace_root: Path) -> None:
@@ -759,7 +759,7 @@ def test_market_caches_live_under_the_cache_directory(workspace_root: Path) -> N
 
 
 class TestListingTemplateLayout:
-    """A35: listing templates live under `listing-templates/<name>/`, and only
+    """ADR-0047: listing templates live under `listing-templates/<name>/`, and only
     `Workspace` knows that -- names from URLs pass the single-segment rule."""
 
     @pytest.fixture
@@ -825,7 +825,7 @@ class TestListingTemplateLayout:
 def test_a_listing_template_read_while_it_is_replaced_still_loads(
     workspace_root: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """``template.yaml`` is written atomically (A37), and Windows refuses to
+    """``template.yaml`` is written atomically, and Windows refuses to
     open it while the editor's save is replacing it; the read waits that out
     rather than reporting the template missing or unreadable."""
     ws = Workspace.discover(root_override=workspace_root)

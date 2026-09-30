@@ -1,4 +1,4 @@
-"""Reading design PNGs out of one dropped ZIP (spec *Accepted input*; A45;
+"""Reading design PNGs out of one dropped ZIP (spec *Accepted input*; ADR-0051;
 batch plan PR 7).
 
 A ZIP is vendor-agnostic: every PNG at any folder depth is a candidate
@@ -28,7 +28,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
 
-# A45: safety limits, not settings. Module attributes so a test can lower them.
+# ADR-0051: safety limits, not settings. Module attributes so a test can lower them.
 MAX_ARCHIVE_BYTES = 512 * 1024 * 1024
 MAX_EXPANDED_BYTES = 1024 * 1024 * 1024
 MAX_ENTRIES = 2000
@@ -58,7 +58,7 @@ class ArchiveRefused(ValueError):
 
 
 def receive(chunks: Iterable[bytes], path: Path) -> None:
-    """Write the dropped ZIP to ``path`` with a running byte count (A45)."""
+    """Write the dropped ZIP to ``path`` with a running byte count."""
     size = 0
     with path.open("wb") as out:
         for chunk in chunks:
@@ -70,7 +70,7 @@ def receive(chunks: Iterable[bytes], path: Path) -> None:
 
 @dataclass(frozen=True)
 class Archive:
-    """An opened ZIP whose every entry passed A45's checks."""
+    """An opened ZIP whose every entry passed ADR-0051's checks."""
 
     _zip: zipfile.ZipFile
     _pngs: dict[str, zipfile.ZipInfo]
@@ -121,7 +121,7 @@ def _unsafe_type(info: zipfile.ZipInfo) -> str | None:
 
 
 def _check(infos: list[zipfile.ZipInfo]) -> None:
-    """Every entry, before any is read: A45's per-entry refusals."""
+    """Every entry, before any is read: ADR-0051's per-entry refusals."""
     if len(infos) > MAX_ENTRIES:
         raise ArchiveRefused(
             f"It holds {len(infos)} entries, and a ZIP can hold at most {MAX_ENTRIES}.",

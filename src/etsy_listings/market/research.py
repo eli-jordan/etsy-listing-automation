@@ -9,7 +9,7 @@ research run therefore makes at most 3 + 1 + 20 calls.
 
 Calls go out at most :data:`MAX_IN_FLIGHT` at a time; pacing and retries are
 the transport's. A call that still fails after those fails the whole run
-(:class:`MarketResearchError`): the market data is the primary driver of the
+( :class:`MarketResearchError`): the market data is the primary driver of the
 proposal's wording, so there is no quietly carrying on without it.
 """
 

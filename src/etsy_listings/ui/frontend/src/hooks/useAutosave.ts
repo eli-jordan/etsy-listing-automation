@@ -15,7 +15,7 @@ export type Patch = Record<string, unknown>;
 /** Where the listing stands with the disk, as the page head reports it.
  *
  * `unsaved` is the state where the listing has a name but the server would
- * not write the document: since PRD 70 that means the document contradicts
+ * not write the document: since ADR-0043 that means the document contradicts
  * itself (a price in the wrong currency, a title over Etsy's limit), never
  * that it is merely incomplete. `field_errors` names the field; this says
  * the consequence is a file that does not exist. */
@@ -30,7 +30,7 @@ export type SaveState =
 /** What one write came to. `saved: false` is a document the server would
  * not write -- nothing on disk changed -- carrying what to show about why:
  * the field errors, and the issues where they describe the candidate (a
- * listing template's valid-only save, A36) rather than something else. */
+ * listing template's valid-only save, template completeness) rather than something else. */
 export type SaveOutcome =
   | { saved: true; detail: ListingDetail }
   | { saved: false; issues: Issue[] | null; field_errors: Record<string, string> };
@@ -262,8 +262,8 @@ export function useAutosave(
       // (`update` replaces it rather than mutating), and that one is not in
       // the document being sent -- so clearing `pending` wholesale on success
       // would drop it silently. The same rule `applyResponse` already states
-      // for a PATCH, applied to the one request that did not have it: PRD
-      // 68's drafted brief is written by a request that resolves during
+      // for a PATCH, applied to the one request that did not have it: The
+      // drafted brief is written by a request that resolves during
       // exactly this window, and it went missing every time.
       const sent = pending.current;
       const sentWith = adopted.current;
@@ -331,7 +331,7 @@ export function useAutosave(
             // would hide it until the next iteration starts.
             if (pending.current === null) setSave(saved());
           } else {
-            // Not written (A36): the values stay on screen, and the next edit
+            // Not written: the values stay on screen, and the next edit
             // sends the whole document again -- which is the retry.
             applyRefusal(outcome);
           }

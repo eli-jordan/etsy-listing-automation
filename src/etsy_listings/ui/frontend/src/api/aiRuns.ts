@@ -12,12 +12,12 @@ import type { AiRunEvent, AiRunSummary } from "../types";
 
 export class AiRunsApiError extends Error {}
 
-/** What the editor says when `POST` answers `batch_pending` (A40). */
+/** What the editor says when `POST` answers `batch_pending`. */
 export const BATCH_PENDING_MESSAGE =
   "This listing is drafting in a batch. AI Mode is back once that is done.";
 
 /** What the editor says when `POST` answers `deploying`: a plan or apply
- * holds the listing, and deploying takes precedence over AI (A43). */
+ * holds the listing, and deploying takes precedence over AI. */
 export const DEPLOYING_MESSAGE =
   "This listing is deploying. AI Mode is back once the deploy finishes.";
 

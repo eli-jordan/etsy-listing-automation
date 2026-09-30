@@ -4,7 +4,7 @@ import { useBlocker } from "react-router-dom";
 /**
  * Warn before navigation would discard values the server has not written
  * (spec, *Completeness and editing*; UI doc §3) -- a listing template's edit
- * that made it incomplete, which A36 keeps off the disk.
+ * that made it incomplete, which template completeness keeps off the disk.
  *
  * Two ways out of the page, two guards. Leaving the app (reload, close, a
  * typed URL) is the browser's own `beforeunload` prompt, which is the only

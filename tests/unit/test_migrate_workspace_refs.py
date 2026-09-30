@@ -1,4 +1,4 @@
-"""`scripts/migrate_workspace_refs.py` (PRD 73): the one-off rewrite of every
+"""`scripts/migrate_workspace_refs.py`: the one-off rewrite of every
 `listing.yaml` from listing-relative `../../` refs to two-root refs.
 
 Driven through `main`, the way a seller runs it: what it prints and what it
@@ -152,7 +152,7 @@ def test_a_listing_already_invalid_for_another_reason_is_migrated_with_a_note(
     workspace_root: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     """Validation proves the edit broke nothing: the result must validate
-    exactly as well as the original. A bare-number price (PRD 24) is the
+    exactly as well as the original. A bare-number price is the
     seller's to fix, and no reason to leave the refs unreadable too."""
     text = LEGACY.replace("prices: {}", "prices: {S: 349}")
     path = _write_listing(workspace_root, "take-a-hike", text)

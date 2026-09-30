@@ -1,4 +1,4 @@
-"""Drafting a listing `brief` from its design image (PRD 68): the request
+"""Drafting a listing `brief` from its design image: the request
 shape, the packaged default `prompts/brief.md`, the response schema, and the
 hard validation a draft passes before it can reach an editor field.
 

@@ -267,7 +267,7 @@ describe("BatchSummaryPage", () => {
     expect(await screen.findByText(/Drafting stopped\. Resume queues the rest\./)).toBeVisible();
   });
 
-  it("shows a row a deploy cancelled, offers its own Retry and no Resume (A43)", async () => {
+  it("shows a row a deploy cancelled, offers its own Retry and no Resume", async () => {
     const deployed = IN_REVIEW.map((r) =>
       r.name === "after-rain-trail-2" ? { ...r, ai: "cancelled_by_deploy" as const } : r,
     );

@@ -60,7 +60,7 @@ export async function saveTemplateConfig(
 }
 
 /** What each photo will be taken as if this becomes a colour-matrix set.
- * Reporting only -- PRD 7a makes the filename the source of truth. */
+ * Reporting only -- ADR-0004 makes the filename the source of truth. */
 export async function getColourReport(name: string): Promise<ColourReportRow[]> {
   const { data, error } = await api.GET("/api/templates/{name}/colour-report", {
     params: { path: { name } },
@@ -71,7 +71,7 @@ export async function getColourReport(name: string): Promise<ColourReportRow[]> 
 
 /** The first calibration step. Writes the starting template.yaml for that
  * shape; refused if one already exists, since kind decides the whole file
- * shape (A11) and changing it would discard the old shape's calibration. */
+ * shape (ADR-0014) and changing it would discard the old shape's calibration. */
 export async function assignKind(name: string, kind: TemplateKind): Promise<TemplateConfigState> {
   const { data, error } = await api.POST("/api/templates/{name}/kind", {
     params: { path: { name } },
@@ -82,7 +82,7 @@ export async function assignKind(name: string, kind: TemplateKind): Promise<Temp
 }
 
 /** The calibrator's test-design library: three bundled targets plus whatever
- * the user has uploaded into the workspace (A19). */
+ * the user has uploaded into the workspace. */
 export async function listDesigns(): Promise<DesignSummary[]> {
   const { data, error } = await api.GET("/api/designs");
   if (error || !data) throw new CalibratorApiError("failed to list test designs");

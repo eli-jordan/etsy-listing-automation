@@ -27,7 +27,7 @@ The one thing it does *not* wait to be asked for is the brief those three
 suggestions are generated from. Attaching a design to a listing with an empty
 brief drafts one from the artwork and requests the proposal it unblocks, so the
 seller usually arrives at Listing Details to find the drawers already open
-(PRD 68, as amended by PRD 71). Every proposal is now market-informed: it is
+(ADR-0003, as amended by ADR-0044). Every proposal is now market-informed: it is
 worded after comparable Etsy listings, and the page head and a top listings
 panel show that work. See [features/market-seo-20260924/spec.md](../market-seo-20260924/spec.md) and
 [features/market-seo-20260924/interactions.md](../market-seo-20260924/interactions.md). Section 1a describes that chain; everything else in this document is
@@ -52,7 +52,7 @@ workspace.
    autosave path persists it; there is no separate AI save or apply step.
 5. Rejecting or closing a suggestion drawer does not undo values already added
    to normal fields.
-6. Suggestions are a server-cached proposal (PRD 74), not another source of
+6. Suggestions are a server-cached proposal (ADR-0047), not another source of
    truth for listing copy.
 7. Regeneration may replace pending suggestions, but never accepted listing
    values.
@@ -82,7 +82,7 @@ action.
 The **AI Mode** control sits to the right of the Brief field, as in the [v3 review mockup](../../../src/etsy_listings/ui/frontend/design/scenes/listing-seo-v3/review.tsx). Its compact
 button has a purple and pink sparkle and remains secondary to **Deploy changes**.
 
-| Interaction                      | What happens                                                                                                                                                  | Why it is important                                                                                                |
+| Interaction | What happens | Why it is important |
 | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
 | Hover or focus **AI Mode** when it cannot run | Show a small card listing the saved listing, design, prompt, and provider requirements, with the current readiness reason when available. | A disabled control explains what the seller can do next. An empty brief is not one of those requirements. |
 | Hover or focus **AI Mode** when it can run and the brief is empty | Show **Writes a brief from this design, then generates title, description and tag recommendations**. | The click is how a draft that failed, or never started, is run again. |
@@ -107,10 +107,10 @@ or a prompt file that appeared, can enable the button.
 Attaching a design is the moment a listing first has something for a model to
 look at, and it is also the moment the seller is furthest from the copy they
 will eventually need. So that transition — and only that transition — starts
-the work by itself (PRD 68, as amended by PRD 71).
+the work by itself (ADR-0003, as amended by ADR-0044).
 
 The pick *arms* the chain. Picking a design also names and writes the listing
-(PRD 69, 70). The chain fires once, as one AI run
+(ADR-0043). The chain fires once, as one AI run
 ([features/market-seo-20260924/spec.md › AI runs](../market-seo-20260924/spec.md#ai-runs)), on the first successful
 save that has a name, a design and a garment profile. The garment is needed
 because the market queries use its item type.
@@ -156,12 +156,12 @@ Immediately after activation, show an inline status message in Listing Details
 and disable **AI Mode** until the request completes. The seller may continue
 editing other fields while generation runs.
 
-| State      | UI response                                                                                                     | Why it is important                                                                                  |
+| State | UI response | Why it is important |
 | ---------- | --------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
 | Generating | Keep **AI Mode** disabled. The sparkle twinkles and the button glows in a pulse. Under the button, **Generating for 0:00 seconds** counts up beside **Cancel**. Hovering the button shows **Generating title, description and tag recommendations for your review**. Motion is still when reduced motion is requested. | The request can take time, so the button itself shows that work is underway, and the seller can see how long it has run and stop it without the card staying open. |
-| Success    | Remove the loading message. If the seller is looking at the page, the suggestion drawers slide out from under Title, Tags, and Description lead, slightly narrower than those fields, headed by the AI Mode sparkle. A proposal restored later appears in place, without the slide. | The drawers should read as coming out of the fields they belong to, and a later visit should not replay that motion. |
-| Failure    | Remove the loading state. **Try again** takes the timer's place under the brief, with no error sentence beside it. The reason pops in as a toast at the upper right, dismissible, and leaves when the next run starts. The top-listings column is not shown for a failure the editor watched. Do not change listing fields. | A model or validation failure must never look like an empty successful result, and the reason must not cover the brief or the market column. |
-| Cancelled  | Remove the loading state and retain no proposal. A brief or market snapshot the run already wrote stays.       | Pressing **Cancel** must not leave a result from an abandoned request. Leaving the editor or losing the connection is not cancelling: the run continues, and the editor reattaches to it. |
+| Success | Remove the loading message. If the seller is looking at the page, the suggestion drawers slide out from under Title, Tags, and Description lead, slightly narrower than those fields, headed by the AI Mode sparkle. A proposal restored later appears in place, without the slide. | The drawers should read as coming out of the fields they belong to, and a later visit should not replay that motion. |
+| Failure | Remove the loading state. **Try again** takes the timer's place under the brief, with no error sentence beside it. The reason pops in as a toast at the upper right, dismissible, and leaves when the next run starts. The top-listings column is not shown for a failure the editor watched. Do not change listing fields. | A model or validation failure must never look like an empty successful result, and the reason must not cover the brief or the market column. |
+| Cancelled | Remove the loading state and retain no proposal. A brief or market snapshot the run already wrote stays. | Pressing **Cancel** must not leave a result from an abandoned request. Leaving the editor or losing the connection is not cancelling: the run continues, and the editor reattaches to it. |
 
 The backend tries Codex first. Only recognised provider-unavailable,
 authentication/quota, or rate-limit failures fall through to Claude Code; a
@@ -179,11 +179,11 @@ AI Mode generates exactly three title options. They appear in a compact drawer
 attached below the existing Title field, using the same body typography as tag
 suggestions.
 
-| Interaction                 | What happens                                                                                                 | Why it is important                                                                        |
+| Interaction | What happens | Why it is important |
 | --------------------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------ |
-| Activate a title option     | Replace the Title field with that option, close the title drawer, and let normal autosave persist the field. | One click is both the decision and the action; a second accept control would be redundant. |
-| Activate **Reject all**     | Close the title drawer and leave the Title field unchanged.                                                  | The seller can dismiss an unhelpful set with a clear, reversible action.                   |
-| Edit the chosen title later | Treat it exactly like manually entered title text.                                                           | AI output is a draft owned by the seller, not locked generated content.                    |
+| Activate a title option | Replace the Title field with that option, close the title drawer, and let normal autosave persist the field. | One click is both the decision and the action; a second accept control would be redundant. |
+| Activate **Reject all** | Close the title drawer and leave the Title field unchanged. | The seller can dismiss an unhelpful set with a clear, reversible action. |
+| Edit the chosen title later | Treat it exactly like manually entered title text. | AI output is a draft owned by the seller, not locked generated content. |
 
 There is no title **Accept** button and no default selection.
 
@@ -193,14 +193,14 @@ AI Mode generates exactly 20 unique, ranked tag candidates. The first 13 are
 shown under **Best 13**; the remaining seven are shown under **More options**.
 This ranking supports a quick default while keeping alternatives available.
 
-| Interaction                                     | What happens                                                                               | Why it is important                                                                  |
+| Interaction | What happens | Why it is important |
 | ----------------------------------------------- | ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------ |
-| Activate an unselected tag                      | Add it immediately to the normal Tags field and mark the suggestion selected.              | The seller sees the real listing state change at the point of choice.                |
-| Activate a selected suggestion                  | Remove it from the normal Tags field and return the suggestion to its unselected state.    | Toggling makes comparison and correction lightweight.                                |
-| Remove a selected tag from the normal chip list | Remove it from the listing and return any matching suggestion to its unselected state.     | Both representations stay synchronized; there is only one tag value.                 |
-| Activate **Accept best 13**                     | Replace the normal tag list with the first 13 ranked suggestions and close the tag drawer. | This is the fast path for sellers who trust the ranking, while remaining explicit.   |
-| Reach 13 selected tags                          | Disable every remaining unselected suggestion until a selected tag is removed.             | The UI prevents an invalid Etsy tag count instead of reporting it after the fact.    |
-| Activate **Close**                              | Close the tag drawer. Tags already selected remain in the normal Tags field.               | Tag choices are applied individually, so closing should not silently roll them back. |
+| Activate an unselected tag | Add it immediately to the normal Tags field and mark the suggestion selected. | The seller sees the real listing state change at the point of choice. |
+| Activate a selected suggestion | Remove it from the normal Tags field and return the suggestion to its unselected state. | Toggling makes comparison and correction lightweight. |
+| Remove a selected tag from the normal chip list | Remove it from the listing and return any matching suggestion to its unselected state. | Both representations stay synchronized; there is only one tag value. |
+| Activate **Accept best 13** | Replace the normal tag list with the first 13 ranked suggestions and close the tag drawer. | This is the fast path for sellers who trust the ranking, while remaining explicit. |
+| Reach 13 selected tags | Disable every remaining unselected suggestion until a selected tag is removed. | The UI prevents an invalid Etsy tag count instead of reporting it after the fact. |
+| Activate **Close** | Close the tag drawer. Tags already selected remain in the normal Tags field. | Tag choices are applied individually, so closing should not silently roll them back. |
 
 The drawer always shows the current count as **n of 13 tags selected**. Selected
 state uses text or an icon as well as color. Tags retain the existing maximum
@@ -212,11 +212,11 @@ AI Mode generates exactly three description-lead options. The lead is the
 opening paragraph a shopper reads before the reusable or listing-specific body.
 Its drawer is attached below the Description lead field.
 
-| Interaction                | What happens                                                                                     | Why it is important                                                                    |
+| Interaction | What happens | Why it is important |
 | -------------------------- | ------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| Activate a lead option     | Replace the Description lead field, close its drawer, and let normal autosave persist the field. | The seller can judge the option in its real location and continue editing immediately. |
-| Activate **Reject all**    | Close the lead drawer and leave the field unchanged.                                             | Dismissing weak options must not erase existing copy.                                  |
-| Edit the chosen lead later | Treat it exactly like manually entered text.                                                     | The seller remains the final author and can correct tone or factual nuance.            |
+| Activate a lead option | Replace the Description lead field, close its drawer, and let normal autosave persist the field. | The seller can judge the option in its real location and continue editing immediately. |
+| Activate **Reject all** | Close the lead drawer and leave the field unchanged. | Dismissing weak options must not erase existing copy. |
+| Edit the chosen lead later | Treat it exactly like manually entered text. | The seller remains the final author and can correct tone or factual nuance. |
 
 There is no description-lead **Accept** button and no default selection.
 
@@ -233,12 +233,12 @@ body as-is while editing. Printify, Etsy, snapshots, diffs, validation, and UI
 preview all consume that one final concrete description; no UI handler joins it
 independently.
 
-| Interaction                                                                        | What happens                                                                    | Why it is important                                                              |
+| Interaction | What happens | Why it is important |
 | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Choose a common-copy item                                                          | Store its workspace-relative reference under `common-copy/` as the body source. | Reusable fit, care, and fulfillment copy stays consistent across listings.       |
-| Choose **Write listing-specific body**                                             | Switch to inline-body mode with an initially blank field.                       | A listing can opt out of shared copy without creating a second competing source. |
-| Switch between body modes                                                          | Replace the active body source immediately; do not retain a hidden fallback.    | Exactly one source makes the final Etsy description predictable.                 |
-| A selected common-copy file is missing, malformed, or not targeted to descriptions | Show a visible Details error and block deployment.                              | Broken shared copy must be fixed before it can reach a customer-facing listing.  |
+| Choose a common-copy item | Store its workspace-relative reference under `common-copy/` as the body source. | Reusable fit, care, and fulfillment copy stays consistent across listings. |
+| Choose **Write listing-specific body** | Switch to inline-body mode with an initially blank field. | A listing can opt out of shared copy without creating a second competing source. |
+| Switch between body modes | Replace the active body source immediately; do not retain a hidden fallback. | Exactly one source makes the final Etsy description predictable. |
+| A selected common-copy file is missing, malformed, or not targeted to descriptions | Show a visible Details error and block deployment. | Broken shared copy must be fixed before it can reach a customer-facing listing. |
 
 The body-source picker searches the title, summary, and reference of common
 copy targeted at descriptions. **Write inline body** remains available in the
@@ -257,7 +257,7 @@ desktop `try-workspace` only, never arbitrary discovered workspaces.
 ## 7. Proposal lifecycle and stale inputs
 
 The latest proposal is stored in server cache (`.cache/proposals/`), scoped to
-its saved listing, with which drawers were resolved (PRD 74). It survives a
+its saved listing, with which drawers were resolved (ADR-0047). It survives a
 refresh or server restart and has no expiry: it lasts until replaced, the
 listing is deleted or fully applied, or the cache is cleared. It is never
 written to listing YAML, a generated-copy file, or a remote listing; only a
@@ -266,14 +266,14 @@ value the seller chooses reaches a normal listing field.
 Generation records a snapshot of the relevant inputs, including the design,
 brief, garment context, and other facts supplied to the model.
 
-| Event                                                                           | UI response                                                                                                             | Why it is important                                                                                                 |
+| Event | UI response | Why it is important |
 | ------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| A relevant input changes while suggestions are pending | Keep the proposal visible and its choices selectable. The drawer heading reads *Out of date: {what changed}. Still usable*. Offer **Regenerate**. | Hiding the result would be disorienting; the heading is the warning, and a dialog for every stale pick was friction without new information (PRD 74). |
+| A relevant input changes while suggestions are pending | Keep the proposal visible and its choices selectable. The drawer heading reads *Out of date: {what changed}. Still usable*. Offer **Regenerate**. | Hiding the result would be disorienting; the heading is the warning, and a dialog for every stale pick was friction without new information (ADR-0047). |
 | The editor is left or reloaded while generation runs | Keep running. The editor reattaches to the run on return and stores its proposal when it arrives. | The work was asked for; walking away from the tab is not a request to throw it away. |
-| Activate **Regenerate**                                                         | Request a complete replacement proposal from the current inputs. Preserve all values already chosen into normal fields. | Regeneration repairs context without undoing seller decisions.                                                      |
-| Resolve or dismiss one drawer                                                   | Clear only that part of the pending proposal.                                                                           | Title, tags, and lead are independent decisions.                                                                    |
-| Resolve or dismiss all drawers                                                  | Keep the proposal, recorded as resolved, so no drawer reopens as new; it can still be inspected.                         | Resolved suggestions must not keep presenting themselves, but the seller may deliberately revisit them.              |
-| Reload with a current pending proposal                                          | Restore unresolved drawers in place.                                                                                    | A refresh should not waste a completed model request.                                                               |
+| Activate **Regenerate** | Request a complete replacement proposal from the current inputs. Preserve all values already chosen into normal fields. | Regeneration repairs context without undoing seller decisions. |
+| Resolve or dismiss one drawer | Clear only that part of the pending proposal. | Title, tags, and lead are independent decisions. |
+| Resolve or dismiss all drawers | Keep the proposal, recorded as resolved, so no drawer reopens as new; it can still be inspected. | Resolved suggestions must not keep presenting themselves, but the seller may deliberately revisit them. |
+| Reload with a current pending proposal | Restore unresolved drawers in place. | A refresh should not waste a completed model request. |
 
 Once a suggestion is chosen, it is no longer tied to the proposal and receives
 no stale badge. It is ordinary listing content.
@@ -331,8 +331,8 @@ The authority documents now establish the boundaries this interaction uses.
 Generation is an in-memory **AI run** with its own registry, separate from
 `ui/runs` and never on the plan/apply worker thread. It keeps no durable job
 record, and its only workspace outputs are the guarded `brief` write and the
-gitignored `.cache/market/` (PRD 71), plus the listing's cached proposal in
-`.cache/proposals/` (PRD 74). The application appends delimited JSON context and a response
+gitignored `.cache/market/` (ADR-0044), plus the listing's cached proposal in
+`.cache/proposals/` (ADR-0047). The application appends delimited JSON context and a response
 schema to plain seller-editable `prompts/seo.md`; it does not support prompt
 placeholders or executable prompt code.
 

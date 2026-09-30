@@ -127,7 +127,7 @@ export function ListingEditorPage() {
       // non-null. `useAutosave` handles a name change itself (`commitName`
       // updates its own `savedName`, `detail` and `save` before `onNamed`
       // fires), so that remount threw away state for nothing. It is not
-      // nothing any more: PRD 68's chain is armed when a design is attached,
+      // nothing any more: ADR-0003's chain is armed when a design is attached,
       // which on a new listing is usually *before* it is named, and a
       // remount there would disarm it before the save that fires it.
       name={routeName}
@@ -164,8 +164,7 @@ function ListingEditorPageContent({
   const [member, setMember] = useListingBatch(detail.name);
   // AI Mode, and the AI run behind it, live here rather than inside a tab: a
   // run outlives the tab that was showing when it started, and the chain
-  // that begins one begins at the design strip, above the tab strip (PRD
-  // 68). Living here rather than in `ListingEditorShell` is what lets the
+  // that begins one begins at the design strip, above the tab strip. Living here rather than in `ListingEditorShell` is what lets the
   // page head report it beside the autosave line.
   /** A name the design pick chose, before the listing exists under it. */
   const [pickedName, setPickedName] = useState("");
@@ -201,7 +200,7 @@ function ListingEditorPageContent({
       setPickedName(named);
       commitName(named);
     }
-    // PRD 68: armed while the brief is empty, fired by the first save that
+    // ADR-0003: armed while the brief is empty, fired by the first save that
     // can run it (`useAiRun`).
     aiSeo.run.arm();
   }
@@ -275,12 +274,12 @@ function saveAsUrl(listing: string): string {
  * row over an action row.
  *
  * - **The identity row**: the breadcrumb (or `crumb`, Back to batch in its
- *   place), the title node, the status pill, the meta -- the save sentence,
- *   or once saved the auto-save chip with its file card -- what the editor is
- *   doing on its own, and Deploy.
+ * place), the title node, the status pill, the meta -- the save sentence,
+ * or once saved the auto-save chip with its file card -- what the editor is
+ * doing on its own, and Deploy.
  * - **The action row**: `actions`, the caller's quiet icon + label actions.
- *   Absent when there are none (an unsaved draft has nothing to act on), and
- *   the identity row then carries the head's rule itself.
+ * Absent when there are none (an unsaved draft has nothing to act on), and
+ * the identity row then carries the head's rule itself.
  *
  * `Deploy changes →` (docs/features/deploy-20260917/spec.md decision 8) sits here rather
  * than in `ListingEditorPageContent`, because this is the one part of the
@@ -305,7 +304,7 @@ export function EditorHead({
   meta: ReactNode;
   flush: () => Promise<void>;
   /** What the editor is doing on its own right now, beside the meta line
-   * (PRD 68). `null` whenever nothing is running, which is most of the
+   * (ADR-0003). `null` whenever nothing is running, which is most of the
    * time. */
   activity?: ReactNode;
   /** Replaces the breadcrumb when truthy: Back to batch (UI doc §8). */
@@ -419,7 +418,7 @@ export function ListingEditorShell(props: ShellProps) {
           activeTab={tab}
           onJumpTo={pickTab}
           subject="listing-template"
-          // A block is what stops the save (A36); warnings alone stop
+          // A block is what stops the save; warnings alone stop
           // nothing, so they are not told the file is being held back.
           when={
             detail.issues.some((issue) => issue.severity === "block")
@@ -451,7 +450,7 @@ export function ListingEditorShell(props: ShellProps) {
             >
               {t.label}
               {/* One warning-coloured count, however many of them stop a
-                  deploy: none of them stops the save (PRD 70), and the tab
+                  deploy: none of them stops the save (ADR-0043), and the tab
                   is only saying there is something to look at. The banner
                   says which ones matter for deploying. */}
               {badge.block + badge.warn > 0 && (

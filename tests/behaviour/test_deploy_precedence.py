@@ -1,4 +1,4 @@
-"""Deploying takes precedence over AI (A43; spec, *Deployment interaction*;
+"""Deploying takes precedence over AI (ADR-0050; spec, *Deployment interaction*;
 UI doc §8).
 
 A UI plan or apply for a listing first cancels that listing's AI work --
@@ -190,7 +190,7 @@ def test_deploy_ownership_wins_when_stop_already_requested(
     provider: ChainProvider,
     prior_reason: Literal["cancelled", "timeout"],
 ) -> None:
-    """A43 is about who owns the listing, not which stop request won a race:
+    """ADR-0050 is about who owns the listing, not which stop request won a race:
     Resume must not requeue active work once deploy has claimed it."""
     provider.gate("brief")
     batch_id = _batch(client, "night-hike-club")

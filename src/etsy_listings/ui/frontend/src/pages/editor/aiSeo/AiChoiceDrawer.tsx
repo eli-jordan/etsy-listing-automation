@@ -27,7 +27,7 @@ export function AiChoiceDrawer({
   field: Field;
   options: string[];
   /** Why the proposal no longer describes the saved listing, from the
-   * server (A41), or `null` while it still does. */
+   * server, or `null` while it still does. */
   staleReason: string | null;
   rationale: SeoRationaleEntry[];
   warnings: SeoWarningEntry[];
@@ -80,7 +80,7 @@ export function AiChoiceDrawer({
 /** A drawer's heading: its own, or -- for an out-of-date proposal -- what
  * changed (UI doc §8; `features/ai-seo-20260922/interactions.md` §7). The choices
  * below stay clickable with no confirmation: the heading is the warning
- * (PRD 74). */
+ * (ADR-0047). */
 export function SuggestionHeading({
   staleReason,
   children,

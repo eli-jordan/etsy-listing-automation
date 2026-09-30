@@ -1,4 +1,4 @@
-"""The file locator's endpoints (PRD 72, 73): the two directories a `media:`
+"""The file locator's endpoints: the two directories a `media:`
 file ref can name, listed with each file's kind, and served.
 
 A file ref has two roots, and the locator offers one group per root: the
@@ -8,7 +8,7 @@ questions -- what is here, a picture to pick it by, the file itself -- so both
 are one schema and one pair of responses, differing only in which `Workspace`
 accessor finds the file.
 
-The listing-local half is a security boundary (A8). Its listing name and path
+The listing-local half is a security boundary. Its listing name and path
 both come from URLs, and the directory it serves from also holds
 ``listing.yaml`` and the lockfile. The boundary is `Workspace`'s
 (``_media_file_in``); this module only decides that a refusal is a ``400``
@@ -37,7 +37,7 @@ _MEDIA_TYPES = {
     ".mp4": "video/mp4",
     ".mov": "video/quicktime",
 }
-"""Every extension `media:` accepts (PRD 72), named here rather than asked of
+"""Every extension `media:` accepts, named here rather than asked of
 `mimetypes`, which on Windows reads the registry and may not know ``.mov``."""
 
 
@@ -80,7 +80,7 @@ def common_media_file(request: Request, name: str) -> FileResponse:
 @router.get("/api/listings/{listing}/media-files", response_model=list[MediaFileSummary])
 def list_listing_media_files(request: Request, listing: str) -> list[MediaFileSummary]:
     """The *This listing* group: the listing's own files, each with the
-    ``./`` ref that names it (PRD 73). A ``404`` for a listing that does not
+    ``./`` ref that names it. A ``404`` for a listing that does not
     exist, rather than an empty group that would look like one with nothing
     in it."""
     workspace = _workspace(request)
@@ -136,7 +136,7 @@ def list_listing_template_media_files(request: Request, template: str) -> list[M
 
 @router.get("/api/listing-templates/{template}/media-files/{path:path}/thumbnail")
 def listing_template_media_thumbnail(request: Request, template: str, path: str) -> Response:
-    """A listing template's own file (its ``./`` root, A35) -- the pictures on
+    """A listing template's own file (its ``./`` root, ADR-0047) -- the pictures on
     its card. The same boundary as a listing's: the directory also holds
     ``template.yaml``."""
     workspace = _workspace(request)

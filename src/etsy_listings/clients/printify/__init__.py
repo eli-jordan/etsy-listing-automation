@@ -13,20 +13,20 @@ it did not need was a second copy of the plumbing. Both halves carried their
 own ``TokenSource``, lazy token resolve, ``401/403`` branch, auth error, base
 URL and ``httpx.Client`` -- and the copies had already drifted, the catalog
 reader having no retries at all while the identical failure on a write rode
-out its backoff (A21). :mod:`~etsy_listings.clients.printify.transport` is now
+out its backoff.:mod:`~etsy_listings.clients.printify.transport` is now
 the one implementation, and the authority lives where it always belonged, in
 the protocols.
 
 The parts:
 
-``transport``   token, retries, auth and error decoding -- the shared half
-``protocol``    the two boundaries; the split that actually matters
-``models``      what Printify returns, reference data and shop state alike
-``catalog``     :class:`CatalogClient` over HTTP
-``products``    :class:`PrintifyClient` over HTTP
-``cache``       TTL disk cache; wraps a catalog client, and only a catalog one
-``resolve``     name -> id, the only place a config name becomes an integer
-``fakes``       in-memory implementations of both, for the behaviour suite
+``transport`` token, retries, auth and error decoding -- the shared half
+``protocol`` the two boundaries; the split that actually matters
+``models`` what Printify returns, reference data and shop state alike
+``catalog`` :class:`CatalogClient` over HTTP
+``products`` :class:`PrintifyClient` over HTTP
+``cache`` TTL disk cache; wraps a catalog client, and only a catalog one
+``resolve`` name -> id, the only place a config name becomes an integer
+``fakes`` in-memory implementations of both, for the behaviour suite
 
 **Nothing caches on the write side, deliberately.** A shop's products are the
 state this tool is converging on, and a cached read of them would make ``plan``

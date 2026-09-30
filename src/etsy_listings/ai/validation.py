@@ -4,13 +4,13 @@ plan, PR3, item 5; `docs/features/ai-seo-20260922/interactions.md` section 8).
 
 Two passes, always in this order:
 
-1. **Normalize** (:func:`normalize_raw_proposal`) -- fix harmless formatting a
+1. **Normalize** ( :func:`normalize_raw_proposal`) -- fix harmless formatting a
    model commonly produces (surrounding whitespace, a wrapping quote pair
    around an otherwise-fine string, doubled interior spaces) so it is never
    mistaken for a genuine content problem. Purely cosmetic: it never changes
    how many entries a list has, never drops or reorders one, and never
    touches ``intent``/``used_in`` enum values.
-2. **Hard-validate** (:func:`validate_proposal`) -- exact counts, Etsy's
+2. **Hard-validate** ( :func:`validate_proposal`) -- exact counts, Etsy's
    title/tag limits (imported from `config/listing.py` rather than
    redeclared, per this codebase's "mirror rather than reinvent" rule for
    anything the listing editor already enforces), tag uniqueness, rationale

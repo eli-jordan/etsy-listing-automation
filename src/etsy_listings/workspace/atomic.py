@@ -1,6 +1,6 @@
-"""Replace a file without a window where a reader sees it half-written (A37).
+"""Replace a file without a window where a reader sees it half-written.
 
-The one helper A37 names, so the per-module copies (``replace_listing_yaml``
+The one helper cache-record persistence names, so the per-module copies (``replace_listing_yaml``
 and the caches' own) can move onto it as they are touched rather than each
 growing its own spelling of "temporary file, then rename".
 """
@@ -68,7 +68,7 @@ def read_bytes_retrying(path: Path) -> bytes:
 
 
 def write_json_atomic(path: Path, document: object) -> None:
-    """:func:`write_bytes_atomic` for a cache record (A37): indented UTF-8
+    """:func:`write_bytes_atomic` for a cache record: indented UTF-8
     JSON, so a record is readable when somebody opens ``.cache`` to see why."""
     text = json.dumps(document, indent=2, ensure_ascii=False, sort_keys=False)
     write_bytes_atomic(path, (text + "\n").encode("utf-8"))

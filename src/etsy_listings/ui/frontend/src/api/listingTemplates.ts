@@ -9,7 +9,7 @@ import type {
 } from "../types";
 
 /**
- * The listing-templates resource (A35, A36): typed wrappers over
+ * The listing-templates resource (ADR-0047, template completeness): typed wrappers over
  * `/api/listing-templates`, in `api/listings.ts`'s shape.
  */
 
@@ -84,7 +84,7 @@ export async function getListingTemplate(name: string): Promise<ListingTemplateD
   return data;
 }
 
-/** A36's valid-only save: resolves `saved: false` with the issues or field
+/** valid-only save: resolves `saved: false` with the issues or field
  * errors, and the file untouched, for a document that is not complete. */
 export async function putListingTemplate(
   name: string,

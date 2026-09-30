@@ -3,10 +3,10 @@ reads, and the helpers AI runs build a proposal with (AI SEO implementation
 plan, PR5; features/market-seo-20260924/spec.md, *AI runs*; market-seo implementation plan, PR 8).
 
 ```
-GET   /api/listings/{name}/ai-seo/readiness      -> SeoReadinessResponse
-GET   /api/listings/{name}/market                -> MarketSnapshot | 404
-GET   /api/listings/{name}/proposal              -> ListingProposal | 404
-PATCH /api/listings/{name}/proposal/resolution   -> ListingProposal | 404 | 409
+GET /api/listings/{name}/ai-seo/readiness -> SeoReadinessResponse
+GET /api/listings/{name}/market -> MarketSnapshot | 404
+GET /api/listings/{name}/proposal -> ListingProposal | 404
+PATCH /api/listings/{name}/proposal/resolution -> ListingProposal | 404 | 409
 ```
 
 Generation itself is an AI run (``ui/airuns/``, served by
@@ -22,10 +22,10 @@ browser disconnecting -- were retired when the browser moved onto runs
   an empty brief is drafted by that click), so the button is lit exactly
   when ``POST /api/ai/runs`` would accept the run the click starts;
 - turning a saved `Listing` into the `SeoRequest` the orchestrator wants
-  (:func:`build_seo_request`, :func:`primary_design_image`), and a cached
+  ( :func:`build_seo_request`, :func:`primary_design_image`), and a cached
   proposal into its wire form, judged stale against the saved listing
-  (:func:`listing_proposal`; A41);
-- the provider factory ``create_app`` injects (:data:`AiProviderFactory`),
+  ( :func:`listing_proposal`; ADR-0049);
+- the provider factory ``create_app`` injects ( :data:`AiProviderFactory`),
   the seam tests replace with fakes. CI never calls a real Codex or Claude
   CLI, per PR4's own rule.
 """
@@ -67,7 +67,7 @@ router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
 
 _PREFERRED_DESIGN_KEYS: tuple[str, ...] = ("default", "on-light", "on-dark")
 """Which artwork key becomes the one image a provider sees, when a listing's
-design map carries more than one (PRD 30's ``on-light``/``on-dark`` split).
+design map carries more than one (``on-light``/``on-dark`` split).
 The provider is reading the design once, for SEO copy and OCR text, not
 rendering it per colour -- there is no per-colour resolution to do here, only
 a deterministic single pick. ``"default"`` covers the common single-artwork
@@ -123,7 +123,7 @@ def primary_design_image(workspace: Workspace, name: str, listing: Listing) -> P
     try:
         return workspace.resolve_ref(listing.design[key], listing_dir=listing_dir)
     except InvalidRefError as exc:
-        # A seller's file to fix (PRD 73's legacy form, most likely), so a
+        # A seller's file to fix (ADR-0046's legacy form, most likely), so a
         # 409 naming it, the way a missing garment profile is answered.
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
@@ -250,8 +250,8 @@ def listing_proposal(
     facts: WorkspaceFacts | None = None,
 ) -> ListingProposal:
     """``record`` on the wire, judged against the saved listing as it is now
-    (A41). Server-side, so the editor and the batch summary agree. A caller
-    judging many listings passes the ``facts`` it gathered once."""
+    . Server-side, so the editor and the batch summary agree. A caller
+        judging many listings passes the ``facts`` it gathered once."""
     listing = workspace.load_listing(name)
     facts = facts or WorkspaceFacts.gather(workspace)
     profile = facts.garment_profile(listing.garment_profile)
@@ -272,7 +272,7 @@ BATCH_PENDING_REASON = "This listing is drafting in a batch. AI Mode is back onc
 
 
 DEPLOYING_REASON = "This listing is deploying. AI Mode is back once the deploy finishes."
-"""The editor's hint while a UI plan or apply holds the listing (A43; UI doc
+"""The editor's hint while a UI plan or apply holds the listing (ADR-0050; UI doc
 §8, *Deploying takes precedence over AI*)."""
 
 
@@ -325,7 +325,7 @@ def get_market_snapshot(target: Existing) -> MarketSnapshot:
     responses={404: {"description": "No such listing, or no proposal cached for it"}},
 )
 def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
-    """The listing's latest AI SEO proposal (A41; spec, *Durable AI
+    """The listing's latest AI SEO proposal (ADR-0049; spec, *Durable AI
     proposals*), with which sections were resolved and whether it has gone
     stale. Written by every AI run before it announces the proposal, so a
     reload, a server restart or a batch run all find it here."""

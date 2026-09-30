@@ -1,4 +1,4 @@
-"""The batch AI queue (spec, *Batch AI queue*; A40): every created batch row
+"""The batch AI queue (spec, *Batch AI queue*; ADR-0048): every created batch row
 drafts its brief, researches the market and gets a proposal, through the
 same :class:`~etsy_listings.ui.airuns.runner.AiRunner` a manual run uses.
 
@@ -14,7 +14,7 @@ after serving one batch the next row comes from the batch after it, so a
 25-row batch cannot hold back a 2-row one confirmed a minute later.
 
 **The rows are the record.** Row states live in the batch record under
-``.cache/batches/`` (A37), so the summary reads them after a restart, and
+``.cache/batches/``, so the summary reads them after a restart, and
 :meth:`BatchQueue.start` returns every ``running`` row to ``queued`` -- a
 run does not survive its server, and its listing already exists, so the
 rerun creates nothing twice. A run stopped by the server shutting down is
@@ -47,7 +47,7 @@ refused while one exists (spec, *Scheduling*)."""
 
 RESUMABLE: frozenset[AiState] = frozenset({"stopped", "cancelled"})
 """Not ``cancelled_by_deploy``: work a deploy cancelled must not resume onto
-the deployed listing (A43; spec, *Deployment interaction*)."""
+the deployed listing (ADR-0050; spec, *Deployment interaction*)."""
 RETRYABLE: frozenset[AiState] = frozenset({"failed", "stopped", "cancelled", "cancelled_by_deploy"})
 
 _ENDED: dict[str, AiState] = {"done": "done", "failed": "failed", "cancelled": "cancelled"}
@@ -185,7 +185,7 @@ class BatchQueue:
                 row.name, draft_brief=self._brief_is_empty(row.name), origin="batch"
             )
             if not isinstance(run, AiRun):
-                # A manual run holds the listing, or a deploy does (A43): a
+                # A manual run holds the listing, or a deploy does: a
                 # row Retry queued mid-deploy starts once the deploy ends.
                 return False
             with self._state:
@@ -197,7 +197,7 @@ class BatchQueue:
         return True
 
     def _brief_is_empty(self, name: str) -> bool:
-        """A40: a brief already there -- the seller's, or a retried row's own
+        """ADR-0048: a brief already there -- the seller's, or a retried row's own
         -- is kept, and only research and SEO rerun. The runner checks again
         under the write lock before it writes."""
         try:
@@ -257,7 +257,7 @@ class BatchQueue:
         return self._requeue(batch_id, lambda row: row.id == row_id and row.ai in RETRYABLE)
 
     def _requeue(self, batch_id: str, which: Callable[[BatchRow], bool]) -> Batch | None:
-        # A42: a deleted listing's row is never queued again, by Resume or
+        # a deleted listing's row is never queued again, by Resume or
         # by Retry -- there is no listing left to draft.
         batch = self._update(
             batch_id,
@@ -273,7 +273,7 @@ class BatchQueue:
 
     @contextmanager
     def yield_to_deploy(self, listings: Sequence[str]) -> Iterator[None]:
-        """A43: a UI deploy (plan or apply) takes ``listings`` from AI work
+        """ADR-0050: a UI deploy (plan or apply) takes ``listings`` from AI work
         for as long as the ``with`` lasts (spec, *Deployment interaction*).
 
         On entry no new run may start for them -- manual or batch; ``POST

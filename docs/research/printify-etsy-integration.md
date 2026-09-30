@@ -33,7 +33,7 @@ that exercises what the Phase 3 stages will do.
 Both products were unpublished and deleted afterwards. Both Etsy drafts
 survived — see *Cleanup does not clean up*. That sequence (unpublish, then
 DELETE) is not the one the tool will use; connected DELETE takes the draft
-(PRD 63).
+(ADR-0036).
 
 **One conclusion from round 1 was corrected by round 2**: the number of images
 Printify sends. See *The first publish sends images regardless*.
@@ -68,7 +68,7 @@ answers `401`. That is not incidental — it produced a defect, recorded under
 |---|---|---|
 | 1 | `POST /v1/shops/{shop}/products.json` with `"visible": false` | `200`. Reads back `visible: false`, plus **17 blueprint tags Printify invented** (`TikTok`, `US Elections Season`, `Back to School`) |
 | 2 | `POST /v1/shops/{shop}/products/{id}/publish.json` | `200 {}`, immediately. The body is the sync flags |
-| 3 | poll `GET .../products/{id}.json` | `is_locked: true` for roughly 8 seconds, then `false` with `external` populated |
+| 3 | poll `GET.../products/{id}.json` | `is_locked: true` for roughly 8 seconds, then `false` with `external` populated |
 | 4 | `GET /v3/application/listings/{listing_id}` | The Etsy listing |
 
 `external` on the finished product:
@@ -138,7 +138,7 @@ Two consequences, and they shape the stage:
 - The media stage must treat Printify's image set as **an unknown number of
   images, settled at an unknown time**. It cannot branch on having seen one.
 - Rank 1 is the listing thumbnail, and Printify lands there. Ours have to
-  displace it. PRD 41's full-replace media sync is the right shape; this is why
+  displace it. ADR-0021's full-replace media sync is the right shape; this is why
   it cannot be an append.
 
 The PRD anticipated Printify's full mockup set — 8 images on the Phase 2 probe
@@ -170,7 +170,7 @@ published draft.
 
 ### A listing cannot be emptied of images
 
-`DELETE .../listings/{listing}/images/{image_id}` returns `204` and works —
+`DELETE.../listings/{listing}/images/{image_id}` returns `204` and works —
 until the last one:
 
 ```
@@ -185,7 +185,7 @@ remove.
 
 ### Uploads work, and are laxer than Etsy's guidance suggests
 
-`POST .../listings/{listing}/images` (multipart, `listings_w`) returned `201`
+`POST.../listings/{listing}/images` (multipart, `listings_w`) returned `201`
 for every render tried, including a **480×576** one — below the 500px shortest
 side Etsy's own seller guidance asks for. Do not rely on the API to reject an
 undersized render; the tool's own validation is the only thing that will.
@@ -227,7 +227,7 @@ exactly this — but nothing about the response says work was lost.
 workspace's `shop.yaml`:
 
 ```
-400 {"error": "There was a problem with /shop/section/id : Shop section not found."}
+400 {"error": "There was a problem with /shop/section/id: Shop section not found."}
 ```
 
 `return_policy_id` re-asserted explicitly returned `200`. So both ids are real
@@ -332,7 +332,7 @@ The measurement PRD risk 12 still owed:
 
 `18000` was sent to Printify as a bare integer. It arrived on the NOK listing as
 **180,00 kr**. No conversion, no rate, nothing volatile anywhere near a hash.
-PRD 39 and 40 are correct and risk 12 is now closed on measurement rather than
+ADR-0019, ADR-0020 are correct and risk 12 is now closed on measurement rather than
 on Printify's documentation.
 
 Per-variant inventory agrees: `price_on_property: [513, 514]` — price varies on
@@ -494,14 +494,14 @@ rather than assumed. With **only the app key pair** and no bearer:
 
 This confirms the claim in `clients/etsy/shops.py` that `setup`'s four calls are
 unscoped, and therefore that a workspace can resolve every id in `shop.yaml`
-before anyone opens a browser (PRD 49).
+before anyone opens a browser (ADR-0025).
 
 **The granted set `(listings_r, listings_w, shops_r)` is sufficient for Phase 3
 as scoped**, given that shipping profiles are created by hand in Shop Manager
 rather than by this tool. Reading a profile to resolve a title needs `shops_r`;
 attaching it needs `listings_w` on `updateListing`. Only
 `createShopShippingProfile` needs `shops_w`, and nothing calls it. Since
-changing `SCOPES` forces every user through consent again (PRD 50), this is
+changing `SCOPES` forces every user through consent again (ADR-0026), this is
 worth stating plainly rather than rediscovering.
 
 `uploadListingImage` and `updateVariationImages` both need only `listings_w`,
@@ -525,7 +525,7 @@ should carry the server's own text.
 ## Cleanup does not clean up
 
 This probe called `unpublish.json` then `DELETE`. That sequence is what the
-measurements below describe; it is not what the tool will do (PRD 63).
+measurements below describe; it is not what the tool will do (ADR-0036).
 
 `POST unpublish.json` returned `200 {}` and cleared `external`;
 `DELETE products.json` returned `200 {}`. The **Etsy listing survived both**,
@@ -537,7 +537,7 @@ unpublish — returned `404` for the listing that product had minted. The
 generalisation this section originally drew (any Printify delete orphans
 Etsy) mixed the two sequences. The tool deletes connected, never unpublished
 first, and fails the apply rather than wiping local files if the draft
-survives. `listings_d` stays outside `SCOPES` (PRD 50). Live listings are
+survives. `listings_d` stays outside `SCOPES` (ADR-0026). Live listings are
 never deleted this way.
 
 Both probe listings — `4572537111` and `4572550919` — were left behind by the
@@ -604,7 +604,7 @@ that a PATCH does the same thing, and the obvious reading is wrong.
 nothing either: the shop has exactly one definition and it was already the
 value in place. Testing a real change needs a second processing profile made
 by hand in Shop Manager, or `shops_w` in the scopes — and `shops_w` costs
-every user a second trip through consent (PRD 50).
+every user a second trip through consent (ADR-0026).
 
 The practical consequence is smaller than it looks: with one processing
 profile in the shop and Printify already applying it to every offering, there
@@ -614,7 +614,7 @@ is currently nothing for this tool to change.
 
 ```
 PATCH {who_made: someone_else, when_made: made_to_order, is_supply: false}
-400 {"error": "There was a problem with /marketplace :
+400 {"error": "There was a problem with /marketplace:
                 Oh dear, you cannot sell this item on Etsy."}
 ```
 
@@ -682,7 +682,7 @@ and silently pick the wrong property on the next one.
 **Match on the values instead**: the colour property is the one whose values
 slugify onto the listing's own `colors`. Printify's colour names arrive
 verbatim (`"Black"` → `black`), which is the same convention the mockup
-filenames already use (PRD 7a), so the bridge is the slugifier that exists.
+filenames already use (ADR-0004), so the bridge is the slugifier that exists.
 
 ### What the shop actually contains today
 
@@ -747,7 +747,7 @@ Uploading at rank 1 with `overwrite: true` against three existing images:
 
 ```
 before: [(1, 8503331196), (2, 8503331086), (3, 8503330926)]
-after : [(1, 8503578806), (2, 8503331086), (3, 8503330926)]
+after: [(1, 8503578806), (2, 8503331086), (3, 8503330926)]
 ```
 
 `201`, count unchanged, ranks 2 and 3 untouched, and rank 1 carries a **new
@@ -766,8 +766,8 @@ than a free win. With both colours linked to image `8503331196`, that image was
 replaced at rank 1. Afterwards:
 
 ```
-Red    -> image 8503331196   DANGLING -- no longer on the listing
-Black  -> image 8503331196   DANGLING -- no longer on the listing
+Red -> image 8503331196 DANGLING -- no longer on the listing
+Black -> image 8503331196 DANGLING -- no longer on the listing
 ```
 
 `getListingVariationImages` still answers `200` with `count: 2`. **Nothing in
@@ -791,12 +791,12 @@ without a partner attached and once with.
 
 ```
 PATCH {who_made: someone_else, when_made: made_to_order, is_supply: false}
-400 "Oh dear, you cannot sell this item on Etsy."          <- partner exists in
+400 "Oh dear, you cannot sell this item on Etsy." <- partner exists in
                                                               the shop, but is
                                                               not on the listing
 
 PATCH {..., production_partner_ids: 5785693}
-200   who_made reads back "someone_else"
+200 who_made reads back "someone_else"
 ```
 
 So the rule is exact: **`who_made: someone_else` requires a partner attached to

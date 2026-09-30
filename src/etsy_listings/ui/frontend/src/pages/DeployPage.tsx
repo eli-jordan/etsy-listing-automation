@@ -176,7 +176,7 @@ export function DeployPage() {
 
   // Status after apply is re-derived from the server, never assumed
   // (decision 10) -- a first deploy reads Deployed, not Live, and a partial
-  // apply reads Dirty (A29).
+  // apply reads Dirty (ADR-0037).
   useEffect(() => {
     if (state.phase !== "applied") return;
     let current = true;

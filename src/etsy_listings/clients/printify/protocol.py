@@ -1,4 +1,4 @@
-"""The two Printify boundaries (A4). One host, one token, two authorities.
+"""The two Printify boundaries. One host, one token, two authorities.
 
 **This split is the whole point of having two protocols.** A caller that reads
 reference data holds a :class:`CatalogClient` and cannot reach a call that
@@ -8,8 +8,8 @@ shared (:mod:`~etsy_listings.clients.printify.transport`); the authority is
 not, and that is the half worth keeping apart.
 
 The two also differ in what may be done *with* a result. A catalog read is
-large, rarely changes, is idempotent and is safe to cache on disk (PRD 22) and
-to fan out (A3). A shop's products are the state this tool is converging on,
+large, rarely changes, is idempotent and is safe to cache on disk and
+to fan out. A shop's products are the state this tool is converging on,
 so a cached read of one would make ``plan`` diff against a stale world --
 which is why :class:`~...cache.CachedCatalogClient` exists for one and
 deliberately has no counterpart for the other.
@@ -35,7 +35,7 @@ from etsy_listings.clients.printify.models import (
 
 
 class CatalogClient(Protocol):
-    """Printify's reference data: read-only and shop-agnostic (PRD 7b).
+    """Printify's reference data: read-only and shop-agnostic.
 
     Any implementation satisfies this without the rest of the codebase knowing
     which -- real HTTP, TTL-cached, or a test fake.
@@ -64,7 +64,7 @@ class PrintifyClient(Protocol):
 
     def shops(self) -> list[Shop]:
         """Every shop the token can reach. Not shop-scoped, unlike the rest of
-        this protocol -- it is what tells you which shop to scope to (PRD 42)."""
+        this protocol -- it is what tells you which shop to scope to."""
         ...
 
     def upload_image(self, file_name: str, contents: bytes) -> Upload:
@@ -91,11 +91,11 @@ class PrintifyClient(Protocol):
 
         Fire-and-forget by design: Printify answers `200 {}` immediately and
         the actual publish happens asynchronously, behind `is_locked` --
-        polling `get_product` is the caller's job (`publish` stage, A28)."""
+        polling `get_product` is the caller's job (`publish` stage, ADR-0024)."""
         ...
 
     def publishing_failed(self, shop_id: int, product_id: str, *, reason: str) -> None:
-        """Clear a publish lock stuck `is_locked: true` (PRD risk 6, `unlock`).
+        """Clear a publish lock stuck `is_locked: true` (`unlock`).
         Never verified against a genuinely stuck publish -- the lock is real,
         measured; the remedy is not."""
         ...
@@ -103,7 +103,7 @@ class PrintifyClient(Protocol):
     def find_product_by_copy(self, shop_id: int, *, title: str, description: str) -> str | None:
         """The id of a product already carrying this copy, or ``None``.
 
-        The duplicate-create guard (PRD 48). A walk of every product in the
+        The duplicate-create guard. A walk of every product in the
         shop, matched client-side, because the list endpoint has no filter.
         """
         ...

@@ -80,7 +80,7 @@ Three circular nodes joined by short connectors, then a one-line text label.
 
 | Node | Icon (Phosphor, `bold`) | Label while active | Spec step(s) |
 |---|---|---|---|
-| Brief | `NotePencil` | Drafting brief… | 1. Brief (PRD 68) |
+| Brief | `NotePencil` | Drafting brief… | 1. Brief (ADR-0003) |
 | Market research | `MagnifyingGlass` | Researching the market… | 2. Query extraction and 3. Market search |
 | SEO suggestions | `Sparkle` | Writing suggestions… | 4. Proposal |
 
@@ -98,7 +98,7 @@ The markup
 <div className="aiflow" role="status" aria-live="polite" aria-label={`AI Mode: ${line.text}`}>
   <ol className="aiflow__nodes">
     <li className="aiflow__step">
-      {index > 0 && <span className={linkDone ? "aiflow__link aiflow__link--done" : "aiflow__link"} aria-hidden="true" />}
+      {index > 0 && <span className={linkDone ? "aiflow__link aiflow__link--done": "aiflow__link"} aria-hidden="true" />}
       <span className={`aiflow__node aiflow__node--${step.state}`} tabIndex={0}
             aria-describedby={tipId} aria-label={`${meta.name}: ${STATE_WORD[step.state]}`}>
         {meta.icon}
@@ -184,7 +184,7 @@ meaning the chain moved past it
 
 | Scenario | Brief | Market research | SEO suggestions | Label |
 |---|---|---|---|---|
-| PRD 68 auto chain: a design picked while the brief was empty, then the first save with a name, design and garment profile | active → done | pending → active → done | pending → active → done | Drafting brief… → Researching the market… → Writing suggestions… → Suggestions ready |
+| ADR-0003 auto chain: a design picked while the brief was empty, then the first save with a name, design and garment profile | active → done | pending → active → done | pending → active → done | Drafting brief… → Researching the market… → Writing suggestions… → Suggestions ready |
 | Auto chain, but the seller wrote a brief before it fired | **skipped** | active → done | active → done | starts at Researching the market… |
 | **AI Mode clicked** (it requires a brief, so always) | **skipped** | active → done | active → done | starts at Researching the market… |
 | No comparable listings, even with filters relaxed | done / skipped | **warning** | active → done | Writing suggestions… |
@@ -288,7 +288,7 @@ motion *is* the information, so it is softened rather than removed.
 
 ```css
 @media (prefers-reduced-motion: reduce) {
-  .aiflow__node--active { animation-duration: 3s; }
+.aiflow__node--active { animation-duration: 3s; }
 }
 ```
 
@@ -316,7 +316,7 @@ The card has three parts:
   position: absolute;
   z-index: 20;
   top: calc(100% + 10px);
-  left: -6px;                 /* left-aligned: centring clipped at the head's left edge */
+  left: -6px; /* left-aligned: centring clipped at the head's left edge */
   width: 250px;
   …
   opacity: 0;
@@ -325,9 +325,9 @@ The card has three parts:
   transition: opacity 120ms ease-out, transform 120ms ease-out, visibility 120ms ease-out;
   pointer-events: none;
 }
-.aiflow__node:hover .aiflow__tip,
-.aiflow__node:focus-visible .aiflow__tip,
-.aiflow__node--tip-open .aiflow__tip {
+.aiflow__node:hover.aiflow__tip,
+.aiflow__node:focus-visible.aiflow__tip,
+.aiflow__node--tip-open.aiflow__tip {
   opacity: 1;
   visibility: visible;
   transform: translateY(0);
@@ -373,7 +373,7 @@ Markup root
   </header>
   <Queries queries={…} />
   <div className="mkt-switch" role="tablist" aria-label="Market view">…</div>
-  {view === "listings" ? <Listings … /> : <Phrases … />}
+  {view === "listings" ? <Listings … />: <Phrases … />}
 </aside>
 ```
 
@@ -407,11 +407,11 @@ Lead, where the comparison matters most.
   wrote from the brief.
 
 ```tsx
-<p className={searching ? "mkt-queries mkt-queries--searching" : "mkt-queries"}>
-  <span className="mkt-queries__label"><MagnifyingGlass weight="bold" /> {searching ? "Searching Etsy for" : "Searched Etsy for"}</span>{" "}
+<p className={searching ? "mkt-queries mkt-queries--searching": "mkt-queries"}>
+  <span className="mkt-queries__label"><MagnifyingGlass weight="bold" /> {searching ? "Searching Etsy for": "Searched Etsy for"}</span>{" "}
   {queries.map((q, i) => (
     <span key={q}>
-      {i > 0 && (i === queries.length - 1 ? " and " : ", ")}
+      {i > 0 && (i === queries.length - 1 ? " and ": ", ")}
       <span className="mkt-query">“{q}”</span>
     </span>
   ))}
@@ -444,14 +444,14 @@ model actually read, and keeps the default panel short.
 ([`ListingRow`, L77-118](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L77))
 
 ```tsx
-<li className={open ? "mkt-row mkt-row--open" : "mkt-row"}>
+<li className={open ? "mkt-row mkt-row--open": "mkt-row"}>
   <button className="mkt-row__main" type="button" aria-expanded={open} onClick={onToggle}>
     <span className="mkt-row__rank">{item.rank}</span>
     <TeeThumb {...item.thumb} />
     <span className="mkt-row__text">
       <span className="mkt-row__title">{item.title}</span>
       <span className="mkt-row__shop">
-        {item.ownShop ? <span className="mkt-own"><Storefront weight="bold" /> Your shop</span> : item.shop}
+        {item.ownShop ? <span className="mkt-own"><Storefront weight="bold" /> Your shop</span>: item.shop}
         <span aria-hidden="true">·</span>
         <Star weight="fill" className="mkt-star" /> {item.shopRating.toFixed(1)}
       </span>
@@ -606,7 +606,7 @@ colour and the AI ink over 1.4s.
 ```css
 /* marketSeo.css:309-319 */
 @media (prefers-reduced-motion: no-preference) {
-  .mkt-queries--searching .mkt-query { animation: mkt-breathe 1.4s ease-in-out infinite; }
+.mkt-queries--searching.mkt-query { animation: mkt-breathe 1.4s ease-in-out infinite; }
 }
 @keyframes mkt-breathe { 50% { color: var(--seo-ink); } }
 ```
@@ -621,7 +621,7 @@ across it every 1.6s.
   background-size: 200% 100%;
 }
 @media (prefers-reduced-motion: no-preference) {
-  .mkt-skel { animation: mkt-shimmer 1.6s linear infinite; }
+.mkt-skel { animation: mkt-shimmer 1.6s linear infinite; }
 }
 @keyframes mkt-shimmer {
   from { background-position: 200% 0; }
@@ -666,7 +666,7 @@ and the panel on the right
   align-items: start;
 }
 @media (max-width: 1100px) {
-  .mkt-layout { grid-template-columns: minmax(0, 1fr); }
+.mkt-layout { grid-template-columns: minmax(0, 1fr); }
 }
 ```
 
@@ -692,7 +692,7 @@ in it is new, apart from sharing the row with the panel.
   app declares all three once, on `:root` in `src/index.css` (PR 7). Before
   that they were declared again on each AI selector (`.seo-suggestion`,
   `.seo-brief-row`, `.seo-ai-mode-anchor`), and the ink was a literal
-  `#593baf`. The mockup still declares them on `.aiflow, .mkt-panel`
+  `#593baf`. The mockup still declares them on `.aiflow,.mkt-panel`
   ([`marketSeo.css:4-9`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/marketSeo.css#L4)).
 - **Neutral for data, purple for AI.** Listing tags, the Your shop pill and the
   notes use the app's neutral and accent tokens. Purple is kept for scores, the

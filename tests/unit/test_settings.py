@@ -152,7 +152,7 @@ def test_a_file_that_is_not_a_mapping_names_the_file(workspace: Workspace, text:
 
 class TestBatchAi:
     """``batch_ai.concurrency``: how many batch rows draft at once, across
-    every batch (spec, *Batch AI queue*; A40). No settings UI in the first
+    every batch (spec, *Batch AI queue*; ADR-0048). No settings UI in the first
     version, so the file is the only way to change it."""
 
     def test_the_default_is_one_at_a_time(self, workspace: Workspace) -> None:

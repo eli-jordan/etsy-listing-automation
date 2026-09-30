@@ -49,7 +49,7 @@ class TestTheTransitionTable:
 
 
 class TestTheIncompleteMarker:
-    """A29. A per-stage lockfile write makes `state.lock.json` newer than
+    """ADR-0037. A per-stage lockfile write makes `state.lock.json` newer than
     `listing.yaml` partway through a deploy that then fails, so
     `edited_since_apply` alone would read a partially-applied live listing as
     clean. A set marker must read exactly like an edit would."""
@@ -67,7 +67,7 @@ class TestTheIncompleteMarker:
         assert listing_status(applied=False, edited=False, live=False, incomplete=True) == "draft"
 
     def test_delete_retire_still_win_over_a_marked_listing(self) -> None:
-        """PRD 61-67's lifecycle badges take precedence over live/dirty
+        """ADR-0035, ADR-0036's lifecycle badges take precedence over live/dirty
         already; the marker must not change that ordering."""
         assert (
             listing_status(
@@ -83,7 +83,7 @@ class TestTheIncompleteMarker:
 
 
 class TestDeleteAndRetireBadges:
-    """PRD 61–67: the original four remain; these add, and win when both
+    """ADR-0035, ADR-0036: the original four remain; these add, and win when both
     could apply. `live` still means "has left draft"; `etsy_state` names
     which published condition, so inactive/expired are not painted live."""
 
@@ -196,7 +196,7 @@ class TestDeleteAndRetireBadges:
 
 
 class TestGestures:
-    """PRD 66: which buttons the listings table offers. Derived from the
+    """lifecycle actions: which buttons the listings table offers. Derived from the
     same facts as the badge, so the two cannot disagree about the row."""
 
     def test_never_live_is_delete(self) -> None:

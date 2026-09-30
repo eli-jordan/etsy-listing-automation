@@ -21,7 +21,7 @@ import { clock, dayMonth } from "../dates";
 /**
  * Staging review (UI doc §5; the `staging` and `staging-blocked` frames): one
  * row per unique design with its source file, an editable listing name and
- * its check. The server works every name out afresh on each answer (A38), so
+ * its check. The server works every name out afresh on each answer, so
  * this page only ever sends what the seller typed and draws what comes back.
  *
  * A name problem blocks Create; a design that will not print does not -- it

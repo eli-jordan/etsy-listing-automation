@@ -135,7 +135,7 @@ def test_a_configured_workspace_does_not_report_a_block(workspace_root: Path) ->
 def test_a_gate_refusal_is_an_actionable_message_not_a_traceback(
     workspace_root: Path,
 ) -> None:
-    """The fixture's copy is still blank, which PRD 44 refuses. The user
+    """The fixture's copy is still blank, which ADR-0022 refuses. The user
     needs the sentence, not a stack."""
     root = set_shop_id(workspace_root, SHOP_ID)
 
@@ -174,7 +174,7 @@ def test_a_gate_refusal_leaves_the_rest_of_the_plan_standing(workspace_root: Pat
 
 
 def test_a_gate_refusal_does_not_halt_a_batch(workspace_root: Path) -> None:
-    """PRD 16: continue-on-error. One listing that cannot be planned must not
+    """continue-on-error: continue-on-error. One listing that cannot be planned must not
     stop the rest -- which is the whole reason `--all` is safe to run."""
     root = set_shop_id(workspace_root, SHOP_ID)
     copy_listing(root, "second-listing")
@@ -211,7 +211,7 @@ def test_apply_still_does_the_work_it_can(workspace_root: Path) -> None:
 
 
 def test_apply_says_it_in_the_same_words_plan_does(workspace_root: Path) -> None:
-    """One vocabulary, both routes (PRD 20). The stage supplies the sentence;
+    """One vocabulary, both routes. The stage supplies the sentence;
     neither the plan renderer nor `apply` writes its own version of it."""
     blocked_line = "will not be uploaded to Printify"
     planned = next(
@@ -231,7 +231,7 @@ class _RefusingStage:
     """A stage that gets as far as comparing and *then* finds it cannot run.
 
     Stands in for `publish`'s below-cost check, which needs ``variants[].cost``
-    and so cannot refuse from ``desired()`` (PRD 40's amendment). Written as a
+    and so cannot refuse from ``desired()`` (ADR-0020's amendment). Written as a
     stub rather than driven through `publish` because the subject here is what
     the user is shown, not what Printify charges: reaching the real check needs
     a published product and a live cost, and neither would make the assertion
@@ -280,7 +280,7 @@ def test_a_refusal_from_plan_reads_like_one_from_desired(workspace_root: Path) -
 
 
 def test_a_drift_with_labels_shows_names_not_ids(workspace_root: Path) -> None:
-    """A30: a stage that could resolve a name for a drifted id shows it,
+    """ADR-0038: a stage that could resolve a name for a drifted id shows it,
     rather than only the id `format_plan` printed before this PR."""
     plan = Plan(
         listing="take-a-hike",
@@ -331,7 +331,7 @@ def test_a_drift_with_no_label_still_shows_the_raw_values(workspace_root: Path) 
 
 
 def test_a_grouped_stage_is_named_under_its_group(workspace_root: Path) -> None:
-    """PRD 72: one gallery, two stages -- a stage the engine groups under
+    """ADR-0045: one gallery, two stages -- a stage the engine groups under
     another is shown under it on every line that names it."""
     grouped = replace(
         StagePlan.work(

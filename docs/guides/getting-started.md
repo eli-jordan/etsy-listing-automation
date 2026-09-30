@@ -51,12 +51,12 @@ take-a-hike
 
   + render (no previous render)
       render flat-lay-01/black
-        in   designs/take-a-hike.png
+        in designs/take-a-hike.png
              mockup-templates/flat-lay-01/template.yaml
              mockup-templates/flat-lay-01/black.png
-        out  .cache/renders/take-a-hike/flat-lay-01/black.png
+        out.cache/renders/take-a-hike/flat-lay-01/black.png
       render flat-lay-01/blue-jean
-        ...
+...
 
   1 to run (4 actions), 0 to change, 0 drift warning(s)
 ```
@@ -97,8 +97,8 @@ Now delete one of those PNGs and run `plan` again:
 
 ```
   + render (1 rendered file missing from the cache)
-      ...
-        out  .cache/renders/take-a-hike/flat-lay-01/black.png   (missing)
+...
+        out.cache/renders/take-a-hike/flat-lay-01/black.png (missing)
 ```
 
 `plan` checks two separate things, and both have to hold for a run to be a
@@ -138,13 +138,13 @@ The `shop.yaml` it writes looks like this, and hand-editing it is fine:
 
 ```yaml
 printify:
-  shop_name: My new store    # so the id below is checkable at a glance
-  shop_id: 28819281          # discovered from your token, not typed
-  preferred_print_provider: Monster Digital   # optional; used by `new`'s default
+  shop_name: My new store # so the id below is checkable at a glance
+  shop_id: 28819281 # discovered from your token, not typed
+  preferred_print_provider: Monster Digital # optional; used by `new`'s default
 etsy:
-  shop_name: TakeAHikeTees   # discovered too; the id is resolved from it
+  shop_name: TakeAHikeTees # discovered too; the id is resolved from it
   shop_id: 12345678
-  currency: NOK              # read from the Etsy shop
+  currency: NOK # read from the Etsy shop
   who_made: i_did
   when_made: made_to_order
   is_supply: false
@@ -233,7 +233,7 @@ run the dev server instead of the built one in a second terminal (it proxies
 `/api` to the backend):
 
 ```bash
-cd src/etsy_listings/ui/frontend && npm run dev   # http://localhost:5173
+cd src/etsy_listings/ui/frontend && npm run dev # http://localhost:5173
 ```
 
 You can also hand-write `template.yaml` — no calibrator required, just less
@@ -293,10 +293,10 @@ With that in place, `new` interactively:
    `tshirt`) across three columns — brand, model, title:
 
    ```
-     1  ⭐ Gildan          5000   Unisex Heavy Cotton Tee
-     2     Comfort Colors  1717   Unisex Garment-Dyed Heavy Weight Tee
-     3     Gildan          2400   Unisex Long Sleeve Tee
-     4     Gildan          18500  Unisex Pullover Hoodie
+     1 ⭐ Gildan 5000 Unisex Heavy Cotton Tee
+     2 Comfort Colors 1717 Unisex Garment-Dyed Heavy Weight Tee
+     3 Gildan 2400 Unisex Long Sleeve Tee
+     4 Gildan 18500 Unisex Pullover Hoodie
    ```
 
    Brand and model are how a blank is actually identified — “Gildan 18500” is
@@ -380,8 +380,8 @@ print_provider: Monster Digital
 placeholder: front
 print_area: { width: 4500, height: 5400 }
 sizes: [S, M, L, XL, XXL, XXXL]
-materials: [cotton]                 # Etsy-facing materials, shared by this garment
-preview_template: flat-lay-01   # colour-matrix; editor colour preview only
+materials: [cotton] # Etsy-facing materials, shared by this garment
+preview_template: flat-lay-01 # colour-matrix; editor colour preview only
 ```
 
 If an existing `listing.yaml` has `etsy.materials`, move that list into the
@@ -393,7 +393,7 @@ choosing its single value.
 blanks. `title` is there so the file reads as something rather than a part
 number, and is ignored when resolving: Printify's titles are generic ("Unisex
 Garment-Dyed T-shirt" is sold by several brands) and get rewritten, so one is
-not an identifier (PRD 23). Case, surrounding spaces and the ® Printify puts
+not an identifier (ADR-0005). Case, surrounding spaces and the ® Printify puts
 in brand names are all normalised away, so `Comfort Colors` matches its
 `Comfort Colors®`.
 
@@ -435,11 +435,11 @@ A few things worth knowing about `listing.yaml`:
 - **Every path is written from the workspace root** — `designs/x.png`,
   `common-media/size-guide.png`, `pricing-plans/launch.yaml` — or from the
   listing's own directory with a `./` prefix (`./close-up.png`). `..` is
-  refused (PRD 73). A workspace written before that rule still spells its
+  refused (ADR-0046). A workspace written before that rule still spells its
   refs `../../designs/x.png`; `uv run python scripts/migrate_workspace_refs.py
   <workspace>` prints the rewrite, and `--write` applies it.
 - **`design` can be a map**, not just a bare path, when you need separate
-  light-ink/dark-ink artwork — `{on-light: ..., on-dark: ...}` — with an
+  light-ink/dark-ink artwork — `{on-light:..., on-dark:...}` — with an
   optional per-colour `artwork:` override on the listing. Full resolution
   order is in [docs/features/multi-placement-rendering-20260903/spec.md](../features/multi-placement-rendering-20260903/spec.md).
 - **SEO values are ordinary listing fields.** Give `etsy.description` a
@@ -466,8 +466,8 @@ Empty/absent is the common case — leave it out until you hit a collision.
 ## 7. Run `plan` and `apply`
 
 ```bash
-uv run etsy-listings plan take-a-hike        # or --all for every listing
-uv run etsy-listings apply take-a-hike       # runs whatever plan identified
+uv run etsy-listings plan take-a-hike # or --all for every listing
+uv run etsy-listings apply take-a-hike # runs whatever plan identified
 ```
 
 `plan` does a three-way diff — desired config vs. last-applied vs. (in later
@@ -613,18 +613,18 @@ creation, AI Mode and reviewed deployment runs.
 
 ```
 your-workspace/
-  shop.yaml              currency, Etsy shop defaults
-  exceptions.yaml         colour-name -> slug overrides (optional)
-  .env                    secrets — PRINTIFY_API_TOKEN etc., gitignore this
-  designs/                your artwork PNGs
+  shop.yaml currency, Etsy shop defaults
+  exceptions.yaml colour-name -> slug overrides (optional)
+.env secrets — PRINTIFY_API_TOKEN etc., gitignore this
+  designs/ your artwork PNGs
   mockup-templates/<name>/
-    template.yaml         kind + bounding box(es) + shade/displace
+    template.yaml kind + bounding box(es) + shade/displace
     {colour}.png | scene.png
-  garment-profiles/<name>.yaml    garment definition, reused across listings
+  garment-profiles/<name>.yaml garment definition, reused across listings
   listings/<name>/
-    listing.yaml          prices, colours, media, Etsy copy
-    state.lock.json        written by `apply` — what ran, input hashes
-  .cache/                gitignored, fully derivable — safe to delete
+    listing.yaml prices, colours, media, Etsy copy
+    state.lock.json written by `apply` — what ran, input hashes
+.cache/ gitignored, fully derivable — safe to delete
     renders/<listing>/<template>/{colour|scene}.png
 ```
 

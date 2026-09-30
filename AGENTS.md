@@ -10,67 +10,67 @@ requirements, guides, research and decisions.
 
 ```
 src/etsy_listings/
-  cli/          Typer app, one module per command
-  workspace/    root discovery, path resolution, the only code that knows the directory layout
-  config/       pydantic models, Money, slugs, listing_validation.py (every local refusal)
-  engine/       Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
-  render/       pure render passes, frozen RenderConfig, pipeline
-  clients/      printify/ and etsy/ — transport, models, fakes
-  ai/           SEO/brief providers (Codex/Claude), prompts, proposals
-  market/       market-informed SEO research
-  ui/           FastAPI api/ + React frontend/ (see frontend/AGENTS.md)
-  newcmd/ setupcmd/ authcmd/   the `new`, `setup` and `auth` wizards
-  connections.py credentials.py prompts.py terminal.py   client wiring, credential steps, prompt backend, encoding guard
-tests/          unit, golden, behaviour, browser, contract, e2e; shared doubles in tests/support/
-docs/           guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
-scripts/        check.sh, sloc.py, generate_test_assets.py
+  cli/ Typer app, one module per command
+  workspace/ root discovery, path resolution, the only code that knows the directory layout
+  config/ pydantic models, Money, slugs, listing_validation.py (every local refusal)
+  engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
+  render/ pure render passes, frozen RenderConfig, pipeline
+  clients/ printify/ and etsy/ — transport, models, fakes
+  ai/ SEO/brief providers (Codex/Claude), prompts, proposals
+  market/ market-informed SEO research
+  ui/ FastAPI api/ + React frontend/ (see frontend/AGENTS.md)
+  newcmd/ setupcmd/ authcmd/ the `new`, `setup` and `auth` wizards
+  connections.py credentials.py prompts.py terminal.py client wiring, credential steps, prompt backend, encoding guard
+tests/ unit, golden, behaviour, browser, contract, e2e; shared doubles in tests/support/
+docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
+scripts/ check.sh, sloc.py, generate_test_assets.py
 ```
 
 Every package's `__init__.py` states what it exports and deliberately withholds. Read that before reaching into a submodule.
 
-The tool lives here; user data (`shop.yaml`, `designs/`, `listings/`, `mockup-templates/`, `.cache/`) lives in a separate workspace directory found by walking up from cwd for `shop.yaml` (`A8`). Never write user data into this repo or assume cwd is the workspace.
+The tool lives here; user data (`shop.yaml`, `designs/`, `listings/`, `mockup-templates/`, `.cache/`) lives in a separate workspace directory found by walking up from cwd for `shop.yaml` (`ADR-0013`). Never write user data into this repo or assume cwd is the workspace.
 
 <important if="you need to run commands to build, test, lint, or generate code">
 
 Run all of these in cygwin zsh from the repo root (see Environment).
 
 ```
-uv sync                              # install deps + create .venv
-./scripts/check.sh                   # format + lint + typecheck + test + coverage gate, Python and frontend
-uv run pytest                        # full suite (excludes -m e2e by default)
-uv run pytest tests/unit/test_money.py                     # one file
-uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
-uv run pytest -k "currency"          # by keyword
-uv run pytest --cov                  # coverage, enforcing the 85% branch floor
-uv run pytest --cov --cov-report=html  # then open htmlcov/index.html
-uv run pytest -m e2e                 # env-gated e2e layer (real shop, see Testing)
-uv run pytest -m browser             # playwright browser tests
-uv run pytest -m "not browser"       # skip them (e.g. no chromium installed)
-uv run playwright install chromium   # one-off, enables the browser layer
-uv run pytest --update-goldens       # regenerate render goldens
-uv run mypy src                      # strict type check
-uv run ruff check . / ruff format .  # lint / format
-uv run python scripts/sloc.py --summary   # code size, prose excluded
+uv sync # install deps + create.venv
+./scripts/check.sh # format + lint + typecheck + test + coverage gate, Python and frontend
+uv run pytest # full suite (excludes -m e2e by default)
+uv run pytest tests/unit/test_money.py # one file
+uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency # one test
+uv run pytest -k "currency" # by keyword
+uv run pytest --cov # coverage, enforcing the 85% branch floor
+uv run pytest --cov --cov-report=html # then open htmlcov/index.html
+uv run pytest -m e2e # env-gated e2e layer (real shop, see Testing)
+uv run pytest -m browser # playwright browser tests
+uv run pytest -m "not browser" # skip them (e.g. no chromium installed)
+uv run playwright install chromium # one-off, enables the browser layer
+uv run pytest --update-goldens # regenerate render goldens
+uv run mypy src # strict type check
+uv run ruff check. / ruff format. # lint / format
+uv run python scripts/sloc.py --summary # code size, prose excluded
 ```
 
-Frontend (`src/etsy_listings/ui/frontend/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|gen:api`. After changing a FastAPI endpoint's shape, regenerate the typed client (`A5`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
+Frontend (`src/etsy_listings/ui/frontend/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|gen:api`. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
 
 Human-facing setup, calibrator usage and contributor docs live in [README.md](README.md); this file holds only what an agent needs to act correctly. Keep the two commands lists in step.
 
-CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and `ui` exist in `cli/app.py`; `render`, `generate`, `catalog refresh` and `status` are the PRD's agreed design and are not built — do not assume a command exists because it is listed.
+CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and `ui` exist in `cli/app.py`; `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
 
 ```
-setup              initialise a workspace: skeleton, shop.yaml, ids
-                   --replace-prompts: reset prompts/ to packaged defaults, keeping <name>.md.bak (PRD 71)
-auth               every credential: Printify, Etsy key pair + OAuth, Anthropic (auth printify|etsy|anthropic)
-new [<design>]     interactive design/garment/provider picker; writes garment profile + listing
-plan <listing|--all>   three-way diff against live state
-apply <listing|--all>  execute every stage the plan identified
-unlock <listing>       clear a Printify product stuck publishing
-ui                     dashboard, calibrator, listings, run runner
-render / generate      force a single local stage                     [not built]
-catalog refresh        force-refresh the cached Printify catalog      [not built]
-status [<listing>]     run history                                    [not built]
+setup initialise a workspace: skeleton, shop.yaml, ids
+                   --replace-prompts: reset prompts/ to packaged defaults, keeping <name>.md.bak (ADR-0044)
+auth every credential: Printify, Etsy key pair + OAuth, Anthropic (auth printify|etsy|anthropic)
+new [<design>] interactive design/garment/provider picker; writes garment profile + listing
+plan <listing|--all> three-way diff against live state
+apply <listing|--all> execute every stage the plan identified
+unlock <listing> clear a Printify product stuck publishing
+ui dashboard, calibrator, listings, run runner
+render / generate force a single local stage [not built]
+catalog refresh force-refresh the cached Printify catalog [not built]
+status [<listing>] run history [not built]
 ```
 </important>
 
@@ -118,7 +118,7 @@ Read the **Invariants** section of [docs/architecture.md](docs/architecture.md) 
 
 <important if="you are writing or modifying tests, or investigating test failures">
 
-Layers (`A4`): unit, golden (per-pass and end-to-end renders), behaviour (in-memory fake clients), browser (`-m browser`, playwright over the built SPA), contract (cassette replay through real httpx), e2e (`-m e2e`), plus Vitest for the frontend.
+Layers (`ADR-0010`): unit, golden (per-pass and end-to-end renders), behaviour (in-memory fake clients), browser (`-m browser`, playwright over the built SPA), contract (cassette replay through real httpx), e2e (`-m e2e`), plus Vitest for the frontend.
 
 - Use a **fake** to test behaviour and a **cassette** to test payload shape; do not ask either to do the other's job.
 - A test file has one subject. Shared doubles live in `tests/support/` (`builders`, `scripted`, `doubles`, `http`) — look there before writing another `fake_run` closure.
@@ -134,7 +134,7 @@ E2E hits the real Printify and Etsy APIs and is excluded by default (`addopts = 
 
 ```
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
-E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py   # full market AI, signed-in local providers
+E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py # full market AI, signed-in local providers
 ```
 
 Run it locally before merging rather than iterating through CI. `gh workflow run e2e --ref <branch>` re-runs just that workflow. If CI's Etsy sign-in goes stale (refresh tokens rotate on use), run `etsy-listings auth etsy` locally and update the `ETSY_TOKENS_JSON` secret.

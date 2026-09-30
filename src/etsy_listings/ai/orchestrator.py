@@ -11,7 +11,7 @@ handed `FakeAiProvider` doubles (every test in this module) or the real
 `CodexProvider`/`ClaudeProvider` adapters.
 
 Two entry points, one rule: `generate_proposal` for an SEO proposal and
-`generate_brief` for a design brief (PRD 68). Both are thin wrappers over
+`generate_brief` for a design brief. Both are thin wrappers over
 :func:`run_task`, which knows about a `ProviderTask` and a function that
 turns raw text into *something* -- and nothing about which of the two it is
 serving. That is deliberate: the classification below is where this feature's
@@ -31,7 +31,7 @@ Classification summary (implementation plan, "Timeout and retries"):
 - Anything else -- the repaired response is still invalid, the repair call
   itself could not even reach the provider, an unrecognised process error,
   or the deadline expiring -- surfaces as "Try again"
-  (:class:`~etsy_listings.ai.errors.SeoTryAgainError`). None of these retry
+  ( :class:`~etsy_listings.ai.errors.SeoTryAgainError`). None of these retry
   a second provider; the settled plan only permits fallback on the first,
   recognised-unavailable failure.
 - :class:`~etsy_listings.ai.errors.ProviderCancelledError` is never caught
@@ -254,7 +254,7 @@ def generate_brief(
     cancel_event: threading.Event | None = None,
 ) -> DesignBrief:
     """One drafted listing brief for ``request``, using the seller's own
-    ``prompts/brief.md`` text (PRD 68).
+    ``prompts/brief.md`` text.
 
     Shares every rule above, including the 60-second budget -- a brief is a
     much smaller ask than a proposal, but it is the same kind of ask, and
@@ -285,7 +285,7 @@ def generate_market_queries(
 
     The third task over the same chain: Codex, then Claude, then Grok on a
     recognised unavailable failure, one same-provider repair, and its own 60 seconds
-    (PRD 4's deadline applies to each provider call of an AI run on its own).
+    (ADR-0003's deadline applies to each provider call of an AI run on its own).
     Never cached -- a second request is free to try different queries.
     """
     return run_task(

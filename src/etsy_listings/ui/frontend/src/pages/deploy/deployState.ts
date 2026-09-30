@@ -22,7 +22,7 @@ export type { StageRuntimeStatus } from "./listingRunState";
  * **`plan` is authoritative once known; `checkingStage` is a placeholder
  * for before it is.** A plan run's own planning walk fires `stage_checking`
  * for a stage, then `stage_planned` with that stage's resolved
- * `StagePlanDTO`, one stage at a time, in pipeline order (A21/A33 decision
+ * `StagePlanDTO`, one stage at a time, in pipeline order (ADR-0009, ADR-0041 decision
  * 2) -- `checkingStage` exists only to paint the spinner on the stage being
  * examined during that walk. Once `listing_planned` arrives with the whole
  * `Plan`, that supersedes every provisional `stage_planned` seen so far,
@@ -39,7 +39,7 @@ export type { StageRuntimeStatus } from "./listingRunState";
  * that have to agree.
  *
  * **A stale outcome carries the plan that superseded the reviewed one.**
- * `ListingFailedEvent.stale_plan` is only set for a `StalePlanError` (A31),
+ * `ListingFailedEvent.stale_plan` is only set for a `StalePlanError`,
  * and decision 5/9 of the doc is to *show* the fresh plan rather than the one
  * that no longer matches -- so `stale_plan`, when present, replaces `plan`
  * the same way `listing_planned` would, and `stale` records that this is

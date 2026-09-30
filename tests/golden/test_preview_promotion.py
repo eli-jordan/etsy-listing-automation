@@ -1,8 +1,8 @@
 """A promoted preview is byte-identical to a direct render of the same scene
-(A32, decision 6). Two independent copies of the fixture workspace: one plans,
+(ADR-0040, decision 6). Two independent copies of the fixture workspace: one plans,
 previews, then applies (promoting every preview); the other applies directly,
 with no preview ever involved. `render` passes are pure and OpenCV/Pillow are
-pinned exactly (A7), so the two runs must produce the same bytes -- this is
+pinned exactly, so the two runs must produce the same bytes -- this is
 what actually verifies that claim, rather than merely asserting it in a
 docstring."""
 

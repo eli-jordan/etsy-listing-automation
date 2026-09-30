@@ -1,4 +1,4 @@
-"""``ui/runs/executor.py`` (A33, decision 7): the FIFO worker thread actually
+"""``ui/runs/executor.py`` (ADR-0041, decision 7): the FIFO worker thread actually
 driving ``engine.run`` through the registry, against the fixture workspace and
 in-memory fakes -- no FastAPI, no TestClient (``tests/contract/test_runs_api.py``
 covers the HTTP surface; this is the thread underneath it).
@@ -293,8 +293,8 @@ def test_stop_cancels_whatever_is_still_queued(workspace_root: Path) -> None:
 def test_a_retract_only_plan_run_never_enters_previewing(
     workspace_root: Path, executor: RunExecutor
 ) -> None:
-    """A ``deleted`` listing's plan walks the retract stage only (PRD
-    61-67) -- there is no render state to ask for a preview, so
+    """A ``deleted`` listing's plan walks the retract stage only -- there is no
+    render state to ask for a preview, so
     ``needs_preview`` must answer false rather than raising."""
     from tests.support.builders import edit_listing
 
@@ -314,7 +314,7 @@ def test_a_retract_only_plan_run_never_enters_previewing(
 
 
 def test_an_apply_run_with_a_stale_expect_ends_stale(executor: RunExecutor) -> None:
-    """A31's ``StalePlanError``, reaching decision 7's dedicated terminal
+    """ADR-0039's ``StalePlanError``, reaching decision 7's dedicated terminal
     phase -- and the ``listing_failed`` event it produces carries the fresh
     plan, not just the refusal message."""
     result = executor.registry.create(ListingApply((LISTING,), {LISTING: "sha256:" + "0" * 64}))

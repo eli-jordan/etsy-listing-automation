@@ -1,5 +1,5 @@
 """Staging loose PNGs (batch plan PR 2; spec *Accepted input*, *Frozen
-staging*, *Staging validation and naming*; A38, A45, A46).
+staging*, *Staging validation and naming*; name allocation, ADR-0051, staging expiry).
 
 Through the `batches` package against a writable fixture workspace: what a
 session holds after an upload, what a refusal leaves on disk (nothing), and

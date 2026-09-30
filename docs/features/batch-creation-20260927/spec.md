@@ -526,13 +526,14 @@ path.
 ## Documentation changes
 
 The earlier authority and interaction documents specified temporary
-browser-local proposals and prohibited accepting stale choices. PRD 74 changes
-both, and the documents were amended with it: PRD 4, 27, 60, 68, 69 and 71;
-A9 and the new A35–A46 in [history/implementation-plan.md](../../history/implementation-plan.md);
+browser-local proposals and prohibited accepting stale choices. ADR-0047 changes
+both. The [ADRs](../../adr/README.md) record the amended proposal lifecycle
+and batch boundaries (ADR-0003, ADR-0044 and ADR-0047 through ADR-0051).
+The current feature documents are
 [features/ai-seo-20260922/plan.md](../ai-seo-20260922/plan.md); and
 [features/ai-seo-20260922/interactions.md](../ai-seo-20260922/interactions.md).
 
-The naming allocator does not weaken PRD 60's no-overwrite rule. It chooses a
+The naming allocator does not weaken the no-overwrite rule. It chooses a
 free identity before creation; it never merges into or replaces an existing
 listing.
 

@@ -21,7 +21,7 @@ class Shop(BaseModel):
 
     `currency_code` is the reason this model exists beyond the id: it is the
     shop's own currency, and reading it is what stops a workspace being
-    configured in one currency while the shop sells in another (PRD 51).
+    configured in one currency while the shop sells in another.
     """
 
     model_config = ConfigDict(extra="ignore")
@@ -77,7 +77,7 @@ class ReturnPolicy(BaseModel):
 
 class ShippingProfile(BaseModel):
     """A shipping profile (`etsy.shipping_profile_id`), addressed by title
-    (PRD 54) -- Etsy gives these a title, unlike a return policy."""
+    -- Etsy gives these a title, unlike a return policy."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -88,7 +88,7 @@ class ShippingProfile(BaseModel):
 
 
 class ProductionPartner(BaseModel):
-    """A fulfilment relationship the shop has declared (PRD 52).
+    """A fulfilment relationship the shop has declared.
 
     Etsy gives it a name and a location but not, notably, a link to
     `profile.print_provider` -- the two describe different things (decision
@@ -116,7 +116,7 @@ class ListingImage(BaseModel):
     url_570xN: str | None = None
     """A thumbnail up to 570px wide, variable height -- Etsy's own field name
     (the API's `ListingImage` schema). What the deploy review's "On Etsy now"
-    column shows (A30): the URL a draft or a hand-uploaded image already has,
+    column shows: the URL a draft or a hand-uploaded image already has,
     with no local render to fall back on for either. Absent unless the read
     asked for images (`include_images=True`), same as `rank`."""
 
@@ -143,7 +143,7 @@ class ListingVideo(BaseModel):
 
 
 class VariationImageLink(BaseModel):
-    """One `(property, value) -> image` swatch binding (PRD 56).
+    """One `(property, value) -> image` swatch binding.
 
     `value` is present on a read (`getListingVariationImages` returns the
     value string alongside each id, which is what makes the reverse
@@ -161,7 +161,7 @@ class VariationImageLink(BaseModel):
 class InventoryPropertyValue(BaseModel):
     """One property on one inventory product-combination -- e.g. this
     combination's colour, or its size. `property_name` is the *blueprint's*
-    option name (PRD 3, "Comfort Colors® Colors" rather than "Color"), which
+    option name (ADR-0002, "Comfort Colors® Colors" rather than "Color"), which
     is why the colour property is identified by matching `values` against the
     listing's own colours rather than by name or id (decision 6)."""
 
@@ -193,7 +193,7 @@ class InventoryProduct(BaseModel):
 class Inventory(BaseModel):
     """`getListingInventory`'s response: Printify's variant matrix as Etsy
     materialised it, including the disabled cross-product cells Etsy adds to
-    keep the grid rectangular (PRD 55 -- read here, never written)."""
+    keep the grid rectangular (ADR-0029 -- read here, never written)."""
 
     model_config = ConfigDict(extra="ignore")
 
@@ -242,7 +242,7 @@ class Listing(BaseModel):
         every ``read_live()`` but ``etsy_media``'s asks for. The field default
         only covers a *missing* key, so without this a plain re-plan of an
         existing listing fails validation on every run. ``videos`` has the
-        same shape without ``includes=Videos`` (PRD 72)."""
+        same shape without ``includes=Videos``."""
         return () if value is None else value
 
 

@@ -1,13 +1,13 @@
 """``pricing-plans/{name}.yaml``: a reusable, per-size starting price table.
 
 Referenced by a listing's ``pricing_plan:`` field as a workspace-relative
-path, resolved the same way ``design:`` is (PRD 34) -- not a bare name
+path, resolved the same way ``design:`` is -- not a bare name
 against a fixed directory the way ``garment_profile:``/``media[].template``
 are. No name/label field: the filename is the identity.
 ``garment_profile`` is a bare-name back-reference to the garment profile
 this plan was built for, in the same style as ``Listing.garment_profile`` --
 unvalidated against an actual garment profile file at load time, for the
-same reason ``Listing.garment_profile`` is (PRD 33).
+same reason ``Listing.garment_profile`` is.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ class PricingPlan(BaseModel):
     prices: dict[str, PriceField]
     price_overrides: dict[str, dict[str, PriceField]] = {}
     """Same shape as ``Listing.price_overrides`` -- a whole tier can carry a
-    colour markup, not just one listing (PRD 33)."""
+    colour markup, not just one listing."""
 
     @model_validator(mode="after")
     def _validate(self, info: ValidationInfo) -> PricingPlan:

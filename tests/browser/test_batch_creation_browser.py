@@ -7,7 +7,7 @@ browser.
   three rows, and each opens an editor whose design is the dropped file,
   asserted on the ``listing.yaml`` and ``designs/*.png`` the UI wrote.
 * Create a batch of two -> both rows reach *done* on the summary -> the
-  editor has the batch run's suggestions waiting (A40, A41).
+  editor has the batch run's suggestions waiting.
 * The summary -> a listing's name -> Mark reviewed in the editor -> Back to batch ->
   the summary shows the row reviewed, and the batch's record says so
   (batch plan PR 5; UI doc §7, §8).

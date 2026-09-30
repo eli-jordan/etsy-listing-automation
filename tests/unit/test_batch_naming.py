@@ -1,4 +1,4 @@
-"""`naming.allocate` (A38; spec *Cleaning and editing names*): the base name
+"""`naming.allocate` (name allocation; spec *Cleaning and editing names*): the base name
 when it is free, else the smallest free ``-N`` from 2, judged casefolded
 against everything a name must not collide with."""
 

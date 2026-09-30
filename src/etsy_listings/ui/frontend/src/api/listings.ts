@@ -151,7 +151,7 @@ export async function listCommonMedia(): Promise<MediaFileSummary[]> {
 }
 
 /** The *This listing* group: the listing's own files, each ref spelled
- * `./…` (PRD 73). */
+ * `./…` (ADR-0046). */
 export async function listListingMediaFiles(listing: string): Promise<MediaFileSummary[]> {
   const { data, error } = await api.GET("/api/listings/{listing}/media-files", {
     params: { path: { listing } },

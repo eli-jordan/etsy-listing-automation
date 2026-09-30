@@ -23,7 +23,7 @@ LOCAL_PICTURE = "./shots/size-chart.png"
 asset to carry into every listing (spec, *Creation and cloning*)."""
 DESIGN_SIZE = (90, 108)
 """90% of :func:`small_print_area`'s 100x120 on each axis -- the smallest
-design that passes (PRD 38)."""
+design that passes."""
 
 
 def small_print_area(root: Path) -> None:

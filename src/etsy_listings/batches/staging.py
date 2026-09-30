@@ -1,13 +1,13 @@
 """Staging one ZIP or loose PNGs, and the review of what was staged (spec
 *Accepted input*, *Frozen staging*, *Staging validation and naming*,
-*Content deduplication*; A38, A45).
+*Content deduplication*; name allocation, ADR-0051).
 
 :func:`stage_pngs` is the one write: it streams each PNG -- loose, or read
 out of the ZIP by `archive` -- to ``uploads/<sha256>.png``, merges identical
 bytes into one row, refuses more than 25 designs, freezes the listing
 template and checks every design against its garment, then writes
 ``session.json`` last. Any refusal removes the session's directory, so a
-refused upload leaves nothing on disk (A45).
+refused upload leaves nothing on disk.
 
 :func:`review` writes nothing. Names depend on the workspace -- a listing
 created a minute ago takes its name from a generated row -- so they are
@@ -39,7 +39,7 @@ from etsy_listings.listing_templates import owned_refs
 from etsy_listings.workspace.atomic import read_bytes_retrying
 from etsy_listings.workspace.workspace import Workspace, remove_tree
 
-# A45: safety limits, not settings. Module attributes so a test can lower them.
+# ADR-0051: safety limits, not settings. Module attributes so a test can lower them.
 MAX_DESIGNS = 25
 MAX_PNG_BYTES = 64 * 1024 * 1024
 MAX_UPLOAD_BYTES = 512 * 1024 * 1024
@@ -73,7 +73,7 @@ def _stem(filename: str) -> str:
 
 class _Received:
     """The unique designs of one upload, stored under their content hash as
-    they stream in (A45). Identical bytes become one row that names every
+    they stream in. Identical bytes become one row that names every
     source (spec, *Content deduplication*)."""
 
     def __init__(self, workspace: Workspace, session: str, total_limit: int | None) -> None:
@@ -196,7 +196,7 @@ def _receive_zip(
     workspace: Workspace, session: str, upload: Upload, head: bytes, received: _Received
 ) -> list[str]:
     """Stream the ZIP to disk, then read each PNG out of it entry by entry
-    (A45); the ZIP itself goes before the session is saved."""
+    ; the ZIP itself goes before the session is saved."""
     path = workspace.staging_archive_file(session)
     path.parent.mkdir(parents=True, exist_ok=True)
     try:
@@ -324,7 +324,7 @@ class StagingReview:
 def workspace_names(workspace: Workspace) -> dict[str, str]:
     """Every name a batch row must not take, casefolded, and what holds it:
     listing directories (with a ``listing.yaml`` or not -- create refuses
-    either) and design stems (A38)."""
+    either) and design stems."""
     taken = {path.stem.casefold(): "design" for path in workspace.design_files()}
     return taken | {name.casefold(): "listing" for name in workspace.listing_directory_names()}
 
@@ -352,7 +352,7 @@ def designs_by_content(workspace: Workspace, sizes: dict[str, int]) -> dict[str,
 def taken_for(workspace_taken: dict[str, str], reuse: str | None) -> set[str]:
     """What a row may not be named. A row reusing ``designs/<r>.png`` may
     take ``r`` itself when nothing but that design holds it, since its one
-    name then drives both paths as A38 intends -- the listing ``r`` over the
+    name then drives both paths as name allocation intends -- the listing ``r`` over the
     design ``r`` -- rather than a needless ``r-2`` over ``designs/r.png``."""
     taken = set(workspace_taken)
     if reuse is not None and workspace_taken.get(reuse.casefold()) == "design":
@@ -375,7 +375,7 @@ def _typed_problem(name: str, holder: str | None) -> str | None:
 
 
 def review(workspace: Workspace, session: StagingSession) -> StagingReview:
-    """Every row's name, state and note (A38; UI doc §5).
+    """Every row's name, state and note (name allocation; UI doc §5).
 
     Typed names are claimed first and never changed: one that is taken is
     flagged, with the next free suffix as a suggestion. Generated names then

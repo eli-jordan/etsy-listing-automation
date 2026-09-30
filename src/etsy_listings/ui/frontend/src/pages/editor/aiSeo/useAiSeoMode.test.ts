@@ -230,7 +230,7 @@ describe("useAiSeoMode generation", () => {
   });
 });
 
-describe("useAiSeoMode while a batch owns the listing (A40)", () => {
+describe("useAiSeoMode while a batch owns the listing", () => {
   const BATCH = "This listing is drafting in a batch. AI Mode is back once that is done.";
 
   afterEach(() => vi.useRealTimers());
@@ -266,7 +266,7 @@ describe("useAiSeoMode while a batch owns the listing (A40)", () => {
   });
 });
 
-describe("useAiSeoMode while a deploy holds the listing (A43)", () => {
+describe("useAiSeoMode while a deploy holds the listing", () => {
   const DEPLOYING = "This listing is deploying. AI Mode is back once the deploy finishes.";
 
   afterEach(() => vi.useRealTimers());

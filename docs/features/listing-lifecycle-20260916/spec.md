@@ -14,7 +14,7 @@ sequences and then generalised (see *The cascade* below).
 
 A listing that has never been for sale and a listing that has are different
 objects. The first can go away. The second has reviews, favourites and search
-history — PRD 37 already refused to throw those away to change a garment.
+history — ADR-0017 already refused to throw those away to change a garment.
 Delete is not that route with a new name.
 
 **Delete** retracts something that was never published on Etsy: local-only,
@@ -34,7 +34,7 @@ nothing to pause.
 
 Rejected: one cleanup that does not care about state. That is how a
 fat-finger retracts a listing with reviews. Rejected: adding `listings_d`.
-PRD 50 stands; changing scopes re-consents every user, and this tool still
+ADR-0026 stands; changing scopes re-consents every user, and this tool still
 does not call Etsy's `deleteListing`. Draft retraction is Printify's cascade,
 not Etsy's delete.
 
@@ -62,7 +62,7 @@ The field is desired state. `plan` never writes `listing.yaml`. Etsy becoming
 `inactive` on its own does not adopt `retired` into the file.
 
 Wrong verb is `Blocked`, never rewritten as the right one. Same shape as the
-garment-change refusal (PRD 37).
+garment-change refusal (ADR-0017).
 
 ---
 

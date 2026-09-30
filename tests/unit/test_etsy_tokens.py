@@ -107,7 +107,7 @@ def test_unreadable_json_reads_as_no_tokens(tmp_path: Path) -> None:
 
 def test_a_token_is_demanded_only_where_one_is_needed(tmp_path: Path) -> None:
     """Building a store must not require credentials -- `plan` builds clients
-    it may never call (A22). Asking for a token is what fails."""
+    it may never call. Asking for a token is what fails."""
     store = TokenStore(tmp_path / "absent.json", refresh=_never)
 
     with pytest.raises(EtsyAuthError) as caught:
@@ -151,7 +151,7 @@ def test_an_expiring_token_is_refreshed_and_the_new_pair_written(tmp_path: Path)
 def test_rotation_restarts_the_ninety_day_clock_optimistically(tmp_path: Path) -> None:
     """Etsy does not document whether a refresh extends the refresh token's
     life, so the stored date is a guess -- and `invalid_grant` is what
-    actually settles it (PRD 50)."""
+    actually settles it."""
     clock = Clock()
     store = TokenStore(tmp_path / "t.json", refresh=lambda _: response(), now=clock)
     store.record(response())

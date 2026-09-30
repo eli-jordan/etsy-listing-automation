@@ -69,11 +69,11 @@ sequenceDiagram
     CLI->>WS: discover(--root / env / walk up)
     CLI->>Engine: plan_listings(ctx, names, STAGES)
 
-    loop each listing, continue-on-error (PRD 16)
+    loop each listing, continue-on-error
         Engine->>Lock: read (or start empty)
         Engine->>Engine: build_plan(ctx, listing, lock, STAGES)
 
-        loop each stage, in pipeline order (A1)
+        loop each stage, in pipeline order (ADR-0007)
             Engine->>Stage: desired(ctx, listing)
             Engine->>Lock: applied_for(stage.name)
             alt stage is not local
@@ -93,7 +93,7 @@ sequenceDiagram
     User->>CLI: etsy-listings apply take-a-hike
     CLI->>Engine: apply_listings(ctx, names, STAGES)
     Engine->>Engine: build_plan(...), then execute(ctx, planned, lock)
-    Engine->>Stage: apply(...) — strictly sequential (A3)
+    Engine->>Stage: apply(...) — strictly sequential (ADR-0009)
     Stage->>Render: render(design, base, cfg) per colour
     Stage-->>Engine: StageApplyResult(applied, outputs)
     Engine->>Lock: write merged lockfile
@@ -124,8 +124,8 @@ graph LR
     L["<b>live</b><br/>Printify + Etsy<br/>(None for local stages)"] --> Diff
     Diff --> SP["StagePlan(will_run, changes, drift)"]
 
-    D -. "≠ applied ⇒ a change you made" .- A
-    A -. "≠ live ⇒ drift, someone edited outside the tool" .- L
+    D -. "≠ applied ⇒ a change you made".- A
+    A -. "≠ live ⇒ drift, someone edited outside the tool".- L
 ```
 
 `read_live()` returning `None` (`stage.local = True`) skips drift entirely, so
@@ -145,7 +145,7 @@ graph TD
     OH --> Reupload{"re-upload?"}
 ```
 
-Collapsing these into one hash breaks the case the PRD calls out: a Pillow or
+Collapsing these into one hash breaks a library-upgrade case: a Pillow or
 OpenCV upgrade changes rendered bytes without changing any input, and those
 images must re-upload. `applied_at`, `tool_version`, `remote` and absolute
 paths never enter a hash; paths that do are workspace-relative and
@@ -229,10 +229,10 @@ later. Each traces to a decision.
 
 - **Only `engine` computes a diff.** The CLI renderer and the UI serialiser both
   consume `Plan` / `StagePlan` / `Change` objects. Neither may compare states
-  itself — that is what makes the CLI and UI enforce identical rules (`A2`, PRD 20).
+  itself — that is what makes the CLI and UI enforce identical rules (`ADR-0008).
 - **Only `engine` runs a run.** The same rule, one level up: reading a
   listing's lockfile, planning it, executing it, writing the lockfile back and
-  carrying on past a failure (PRD 16) all live in `engine/run.py`, behind
+  carrying on past a failure all live in `engine/run.py`, behind
   `plan_listings` / `apply_listings`. An entry point supplies the listings and
   formats the resulting `RunReport`; it never opens a lockfile itself.
 - **Only the lockfile merges a lockfile.** `Lockfile.fold()` owns the
@@ -258,7 +258,7 @@ later. Each traces to a decision.
   sentinel, a design too small — is `desired()` returning `Blocked`, before a
   document exists for a run that was never going to happen. A refusal only the
   live state can prove — a retail price below Printify's cost, which needs
-  `variants[].cost` and therefore cannot be known before `read_live` (PRD 40's
+  `variants[].cost` and therefore cannot be known before `read_live` (ADR-0020's
   amendment) — is `plan()` returning `Verdict.refused(...)`, which the engine
   turns into the same `StagePlan.blocked`. Neither may raise, and a stage still
   never names itself. What is forbidden is the third shape: a stage that will
@@ -282,13 +282,13 @@ later. Each traces to a decision.
   expressions of one rule are how a stage comes to run while reporting nothing
   to do.
 - **`apply` is strictly sequential.** The current planner also walks stages
-  in pipeline order. The original read-only fan-out design (`A3`) is not
+  in pipeline order. The original read-only fan-out design (`ADR-0009`) is not
   implemented; it is not permission to parallelise writes.
 - **`plan` checks two things, not one: would the output differ, and is the
   output still there.** The render cache is gitignored and fully derivable, so
   it is a directory users delete. A stage's `read_live()` is called even when
   `local` is true — `local` means "no *remote* state", so no drift reporting
-  and no thread-pool fan-out, not "reads nothing" (`A1`).
+  and no thread-pool fan-out, not "reads nothing" (`ADR-0007`).
 
 ### Hashing
 
@@ -306,37 +306,37 @@ later. Each traces to a decision.
   differently than on Linux.
 - **Two hash axes, not one.** `input_hash` decides whether to re-render;
   `outputs` (per-file) decides whether to re-upload. Collapsing them breaks the
-  library-upgrade case the PRD calls out.
+  library-upgrade case described above.
 
 ### Rendering
 
 - **Render passes are pure.** No I/O, no globals, no clock. Inputs are ndarrays
   and frozen config. This is what makes both the hash and the goldens meaningful
-  (`A7`).
+  (`ADR-0012`).
 - **Every `cv2` call passes explicit `interpolation` and `borderMode`.** Relying
   on defaults makes output depend on the library version.
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
-  variants sell, not which photos get rendered (PRD 31).
+  variants sell, not which photos get rendered.
 - **A template is exactly one of three kinds — never a mix.** `kind:
-  colour-matrix | multiple | single`, a discriminated union (`A11`). **No
+  colour-matrix | multiple | single`, a discriminated union (`ADR-0014`). **No
   garment-profile-level registry of listing templates** — a template lives
   purely in `mockup-templates/{name}/`, and any listing may reference any of
   them. A listing's `media:` always names `{template, colour?}` explicitly —
-  there is no default template and no bare-colour shorthand (`A13`, PRD 29).
+  there is no default template and no bare-colour shorthand (`ADR-0015).
   `GarmentProfile.preview_template` is the one exception: a single
   `colour-matrix` template the editor uses to judge colours, not a `media:`
   default.
 - **`colour-matrix`-kind mockup filename = slugified Printify colour name.**
   Convention, not a mapping table. A sparse `exceptions.yaml` handles what
-  will not slugify (PRD 7a). When nothing matches exactly, `template_base_image`
+  will not slugify (ADR-0004). When nothing matches exactly, `template_base_image`
   falls back to a filename ending in the slug's hyphen segments — but only if
   exactly one photo in the directory qualifies; two candidates is refused, not
   guessed at. That fallback is lookup-only: `template_colours` still reports
   a non-matching filename as its own name, since deriving a colour from an
   unknown shared prefix (enumeration) isn't the same question as matching a
   known slug against one (lookup). `multiple`- and `single`-kind templates use a
-  fixed `scene.png` instead (PRD 28). **The browser is never told this rule**;
+  fixed `scene.png` instead (ADR-0014). **The browser is never told this rule**;
   it is served the answer. `TemplateSummary.photos` carries each scene's real
   workspace-relative path, resolved through `Workspace.scene_photo`, because the
   editor's caption used to compose one from the convention and so named a
@@ -348,7 +348,7 @@ later. Each traces to a decision.
   Everything else asks for `workspace.lock_file(name)` rather than joining
   `listings/<name>/state.lock.json`, and for `workspace.template_photos(name)`
   rather than globbing `mockup-templates/<name>/*.png`. Two rules enforce it:
-  `resolve()` rejects paths escaping the root (`A8`), and the layout accessors
+  `resolve()` rejects paths escaping the root (`ADR-0013`), and the layout accessors
   reject any name that is not a single path segment. Together they keep the UI's
   endpoints safe — template names arrive from URLs — so this is a security
   boundary, not a tidiness rule. A new path-taking CLI option or endpoint goes
@@ -375,7 +375,7 @@ later. Each traces to a decision.
   `cli/app.py`. A missed `None` here writes a `None` to a file.
 - **Every price carries an explicit currency.** Bare numbers are rejected at
   validation. Revenue is NOK, Printify's costs are USD; a bare number is a bug
-  waiting to be a refund (PRD 24).
+  waiting to be a refund (ADR-0006).
 
 ## Testing layers
 

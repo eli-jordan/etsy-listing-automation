@@ -8,11 +8,11 @@ nothing:
 and shop call goes through. :class:`OAuthClient` talks to the token endpoint,
 which takes **neither**: it authenticates by `client_id` in the form body, and
 is the only Etsy endpoint that can be called before a token exists. Giving the
-token endpoint its own client is what keeps :mod:`tokens` free of a cycle back
-through here (A23).
+token endpoint its own client is what keeps:mod:`tokens` free of a cycle back
+through here.
 
 The retry policy, the backoff and the "return the last response rather than
-raising" rule are all shared with Printify (A21) -- one `retry.py`, because a
+raising" rule are all shared with Printify -- one `retry.py`, because a
 429 means the same thing to both. Etsy adds one thing Printify does not: every
 response says how many calls are left this second, which :class:`RateGate`
 reads so the next call waits instead of spending a 429 (features/market-seo-20260924/spec.md,
@@ -41,7 +41,7 @@ BASE_URL = "https://openapi.etsy.com"
 ``api.etsy.com`` for the same paths; both answer, and the reference is the one
 that describes the endpoints this transport carries. The OAuth token endpoint
 is the exception and keeps the host its own documentation gives it
-(:data:`~etsy_listings.clients.etsy.oauth.TOKEN_URL`)."""
+( :data:`~etsy_listings.clients.etsy.oauth.TOKEN_URL`)."""
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 """Generous for the same reason Printify's is: listing images travel this
@@ -56,14 +56,14 @@ _log = logging.getLogger(__name__)
 BearerSource = Callable[[], str]
 """Resolved per request, never at construction. `plan` builds clients it may
 never call, and a workspace that has not signed in must still be able to build
-one (A22)."""
+one."""
 
 
 class EtsyApiError(UserFacingError, RuntimeError):
     """A request Etsy understood and refused.
 
     A :class:`~etsy_listings.errors.UserFacingError`, so that one listing
-    Etsy refuses is one listing reported rather than a batch ended (PRD 16).
+    Etsy refuses is one listing reported rather than a batch ended.
     The Phase 3 stages that will raise this inherit the behaviour by being
     written against this type.
 
@@ -197,7 +197,7 @@ class Transport:
 
         # Retries first, so a 429 that clears never becomes an exception, and
         # one that does not surfaces as the real decoded error rather than a
-        # wrapper's summary of it (A21).
+        # wrapper's summary of it.
         response = with_retries(send, method, self._policy, sleep=self._sleep, random=self._random)
 
         if response.status_code in (401, 403):

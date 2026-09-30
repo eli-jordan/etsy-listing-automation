@@ -226,7 +226,7 @@ def scored_listing(listing_id: int, **over: object) -> ScoredListing:
 
 
 def seed_proposal(root: Path, listing: str = "take-a-hike") -> ProposalRecord:
-    """Caches a proposal for ``listing`` as a finished run would have (A41)."""
+    """Caches a proposal for ``listing`` as a finished run would have."""
     return ProposalStore(Workspace.discover(root_override=root)).put(
         listing,
         ProposalChoices.model_validate_json(proposal_payload()),

@@ -73,7 +73,7 @@ def test_scopes_are_space_separated_and_percent_encoded() -> None:
 
 
 def test_the_registered_scopes_are_the_ones_phase_3_needs() -> None:
-    """PRD 50. `listings_d` is deliberately absent: it deletes listings, and
+    """ADR-0026. `listings_d` is deliberately absent: it deletes listings, and
     image delete is covered by `listings_w`."""
     assert set(oauth.SCOPES) == {"listings_r", "listings_w", "shops_r"}
     assert "listings_d" not in oauth.SCOPES
