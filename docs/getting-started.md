@@ -5,18 +5,16 @@ try it against a ready-made workspace with zero setup, then build your own —
 a workspace, a design, a mockup template, a garment profile and a listing — and run
 `plan`/`apply` against it.
 
-**Status check first.** Only Phases 0 and 1 are implemented: workspace
-discovery, config, the render pipeline, the `plan`/`apply`/`new`/`ui`
-commands, and the browser calibrator. `apply` only ever runs the `render`
-stage — nothing here talks to Printify or Etsy yet. That's expected, not a
-bug in the tool or in this guide. See [README.md](../README.md) and
-[docs/prd.md](prd.md) for the full roadmap.
+This guide only covers the local workflow: `apply` here runs the `render`
+stage, and nothing in it talks to Printify or Etsy. See
+[docs/setup.md](setup.md) for connecting real accounts and
+[docs/prd.md](prd.md) for the full scope.
 
 ## 1. Install
 
 Requires [uv](https://docs.astral.sh/uv/) and Python 3.12+ (uv manages the
 interpreter for you), run from **zsh under cygwin** — see
-[CLAUDE.md](../CLAUDE.md) for why other Windows shells misbehave here.
+the README's [Windows notes](../README.md#windows-notes) for why other Windows shells misbehave here.
 
 ```bash
 uv sync
@@ -29,9 +27,8 @@ Confirm it's on your PATH:
 uv run etsy-listings --help
 ```
 
-You'll see four commands: `plan`, `apply`, `new`, `ui`. That's the entire
-implemented surface — anything else (`auth`, `catalog refresh`, `unlock`,
-`status`) is designed but not built; see "What's not here yet" at the bottom.
+This guide uses `plan`, `apply`, `new` and `ui`. Commands that are designed
+but not built are listed in "What's not here yet" at the bottom.
 
 Node is only needed if you want to run the calibrator's frontend in dev mode
 (§5) — skip it for now.
@@ -133,8 +130,8 @@ can reach and writes that id, then collects the currency and Etsy defaults and
 writes `shop.yaml`. It is safe to re-run: every question arrives pre-filled
 with what the file already says, so pressing enter through it changes nothing.
 
-It stops before Etsy sign-in, which arrives with `auth` in Phase 3. A
-workspace without that is complete for everything up to publishing.
+It stops before Etsy sign-in, which `auth` handles. A workspace without that
+is complete for everything up to publishing.
 
 The `shop.yaml` it writes looks like this, and hand-editing it is fine:
 
@@ -610,8 +607,8 @@ you're planning around where this is going — but none of it runs yet:
 | `status [<listing>]` | Run history from the SQLite recorder |
 | `render` | Force the local render stage in isolation (today, it runs as part of `apply`) |
 
-`ui` itself will grow a dashboard, setup wizard and run runner in Phase 5 —
-today it serves the calibrator, the listing editor, and AI Mode (§8).
+`ui` currently serves the calibrator, the listing editor, and AI Mode (§8);
+a setup wizard and run runner are planned.
 
 ## Where things live, quick reference
 
@@ -634,5 +631,5 @@ your-workspace/
 
 Never write secrets into this repository — they belong in the workspace's
 `.env` and `.auth/`, both gitignored. See [docs/setup.md](setup.md) for what
-has to exist in Printify/Etsy before Phase 2 can run against a real shop, and
+has to exist in Printify/Etsy before running against a real shop, and
 [docs/architecture.md](architecture.md) for how the modules fit together.
