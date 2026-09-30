@@ -39,10 +39,17 @@ def _listing_on_disk(workspace_root: Path) -> dict[str, object]:
 
 def _wait_for_media(page, workspace_root: Path, expected: list[object]) -> None:  # noqa: ANN001
     """Poll the file, not the page: "Autosaved" already reads true during the
-    debounce before the save is sent (see `test_listings_browser.py`)."""
+    debounce before the save is sent (see `test_listings_browser.py`).
+
+    On Windows a read that lands while autosave's atomic replace swaps the
+    file in is refused with PermissionError; that is "not saved yet", so the
+    poll tries again rather than failing."""
     for _ in range(100):
-        if _listing_on_disk(workspace_root)["media"] == expected:
-            return
+        try:
+            if _listing_on_disk(workspace_root)["media"] == expected:
+                return
+        except PermissionError:
+            pass
         page.wait_for_timeout(100)
     raise AssertionError(
         f"media: never reached {expected}: {_listing_on_disk(workspace_root)['media']}"
