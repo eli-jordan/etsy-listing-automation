@@ -201,8 +201,10 @@ directory), then deletes the staging directory. Cancel deletes it straight away.
 | `POST /api/staging` (multipart: `template`, `files[]`) | Validate the input, freeze the template, create the session | 2, 7 |
 | `GET/PATCH/DELETE /api/staging/{id}` | Reattach, edit names/label/remove rows, cancel | 2 |
 | `POST /api/staging/{id}/confirm` | Create the batch and its listings, return the batch id | 2 |
+| `GET /api/staging/{id}/rows/{row}/thumbnail` | A staged design's thumbnail for the review | 2 |
 | `GET /api/batches`, `GET/PATCH/DELETE /api/batches/{id}` | Recent batches, summary, rename, delete record | 2, 5 |
-| `POST /api/batches/{id}/{cancel,resume,retry}`, `POST …/rows/{row}/retry` | Queue control | 4 |
+| `POST /api/batches/{id}/rows/{row}/retry` | Retry a row's creation (PR 2); PR 4 adds its AI half | 2, 4 |
+| `POST /api/batches/{id}/{cancel,resume,retry}` | Queue control | 4 |
 | `PUT /api/batches/{id}/rows/{row}/reviewed` | Mark reviewed / needs review | 5 |
 | `GET /api/listings/{name}/batch` | The listing's batch membership, for the editor's row | 5 |
 | `GET /api/listings/{name}/proposal`, `PATCH …/resolution` | Durable proposal | 3 |
@@ -339,6 +341,10 @@ Applied on PR 81's branch alongside this plan:
 
 **Target: about 4,700 lines.** This completes the thin end-to-end path.
 
+Shipped as two PRs to stay under the size limit: **PR 2** is items 1–3 (the
+`batches/` package and the API), and **PR 2b** is item 4 (the frontend). The
+browser success condition belongs to PR 2b.
+
 1. `batches/` package:
    - `StagingStore` and `BatchStore` (A37), with `write_json_atomic`.
    - `naming.allocate` (A38).
@@ -383,8 +389,9 @@ Applied on PR 81's branch alongside this plan:
   the created listings, and deleting the template doesn't break confirm.
 - A contract test shows a reload reattaches to the session: `GET` returns the
   same rows and names.
-- Browser test: drop three PNGs → fix one name → Create 3 listings → summary
-  shows three rows, and each opens an editor whose design is the dropped file.
+- Browser test (PR 2b): drop three PNGs → fix one name → Create 3 listings →
+  summary shows three rows, and each opens an editor whose design is the dropped
+  file.
 
 ### PR 3 — `feat(ai): durable server-side proposals`
 
