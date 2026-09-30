@@ -10,6 +10,15 @@ Last audited against the implementation on 2026-09-30. The
 remaining violations and proposed repairs. The invariants below describe the
 intended contracts; they are not a claim that every current caller obeys them.
 
+The [module-structure specification](features/module-structure-20260930/spec.md)
+and ADR-0052 define an accepted, pending restructure into transport-independent
+core, server and CLI modules with React source at `src/ui`. Its
+[stacked implementation plan](features/module-structure-20260930/plan.md)
+requires current descriptions to stay truthful during migration and a complete
+architecture reconciliation at completion. This document still describes the
+current checkout; the specification governs changed ownership and removal of
+the native host, while unrelated invariants below remain in force.
+
 ## Runtime and dependencies
 
 The application is a synchronous Python 3.12+ core with a FastAPI server and

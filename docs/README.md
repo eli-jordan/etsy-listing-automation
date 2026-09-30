@@ -34,6 +34,7 @@ identify the start of the work, not its release date.
 | Market-informed SEO | [Spec](features/market-seo-20260924/spec.md) | [Interactions](features/market-seo-20260924/interactions.md) | [Plan](features/market-seo-20260924/plan.md) |
 | Listing videos | — | — | [Plan](features/listing-videos-20260925/plan.md) |
 | Listing templates and batch creation | [Spec](features/batch-creation-20260927/spec.md) | [Interactions](features/batch-creation-20260927/interactions.md) | [Plan](features/batch-creation-20260927/plan.md) |
+| Module structure and shared operations | [Spec](features/module-structure-20260930/spec.md) | — | [Plan](features/module-structure-20260930/plan.md) |
 
 The AI SEO interactions are amended by market-informed SEO and durable batch
 proposals; the video requirements also live in the Etsy integration spec.

@@ -69,3 +69,4 @@ so the trade-off remains visible.
 | 0049 | [Keep the latest proposal in server cache](0049-keep-the-latest-proposal-in-server-cache.md) | 2026-09-27 |
 | 0050 | [Give UI deploy precedence over AI work](0050-give-ui-deploy-precedence-over-ai-work.md) | 2026-09-27 |
 | 0051 | [Bound uploads and inspect archive entries](0051-bound-uploads-and-inspect-archive-entries.md) | 2026-09-27 |
+| 0052 | [Separate core from transport adapters](0052-separate-core-from-transport-adapters.md) | 2026-09-30 |
