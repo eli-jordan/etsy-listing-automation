@@ -69,8 +69,17 @@ def test_command_help_documents_the_command_specific_flags() -> None:
     ui_help = _help("ui")
     assert "--host" in ui_help
     assert "--port" in ui_help
-    assert "--browser" in ui_help
-    assert "--debug" in ui_help
+    assert "--browser" not in ui_help
+    assert "--debug" not in ui_help
+
+
+def test_ui_help_describes_foreground_http_serving() -> None:
+    # The specification's one intentional user-visible change (ADR-0052):
+    # `ui` serves HTTP in the foreground; there is no native window.
+    ui_help = " ".join(_help("ui").split())
+    assert "in the foreground" in ui_help
+    # Word-bounded: the shared epilog's "native Windows forms" is about paths.
+    assert not re.search(r"native window\b", ui_help, re.IGNORECASE)
 
 
 def test_root_can_be_given_through_the_environment(workspace_root: Path) -> None:

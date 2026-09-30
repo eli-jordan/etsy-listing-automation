@@ -84,10 +84,10 @@ def create_app(
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         """Starts the runs executor's worker thread with the app, and waits
-        for it on the way out -- the same "finish what's in flight, start
-        nothing else" shutdown ``ui/desktop.py``'s close handler also needs
-        (decision 7), except this is the path every ASGI server already calls
-        (uvicorn's own shutdown, and ``TestClient``'s ``with`` block).
+        for it on the way out -- "finish what's in flight, start nothing
+        else" (decision 7), on the path every ASGI server already calls
+        (uvicorn's own shutdown when ``ui`` is interrupted, and
+        ``TestClient``'s ``with`` block).
 
         AI runs are cancelled first: each is on its own daemon thread, and
         cancelling kills its provider subprocess tree, so a server stopping

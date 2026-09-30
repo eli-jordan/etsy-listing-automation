@@ -1,72 +1,85 @@
-"""The ``ui`` command's flags reach the desktop launcher.
+"""The ``ui`` command serves the HTTP app in the foreground.
 
 A behaviour test rather than a unit one because it drives the Typer
-application: the interesting fact is that ``--browser`` and ``--debug``
-survive the CLI and arrive as the kwargs ``run_calibrator`` is defined to
-take, not that the launcher itself does the right thing with them.
+application: the interesting facts are that the command reaches uvicorn with
+the workspace's app, its host and its port, and that nothing on that path
+needs a GUI toolkit. The module-structure specification removed the native
+window and its ``--browser``/``--debug`` flags (ADR-0052), so those are
+rejected as unknown options rather than accepted and ignored.
 """
 
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 from typing import Any
 
 import pytest
+from fastapi import FastAPI
 from typer.testing import CliRunner
 
 from etsy_listings.cli.app import app
-from etsy_listings.errors import UserFacingError
-from etsy_listings.workspace.workspace import Workspace
 
 runner = CliRunner()
 
 
-def test_ui_defaults_to_a_native_window(
-    monkeypatch: pytest.MonkeyPatch, workspace_root: Path
-) -> None:
+def _capture_uvicorn(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
+    """Record what the command hands uvicorn, and block the GUI toolkit.
+
+    A `None` entry makes any `import webview` raise ImportError, so a path
+    that still reached for the toolkit fails here instead of opening a window
+    on the machine running the tests.
+    """
+    monkeypatch.setitem(sys.modules, "webview", None)
     seen: dict[str, Any] = {}
 
-    def fake_run(workspace: Workspace, **kwargs: Any) -> None:
-        seen["root"] = workspace.root
+    def fake_run(served: object, **kwargs: Any) -> None:
+        seen["app"] = served
         seen.update(kwargs)
 
-    monkeypatch.setattr("etsy_listings.ui.desktop.run_calibrator", fake_run)
+    monkeypatch.setattr("uvicorn.run", fake_run)
+    return seen
+
+
+def test_bare_ui_serves_http_without_a_gui_toolkit(
+    monkeypatch: pytest.MonkeyPatch, workspace_root: Path
+) -> None:
+    seen = _capture_uvicorn(monkeypatch)
+
     result = runner.invoke(app, ["ui", "--root", str(workspace_root)])
+
     assert result.exit_code == 0, result.output
-    assert seen["browser"] is False
-    assert seen["debug"] is False
+    served = seen["app"]
+    assert isinstance(served, FastAPI)
+    assert served.state.workspace.root == workspace_root.resolve()
     # Every interface, not loopback: the workspace is reachable from a phone
     # or another machine on the LAN, which is the point of serving it at all.
-    # `page_url` still points the native window itself at 127.0.0.1.
     assert seen["host"] == "0.0.0.0"
     assert seen["port"] == 8000
 
 
-def test_ui_browser_flag_skips_the_native_window(
+def test_ui_passes_host_and_port_to_the_server(
     monkeypatch: pytest.MonkeyPatch, workspace_root: Path
 ) -> None:
-    seen: dict[str, Any] = {}
+    seen = _capture_uvicorn(monkeypatch)
 
-    def fake_run(workspace: Workspace, **kwargs: Any) -> None:
-        seen.update(kwargs)
-
-    monkeypatch.setattr("etsy_listings.ui.desktop.run_calibrator", fake_run)
     result = runner.invoke(
-        app, ["ui", "--browser", "--debug", "--port", "9000", "--root", str(workspace_root)]
+        app, ["ui", "--host", "127.0.0.1", "--port", "9000", "--root", str(workspace_root)]
     )
+
     assert result.exit_code == 0, result.output
-    assert seen["browser"] is True
-    assert seen["debug"] is True
+    assert seen["host"] == "127.0.0.1"
     assert seen["port"] == 9000
 
 
-def test_ui_prints_a_user_facing_error(
-    monkeypatch: pytest.MonkeyPatch, workspace_root: Path
+@pytest.mark.parametrize("flag", ["--browser", "--debug"])
+def test_removed_native_window_flags_are_rejected(
+    flag: str, monkeypatch: pytest.MonkeyPatch, workspace_root: Path
 ) -> None:
-    def fake_run(workspace: Workspace, **kwargs: Any) -> None:
-        raise UserFacingError("the calibrator frontend has not been built")
+    seen = _capture_uvicorn(monkeypatch)
 
-    monkeypatch.setattr("etsy_listings.ui.desktop.run_calibrator", fake_run)
-    result = runner.invoke(app, ["ui", "--root", str(workspace_root)])
-    assert result.exit_code == 1
-    assert "has not been built" in result.output
+    result = runner.invoke(app, ["ui", flag, "--root", str(workspace_root)])
+
+    assert result.exit_code == 2
+    assert "No such option" in result.output
+    assert seen == {}
