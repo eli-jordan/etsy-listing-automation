@@ -12,6 +12,7 @@ export type StagingPatch = components["schemas"]["StagingPatch"];
 export type StagingRefusal = components["schemas"]["StagingRefusal"];
 export type BatchDetail = components["schemas"]["BatchDetail"];
 export type BatchRow = components["schemas"]["BatchRowDetail"];
+export type AiReadinessBlock = components["schemas"]["AiReadinessBlock"];
 
 export class BatchesApiError extends Error {}
 
@@ -89,11 +90,31 @@ export async function getBatch(id: string): Promise<BatchDetail> {
   return data;
 }
 
+/** Retry one row: its creation if that failed, else its AI (A40). */
 export async function retryBatchRow(id: string, row: string): Promise<BatchDetail> {
   const { data, error } = await api.POST("/api/batches/{batch_id}/rows/{row}/retry", {
     params: { path: { batch_id: id, row } },
   });
   if (error || !data) throw new BatchesApiError(detailOf(error, "Retry failed."));
+  return data;
+}
+
+const CONTROLS = {
+  cancel: "/api/batches/{batch_id}/cancel",
+  resume: "/api/batches/{batch_id}/resume",
+  retry: "/api/batches/{batch_id}/retry",
+} as const;
+
+/** The batch's queue controls (A40): Cancel batch, Resume, and Retry N
+ * failed. Each answers the batch as it is afterwards. */
+export async function controlBatch(
+  id: string,
+  action: keyof typeof CONTROLS,
+): Promise<BatchDetail> {
+  const { data, error } = await api.POST(CONTROLS[action], {
+    params: { path: { batch_id: id } },
+  });
+  if (error || !data) throw new BatchesApiError(detailOf(error, "The batch did not change."));
   return data;
 }
 

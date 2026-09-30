@@ -83,6 +83,21 @@ describe("AiSeoControl", () => {
     expect(generate).toHaveBeenCalled();
   });
 
+  it("offers no Cancel for a batch's run: Cancel batch on the summary stops it", () => {
+    render(
+      <AiSeoControl
+        mode={mode({
+          phase: "loading",
+          startedAt: Date.now(),
+          run: aiRunStub({ phase: "running", busy: true, origin: "batch" }),
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
+    expect(screen.getByText("Drafting as part of a batch")).toBeInTheDocument();
+  });
+
   it("shows a polite loading status with Cancel while generating, and disables AI Mode", () => {
     vi.useFakeTimers();
     const cancel = vi.fn();

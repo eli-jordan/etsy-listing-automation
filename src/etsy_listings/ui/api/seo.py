@@ -55,6 +55,7 @@ from etsy_listings.market import snapshot as market_snapshot
 from etsy_listings.market.snapshot import MarketSnapshot
 from etsy_listings.ui.api.listings import Existing
 from etsy_listings.ui.api.schemas import (
+    AiReadinessBlock,
     ListingProposal,
     ProposalResolutionPatch,
     SeoReadinessResponse,
@@ -155,21 +156,62 @@ def readiness(
         return SeoReadinessResponse(ready=False, reason="the listing brief is empty")
     if WorkspaceFacts.gather(workspace).garment_profile(listing.garment_profile) is None:
         return SeoReadinessResponse(ready=False, reason="the listing has no usable garment profile")
-    prompts = [workspace.seo_prompt_file(), workspace.market_queries_prompt_file()]
-    if drafting:
-        prompts.append(workspace.brief_prompt_file())
-    for prompt_file in prompts:
-        if not prompt_file.is_file():
-            return SeoReadinessResponse(
-                ready=False,
-                reason=f"{prompt_file} is missing; run `etsy-listings setup` to seed it",
-            )
-    checks = [provider.readiness() for provider in providers]
-    if not any(check.ready for check in checks):
-        reasons = "; ".join(check.reason for check in checks if check.reason)
-        detail = reasons or "no provider is configured"
-        return SeoReadinessResponse(ready=False, reason=f"no AI provider is ready ({detail})")
+    prompt_file = missing_prompt(workspace, draft_brief=drafting)
+    if prompt_file is not None:
+        return SeoReadinessResponse(
+            ready=False,
+            reason=f"{prompt_file} is missing; run `etsy-listings setup` to seed it",
+        )
+    unready = provider_problem(providers)
+    if unready is not None:
+        return SeoReadinessResponse(ready=False, reason=f"no AI provider is ready ({unready})")
     return SeoReadinessResponse(ready=True)
+
+
+def missing_prompt(workspace: Workspace, *, draft_brief: bool) -> Path | None:
+    """The first prompt file a run needs that is not there: ``seo.md`` and
+    ``market-queries.md`` always, ``brief.md`` when the run drafts."""
+    prompts = [workspace.seo_prompt_file(), workspace.market_queries_prompt_file()]
+    if draft_brief:
+        prompts.append(workspace.brief_prompt_file())
+    return next((prompt for prompt in prompts if not prompt.is_file()), None)
+
+
+def provider_problem(providers: Sequence[AiProvider]) -> str | None:
+    """``None`` when some provider is ready, else every provider's reason."""
+    checks = [provider.readiness() for provider in providers]
+    if any(check.ready for check in checks):
+        return None
+    reasons = "; ".join(check.reason for check in checks if check.reason)
+    return reasons or "no provider is configured"
+
+
+SETUP_REMEDY = "Add one in Setup, then come back. Your staging is kept."
+
+
+def batch_readiness(
+    workspace: Workspace, providers: Sequence[AiProvider], *, has_market: bool
+) -> AiReadinessBlock | None:
+    """Whether a batch created now could draft (spec, *Design validation*):
+    every prompt a drafting run reads, a ready provider -- :func:`readiness`'
+    own two checks -- and Etsy market access, which a manual run only finds
+    missing once it reaches research. ``None`` when all three are there;
+    the wording is ``staging.note.md``'s."""
+    prompt_file = missing_prompt(workspace, draft_brief=True)
+    if prompt_file is not None:
+        shown = prompt_file.relative_to(workspace.root).as_posix()
+        return AiReadinessBlock(
+            message=f"{shown} is missing.",
+            remedy="Run `etsy-listings setup` to seed it, then come back. Your staging is kept.",
+        )
+    if provider_problem(providers) is not None:
+        return AiReadinessBlock(message="No AI provider is ready.", remedy=SETUP_REMEDY)
+    if not has_market:
+        return AiReadinessBlock(
+            message="Etsy market access isn't set up.",
+            remedy="Add the Etsy app key in Setup, then come back. Your staging is kept.",
+        )
+    return None
 
 
 def build_seo_request(
@@ -200,11 +242,19 @@ def build_seo_request(
     )
 
 
-def listing_proposal(workspace: Workspace, name: str, record: ProposalRecord) -> ListingProposal:
+def listing_proposal(
+    workspace: Workspace,
+    name: str,
+    record: ProposalRecord,
+    *,
+    facts: WorkspaceFacts | None = None,
+) -> ListingProposal:
     """``record`` on the wire, judged against the saved listing as it is now
-    (A41). Server-side, so the editor and the batch summary agree."""
+    (A41). Server-side, so the editor and the batch summary agree. A caller
+    judging many listings passes the ``facts`` it gathered once."""
     listing = workspace.load_listing(name)
-    profile = WorkspaceFacts.gather(workspace).garment_profile(listing.garment_profile)
+    facts = facts or WorkspaceFacts.gather(workspace)
+    profile = facts.garment_profile(listing.garment_profile)
     now = input_snapshot(workspace, name, listing, profile)
     return ListingProposal(
         proposal=record.proposal,
@@ -214,6 +264,11 @@ def listing_proposal(workspace: Workspace, name: str, record: ProposalRecord) ->
         resolution=record.resolution,
         stale=proposal_staleness(record.snapshot, now),
     )
+
+
+BATCH_PENDING_REASON = "This listing is drafting in a batch. AI Mode is back once that is done."
+"""The editor's hint while a batch row owns the listing's AI (spec,
+*Scheduling*: two runs must never own one listing)."""
 
 
 def _proposals(request: Request) -> ProposalStore:
@@ -233,6 +288,8 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     `readiness()`, is a local probe (a file's existence, a fast
     `--help`/`login status` subprocess) that changes nothing.
     """
+    if request.app.state.batch_queue.pending(target.name):
+        return SeoReadinessResponse(ready=False, reason=BATCH_PENDING_REASON, batch_pending=True)
     listing = target.workspace.load_listing(target.name)
     providers = _providers(request, target.workspace)
     return readiness(target.workspace, listing, providers, draft_brief=True)

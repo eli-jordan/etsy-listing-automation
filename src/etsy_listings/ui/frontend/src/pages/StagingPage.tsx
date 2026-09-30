@@ -3,6 +3,7 @@ import { CopySimpleIcon } from "@phosphor-icons/react/dist/csr/CopySimple";
 import { InfoIcon } from "@phosphor-icons/react/dist/csr/Info";
 import { ProhibitIcon } from "@phosphor-icons/react/dist/csr/Prohibit";
 import { WarningIcon } from "@phosphor-icons/react/dist/csr/Warning";
+import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
 import { XIcon } from "@phosphor-icons/react/dist/csr/X";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -25,6 +26,11 @@ import {
  * A name problem blocks Create; a design that will not print does not -- it
  * is shown as *Not created* and Create counts only the ready rows. The
  * session lives on the server, so a reload lands here again.
+ *
+ * AI readiness is said only when it fails (`staging.note.md`): a missing
+ * prompt, provider or Etsy market access replaces the count strip's right
+ * side with a blocking callout, and Create is disabled -- the server refuses
+ * the confirm anyway (spec, *Design validation*).
  */
 
 function time(iso: string): string {
@@ -175,6 +181,7 @@ export function StagingPage() {
   const invalid = rows.filter((row) => row.state === "invalid").length;
   const merged = rows.reduce((sum, row) => sum + row.sources.length - 1, 0);
   const fixNames = `Fix ${nameProblems} ${nameProblems === 1 ? "name" : "names"}`;
+  const aiBlocked = session?.ai_blocked ?? null;
 
   return (
     <>
@@ -200,11 +207,11 @@ export function StagingPage() {
           <button
             type="button"
             className="btn btn-primary"
-            disabled={!session || nameProblems > 0 || ready === 0 || creating}
+            disabled={!session || nameProblems > 0 || ready === 0 || creating || aiBlocked !== null}
             title={nameProblems > 0 ? `${fixNames} first` : undefined}
             onClick={create}
           >
-            Create {ready + nameProblems} listings
+            Create {ready + nameProblems} {ready + nameProblems === 1 ? "listing" : "listings"}
           </button>
         </div>
       </div>
@@ -237,6 +244,18 @@ export function StagingPage() {
                 <span className="bc-dot" />
                 <strong>{merged}</strong> {merged === 1 ? "duplicate" : "duplicates"} merged
               </span>
+            )}
+            {aiBlocked && (
+              <>
+                <span className="bc-spacer" />
+                <div className="dv-callout dv-callout--blocked bc-ai-blocked" role="alert">
+                  <WarningCircleIcon className="dv-callout__icon" />
+                  <div>
+                    <strong>AI drafting can't run yet.</strong> {aiBlocked.message}{" "}
+                    {aiBlocked.remedy}
+                  </div>
+                </div>
+              </>
             )}
           </div>
 

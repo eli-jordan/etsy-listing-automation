@@ -9,6 +9,7 @@ import socket
 import threading
 from collections.abc import Iterator
 from pathlib import Path
+from typing import Any
 
 import pytest
 import uvicorn
@@ -81,7 +82,16 @@ def browser_type(prerequisite_missing):  # noqa: ANN201 - playwright's type isn'
 
 
 @pytest.fixture
-def calibrator_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]:
+def app_options() -> dict[str, Any]:
+    """``create_app``'s keyword arguments. A module overrides this fixture to
+    serve the app with doubles -- fake AI providers, the in-memory market."""
+    return {}
+
+
+@pytest.fixture
+def calibrator_server(
+    workspace_root: Path, prerequisite_missing, app_options: dict[str, Any]
+) -> Iterator[str]:
     """Runs the real app against a throwaway copy of the fixture workspace and
     yields its base URL. Any template.yaml the browser saves lands in that copy,
     so a test can assert on the file the UI actually wrote."""
@@ -93,7 +103,9 @@ def calibrator_server(workspace_root: Path, prerequisite_missing) -> Iterator[st
 
     workspace = Workspace.discover(root_override=workspace_root)
     port = _free_port()
-    config = uvicorn.Config(create_app(workspace), host="127.0.0.1", port=port, log_level="warning")
+    config = uvicorn.Config(
+        create_app(workspace, **app_options), host="127.0.0.1", port=port, log_level="warning"
+    )
     server = uvicorn.Server(config)
     thread = threading.Thread(target=server.run, daemon=True)
     thread.start()

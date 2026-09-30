@@ -96,6 +96,24 @@ describe("StagingPage", () => {
     expect(confirm).toHaveBeenCalledWith("s1");
   });
 
+  it("says nothing about AI while it can run, and blocks Create when it cannot", async () => {
+    vi.spyOn(batchesApi, "getStaging").mockResolvedValue({
+      ...session([READY]),
+      ai_blocked: {
+        message: "No AI provider is ready.",
+        remedy: "Add one in Setup, then come back. Your staging is kept.",
+      },
+    });
+    renderPage();
+
+    const create = await screen.findByRole("button", { name: "Create 1 listing" });
+    expect(create).toBeDisabled();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "AI drafting can't run yet. No AI provider is ready. Add one in Setup, then come back. " +
+        "Your staging is kept.",
+    );
+  });
+
   it("blocks Create on a name to fix, and Use suggestion sends it", async () => {
     vi.spyOn(batchesApi, "getStaging").mockResolvedValue(session([READY, TAKEN]));
     const patch = vi
@@ -154,7 +172,7 @@ describe("StagingPage", () => {
     vi.spyOn(batchesApi, "confirmStaging").mockRejectedValue(new Error("can no longer make"));
     renderPage();
 
-    fireEvent.click(await screen.findByRole("button", { name: "Create 1 listings" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Create 1 listing" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("can no longer make");
   });

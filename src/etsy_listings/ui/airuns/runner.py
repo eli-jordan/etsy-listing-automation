@@ -209,6 +209,9 @@ class AiRunner:
         return listing, profile
 
     def _chain(self, run: AiRun) -> None:
+        # A batch run can be asked to stop before its thread starts (Cancel
+        # batch landing just after the queue claimed the row, A40).
+        self._check(run)
         workspace = self.workspace
         listing, profile = self._load(run)
         providers = self.providers(workspace)
@@ -312,7 +315,7 @@ class AiRunner:
                 ProposalChoices.of(proposal),
                 frozen,
                 generated_at=datetime.now(UTC),
-                origin="manual",
+                origin=run.origin,
             )
             announced = listing_proposal(workspace, run.listing, record)
         run.emit(lambda seq: AiProposalEvent(seq=seq, **announced.model_dump()))

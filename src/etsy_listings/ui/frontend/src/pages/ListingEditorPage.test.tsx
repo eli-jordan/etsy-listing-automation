@@ -72,7 +72,7 @@ beforeEach(() => {
     shop_name: "Pine & Thread",
     storage_id: "workspace-1",
   });
-  vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
+  vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false, batch_pending: false });
 });
 
 afterEach(() => vi.restoreAllMocks());

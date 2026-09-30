@@ -68,8 +68,15 @@ export interface AiRun {
   message: string | null;
   /** When the run started (ms since the epoch), from the server. */
   startedAt: number | null;
+  /** Who started the run: this editor, or the batch queue (A40). `null`
+   * until there is a run. */
+  origin: AiRunSummary["origin"] | null;
   start: (options: { draftBrief: boolean; automatic?: boolean }) => void;
   cancel: () => void;
+  /** Attaches to the listing's run if one is running that this editor is
+   * not following yet -- a batch run whose turn came while the editor was
+   * open (A40). */
+  follow: () => void;
   /** Arms the auto chain; see the module docstring. */
   arm: () => void;
   /** The auto chain started the run now on screen. A press of AI Mode does not set this. */
@@ -95,6 +102,7 @@ interface View {
   proposal: ListingProposal | null;
   message: string | null;
   startedAt: number | null;
+  origin: AiRunSummary["origin"] | null;
 }
 
 const IDLE: View = {
@@ -106,6 +114,7 @@ const IDLE: View = {
   proposal: null,
   message: null,
   startedAt: null,
+  origin: null,
 };
 
 function viewOf(run: AiRunSummary): View {
@@ -115,6 +124,7 @@ function viewOf(run: AiRunSummary): View {
     phase: run.phase,
     steps: run.steps,
     startedAt: Date.parse(run.created_at),
+    origin: run.origin,
   };
 }
 
@@ -163,9 +173,9 @@ export function useAiRun(
   /** While armed: the last save state the trigger judged (at first, the one
    * showing when the design was picked). */
   const armed = useRef<{ baseline: SaveState | undefined } | null>(null);
-  const latest = useRef({ detail, save, handlers });
+  const latest = useRef({ detail, save, handlers, runId: view.runId });
   useEffect(() => {
-    latest.current = { detail, save, handlers };
+    latest.current = { detail, save, handlers, runId: view.runId };
   });
 
   const attach = useCallback((run: AiRunSummary) => {
@@ -236,6 +246,18 @@ export function useAiRun(
     cancelAiRun(runId).catch(() => {});
   }, [runId, running]);
 
+  const follow = useCallback(() => {
+    const listing = latest.current.detail.name;
+    if (listing === "") return;
+    const mine = generation.current;
+    findAiRun(listing)
+      .then((run) => {
+        if (run === null || run.phase !== "running" || mine !== generation.current) return;
+        if (run.id !== latest.current.runId) attach(run);
+      })
+      .catch(() => {});
+  }, [attach]);
+
   const arm = useCallback(() => {
     if (latest.current.detail.brief.trim() !== "") return;
     armed.current = { baseline: latest.current.save };
@@ -287,8 +309,10 @@ export function useAiRun(
     proposal: view.proposal,
     message: view.message,
     startedAt: view.startedAt,
+    origin: view.origin,
     start,
     cancel,
+    follow,
     arm,
     autoNotice,
     dismissAutoNotice: () => setAutoNotice(false),

@@ -82,9 +82,15 @@ export function AiSeoControl({
           <span className="seo-ai-mode-elapsed">
             Generating for {formatElapsed(elapsed)} seconds
           </span>
-          <button type="button" onClick={mode.cancel}>
-            Cancel
-          </button>
+          {mode.run.origin === "batch" ? (
+            // No per-row cancel (spec, *Cancellation and deletion*): the
+            // batch summary's Cancel batch stops it.
+            <span className="seo-ai-mode-elapsed">Drafting as part of a batch</span>
+          ) : (
+            <button type="button" onClick={mode.cancel}>
+              Cancel
+            </button>
+          )}
         </div>
       )}
 

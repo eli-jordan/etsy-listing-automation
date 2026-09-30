@@ -520,6 +520,15 @@ class StagingRowDetail(BaseModel):
     suggestion: str | None
 
 
+class AiReadinessBlock(BaseModel):
+    """Why a batch could not draft if it were created now (spec, *Design
+    validation*; ``staging.note.md``): the sentence after *AI drafting can't
+    run yet.*, and what to do about it."""
+
+    message: str
+    remedy: str
+
+
 class StagingDetail(BaseModel):
     id: str
     listing_template: str
@@ -529,6 +538,9 @@ class StagingDetail(BaseModel):
     HH:MM*."""
     expires_at: datetime
     rows: list[StagingRowDetail]
+    ai_blocked: AiReadinessBlock | None = None
+    """Set only while a prompt, a ready provider or Etsy market access is
+    missing, which refuses Create; nothing is said when AI can run."""
 
 
 class StagingRefusal(BaseModel):
@@ -546,6 +558,19 @@ class StagingPatch(BaseModel):
     remove: list[str] = []
 
 
+StepId = Literal["brief", "market", "seo"]
+StepState = Literal["pending", "active", "done", "skipped", "warning", "failed"]
+
+
+class WorkflowStep(BaseModel):
+    """One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
+    ``WorkflowStep``): an AI run's, or a batch row's."""
+
+    id: StepId
+    state: StepState
+    detail: str | None = None
+
+
 class BatchRowDetail(BaseModel):
     id: str
     sources: list[str]
@@ -554,6 +579,18 @@ class BatchRowDetail(BaseModel):
     design: str
     creation: Literal["pending", "created", "failed"]
     error: str | None
+    ai: Literal["queued", "running", "done", "failed", "stopped", "cancelled"] | None = None
+    """The row's AI work (A40); ``None`` until its listing exists."""
+    ai_steps: list[WorkflowStep] = []
+    """The live run's nodes while running, else the last run's as it ended."""
+    ai_error: str | None = None
+    queue_position: int | None = None
+    """1 for the next row to start, across every batch; ``None`` unless
+    queued."""
+    proposal: Literal["ready", "stale", "resolved"] | None = None
+    """The listing's cached proposal (A41): sections waiting and current,
+    waiting but out of date, or every section dealt with."""
+    stale_reasons: list[str] = []
 
 
 class BatchDetail(BaseModel):
@@ -562,6 +599,8 @@ class BatchDetail(BaseModel):
     listing_template: str
     created_at: datetime
     rows: list[BatchRowDetail]
+    concurrency: int = 1
+    """``batch_ai.concurrency``: how many rows draft at once."""
 
 
 # ──────────────────────────────────────────────────────────────────────────
@@ -667,6 +706,9 @@ class SeoReadinessResponse(BaseModel):
 
     ready: bool
     reason: str | None = None
+    batch_pending: bool = False
+    """A batch row owns this listing's AI (A40): the editor follows the
+    batch run instead of offering its own."""
 
 
 class ListingProposal(BaseModel):

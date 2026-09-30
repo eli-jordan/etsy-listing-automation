@@ -15,13 +15,16 @@ provider.
 * :func:`confirm` and :func:`retry_row` -- create the listings, idempotently
   (A39).
 
-Deliberately withheld: ZIP input and dedupe against ``designs/`` (PR 7), and
-the AI queue a created row enters (PR 4).
+A created row is queued for AI (``BatchRow.ai``); the queue that drafts it
+is the UI server's (``ui/batchqueue.py``, A40), since only that process runs
+AI. Deliberately withheld: ZIP input and dedupe against ``designs/`` (PR 7).
 """
 
 from etsy_listings.batches.creation import ConfirmRefused, NameLock, confirm, retry_row
 from etsy_listings.batches.naming import allocate
 from etsy_listings.batches.records import (
+    AiState,
+    AiStep,
     Batch,
     BatchRow,
     BatchStore,
@@ -46,6 +49,8 @@ __all__ = [
     "StagingStore",
     "Batch",
     "BatchRow",
+    "AiState",
+    "AiStep",
     "BatchStore",
     # Staging (A45) and its review (A38).
     "Upload",

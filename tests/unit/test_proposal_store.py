@@ -23,6 +23,8 @@ from etsy_listings.ai.proposals import (
 )
 from etsy_listings.workspace.workspace import Workspace
 
+from tests.support.refusals import refuse_reads
+
 GENERATED = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
 LATER = datetime(2026, 9, 25, 9, 30, tzinfo=UTC)
 
@@ -93,6 +95,29 @@ def test_a_saved_proposal_loads_back_with_every_section_pending(store: ProposalS
 
 
 def test_no_proposal_is_none(store: ProposalStore) -> None:
+    assert store.load("take-a-hike") is None
+
+
+def test_a_proposal_read_while_it_is_replaced_is_still_there(
+    store: ProposalStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Windows refuses to open a record mid-replace; a read that lands there
+    waits the save out rather than finding no proposal (A37)."""
+    _put(store)
+    refuse_reads(monkeypatch, 3)
+
+    record = store.load("take-a-hike")
+
+    assert record is not None
+    assert record.proposal == _choices()
+
+
+def test_a_proposal_that_stays_unreadable_is_no_proposal(
+    store: ProposalStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _put(store)
+    refuse_reads(monkeypatch, 1000)
+
     assert store.load("take-a-hike") is None
 
 

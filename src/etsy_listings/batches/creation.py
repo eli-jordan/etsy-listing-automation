@@ -116,7 +116,10 @@ def _start(
         raise KeyError(session_id)
     reviewed = review(workspace, session)
     if reviewed.name_problems:
-        raise ConfirmRefused(f"Fix {reviewed.name_problems} names to create the listings.")
+        count = reviewed.name_problems
+        raise ConfirmRefused(
+            f"Fix {count} {'name' if count == 1 else 'names'} to create the listings."
+        )
     if not reviewed.creatable:
         raise ConfirmRefused("There is no design here that can become a listing.")
     template = ListingTemplate.model_validate(
@@ -279,7 +282,9 @@ def _create(
                     batch.rows[index] = row
                     batches.save(batch)
                 _write(workspace, batch, row, template)
-                return row.model_copy(update={"creation": "created", "error": None})
+                # Created is queued (spec, *Confirming a batch*), in the same
+                # save, so a crash cannot leave a listing the queue never sees.
+                return row.model_copy(update={"creation": "created", "error": None, "ai": "queued"})
         others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
         name = allocate(row.base, set(workspace_names(workspace)) | others)
         row = row.model_copy(update={"name": name, "design": name, "claimed": False})

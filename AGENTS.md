@@ -229,6 +229,11 @@ src/etsy_listings/
                   (`app.state.workspace_locks.listing(name)`). Every
                   read-merge-write of `listing.yaml` in the UI process holds
                   it: PATCH, DELETE, create, rename, and AI runs' brief write
+                batchqueue.py -- the batch AI queue (A40): one dispatcher
+                  thread starting queued batch rows as `origin="batch"` runs,
+                  `batch_ai.concurrency` at a time, round-robin across
+                  batches; `app.state.batch_queue`. Row states live in the
+                  batch record, so a restart requeues what was running
                 airuns/ -- AI runs (market-seo.md, *AI runs*): brief, market
                   research and proposal as one run per listing, each on its
                   own daemon thread (never the plan/apply executor), streamed

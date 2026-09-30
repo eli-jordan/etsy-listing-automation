@@ -87,6 +87,67 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/batches/{batch_id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel Batch
+     * @description **Cancel batch** (spec, *Cancellation and deletion*): queued rows are
+     *     stopped and running ones asked to stop. Everything written stays.
+     */
+    post: operations["cancel_batch_api_batches__batch_id__cancel_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resume Batch
+     * @description **Resume**: stopped and cancelled rows join the queue again.
+     */
+    post: operations["resume_batch_api_batches__batch_id__resume_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retry Batch
+     * @description **Retry N failed**: every row whose creation or AI failed.
+     */
+    post: operations["retry_batch_api_batches__batch_id__retry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/batches/{batch_id}/rows/{row}/retry": {
     parameters: {
       query?: never;
@@ -98,8 +159,8 @@ export interface paths {
     put?: never;
     /**
      * Retry Batch Row
-     * @description Retry a row whose creation failed (UI doc §7). The AI half of Retry
-     *     arrives with the batch queue (batch plan PR 4).
+     * @description Retry one row (UI doc §7): its creation, if that failed -- which
+     *     queues it once it exists -- else its AI, keeping the saved brief (A40).
      */
     post: operations["retry_batch_row_api_batches__batch_id__rows__row__retry_post"];
     delete?: never;
@@ -1341,6 +1402,18 @@ export interface components {
        */
       type: "queries";
     };
+    /**
+     * AiReadinessBlock
+     * @description Why a batch could not draft if it were created now (spec, *Design
+     *     validation*; ``staging.note.md``): the sentence after *AI drafting can't
+     *     run yet.*, and what to do about it.
+     */
+    AiReadinessBlock: {
+      /** Message */
+      message: string;
+      /** Remedy */
+      remedy: string;
+    };
     /** AiRunDetail */
     AiRunDetail: {
       /**
@@ -1365,6 +1438,11 @@ export interface components {
       id: string;
       /** Listing */
       listing: string;
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "manual" | "batch";
       /**
        * Phase
        * @enum {string}
@@ -1400,6 +1478,11 @@ export interface components {
       id: string;
       /** Listing */
       listing: string;
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "manual" | "batch";
       /**
        * Phase
        * @enum {string}
@@ -1520,6 +1603,11 @@ export interface components {
     /** BatchDetail */
     BatchDetail: {
       /**
+       * Concurrency
+       * @default 1
+       */
+      concurrency: number;
+      /**
        * Created At
        * Format: date-time
        */
@@ -1535,6 +1623,15 @@ export interface components {
     };
     /** BatchRowDetail */
     BatchRowDetail: {
+      /** Ai */
+      ai?: ("queued" | "running" | "done" | "failed" | "stopped" | "cancelled") | null;
+      /** Ai Error */
+      ai_error?: string | null;
+      /**
+       * Ai Steps
+       * @default []
+       */
+      ai_steps: components["schemas"]["WorkflowStep"][];
       /**
        * Creation
        * @enum {string}
@@ -1548,8 +1645,17 @@ export interface components {
       id: string;
       /** Name */
       name: string;
+      /** Proposal */
+      proposal?: ("ready" | "stale" | "resolved") | null;
+      /** Queue Position */
+      queue_position?: number | null;
       /** Sources */
       sources: string[];
+      /**
+       * Stale Reasons
+       * @default []
+       */
+      stale_reasons: string[];
     };
     /**
      * BelowCostRow
@@ -3185,6 +3291,11 @@ export interface components {
      *     to a developer or support reader.
      */
     SeoReadinessResponse: {
+      /**
+       * Batch Pending
+       * @default false
+       */
+      batch_pending: boolean;
       /** Ready */
       ready: boolean;
       /** Reason */
@@ -3396,6 +3507,7 @@ export interface components {
     };
     /** StagingDetail */
     StagingDetail: {
+      ai_blocked?: components["schemas"]["AiReadinessBlock"] | null;
       /**
        * Expires At
        * Format: date-time
@@ -3613,7 +3725,7 @@ export interface components {
     /**
      * WorkflowStep
      * @description One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
-     *     ``WorkflowStep``).
+     *     ``WorkflowStep``): an AI run's, or a batch row's.
      */
     WorkflowStep: {
       /** Detail */
@@ -3923,6 +4035,99 @@ export interface operations {
       };
     };
   };
+  cancel_batch_api_batches__batch_id__cancel_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  resume_batch_api_batches__batch_id__resume_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  retry_batch_api_batches__batch_id__retry_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   retry_batch_row_api_batches__batch_id__rows__row__retry_post: {
     parameters: {
       query?: never;
@@ -3943,6 +4148,13 @@ export interface operations {
         content: {
           "application/json": components["schemas"]["BatchDetail"];
         };
+      };
+      /** @description The row has nothing to retry */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
