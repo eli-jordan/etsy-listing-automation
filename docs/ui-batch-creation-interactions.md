@@ -56,7 +56,7 @@ Listing editor ──Create listing template──▶ New listing template (name
                               ▼                                      │
                         Batch summary ◀──── any other status row ────┘
                               │   ▲
-                         Open │   │ Back to batch
+                         name │   │ Back to batch
                               ▼   │
                       Listing editor (from a batch)
 ```
