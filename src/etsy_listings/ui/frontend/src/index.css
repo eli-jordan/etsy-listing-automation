@@ -2837,6 +2837,28 @@ table.listings tbody tr:last-child td {
   margin-top: 3px;
 }
 
+.section-create {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: end;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.section-create > label,
+.section-create > .field__error {
+  grid-column: 1 / -1;
+}
+
+.section-create > label {
+  font-size: 12px;
+  margin-bottom: -3px;
+}
+
+.section-create > .field__error {
+  margin-top: 0;
+}
+
 /* — the composed description preview: the server's own join, rendered as-is — */
 .description-preview {
   margin: 0;

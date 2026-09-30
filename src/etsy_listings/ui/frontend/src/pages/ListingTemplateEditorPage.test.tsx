@@ -90,7 +90,7 @@ beforeEach(() => {
   vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
     { name: "night-hike-club", file: "designs/night-hike-club.png" },
   ]);
-  vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue([]);
+  vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({ available: false, sections: [] });
   vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([]);
 });
 

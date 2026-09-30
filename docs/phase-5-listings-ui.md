@@ -104,13 +104,15 @@ other reasons, not on the underlying question still being unanswered:
   photo inside its own saved bounding box. The Variants tab's colour rows
   carry a dot from it; the real-render preview panel (next point) is still
   what answers "does this suit the design", unchanged.
-- **Section is a dropdown.** The original call needed a live `plan()` to
+- **Section is a dropdown with inline creation.** The original call needed a live `plan()` to
   validate a section name. It does not need one to *list* the shop's
   sections: `EtsyShopClient.shop_sections` (`clients/etsy/shops.py`) was
   already unscoped for `setup`'s own use, so `GET /api/etsy/sections` costs
   no OAuth sign-in, only the workspace's app key pair -- and is empty (not an
   error) for a workspace short of either, falling back to the original text
-  field.
+  field. The dropdown's "Create new section…" action uses the signed-in
+  `EtsyListingClient` and Etsy's `shops_w` scope; after Etsy creates the row,
+  the editor adds it to the dropdown and autosaves its title on the listing.
 - **Pricing plan is selectable, and a resolved price is editable.**
   `GET /api/pricing-plans` already existed for "+ New listing"; it grew a
   `ref` field so the Pricing tab can PATCH `pricing_plan:` with it directly.

@@ -496,13 +496,13 @@ This confirms the claim in `clients/etsy/shops.py` that `setup`'s four calls are
 unscoped, and therefore that a workspace can resolve every id in `shop.yaml`
 before anyone opens a browser (PRD 49).
 
-**The granted set `(listings_r, listings_w, shops_r)` is sufficient for Phase 3
-as scoped**, given that shipping profiles are created by hand in Shop Manager
-rather than by this tool. Reading a profile to resolve a title needs `shops_r`;
-attaching it needs `listings_w` on `updateListing`. Only
-`createShopShippingProfile` needs `shops_w`, and nothing calls it. Since
-changing `SCOPES` forces every user through consent again (PRD 50), this is
-worth stating plainly rather than rediscovering.
+**The set granted during this Phase 3 recon — `(listings_r, listings_w,
+shops_r)` — is sufficient for Phase 3 as scoped**, given that shipping
+profiles are created by hand in Shop Manager rather than by this tool. Reading
+a profile to resolve a title needs `shops_r`; attaching it needs `listings_w`
+on `updateListing`. Phase 5 later added `shops_w` for `createShopSection`
+(PRD 50/53). That does not change this measurement or #54's decision that the
+tool never calls `createShopShippingProfile`.
 
 `uploadListingImage` and `updateVariationImages` both need only `listings_w`,
 so the media work of Phases 3 and beyond needs no further consent either.
@@ -603,8 +603,8 @@ that a PATCH does the same thing, and the obvious reading is wrong.
 `readiness_state_id` on `updateListing` also answered `200`, and that proves
 nothing either: the shop has exactly one definition and it was already the
 value in place. Testing a real change needs a second processing profile made
-by hand in Shop Manager, or `shops_w` in the scopes — and `shops_w` costs
-every user a second trip through consent (PRD 50).
+by hand in Shop Manager. The consent now includes `shops_w` for section
+creation, but PRD 54 still keeps profile creation outside the tool.
 
 The practical consequence is smaller than it looks: with one processing
 profile in the shop and Printify already applying it to every offering, there
