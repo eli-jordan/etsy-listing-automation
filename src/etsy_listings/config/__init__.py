@@ -20,6 +20,7 @@ from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile, PrintArea
 from etsy_listings.config.listing import EtsyListingConfig, Listing
 from etsy_listings.config.listing_template import ListingTemplate
+from etsy_listings.config.market_weights import MarketWeights
 from etsy_listings.config.media import (
     MAX_IMAGES,
     MAX_VIDEOS,
@@ -46,6 +47,7 @@ __all__ = [
     "Defaults",
     "Listing",
     "ListingTemplate",
+    "MarketWeights",
     "PricingPlan",
     "GarmentProfile",
     "EtsyListingConfig",

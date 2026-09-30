@@ -62,7 +62,6 @@ from etsy_listings.ui.api.schemas import (
     TemplateSummary,
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
-from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import AmbiguousColourSuffixError, Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
@@ -176,22 +175,15 @@ def _photos(workspace: Workspace, name: str, config: AnyTemplate) -> list[Templa
     """
     if not isinstance(config, ColourMatrixTemplate):
         scene = workspace.template_scene_image(name)
-        return [TemplatePhoto(colour=None, file=_relative(name, scene))]
+        return [TemplatePhoto(colour=None, file=workspace.relative_path(scene))]
     photos: list[TemplatePhoto] = []
     for colour in workspace.template_colours(name):
         try:
             path = workspace.scene_photo(name, colour).path
         except AmbiguousColourSuffixError:
             continue
-        photos.append(TemplatePhoto(colour=colour, file=_relative(name, path)))
+        photos.append(TemplatePhoto(colour=colour, file=workspace.relative_path(path)))
     return photos
-
-
-def _relative(template: str, photo: Path) -> str:
-    """Forward-slashed and workspace-relative, the shape every other served
-    path uses (`MediaFileSummary.file`). Built from the layout rather than
-    `relative_to(root)` so it cannot come back as a Windows path."""
-    return f"{layout.MOCKUP_TEMPLATES_DIR}/{template}/{photo.name}"
 
 
 def _summarize(workspace: Workspace, name: str) -> TemplateSummary:

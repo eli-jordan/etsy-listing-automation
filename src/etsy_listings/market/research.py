@@ -25,12 +25,11 @@ import httpx
 
 from etsy_listings.clients.etsy.market import EtsyMarketClient
 from etsy_listings.clients.etsy.models import MarketCandidate, MarketListing
+from etsy_listings.config.market_weights import MarketWeights, Metric
 from etsy_listings.errors import UserFacingError
 from etsy_listings.market.block import lead
 from etsy_listings.market.models import (
     MarketResult,
-    MarketWeights,
-    Metric,
     ScoredListing,
 )
 from etsy_listings.market.phrases import rank_phrases

@@ -113,6 +113,8 @@ from etsy_listings.engine.status import (
     is_live_etsy_state,
     listing_gestures,
     listing_status,
+    remote_ids,
+    workspace_listing_status,
 )
 
 __all__ = [
@@ -184,6 +186,8 @@ __all__ = [
     "listing_gestures",
     "edited_since_apply",
     "is_live_etsy_state",
+    "remote_ids",
+    "workspace_listing_status",
     # state.lock.json, and the hashing helpers everything must go through.
     "Lockfile",
     "canonical_hash",

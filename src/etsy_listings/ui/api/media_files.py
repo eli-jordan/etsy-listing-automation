@@ -25,7 +25,6 @@ from fastapi.responses import FileResponse, Response
 from etsy_listings.config.media import media_kind
 from etsy_listings.ui.api.schemas import MediaFileSummary
 from etsy_listings.ui.api.thumbnails import thumbnail_response
-from etsy_listings.workspace import layout
 from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(tags=["media-files"])
@@ -59,7 +58,7 @@ def list_common_media(request: Request) -> list[MediaFileSummary]:
     shared = workspace.common_media_dir()
     rows: list[MediaFileSummary] = []
     for path in workspace.common_media_files():
-        ref = f"{layout.COMMON_MEDIA_DIR}/{path.relative_to(shared).as_posix()}"
+        ref = workspace.relative_path(path)
         rows.append(_summary(path, shared, file=ref, ref=ref))
     return rows
 
@@ -94,7 +93,7 @@ def list_listing_media_files(request: Request, listing: str) -> list[MediaFileSu
             _summary(
                 path,
                 directory,
-                file=f"{layout.LISTINGS_DIR}/{listing}/{relative}",
+                file=workspace.relative_path(path),
                 ref=f"./{relative}",
             )
         )
@@ -127,7 +126,7 @@ def list_listing_template_media_files(request: Request, template: str) -> list[M
             _summary(
                 path,
                 directory,
-                file=f"{layout.LISTING_TEMPLATES_DIR}/{template}/{relative}",
+                file=workspace.relative_path(path),
                 ref=f"./{relative}",
             )
         )

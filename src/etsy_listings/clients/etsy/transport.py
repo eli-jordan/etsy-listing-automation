@@ -53,7 +53,8 @@ HTTP_NOT_FOUND = 404
 
 _log = logging.getLogger(__name__)
 
-BearerSource = Callable[[], str]
+BearerSource = Callable[[], str | None]
+AppKeySource = Callable[[], EtsyAppKey]
 """Resolved per request, never at construction. `plan` builds clients it may
 never call, and a workspace that has not signed in must still be able to build
 one."""
@@ -166,7 +167,7 @@ class Transport:
 
     def __init__(
         self,
-        app_key: EtsyAppKey,
+        app_key: EtsyAppKey | AppKeySource,
         *,
         bearer: BearerSource | None = None,
         client: httpx.Client | None = None,
@@ -184,9 +185,10 @@ class Transport:
         self._gate = RateGate(clock=clock, sleep=sleep)
 
     def request(self, method: str, path: str, **kwargs: Any) -> httpx.Response:
-        headers = {"x-api-key": self._app_key.header()}
-        if self._bearer is not None:
-            headers["Authorization"] = f"Bearer {self._bearer()}"
+        app_key = self._app_key() if callable(self._app_key) else self._app_key
+        headers = {"x-api-key": app_key.header()}
+        if self._bearer is not None and (token := self._bearer()) is not None:
+            headers["Authorization"] = f"Bearer {token}"
 
         def send() -> httpx.Response:
             # Paced per attempt, so a retry waits its turn like any call.

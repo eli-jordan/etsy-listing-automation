@@ -1034,6 +1034,26 @@ class Workspace:
         it, so :meth:`remove_listing` can wipe one independently of the other."""
         return self.cache(layout.PREVIEWS_DIR, _segment(listing))
 
+    def relative_path(self, path: Path) -> str:
+        """Serialize an owned path for API responses, with portable separators."""
+        return path.relative_to(self.root).as_posix()
+
+    def prune_previews(self, listing: str, valid: dict[str, set[str]]) -> None:
+        """Keep current content-addressed scenes, removing unused templates."""
+        root = self.preview_dir(listing)
+        if not root.is_dir():
+            return
+        for directory in root.iterdir():
+            if not directory.is_dir():
+                continue
+            keep = valid.get(directory.name)
+            if keep is None:
+                remove_tree(directory)
+                continue
+            for file in directory.glob("*.png"):
+                if file.name not in keep:
+                    file.unlink()
+
     def preview_file(
         self, listing: str, template: str, colour: str | None, scene_hash: str
     ) -> Path:

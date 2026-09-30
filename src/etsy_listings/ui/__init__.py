@@ -1,14 +1,14 @@
-"""The calibrator: a FastAPI app and the React front end it serves.
+"""The dashboard, listings and template editors, calibrator and run runner.
 
-Phase 1 carries only template calibration, because templates must be
-calibrated before rendering is useful at all. The dashboard, setup wizard and
-run runner land in Phase 5.
+FastAPI serves the React SPA and the workspace-scoped HTTP API. Background
+workers coordinate deployment runs and batch AI drafting.
 
 It is deliberately **not** a second execution path. The preview endpoint runs
 the same renderer ``apply`` runs, over the same photo and derived maps that
 ``Workspace.scene_photo`` gives the render stage -- so the preview is the
-actual output rather than an approximation of it. ``template.yaml`` is the
-only thing that passes between the calibrator and the engine.
+actual output rather than an approximation of it. Calibration persists
+``template.yaml``. Listing plan previews also produce
+content-addressed files that the engine can promote during apply (ADR-0040).
 
 It serves that output at two *sizes*, which is a different thing from serving
 two renderers. The editing canvas asks for a downscale (``?scale=editor``) so

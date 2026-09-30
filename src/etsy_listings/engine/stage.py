@@ -181,6 +181,11 @@ class Stage(Protocol[D, A, L]):
 
     # A stage may also implement:
     #
+    # def review_hash(self, desired: D) -> str: ...
+    #
+    # Stable execution evidence not visible in changes/actions (ADR-0039).
+    # The planner includes it in StagePlan separately from transient snapshots.
+    #
     # def snapshot(self, desired: D, live: L | None) -> BaseModel | None:...
     #
     # a **public pydantic model of domain facts** for the before/after review

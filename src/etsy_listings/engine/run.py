@@ -153,7 +153,9 @@ def plan_fingerprint(plan: Plan) -> str:
     between two otherwise-identical plans -- an Etsy CDN URL, whether a
     preview has rendered yet -- and hashing one would make ``apply`` refuse a
     plan nobody actually disagreed with. Everything else is hashed on
-    purpose, drift and ``actions`` included: if Etsy drifted between review
+    purpose, drift, ``actions`` and stable stage ``review_hash`` values included:
+    render input edits invalidate review even when visible actions match. If
+    Etsy drifted between review
     and apply, applying without a fresh review would revert something the
     user never saw reverted.
     """

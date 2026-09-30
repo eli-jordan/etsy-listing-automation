@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.config import MarketWeights
 from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.market import MarketWeights
 from etsy_listings.workspace.workspace import Workspace
 
 SPEC_DEFAULTS = {

@@ -12,7 +12,6 @@ from etsy_listings.engine.apply import execute
 from etsy_listings.engine.plan import build_plan
 from etsy_listings.engine.stages import STAGES
 from etsy_listings.engine.stages.placement import ArtworkResolutionError
-from etsy_listings.engine.stages.render import TemplateNotFoundError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock
@@ -99,8 +98,8 @@ def test_media_referencing_a_template_with_no_directory_names_it(workspace_root:
     )
 
     ctx = a_context(workspace_root)
-    with pytest.raises(TemplateNotFoundError, match="does-not-exist"):
-        build_plan(ctx, LISTING, a_lock(), STAGES)
+    planned = build_plan(ctx, LISTING, a_lock(), STAGES)
+    assert "does-not-exist" in (planned.plan.stage_plans[0].blocked or "")
 
 
 def test_apply_renders_a_multiple_kind_scene_as_one_composite(workspace_root: Path) -> None:

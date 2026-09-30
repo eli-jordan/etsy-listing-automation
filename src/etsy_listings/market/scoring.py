@@ -11,7 +11,7 @@ from __future__ import annotations
 import math
 from collections.abc import Collection, Sequence
 
-from etsy_listings.market.models import METRICS, MarketWeights, Metric
+from etsy_listings.config.market_weights import METRICS, MarketWeights, Metric
 
 
 def percentiles(values: Sequence[float | None]) -> list[float]:

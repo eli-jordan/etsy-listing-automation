@@ -1,9 +1,9 @@
 """``RunContext``: what a stage needs to compute desired/live state and apply.
 
-Phase 0/1 only carry a workspace and a catalog client. Later phases (2: Printify,
-3: Etsy, 6: rate limiting) extend this with the shop-scoped clients and the
-shared token-bucket limiter from ADR-0009 -- added as new optional fields so existing
-stages and tests are unaffected.
+The workspace, catalog and optional Printify/Etsy clients are accompanied by
+a structured progress sink. Production connections resolve credentials at
+request time; tests and local-only runs can omit unused shop clients. Rate
+pacing belongs to the transports, not this context.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ class MissingClientError(RuntimeError):
 
 Swatch = tuple[int, int, int]
 """An 8-bit sRGB colour a sink may render next to an event. Structured, not an
-ANSI escape baked into the message: the CLI colours it, the UI's future SSE
+ANSI escape baked into the message: the CLI colours it, the UI's SSE
 serialiser sends it as JSON, and a log file gets neither."""
 
 

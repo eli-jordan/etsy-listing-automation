@@ -5,6 +5,39 @@ Feature requirements live in the [documentation index](README.md#features);
 decision rationale lives in [ADRs](adr/README.md). The
 [original PRD and plan](README.md#history) are retained as historical snapshots.
 
+Last audited against the implementation on 2026-09-30. The
+[audit report](research/architecture-audit-20260930.html) records evidence,
+remaining violations and proposed repairs. The invariants below describe the
+intended contracts; they are not a claim that every current caller obeys them.
+
+## Runtime and dependencies
+
+The application is a synchronous Python 3.12+ core with a FastAPI server and
+a React/TypeScript SPA. `pyproject.toml` declares runtime dependencies and
+`uv.lock` records the Python resolution; the frontend's `package.json` and
+`package-lock.json` do the same for Node. Versions here describe this checkout,
+not the latest vendor releases.
+
+| Area | Dependencies and current role |
+|---|---|
+| CLI and documents | Typer (locked 0.27.2, Click 8.5.0 transitively), pydantic v2 (2.13.5), pydantic-settings and PyYAML; questionary is used through `prompts.py` with a plain-input fallback |
+| HTTP clients | httpx (0.28.1); vendor protocols and shared retry policy, without vendor SDKs |
+| Images | `opencv-python-headless==4.10.0.84`, `pillow==10.4.0`, and NumPy (locked 2.5.2, currently supplied transitively by OpenCV); pure numerical passes plus explicit I/O/cache adapters |
+| Videos | PyAV (`av>=15`, locked 18.1.0) probes streams, dimensions and duration; the tool uploads original video bytes rather than encoding them |
+| Web and desktop | FastAPI (0.141.1), python-multipart and uvicorn; pywebview (6.2.1) is imported for the native window, while `ui --browser` serves the same application |
+| Frontend | React/React DOM 19, React Router 7, Phosphor icons and openapi-fetch; TypeScript 5 and Vite 8 build the SPA; openapi-typescript generates `src/api/schema.ts` from `docs/openapi.json` (ADR-0011) |
+| Development | uv/hatchling, ruff, strict mypy, pytest/pytest-cov, Playwright; frontend ESLint, Prettier, Vitest, Testing Library and V8 coverage; marver is a design dependency |
+| AI processes | Installed, signed-in `codex`, `claude` and `grok` CLIs, invoked behind `AiProvider`; these are external executables, not Python SDK dependencies |
+
+`hatch_build.py` rebuilds release-wheel assets with `npm ci` and `npm run build`;
+Node/npm are required even when `dist/` already exists. Installing the resulting
+wheel needs no Node. Editable installs reuse existing assets and, when npm is
+absent, warn and allow Python-only development without the SPA. CI builds with
+`npm ci` before editable `uv sync --frozen`. NumPy, Starlette,
+prompt_toolkit and pydantic-core are imported directly but currently arrive
+through other declared dependencies; the audit distinguishes that coupling
+from a missing dependency at runtime.
+
 ## Module boundaries
 
 ```mermaid
@@ -12,7 +45,8 @@ graph TD
     CLI[CLI commands and wizards] --> ENGINE[Engine: plan, apply and lifecycle]
     UI[UI: FastAPI and React] --> ENGINE
     UI --> AI[AI runs and proposals]
-    AI --> MARKET[Market research]
+    UI --> MARKET[Market research]
+    AI --> WORKSPACE
     UI --> BATCHES[Batch staging and creation]
     UI --> CLIENTS
     BATCHES --> TEMPLATES[Frozen listing-template content]
@@ -23,9 +57,19 @@ graph TD
     BATCHES --> WORKSPACE
     WORKSPACE --> CONFIG[Config models and validation]
     WORKSPACE --> RENDER
+    ENGINE --> AI
+    TEMPLATES --> WORKSPACE
+    MARKET --> CONFIG
 ```
 
-This diagram shows the main flows, rather than every import. Entry points
+This diagram shows the main flows and notable cross-package dependencies,
+rather than every import. The UI AI runner composes AI tasks with market
+research; `ai` does not itself import `market`. The engine imports the AI
+proposal store to clear accepted or discarded proposals after full apply.
+`config.market_weights` owns the settings value types consumed by research;
+market retains compatibility re-exports, while config does not import market.
+Dependencies are not a strictly
+downward tree. Entry points
 adapt the engine's domain events and reports; clients own HTTP; the workspace
 owns the data tree. Rendering takes arrays and frozen configuration, with file
 I/O at its boundary. Each package's `__init__.py` documents its public interface
@@ -35,20 +79,22 @@ and what it deliberately withholds.
 |---|---|---|
 | `cli` | Typer commands and terminal presentation | Uses engine reports rather than computing a second diff |
 | `newcmd`, `setupcmd`, `authcmd` | Picker and workspace/credential workflows | Prompt sequencing is separate from their testable logic |
-| `ui` | HTTP contracts, React presentation, deployment and AI run resources | Adapts engine events; the deploy and AI workers remain separate |
+| `ui` | HTTP contracts, React presentation, deployment/AI resources, batch dispatch and native window | Adapts engine events; a FIFO deployment worker, per-run AI threads and a batch dispatcher remain separate |
 | `engine` | Stage protocol, comparison, lockfile, lifecycle and runs | Stages return values; the engine decides execution and records progress |
-| `workspace` | Root discovery, layout, safe paths and file loading | Every caller accesses user data through this boundary |
+| `workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, video probes and request facts | Owns workspace layout and containment; callers may do I/O on paths it supplies |
 | `render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
 | `clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs | Shared transport per vendor; separate caller authority through protocols |
-| `config` | Validated documents, money, slugs and local listing refusals | No knowledge of where configuration lives on disk |
+| `config` | Validated documents, settings, money, slugs and local listing refusals | No knowledge of directory layout; path-based loaders and the design-resolution check currently perform file I/O |
 | `ai` | Provider calls, prompts, saved-listing inputs, validation and cached proposals | Requests and comparison snapshots share one interpretation of saved facts; suggestions enter listing content only through acceptance |
 | `listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to the UI server |
 
-`connections.py` builds clients and `RunContext` without resolving credentials
-until they are used. `credentials.py` owns credential capture, verification and
-storage. `prompts.py` chooses the terminal backend and handles cancellation;
+`connections.py` builds clients and `RunContext`. Printify tokens and Etsy
+bearers resolve at request time, but the Etsy app key pair is read during
+construction to decide whether an optional client exists. `credentials.py`
+owns credential capture, verification and storage. `prompts.py` chooses the
+terminal backend and handles cancellation;
 `terminal.py` is a standard-library leaf for encoding and presentation.
 
 Three boundaries carry most of the weight. Only `workspace` knows the data
@@ -77,12 +123,14 @@ sequenceDiagram
         Engine->>Engine: build_plan(ctx, listing, lock, STAGES)
 
         loop each stage, in pipeline order (ADR-0007)
-            Engine->>Stage: desired(ctx, listing)
-            Engine->>Lock: applied_for(stage.name)
-            alt stage is not local
-                Engine->>Stage: read_live(ctx, lock)
+            Engine->>Lock: parse_applied_for(stage.name, stage.applied_model)
+            Engine->>Stage: desired(ctx, listing, applied)
+            alt desired is not Blocked
+                Engine->>Stage: read_live(ctx, listing, lock, applied)
+                Engine->>Stage: plan(desired, applied, live) → Verdict
+            else desired is Blocked
+                Engine->>Engine: record blocked StagePlan without live read
             end
-            Engine->>Stage: plan(desired, applied, live) → StagePlan
         end
 
         Engine-->>CLI: on_planned(listing, PlannedRun)
@@ -124,16 +172,18 @@ Each stage's own `plan()` compares three states using the shared helpers in
 graph LR
     D["<b>desired</b><br/>config files + rendered mockups"] --> Diff{"stage.plan()"}
     A["<b>last applied</b><br/>state.lock.json → applied.&lt;stage&gt;"] --> Diff
-    L["<b>live</b><br/>Printify + Etsy<br/>(None for local stages)"] --> Diff
+    L["<b>live</b><br/>Printify + Etsy<br/>or local output existence"] --> Diff
     Diff --> SP["StagePlan(will_run, changes, drift)"]
 
     D -. "≠ applied ⇒ a change you made".- A
     A -. "≠ live ⇒ drift, someone edited outside the tool".- L
 ```
 
-`read_live()` returning `None` (`stage.local = True`) skips drift entirely, so
-no stage has to special-case it. The render stage is local: there is no remote
-mockup to drift from.
+`local = True` means there is no remote drift to report; it does not suppress
+`read_live()`. Render reads the existence of previously applied output files
+and recorded scene hashes, returning `RenderLive` when applied state exists.
+It reports missing local outputs as work to redo. `None` can also mean a remote
+resource has not yet been created; each stage interprets its own live type.
 
 ## Two hashes, doing different jobs
 
@@ -142,17 +192,29 @@ graph TD
     Design["design bytes"] --> IH
     Template["template.yaml + colour images"] --> IH
     Cfg["resolved RenderConfig per colour"] --> IH
-    IH["<b>input_hash</b><br/>canonical_hash(applied subtree)"] --> Rerender{"re-render?"}
+    IH["<b>render input_hash</b><br/>canonical_hash(render input payload)"] --> Rerender{"re-render?"}
 
     Png[".cache/renders/*.png bytes"] --> OH["<b>outputs</b><br/>per-file content hash"]
     OH --> Reupload{"re-upload?"}
 ```
 
-Collapsing these into one hash breaks a library-upgrade case: a Pillow or
-OpenCV upgrade changes rendered bytes without changing any input, and those
-images must re-upload. `applied_at`, `tool_version`, `remote` and absolute
+Separate hashes allow changed rendered bytes to trigger uploads independently
+of input changes. They do not themselves force a re-render after a library
+upgrade: current input and scene hashes have no renderer revision, so existing
+renders and previews can survive such a change. Exact library pins constrain
+this risk; an intentional renderer/library change needs cache invalidation
+until that gap is repaired. `applied_at`, `tool_version`, `remote` and absolute
 paths never enter a hash; paths that do are workspace-relative and
 forward-slashed, so a Windows machine and a Linux runner agree.
+
+`Lockfile.input_hash()` hashes the whole applied subtree. The render stage also
+hashes its own input payload and each scene payload. Reviewed applies hash the
+presentation `Plan` and stable stage review-input digests without snapshots; cache and OAuth code use hashes for
+other purposes. The restriction on volatile deployment inputs is not a ban on
+those separate keys. Render stages expose their input digest through the
+optional `review_hash` hook: design/photo/template-byte edits invalidate a
+reviewed apply even when action paths and reasons remain identical (ADR-0039).
+Preview completion and transient CDN URLs remain excluded from review identity.
 
 ## The calibrator
 
@@ -171,8 +233,11 @@ graph LR
 
 The preview is the real renderer, not an approximation — that is the whole
 point of calibrating in a browser. `template.yaml` is the artefact the
-calibrator produces and the render stage consumes; nothing else passes between
-them.
+calibrator produces and the render stage consumes. Separately, UI deployment
+plan runs call `preview_listing()` after planning and write full-size,
+content-addressed previews. Apply copies a matching preview into render outputs
+instead of rendering again, retaining the preview for reattachment (ADR-0040).
+Those deployment previews are distinct from the calibrator's HTTP previews.
 
 "Real renderer" is now structural rather than a claim maintained by hand. Both
 routes ask `Workspace.scene_photo()` which photo a scene composites over and
@@ -223,6 +288,87 @@ Two consequences worth knowing:
   cache, and giving it one would put mutable process state under the pure
   layer for nobody's benefit.
 
+## UI resources, AI and batch creation
+
+`ui/api/app.py` assembles one workspace, deployment registry/executor, AI
+registry/runner, proposal store, staging/batch stores, write-lock collection
+and batch queue per server process. FastAPI serves the generated-contract
+routes and built SPA. React Router provides the dashboard, listings and editor,
+individual/workspace deployment, listing-template editor, batch upload/staging/
+summary and mockup calibrator routes (`frontend/src/main.tsx`). Setup and
+authentication remain terminal workflows, not a web setup wizard.
+
+Deployment uses one FIFO worker for the workspace. The registry reserves
+listing names when a run is queued; reviewed applies carry fingerprints and
+the exact reviewed listing set (ADR-0039, ADR-0042). Engine events become SSE
+events retained in memory, so a browser can reconnect while the server lives.
+There is no SQLite run-history recorder. AI runs have their own registry and
+thread per run, with cancellation propagated to provider subprocess trees.
+Both registries are lost on process restart; listing state and cached proposals
+persist on disk.
+
+The AI runner optionally drafts an empty brief, extracts three buyer queries,
+researches comparable Etsy listings, then generates and validates a proposal.
+The default provider order is Codex, Claude, Grok, with availability fallback,
+one same-provider repair for invalid output and a shared deadline. Market
+search/stat caches live for seven days; the latest per-listing evidence snapshot
+is separate. Research is read-only and supplies wording evidence rather than
+new garment facts (ADR-0044). The runner may save an automatically drafted
+brief after rechecking that it is still empty; SEO suggestions enter the listing
+through the seller's acceptance workflow (ADR-0003).
+
+`ProposalStore` retains one latest proposal with its input snapshot, generation
+time, origin and per-section resolutions. Staleness is judged on the server;
+stale proposals remain reviewable. A proposal is persisted before its streamed
+event, and full successful apply clears it through the engine, including CLI
+apply (ADR-0049, ADR-0050).
+
+Listing templates are distinct from mockup templates: they capture commercial
+configuration and media references, while mockup templates define render
+geometry. Upload staging freezes the selected listing-template document and
+owned assets under its write lock. Bounded loose-PNG/ZIP inspection precedes
+review; confirm and retry revalidate shared references and allocate names under
+a name lock. They create ordinary listings and retained batch records,
+idempotently, without deploying (ADR-0047, ADR-0051). Staging expires seven days
+after its last edit and is swept at startup. `BatchQueue` dispatches queued
+rows through the existing AI runner, defaults to one concurrent batch row,
+reads the workspace concurrency setting, and recovers interrupted rows on
+restart (ADR-0048).
+
+Before a UI plan or apply begins, the batch queue cancels queued AI for its
+listings, stops and awaits active AI, and holds those names against new AI
+until deployment ends. CLI does not coordinate with this queue (ADR-0050).
+`WorkspaceLocks` serializes UI read/merge/write operations and name changes
+inside one process. There is no cross-process lock protecting concurrent CLI
+and UI writes, nor a supported shared registry across multiple ASGI workers.
+Atomic file replacement prevents torn files; it does not prevent lost updates.
+
+## Workspace references and media ownership
+
+`Workspace.discover()` honors an explicit root, then `ETSY_LISTINGS_ROOT`, then
+walks upward for `shop.yaml`; user data belongs outside the application checkout.
+The layout includes garment/pricing profiles, common media/copy, test designs,
+prompts, listing templates and `settings.yaml` as well as the original listing,
+design and mockup directories. Cache accessors cover catalog data, renders,
+previews, market evidence, proposals, staging sessions and batch records.
+
+File references without a prefix resolve from the workspace root. `./` resolves
+from the owning listing or listing-template directory; subdirectories are
+allowed, while absolute paths, backslashes and `..` segments are refused
+(ADR-0046). Reference resolution checks the resolved target against the root.
+Layout names are validated as single segments, but not all layout accessors
+check symlink/junction containment; that remaining gap is audit finding F02.
+
+The ordered `media` gallery combines explicit rendered scenes with image/video
+file references (ADR-0045). Images use content hashes and an ordered remote-id
+manifest; variation images use the configured template (ADR-0030, ADR-0031).
+The video stage follows images because attachment position depends on image
+count. PyAV facts feed shared local video checks before original bytes are
+uploaded; vendor slot/budget refusals remain distinct from local validation.
+Printify creates the Etsy draft; Etsy stages then own copy, image and video
+updates. Selective publish flags and field ownership prevent Printify from
+overwriting Etsy-owned content (ADR-0001, ADR-0021).
+
 ## Invariants
 
 These are the things that are easy to break by accident and expensive to notice
@@ -232,12 +378,16 @@ later. Each traces to a decision.
 
 - **Only `engine` computes a diff.** The CLI renderer and the UI serialiser both
   consume `Plan` / `StagePlan` / `Change` objects. Neither may compare states
-  itself — that is what makes the CLI and UI enforce identical rules (`ADR-0008).
+  itself — that is what makes the CLI and UI enforce identical rules (ADR-0008).
 - **Only `engine` runs a run.** The same rule, one level up: reading a
   listing's lockfile, planning it, executing it, writing the lockfile back and
   carrying on past a failure all live in `engine/run.py`, behind
   `plan_listings` / `apply_listings`. An entry point supplies the listings and
-  formats the resulting `RunReport`; it never opens a lockfile itself.
+  formats the resulting `RunReport`. Read-only UI status queries currently
+  open lockfiles through the engine's `Lockfile` type; that is not a second
+  deployment walk, but interpreting stage-owned state there is an audit finding.
+  The engine also exports `build_plan` / `execute` for callers owning an
+  individual lockfile, without moving stage execution into those callers.
 - **Only the lockfile merges a lockfile.** `Lockfile.fold()` owns the
   replace-versus-merge rules for all four axes, `applied_for()` owns the
   per-stage lookup and `parse_applied_for()` owns the decode. A stage returns
@@ -268,6 +418,10 @@ later. Each traces to a decision.
   not run reporting a `reason` instead. `format_plan` prints a reason only for
   stages that *do* run, so a listing priced under cost skipped `publish` in
   silence, under a plan reading "No changes."
+  Missing render templates/photos, template-kind colour mismatches and
+  unresolved artwork use shared config checks and return `Blocked`. Template
+  load failures are adapted to the same stage refusal. Artwork resolution
+  errors are actionable at exceptional boundaries and caught in desired state.
 - **One rule behind that vocabulary, not one per reader.** `config/listing_validation.py`
   owns every local refusal about a listing — predicate, message and all — and
   `engine/stages/gates.py` is the adapter that turns one into a `Blocked` for a
@@ -276,9 +430,12 @@ later. Each traces to a decision.
   diverged: `.strip()` on the engine's side, a bare truth test on the editor's,
   so a `garment_profile: " "` passed `plan` and failed the banner about the same
   file. A new local refusal is a check function there and nothing else.
+  The variation-template membership check is still duplicated in
+  `EtsyMediaStage.desired()` (F15).
 - **A check reads the workspace through `WorkspaceFacts`, gathered once.**
-  `check_listing` is pure and takes no workspace. Build one `WorkspaceFacts`
-  where a request begins and hand it down; never load a profile or a template
+  `check_listing` takes no workspace, but currently opens design images through
+  `check_design_resolution`; full purity is an unmet contract (F04). Build one
+  `WorkspaceFacts` where a request begins and hand it down; never load a profile or a template
   config beside a check (each listings-table row used to re-parse the entire
   template catalogue).
 - **`will_run` is derived from a reason, never computed beside one.** Two
@@ -296,14 +453,19 @@ later. Each traces to a decision.
 ### Hashing
 
 - **A hashed document must not depend on the order its inputs happened to
-  arrive in.** Sort anything that lands in one. Variant ids reached
+  arrive in.** Sort unordered collections before hashing; preserve intentional
+  gallery order and compositing layer order. Variant ids reached
   `print_areas[].variant_ids` in the order a listing wrote `colors:`, so
   reordering that list changed `input_hash` and re-applied a product nothing
   about which had changed.
-- **Nothing volatile enters a hash.** No timestamps, no absolute paths, no model
-  output, no `tool_version`. Only the lockfile's `applied` subtree is hashed, via
-  the single `canonical_hash()` helper. Violating this makes every run show a
-  spurious diff.
+- **Nothing volatile enters a deployment input hash.** No timestamps, absolute
+  paths, raw model responses or `tool_version`. The aggregate lockfile hash
+  includes only its `applied` subtree via `canonical_hash()`; volatile bookkeeping
+  stays outside it. Violating this makes every run show a spurious diff.
+  `canonical_hash()` is also reused for render-input/scene
+  payloads and review fingerprints; those are distinct from the aggregate
+  lockfile input hash. Accepted AI copy is ordinary saved listing content;
+  raw provider responses and proposal metadata are not deployment inputs.
 - **Paths inside hashed content are workspace-relative and forward-slashed.**
   Non-negotiable on Windows, where the same content would otherwise hash
   differently than on Linux.
@@ -316,8 +478,11 @@ later. Each traces to a decision.
 - **Render passes are pure.** No I/O, no globals, no clock. Inputs are ndarrays
   and frozen config. This is what makes both the hash and the goldens meaningful
   (`ADR-0012`).
-- **Every `cv2` call passes explicit `interpolation` and `borderMode`.** Relying
-  on defaults makes output depend on the library version.
+- **Geometric resampling specifies interpolation and border behavior.**
+  `warpPerspective` uses `flags` and `borderMode`; `remap` uses `interpolation`
+  and `borderMode`; Sobel/GaussianBlur specify `borderType`. Calls such as
+  `cvtColor` and `getPerspectiveTransform` have different contracts and do not
+  take those keywords. `test_no_bare_cv2.py` checks the applicable render calls.
 - **Rendering is driven purely by `media`.** A scene renders only if some
   `media` entry references it — `listing.colors` drives which Printify
   variants sell, not which photos get rendered.
@@ -356,12 +521,18 @@ later. Each traces to a decision.
   endpoints safe — template names arrive from URLs — so this is a security
   boundary, not a tidiness rule. A new path-taking CLI option or endpoint goes
   through them, and so does a new `glob`.
+  `Workspace.prune_previews` owns stale-preview enumeration and removal;
+  `relative_path` serializes paths for HTTP. Engine status operations decode
+  remote identities and applied lifecycle, keeping stage persistence out of UI.
 - **A client is built through `connections.py`.** Which credential is resolved
   when, what a missing one means, and where the Etsy token file lives are one
   set of answers, not four (`cli`, `setup`, `auth` and the e2e layer each used to
   assemble the Etsy client themselves). The rule the module exists to hold: **a
   credential is resolved when it is used, never when a client is built**, so a
-  workspace that has only ever rendered mockups can still `plan`.
+  workspace that has only ever rendered mockups can still `plan`. Etsy app keys,
+  bearers and Printify tokens are lazy sources; the explicit `etsy_app_key`
+  availability query is reserved for readiness/setup operations. Setup still assembles an Etsy
+  shop client outside this module (F06).
 - **A credential is captured, verified and stored through `credentials.py`.**
   Where it already lives (environment, then the workspace `.env`), what to say
   before asking, how to ask, how to prove it, and what to say when it fails.
@@ -369,15 +540,19 @@ later. Each traces to a decision.
   it goes while `setup` writes once every question is answered.
 - **Secrets never enter the repo.** Tokens in `.auth/`, keys in `.env`, both
   gitignored, and both in the *workspace*, not the repo. `config/secrets.py` is
-  the only reader; a missing credential is reported by name and file, never as a
-  raw `401` traceback.
+  the reader for environment/file API keys; `clients/etsy/tokens.py` owns OAuth
+  token-file reads, writes and persist-before-use refresh (ADR-0027). A missing
+  credential is reported by name and file, never as a raw `401` traceback.
 - **A cancelled prompt raises; it is never a `None` a caller might miss.**
   `prompts.choose`/`text`/`confirm` answer `None` because that is the honest
   shape for a backend, but no wizard uses them directly — `pick`, `ask_choice`,
   `ask_text` and `ask_confirm` raise `prompts.Cancelled`, caught once in
   `cli/app.py`. A missed `None` here writes a `None` to a file.
 - **Every price carries an explicit currency.** Bare numbers are rejected at
-  validation. Revenue is NOK, Printify's costs are USD; a bare number is a bug
+  validation. Retail uses the configured Etsy channel currency (NOK in the
+  fixture/default setup); Printify manufacturing costs are USD. Apply does not
+  convert retail prices, and the below-cost check requires comparable currencies
+  (ADR-0019, ADR-0020). A bare number is a bug
   waiting to be a refund (ADR-0006).
 
 ## Testing layers
@@ -394,3 +569,22 @@ later. Each traces to a decision.
 Reach for a fake to test behaviour and a cassette to test payload shape. The
 browser layer exists because nothing below it can catch a wiring mistake
 between three otherwise-tested pieces.
+
+`scripts/check.sh` formats, lints, typechecks and runs Python coverage, then
+the equivalent frontend gates when npm is available. Both coverage gates use
+an 85% floor with branch measurement. Browser tests skip when prerequisites
+are missing unless `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1`; E2E tests have
+credential guards and default pytest options exclude them.
+
+CI runs Python and frontend gates on PRs, main pushes and manual runs, followed
+by a browser job on every trigger. The Python job explicitly uses
+`-m "not browser and not e2e"`: a command-line marker replaces the default,
+so both exclusions must be stated. Browser checks require Chromium and the
+built SPA and prohibit clean skips. Real-API E2E stays in its separate
+main/manual workflow. No live API tests were executed during this audit or repair.
+
+The CLI currently exposes `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and
+`ui`. Dedicated `render`, `generate`, `catalog refresh`, `status`, a persisted
+run-history recorder and a general persisted rate-budget module are absent.
+Current transports already share retries, and Etsy has a per-transport,
+header-driven `RateGate`; their existence does not imply those future modules.

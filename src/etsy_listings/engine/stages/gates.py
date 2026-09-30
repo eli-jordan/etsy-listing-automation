@@ -96,3 +96,15 @@ def check_videos(videos: Mapping[str, VideoFacts | ProbeFailure]) -> Blocked | N
     """A video Etsy's help page would reject. Its audio note is not
     a refusal, which is why `_refuse` reads severity."""
     return _refuse(rules.check_videos(videos))
+
+
+def check_scene_colour(template: str, kind: str, colour: str | None) -> Blocked | None:
+    return _refuse(rules.check_scene_colour(template, kind, colour))
+
+
+def check_render_template(template: str, path: Path) -> Blocked | None:
+    return _refuse(rules.check_render_template(template, path, present=path.is_file()))
+
+
+def check_render_photo(template: str, colour: str | None, path: Path) -> Blocked | None:
+    return _refuse(rules.check_render_photo(template, colour, path, present=path.is_file()))

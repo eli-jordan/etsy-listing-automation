@@ -1,9 +1,10 @@
 """The outside world: one package per API this tool talks to.
 
 ``printify/`` everything said to Printify -- reference data and shop writes
-``etsy/`` Etsy's OAuth and listing endpoints (Phase 3)
+``etsy/`` Etsy OAuth, listings, media, shop lookups and market reads
 ``retry.py`` the backoff policy both write sides share
-``limiter.py`` token buckets and the persisted daily budget (Phase 6)
+Etsy transport also owns a header-driven per-connection RateGate. There is
+no general persisted daily-budget module.
 
 Each API gets narrow ``Protocol``s returning pydantic models, an HTTP
 implementation, and an in-memory fake. Behaviour tests drive the fakes;

@@ -47,7 +47,7 @@ uv run pytest --cov # coverage, enforcing the 85% branch floor
 uv run pytest --cov --cov-report=html # then open htmlcov/index.html
 uv run pytest -m e2e # env-gated e2e layer (real shop, see Testing)
 uv run pytest -m browser # playwright browser tests
-uv run pytest -m "not browser" # skip them (e.g. no chromium installed)
+uv run pytest -m "not browser and not e2e" # hermetic layers (e.g. no chromium installed)
 uv run playwright install chromium # one-off, enables the browser layer
 uv run pytest --update-goldens # regenerate render goldens
 uv run mypy src # strict type check
@@ -127,7 +127,7 @@ Layers (`ADR-0010`): unit, golden (per-pass and end-to-end renders), behaviour (
 - Golden failures should name the guilty render pass. Regenerate with `--update-goldens` only after looking at the diff.
 - No real design files or photography in the repo; `scripts/generate_test_assets.py` generates deterministic synthetic assets.
 - The browser layer runs in a normal `pytest` but skips if playwright, chromium or `ui/frontend/dist` is missing. Assert through observable effects (decoded PNG size, the `template.yaml` Save wrote), not internal state.
-- `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1` turns those clean skips into failures; both `main`-tier workflows set it.
+- `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1` turns those clean skips into failures; the browser and e2e jobs set it.
 </important>
 
 <important if="you are running or modifying the e2e tests, or the e2e workflow">
@@ -149,7 +149,7 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 
 <important if="you are changing CI workflows or scripts/check.sh">
 
-[ci.yml](.github/workflows/ci.yml): PRs run format-check, ruff, mypy and `pytest -m "not browser"` under the coverage floor on ubuntu and windows, plus the frontend gate; pushes to `main` add `pytest -m browser`. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. The PR tier is deliberately hermetic (no network, no browser). Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI mirrors `check.sh` rather than calling it — change one, change the other.
+[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run format-check, ruff, mypy and `pytest -m "not browser and not e2e"` under the coverage floor on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI mirrors `check.sh` rather than calling it — change one, change the other.
 </important>
 
 <important if="you are measuring or reducing code size">

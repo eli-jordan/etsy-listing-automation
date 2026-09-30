@@ -30,7 +30,7 @@ import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
 from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.market.models import MarketWeights
+from etsy_listings.config.market_weights import MarketWeights
 
 
 def _absent_is_empty(value: Any) -> Any:  # noqa: ANN401 - pre-validation YAML

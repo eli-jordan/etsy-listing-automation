@@ -37,6 +37,12 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
+from etsy_listings.engine.lock import Lockfile
+from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
+from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
+from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.workspace import Workspace
+
 ListingLifecycle = Literal["retired", "deleted", "renew"]
 ListingStatus = Literal[
     "draft",
@@ -49,6 +55,39 @@ ListingStatus = Literal[
     "expired",
 ]
 ListingGesture = Literal["delete", "retire", "un-retire", "cancel", "renew"]
+
+
+def remote_ids(workspace: Workspace, name: str) -> tuple[int | None, str | None]:
+    """Public remote identity, decoded from the engine's persistence format."""
+    lock = Lockfile.read(workspace.lock_file(name))
+    if lock is None:
+        return None, None
+    etsy = lock.remote.get(ETSY_LISTING_ID_KEY)
+    product = lock.remote.get(PRODUCT_ID_KEY)
+    return (int(etsy) if etsy else None), (str(product) if product else None)
+
+
+def workspace_listing_status(
+    workspace: Workspace,
+    name: str,
+    *,
+    live: bool,
+    lifecycle: ListingLifecycle | None = None,
+    etsy_state: str | None = None,
+) -> ListingStatus:
+    """Combine the last apply record with current local and remote facts."""
+    lock = Lockfile.read(workspace.lock_file(name))
+    applied = lock.parse_applied_for("etsy_listing", AppliedEtsyListing) if lock else None
+    return listing_status(
+        applied=lock is not None and bool(lock.stages_completed),
+        edited=edited_since_apply(workspace.listing_file(name), workspace.lock_file(name)),
+        live=live,
+        lifecycle=lifecycle,
+        etsy_state=etsy_state,
+        last_applied_lifecycle="retired" if applied and applied.state == "inactive" else None,
+        incomplete=lock is not None and lock.incomplete is not None,
+    )
+
 
 LIVE_ETSY_STATES = frozenset({"active", "inactive", "sold_out", "expired", "removed"})
 """Etsy ``state`` values that mean the listing left draft at some point.

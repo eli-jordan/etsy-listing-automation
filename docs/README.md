@@ -47,6 +47,7 @@ does not imply a missing implementation.
 |---|---|
 | [Printify–Etsy integration](research/printify-etsy-integration.md) | Native integration, field ownership and API constraints |
 | [API findings](research/api-findings.md) | Measured requests, responses and integration surprises |
+| [Architecture audit, 2026-09-30](research/architecture-audit-20260930.html) | Current module/dependency inventory, invariant violations, reproductions and proposed repairs |
 
 Research records evidence from the investigation date. Consult the current
 feature requirements and client code for application behaviour; a measurement

@@ -55,6 +55,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import TemplateMediaEntry
 from etsy_listings.engine.change import Action, Verdict
 from etsy_listings.engine.context import RunContext, Swatch
@@ -65,8 +66,13 @@ from etsy_listings.engine.lock import (
     to_workspace_relative_posix,
 )
 from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.gates import check_garment_profile_chosen
-from etsy_listings.engine.stages.placement import DesignPlacement
+from etsy_listings.engine.stages.gates import (
+    check_garment_profile_chosen,
+    check_render_photo,
+    check_render_template,
+    check_scene_colour,
+)
+from etsy_listings.engine.stages.placement import ArtworkResolutionError, DesignPlacement
 from etsy_listings.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
@@ -78,7 +84,7 @@ from etsy_listings.render.maps import DerivedMapCache
 from etsy_listings.render.pipeline import Layer, render_scene
 from etsy_listings.render.swatch import sample_swatch
 from etsy_listings.render.types import RGBA
-from etsy_listings.workspace.workspace import Workspace, remove_tree
+from etsy_listings.workspace.workspace import Workspace
 
 PREVIEW_WORKERS = 2
 """Maximum full-size preview renders in flight.
@@ -108,32 +114,6 @@ def _copy_preview(source: Path, target: Path) -> None:
         os.replace(temporary, target)
     finally:
         temporary.unlink(missing_ok=True)
-
-
-class TemplateAssetError(FileNotFoundError):
-    def __init__(self, template: str, colour: str | None, path: object) -> None:
-        where = f"colour {colour!r}" if colour is not None else "its scene"
-        super().__init__(f"template {template!r}: no mockup base image for {where} at {path}")
-
-
-class TemplateNotFoundError(FileNotFoundError):
-    def __init__(self, template: str, path: object) -> None:
-        super().__init__(
-            f"media references template {template!r}, but no template.yaml exists at {path}"
-        )
-
-
-class MediaColourMismatchError(ValueError):
-    def __init__(self, template: str, kind: str, colour: str | None) -> None:
-        if kind == "colour-matrix":
-            super().__init__(
-                f"media entry for template {template!r} (colour-matrix kind) needs a colour"
-            )
-        else:
-            super().__init__(
-                f"media entry for template {template!r} ({kind} kind) must not set colour "
-                f"{colour!r} -- it has exactly one output"
-            )
 
 
 @dataclass(frozen=True)
@@ -437,18 +417,23 @@ def _resolve_scene(
     template_name: str,
     template_cfg: AnyTemplate,
     colour: str | None,
-) -> SceneWork:
+) -> SceneWork | Blocked:
     kind = template_cfg.kind
-    if (kind == "colour-matrix") != (colour is not None):
-        raise MediaColourMismatchError(template_name, kind, colour)
+    blocked = check_scene_colour(template_name, kind, colour)
+    if blocked is not None:
+        return blocked
 
     photo = workspace.scene_photo(template_name, colour)
-    if not photo.path.is_file():
-        raise TemplateAssetError(template_name, colour, photo.path)
+    blocked = check_render_photo(template_name, colour, photo.path)
+    if blocked is not None:
+        return blocked
 
     layers = []
     for layer_colour, override, cfg in _layer_specs(template_cfg, colour):
-        artwork = placement.artwork_for(layer_colour, template_override=override)
+        try:
+            artwork = placement.artwork_for(layer_colour, template_override=override)
+        except ArtworkResolutionError as exc:
+            return Blocked(str(exc))
         layers.append(
             ResolvedLayer(
                 colour=layer_colour, artwork=artwork, design=placement.paths[artwork], cfg=cfg
@@ -503,13 +488,17 @@ class RenderStage:
         for template_name, colour in referenced:
             if template_name not in template_configs:
                 config_path = workspace.template_config_file(template_name)
-                if not config_path.is_file():
-                    raise TemplateNotFoundError(template_name, config_path)
+                blocked = check_render_template(template_name, config_path)
+                if blocked is not None:
+                    return blocked
                 # The file's own bytes, not the re-serialised model: hashing a
                 # normalised dump would miss an edit that pydantic round-trips
                 # away, and the question here is "did the file change?".
                 template_hash[template_name] = hash_file(config_path)
-                template_configs[template_name] = workspace.load_template_config(template_name)
+                try:
+                    template_configs[template_name] = workspace.load_template_config(template_name)
+                except ConfigLoadError as exc:
+                    return Blocked(str(exc))
 
             work = _resolve_scene(
                 workspace=workspace,
@@ -519,6 +508,8 @@ class RenderStage:
                 template_cfg=template_configs[template_name],
                 colour=colour,
             )
+            if isinstance(work, Blocked):
+                return work
             works.append(work)
 
             # Per scene, not per template. A colour-matrix set has one photo
@@ -773,25 +764,13 @@ class RenderStage:
                (dropped from ``media:`` this run) is removed outright rather than
                left empty.
         """
-        preview_root = workspace.preview_dir(desired.listing)
-        if not preview_root.is_dir():
-            return
         valid: dict[str, set[str]] = {}
         for work in desired.works:
             name = workspace.preview_file(
                 desired.listing, work.template, work.colour, _hash_token(scene_hash(desired, work))
             ).name
             valid.setdefault(work.template, set()).add(name)
-        for template_dir in preview_root.iterdir():
-            if not template_dir.is_dir():
-                continue
-            keep = valid.get(template_dir.name)
-            if keep is None:
-                remove_tree(template_dir)
-                continue
-            for file in template_dir.glob("*.png"):
-                if file.name not in keep:
-                    file.unlink()
+        workspace.prune_previews(desired.listing, valid)
 
     def apply(
         self,
@@ -870,6 +849,10 @@ class RenderStage:
             "scene_hashes": {work.key: scene_hash(desired, work) for work in desired.works},
         }
         return StageApplyResult(applied=document, outputs=outputs)
+
+    def review_hash(self, desired: RenderDesired) -> str:
+        """Protect reviewed pixels even when paths and work reasons stay equal."""
+        return self._input_hash(desired)
 
     @staticmethod
     def _input_hash(desired: RenderDesired) -> str:

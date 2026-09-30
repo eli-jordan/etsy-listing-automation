@@ -1,12 +1,6 @@
-# Two tiers, split by what a layer needs from the outside world.
-#
-# Pull requests get the hermetic layers -- unit, golden, behaviour, contract --
-# behind the same lint/type gates as `scripts/check.sh`, plus the coverage
-# floor. None of that touches a network or a browser, so a PR cannot go red on
-# somebody else's infrastructure.
-#
-# main gets the `browser` layer on top -- playwright over the built SPA served
-# by FastAPI, which needs chromium and so cannot sit on a PR.
+# PRs, main pushes and manual runs get hermetic Python/frontend gates,
+# followed by browser tests over the built SPA. Real-service tests are
+# explicitly excluded from the Python gate and belong to e2e.yml.
 #
 # The `e2e` layer lives in its own workflow ([e2e.yml](e2e.yml)) rather than
 # here, because it is the one layer worth running on its own: it talks to real
@@ -25,10 +19,7 @@ on:
   pull_request:
   push:
     branches: [main]
-  # Lets the main-only tier be run deliberately against a chosen ref -- the
-  # only way to exercise it before merging, since a pull_request runs at
-  # refs/pull/<n>/merge and the gate rightly excludes that.
-  # `gh workflow run CI --ref <branch>` dispatches it from a branch.
+  # Exercise every CI gate against a chosen ref.
   workflow_dispatch:
 
 concurrency:
@@ -60,10 +51,7 @@ jobs:
           cache: npm
           cache-dependency-path: src/etsy_listings/ui/frontend/package-lock.json
 
-      # Built before `uv sync` on purpose: hatch_build.py builds dist/ during
-      # the editable install when it is absent, and does it with `npm install`.
-      # Building first makes that hook a no-op, so every node install in CI
-      # comes from package-lock.json.
+      # Editable sync reuses these assets; release wheels always rebuild.
       - name: build the calibrator frontend
         working-directory: src/etsy_listings/ui/frontend
         run: npm ci && npm run build
@@ -85,12 +73,12 @@ jobs:
       - name: mypy
         run: uv run mypy src
 
-      # `not browser` leaves unit, golden, behaviour and contract; `e2e` is
-      # already excluded by pyproject's addopts. The 85% branch floor comes from
+      # An explicit -m replaces addopts: exclude both browser and e2e here.
+      # This leaves unit, golden, behaviour and contract. The 85% branch floor comes from
       # `fail_under` in pyproject.toml, so this gate and a local `check.sh` can
       # never disagree about the number.
       - name: pytest + coverage (branch, fail under 85%)
-        run: uv run pytest -m "not browser" --cov --cov-report=term-missing
+        run: uv run pytest -m "not browser and not e2e" --cov --cov-report=term-missing
 
   frontend:
     name: frontend
@@ -123,15 +111,7 @@ jobs:
         run: npm run test:coverage
 
   browser:
-    # main, or a deliberate manual run. Gated on the ref rather than merely
-    # on the event: `on.push`
-    # is filtered to main today, so `event_name == 'push'` would be equivalent
-    # -- but only by a coupling to a filter twelve lines away, and adding a
-    # release branch there would silently start spending runner time on it.
-    # A pull_request event runs at refs/pull/<n>/merge, so it cannot match.
-    #
-    # `needs` keeps this from burning ten minutes on a commit whose lint is
-    # already broken.
+    # Every trigger runs browsers after the Python and frontend gates.
     name: browser
     needs: [python, frontend]
     runs-on: ubuntu-latest

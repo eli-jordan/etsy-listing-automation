@@ -30,13 +30,14 @@ Frontend development also needs Node.js (any current LTS):
 
 ```bash
 cd src/etsy_listings/ui/frontend
-npm install
+npm ci
 ```
 
-Installing the package never needs node: `uv build` runs
-`npm install && npm run build` via a hatchling hook (`hatch_build.py`) only
-when `ui/frontend/dist/` doesn't already exist, and a wheel built in CI ships
-`dist/` pre-built.
+Installing a published wheel needs no Node: it ships the built SPA. Building
+a release wheel with `uv build` requires Node and always runs `npm ci` and
+`npm run build` through `hatch_build.py`, so existing assets cannot hide stale
+source. Editable installs reuse an existing `dist/`; without npm or assets,
+they support Python development and warn that the UI has no frontend.
 
 ## Workspaces
 
@@ -131,8 +132,10 @@ uv run pytest --cov            # ...with the branch-coverage gate
 ```
 
 CI ([ci.yml](.github/workflows/ci.yml)) runs the same gates on pull requests,
-on Ubuntu and Windows. The browser layer runs on pushes to `main`, alongside the
-[e2e workflow](.github/workflows/e2e.yml).
+on Ubuntu and Windows. The Python coverage job explicitly excludes browser
+and e2e tests. A separate browser job runs on pull requests, pushes to `main`
+and manual runs after the other gates pass. The [e2e workflow](.github/workflows/e2e.yml)
+uses real services and runs only on `main` or manually.
 
 ### Tests
 
@@ -146,7 +149,7 @@ uv run pytest tests/unit/test_money.py                      # one file
 uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"                                   # by keyword
 uv run pytest -m browser                                       # only the browser tests
-uv run pytest -m "not browser"                                 # skip them
+uv run pytest -m "not browser and not e2e"                     # hermetic layers
 uv run pytest --update-goldens                                 # regenerate render goldens
 uv run pytest -m e2e                                           # real Printify/Etsy; see below
 ```

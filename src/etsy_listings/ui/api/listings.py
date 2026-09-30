@@ -55,19 +55,15 @@ from etsy_listings.config.listing_validation import (
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.config.money import Money
 from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.engine.lock import Lockfile
+from etsy_listings.config.secrets import MissingCredentialError
 from etsy_listings.engine.preview import lookup_preview
-from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
-from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.engine.status import (
     ListingGesture,
-    ListingLifecycle,
     ListingStatus,
-    edited_since_apply,
     is_live_etsy_state,
     listing_gestures,
-    listing_status,
+    remote_ids,
+    workspace_listing_status,
 )
 from etsy_listings.newcmd.logic import (
     build_pricing_plan_choices,
@@ -195,56 +191,6 @@ def _business_issues(
     ]
 
 
-def _remote_ids(workspace: Workspace, name: str) -> tuple[int | None, str | None]:
-    lock = Lockfile.read(workspace.lock_file(name))
-    if lock is None:
-        return None, None
-    raw_etsy = lock.remote.get(ETSY_LISTING_ID_KEY)
-    raw_product = lock.remote.get(PRODUCT_ID_KEY)
-    return (int(raw_etsy) if raw_etsy else None), (str(raw_product) if raw_product else None)
-
-
-def _last_applied_lifecycle(lock: Lockfile | None) -> ListingLifecycle | None:
-    if lock is None:
-        return None
-    applied = lock.parse_applied_for("etsy_listing", AppliedEtsyListing)
-    if applied is not None and applied.state == "inactive":
-        return "retired"
-    return None
-
-
-def _status(
-    workspace: Workspace,
-    name: str,
-    *,
-    live: bool,
-    lifecycle: ListingLifecycle | None = None,
-    etsy_state: str | None = None,
-) -> ListingStatus:
-    """This listing's place in the lifecycle
-    (:mod:`etsy_listings.engine.status`).
-
-    The two local facts are read here because they are facts about *files*:
-    the lockfile records the last apply, and its own modification time is what
-    a later edit to ``listing.yaml`` is compared against. The remote one --
-    whether Etsy has published it -- is the caller's, since the listings table
-    resolves every row's in one request.
-    """
-    lock = Lockfile.read(workspace.lock_file(name))
-    return listing_status(
-        applied=lock is not None and bool(lock.stages_completed),
-        edited=edited_since_apply(workspace.listing_file(name), workspace.lock_file(name)),
-        live=live,
-        lifecycle=lifecycle,
-        etsy_state=etsy_state,
-        last_applied_lifecycle=_last_applied_lifecycle(lock),
-        # ADR-0037: a stage raised mid-apply, and the per-stage write already made
-        # the lockfile newer than the yaml -- `edited` alone would read this
-        # as clean.
-        incomplete=lock is not None and lock.incomplete is not None,
-    )
-
-
 def _etsy_state(workspace: Workspace, etsy_listing_id: int | None) -> str | None:
     """One listing's Etsy ``state``. For the single-listing endpoints; the
     table asks :func:`etsy_states` once for every row instead."""
@@ -327,7 +273,7 @@ def _summarize_listing(
     live: bool,
     etsy_state: str | None = None,
 ) -> ListingSummary:
-    etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
+    etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     if not workspace.listing_file(name).is_file():
         missing = check_listing_yaml_present(present=False)
         return ListingSummary(
@@ -335,7 +281,7 @@ def _summarize_listing(
             garment_profile="",
             design=None,
             colour_count=0,
-            status=_status(workspace, name, live=live, etsy_state=etsy_state),
+            status=workspace_listing_status(workspace, name, live=live, etsy_state=etsy_state),
             issue_counts=IssueCounts(block=len(missing), warn=0),
             etsy_listing_id=etsy_listing_id,
             printify_product_id=printify_product_id,
@@ -361,7 +307,7 @@ def _summarize_listing(
         garment_profile=listing.garment_profile,
         design=_sole_design_name(listing),
         colour_count=len(listing.colors),
-        status=_status(
+        status=workspace_listing_status(
             workspace, name, live=live, lifecycle=listing.lifecycle, etsy_state=etsy_state
         ),
         issue_counts=counts,
@@ -381,7 +327,7 @@ def _detail(
     workspace: Workspace, name: str, *, field_errors: dict[str, str] | None = None
 ) -> ListingDetail:
     listing = workspace.load_listing(name)
-    etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
+    etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     published = is_live_etsy_state(etsy_state) if etsy_listing_id is not None else False
     return _describe(
@@ -391,7 +337,7 @@ def _detail(
         name=name,
         listing_dir=workspace.listing_dir(name),
         modified_at=datetime.fromtimestamp(workspace.listing_file(name).stat().st_mtime, tz=UTC),
-        status=_status(
+        status=workspace_listing_status(
             workspace,
             name,
             live=is_live_etsy_state(etsy_state),
@@ -512,7 +458,7 @@ def list_listings(request: Request) -> list[ListingSummary]:
     workspace = _workspace(request)
     facts = WorkspaceFacts.gather(workspace)
     names = workspace.listing_names()
-    ids = {name: _remote_ids(workspace, name)[0] for name in names}
+    ids = {name: remote_ids(workspace, name)[0] for name in names}
     states = etsy_states(workspace.root, [i for i in ids.values() if i is not None])
     live = {i for i, state in states.items() if is_live_etsy_state(state)}
     rows: list[ListingSummary] = []
@@ -572,7 +518,7 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
     the listing's batch rows are marked deleted and leave the queue.
     """
     workspace, name = target.workspace, target.name
-    etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
+    etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
@@ -863,7 +809,7 @@ def list_etsy_sections(request: Request) -> EtsySectionsResponse:
         return EtsySectionsResponse(available=False, sections=[])
     try:
         sections = client.shop_sections(shop_id)
-    except (EtsyApiError, EtsyAuthError):
+    except (EtsyApiError, EtsyAuthError, MissingCredentialError):
         return EtsySectionsResponse(available=False, sections=[])
     return EtsySectionsResponse(
         available=True,
@@ -892,7 +838,7 @@ def create_etsy_section(request: Request, body: CreateEtsySectionRequest) -> Ets
         )
     try:
         section = client.create_shop_section(shop_id, body.title)
-    except EtsyAuthError as exc:
+    except (EtsyAuthError, MissingCredentialError) as exc:
         raise HTTPException(status_code=401, detail=str(exc)) from exc
     except EtsyApiError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

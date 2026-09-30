@@ -401,26 +401,71 @@ def _check_template_kind_colour_match(
         info = templates.get(entry.template)
         if info is None:
             continue
-        where = f"Listing Images › {entry.template}"
-        if info.kind == "colour-matrix" and entry.colour is None:
-            issues.append(
-                Issue(
-                    "block",
-                    "images",
-                    where,
-                    f"{entry.template!r} is a colour-matrix template and needs a colour.",
-                )
-            )
-        elif info.kind != "colour-matrix" and entry.colour is not None:
-            issues.append(
-                Issue(
-                    "block",
-                    "images",
-                    where,
-                    f"{entry.template!r} is a {info.kind} template and must not name a colour.",
-                )
-            )
+        issues.extend(check_scene_colour(entry.template, info.kind, entry.colour))
     return issues
+
+
+def check_scene_colour(template: str, kind: str, colour: str | None) -> list[Issue]:
+    if (kind == "colour-matrix") == (colour is not None):
+        return []
+    message = (
+        f"{template!r} is a colour-matrix template and needs a colour."
+        if kind == "colour-matrix"
+        else f"{template!r} is a {kind} template and must not name a colour."
+    )
+    return [Issue("block", "images", f"Listing Images › {template}", message)]
+
+
+def check_render_template(template: str, path: Path, *, present: bool) -> list[Issue]:
+    if present:
+        return []
+    return [
+        Issue(
+            "block",
+            "images",
+            "Listing Images",
+            f"media references template {template!r}, but no template.yaml exists at {path}",
+        )
+    ]
+
+
+def check_render_photo(
+    template: str, colour: str | None, path: Path, *, present: bool
+) -> list[Issue]:
+    if present:
+        return []
+    where = f"colour {colour!r}" if colour is not None else "its scene"
+    return [
+        Issue(
+            "block",
+            "images",
+            "Listing Images",
+            f"template {template!r}: no mockup base image for {where} at {path}",
+        )
+    ]
+
+
+def check_artwork_resolved(
+    colour: str | None,
+    tone: str | None,
+    available: list[str],
+    *,
+    wanted: str | None = None,
+    source: str = "",
+) -> list[Issue]:
+    if wanted is not None and wanted in available:
+        return []
+    detail = f"colour {colour!r}" if colour is not None else "this template"
+    tone_note = f" (tone: {tone})" if tone else ""
+    message = (
+        f"{detail}{tone_note}: {source} asks for artwork {wanted!r}, which the "
+        f"design does not have -- it offers {available!r}. Add {wanted!r} to the "
+        f"listing's design:, or remove the override."
+        if wanted is not None
+        else f"{detail}{tone_note} needs an artwork but none resolves -- design offers "
+        f"{available!r}; add a listing.artwork override or a matching key"
+    )
+    return [Issue("block", "variants", "Design", message)]
 
 
 def _check_variation_images(

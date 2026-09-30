@@ -171,12 +171,22 @@ def _walk(
         drift=verdict.drift,
         snapshot=_snapshot(stage, desired, live),
         group=stage.group,
+        review_hash=_review_hash(stage, desired),
     )
     state = StageState(
         stage=stage, desired=desired, applied=applied, live=live, stage_plan=stage_plan
     )
     on_event(EngineStagePlanned(listing, stage_plan))
     return state
+
+
+def _review_hash(stage: AnyStage, desired: Any) -> str | None:
+    """Optional stable stage evidence, kept out of transient snapshots (ADR-0039)."""
+    method = getattr(stage, "review_hash", None)
+    if method is None:
+        return None
+    result: str = method(desired)
+    return result
 
 
 def _snapshot(stage: AnyStage, desired: Any, live: Any) -> BaseModel | None:

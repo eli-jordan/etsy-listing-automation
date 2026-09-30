@@ -12,6 +12,7 @@ import json
 from pathlib import Path
 
 import pytest
+from PIL import Image
 
 from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
 from etsy_listings.clients.printify.models import Blueprint
@@ -56,6 +57,38 @@ def _ctx(root: Path, **overrides: object) -> RunContext:
 
 
 # ------------------------------------------------------------------ continue-on-error
+
+
+@pytest.mark.parametrize("problem", ["template", "photo", "colour", "artwork"])
+def test_local_render_refusals_preserve_the_rest_of_the_batch(
+    workspace_root: Path, problem: str
+) -> None:
+    import yaml
+
+    copy_listing(workspace_root, "broken")
+    path = workspace_root / "listings/broken/listing.yaml"
+    document = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if problem == "template":
+        document["media"] = [{"template": "missing-template"}]
+    elif problem == "photo":
+        document["colors"].append("missing-colour")
+        document["media"] = [{"template": "flat-lay-01", "colour": "missing-colour"}]
+    elif problem == "colour":
+        document["media"] = [{"template": "flat-lay-01"}]
+    else:
+        document["design"] = {
+            "first": "designs/take-a-hike.png",
+            "second": "designs/take-a-hike.png",
+        }
+    path.write_text(yaml.safe_dump(document), encoding="utf-8")
+
+    report = plan_listings(_ctx(workspace_root), ["broken", LISTING], STAGES)
+
+    assert report.outcomes[0].planned is not None
+    plans = report.outcomes[0].planned.plan.stage_plans
+    assert plans[0].stage == "render" and plans[0].blocked
+    assert len(plans) == len(STAGES)
+    assert report.outcomes[1].ok
 
 
 def test_one_bad_listing_does_not_stop_the_rest(workspace_root: Path) -> None:
@@ -393,6 +426,39 @@ def test_apply_with_a_matching_fingerprint_applies_normally(workspace_root: Path
 
     assert not report.failed
     assert (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
+
+
+@pytest.mark.parametrize(
+    "input_file",
+    [
+        "designs/take-a-hike.png",
+        "mockup-templates/flat-lay-01/moss.png",
+        "mockup-templates/flat-lay-01/template.yaml",
+    ],
+)
+def test_reviewed_apply_refuses_changed_render_inputs_at_the_same_path(
+    workspace_root: Path, input_file: str
+) -> None:
+    ctx = _ctx(workspace_root)
+    reviewed = plan_listings(ctx, [LISTING], [RenderStage()]).outcomes[0].planned
+    assert reviewed is not None
+    path = workspace_root / input_file
+    if path.suffix == ".yaml":
+        path.write_text(
+            path.read_text(encoding="utf-8") + "\n# calibration edited\n", encoding="utf-8"
+        )
+    else:
+        with Image.open(path) as image:
+            changed = image.copy()
+        changed.putpixel((0, 0), (255, 0, 255, 255) if changed.mode == "RGBA" else (255, 0, 255))
+        changed.save(path)
+
+    report = apply_listings(
+        ctx, [LISTING], [RenderStage()], expect={LISTING: plan_fingerprint(reviewed.plan)}
+    )
+
+    assert isinstance(report.outcomes[0].error, StalePlanError)
+    assert not ctx.workspace.lock_file(LISTING).exists()
 
 
 def test_a_stale_fingerprint_refuses_before_any_write(workspace_root: Path) -> None:

@@ -45,6 +45,8 @@ FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
 def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
     """The real, read-only Etsy market client (the app key only), or `None`
     when the workspace has none."""
+    if connections.etsy_app_key(workspace.root) is None:
+        return None
     return connections.etsy_market_client(workspace.root)
 
 

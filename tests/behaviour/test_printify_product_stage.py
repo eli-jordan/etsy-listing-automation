@@ -107,6 +107,16 @@ def _plan(ctx: RunContext, lock: Lockfile) -> PlannedRun:
     return build_plan(ctx, LISTING, lock, [STAGE])
 
 
+def test_unresolvable_artwork_is_a_blocked_product_plan(
+    root: Path, catalog: FakeCatalogClient, printify: FakePrintifyClient
+) -> None:
+    edit_listing(
+        root, design={"first": "designs/take-a-hike.png", "second": "designs/take-a-hike.png"}
+    )
+    planned = _plan(_ctx(root, catalog, printify), a_lock())
+    assert planned.plan.stage_plans[0].blocked
+
+
 def _stage_plan(ctx: RunContext, lock: Lockfile):
     return _plan(ctx, lock).plan.stage_plans[0]
 

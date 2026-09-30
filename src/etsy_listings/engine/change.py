@@ -254,6 +254,10 @@ class StagePlan:
     """The stage this one is shown under (``Stage.group``), stamped by the
     engine like ``stage`` itself."""
 
+    review_hash: str | None = None
+    """Stable execution inputs not expressed by changes/actions (ADR-0039).
+    Separate from display snapshots, so preview availability cannot stale a review."""
+
     @classmethod
     def no_work(
         cls,

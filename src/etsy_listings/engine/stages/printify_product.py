@@ -60,7 +60,7 @@ from etsy_listings.engine.stages.gates import (
     check_garment_profile_chosen,
     check_price_source,
 )
-from etsy_listings.engine.stages.placement import DesignPlacement
+from etsy_listings.engine.stages.placement import ArtworkResolutionError, DesignPlacement
 from etsy_listings.engine.stages.product_diff import compare
 from etsy_listings.engine.stages.product_document import (
     AppliedProduct,
@@ -181,6 +181,11 @@ class PrintifyProductStage:
         if blocked is not None:
             return blocked
 
+        try:
+            groups = placement.group_by_artwork([v.colour_slug for v in resolved.variants])
+        except ArtworkResolutionError as exc:
+            return Blocked(str(exc))
+
         return PrintifyProductDesired(
             title=config.etsy.title,
             description=description,
@@ -188,7 +193,7 @@ class PrintifyProductStage:
             print_provider_id=resolved.print_provider_id,
             position=profile.placeholder,
             variants=resolved.variants,
-            groups=placement.group_by_artwork([v.colour_slug for v in resolved.variants]),
+            groups=groups,
             missing=resolved.missing,
             currency=workspace.defaults.etsy.currency,
         )

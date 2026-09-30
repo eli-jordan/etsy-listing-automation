@@ -23,11 +23,13 @@ from pathlib import Path
 
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.listing_validation import check_artwork_resolved
 from etsy_listings.engine.lock import hash_file
+from etsy_listings.errors import UserFacingError
 from etsy_listings.workspace.workspace import Workspace
 
 
-class ArtworkResolutionError(ValueError):
+class ArtworkResolutionError(UserFacingError):
     """Names *which* key was asked for and *who* asked for it.
 
     Without both, the message sends you to the wrong file. A template with
@@ -46,19 +48,8 @@ class ArtworkResolutionError(ValueError):
         wanted: str | None = None,
         source: str = "",
     ) -> None:
-        detail = f"colour {colour!r}" if colour is not None else "this template"
-        tone_note = f" (tone: {tone})" if tone else ""
-        if wanted is not None:
-            super().__init__(
-                f"{detail}{tone_note}: {source} asks for artwork {wanted!r}, which the "
-                f"design does not have -- it offers {available!r}. Add {wanted!r} to the "
-                f"listing's design:, or remove the override."
-            )
-        else:
-            super().__init__(
-                f"{detail}{tone_note} needs an artwork but none resolves -- design offers "
-                f"{available!r}; add a listing.artwork override or a matching key"
-            )
+        issues = check_artwork_resolved(colour, tone, available, wanted=wanted, source=source)
+        super().__init__(issues[0].message)
 
 
 @dataclass(frozen=True)
@@ -134,11 +125,12 @@ class DesignPlacement:
         if candidate is None and len(keys) == 1:
             candidate, source = keys[0], "the design's sole key"
 
-        if candidate is None or candidate not in key_set:
-            tone = self.profile.colors.get(colour) if colour is not None else None
+        tone = self.profile.colors.get(colour) if colour is not None else None
+        if check_artwork_resolved(colour, tone, sorted(keys), wanted=candidate, source=source):
             raise ArtworkResolutionError(
                 colour, tone, sorted(keys), wanted=candidate, source=source
             )
+        assert candidate is not None
         return candidate
 
     def design_for(self, colour: str | None, *, template_override: str | None = None) -> Path:

@@ -20,6 +20,22 @@ from etsy_listings.workspace.workspace import (
 from tests.support.refusals import refuse_reads
 
 
+def test_prune_previews_keeps_current_scenes_and_removes_stale_templates(
+    workspace_root: Path,
+) -> None:
+    ws = Workspace.discover(root_override=workspace_root)
+    current = ws.preview_file("take-a-hike", "flat-lay-01", "moss", "current")
+    stale = ws.preview_file("take-a-hike", "flat-lay-01", "moss", "stale")
+    removed = ws.preview_file("take-a-hike", "removed", None, "old")
+    for path in (current, stale, removed):
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(b"preview")
+    ws.prune_previews("take-a-hike", {"flat-lay-01": {current.name}})
+    assert current.read_bytes() == b"preview"
+    assert not stale.exists()
+    assert not removed.parent.exists()
+
+
 def test_discover_finds_root_from_nested_cwd(workspace_root: Path) -> None:
     nested = workspace_root / "listings" / "take-a-hike"
     ws = Workspace.discover(start=nested)
