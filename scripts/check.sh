@@ -28,6 +28,10 @@ uv run ruff check .
 echo "== mypy =="
 uv run mypy src
 
+# Core/server/CLI dependency direction (ADR-0052); contracts in pyproject.toml.
+echo "== import-linter =="
+uv run lint-imports
+
 # Coverage is measured over the whole suite, browser layer included. Those
 # tests skip themselves when chromium or src/ui/dist is missing, which
 # costs about a point -- the gate has enough headroom to pass either way, so a
