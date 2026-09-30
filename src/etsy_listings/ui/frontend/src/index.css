@@ -2515,8 +2515,8 @@ table.listings tbody tr:last-child td {
    while a run goes and stays 4s after the suggestions arrive -- exactly when
    the seller is clicking them -- so if the head wrapped (Deploy dropping to a
    second line), every drawer below would jump under the pointer as the
-   indicator came and went. Instead the listing path gives way first
-   (ellipsis), then the rest of the meta line, and the title last. */
+   indicator came and went. Instead the meta line gives way first
+   (ellipsis), and the title last. */
 .page-head--editor {
   flex-wrap: nowrap;
 }
@@ -2538,14 +2538,10 @@ table.listings tbody tr:last-child td {
   white-space: pre;
 }
 
-.page-head--editor .page-head__path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.page-head--editor .page-head__saved {
-  flex-shrink: 0;
+/* Once saved, the meta is the auto-save chip, whose card must not be
+   clipped by the ellipsis the sentences need. The chip is short. */
+.page-head--editor > .page-head__meta:has(.save-chip) {
+  overflow: visible;
 }
 
 .page-head--editor > .page-head__title {
@@ -2570,6 +2566,222 @@ table.listings tbody tr:last-child td {
   flex: none;
   border-radius: 999px;
   background: var(--color-accent-2);
+}
+
+/* — the editor head: an identity row over an action row (UI doc, *The
+   editor head*). With actions, the rule under the head moves from the
+   identity row to the action row. — */
+.editor-head--actions > .page-head {
+  align-items: center;
+  margin-bottom: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: none;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+
+.action-row__divider {
+  width: 1px;
+  height: 14px;
+  background: var(--color-divider);
+}
+
+.action-row__error {
+  font-size: 12px;
+  color: var(--color-danger-700);
+}
+
+/* Quiet icon + label actions: they read as a list of things to do, not a
+   second set of primary buttons beside Deploy. */
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 -6px;
+  padding: 3px 6px;
+  font: inherit;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.action-link svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.action-link svg.action-link__caret {
+  width: 11px;
+  height: 11px;
+  margin-left: -1px;
+}
+
+.action-link:hover:not(:disabled),
+.action-link[aria-expanded="true"] {
+  color: var(--color-accent-700);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.action-link:focus-visible,
+.back-crumb:focus-visible,
+.save-chip__trigger:focus-visible,
+.save-card__copy:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Destructive, so as quiet as its neighbours until pointed at. */
+.action-link--danger:hover:not(:disabled) {
+  color: var(--color-danger-700);
+  background: color-mix(in srgb, var(--color-danger-700) 9%, transparent);
+}
+
+/* A settled state: Mark reviewed, once pressed. */
+.action-link--done,
+.action-link--done:hover:not(:disabled) {
+  color: var(--color-accent-2-700);
+}
+
+/* Back to batch, in the breadcrumb's place: the crumb's size and colour,
+   outlined because it leaves for the batch rather than for Listings. */
+.back-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.back-crumb svg {
+  width: 15px;
+  height: 15px;
+}
+
+.back-crumb:hover {
+  color: var(--color-accent-700);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+/* — the auto-save chip and its file card — */
+.save-chip {
+  position: relative;
+  display: inline-flex;
+}
+
+.save-chip__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  font: inherit;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.save-chip__trigger:hover,
+.save-chip__trigger[aria-expanded="true"] {
+  border-color: var(--color-divider);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+.save-chip__caret {
+  width: 11px;
+  height: 11px;
+}
+
+.save-card {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 25;
+  width: max-content;
+  max-width: min(460px, calc(100vw - 2 * var(--space-3)));
+  padding: var(--space-3);
+  white-space: normal;
+  color: var(--color-text);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.save-card__title {
+  margin-bottom: var(--space-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.save-card__path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+}
+
+.save-card__path .page-head__path {
+  flex: 1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.save-card__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.save-card__copy svg {
+  width: 13px;
+  height: 13px;
+}
+
+.save-card__copy:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.save-card__when {
+  margin-top: var(--space-2);
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }
 
 /* — the tab strip's per-tab issue badge — */
@@ -6219,21 +6431,86 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
   border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
   box-shadow: var(--shadow-sm);
 }
+/* The gallery as a fanned stack of prints on a soft stage: the first
+   mockup whole in front, the next two fanned behind it. */
 .bc-card__gallery {
-  display: grid;
-  grid-template-columns: 2fr 1fr 1fr;
-  grid-template-rows: 128px;
-  gap: 2px;
-  height: 128px;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 176px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 60%, var(--color-neutral-100), transparent 70%),
+    var(--color-neutral-200);
+}
+.bc-card__no-gallery {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.bc-deck {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+.bc-deck__print {
+  position: absolute;
+  inset: 0;
   overflow: hidden;
   background: var(--color-neutral-200);
+  border: 3px solid #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  transform-origin: 50% 90%;
 }
-.bc-card__gallery img {
+.bc-deck__print img,
+.bc-deck__print video {
+  display: block;
   width: 100%;
   height: 100%;
-  min-height: 0;
   object-fit: cover;
-  display: block;
+}
+/* Front first in the DOM, so a screen reader and the tests meet the gallery
+   in its own order; z-index does the stacking. */
+.bc-deck__print--0 {
+  z-index: 3;
+}
+.bc-deck__print--1 {
+  z-index: 2;
+  transform: translateX(-34px) rotate(-9deg) scale(0.92);
+}
+.bc-deck__print--2 {
+  z-index: 1;
+  transform: translateX(34px) rotate(9deg) scale(0.92);
+}
+.bc-deck__play {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: #fff;
+  background: color-mix(in srgb, var(--color-text) 72%, transparent);
+  border-radius: 999px;
+}
+.bc-deck__play svg {
+  width: 11px;
+  height: 11px;
+}
+.bc-deck__count {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-neutral-100) 88%, transparent);
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
 }
 .bc-card__body {
   padding: var(--space-3);

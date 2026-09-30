@@ -1,6 +1,13 @@
+import { CopySimpleIcon } from "@phosphor-icons/react/dist/csr/CopySimple";
+import { TrashIcon } from "@phosphor-icons/react/dist/csr/Trash";
 import { useEffect, useMemo, useState } from "react";
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
-import { getListingTemplate, getListingTemplateDraft } from "../api/listingTemplates";
+import {
+  deleteListingTemplate,
+  getListingTemplate,
+  getListingTemplateDraft,
+} from "../api/listingTemplates";
+import { ActionLink } from "../components/ActionLink";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { EditableName } from "../components/EditableName";
 import { useAutosave } from "../hooks/useAutosave";
@@ -10,12 +17,13 @@ import type { ListingDetail, ListingTemplateDetail, ListingTemplateSource } from
 import { EditorHead, ListingEditorShell } from "./ListingEditorPage";
 import { listingTemplateTransport, templateAsListing } from "./editor/listingTemplateDocument";
 import { metaFor } from "./editor/saveMeta";
+import { TEMPLATE_DELETE_DETAILS, templateDeleteTitle } from "./listingTemplateDelete";
 
 /**
  * The listing-template editor (UI doc §3; batch plan PR 6): the listing
  * editor's own shell with `kind="listing-template"`, at two routes.
  *
- * `/listing-templates/new?from_listing=` (Save as listing template) and
+ * `/listing-templates/new?from_listing=` (Create listing template) and
  * `?from_template=` (Clone) open it unsaved, on the draft the server would
  * write, with the name field focused (UI doc §1). Nothing is written until
  * the seller commits a unique name; edits made before that ride along in the
@@ -25,10 +33,13 @@ import { metaFor } from "./editor/saveMeta";
  * Autosave writes only complete templates (A36): an edit that makes one
  * incomplete is held here, explained by the banner and the head, retried by
  * the next edit, and guarded against navigating away (`useUnsavedWarning`).
+ *
+ * A saved template's action row holds Clone and Delete, as its card does
+ * (UI doc §3); an unsaved one has nothing to clone or delete yet.
  */
 
 const HOW_TO =
-  "To make a listing template, open a finished listing and choose Save as listing template.";
+  "To make a listing template, open a finished listing and choose Create listing template.";
 
 function sourceFrom(params: URLSearchParams): ListingTemplateSource | null {
   const listing = params.get("from_listing");
@@ -156,6 +167,28 @@ function ListingTemplateEditor({
 
   // UI doc §3: navigating away with unsaved values warns first.
   const blocker = useUnsavedWarning(save.kind === "unsaved");
+  const navigate = useNavigate();
+  const [deleting, setDeleting] = useState(false);
+  const [actionError, setActionError] = useState("");
+  /** The template's name on disk, once it has one. */
+  const saved = detail.name || name;
+
+  function clone(template: string) {
+    void flush().then(() =>
+      navigate(`/listing-templates/new?from_template=${encodeURIComponent(template)}`),
+    );
+  }
+
+  function confirmDelete(template: string) {
+    setDeleting(false);
+    setActionError("");
+    deleteListingTemplate(template)
+      // Replace, not push: Back must not return to a template that is gone,
+      // and a replace is not held by the unsaved-edits warning -- the seller
+      // has just confirmed they are done with it.
+      .then(() => navigate("/listing-templates", { replace: true }))
+      .catch(() => setActionError(`Could not delete ${template}`));
+  }
 
   return (
     <>
@@ -186,9 +219,42 @@ function ListingTemplateEditor({
               />
             }
             meta={metaFor(save, detail.name || name, "listing-template")}
+            actions={
+              saved && (
+                <>
+                  <ActionLink
+                    icon={<CopySimpleIcon aria-hidden="true" />}
+                    onClick={() => clone(saved)}
+                  >
+                    Clone
+                  </ActionLink>
+                  <ActionLink
+                    tone="danger"
+                    icon={<TrashIcon aria-hidden="true" />}
+                    onClick={() => setDeleting(true)}
+                  >
+                    Delete
+                  </ActionLink>
+                  {actionError && (
+                    <span className="action-row__error" role="alert">
+                      {actionError}
+                    </span>
+                  )}
+                </>
+              )
+            }
           />
         }
       />
+      {deleting && saved && (
+        <ConfirmDialog
+          title={templateDeleteTitle(saved)}
+          confirmLabel="Delete"
+          details={TEMPLATE_DELETE_DETAILS}
+          onConfirm={() => confirmDelete(saved)}
+          onCancel={() => setDeleting(false)}
+        />
+      )}
       {blocker !== null && (
         <ConfirmDialog
           title="Leave without saving this listing template?"

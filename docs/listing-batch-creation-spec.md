@@ -95,7 +95,7 @@ template's directory.
 
 The seller can create a listing template in two ways:
 
-1. **Save as listing template** from an existing listing.
+1. **Create listing template** from an existing listing.
 2. **Clone listing template** from an existing listing template.
 
 There is no blank listing-template creation flow in the first version. Both
@@ -122,7 +122,7 @@ It deliberately excludes or resets these fields:
 | Applied/remote state | lockfile, provider IDs, renders, market snapshots, runs, proposals | A template cannot inherit deployment identity or generated state. |
 
 A bare media ref rooted in the workspace remains a shared workspace ref. For
-each `./` listing-local image or video, **Save as listing template** copies the
+each `./` listing-local image or video, **Create listing template** copies the
 file into template-owned assets and rewrites the ref. Instantiation copies that
 asset into the new listing so the resulting `./` ref remains listing-local. A
 missing or unreadable source asset prevents the listing template from being
@@ -130,7 +130,7 @@ saved. Inline `etsy.description.text` is copied deliberately because the seller
 chose it as reusable template content; the conversion UI must show it rather
 than implying that all prose is being reset.
 
-**Save as listing template** has no confirmation dialog. It opens the new
+**Create listing template** has no confirmation dialog. It opens the new
 listing template straight away in the listing-template editor, unsaved, with
 the name field focused; the editor shows what was kept, and the design-specific
 fields are simply absent. Nothing is written until the seller commits a unique
@@ -295,8 +295,11 @@ PNG bytes, not uploaded names, identify artwork content.
 ## Confirming a batch
 
 Confirmation assigns a stable opaque batch ID and a human-readable label. The
-default label combines the listing-template name and date/time; it is editable
-before and after creation without changing batch identity.
+default label combines the listing-template name and date/time -- led by the
+ZIP's filename, without `.zip`, when the designs came in one ZIP
+(`<zip name> · <listing template> · <date>`), since that name is usually the
+collection the seller exported. It is editable before and after creation
+without changing batch identity.
 
 The application persists the batch record first, then attempts every valid row.
 For each row it:
@@ -471,9 +474,9 @@ behavior. A CLI apply and UI apply must leave the same proposal state.
 
 | Surface | Required behavior |
 |---|---|
-| Listing editor | **Save as listing template**; durable proposal review; stale choices usable under an *Out of date* heading; Back to batch when opened from a batch summary; Mark reviewed/needs review when the listing belongs to a cached batch. |
+| Listing editor | **Create listing template**; durable proposal review; stale choices usable under an *Out of date* heading; Back to batch when opened from a batch summary; Mark reviewed/needs review when the listing belongs to a cached batch. |
 | Listing templates page | Small card collection; open editor; clone; delete; start a batch; accept a drop as a shortcut to staging; Recent batches with derived status. |
-| Listing-template editor | Valid-only autosave, production settings, copied media assets, and calibrator test-design preview controls. |
+| Listing-template editor | Valid-only autosave, production settings, copied media assets, calibrator test-design preview controls, and **Clone** and **Delete** for a saved template. |
 | New batch page | Select one listing template, upload one ZIP or loose PNG set, persist and resume staging, edit names, remove invalid rows, confirm. |
 | Batch summary | Rename, status counts and rows, Cancel/Resume, Retry failures, open listing, Mark reviewed/needs review, delete batch record. |
 

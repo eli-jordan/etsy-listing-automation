@@ -10,6 +10,7 @@ session holds afterwards, and that a refusal leaves nothing on disk.
 from __future__ import annotations
 
 import random
+import re
 import warnings
 import zipfile
 from datetime import UTC, datetime
@@ -129,6 +130,26 @@ class TestDiscovery:
         session = _stage(workspace, store, ("kittl-export.zip", a_zip(("a.png", png(1)))))
 
         assert not workspace.staging_archive_file(session.id).exists()
+
+    def test_the_default_label_leads_with_the_zips_name(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        """Spec, *Confirming a batch*: the ZIP's name is usually the
+        collection the seller exported, so it leads the label."""
+        session = _stage(workspace, store, ("Coding x Music.ZIP", a_zip(("a.png", png(1)))))
+
+        assert re.fullmatch(
+            r"Coding x Music · heavyweight-tee · \d{1,2} Sep \d\d:\d\d", session.label
+        )
+
+    def test_a_zip_named_with_folders_labels_by_its_file_name(
+        self, workspace: Workspace, store: StagingStore
+    ) -> None:
+        session = _stage(
+            workspace, store, ("C:\\exports\\kittl-export.zip", a_zip(("a.png", png(1))))
+        )
+
+        assert session.label.startswith("kittl-export · heavyweight-tee · ")
 
 
 class TestInputMode:

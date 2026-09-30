@@ -6,7 +6,7 @@ import { useRef, useState } from "react";
  * given yet (opens waiting, because there is nothing to double-click).
  *
  * It lives in `components/` rather than under `pages/editor/` for the reason
- * `StatusTag` and `OpenOnMenu` do -- head chrome that no single page owns.
+ * `StatusTag` and `OpenInMenu` do -- head chrome that no single page owns.
  *
  * Nothing here validates. What makes a legal listing name is what makes a legal
  * *directory* name, and only `workspace` knows that (A8), so a refusal arrives

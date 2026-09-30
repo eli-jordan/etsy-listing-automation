@@ -92,6 +92,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: "tee-basic",
     resolved_prices: [{ size: "S", amount: "349 NOK" }],
+    gestures: [],
     description_composed: "",
     ...over,
   };
@@ -515,18 +516,16 @@ describe("DetailsTab", () => {
     expect(screen.getByText("0 / 140")).toBeInTheDocument();
   });
 
-  it("shows garment materials as read-only text", () => {
-    const onUpdate = vi.fn();
+  it("shows no materials: they are the garment profile's", () => {
     render(
       <DetailsTab
-        detail={detail({ garment_materials: ["cotton", "水性インク"] })}
-        onUpdate={onUpdate}
+        detail={detail({ garment_materials: ["cotton"] })}
+        onUpdate={vi.fn()}
         onFlush={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("Materials")).toHaveValue("cotton, 水性インク");
-    expect(screen.getByLabelText("Materials")).toHaveAttribute("readonly");
-    expect(onUpdate).not.toHaveBeenCalled();
+    expect(screen.queryByLabelText("Materials")).toBeNull();
+    expect(screen.queryByText("cotton")).toBeNull();
   });
 
   it("shows a section dropdown once the shop's sections are known", async () => {

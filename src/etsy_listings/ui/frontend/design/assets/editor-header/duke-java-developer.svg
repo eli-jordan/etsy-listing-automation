@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120">
+  <rect width="120" height="120" fill="#fbf7f0"/>
+  <path d="M60 18 L88 86 Q60 100 32 86 Z" fill="#1f1b18"/>
+  <path d="M44 70 Q60 64 76 70 L84 90 Q60 102 36 90 Z" fill="#ffffff" stroke="#1f1b18" stroke-width="3"/>
+  <circle cx="60" cy="52" r="9" fill="#d23a2c"/>
+  <path d="M36 72 L22 60 M84 72 L98 58" stroke="#1f1b18" stroke-width="5" stroke-linecap="round"/>
+  <text x="60" y="112" text-anchor="middle" font-family="Georgia, serif" font-size="9" font-weight="700" fill="#1f1b18">JAVA DEVELOPER</text>
+</svg>

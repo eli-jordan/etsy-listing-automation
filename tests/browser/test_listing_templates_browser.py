@@ -3,14 +3,17 @@ there (batch plan PR 1, PR 6): the listing editor, the *name it* state, the
 listing-templates and staging endpoints and the files they write, together in
 a real browser.
 
-* Save as listing template -> name it -> the card appears on the Listing
+* Create listing template -> name it -> the card appears on the Listing
   templates page, asserted on the ``template.yaml`` the UI actually wrote.
+* Delete from the template editor's action row removes the template's
+  folder and lands back on the Listing templates page.
 * Dropping PNGs on a card lands on staging with that template chosen,
   skipping New batch (UI doc §2).
 """
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -23,11 +26,11 @@ from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png
 pytestmark = pytest.mark.browser
 
 
-def test_save_a_listing_as_a_listing_template(page, workspace_root: Path) -> None:  # noqa: ANN001
+def test_create_a_listing_template_from_a_listing(page, workspace_root: Path) -> None:  # noqa: ANN001
     base = page.url.rsplit("/", 1)[0]
     page.goto(f"{base}/listings/take-a-hike")
 
-    page.get_by_role("button", name="Save as listing template").click()
+    page.get_by_role("button", name="Create listing template").click()
 
     # No dialog (UI doc §1): the draft opens straight away, unsaved, with the
     # name field focused, and nothing is on disk yet.
@@ -41,6 +44,8 @@ def test_save_a_listing_as_a_listing_template(page, workspace_root: Path) -> Non
 
     # Naming it writes it, and the editor stays open on it by name (PR 6).
     page.wait_for_url("**/listing-templates/heavyweight-tee")
+    # The path is in the auto-save chip's card (UI doc, *The editor head*).
+    page.get_by_role("button", name=re.compile("^Saved ")).click()
     page.get_by_text("listing-templates/heavyweight-tee/template.yaml").wait_for()
     page.locator(".page-head__crumb", has_text="Listing templates").click()
 
@@ -57,6 +62,20 @@ def test_save_a_listing_as_a_listing_template(page, workspace_root: Path) -> Non
     assert written["colors"] == ["black", "blue-jean", "ivory", "moss"]
     assert "design" not in written
     assert "brief" not in written
+
+
+def test_delete_a_listing_template_from_its_editor(page, workspace_root: Path) -> None:  # noqa: ANN001
+    a_listing_template(Workspace.discover(root_override=workspace_root))
+    folder = workspace_root / "listing-templates" / LISTING_TEMPLATE
+    assert folder.is_dir()
+    base = page.url.rsplit("/", 1)[0]
+    page.goto(f"{base}/listing-templates/{LISTING_TEMPLATE}")
+
+    page.get_by_role("group", name="Actions").get_by_role("button", name="Delete").click()
+    page.get_by_role("dialog").get_by_role("button", name="Delete").click()
+
+    page.wait_for_url("**/listing-templates")
+    assert not folder.exists()
 
 
 def test_dropping_pngs_on_a_card_lands_on_staging_with_that_template(  # noqa: ANN001

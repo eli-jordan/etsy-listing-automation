@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "name": "template-cards",
+  "auto": false,
+  "order": 6,
+  "title": "Listing template cards",
+  "description": "The listing template card gallery: today's 2fr/1fr/1fr strip beside the shipped fanned stack (C). A and B are on the archive.",
+  "layout": {
+    "rows": [
+      [
+        "template-cards"
+      ]
+    ],
+    "scenes": {
+      "template-cards": {
+        "rows": [
+          [
+            "current",
+            "card"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "frame": "template-cards/current"
+    },
+    {
+      "frame": "template-cards/card"
+    }
+  ]
+}

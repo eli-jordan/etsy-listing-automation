@@ -1,36 +1,24 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  deleteListing,
-  listingDesignThumbnailUrl,
-  listListings,
-  patchListing,
-} from "../api/listings";
+import { deleteListing, listListings, patchListing } from "../api/listings";
 import { createRun, currentWorkspaceRun, getRun } from "../api/runs";
 import { ConfirmDialog } from "../components/ConfirmDialog";
-import { OpenOnMenu } from "../components/OpenOnMenu";
+import { ListingHover } from "../components/ListingHover";
+import { OpenInMenu } from "../components/OpenInMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { STATUS_LABELS, StatusTag } from "../components/StatusTag";
 import type { ListingStatus, ListingSummary } from "../types";
 import { BatchCandidateControl } from "./batchDeploy/BatchCandidateControl";
 import { candidateNames } from "./batchDeploy/batchDeployPresentation";
 import { TERMINAL_PHASES } from "./deploy/runPhases";
-
-type Gesture = ListingSummary["gestures"][number];
-
-const GESTURE_LABELS: Record<Gesture, string> = {
-  delete: "Delete",
-  retire: "Retire",
-  "un-retire": "Un-retire",
-  cancel: "Cancel",
-  renew: "Renew",
-};
-
-const MARK_FOR_DELETION_DETAILS =
-  "The listing stays in this table as pending-delete. The next apply will retract the Printify product — the Etsy draft goes with it — then remove the local files. Until then you can undo the mark.";
-
-const DELETE_DETAILS =
-  "The listing folder and its render cache are removed now. There is nothing on Printify or Etsy to retract. Designs, garment profiles and pricing plans stay.";
+import {
+  deleteDetails,
+  deleteLabel,
+  deleteTitle,
+  GESTURE_LABELS,
+  type Gesture,
+  LIFECYCLE_OF,
+} from "./listingLifecycle";
 
 /** The listings list (phase 5): table + search + status filter, from
  * the design mockup's listings section, backed by `GET /api/listings`. */
@@ -44,55 +32,8 @@ const FILTERS: Filter[] = ["all", ...(Object.keys(STATUS_LABELS) as ListingStatu
 
 const FILTER_LABELS: Record<Filter, string> = { all: "All statuses", ...STATUS_LABELS };
 
-function hasRemotes(row: ListingSummary): boolean {
-  return row.etsy_listing_id != null || row.printify_product_id != null;
-}
-
-function deleteLabel(row: ListingSummary): string {
-  return hasRemotes(row) ? "Mark for deletion" : "Delete";
-}
-
 function gestureLabel(row: ListingSummary, gesture: Gesture): string {
   return gesture === "delete" ? deleteLabel(row) : GESTURE_LABELS[gesture];
-}
-
-/** The listing's artwork, or an empty tile when `design` is null -- which is
- * what a multi-artwork listing (`on-light`/`on-dark`) reports, since no single
- * picture stands for it. Decorative: the row's name is right beside it and is
- * what a screen reader should read, so `alt` is deliberately empty. */
-function DesignThumb({ design }: { design: string | null }) {
-  if (design === null) return <span className="listing-thumb listing-thumb--empty" />;
-  return (
-    <img className="listing-thumb" src={listingDesignThumbnailUrl(design)} alt="" loading="lazy" />
-  );
-}
-
-/** The card the row's name reveals on hover. Purely CSS-driven (see
- * `.listing-hover:hover .listing-popup`) rather than JS state: it shows only
- * what the server already sent for this row, so there is nothing to fetch and
- * no state worth re-rendering the table for. It exists because the table is
- * three narrow columns and the artwork and colour count have nowhere to go. */
-function ListingCard({ row }: { row: ListingSummary }) {
-  return (
-    <span className="listing-popup">
-      {row.design !== null && (
-        <img
-          className="listing-popup__thumb"
-          src={listingDesignThumbnailUrl(row.design)}
-          alt=""
-          loading="lazy"
-        />
-      )}
-      <span className="listing-popup__name">{row.name}</span>
-      <span className="listing-popup__garment">{row.garment_profile}</span>
-      <span className="listing-popup__meta">
-        <StatusTag status={row.status} />
-        <span>
-          {row.colour_count} {row.colour_count === 1 ? "colour" : "colours"}
-        </span>
-      </span>
-    </span>
-  );
 }
 
 function UndoMarkIcon() {
@@ -184,9 +125,8 @@ export function ListingsPage() {
         setPendingDelete(row);
         return;
       }
-      const lifecycle = gesture === "retire" ? "retired" : gesture === "renew" ? "renew" : null;
       try {
-        await patchListing(row.name, { lifecycle });
+        await patchListing(row.name, { lifecycle: LIFECYCLE_OF[gesture] });
         refresh();
       } catch {
         setStatus(`could not ${GESTURE_LABELS[gesture].toLowerCase()} ${row.name}`);
@@ -296,8 +236,7 @@ export function ListingsPage() {
             <tr key={row.name}>
               <td>
                 <div className="listing-cell">
-                  <span className="listing-hover">
-                    <DesignThumb design={row.design} />
+                  <ListingHover listing={row}>
                     <button
                       type="button"
                       className="listing-row__link"
@@ -305,10 +244,9 @@ export function ListingsPage() {
                     >
                       {row.name}
                     </button>
-                    <ListingCard row={row} />
-                  </span>
+                  </ListingHover>
                   {hasOpenTargets(row.etsy_listing_id, row.printify_product_id) && (
-                    <OpenOnMenu
+                    <OpenInMenu
                       etsyListingId={row.etsy_listing_id}
                       printifyProductId={row.printify_product_id}
                     />
@@ -365,13 +303,9 @@ export function ListingsPage() {
 
       {pendingDelete !== null && (
         <ConfirmDialog
-          title={
-            hasRemotes(pendingDelete)
-              ? `Are you sure you want to mark ${pendingDelete.name} for deletion?`
-              : `Are you sure you want to delete ${pendingDelete.name}?`
-          }
+          title={deleteTitle(pendingDelete)}
           confirmLabel={deleteLabel(pendingDelete)}
-          details={hasRemotes(pendingDelete) ? MARK_FOR_DELETION_DETAILS : DELETE_DETAILS}
+          details={deleteDetails(pendingDelete)}
           onConfirm={() => void confirmDelete()}
           onCancel={() => setPendingDelete(null)}
         />

@@ -8,7 +8,7 @@ browser.
   asserted on the ``listing.yaml`` and ``designs/*.png`` the UI wrote.
 * Create a batch of two -> both rows reach *done* on the summary -> the
   editor has the batch run's suggestions waiting (A40, A41).
-* The summary -> Open -> Mark reviewed in the editor -> Back to batch ->
+* The summary -> a listing's name -> Mark reviewed in the editor -> Back to batch ->
   the summary shows the row reviewed, and the batch's record says so
   (batch plan PR 5; UI doc §7, §8).
 * Drop a ZIP with nested folders, a duplicate, a text file and a design
@@ -100,7 +100,7 @@ def test_drop_three_pngs_fix_a_name_and_create_three_listings(  # noqa: ANN001
     summary = page.url
     for listing in names:
         page.goto(summary)
-        rows.filter(has_text=listing).get_by_role("link", name="Open").click()
+        rows.filter(has_text=listing).get_by_role("link", name=listing).click()
         page.wait_for_url(re.compile(rf"/listings/{listing}\?batch="))
         # The editor's design row names the file the row wrote.
         design_file = page.locator(".design-row__file")
@@ -133,7 +133,7 @@ def test_a_batch_of_two_drafts_both_and_the_editor_has_the_suggestions_waiting( 
         assert written["brief"] == DRAFTED_BRIEF
 
     page.locator("table.bc-table tbody tr", has_text="lake-loop").get_by_role(
-        "link", name="Open"
+        "link", name="lake-loop"
     ).click()
     page.wait_for_url(re.compile(r"/listings/lake-loop\?batch="))
     page.locator(".tabs .seg-opt", has_text="Listing Details").click()
@@ -158,7 +158,7 @@ def test_open_from_the_summary_mark_reviewed_and_go_back_to_the_batch(  # noqa: 
     summary = page.url
 
     page.locator("table.bc-table tbody tr", has_text="lake-loop").get_by_role(
-        "link", name="Open"
+        "link", name="lake-loop"
     ).click()
     page.wait_for_url(re.compile(r"/listings/lake-loop\?batch="))
     page.get_by_role("button", name="Mark reviewed").click()

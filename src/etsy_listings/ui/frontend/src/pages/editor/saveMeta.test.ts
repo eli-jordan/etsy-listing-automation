@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { metaFor } from "./saveMeta";
 import { timeAgo } from "./timeAgo";
@@ -30,11 +30,14 @@ describe("metaFor", () => {
     expect(metaFor({ kind: "saving" }, "take-a-hike")).toBe("Saving…");
   });
 
-  it("shows the path and a saved-ago caption once saved", () => {
+  it("shows a saved-ago chip once saved, whose card holds the path", () => {
     const now = Date.now();
     render(metaFor({ kind: "saved", savedAt: now - 2 * 60_000 }, "take-a-hike"));
+    const chip = screen.getByRole("button", { name: /Saved 2 mins ago/ });
+    expect(screen.queryByText("listings/take-a-hike/listing.yaml")).toBeNull();
+    fireEvent.click(chip);
+    expect(screen.getByRole("dialog", { name: "Listing file" })).toBeInTheDocument();
     expect(screen.getByText("listings/take-a-hike/listing.yaml")).toBeInTheDocument();
-    expect(screen.getByText(/Saved 2 mins ago/)).toBeInTheDocument();
   });
 });
 
@@ -54,6 +57,8 @@ describe("metaFor a listing template", () => {
 
   it("shows template.yaml's path once saved", () => {
     render(metaFor({ kind: "saved", savedAt: Date.now() }, "tee", "listing-template"));
+    fireEvent.click(screen.getByRole("button", { name: /^Saved / }));
+    expect(screen.getByRole("dialog", { name: "Listing template file" })).toBeInTheDocument();
     expect(screen.getByText("listing-templates/tee/template.yaml")).toBeInTheDocument();
   });
 });

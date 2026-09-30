@@ -19,8 +19,10 @@ import {
   type BatchDetail,
   type BatchRow,
 } from "../api/batches";
-import { listingDesignThumbnailUrl } from "../api/listings";
+import { listingDesignThumbnailUrl, listListings } from "../api/listings";
 import { ConfirmDialog } from "../components/ConfirmDialog";
+import { ListingHover } from "../components/ListingHover";
+import type { ListingSummary } from "../types";
 import { clock, dayMonth } from "../dates";
 import { EditableName } from "../components/EditableName";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
@@ -42,8 +44,10 @@ import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
  * is reviewable. The label renames by double-click, and Delete batch record
  * removes only the batch's own history (spec, *Cancellation and deletion*).
  * A deleted listing's row stays, struck through (A42). A row whose AI work a
- * deploy cancelled says so and keeps its own Retry (A43; UI doc §8). Open carries
- * `?batch=`, which is what shows the editor's Back to batch (UI doc §8).
+ * deploy cancelled says so and keeps its own Retry (A43; UI doc §8). A
+ * created listing's name is its link to the editor -- there is no separate
+ * Open -- and carries `?batch=`, which is what shows the editor's Back to
+ * batch (UI doc §8).
  */
 
 export const POLL_MS = 2000;
@@ -217,6 +221,29 @@ function ReviewedCell({ row, onReview }: { row: BatchRow; onReview: (next: boole
 }
 
 /** Where a row's listing opens: the editor, told which batch it came from. */
+/** The Listings table's summary of each of the batch's listings, for the
+ * name's hover card (the same one the Listings page shows). Asked once per
+ * set of names, not on every poll: a row's name changes only when it is
+ * created, renamed or deleted, and the card is extra -- if the summaries
+ * will not load, the names are plain links. */
+function useListingSummaries(names: string[]): Map<string, ListingSummary> {
+  const [summaries, setSummaries] = useState<Map<string, ListingSummary>>(new Map());
+  const key = [...names].sort().join("\n");
+  useEffect(() => {
+    if (key === "") return;
+    let current = true;
+    listListings()
+      .then((all) => {
+        if (current) setSummaries(new Map(all.map((summary) => [summary.name, summary])));
+      })
+      .catch(() => {});
+    return () => {
+      current = false;
+    };
+  }, [key]);
+  return summaries;
+}
+
 function editorUrl(batch: string, row: BatchRow): string {
   return `/listings/${encodeURIComponent(row.name)}?batch=${encodeURIComponent(batch)}`;
 }
@@ -234,6 +261,7 @@ export function BatchSummaryPage() {
   const busy = count("drafting") + count("queued") > 0;
   const listings = rows.filter((row) => row.creation === "created" && !row.deleted);
   const reviewed = listings.filter((row) => row.reviewed).length;
+  const summaries = useListingSummaries(listings.map((row) => row.name));
 
   // The first load, then one every POLL_MS for as long as a row is queued
   // or running.
@@ -438,20 +466,33 @@ export function BatchSummaryPage() {
                   <tr key={row.id} className={open ? undefined : "bc-tr--muted"}>
                     <td>
                       <span className="bc-cell">
-                        <img
-                          className="listing-thumb"
-                          src={
-                            row.creation === "created"
-                              ? listingDesignThumbnailUrl(row.design)
-                              : batchRowThumbnailUrl(id, row.id)
-                          }
-                          alt=""
-                        />
                         {open ? (
-                          <Link className="listing-row__link" to={editorUrl(id, row)}>
-                            {row.name}
-                          </Link>
+                          <ListingHover
+                            listing={summaries.get(row.name) ?? null}
+                            thumb={
+                              <img
+                                className="listing-thumb"
+                                src={listingDesignThumbnailUrl(row.design)}
+                                alt=""
+                              />
+                            }
+                          >
+                            <Link className="listing-row__link" to={editorUrl(id, row)}>
+                              {row.name}
+                            </Link>
+                          </ListingHover>
                         ) : (
+                          <img
+                            className="listing-thumb"
+                            src={
+                              row.creation === "created"
+                                ? listingDesignThumbnailUrl(row.design)
+                                : batchRowThumbnailUrl(id, row.id)
+                            }
+                            alt=""
+                          />
+                        )}
+                        {!open && (
                           <span
                             className={row.deleted ? "bc-muted" : undefined}
                             style={{ fontWeight: 600 }}
@@ -482,11 +523,6 @@ export function BatchSummaryPage() {
                         >
                           Retry
                         </button>
-                      )}
-                      {open && (
-                        <Link className="btn btn-ghost" to={editorUrl(id, row)}>
-                          Open
-                        </Link>
                       )}
                     </td>
                   </tr>

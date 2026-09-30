@@ -61,6 +61,7 @@ export function templateAsListing(template: ListingTemplateDetail): ListingDetai
     garment_product_type: template.garment_product_type ?? null,
     garment_brand: template.garment_brand ?? null,
     garment_model: template.garment_model ?? null,
+    gestures: [],
     description_composed: template.description_composed,
   };
 }

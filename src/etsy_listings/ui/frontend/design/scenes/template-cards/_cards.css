@@ -1,0 +1,142 @@
+/* Gallery directions for the listing template card. Everything else is the
+   app's own stylesheet (theme.css imports src/index.css). */
+
+.tc-tile {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  background: var(--color-neutral-200);
+}
+.tc-tile img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Today's tiles fill whatever cell the 2fr/1fr/1fr grid gives them. */
+.tc-tile--fill {
+  height: 128px;
+}
+
+.tc-play {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  font-size: 11px;
+  color: #fff;
+  background: color-mix(in srgb, var(--color-text) 72%, transparent);
+  border-radius: 999px;
+}
+
+.tc-more {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 14px;
+  color: #fff;
+  background: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+
+.tc-hint {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: var(--space-4);
+}
+
+/* — A: square hero + thumbnail strip. Capped card width, so the hero square
+   stays a card image rather than a poster. — */
+.tc-cards--narrow {
+  grid-template-columns: repeat(auto-fill, minmax(290px, 310px));
+}
+.tc-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  background: var(--color-neutral-200);
+}
+.tc-hero__main {
+  aspect-ratio: 1;
+}
+.tc-hero__strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 3px;
+}
+.tc-hero__thumb {
+  position: relative;
+  aspect-ratio: 1;
+}
+.tc-hero__thumb .tc-tile {
+  height: 100%;
+}
+
+/* — B: three even squares — */
+.tc-squares {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 2px;
+  background: var(--color-neutral-200);
+}
+.tc-squares__cell,
+.tc-squares__empty {
+  position: relative;
+  aspect-ratio: 1;
+}
+.tc-squares__cell .tc-tile {
+  height: 100%;
+}
+.tc-squares__empty {
+  background: color-mix(in srgb, var(--color-neutral-200) 60%, var(--color-neutral-100));
+}
+
+/* — C: fanned stack on a soft stage — */
+.tc-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 176px;
+  background:
+    radial-gradient(circle at 50% 60%, var(--color-neutral-100), transparent 70%),
+    var(--color-neutral-200);
+}
+.tc-deck {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+.tc-deck__card {
+  position: absolute;
+  inset: 0;
+  border: 3px solid #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  transform-origin: 50% 90%;
+}
+.tc-deck__card--1 {
+  transform: translateX(-34px) rotate(-9deg) scale(0.92);
+}
+.tc-deck__card--2 {
+  transform: translateX(34px) rotate(9deg) scale(0.92);
+}
+.tc-count {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-neutral-100) 88%, transparent);
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+}

@@ -81,7 +81,6 @@ export function DetailsTab(props: Props) {
   const titleError = detail.field_errors["etsy.title"];
   const sectionError = detail.field_errors["etsy.section"];
   const title = detail.etsy.title;
-  const materials = detail.garment_materials ?? [];
   const description = detail.etsy.description;
   const descriptionIssues = detail.issues.filter((i) => i.where === DESCRIPTION_ISSUE_WHERE);
 
@@ -392,20 +391,9 @@ export function DetailsTab(props: Props) {
           {sectionError && <span className="field__error">{sectionError}</span>}
         </div>
 
-        {/* Materials belong to the chosen garment. The listing can show the
-            Etsy-facing value but must not let one listing contradict its
-            shared garment profile. */}
-        <div className="field">
-          <label htmlFor="details-materials">Materials</label>
-          <input
-            id="details-materials"
-            className="input"
-            type="text"
-            value={materials.join(", ")}
-            readOnly
-          />
-          <span className="field__hint">Set by the selected garment profile.</span>
-        </div>
+        {/* No Materials field: they belong to the garment profile, which
+            every listing on it deploys (docs/phase-5-listings-ui.md), so a
+            read-only copy here only looked editable. */}
       </fieldset>
     </div>
   );

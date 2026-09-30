@@ -209,14 +209,14 @@ class ListingSummary(BaseModel):
     etsy_listing_id: int | None = None
     printify_product_id: str | None = None
     """Carried on the summary, not just on `ListingDetail`, because the table
-    offers the same "Open on Etsy / Printify" menu the editor's page head
+    offers the same "Open in Etsy / Printify" menu the editor's page head
     does -- and a menu per row that each had to fetch its own ids would be one
     request per listing to render a list."""
     gestures: list[ListingGesture] = []
     """Which buttons the listings table offers for this row (PRD 66). Computed
     server-side from the same facts as ``status``, so the CLI's future
-    `status` and the table cannot disagree about the row. Empty on the
-    editor's `ListingDetail` -- those buttons do not exist there."""
+    `status` and the table cannot disagree about the row. The editor's
+    `ListingDetail` carries the same list for its action row."""
 
 
 class ResolvedPrice(BaseModel):
@@ -238,6 +238,10 @@ class ListingDetail(Listing):
     status: ListingStatus
     issues: list[Issue]
     field_errors: dict[str, str] = {}
+    gestures: list[ListingGesture] = []
+    """The lifecycle actions the editor's action row offers: the listings
+    table's row gestures (PRD 66), from the same rule. Empty for the unsaved
+    draft, which has no lifecycle yet."""
     """Populated only when a PATCH's candidate failed `Listing.model_validate`
     -- the write was skipped and every other field here still describes the
     listing as it was before the PATCH. Empty on every GET and every

@@ -81,6 +81,39 @@ describe("ListingTemplatesPage", () => {
     ]);
   });
 
+  it("fans the gallery as a stack of prints, counting what is in it", async () => {
+    vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
+      card({ name: "heavyweight-tee" }),
+      card({ name: "with-video", media: ["common-media/size-guide.mp4", "./a.png"] }),
+      card({ name: "single-shot", media: ["./a.png"] }),
+    ]);
+    renderPage();
+    await screen.findByText("heavyweight-tee");
+
+    const full = within(cardFor("heavyweight-tee"));
+    expect(full.getByText("4 items")).toBeInTheDocument();
+    expect(full.queryByLabelText("Video")).toBeNull();
+    const video = cardFor("with-video");
+    expect(within(video).getByLabelText("Video")).toBeInTheDocument();
+    // Drawn from the clip itself: a video has no thumbnail to ask for.
+    expect(video.querySelector(".bc-deck__print video")?.getAttribute("src")).toMatch(
+      /size-guide.mp4/,
+    );
+    // One picture is one print: nothing fanned, nothing to count.
+    const single = cardFor("single-shot");
+    expect(single.querySelectorAll(".bc-deck__print")).toHaveLength(1);
+    expect(within(single).queryByText(/items?$/)).toBeNull();
+  });
+
+  it("says so when a template has no gallery images", async () => {
+    vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
+      card({ name: "bare", media: [] }),
+    ]);
+    renderPage();
+
+    expect(await screen.findByText("No gallery images")).toBeInTheDocument();
+  });
+
   it("starts a batch from a card with its template chosen, or from the head", async () => {
     vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
       card({ name: "heavyweight-tee" }),
@@ -140,7 +173,7 @@ describe("ListingTemplatesPage", () => {
 
     expect(await screen.findByText("0 templates")).toBeInTheDocument();
     expect(
-      screen.getByText(/open a finished listing and choose Save as listing template/),
+      screen.getByText(/open a finished listing and choose Create listing template/),
     ).toBeInTheDocument();
   });
 

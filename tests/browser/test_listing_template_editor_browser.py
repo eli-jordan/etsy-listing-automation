@@ -11,6 +11,7 @@ together in a real browser.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -44,10 +45,20 @@ def _a_classified_listing_template(root: Path) -> None:
     edit_garment_profile(root, GARMENT_PROFILE, colors=dict.fromkeys(COLOURS, "dark"))
 
 
+def _saved(page, name: str = LISTING_TEMPLATE) -> None:  # noqa: ANN001
+    """Wait for the head to say this template's file is saved: the auto-save
+    chip, whose card names the file (UI doc, *The editor head*)."""
+    chip = page.get_by_role("button", name=re.compile("^Saved "))
+    chip.wait_for()
+    chip.click()
+    page.get_by_text(f"listing-templates/{name}/template.yaml").wait_for()
+    page.keyboard.press("Escape")
+
+
 def _open(page, name: str = LISTING_TEMPLATE) -> None:  # noqa: ANN001
     base = page.url.rsplit("/", 1)[0]
     page.goto(f"{base}/listing-templates/{name}")
-    page.get_by_text(f"listing-templates/{name}/template.yaml").wait_for()
+    _saved(page, name)
 
 
 def _switch_every_colour_off(page) -> None:  # noqa: ANN001
@@ -76,7 +87,7 @@ def test_an_incomplete_listing_template_is_kept_off_disk_until_it_is_complete(  
 
     page.get_by_role("switch", name="black").click()
 
-    page.get_by_text(f"listing-templates/{LISTING_TEMPLATE}/template.yaml").wait_for()
+    _saved(page)
     expect(page.locator(".issues")).to_have_count(0)
     assert _colours(workspace_root) == ["black"]
 
@@ -119,7 +130,7 @@ def test_clone_and_name_makes_two_independent_listing_templates(  # noqa: ANN001
     name.fill("everyday-tee")
     name.press("Enter")
     page.wait_for_url("**/listing-templates/everyday-tee")
-    page.get_by_text("listing-templates/everyday-tee/template.yaml").wait_for()
+    _saved(page, "everyday-tee")
 
     # An edit to the clone reaches only the clone.
     switch = page.get_by_role("switch", name="moss")

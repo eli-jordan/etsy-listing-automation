@@ -2397,6 +2397,21 @@
             "title": "Garment Profile",
             "type": "string"
           },
+          "gestures": {
+            "default": [],
+            "items": {
+              "enum": [
+                "delete",
+                "retire",
+                "un-retire",
+                "cancel",
+                "renew"
+              ],
+              "type": "string"
+            },
+            "title": "Gestures",
+            "type": "array"
+          },
           "issues": {
             "items": {
               "$ref": "#/components/schemas/Issue"

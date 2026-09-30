@@ -85,9 +85,10 @@ left standing with the code disagreeing with them:
   markup the `.stat-*` CSS was already ported for. (One card per lifecycle
   state since the status amendment below — four, not two.)
 
-The Details tab shows the selected garment profile's materials read-only. A
-listing does not own composition, so it cannot override the shared garment
-definition from the editor.
+The Details tab does not show materials. A listing does not own composition --
+the garment profile does, and every listing on it deploys the profile's
+`materials` -- so a read-only copy in each editor (listing and listing
+template) was a field that looked editable and could not be.
 
 ### Amendment: three deferrals that stopped being true
 

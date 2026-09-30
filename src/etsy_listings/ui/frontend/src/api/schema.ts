@@ -2580,6 +2580,11 @@ export interface components {
       garment_product_type?: string | null;
       /** Garment Profile */
       garment_profile: string;
+      /**
+       * Gestures
+       * @default []
+       */
+      gestures: ("delete" | "retire" | "un-retire" | "cancel" | "renew")[];
       /** Issues */
       issues: components["schemas"]["Issue"][];
       /** Lifecycle */

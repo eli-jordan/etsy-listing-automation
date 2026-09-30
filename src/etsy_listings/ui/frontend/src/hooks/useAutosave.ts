@@ -10,7 +10,7 @@ import type { Issue, ListingDetail } from "../types";
  * (see `flush` below), so a save is never waiting on this timer alone. */
 export const AUTOSAVE_DEBOUNCE_MS = 800;
 
-type Patch = Record<string, unknown>;
+export type Patch = Record<string, unknown>;
 
 /** Where the listing stands with the disk, as the page head reports it.
  *

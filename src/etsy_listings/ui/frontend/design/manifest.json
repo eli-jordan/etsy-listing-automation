@@ -25,6 +25,16 @@
       "description": "Hi-fi (round 4) from the app's real components: template editor, templates and batches, staging, batch summary, listing from a batch."
     },
     {
+      "name": "editor-header",
+      "title": "Listing editor header",
+      "description": "Chosen listing-editor head (round 4): identity row with auto-save chip over an icon + label action row, its states, and the batch context."
+    },
+    {
+      "name": "template-cards",
+      "title": "Listing template cards",
+      "description": "The listing template card gallery: today's 2fr/1fr/1fr strip beside the shipped fanned stack (C). A and B are on the archive."
+    },
+    {
       "name": "archive",
       "title": "Archive",
       "description": "Retired directions, grouped by feature - history, not options."
@@ -33,7 +43,7 @@
   "scenes": [
     {
       "name": "archive",
-      "frames": 3,
+      "frames": 7,
       "brief": "design/scenes/archive/_brief.md",
       "title": "Archive",
       "description": "Retired directions, kept as history — never linked from a live flow."
@@ -117,6 +127,22 @@
       "frames": 3
     },
     {
+      "name": "editor-header",
+      "frames": 8
+    },
+    {
+      "name": "editor-header-v1",
+      "frames": 6
+    },
+    {
+      "name": "editor-header-v2",
+      "frames": 6
+    },
+    {
+      "name": "editor-header-v3",
+      "frames": 9
+    },
+    {
       "name": "listing-seo",
       "frames": 1
     },
@@ -154,6 +180,10 @@
     {
       "name": "market-seo",
       "frames": 4
+    },
+    {
+      "name": "template-cards",
+      "frames": 2
     }
   ],
   "frames": [
@@ -183,6 +213,42 @@
       "title": "Batch deployment — review (stage matrix)",
       "viewport": "laptop",
       "description": "Retired: the stage matrix read as a spreadsheet - the plain listing list won, with stages per listing in the bottom sheet."
+    },
+    {
+      "id": "archive/editor-header-icon-only",
+      "file": "design/scenes/archive/editor-header-icon-only.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Editor header - icon-only actions",
+      "viewport": "laptop",
+      "description": "Retired: icon-only action row with hover/focus tips; the icon + label row won - words need no hover and fit the row."
+    },
+    {
+      "id": "archive/editor-header-icon-only-batch",
+      "file": "design/scenes/archive/editor-header-icon-only-batch.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Editor header - icon-only actions, from a batch",
+      "viewport": "laptop",
+      "description": "Retired: the icon-only action row in batch context (Mark reviewed was still a separate button); the icon + label row won."
+    },
+    {
+      "id": "archive/template-card-even-squares",
+      "file": "design/scenes/archive/template-card-even-squares.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Template card - three even squares",
+      "viewport": "laptop",
+      "description": "Retired: C (fanned stack) won -- three small squares read as a summary, not a gallery."
+    },
+    {
+      "id": "archive/template-card-hero-strip",
+      "file": "design/scenes/archive/template-card-hero-strip.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Template card - hero + thumbnail strip",
+      "viewport": "laptop",
+      "description": "Retired: C (fanned stack) won -- the hero made every card poster-tall."
     },
     {
       "id": "batch-create-lofi-v1/batch-summary",
@@ -825,6 +891,294 @@
       "viewport": "mobile"
     },
     {
+      "id": "editor-header-v1/a-overflow-menu",
+      "file": "design/scenes/editor-header-v1/a-overflow-menu.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**A · One overflow menu.** Deploy stays the only primary action; everything secondary (Open on Etsy/Printify, Save as listing template, Copy listing path) lives behind one ⋯ next to it. Right-clicking the name opens the same menu.\n\nWhy: the most familiar pattern (GitHub, Linear). The head drops from two rows to one.",
+      "title": "A · One overflow menu · v1",
+      "viewport": "laptop",
+      "description": "Retired in round 2 (C won, taking D's file card): Head keeps name, status, saved state and Deploy; Save as template, Open on and Copy path move into one ⋯ menu (shown open). Right-click on the name opens it too.",
+      "variantGroup": "editor-header-v1",
+      "variant": "a"
+    },
+    {
+      "id": "editor-header-v1/b-name-menu",
+      "file": "design/scenes/editor-header-v1/b-name-menu.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**B · The name is the menu.** Click or right-click the listing name for a file-style menu: Rename, Copy listing path, Open on…, Save as listing template. The right side holds only Deploy.\n\nWhy: every action here is about *this listing file*, so it hangs off the name (Figma/Google Docs). Closest to the right-click idea.",
+      "title": "B · The name is the menu · v1",
+      "viewport": "laptop",
+      "description": "Retired in round 2 (C won, taking D's file card): The listing name is a file-style menu (click or right-click): Rename, Copy listing path, Open on Etsy/Printify, Save as listing template. Deploy stands alone on the right.",
+      "variantGroup": "editor-header-v1",
+      "variant": "b"
+    },
+    {
+      "id": "editor-header-v1/c-action-row",
+      "file": "design/scenes/editor-header-v1/c-action-row.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**C · Identity row + action row.** Name, status and Deploy on top; a quiet link row underneath carries Open on, Save as listing template, Copy path and the saved state.\n\nWhy: nothing hidden behind a click, but secondary actions read as links, not a second primary button.",
+      "title": "C · Identity row + action row · v1",
+      "viewport": "laptop",
+      "description": "Round 1 pick - refined into the live header (Open in dropdown, file card, delete): Two rows: name, status and Deploy on top; a quiet link row underneath carries Open on Etsy/Printify, Save as listing template, Copy path and the saved state. Nothing hidden.",
+      "variantGroup": "editor-header-v1",
+      "variant": "c"
+    },
+    {
+      "id": "editor-header-v1/current",
+      "file": "design/scenes/editor-header-v1/current.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**Today.** Save as listing template sits alone on a row *above* Deploy, the ▾ Open on caret floats beside the name, and the full `listing.yaml` path fights the title for room on one line.",
+      "title": "Today · the head as shipped · v1",
+      "viewport": "laptop",
+      "description": "Baseline: Save as listing template floats on its own row above Deploy; the Open on caret, status, path and saved state all share the title row."
+    },
+    {
+      "id": "editor-header-v1/d-grouped-buttons",
+      "file": "design/scenes/editor-header-v1/d-grouped-buttons.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**D · Grouped buttons + file card.** Save as template and Open on join Deploy in one right-aligned group. The path moves into a card behind *Saved 3 mins ago* (shown open) with Copy and last-deployed.\n\nWhy: the smallest change from today; the template button finally lines up with Deploy.",
+      "title": "D · Grouped buttons + file card · v1",
+      "viewport": "laptop",
+      "description": "Retired in round 2 (C won, taking D's file card): Smallest change: Save as template and Open on join Deploy as one right-aligned button group; the path moves into a file card that opens from Saved 3 mins ago (shown open).",
+      "variantGroup": "editor-header-v1",
+      "variant": "d"
+    },
+    {
+      "id": "editor-header-v1/e-status-bar",
+      "file": "design/scenes/editor-header-v1/e-status-bar.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**E · Status bar.** The head keeps only crumb, name, status and Deploy. A status bar pinned to the bottom holds the path + Copy, saved state, Open on links and Save as listing template.\n\nWhy: an IDE-style split. Identity and the one action on top, file facts at the bottom, always in view without crowding the head.",
+      "title": "E · Status bar · v1",
+      "viewport": "laptop",
+      "description": "Retired in round 2 (C won, taking D's file card): Head is only crumb, name, status and Deploy; an editor status bar pinned to the bottom holds the file path + Copy, saved state, Open on links and Save as listing template.",
+      "variantGroup": "editor-header-v1",
+      "variant": "e"
+    },
+    {
+      "id": "editor-header-v2/current",
+      "file": "design/scenes/editor-header-v2/current.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "note": "**Today.** Save as listing template sits alone on a row *above* Deploy, the ▾ Open on caret floats beside the name, and the full `listing.yaml` path fights the title for room on one line.",
+      "title": "Today · the head as shipped · v2",
+      "viewport": "laptop",
+      "description": "Baseline: Save as listing template floats on its own row above Deploy; the Open on caret, status, path and saved state all share the title row."
+    },
+    {
+      "id": "editor-header-v2/header",
+      "file": "design/scenes/editor-header-v2/header.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · resting · v2",
+      "viewport": "laptop",
+      "description": "Chosen head: identity row (name, status, Deploy) over a quiet action row - Open in, Create listing template, Mark for deletion, and the saved state."
+    },
+    {
+      "id": "editor-header-v2/header-delete-confirm",
+      "file": "design/scenes/editor-header-v2/header-delete-confirm.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · confirm deletion · v2",
+      "viewport": "laptop",
+      "description": "Mark for deletion asks first, with the Listings table's own dialog and wording; Delete replaces it for a listing with nothing on Etsy or Printify."
+    },
+    {
+      "id": "editor-header-v2/header-file-card",
+      "file": "design/scenes/editor-header-v2/header-file-card.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · file card · v2",
+      "viewport": "laptop",
+      "description": "Saved 3 mins ago opened into the listing file card: the listing.yaml path with Copy, when it saved, when it last deployed."
+    },
+    {
+      "id": "editor-header-v2/header-marked",
+      "file": "design/scenes/editor-header-v2/header-marked.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · marked for deletion · v2",
+      "viewport": "laptop",
+      "description": "After confirming: status reads Pending delete and the action becomes Undo mark for deletion until the next deploy retracts it."
+    },
+    {
+      "id": "editor-header-v2/header-open-in",
+      "file": "design/scenes/editor-header-v2/header-open-in.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · Open in menu · v2",
+      "viewport": "laptop",
+      "description": "The Open in dropdown open: Etsy and Printify, each shown only when the listing has an id there."
+    },
+    {
+      "id": "editor-header-v3/a-labelled",
+      "file": "design/scenes/editor-header-v3/a-labelled.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · icon + label · v3",
+      "viewport": "laptop",
+      "description": "Chosen head: identity row (name, status, auto-save chip, Deploy) over an action row of icon + label actions - Open in, Create listing template, Mark for deletion.",
+      "variantGroup": "editor-header-v3",
+      "variant": "a"
+    },
+    {
+      "id": "editor-header-v3/b-icon-only",
+      "file": "design/scenes/editor-header-v3/b-icon-only.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · icon only · v3",
+      "viewport": "laptop",
+      "description": "Same head with an icon-only action row; each icon names itself on hover and keyboard focus (Create listing template tip pinned open).",
+      "variantGroup": "editor-header-v3",
+      "variant": "b"
+    },
+    {
+      "id": "editor-header-v3/batch/a-labelled",
+      "file": "design/scenes/editor-header-v3/batch/a-labelled.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Batch · icon + label · v3",
+      "viewport": "laptop",
+      "description": "Opened from a batch: Back to batch takes the crumb place; Mark reviewed ends the action row under Deploy. Actions are icon + label.",
+      "variantGroup": "editor-header-v3/batch",
+      "variant": "a"
+    },
+    {
+      "id": "editor-header-v3/batch/b-icon-only",
+      "file": "design/scenes/editor-header-v3/batch/b-icon-only.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Batch · icon only · v3",
+      "viewport": "laptop",
+      "description": "Opened from a batch, icon-only action row (Mark for deletion tip pinned open); Back to batch and Mark reviewed keep their words (they are navigation and a workflow step, not listing actions).",
+      "variantGroup": "editor-header-v3/batch",
+      "variant": "b"
+    },
+    {
+      "id": "editor-header-v3/current",
+      "file": "design/scenes/editor-header-v3/current.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "note": "**Today.** Save as listing template sits alone on a row *above* Deploy, the ▾ Open on caret floats beside the name, and the full `listing.yaml` path fights the title for room on one line.",
+      "title": "Today · the head as shipped · v3",
+      "viewport": "laptop",
+      "description": "Baseline: Save as listing template floats on its own row above Deploy; the Open on caret, status, path and saved state all share the title row."
+    },
+    {
+      "id": "editor-header-v3/header-delete-confirm",
+      "file": "design/scenes/editor-header-v3/header-delete-confirm.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · confirm deletion · v3",
+      "viewport": "laptop",
+      "description": "Mark for deletion asks first, with the Listings table's own dialog and wording; Delete replaces it for a listing with nothing on Etsy or Printify."
+    },
+    {
+      "id": "editor-header-v3/header-file-card",
+      "file": "design/scenes/editor-header-v3/header-file-card.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · file card · v3",
+      "viewport": "laptop",
+      "description": "The auto-save chip beside the status opened into the listing file card: listing.yaml path with Copy, when it saved, when it last deployed."
+    },
+    {
+      "id": "editor-header-v3/header-marked",
+      "file": "design/scenes/editor-header-v3/header-marked.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · marked for deletion · v3",
+      "viewport": "laptop",
+      "description": "After confirming: status reads Pending delete and the action becomes Undo mark for deletion until the next deploy retracts it."
+    },
+    {
+      "id": "editor-header-v3/header-open-in",
+      "file": "design/scenes/editor-header-v3/header-open-in.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · Open in menu · v3",
+      "viewport": "laptop",
+      "description": "The Open in dropdown open: Etsy and Printify, each shown only when the listing has an id there."
+    },
+    {
+      "id": "editor-header/batch",
+      "file": "design/scenes/editor-header/batch.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · from a batch",
+      "viewport": "laptop",
+      "description": "Opened from a batch: Back to batch takes the crumb place, and Mark reviewed joins the action row beside Mark for deletion, styled like it."
+    },
+    {
+      "id": "editor-header/batch-reviewed",
+      "file": "design/scenes/editor-header/batch-reviewed.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · from a batch, reviewed",
+      "viewport": "laptop",
+      "description": "After Mark reviewed: the action reads Reviewed in the settled green; pressing it again marks the listing as needing review."
+    },
+    {
+      "id": "editor-header/current",
+      "file": "design/scenes/editor-header/current.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "note": "**Today.** Save as listing template sits alone on a row *above* Deploy, the ▾ Open on caret floats beside the name, and the full `listing.yaml` path fights the title for room on one line.",
+      "title": "Today · the head as shipped",
+      "viewport": "laptop",
+      "description": "Baseline: Save as listing template floats on its own row above Deploy; the Open on caret, status, path and saved state all share the title row."
+    },
+    {
+      "id": "editor-header/header",
+      "file": "design/scenes/editor-header/header.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header",
+      "viewport": "laptop",
+      "description": "Chosen head (round 4): identity row (name, status, auto-save chip, Deploy) over an icon + label action row - Open in, Create listing template, Mark for deletion."
+    },
+    {
+      "id": "editor-header/header-delete-confirm",
+      "file": "design/scenes/editor-header/header-delete-confirm.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · confirm deletion",
+      "viewport": "laptop",
+      "description": "Mark for deletion asks first, with the Listings table's own dialog and wording; Delete replaces it for a listing with nothing on Etsy or Printify."
+    },
+    {
+      "id": "editor-header/header-file-card",
+      "file": "design/scenes/editor-header/header-file-card.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · file card",
+      "viewport": "laptop",
+      "description": "The auto-save chip beside the status opened into the listing file card: listing.yaml path with Copy, and when it saved."
+    },
+    {
+      "id": "editor-header/header-marked",
+      "file": "design/scenes/editor-header/header-marked.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · marked for deletion",
+      "viewport": "laptop",
+      "description": "After confirming: status reads Pending delete and the action becomes Undo mark for deletion until the next deploy retracts it."
+    },
+    {
+      "id": "editor-header/header-open-in",
+      "file": "design/scenes/editor-header/header-open-in.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · Open in menu",
+      "viewport": "laptop",
+      "description": "The Open in dropdown open: Etsy and Printify, each shown only when the listing has an id there."
+    },
+    {
       "id": "listing-seo-lofi-v1/description-source",
       "file": "design/scenes/listing-seo-lofi-v1/description-source.tsx",
       "kind": "tsx",
@@ -1160,6 +1514,24 @@
       "title": "Market SEO — writing suggestions",
       "viewport": "laptop",
       "description": "Market research done and the top listings panel filled; SEO suggestions is the glowing last node."
+    },
+    {
+      "id": "template-cards/card",
+      "file": "design/scenes/template-cards/card.tsx",
+      "kind": "tsx",
+      "scene": "template-cards",
+      "title": "Template card · fanned stack (shipped)",
+      "viewport": "laptop",
+      "description": "The first mockup whole, on a soft stage, with the next two fanned behind it like a deck of prints and a count chip. Reads as 'a gallery'; one image is simply one print."
+    },
+    {
+      "id": "template-cards/current",
+      "file": "design/scenes/template-cards/current.tsx",
+      "kind": "tsx",
+      "scene": "template-cards",
+      "title": "Today · 2fr/1fr/1fr strip",
+      "viewport": "laptop",
+      "description": "Baseline: square mockups forced into one wide and two skinny 128px tiles with object-fit: cover -- each shows a slice of the middle."
     }
   ]
 }
