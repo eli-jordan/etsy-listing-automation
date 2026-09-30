@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { MutedClip } from "../../components/MutedClip";
 import { useHoverPlay } from "../../hooks/useHoverPlay";
-import { mediaKind, mediaLabel, pictureFor } from "../../media";
+import { type Artwork, type MediaOwner, mediaKind, mediaLabel, pictureFor } from "../../media";
 import type { MediaFileSummary, MediaEntry } from "../../types";
 import { MAX_IMAGES, MAX_VIDEOS, canReorder } from "./mediaEdits";
 import type { Focus } from "./focus";
@@ -26,11 +26,12 @@ import type { Focus } from "./focus";
 
 interface Props {
   media: readonly MediaEntry[];
-  design: string | null;
+  design: Artwork | null;
   swatchTemplate: string | null;
   selectedIndex: number | null;
-  /** The listing a `./` ref belongs to, or `null` for a draft. */
-  listing: string | null;
+  /** Whose `./` refs these are -- a listing (by name) or a listing
+   * template -- or `null` for a draft. */
+  listing: MediaOwner | string | null;
   /** Every file the locator lists, both groups -- what a file ref's tile
    * points the preview at. */
   files: readonly MediaFileSummary[];

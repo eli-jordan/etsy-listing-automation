@@ -25,9 +25,10 @@ from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.plan import PlannedRun, StageState
 from etsy_listings.engine.run import apply_listings, plan_listings
 from etsy_listings.engine.stage import StageApplyResult
+from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import a_context, a_lock, copy_listing
+from tests.support.builders import a_context, a_lock, copy_listing, edit_listing
 
 
 class _AppliedDoc(BaseModel):
@@ -176,4 +177,47 @@ def test_apply_listings_without_should_stop_behaves_as_before(workspace_root: Pa
     report = apply_listings(ctx, [LISTING], [_Stage("render")])  # type: ignore[list-item]
 
     assert not report.failed
-    assert (workspace_root / "listings" / LISTING / "state.lock.json").is_file()
+    workspace = Workspace.discover(root_override=workspace_root)
+    assert workspace.lock_file(LISTING).is_file()
+
+
+def test_a_stop_before_etsy_listing_does_not_consume_renew(workspace_root: Path) -> None:
+    """``lifecycle: renew`` is consumed only by the apply that sent
+    ``state=active`` (PRD 62). A stop that skipped ``etsy_listing`` sent
+    nothing, so the mark must still be there for the next apply."""
+    edit_listing(workspace_root, lifecycle="renew")
+    checks = {"count": 0}
+
+    def stop() -> bool:
+        # `_over`'s check, then `execute`'s before "render": both False; the
+        # one before "etsy_listing" stops.
+        checks["count"] += 1
+        return checks["count"] > 2
+
+    report = apply_listings(
+        a_context(workspace_root),
+        [LISTING],
+        [_Stage("render"), _Stage("etsy_listing")],  # type: ignore[list-item]
+        should_stop=stop,
+    )
+
+    assert report.outcomes[0].ok
+    workspace = Workspace.discover(root_override=workspace_root)
+    assert workspace.load_listing(LISTING).lifecycle == "renew"
+
+
+def test_a_stop_before_retract_keeps_the_listing(workspace_root: Path) -> None:
+    """A retract that never ran retracted nothing: the local listing is what
+    still points at the remote product, so it must not be wiped."""
+    edit_listing(workspace_root, lifecycle="deleted")
+    checks = {"count": 0}
+
+    def stop() -> bool:
+        # `_over`'s check passes; `execute`'s before "retract" stops.
+        checks["count"] += 1
+        return checks["count"] > 1
+
+    apply_listings(a_context(workspace_root), [LISTING], [_Stage("render")], should_stop=stop)  # type: ignore[list-item]
+
+    workspace = Workspace.discover(root_override=workspace_root)
+    assert workspace.listing_file(LISTING).is_file()

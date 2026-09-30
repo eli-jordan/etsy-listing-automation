@@ -17,24 +17,16 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
+from etsy_listings.ai.proposals import ListingProposal
 from etsy_listings.market.snapshot import MarketSnapshot
-from etsy_listings.ui.api.schemas import SeoProposalResponse
+from etsy_listings.ui.api.schemas import StepId as StepId
+from etsy_listings.ui.api.schemas import StepState as StepState
+from etsy_listings.ui.api.schemas import WorkflowStep as WorkflowStep
 
-StepId = Literal["brief", "market", "seo"]
-StepState = Literal["pending", "active", "done", "skipped", "warning", "failed"]
 TerminalPhase = Literal["done", "failed", "cancelled"]
 AiRunPhase = Literal["running", "done", "failed", "cancelled"]
 
 STEP_IDS: tuple[StepId, ...] = ("brief", "market", "seo")
-
-
-class WorkflowStep(BaseModel):
-    """One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
-    ``WorkflowStep``)."""
-
-    id: StepId
-    state: StepState
-    detail: str | None = None
 
 
 class AiStepEvent(WorkflowStep):
@@ -71,9 +63,10 @@ class AiMarketEvent(BaseModel):
     snapshot: MarketSnapshot
 
 
-class AiProposalEvent(SeoProposalResponse):
-    """The validated proposal: :class:`SeoProposalResponse` unchanged, plus
-    ``type`` and ``seq``."""
+class AiProposalEvent(ListingProposal):
+    """The validated proposal, once it is cached (A41): what ``GET
+    /api/listings/{name}/proposal`` answers at that moment, plus ``type``
+    and ``seq``."""
 
     type: Literal["proposal"] = "proposal"
     seq: int
@@ -114,6 +107,7 @@ class AiRunSummary(BaseModel):
     id: str
     listing: str
     draft_brief: bool
+    origin: Literal["manual", "batch"]
     phase: AiRunPhase
     steps: list[WorkflowStep]
     created_at: datetime

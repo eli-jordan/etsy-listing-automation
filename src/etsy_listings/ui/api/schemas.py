@@ -12,8 +12,16 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from etsy_listings.ai.proposals import (
+    ListingProposal as ListingProposal,
+)
+from etsy_listings.ai.proposals import (
+    Resolution,
+)
+from etsy_listings.batches import AiState
 from etsy_listings.config.listing import Listing
-from etsy_listings.config.media import MediaKind
+from etsy_listings.config.listing_template import ListingTemplate
+from etsy_listings.config.media import MediaEntry, MediaKind
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
@@ -199,14 +207,14 @@ class ListingSummary(BaseModel):
     etsy_listing_id: int | None = None
     printify_product_id: str | None = None
     """Carried on the summary, not just on `ListingDetail`, because the table
-    offers the same "Open on Etsy / Printify" menu the editor's page head
+    offers the same "Open in Etsy / Printify" menu the editor's page head
     does -- and a menu per row that each had to fetch its own ids would be one
     request per listing to render a list."""
     gestures: list[ListingGesture] = []
     """Which buttons the listings table offers for this row (PRD 66). Computed
     server-side from the same facts as ``status``, so the CLI's future
-    `status` and the table cannot disagree about the row. Empty on the
-    editor's `ListingDetail` -- those buttons do not exist there."""
+    `status` and the table cannot disagree about the row. The editor's
+    `ListingDetail` carries the same list for its action row."""
 
 
 class ResolvedPrice(BaseModel):
@@ -228,6 +236,10 @@ class ListingDetail(Listing):
     status: ListingStatus
     issues: list[Issue]
     field_errors: dict[str, str] = {}
+    gestures: list[ListingGesture] = []
+    """The lifecycle actions the editor's action row offers: the listings
+    table's row gestures (PRD 66), from the same rule. Empty for the unsaved
+    draft, which has no lifecycle yet."""
     """Populated only when a PATCH's candidate failed `Listing.model_validate`
     -- the write was skipped and every other field here still describes the
     listing as it was before the PATCH. Empty on every GET and every
@@ -428,6 +440,279 @@ class RenameListingRequest(BaseModel):
 
 
 # ──────────────────────────────────────────────────────────────────────────
+# Listing templates (A35, A36). The detail reuses `ListingTemplate` directly,
+# as `ListingDetail` reuses `Listing`: the wire shape *is* template.yaml.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class PixelSize(BaseModel):
+    width: int
+    height: int
+
+
+class ListingTemplateSummary(BaseModel):
+    """One card on the Listing templates page (UI doc §2)."""
+
+    name: str
+    garment: str
+    """The garment profile's blueprint as a seller names it --
+    ``Comfort Colors 1717`` -- or the profile's own name when it will not
+    load."""
+    colour_count: int
+    pricing_plan_name: str | None
+    """The plan ref's filename stem; ``None`` when the template prices its
+    sizes itself."""
+    media: list[MediaEntry]
+    batch_count: int = 0
+    """Batches made from this template, while their records last (A37)."""
+    design_minimum: PixelSize | None = None
+    """The smallest design the garment's print area takes -- New batch's size
+    hint (UI doc §4). ``None`` when the garment profile will not load."""
+
+
+class ListingTemplateSource(BaseModel):
+    kind: Literal["listing", "listing-template"]
+    name: str
+
+
+class ListingTemplateAsset(BaseModel):
+    """A file the draft will copy: the ``./`` ref the template will name it
+    by, and the ref it has in its source -- which is where the *name it*
+    page's thumbnail has to come from, since the copy does not exist yet."""
+
+    ref: str
+    source_ref: str
+
+
+class ListingTemplateDetail(ListingTemplate):
+    """A listing template as its pages read it, saved or not -- one shape for
+    both, as `ListingDetail` is one shape for a listing and the unnamed draft.
+
+    A draft (``GET /draft``: Save as listing template or Clone, written
+    nowhere, UI doc §1) has ``name`` ``""``, no ``modified_at``, and says
+    where it came from in ``source`` and ``assets``."""
+
+    name: str
+    modified_at: datetime | None
+    issues: list[Issue]
+    garment: str | None = None
+    pricing_plan_name: str | None = None
+    source: ListingTemplateSource | None = None
+    assets: list[ListingTemplateAsset] = []
+    # What the listing editor's tabs read off a `ListingDetail`, computed the
+    # same way, because the listing-template editor mounts those tabs
+    # unchanged (UI doc §3, *Existing components the template editor needs*).
+    resolved_prices: list[ResolvedPrice] = []
+    garment_materials: list[str] | None = None
+    garment_product_type: str | None = None
+    garment_brand: str | None = None
+    garment_model: str | None = None
+    description_composed: str = ""
+    """The body alone: a template has no lead, and each listing's own is
+    placed above it."""
+
+
+class ListingTemplateSaveResult(BaseModel):
+    """What a create or ``PUT`` did (A36). Refusing an incomplete document is
+    a 200 with ``saved: false``, as a listing's malformed PATCH is, because the
+    editor shows the issues and keeps going; nothing was written."""
+
+    saved: bool
+    issues: list[Issue]
+    field_errors: dict[str, str] = {}
+    template: ListingTemplateDetail | None = None
+
+
+class CreateListingTemplateRequest(BaseModel):
+    """Save as listing template (``from_listing``) or Clone
+    (``from_template``) -- exactly one. There is no blank creation (spec)."""
+
+    name: str
+    from_listing: str | None = None
+    from_template: str | None = None
+    document: dict[str, Any] | None = None
+    """The seller's edits made before naming it, as ``template.yaml`` would
+    hold them: the *name it* state is the editor (UI doc §1, §3). Absent
+    means the draft as the source gives it. Checked as a ``PUT`` is (A36),
+    and its ``./`` refs must be files the draft copies."""
+
+    @model_validator(mode="after")
+    def _exactly_one_source(self) -> CreateListingTemplateRequest:
+        if (self.from_listing is None) == (self.from_template is None):
+            raise ValueError("give exactly one of from_listing and from_template")
+        return self
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# Staging and batches (A37-A39; batch plan PR 2).
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class StagingRowDetail(BaseModel):
+    """One unique design on the staging page (UI doc §5)."""
+
+    id: str
+    sources: list[str]
+    """Every uploaded file with these bytes; more than one is a merge."""
+    name: str
+    typed: bool
+    state: Literal["ready", "name", "invalid"]
+    """``ready`` will be created; ``name`` blocks Create until fixed;
+    ``invalid`` will not be created and blocks nothing."""
+    message: str | None
+    note: str | None
+    suggestion: str | None
+    reuse: str | None
+    """The ``designs/`` stem with this row's exact bytes, which its listing
+    will name instead of writing its own (spec, *Content deduplication*)."""
+
+
+class AiReadinessBlock(BaseModel):
+    """Why a batch could not draft if it were created now (spec, *Design
+    validation*; ``staging.note.md``): the sentence after *AI drafting can't
+    run yet.*, and what to do about it."""
+
+    message: str
+    remedy: str
+
+
+class StagingDetail(BaseModel):
+    id: str
+    listing_template: str
+    label: str
+    template_saved_at: datetime
+    """When the frozen listing template was last saved: *Using X as saved at
+    HH:MM*."""
+    expires_at: datetime
+    rows: list[StagingRowDetail]
+    ignored: list[str]
+    """A ZIP's files that are not PNGs, by their path in it: the count
+    strip's *N other files ignored* and its list (UI doc §5)."""
+    ai_blocked: AiReadinessBlock | None = None
+    """Set only while a prompt, a ready provider or Etsy market access is
+    missing, which refuses Create; nothing is said when AI can run."""
+
+
+class StagingRefusal(BaseModel):
+    """A ``422``'s ``detail`` for an upload refused before staging (A45)."""
+
+    message: str
+    remedy: str
+
+
+class StagingPatch(BaseModel):
+    """Every staging edit, applied in order: label, names, removals."""
+
+    label: str | None = None
+    names: dict[str, str] = {}
+    remove: list[str] = []
+
+
+StepId = Literal["brief", "market", "seo"]
+StepState = Literal["pending", "active", "done", "skipped", "warning", "failed"]
+
+
+class WorkflowStep(BaseModel):
+    """One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
+    ``WorkflowStep``): an AI run's, or a batch row's."""
+
+    id: StepId
+    state: StepState
+    detail: str | None = None
+
+
+class BatchRowDetail(BaseModel):
+    id: str
+    sources: list[str]
+    name: str
+    """The name actually created, which confirm may have suffixed (A38)."""
+    design: str
+    creation: Literal["pending", "created", "failed"]
+    error: str | None
+    ai: AiState | None = None
+    """The row's AI work (A40, and A43's ``cancelled_by_deploy``); ``None``
+    until its listing exists."""
+    ai_steps: list[WorkflowStep] = []
+    """The live run's nodes while running, else the last run's as it ended."""
+    ai_error: str | None = None
+    queue_position: int | None = None
+    """1 for the next row to start, across every batch; ``None`` unless
+    queued."""
+    proposal: Literal["ready", "stale", "resolved"] | None = None
+    """The listing's cached proposal (A41): sections waiting and current,
+    waiting but out of date, or every section dealt with."""
+    stale_reasons: list[str] = []
+    reviewed: bool = False
+    """The seller's own judgement (spec, *Review workflow*)."""
+    reviewable: bool = False
+    """Whether Mark reviewed is offered: not on a queued, drafting, deleted
+    or never-created row (UI doc §7)."""
+    deleted: bool = False
+    """The listing was deleted; the row stays, struck through (A42)."""
+
+
+BatchStatus = Literal["staging", "drafting", "in_review", "complete", "stopped"]
+"""Recent batches' derived status (UI doc §2): ``staging`` for a session not
+confirmed yet, the rest `batches.standing`'s."""
+
+
+class BatchDetail(BaseModel):
+    id: str
+    label: str
+    listing_template: str
+    created_at: datetime
+    rows: list[BatchRowDetail]
+    concurrency: int = 1
+    """``batch_ai.concurrency``: how many rows draft at once."""
+    status: BatchStatus = "drafting"
+
+
+class BatchPatch(BaseModel):
+    """Rename the batch (UI doc §7): its label only, never its identity."""
+
+    label: str
+
+
+class ReviewedRequest(BaseModel):
+    reviewed: bool
+
+
+class BatchIndexEntry(BaseModel):
+    """One row of Recent batches (UI doc §2): a confirmed batch, or a staging
+    session not confirmed yet, which reopens staging instead."""
+
+    kind: Literal["staging", "batch"]
+    id: str
+    label: str
+    listing_template: str
+    created_at: datetime
+    status: BatchStatus
+    designs: int
+    """Rows: the staged designs, or the batch's rows."""
+    listings: int = 0
+    """Rows with a listing now: created and not deleted."""
+    drafted: int = 0
+    reviewed: int = 0
+    undrafted: int = 0
+    """Listings **Cancel batch** left for Resume."""
+    failures: int = 0
+    """*N need retry*: a count beside the progress, never a status."""
+    expires_at: datetime | None = None
+    """A staging session's: seven days after its last edit (A46)."""
+
+
+class ListingBatch(BaseModel):
+    """The batch a listing was made by, for the editor's row above the head
+    (UI doc §8): Back to batch and Mark reviewed."""
+
+    batch_id: str
+    label: str
+    row_id: str
+    reviewed: bool
+    reviewable: bool
+
+
+# ──────────────────────────────────────────────────────────────────────────
 # Runs (A33). ``RunEvent`` itself, and the ``Plan``/``StagePlan`` DTOs it
 # carries, live in ``ui/runs/events.py`` beside the engine types they mirror --
 # only the request/response envelope belongs here, next to every other
@@ -511,14 +796,14 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# AI SEO (AI SEO implementation plan, PR5). The proposal reaches the browser
-# as an AI run's `proposal` event (`ui/airuns/events.py`) and is kept there,
-# in local storage -- never in a lockfile or a server-side cache. The
-# proposal's own field shapes mirror `ai/models.py.SeoProposal` field for
-# field, the same "wire shape *is* the domain shape" rule `ListingDetail`
-# follows for `Listing` above, rather than reusing those frozen dataclasses
-# directly -- pydantic, not a dataclass, is what FastAPI serialises a
-# response with.
+# AI SEO (AI SEO implementation plan, PR5; A41). A proposal is cached on the
+# server (`ai/proposals.py`) and reaches the browser two ways: as an AI
+# run's `proposal` event (`ui/airuns/events.py`) the moment it is written,
+# and from `GET /api/listings/{name}/proposal` after that. Both are
+# :class:`ListingProposal`. The choices' field shapes mirror
+# `ai/models.py.SeoProposal` field for field, the same "wire shape *is* the
+# domain shape" rule `ListingDetail` follows for `Listing` above; they live
+# in `ai/proposals.py` because the cache record is made of them.
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -530,71 +815,21 @@ class SeoReadinessResponse(BaseModel):
 
     ready: bool
     reason: str | None = None
+    batch_pending: bool = False
+    """A batch row owns this listing's AI (A40): the editor follows the
+    batch run instead of offering its own."""
+    deploying: bool = False
+    """A UI plan or apply holds this listing (A43): the editor asks again
+    until the deploy lets it go."""
 
 
-SeoRationaleIntent = Literal["core_product", "bottom_of_funnel", "style"]
-SeoRationaleField = Literal["title", "tags", "description_lead"]
-SeoWarningKind = Literal["general", "trademark"]
+class ProposalResolutionPatch(BaseModel):
+    """``PATCH /api/listings/{name}/proposal/resolution``: the sections to
+    record, on the proposal generated at ``generated_at`` -- a regeneration
+    that landed meanwhile is a different proposal, and is a 409. ``pending``
+    reopens a section."""
 
-
-class SeoRationaleEntry(BaseModel):
-    """One of the proposal's seven priority-phrase rationales -- the wire
-    shape of `ai/models.py.PhraseRationale`."""
-
-    phrase: str
-    intent: SeoRationaleIntent
-    reason: str
-    used_in: list[SeoRationaleField]
-
-
-class SeoWarningEntry(BaseModel):
-    """The wire shape of `ai/models.py.ProposalWarning`."""
-
-    message: str
-    kind: SeoWarningKind = "general"
-
-
-class SeoProposalSnapshot(BaseModel):
-    """The submitted generation inputs, echoed back beside the proposal
-    (implementation plan, PR5 item 4: "input snapshot data").
-
-    This is what a future frontend (PR7) compares its own current editor
-    state against to decide a pending proposal has gone stale
-    (`docs/ui-listing-seo-interactions.md` section 7) -- everything
-    `ai/models.py.SeoRequest` sent to the provider except the design image
-    itself. Design identity and content are captured before generation, rather
-    than inferred from whichever editor state exists when the response arrives.
-    """
-
-    brief: str
-    product_type: str
-    etsy_category: str
-    materials: list[str]
-    colors: list[str]
-    garment_brand: str
-    garment_model: str
-    garment_profile: str
-    design: dict[str, str]
-    design_content_hash: str | None
-
-
-class SeoProposalResponse(BaseModel):
-    """A complete, hard-validated proposal plus what PR5 item 4 promises
-    beside it: the input snapshot and expiry metadata. Never cached
-    server-side past this one response -- `ui/api/seo.py` builds this,
-    returns it, and keeps nothing."""
-
-    titles: list[str]
-    tags: list[str]
-    description_leads: list[str]
-    rationale: list[SeoRationaleEntry]
-    warnings: list[SeoWarningEntry]
-    observed_text: str
-    snapshot: SeoProposalSnapshot
     generated_at: datetime
-    expires_at: datetime
-    """``generated_at`` plus the settled one-day local-storage retention
-    (implementation plan, "Proposal persistence") -- the browser's own
-    expiry clock (PR7's job to enforce) is seeded from the server's clock
-    rather than computed from a client-side timestamp that skew or a
-    suspended laptop could stretch past a day."""
+    title: Resolution | None = None
+    tags: Resolution | None = None
+    lead: Resolution | None = None

@@ -8,7 +8,6 @@ import type {
   AiRunSummary,
   ListingDetail,
   MarketSnapshot,
-  SeoProposalResponse,
   WorkflowStep,
 } from "../../../types";
 
@@ -25,12 +24,10 @@ import type {
  * replays every event from the start (`openAiRunStream`), and the same
  * reduction lands in the same place.
  *
- * Two events carry something the editor must *do*, not just show, and go to
- * the caller's handlers instead: a `brief` the server wrote into
- * `listing.yaml` (the field fills in without being autosaved again), and the
- * `proposal` (kept in `aiSeoStorage`, which opens the drawers). Replay calls
- * them again, so both must be idempotent -- see `useAiSeoMode`'s
- * `receiveProposal`.
+ * A written brief is handed over only for a live attachment: a finished
+ * run's brief is already in the saved listing. Proposal events are forwarded
+ * with attachment context; useProposalReview owns their identity and
+ * precedence against durable cache reads and resolutions (A41).
  *
  * ## The auto chain (PRD 68)
  *
@@ -60,14 +57,19 @@ export interface AiRun {
   queries: string[] | null;
   /** The run's market snapshot, once research has finished. */
   market: MarketSnapshot | null;
-  /** The run's proposal, once it has one. */
-  proposal: SeoProposalResponse | null;
   /** Why the run failed, or was refused. */
   message: string | null;
   /** When the run started (ms since the epoch), from the server. */
   startedAt: number | null;
+  /** Who started the run: this editor, or the batch queue (A40). `null`
+   * until there is a run. */
+  origin: AiRunSummary["origin"] | null;
   start: (options: { draftBrief: boolean; automatic?: boolean }) => void;
   cancel: () => void;
+  /** Attaches to the listing's run if one is running that this editor is
+   * not following yet -- a batch run whose turn came while the editor was
+   * open (A40). */
+  follow: () => void;
   /** Arms the auto chain; see the module docstring. */
   arm: () => void;
   /** The auto chain started the run now on screen. A press of AI Mode does not set this. */
@@ -78,7 +80,8 @@ export interface AiRun {
 export interface AiRunHandlers {
   /** The server wrote a drafted brief into the listing. */
   onBrief?: (text: string) => void;
-  onProposal?: (proposal: SeoProposalResponse) => void;
+  /** Raw event and attachment context; proposal review owns replay precedence. */
+  onProposal?: (event: Extract<AiRunEvent, { type: "proposal" }>, source: AiRunSummary) => void;
 }
 
 const LOST_STREAM = "Lost the connection to the AI run. Reload the page to see how it went.";
@@ -90,9 +93,9 @@ interface View {
   steps: WorkflowStep[];
   queries: string[] | null;
   market: MarketSnapshot | null;
-  proposal: SeoProposalResponse | null;
   message: string | null;
   startedAt: number | null;
+  origin: AiRunSummary["origin"] | null;
 }
 
 const IDLE: View = {
@@ -101,9 +104,9 @@ const IDLE: View = {
   steps: [],
   queries: null,
   market: null,
-  proposal: null,
   message: null,
   startedAt: null,
+  origin: null,
 };
 
 function viewOf(run: AiRunSummary): View {
@@ -113,6 +116,7 @@ function viewOf(run: AiRunSummary): View {
     phase: run.phase,
     steps: run.steps,
     startedAt: Date.parse(run.created_at),
+    origin: run.origin,
   };
 }
 
@@ -130,22 +134,11 @@ function applyEvent(view: View, event: AiRunEvent): View {
       return { ...view, queries: event.queries };
     case "market":
       return { ...view, market: event.snapshot };
-    case "proposal":
-      return { ...view, proposal: proposalOf(event) };
     case "phase":
       return { ...view, phase: event.phase, message: event.message ?? null };
     default:
       return view;
   }
-}
-
-/** The event is the response plus `type` and `seq`; the response is what
- * `aiSeoStorage` keeps. */
-function proposalOf(event: Extract<AiRunEvent, { type: "proposal" }>): SeoProposalResponse {
-  const { type, seq, ...proposal } = event;
-  void type;
-  void seq;
-  return proposal;
 }
 
 export function useAiRun(
@@ -162,16 +155,18 @@ export function useAiRun(
   /** While armed: the last save state the trigger judged (at first, the one
    * showing when the design was picked). */
   const armed = useRef<{ baseline: SaveState | undefined } | null>(null);
-  const latest = useRef({ detail, save, handlers });
+  const latest = useRef({ detail, save, handlers, runId: view.runId });
   useEffect(() => {
-    latest.current = { detail, save, handlers };
+    latest.current = { detail, save, handlers, runId: view.runId };
   });
 
   const attach = useCallback((run: AiRunSummary) => {
     stream.current?.close();
     const mine = ++generation.current;
     // A finished run's brief is already in the file the editor loaded -- or
-    // the seller has changed it since. Only a run still going hands one over.
+    // the seller has changed it since -- and its proposal is cached with the
+    // seller's resolutions. Brief adoption is live-only; proposal review
+    // receives the attachment context to decide which events remain current.
     const live = run.phase === "running";
     setView(viewOf(run));
     stream.current = openAiRunStream(run.id, {
@@ -181,7 +176,9 @@ export function useAiRun(
         if (event.type === "brief" && event.written && live) {
           latest.current.handlers.onBrief?.(event.text);
         }
-        if (event.type === "proposal") latest.current.handlers.onProposal?.(proposalOf(event));
+        if (event.type === "proposal") {
+          latest.current.handlers.onProposal?.(event, run);
+        }
       },
       onError: () => {
         if (mine !== generation.current) return;
@@ -232,6 +229,18 @@ export function useAiRun(
     cancelAiRun(runId).catch(() => {});
   }, [runId, running]);
 
+  const follow = useCallback(() => {
+    const listing = latest.current.detail.name;
+    if (listing === "") return;
+    const mine = generation.current;
+    findAiRun(listing)
+      .then((run) => {
+        if (run === null || run.phase !== "running" || mine !== generation.current) return;
+        if (run.id !== latest.current.runId) attach(run);
+      })
+      .catch(() => {});
+  }, [attach]);
+
   const arm = useCallback(() => {
     if (latest.current.detail.brief.trim() !== "") return;
     armed.current = { baseline: latest.current.save };
@@ -280,11 +289,12 @@ export function useAiRun(
     steps: view.steps,
     queries: view.queries,
     market: view.market,
-    proposal: view.proposal,
     message: view.message,
     startedAt: view.startedAt,
+    origin: view.origin,
     start,
     cancel,
+    follow,
     arm,
     autoNotice,
     dismissAutoNotice: () => setAutoNotice(false),

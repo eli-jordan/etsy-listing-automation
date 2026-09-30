@@ -83,7 +83,12 @@ def test_readiness_is_ready_when_one_provider_is_ready(workspace_root: Path) -> 
         _ready_provider("claude"),
     ]
 
-    assert _readiness(workspace_root, providers) == {"ready": True, "reason": None}
+    assert _readiness(workspace_root, providers) == {
+        "ready": True,
+        "reason": None,
+        "batch_pending": False,
+        "deploying": False,
+    }
 
 
 @pytest.mark.parametrize("prompt", [SEO_PROMPT_FILE, MARKET_QUERIES_PROMPT_FILE])
@@ -108,7 +113,12 @@ def test_readiness_is_hidden_without_a_selected_design(workspace_root: Path) -> 
 def test_an_empty_brief_is_ready_because_the_button_drafts_it(workspace_root: Path) -> None:
     edit_listing(workspace_root, brief="   ")
 
-    assert _readiness(workspace_root) == {"ready": True, "reason": None}
+    assert _readiness(workspace_root) == {
+        "ready": True,
+        "reason": None,
+        "batch_pending": False,
+        "deploying": False,
+    }
 
 
 def test_an_empty_brief_needs_the_brief_prompt(workspace_root: Path) -> None:
@@ -126,7 +136,12 @@ def test_readiness_is_hidden_without_a_usable_garment_profile(workspace_root: Pa
 
     body = _readiness(workspace_root)
 
-    assert body == {"ready": False, "reason": "the listing has no usable garment profile"}
+    assert body == {
+        "ready": False,
+        "reason": "the listing has no usable garment profile",
+        "batch_pending": False,
+        "deploying": False,
+    }
 
 
 def test_readiness_is_hidden_when_no_provider_is_ready(workspace_root: Path) -> None:

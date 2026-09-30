@@ -8,6 +8,7 @@ import {
   type FakeAiRuns,
   aiRunSummary,
   fakeAiRuns,
+  listingProposal,
   marketEvent,
   phaseEvent,
   proposalEvent,
@@ -15,7 +16,7 @@ import {
   stepEvent,
 } from "../../test/aiRuns";
 import { MARKET_QUERIES, marketSnapshot } from "../../test/market";
-import type { ListingDetail, SeoProposalResponse } from "../../types";
+import type { ListingDetail, ListingProposal } from "../../types";
 import { DetailsTab as DetailsTabView } from "./DetailsTab";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
 
@@ -32,7 +33,7 @@ afterEach(() => {
 
 /** What the AI run behind the button sends once it has written the
  * suggestions: the proposal, then the end of the run. */
-async function runDelivers(body: SeoProposalResponse) {
+async function runDelivers(body: ListingProposal) {
   await waitFor(() => expect(runs.streams).toHaveLength(1));
   runs.emit(proposalEvent(body), phaseEvent("done"));
 }
@@ -91,10 +92,59 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: "tee-basic",
     resolved_prices: [{ size: "S", amount: "349 NOK" }],
+    gestures: [],
     description_composed: "",
     ...over,
   };
 }
+
+describe("DetailsTab for a listing template", () => {
+  /* UI doc §3: Brief, Title, Tags, Description lead and AI Mode are written
+     for each listing in a batch, so a listing template has none of them. */
+  it("has none of the design-specific fields, and says where the lead goes", () => {
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({ available: false, sections: [] });
+    vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([]);
+    render(
+      <DetailsTabView
+        kind="listing-template"
+        detail={detail({ etsy: { ...detail().etsy, section: "Hiking tees" } })}
+        onUpdate={vi.fn()}
+        onFlush={vi.fn()}
+      />,
+    );
+
+    for (const label of ["Brief", "Title", "Description Lead"]) {
+      expect(screen.queryByLabelText(label)).not.toBeInTheDocument();
+    }
+    expect(screen.queryByText("Tags")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /AI Mode/ })).not.toBeInTheDocument();
+    expect(screen.getByText("Description Body")).toBeInTheDocument();
+    expect(screen.getByLabelText("Section")).toHaveValue("Hiking tees");
+    expect(
+      screen.getByText("Each listing's own description lead is placed above this body."),
+    ).toBeInTheDocument();
+  });
+
+  it("still edits the description body", () => {
+    vi.spyOn(listingsApi, "listEtsySections").mockResolvedValue({ available: false, sections: [] });
+    vi.spyOn(listingsApi, "listCommonCopy").mockResolvedValue([]);
+    const onUpdate = vi.fn();
+    render(
+      <DetailsTabView
+        kind="listing-template"
+        detail={detail()}
+        onUpdate={onUpdate}
+        onFlush={vi.fn()}
+      />,
+    );
+
+    fireEvent.change(screen.getByLabelText("Description body"), { target: { value: "Cotton." } });
+
+    expect(onUpdate).toHaveBeenCalledWith({
+      etsy: { description: { lead: "", text: "Cotton.", ref: null } },
+    });
+  });
+});
 
 describe("DetailsTab", () => {
   it("shows and edits the brief through normal autosave", () => {
@@ -475,6 +525,7 @@ describe("DetailsTab", () => {
       />,
     );
     expect(screen.queryByLabelText("Materials")).not.toBeInTheDocument();
+    expect(screen.queryByText("cotton")).not.toBeInTheDocument();
   });
 
   it("shows a section dropdown once the shop's sections are known", async () => {
@@ -566,32 +617,7 @@ describe("DetailsTab AI Mode", () => {
     });
   }
 
-  function proposal(): SeoProposalResponse {
-    return {
-      titles: ["Title A", "Title B", "Title C"],
-      tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
-      description_leads: ["Lead A", "Lead B", "Lead C"],
-      rationale: [],
-      warnings: [],
-      observed_text: "",
-      snapshot: {
-        brief: "A relaxed hiking tee.",
-        product_type: "tee",
-        etsy_category: "",
-        materials: [],
-        colors: ["black"],
-        garment_brand: "Comfort Colors",
-        garment_model: "1717",
-        garment_profile: "comfort-colors-1717",
-        design: { default: "designs/take-a-hike.png" },
-        design_content_hash: null,
-      },
-      generated_at: "2026-09-23T00:00:00Z",
-      // Relative to now -- see `aiSeoStorage.test.ts` for why a fixed pair is a
-      // fixture with an expiry date of its own.
-      expires_at: new Date(Date.now() + 86_400_000).toISOString(),
-    };
-  }
+  const proposal = () => listingProposal();
 
   it("shows disabled AI Mode without a design and brief", () => {
     render(<DetailsTab detail={detail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
@@ -599,14 +625,15 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("asks readiness with an empty brief, and again after the listing changes", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
-      .mockResolvedValueOnce({ ready: false, reason: "prompts/brief.md is missing" })
-      .mockResolvedValueOnce({ ready: true });
+      .mockResolvedValueOnce({
+        ready: false,
+        reason: "prompts/brief.md is missing",
+        batch_pending: false,
+        deploying: false,
+      })
+      .mockResolvedValueOnce({ ready: true, batch_pending: false, deploying: false });
     const { rerender } = render(
       <DetailsTab detail={readyDetail({ brief: "" })} onUpdate={vi.fn()} onFlush={vi.fn()} />,
     );
@@ -626,14 +653,15 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("rechecks readiness after save even when modified_at is unchanged", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     const readiness = vi
       .spyOn(seoApi, "getSeoReadiness")
-      .mockResolvedValueOnce({ ready: false, reason: "the listing brief is empty" })
-      .mockResolvedValueOnce({ ready: true });
+      .mockResolvedValueOnce({
+        ready: false,
+        reason: "the listing brief is empty",
+        batch_pending: false,
+        deploying: false,
+      })
+      .mockResolvedValueOnce({ ready: true, batch_pending: false, deploying: false });
     const current = readyDetail();
     const { rerender } = render(
       <DetailsTab
@@ -667,11 +695,11 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("keeps AI Mode disabled when the readiness endpoint says no", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: false,
+      batch_pending: false,
+      deploying: false,
     });
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
     await waitFor(() => expect(seoApi.getSeoReadiness).toHaveBeenCalled());
@@ -679,11 +707,11 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("renders AI Mode once the readiness endpoint says ready", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: true,
+      batch_pending: false,
+      deploying: false,
     });
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
@@ -691,11 +719,11 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("reveals all three drawers after a successful request and focuses the first title option", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: true,
+      batch_pending: false,
+      deploying: false,
     });
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
@@ -713,11 +741,11 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("returns focus to the AI Mode button once the last drawer resolves", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: true,
+      batch_pending: false,
+      deploying: false,
     });
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const body = proposal();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
@@ -738,11 +766,11 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("applies the chosen title through the normal autosave path", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: true,
+      batch_pending: false,
+      deploying: false,
     });
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
     const onUpdate = vi.fn();
     const onFlush = vi.fn();
 
@@ -757,12 +785,53 @@ describe("DetailsTab AI Mode", () => {
     expect(onFlush).toHaveBeenCalled();
   });
 
-  it("shows a Try again failure state without changing any listing field", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
+  it("keeps an out-of-date proposal's choices usable and names what changed", async () => {
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: true,
+      batch_pending: false,
+      deploying: false,
     });
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: true });
+    runs.cached.proposal = listingProposal({
+      stale: { is_stale: true, reasons: ["brief edited since"] },
+    });
+    const onUpdate = vi.fn();
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
+    const drawer = await screen.findByRole("region", { name: "title AI suggestions" });
+
+    expect(
+      within(drawer).getByText("Out of date: brief edited since. Still usable"),
+    ).toBeInTheDocument();
+    await userEvent.click(within(drawer).getByRole("button", { name: /Title B/ }));
+    expect(onUpdate).toHaveBeenCalledWith({ etsy: { title: "Title B" } });
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("opens only the sections of the cached proposal the seller has not resolved", async () => {
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: true,
+      batch_pending: false,
+      deploying: false,
+    });
+    runs.cached.proposal = listingProposal({
+      resolution: { title: "accepted", tags: "dismissed", lead: "pending" },
+    });
+
+    render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+
+    expect(
+      await screen.findByRole("region", { name: "description lead AI suggestions" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("region", { name: "title AI suggestions" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "tag AI suggestions" })).toBeNull();
+  });
+
+  it("shows a Try again failure state without changing any listing field", async () => {
+    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+      ready: true,
+      batch_pending: false,
+      deploying: false,
+    });
     const onUpdate = vi.fn();
 
     render(<DetailsTab detail={readyDetail()} onUpdate={onUpdate} onFlush={vi.fn()} />);
@@ -834,10 +903,6 @@ describe("DetailsTab top listings panel", () => {
   });
 
   it("ticks the phrases the pending suggestions use", async () => {
-    vi.spyOn(listingsApi, "getWorkspace").mockResolvedValue({
-      shop_name: "Pine & Thread",
-      storage_id: "workspace-1",
-    });
     runs.market.mockResolvedValue(marketSnapshot());
     runs.find.mockResolvedValue(aiRunSummary());
     const user = userEvent.setup();
@@ -847,28 +912,11 @@ describe("DetailsTab top listings panel", () => {
     expect(within(panel).queryByLabelText("In your suggestions")).toBeNull();
 
     await waitFor(() => expect(runs.streams).toHaveLength(1));
+    const suggested = listingProposal();
     runs.emit(
       proposalEvent({
-        titles: ["Retro Hiking Shirt", "Title B", "Title C"],
-        tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
-        description_leads: ["Lead A", "Lead B", "Lead C"],
-        rationale: [],
-        warnings: [],
-        observed_text: "",
-        snapshot: {
-          brief: "A relaxed hiking tee.",
-          product_type: "",
-          etsy_category: "",
-          materials: [],
-          colors: ["black"],
-          garment_brand: "",
-          garment_model: "",
-          garment_profile: "comfort-colors-1717",
-          design: { default: "designs/take-a-hike.png" },
-          design_content_hash: null,
-        },
-        generated_at: new Date().toISOString(),
-        expires_at: new Date(Date.now() + 86_400_000).toISOString(),
+        ...suggested,
+        proposal: { ...suggested.proposal, titles: ["Retro Hiking Shirt", "Title B", "Title C"] },
       }),
     );
 

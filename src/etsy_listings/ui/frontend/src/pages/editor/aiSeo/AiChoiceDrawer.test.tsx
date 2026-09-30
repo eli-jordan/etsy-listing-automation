@@ -27,7 +27,7 @@ describe("AiChoiceDrawer", () => {
       <AiChoiceDrawer
         field="title"
         options={["Title A", "Title B", "Title C"]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -45,7 +45,7 @@ describe("AiChoiceDrawer", () => {
       <AiChoiceDrawer
         field="description lead"
         options={["Lead A", "Lead B"]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -63,7 +63,7 @@ describe("AiChoiceDrawer", () => {
       <AiChoiceDrawer
         field="title"
         options={["Title A"]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -75,23 +75,30 @@ describe("AiChoiceDrawer", () => {
     expect(onReject).toHaveBeenCalled();
   });
 
-  it("disables every option and marks the drawer stale when stale", () => {
+  it("keeps an out-of-date drawer's options usable, with the reason as its heading", async () => {
+    const onChoose = vi.fn();
     render(
       <AiChoiceDrawer
         field="title"
         options={["Title A", "Title B"]}
-        stale={true}
+        staleReason="brief edited since"
         rationale={[]}
         warnings={[]}
         observedText=""
-        onChoose={vi.fn()}
+        onChoose={onChoose}
         onReject={vi.fn()}
       />,
     );
-    expect(screen.getByText(/out of date/i)).toBeInTheDocument();
+
+    expect(screen.getByText("Out of date: brief edited since. Still usable")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "title AI suggestions" })).toHaveClass(
+      "seo-suggestion--stale",
+    );
     for (const button of screen.getAllByRole("button", { name: /Title/ })) {
-      expect(button).toBeDisabled();
+      expect(button).toBeEnabled();
     }
+    await userEvent.click(screen.getByRole("button", { name: /Title B/ }));
+    expect(onChoose).toHaveBeenCalledWith("Title B");
   });
 
   it("exposes rationale filtered to this field, warnings, and observed OCR text as a disclosure", () => {
@@ -99,7 +106,7 @@ describe("AiChoiceDrawer", () => {
       <AiChoiceDrawer
         field="title"
         options={["Title A"]}
-        stale={false}
+        staleReason={null}
         rationale={rationale}
         warnings={warnings}
         observedText="TAKE A HIKE"
@@ -119,7 +126,7 @@ describe("AiChoiceDrawer", () => {
       <AiChoiceDrawer
         field="title"
         options={["Title A"]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""
@@ -135,7 +142,7 @@ describe("AiChoiceDrawer", () => {
       <AiChoiceDrawer
         field="title"
         options={["Title A", "Title B"]}
-        stale={false}
+        staleReason={null}
         rationale={[]}
         warnings={[]}
         observedText=""

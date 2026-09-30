@@ -1,4 +1,6 @@
 import {
+  type Artwork,
+  type MediaOwner,
   isInMedia,
   mediaKind,
   mediaLabel,
@@ -52,14 +54,15 @@ export function viewFocus(
   focus: Focus,
   detail: ListingDetail,
   templates: readonly TemplateSummary[],
-  design: string | null,
+  design: Artwork | null,
+  owner: MediaOwner | string | null = detail.name || null,
 ): FocusView {
   if (focus.kind === "file") {
     const ref = focus.asset.ref;
     return {
       title: refName(ref),
       path: focus.asset.file,
-      picture: pictureFor(ref, design, "full", detail.name || null),
+      picture: pictureFor(ref, design, "full", owner),
       kind: mediaKind(ref),
       // `check_videos` places each of its issues at the ref it is about.
       notes: detail.issues.filter((issue) => issue.where === `Listing Images › ${ref}`),

@@ -6,12 +6,13 @@ import {
   briefEvent,
   type FakeAiRuns,
   fakeAiRuns,
+  listingProposal,
   phaseEvent,
   proposalEvent,
   queriesEvent,
   stepEvent,
 } from "../../../test/aiRuns";
-import type { ListingDetail, MarketSnapshot, SeoProposalResponse } from "../../../types";
+import type { ListingDetail, MarketSnapshot } from "../../../types";
 import { type AiRunHandlers, useAiRun } from "./useAiRun";
 
 /**
@@ -63,35 +64,13 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    gestures: [],
     description_composed: "",
     ...over,
   };
 }
 
-function proposal(): SeoProposalResponse {
-  return {
-    titles: ["Title A", "Title B", "Title C"],
-    tags: Array.from({ length: 20 }, (_, i) => `tag-${i}`),
-    description_leads: ["Lead A", "Lead B", "Lead C"],
-    rationale: [],
-    warnings: [],
-    observed_text: "",
-    snapshot: {
-      brief: "A relaxed hiking tee.",
-      product_type: "tee",
-      etsy_category: "",
-      materials: [],
-      colors: ["black"],
-      garment_brand: "Comfort Colors",
-      garment_model: "1717",
-      garment_profile: "comfort-colors-1717",
-      design: { default: "designs/take-a-hike.png" },
-      design_content_hash: null,
-    },
-    generated_at: "2026-09-25T10:00:30Z",
-    expires_at: "2026-09-26T10:00:30Z",
-  };
-}
+const proposal = () => listingProposal({ generated_at: "2026-09-25T10:00:30Z" });
 
 function snapshot(): MarketSnapshot {
   return {
@@ -203,15 +182,17 @@ describe("useAiRun starting and following a run", () => {
     expect(onBrief).toHaveBeenCalledWith("Retro sunset over mountains.");
   });
 
-  it("hands the proposal over as the plain response, without the event's own fields", async () => {
+  it("forwards proposal events with their attachment context", async () => {
     const onProposal = vi.fn();
     const view = setup({}, { onProposal });
     await started(view);
 
     runs.emit(proposalEvent(proposal()));
 
-    expect(onProposal).toHaveBeenCalledWith(proposal());
-    expect(view.result.current.proposal).toEqual(proposal());
+    expect(onProposal).toHaveBeenCalledWith(
+      expect.objectContaining(proposal()),
+      expect.objectContaining({ phase: "running" }),
+    );
   });
 
   it("ends with the run's phase, and a failure keeps its message", async () => {
@@ -303,7 +284,10 @@ describe("useAiRun reattaching", () => {
     });
   });
 
-  it("replays a run that has just finished, proposal included", async () => {
+  it("forwards finished-run proposal replay with its attachment context", async () => {
+    /* The cached proposal is the truth once the run is over (A41): it
+       carries which sections the seller has resolved since, which the
+       replayed event does not. */
     runs.find.mockResolvedValue(aiRunSummary({ phase: "done" }));
     const onProposal = vi.fn();
     const view = setup({}, { onProposal });
@@ -311,7 +295,10 @@ describe("useAiRun reattaching", () => {
     await waitFor(() => expect(runs.streams).toHaveLength(1));
     runs.emit(proposalEvent(proposal()), phaseEvent("done"));
 
-    expect(onProposal).toHaveBeenCalledWith(proposal());
+    expect(onProposal).toHaveBeenCalledWith(
+      expect.objectContaining(proposal()),
+      expect.objectContaining({ phase: "done" }),
+    );
     expect(view.result.current.phase).toBe("done");
   });
 

@@ -16,9 +16,11 @@ from io import BytesIO
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request, UploadFile
+from fastapi.responses import Response
 from PIL import Image, UnidentifiedImageError
 
 from etsy_listings.ui.api.schemas import DesignSummary
+from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/designs", tags=["designs"])
@@ -73,6 +75,13 @@ def list_designs(request: Request) -> list[DesignSummary]:
         for name in workspace.test_design_names()
     ]
     return bundled + uploads
+
+
+@router.get("/{design}/thumbnail")
+def design_thumbnail(request: Request, design: str) -> Response:
+    """A test design, small: what the listing-template editor's
+    preview-design row shows beside *Preview design: …* (UI doc §3)."""
+    return thumbnail_response(resolve_design(_workspace(request), design))
 
 
 @router.post("", response_model=DesignSummary)

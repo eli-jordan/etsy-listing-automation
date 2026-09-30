@@ -627,7 +627,11 @@ def _saved_render_configs(config: AnyTemplate) -> list[RenderConfig]:
 
 @router.get("/{name}/design-preview")
 def design_preview(
-    template: Existing, design: str, colour: str | None = None, scale: PreviewScale = "full"
+    template: Existing,
+    design: str | None = None,
+    test_design: str | None = None,
+    colour: str | None = None,
+    scale: PreviewScale = "full",
 ) -> Response:
     """A listing's *real* artwork, composited onto this template's saved
     geometry -- what the listing editor's Variants/Listing Images tabs show
@@ -637,12 +641,24 @@ def design_preview(
     ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
     which is the calibrator's own test-design library and never sees a
     listing's real artwork.
+
+    ``test_design`` is that library's id instead, for the listing-template
+    editor (UI doc §3): a listing template has no artwork, so it is viewed
+    through a calibrator test design, bundled grid by default. Exactly one of
+    the two -- they name files in different places, and guessing which one a
+    bare name meant is how a test target would end up judged as artwork.
     """
     workspace, name = template.workspace, template.name
+    if (design is None) == (test_design is None):
+        raise HTTPException(status_code=422, detail="give exactly one of design, test_design")
     config = _load_config(workspace, name)
-    design_path = workspace.design_file(design)
-    if not design_path.is_file():
-        raise HTTPException(status_code=404, detail=f"no design {design!r}")
+    if test_design is not None:
+        design_path = resolve_design(workspace, test_design)
+    else:
+        assert design is not None  # noqa: S101 - exactly one, checked above
+        design_path = workspace.design_file(design)
+        if not design_path.is_file():
+            raise HTTPException(status_code=404, detail=f"no design {design!r}")
 
     resolved_colour = colour if isinstance(config, ColourMatrixTemplate) else None
     return _render_preview_response(

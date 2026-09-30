@@ -45,6 +45,7 @@ from PIL import Image, UnidentifiedImageError
 
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing, TemplateMediaEntry
+from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.media import ProbeFailure, VideoFacts
 
 Severity = Literal["block", "warn", "info"]
@@ -52,6 +53,11 @@ Severity = Literal["block", "warn", "info"]
 -- the one today is that Etsy strips a video's sound (PRD 72). The banner shows
 it quietly and `engine/stages/gates.py` never refuses on it."""
 Tab = Literal["variants", "pricing", "images", "details"]
+
+Production = Listing | ListingTemplate
+"""What the production checks read: the fields a listing and a listing
+template share (A36). A check that takes one takes either, so a template is
+judged by the very rules the listings made from it will be."""
 
 
 @dataclass(frozen=True)
@@ -119,7 +125,9 @@ refusal; the live catalog remains the authority on what can actually be sent.
 """
 
 
-def _required_pixels(profile: GarmentProfile) -> tuple[int, int]:
+def required_design_pixels(profile: GarmentProfile) -> tuple[int, int]:
+    """The smallest design ``profile`` prints: 90% of its print area on each
+    axis. Public for New batch's size hint (UI doc §4)."""
     return (
         int(profile.print_area.width * RESOLUTION_TOLERANCE),
         int(profile.print_area.height * RESOLUTION_TOLERANCE),
@@ -157,7 +165,7 @@ def check_design_resolution(design: Path, profile: GarmentProfile) -> list[Issue
             f"Export it as RGBA."
         )
 
-    need_width, need_height = _required_pixels(profile)
+    need_width, need_height = required_design_pixels(profile)
     if width < need_width or height < need_height:
         return blocked(
             f"{design.name} is {width}x{height}, too small for this garment's "
@@ -267,7 +275,7 @@ def _check_design(design_paths: Mapping[str, Path], profile: GarmentProfile) -> 
     return issues
 
 
-def _check_media_present(listing: Listing) -> list[Issue]:
+def _check_media_present(listing: Production) -> list[Issue]:
     if listing.media:
         return []
     return [
@@ -280,7 +288,7 @@ def _check_media_present(listing: Listing) -> list[Issue]:
     ]
 
 
-def _check_colours_enabled(listing: Listing) -> list[Issue]:
+def _check_colours_enabled(listing: Production) -> list[Issue]:
     if listing.colors:
         return []
     return [
@@ -293,7 +301,7 @@ def _check_colours_enabled(listing: Listing) -> list[Issue]:
     ]
 
 
-def _check_printify_variant_limit(listing: Listing, profile: GarmentProfile) -> list[Issue]:
+def _check_printify_variant_limit(listing: Production, profile: GarmentProfile) -> list[Issue]:
     colour_count = len(listing.colors)
     size_count = len(profile.sizes)
     variant_count = colour_count * size_count
@@ -317,7 +325,7 @@ def _check_printify_variant_limit(listing: Listing, profile: GarmentProfile) -> 
 
 
 def _check_garment_profile_exists(
-    listing: Listing, garment_profile_names: Iterable[str]
+    listing: Production, garment_profile_names: Iterable[str]
 ) -> list[Issue]:
     # A new listing starts unchosen: the editor opens on a document with nothing
     # picked, so "not chosen yet" is the ordinary case and reporting it as
@@ -379,12 +387,12 @@ def check_price_source(*, pricing_plan: str | None, priced_sizes: bool) -> list[
     ]
 
 
-def _check_price_source(listing: Listing) -> list[Issue]:
+def _check_price_source(listing: Production) -> list[Issue]:
     return check_price_source(pricing_plan=listing.pricing_plan, priced_sizes=bool(listing.prices))
 
 
 def _check_template_kind_colour_match(
-    listing: Listing, templates: Mapping[str, TemplateInfo]
+    listing: Production, templates: Mapping[str, TemplateInfo]
 ) -> list[Issue]:
     issues: list[Issue] = []
     for entry in listing.media:
@@ -415,7 +423,9 @@ def _check_template_kind_colour_match(
     return issues
 
 
-def _check_variation_images(listing: Listing, templates: Mapping[str, TemplateInfo]) -> list[Issue]:
+def _check_variation_images(
+    listing: Production, templates: Mapping[str, TemplateInfo]
+) -> list[Issue]:
     name = listing.etsy.variation_images
     if name is None:
         return []
@@ -465,7 +475,7 @@ def _check_tags(listing: Listing) -> list[Issue]:
 
 
 def _check_colours_in_garment_profile(
-    listing: Listing, profile: GarmentProfile | None
+    listing: Production, profile: GarmentProfile | None
 ) -> list[Issue]:
     if profile is None:
         return []
@@ -621,4 +631,40 @@ def check_listing(
     issues += _check_tags(listing)
     if published is not None:
         issues += check_lifecycle_verb(listing.lifecycle, published=published)
+    return issues
+
+
+def check_listing_template(
+    template: ListingTemplate,
+    *,
+    garment_profile: GarmentProfile | None,
+    garment_profile_names: Iterable[str],
+    templates: Mapping[str, TemplateInfo],
+    description_ref_error: str | None = None,
+    videos: Mapping[str, VideoFacts | ProbeFailure] | None = None,
+) -> list[Issue]:
+    """Every production issue with a listing template (A36): the checks
+    :func:`check_listing` makes about garment, colours, price source,
+    gallery, videos and mockup-template kinds, and none of its design, brief,
+    copy or lifecycle checks -- a template has none of those fields, and their
+    absence is the point of it rather than something to finish.
+
+    Any ``block`` refuses the write: a listing template on disk is always
+    complete, so the server keeps the last complete version instead. Its
+    inputs arrive pre-resolved, exactly as :func:`check_listing`'s do (this
+    module opens no file), and nothing here asks a provider -- live facts such
+    as a price under Printify's cost stay deployment-time checks.
+    """
+    issues: list[Issue] = []
+    issues += _check_garment_profile_exists(template, garment_profile_names)
+    issues += _check_colours_enabled(template)
+    issues += _check_price_source(template)
+    issues += _check_media_present(template)
+    issues += check_description_ref(template.etsy.description.ref, description_ref_error)
+    if garment_profile is not None:
+        issues += _check_colours_in_garment_profile(template, garment_profile)
+        issues += _check_printify_variant_limit(template, garment_profile)
+    issues += _check_template_kind_colour_match(template, templates)
+    issues += _check_variation_images(template, templates)
+    issues += check_videos(videos or {})
     return issues

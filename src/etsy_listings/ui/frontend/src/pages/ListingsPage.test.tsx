@@ -231,15 +231,15 @@ describe("ListingsPage", () => {
     await findRowLink("live-one");
 
     fireEvent.click(
-      within(rowFor("live-one")).getByRole("button", { name: "Open on Etsy or Printify" }),
+      within(rowFor("live-one")).getByRole("button", { name: "Open in Etsy or Printify" }),
     );
 
-    expect(within(rowFor("live-one")).getByRole("link", { name: /Open on Etsy/ })).toHaveAttribute(
+    expect(within(rowFor("live-one")).getByRole("link", { name: /Open in Etsy/ })).toHaveAttribute(
       "href",
       "https://www.etsy.com/your/shops/me/listing-editor/edit/4572960161",
     );
     expect(
-      within(rowFor("live-one")).getByRole("link", { name: /Open on Printify/ }),
+      within(rowFor("live-one")).getByRole("link", { name: /Open in Printify/ }),
     ).toHaveAttribute("href", "https://printify.com/app/product-details/6aa332559f8d2ff30103b4c9");
   });
 
@@ -251,13 +251,13 @@ describe("ListingsPage", () => {
     await findRowLink("live-one");
 
     fireEvent.click(
-      within(rowFor("live-one")).getByRole("button", { name: "Open on Etsy or Printify" }),
+      within(rowFor("live-one")).getByRole("button", { name: "Open in Etsy or Printify" }),
     );
-    expect(within(rowFor("live-one")).getByRole("link", { name: /Open on Etsy/ })).toBeVisible();
+    expect(within(rowFor("live-one")).getByRole("link", { name: /Open in Etsy/ })).toBeVisible();
 
     fireEvent.mouseDown(document.body);
     expect(
-      within(rowFor("live-one")).queryByRole("link", { name: /Open on Etsy/ }),
+      within(rowFor("live-one")).queryByRole("link", { name: /Open in Etsy/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -269,7 +269,7 @@ describe("ListingsPage", () => {
     await findRowLink("draft-one");
 
     expect(
-      within(rowFor("draft-one")).queryByRole("button", { name: "Open on Etsy or Printify" }),
+      within(rowFor("draft-one")).queryByRole("button", { name: "Open in Etsy or Printify" }),
     ).not.toBeInTheDocument();
   });
 

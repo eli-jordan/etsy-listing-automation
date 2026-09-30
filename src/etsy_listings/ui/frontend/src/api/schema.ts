@@ -70,6 +70,184 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/batches": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Batches
+     * @description Recent batches (UI doc §2): every batch, and every staging session
+     *     not confirmed yet, newest first, each with its derived status. Listing
+     *     them sweeps expired staging first (A46), so a row never offers a
+     *     session that has gone.
+     */
+    get: operations["list_batches_api_batches_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Batch */
+    get: operations["get_batch_api_batches__batch_id__get"];
+    put?: never;
+    post?: never;
+    /**
+     * Delete Batch
+     * @description Delete batch record (spec, *Cancellation and deletion*): its queued
+     *     and running work is cancelled first, then only the record goes -- its
+     *     rows, review flags and queue state, and the frozen template beside it.
+     *     Designs, listings, briefs and proposals are the workspace's and stay.
+     */
+    delete: operations["delete_batch_api_batches__batch_id__delete"];
+    options?: never;
+    head?: never;
+    /**
+     * Rename Batch
+     * @description Rename the batch (UI doc §7): the label only, so its id -- and every
+     *     link to it -- stays. A blank label keeps the one it had, as staging's
+     *     does.
+     */
+    patch: operations["rename_batch_api_batches__batch_id__patch"];
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/cancel": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Cancel Batch
+     * @description **Cancel batch** (spec, *Cancellation and deletion*): queued rows are
+     *     stopped and running ones asked to stop. Everything written stays.
+     */
+    post: operations["cancel_batch_api_batches__batch_id__cancel_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/resume": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Resume Batch
+     * @description **Resume**: stopped and cancelled rows join the queue again.
+     */
+    post: operations["resume_batch_api_batches__batch_id__resume_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retry Batch
+     * @description **Retry N failed**: every row whose creation or AI failed.
+     */
+    post: operations["retry_batch_api_batches__batch_id__retry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/rows/{row}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retry Batch Row
+     * @description Retry one row (UI doc §7): its creation, if that failed -- which
+     *     queues it once it exists -- else its AI, keeping the saved brief (A40).
+     */
+    post: operations["retry_batch_row_api_batches__batch_id__rows__row__retry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/rows/{row}/reviewed": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    /**
+     * Set Reviewed
+     * @description Mark reviewed / Mark needs review (spec, *Review workflow*). Refused
+     *     for a row still queued or drafting, deleted, or never created.
+     */
+    put: operations["set_reviewed_api_batches__batch_id__rows__row__reviewed_put"];
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/rows/{row}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Batch Row Thumbnail
+     * @description A row that was never created has no listing design to show, so the
+     *     summary shows the upload it was made from, kept beside the batch for
+     *     Retry (A46).
+     */
+    get: operations["batch_row_thumbnail_api_batches__batch_id__rows__row__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/common-copy": {
     parameters: {
       query?: never;
@@ -176,6 +354,27 @@ export interface paths {
     put?: never;
     /** Upload Design */
     post: operations["upload_design_api_designs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/designs/{design}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Design Thumbnail
+     * @description A test design, small: what the listing-template editor's
+     *     preview-design row shows beside *Preview design: …* (UI doc §3).
+     */
+    get: operations["design_thumbnail_api_designs__design__thumbnail_get"];
+    put?: never;
+    post?: never;
     delete?: never;
     options?: never;
     head?: never;
@@ -334,6 +533,177 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/listing-templates": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Listing Templates
+     * @description Every listing template, as its card on the Listing templates page shows
+     *     it (UI doc §2). A template whose file will not load is left out rather
+     *     than failing the page; it can only get that way by a hand edit.
+     */
+    get: operations["list_listing_templates_api_listing_templates_get"];
+    put?: never;
+    /**
+     * Create Listing Template
+     * @description Naming the draft is what writes it (UI doc §1). The name is checked
+     *     first, so a bad one is a 400 before any source is read.
+     */
+    post: operations["create_listing_template_api_listing_templates_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/draft": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Template Draft
+     * @description The template Save as listing template or Clone would write, written
+     *     nowhere: what the *name it* page shows before the seller commits a name
+     *     (UI doc §1).
+     */
+    get: operations["listing_template_draft_api_listing_templates_draft_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{name}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Listing Template */
+    get: operations["get_listing_template_api_listing_templates__name__get"];
+    /**
+     * Put Listing Template
+     * @description A36: write the whole document only if it is complete. A malformed or
+     *     incomplete one leaves ``template.yaml`` byte-for-byte as it was, so the
+     *     server always holds the last complete version; the listing-template editor
+     *     (PR 6) keeps the unsaved values on its side.
+     */
+    put: operations["put_listing_template_api_listing_templates__name__put"];
+    post?: never;
+    /**
+     * Delete Listing Template
+     * @description Allowed whatever was made from it: batches keep their own frozen copy,
+     *     and a listing never had a link to it (spec, *Completeness and editing*).
+     */
+    delete: operations["delete_listing_template_api_listing_templates__name__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{name}/rename": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Rename Listing Template
+     * @description Move a listing template, whole, to a new name -- double-click the
+     *     name, exactly as a listing (UI doc §3). Its name is its directory (A35),
+     *     so the rename is a directory move and its ``./`` refs, which name that
+     *     directory, need no rewrite. A taken name is a 409 and never suffixed
+     *     (spec, *Storage and identity*).
+     *
+     *     Staging sessions and batch records made from it follow it by name --
+     *     the name, not the frozen copy they each keep (A37), which is untouched.
+     *     That name is the card's *Used by N batches* and the staging page's
+     *     *Using X*, the seller's link between a template and its batches. It
+     *     is rewritten after the move, under each record's lock; a crash between
+     *     the two leaves records naming a template that is gone, which is what a
+     *     delete leaves too, and harms nothing a batch needs.
+     */
+    post: operations["rename_listing_template_api_listing_templates__name__rename_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{template}/media-files": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Listing Template Media Files
+     * @description The *This template* group (UI doc, *Existing components the template
+     *     editor needs*): the listing template's own files, each with the ``./``
+     *     ref that names it from ``template.yaml``. Scoped to ``assets/``.
+     */
+    get: operations["list_listing_template_media_files_api_listing_templates__template__media_files_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{template}/media-files/{path}/file": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Listing Template Media File */
+    get: operations["listing_template_media_file_api_listing_templates__template__media_files__path__file_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{template}/media-files/{path}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Template Media Thumbnail
+     * @description A listing template's own file (its ``./`` root, A35) -- the pictures on
+     *     its card. The same boundary as a listing's: the directory also holds
+     *     ``template.yaml``.
+     */
+    get: operations["listing_template_media_thumbnail_api_listing_templates__template__media_files__path__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/listings": {
     parameters: {
       query?: never;
@@ -447,9 +817,12 @@ export interface paths {
      *     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
      *     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
      *
-     *     Either way the market snapshot goes now (market-seo.md, *Cache*): a
-     *     listing pending deletion is one the seller is done researching, and
-     *     otherwise only the wipe after the remote deletion would remove it.
+     *     Either way the market snapshot and the cached AI proposal go now
+     *     (market-seo.md, *Cache*; A42): a listing pending deletion is one the
+     *     seller is done researching, and otherwise only the wipe after the remote
+     *     deletion would remove them. An AI run still going is asked to stop
+     *     first, so it does not write a proposal for a listing being deleted, and
+     *     the listing's batch rows are marked deleted and leave the queue (A42).
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
@@ -478,6 +851,29 @@ export interface paths {
      *     `--help`/`login status` subprocess) that changes nothing.
      */
     get: operations["get_seo_readiness_api_listings__name__ai_seo_readiness_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/batch": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Listing Batch
+     * @description The batch that made ``name``, for the editor's row above the head
+     *     (UI doc §8), or ``null``. A row names its listing exactly, as the rename
+     *     and delete hooks match it (A42); a deleted row is not the listing's.
+     *     Should two batches both claim it, the newer wins.
+     */
+    get: operations["listing_batch_api_listings__name__batch_get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -551,6 +947,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/listings/{name}/proposal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Listing Proposal
+     * @description The listing's latest AI SEO proposal (A41; spec, *Durable AI
+     *     proposals*), with which sections were resolved and whether it has gone
+     *     stale. Written by every AI run before it announces the proposal, so a
+     *     reload, a server restart or a batch run all find it here.
+     */
+    get: operations["get_listing_proposal_api_listings__name__proposal_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/proposal/resolution": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Resolve Listing Proposal
+     * @description Record accepted or dismissed sections (spec, *Durable AI proposals*),
+     *     so a resolved drawer does not reopen as new after a reload. The chosen
+     *     value itself reaches ``listing.yaml`` through ordinary autosave; this
+     *     records only that the section was dealt with. Under the listing's write
+     *     lock, so a delete or rename cannot land between the read and the write
+     *     and leave a record behind for a listing that is gone.
+     */
+    patch: operations["resolve_listing_proposal_api_listings__name__proposal_resolution_patch"];
+    trace?: never;
+  };
   "/api/listings/{name}/rename": {
     parameters: {
       query?: never;
@@ -568,7 +1012,10 @@ export interface paths {
      *     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
      *     generated copy travel together, and `.cache/renders/{name}/` moves with them
      *     because the render cache is keyed by listing name too -- left behind it
-     *     would orphan a tree nothing deletes and cost a full re-render.
+     *     would orphan a tree nothing deletes and cost a full re-render. The market
+     *     snapshot and the cached AI proposal (A42) move for the same reason, and
+     *     every batch row naming the listing follows it (A42), so the batch
+     *     summary opens the new name.
      *
      *     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
      *     left that way deliberately: nothing reads them, they become true again at
@@ -701,6 +1148,98 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/staging": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Staging
+     * @description Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
+     *     already spooled the parts to temporary files; `stage_pngs` streams each
+     *     one on -- a PNG to its content-addressed upload, a ZIP to disk and then
+     *     entry by entry out of it -- with a running count (A45).
+     */
+    post: operations["create_staging_api_staging_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/staging/{session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Staging
+     * @description A reload reattaches here (spec, *Frozen staging*).
+     */
+    get: operations["get_staging_api_staging__session_id__get"];
+    put?: never;
+    post?: never;
+    /**
+     * Cancel Staging
+     * @description Cancel staging: the uploads go at once (A46). The seller's own files
+     *     were never touched.
+     */
+    delete: operations["cancel_staging_api_staging__session_id__delete"];
+    options?: never;
+    head?: never;
+    /**
+     * Patch Staging
+     * @description Edit the label, type names, remove rows. Every edit moves the
+     *     session's expiry to seven days from now (A46).
+     */
+    patch: operations["patch_staging_api_staging__session_id__patch"];
+    trace?: never;
+  };
+  "/api/staging/{session_id}/confirm": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Confirm Staging
+     * @description Create N listings (UI doc §6). Repeating it -- a double click, a retry
+     *     after a dropped response -- finishes the same batch rather than making a
+     *     second one (A39).
+     */
+    post: operations["confirm_staging_api_staging__session_id__confirm_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/staging/{session_id}/rows/{row}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Staging Row Thumbnail */
+    get: operations["staging_row_thumbnail_api_staging__session_id__rows__row__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/templates": {
     parameters: {
       query?: never;
@@ -779,6 +1318,12 @@ export interface paths {
      *     ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
      *     which is the calibrator's own test-design library and never sees a
      *     listing's real artwork.
+     *
+     *     ``test_design`` is that library's id instead, for the listing-template
+     *     editor (UI doc §3): a listing template has no artwork, so it is viewed
+     *     through a calibrator test design, bundled grid by default. Exactly one of
+     *     the two -- they name files in different places, and guessing which one a
+     *     bare name meant is how a test target would end up judged as artwork.
      */
     get: operations["design_preview_api_templates__name__design_preview_get"];
     put?: never;
@@ -940,23 +1485,6 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
-  "/{full_path}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Spa Fallback */
-    get: operations["spa_fallback__full_path__get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -1026,40 +1554,32 @@ export interface components {
     };
     /**
      * AiProposalEvent
-     * @description The validated proposal: :class:`SeoProposalResponse` unchanged, plus
-     *     ``type`` and ``seq``.
+     * @description The validated proposal, once it is cached (A41): what ``GET
+     *     /api/listings/{name}/proposal`` answers at that moment, plus ``type``
+     *     and ``seq``.
      */
     AiProposalEvent: {
-      /** Description Leads */
-      description_leads: string[];
-      /**
-       * Expires At
-       * Format: date-time
-       */
-      expires_at: string;
       /**
        * Generated At
        * Format: date-time
        */
       generated_at: string;
-      /** Observed Text */
-      observed_text: string;
-      /** Rationale */
-      rationale: components["schemas"]["SeoRationaleEntry"][];
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "manual" | "batch";
+      proposal: components["schemas"]["ProposalChoices"];
+      resolution: components["schemas"]["ProposalResolution"];
       /** Seq */
       seq: number;
       snapshot: components["schemas"]["SeoProposalSnapshot"];
-      /** Tags */
-      tags: string[];
-      /** Titles */
-      titles: string[];
+      stale: components["schemas"]["ProposalStaleness"];
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       type: "proposal";
-      /** Warnings */
-      warnings: components["schemas"]["SeoWarningEntry"][];
     };
     /**
      * AiQueriesEvent
@@ -1075,6 +1595,18 @@ export interface components {
        * @enum {string}
        */
       type: "queries";
+    };
+    /**
+     * AiReadinessBlock
+     * @description Why a batch could not draft if it were created now (spec, *Design
+     *     validation*; ``staging.note.md``): the sentence after *AI drafting can't
+     *     run yet.*, and what to do about it.
+     */
+    AiReadinessBlock: {
+      /** Message */
+      message: string;
+      /** Remedy */
+      remedy: string;
     };
     /** AiRunDetail */
     AiRunDetail: {
@@ -1100,6 +1632,11 @@ export interface components {
       id: string;
       /** Listing */
       listing: string;
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "manual" | "batch";
       /**
        * Phase
        * @enum {string}
@@ -1135,6 +1672,11 @@ export interface components {
       id: string;
       /** Listing */
       listing: string;
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "manual" | "batch";
       /**
        * Phase
        * @enum {string}
@@ -1252,6 +1794,159 @@ export interface components {
        */
       kind: "colour-matrix" | "multiple" | "single";
     };
+    /** BatchDetail */
+    BatchDetail: {
+      /**
+       * Concurrency
+       * @default 1
+       */
+      concurrency: number;
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
+      /** Listing Template */
+      listing_template: string;
+      /** Rows */
+      rows: components["schemas"]["BatchRowDetail"][];
+      /**
+       * Status
+       * @default drafting
+       * @enum {string}
+       */
+      status: "staging" | "drafting" | "in_review" | "complete" | "stopped";
+    };
+    /**
+     * BatchIndexEntry
+     * @description One row of Recent batches (UI doc §2): a confirmed batch, or a staging
+     *     session not confirmed yet, which reopens staging instead.
+     */
+    BatchIndexEntry: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Designs */
+      designs: number;
+      /**
+       * Drafted
+       * @default 0
+       */
+      drafted: number;
+      /** Expires At */
+      expires_at?: string | null;
+      /**
+       * Failures
+       * @default 0
+       */
+      failures: number;
+      /** Id */
+      id: string;
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "staging" | "batch";
+      /** Label */
+      label: string;
+      /** Listing Template */
+      listing_template: string;
+      /**
+       * Listings
+       * @default 0
+       */
+      listings: number;
+      /**
+       * Reviewed
+       * @default 0
+       */
+      reviewed: number;
+      /**
+       * Status
+       * @enum {string}
+       */
+      status: "staging" | "drafting" | "in_review" | "complete" | "stopped";
+      /**
+       * Undrafted
+       * @default 0
+       */
+      undrafted: number;
+    };
+    /**
+     * BatchPatch
+     * @description Rename the batch (UI doc §7): its label only, never its identity.
+     */
+    BatchPatch: {
+      /** Label */
+      label: string;
+    };
+    /** BatchRowDetail */
+    BatchRowDetail: {
+      /** Ai */
+      ai?:
+        | (
+            | "queued"
+            | "running"
+            | "done"
+            | "failed"
+            | "stopped"
+            | "cancelled"
+            | "cancelled_by_deploy"
+          )
+        | null;
+      /** Ai Error */
+      ai_error?: string | null;
+      /**
+       * Ai Steps
+       * @default []
+       */
+      ai_steps: components["schemas"]["WorkflowStep"][];
+      /**
+       * Creation
+       * @enum {string}
+       */
+      creation: "pending" | "created" | "failed";
+      /**
+       * Deleted
+       * @default false
+       */
+      deleted: boolean;
+      /** Design */
+      design: string;
+      /** Error */
+      error: string | null;
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
+      /** Proposal */
+      proposal?: ("ready" | "stale" | "resolved") | null;
+      /** Queue Position */
+      queue_position?: number | null;
+      /**
+       * Reviewable
+       * @default false
+       */
+      reviewable: boolean;
+      /**
+       * Reviewed
+       * @default false
+       */
+      reviewed: boolean;
+      /** Sources */
+      sources: string[];
+      /**
+       * Stale Reasons
+       * @default []
+       */
+      stale_reasons: string[];
+    };
     /**
      * BelowCostRow
      * @description One variant priced under what Printify charges to make it -- the
@@ -1283,6 +1978,13 @@ export interface components {
        * @enum {string}
        */
       type: "blocked";
+    };
+    /** Body_create_staging_api_staging_post */
+    Body_create_staging_api_staging_post: {
+      /** Files */
+      files?: string[] | null;
+      /** Listing Template */
+      listing_template: string;
     };
     /** Body_upload_design_api_designs_post */
     Body_upload_design_api_designs_post: {
@@ -1426,6 +2128,23 @@ export interface components {
       document: {
         [key: string]: unknown;
       };
+      /** Name */
+      name: string;
+    };
+    /**
+     * CreateListingTemplateRequest
+     * @description Save as listing template (``from_listing``) or Clone
+     *     (``from_template``) -- exactly one. There is no blank creation (spec).
+     */
+    CreateListingTemplateRequest: {
+      /** Document */
+      document?: {
+        [key: string]: unknown;
+      } | null;
+      /** From Listing */
+      from_listing?: string | null;
+      /** From Template */
+      from_template?: string | null;
       /** Name */
       name: string;
     };
@@ -1809,6 +2528,23 @@ export interface components {
        */
       scope: "listings";
     };
+    /**
+     * ListingBatch
+     * @description The batch a listing was made by, for the editor's row above the head
+     *     (UI doc §8): Back to batch and Mark reviewed.
+     */
+    ListingBatch: {
+      /** Batch Id */
+      batch_id: string;
+      /** Label */
+      label: string;
+      /** Reviewable */
+      reviewable: boolean;
+      /** Reviewed */
+      reviewed: boolean;
+      /** Row Id */
+      row_id: string;
+    };
     /** ListingDesignSummary */
     ListingDesignSummary: {
       /** File */
@@ -1875,6 +2611,11 @@ export interface components {
       garment_product_type?: string | null;
       /** Garment Profile */
       garment_profile: string;
+      /**
+       * Gestures
+       * @default []
+       */
+      gestures: ("delete" | "retire" | "un-retire" | "cancel" | "renew")[];
       /** Issues */
       issues: components["schemas"]["Issue"][];
       /** Lifecycle */
@@ -1979,6 +2720,29 @@ export interface components {
        */
       type: "listing_planned";
     };
+    /**
+     * ListingProposal
+     * @description A listing's cached proposal as the editor and the batch summary read
+     *     it (A41): the record, and whether it still describes the saved listing.
+     *     ``stale`` is computed from the saved listing on every read, never
+     *     stored.
+     */
+    ListingProposal: {
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string;
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "manual" | "batch";
+      proposal: components["schemas"]["ProposalChoices"];
+      resolution: components["schemas"]["ProposalResolution"];
+      snapshot: components["schemas"]["SeoProposalSnapshot"];
+      stale: components["schemas"]["ProposalStaleness"];
+    };
     /** ListingSummary */
     ListingSummary: {
       /** Colour Count */
@@ -2012,6 +2776,145 @@ export interface components {
         | "pending-retire"
         | "inactive"
         | "expired";
+    };
+    /**
+     * ListingTemplateAsset
+     * @description A file the draft will copy: the ``./`` ref the template will name it
+     *     by, and the ref it has in its source -- which is where the *name it*
+     *     page's thumbnail has to come from, since the copy does not exist yet.
+     */
+    ListingTemplateAsset: {
+      /** Ref */
+      ref: string;
+      /** Source Ref */
+      source_ref: string;
+    };
+    /**
+     * ListingTemplateDetail
+     * @description A listing template as its pages read it, saved or not -- one shape for
+     *     both, as `ListingDetail` is one shape for a listing and the unnamed draft.
+     *
+     *     A draft (``GET /draft``: Save as listing template or Clone, written
+     *     nowhere, UI doc §1) has ``name`` ``""``, no ``modified_at``, and says
+     *     where it came from in ``source`` and ``assets``.
+     */
+    ListingTemplateDetail: {
+      /**
+       * Assets
+       * @default []
+       */
+      assets: components["schemas"]["ListingTemplateAsset"][];
+      /** Colors */
+      colors: string[];
+      /**
+       * Description Composed
+       * @default
+       */
+      description_composed: string;
+      /**
+       * @default {
+       *       "description": {}
+       *     }
+       */
+      etsy: components["schemas"]["TemplateEtsyConfig"];
+      /** Garment */
+      garment?: string | null;
+      /** Garment Brand */
+      garment_brand?: string | null;
+      /** Garment Materials */
+      garment_materials?: string[] | null;
+      /** Garment Model */
+      garment_model?: string | null;
+      /** Garment Product Type */
+      garment_product_type?: string | null;
+      /** Garment Profile */
+      garment_profile: string;
+      /** Issues */
+      issues: components["schemas"]["Issue"][];
+      /** Media */
+      media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /** Modified At */
+      modified_at: string | null;
+      /** Name */
+      name: string;
+      /**
+       * Price Overrides
+       * @default {}
+       */
+      price_overrides: {
+        [key: string]: {
+          [key: string]: string;
+        };
+      };
+      /**
+       * Prices
+       * @default {}
+       */
+      prices: {
+        [key: string]: string;
+      };
+      /** Pricing Plan */
+      pricing_plan?: string | null;
+      /** Pricing Plan Name */
+      pricing_plan_name?: string | null;
+      /**
+       * Resolved Prices
+       * @default []
+       */
+      resolved_prices: components["schemas"]["ResolvedPrice"][];
+      source?: components["schemas"]["ListingTemplateSource"] | null;
+    };
+    /**
+     * ListingTemplateSaveResult
+     * @description What a create or ``PUT`` did (A36). Refusing an incomplete document is
+     *     a 200 with ``saved: false``, as a listing's malformed PATCH is, because the
+     *     editor shows the issues and keeps going; nothing was written.
+     */
+    ListingTemplateSaveResult: {
+      /**
+       * Field Errors
+       * @default {}
+       */
+      field_errors: {
+        [key: string]: string;
+      };
+      /** Issues */
+      issues: components["schemas"]["Issue"][];
+      /** Saved */
+      saved: boolean;
+      template?: components["schemas"]["ListingTemplateDetail"] | null;
+    };
+    /** ListingTemplateSource */
+    ListingTemplateSource: {
+      /**
+       * Kind
+       * @enum {string}
+       */
+      kind: "listing" | "listing-template";
+      /** Name */
+      name: string;
+    };
+    /**
+     * ListingTemplateSummary
+     * @description One card on the Listing templates page (UI doc §2).
+     */
+    ListingTemplateSummary: {
+      /**
+       * Batch Count
+       * @default 0
+       */
+      batch_count: number;
+      /** Colour Count */
+      colour_count: number;
+      design_minimum?: components["schemas"]["PixelSize"] | null;
+      /** Garment */
+      garment: string;
+      /** Media */
+      media: (components["schemas"]["TemplateMediaEntry"] | string)[];
+      /** Name */
+      name: string;
+      /** Pricing Plan Name */
+      pricing_plan_name: string | null;
     };
     /**
      * LiveImageSnapshot
@@ -2203,6 +3106,13 @@ export interface components {
       phrase: string;
       /** Score */
       score: number;
+    };
+    /** PixelSize */
+    PixelSize: {
+      /** Height */
+      height: number;
+      /** Width */
+      width: number;
     };
     /**
      * Placement
@@ -2438,6 +3348,78 @@ export interface components {
       type: "progress";
     };
     /**
+     * ProposalChoices
+     * @description What the seller chooses from: the validated `ai/models.py.SeoProposal`,
+     *     field for field, as JSON can carry it.
+     */
+    ProposalChoices: {
+      /** Description Leads */
+      description_leads: string[];
+      /** Observed Text */
+      observed_text: string;
+      /** Rationale */
+      rationale: components["schemas"]["SeoRationaleEntry"][];
+      /** Tags */
+      tags: string[];
+      /** Titles */
+      titles: string[];
+      /** Warnings */
+      warnings: components["schemas"]["SeoWarningEntry"][];
+    };
+    /**
+     * ProposalResolution
+     * @description Each section's state (spec, *Durable AI proposals*): a section the
+     *     seller accepted or dismissed stays resolved after a reload, so its drawer
+     *     does not present itself as new again. ``pending`` is still open.
+     */
+    ProposalResolution: {
+      /**
+       * Lead
+       * @default pending
+       * @enum {string}
+       */
+      lead: "pending" | "accepted" | "dismissed";
+      /**
+       * Tags
+       * @default pending
+       * @enum {string}
+       */
+      tags: "pending" | "accepted" | "dismissed";
+      /**
+       * Title
+       * @default pending
+       * @enum {string}
+       */
+      title: "pending" | "accepted" | "dismissed";
+    };
+    /**
+     * ProposalResolutionPatch
+     * @description ``PATCH /api/listings/{name}/proposal/resolution``: the sections to
+     *     record, on the proposal generated at ``generated_at`` -- a regeneration
+     *     that landed meanwhile is a different proposal, and is a 409. ``pending``
+     *     reopens a section.
+     */
+    ProposalResolutionPatch: {
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string;
+      /** Lead */
+      lead?: ("pending" | "accepted" | "dismissed") | null;
+      /** Tags */
+      tags?: ("pending" | "accepted" | "dismissed") | null;
+      /** Title */
+      title?: ("pending" | "accepted" | "dismissed") | null;
+    };
+    /** ProposalStaleness */
+    ProposalStaleness: {
+      /** Is Stale */
+      is_stale: boolean;
+      /** Reasons */
+      reasons: string[];
+    };
+    /**
      * PublishSnapshot
      * @description Domain facts for the review (A30): only the rows the stage's own
      *     ``plan()`` would refuse over, so the price table's red marker is never a
@@ -2563,6 +3545,11 @@ export interface components {
        */
       stage: "retract";
     };
+    /** ReviewedRequest */
+    ReviewedRequest: {
+      /** Reviewed */
+      reviewed: boolean;
+    };
     /**
      * ScoredListing
      * @description One of the (at most) twenty listings scored, with everything the top
@@ -2611,15 +3598,10 @@ export interface components {
     };
     /**
      * SeoProposalSnapshot
-     * @description The submitted generation inputs, echoed back beside the proposal
-     *     (implementation plan, PR5 item 4: "input snapshot data").
-     *
-     *     This is what a future frontend (PR7) compares its own current editor
-     *     state against to decide a pending proposal has gone stale
-     *     (`docs/ui-listing-seo-interactions.md` section 7) -- everything
-     *     `ai/models.py.SeoRequest` sent to the provider except the design image
-     *     itself. Design identity and content are captured before generation, rather
-     *     than inferred from whichever editor state exists when the response arrives.
+     * @description The generation inputs, frozen before the provider starts: everything
+     *     `ai/models.py.SeoRequest` sent except the design image itself, plus the
+     *     design's identity and content hash. :func:`proposal_staleness` compares
+     *     one of these against the same inputs read from the listing now.
      */
     SeoProposalSnapshot: {
       /** Brief */
@@ -2671,6 +3653,16 @@ export interface components {
      *     to a developer or support reader.
      */
     SeoReadinessResponse: {
+      /**
+       * Batch Pending
+       * @default false
+       */
+      batch_pending: boolean;
+      /**
+       * Deploying
+       * @default false
+       */
+      deploying: boolean;
       /** Ready */
       ready: boolean;
       /** Reason */
@@ -2880,6 +3872,87 @@ export interface components {
        */
       type: "stage_planned";
     };
+    /** StagingDetail */
+    StagingDetail: {
+      ai_blocked?: components["schemas"]["AiReadinessBlock"] | null;
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /** Id */
+      id: string;
+      /** Ignored */
+      ignored: string[];
+      /** Label */
+      label: string;
+      /** Listing Template */
+      listing_template: string;
+      /** Rows */
+      rows: components["schemas"]["StagingRowDetail"][];
+      /**
+       * Template Saved At
+       * Format: date-time
+       */
+      template_saved_at: string;
+    };
+    /**
+     * StagingPatch
+     * @description Every staging edit, applied in order: label, names, removals.
+     */
+    StagingPatch: {
+      /** Label */
+      label?: string | null;
+      /**
+       * Names
+       * @default {}
+       */
+      names: {
+        [key: string]: string;
+      };
+      /**
+       * Remove
+       * @default []
+       */
+      remove: string[];
+    };
+    /**
+     * StagingRefusal
+     * @description A ``422``'s ``detail`` for an upload refused before staging (A45).
+     */
+    StagingRefusal: {
+      /** Message */
+      message: string;
+      /** Remedy */
+      remedy: string;
+    };
+    /**
+     * StagingRowDetail
+     * @description One unique design on the staging page (UI doc §5).
+     */
+    StagingRowDetail: {
+      /** Id */
+      id: string;
+      /** Message */
+      message: string | null;
+      /** Name */
+      name: string;
+      /** Note */
+      note: string | null;
+      /** Reuse */
+      reuse: string | null;
+      /** Sources */
+      sources: string[];
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "ready" | "name" | "invalid";
+      /** Suggestion */
+      suggestion: string | null;
+      /** Typed */
+      typed: boolean;
+    };
     /**
      * SwatchResponse
      * @description A colour-matrix colour's real garment shade, sampled off its own scene
@@ -2889,6 +3962,35 @@ export interface components {
     SwatchResponse: {
       /** Hex */
       hex: string;
+    };
+    /**
+     * TemplateDescriptionConfig
+     * @description A description *body*: inline ``text`` or a common-copy ``ref``, and no
+     *     ``lead``. The lead is the opening a shopper reads about one design, so
+     *     every listing made from the template gets its own (spec, copy table).
+     */
+    TemplateDescriptionConfig: {
+      /** Ref */
+      ref?: string | null;
+      /** Text */
+      text?: string | null;
+    };
+    /**
+     * TemplateEtsyConfig
+     * @description `EtsyListingConfig` without the copy an instance writes for itself.
+     *     The four settings keep the meanings `EtsyListingConfig` documents.
+     */
+    TemplateEtsyConfig: {
+      /** @default {} */
+      description: components["schemas"]["TemplateDescriptionConfig"];
+      /** Renewal */
+      renewal?: ("manual" | "auto") | null;
+      /** Section */
+      section?: string | null;
+      /** Shipping Profile */
+      shipping_profile?: string | null;
+      /** Variation Images */
+      variation_images?: string | null;
     };
     /**
      * TemplateMediaEntry
@@ -2994,7 +4096,7 @@ export interface components {
     /**
      * WorkflowStep
      * @description One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
-     *     ``WorkflowStep``).
+     *     ``WorkflowStep``): an AI run's, or a batch row's.
      */
     WorkflowStep: {
       /** Detail */
@@ -3273,6 +4375,328 @@ export interface operations {
       };
     };
   };
+  list_batches_api_batches_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchIndexEntry"][];
+        };
+      };
+    };
+  };
+  get_batch_api_batches__batch_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_batch_api_batches__batch_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  rename_batch_api_batches__batch_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["BatchPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cancel_batch_api_batches__batch_id__cancel_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  resume_batch_api_batches__batch_id__resume_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  retry_batch_api_batches__batch_id__retry_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  retry_batch_row_api_batches__batch_id__rows__row__retry_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+        row: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description The row has nothing to retry */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  set_reviewed_api_batches__batch_id__rows__row__reviewed_put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+        row: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ReviewedRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description The row has no listing to review yet */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  batch_row_thumbnail_api_batches__batch_id__rows__row__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+        row: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   list_common_copy_api_common_copy_get: {
     parameters: {
       query?: never;
@@ -3415,6 +4839,37 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["DesignSummary"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  design_thumbnail_api_designs__design__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        design: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */
@@ -3614,6 +5069,318 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["ListingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_listing_templates_api_listing_templates_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateSummary"][];
+        };
+      };
+    };
+  };
+  create_listing_template_api_listing_templates_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["CreateListingTemplateRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateSaveResult"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_template_draft_api_listing_templates_draft_get: {
+    parameters: {
+      query?: {
+        from_listing?: string | null;
+        from_template?: string | null;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_listing_template_api_listing_templates__name__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  put_listing_template_api_listing_templates__name__put: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": {
+          [key: string]: unknown;
+        };
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateSaveResult"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_listing_template_api_listing_templates__name__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  rename_listing_template_api_listing_templates__name__rename_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RenameListingRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_listing_template_media_files_api_listing_templates__template__media_files_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MediaFileSummary"][];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_template_media_file_api_listing_templates__template__media_files__path__file_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template: string;
+        path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  listing_template_media_thumbnail_api_listing_templates__template__media_files__path__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template: string;
+        path: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
         };
       };
       /** @description Validation Error */
@@ -3905,6 +5672,37 @@ export interface operations {
       };
     };
   };
+  listing_batch_api_listings__name__batch_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingBatch"] | null;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   get_market_snapshot_api_listings__name__market_get: {
     parameters: {
       query?: never;
@@ -3996,6 +5794,93 @@ export interface operations {
         content: {
           "application/json": unknown;
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_listing_proposal_api_listings__name__proposal_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingProposal"];
+        };
+      };
+      /** @description No such listing, or no proposal cached for it */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  resolve_listing_proposal_api_listings__name__proposal_resolution_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProposalResolutionPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingProposal"];
+        };
+      };
+      /** @description No such listing, or no proposal cached for it */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The proposal was regenerated since the page read it */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {
@@ -4273,6 +6158,204 @@ export interface operations {
       };
     };
   };
+  create_staging_api_staging_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": components["schemas"]["Body_create_staging_api_staging_post"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StagingDetail"];
+        };
+      };
+      /** @description Unprocessable Entity */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StagingRefusal"];
+        };
+      };
+    };
+  };
+  get_staging_api_staging__session_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StagingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cancel_staging_api_staging__session_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  patch_staging_api_staging__session_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StagingPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StagingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  confirm_staging_api_staging__session_id__confirm_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description The session cannot be confirmed yet */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  staging_row_thumbnail_api_staging__session_id__rows__row__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+        row: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   list_templates_api_templates_get: {
     parameters: {
       query?: never;
@@ -4401,8 +6484,9 @@ export interface operations {
   };
   design_preview_api_templates__name__design_preview_get: {
     parameters: {
-      query: {
-        design: string;
+      query?: {
+        design?: string | null;
+        test_design?: string | null;
         colour?: string | null;
         scale?: "editor" | "full";
       };
@@ -4627,37 +6711,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["WorkspaceSummary"];
-        };
-      };
-    };
-  };
-  spa_fallback__full_path__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        full_path: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

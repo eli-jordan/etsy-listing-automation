@@ -1,8 +1,8 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../api/listings";
-import type { ListingDetail } from "../types";
-import { AUTOSAVE_DEBOUNCE_MS, useAutosave } from "./useAutosave";
+import type { Issue, ListingDetail } from "../types";
+import { AUTOSAVE_DEBOUNCE_MS, type AutosaveTransport, useAutosave } from "./useAutosave";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return {
@@ -33,6 +33,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    gestures: [],
     description_composed: "",
     ...over,
   };
@@ -647,5 +648,79 @@ describe("useAutosave renaming", () => {
     });
 
     expect(rename).not.toHaveBeenCalled();
+  });
+});
+
+describe("useAutosave with a transport that writes only complete documents", () => {
+  /* A listing template's valid-only save (A36; batch plan PR 6 item 3): a
+     `saved: false` answer leaves the file alone, the editor keeps the values
+     and explains, and the next edit retries with the whole document. */
+  function transport(save: AutosaveTransport["save"]): AutosaveTransport {
+    return {
+      document: (d) => ({ colors: d.colors, media: d.media }),
+      describe: null,
+      create: vi.fn(),
+      save,
+      rename: vi.fn(),
+    };
+  }
+  const refusal: Issue = {
+    severity: "block",
+    tab: "variants",
+    where: "Variants › Colours",
+    message: "Turn on at least one colour.",
+  };
+
+  it("keeps an incomplete edit on screen, unsaved, with the refusal's issues", async () => {
+    const save = vi.fn<AutosaveTransport["save"]>().mockResolvedValue({
+      saved: false,
+      issues: [refusal],
+      field_errors: {},
+    });
+    const stable = transport(save);
+    const { result } = renderHook(() =>
+      useAutosave("heavyweight-tee", detail(), { transport: stable }),
+    );
+
+    act(() => result.current.update({ colors: [] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(result.current.save).toEqual({ kind: "unsaved" });
+    expect(result.current.detail.colors).toEqual([]);
+    expect(result.current.detail.issues).toEqual([refusal]);
+    expect(save.mock.calls[0]?.[2]).toEqual({ colors: [], media: [] });
+  });
+
+  it("retries with the whole document once an edit makes it complete", async () => {
+    const save = vi
+      .fn<AutosaveTransport["save"]>()
+      .mockResolvedValueOnce({ saved: false, issues: [refusal], field_errors: {} })
+      .mockResolvedValueOnce({
+        saved: true,
+        detail: detail({ colors: ["ivory"], media: ["common-media/size.png"] }),
+      });
+    const stable = transport(save);
+    const { result } = renderHook(() =>
+      useAutosave("heavyweight-tee", detail(), { transport: stable }),
+    );
+
+    act(() => result.current.update({ colors: [] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+    act(() => result.current.update({ media: ["common-media/size.png"] }));
+    act(() => result.current.update({ colors: ["ivory"] }));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(AUTOSAVE_DEBOUNCE_MS);
+    });
+
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(save.mock.calls[1]?.[2]).toEqual({
+      colors: ["ivory"],
+      media: ["common-media/size.png"],
+    });
+    expect(result.current.save.kind).toBe("saved");
   });
 });

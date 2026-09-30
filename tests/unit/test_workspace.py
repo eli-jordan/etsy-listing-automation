@@ -17,6 +17,8 @@ from etsy_listings.workspace.workspace import (
     remove_tree,
 )
 
+from tests.support.refusals import refuse_reads
+
 
 def test_discover_finds_root_from_nested_cwd(workspace_root: Path) -> None:
     nested = workspace_root / "listings" / "take-a-hike"
@@ -754,3 +756,84 @@ def test_market_caches_live_under_the_cache_directory(workspace_root: Path) -> N
     assert ws.market_snapshot_file("take-a-hike") == market / "snapshots" / "take-a-hike.json"
     with pytest.raises(InvalidNameError):
         ws.market_snapshot_file("../escape")
+
+
+class TestListingTemplateLayout:
+    """A35: listing templates live under `listing-templates/<name>/`, and only
+    `Workspace` knows that -- names from URLs pass the single-segment rule."""
+
+    @pytest.fixture
+    def ws(self, workspace_root: Path) -> Workspace:
+        return Workspace.discover(root_override=workspace_root)
+
+    def _write(self, ws: Workspace, name: str) -> None:
+        path = ws.listing_template_file(name)
+        path.parent.mkdir(parents=True)
+        path.write_text("garment_profile: comfort-colors-1717\n", encoding="utf-8")
+
+    def test_the_accessors_point_at_the_documented_locations(self, ws: Workspace) -> None:
+        base = ws.root / "listing-templates" / "heavyweight-tee"
+        assert ws.listing_template_dir("heavyweight-tee") == base
+        assert ws.listing_template_file("heavyweight-tee") == base / "template.yaml"
+        assert ws.listing_template_assets_dir("heavyweight-tee") == base / "assets"
+
+    @pytest.mark.parametrize("name", ["", "..", "a/b", "a\\b", "C:x"])
+    def test_a_name_that_is_not_one_segment_is_refused(self, ws: Workspace, name: str) -> None:
+        with pytest.raises(InvalidNameError):
+            ws.listing_template_dir(name)
+
+    def test_names_are_the_directories_holding_a_template_file(self, ws: Workspace) -> None:
+        self._write(ws, "heavyweight-tee")
+        self._write(ws, "everyday-tee")
+        (ws.root / "listing-templates" / "half-written").mkdir()
+
+        assert ws.listing_template_names() == ["everyday-tee", "heavyweight-tee"]
+
+    def test_names_are_empty_without_the_directory(self, ws: Workspace) -> None:
+        assert ws.listing_template_names() == []
+
+    def test_remove_takes_the_whole_directory(self, ws: Workspace) -> None:
+        self._write(ws, "heavyweight-tee")
+        asset = ws.listing_template_assets_dir("heavyweight-tee") / "chart.png"
+        asset.parent.mkdir()
+        asset.write_bytes(b"png")
+
+        ws.remove_listing_template("heavyweight-tee")
+
+        assert not ws.listing_template_dir("heavyweight-tee").exists()
+
+    def test_a_dot_slash_ref_resolves_against_the_template_directory(self, ws: Workspace) -> None:
+        resolved = ws.resolve_template_ref("./assets/chart.png", template="heavyweight-tee")
+        assert resolved == ws.listing_template_dir("heavyweight-tee") / "assets" / "chart.png"
+
+    def test_a_bare_ref_is_still_the_workspace_root(self, ws: Workspace) -> None:
+        resolved = ws.resolve_template_ref("common-media/chart.png", template="heavyweight-tee")
+        assert resolved == ws.root / "common-media" / "chart.png"
+
+    def test_a_refused_template_ref_names_the_template_file(self, ws: Workspace) -> None:
+        with pytest.raises(InvalidRefError) as caught:
+            ws.resolve_template_ref("./../x.png", template="heavyweight-tee")
+        assert caught.value.path == ws.listing_template_file("heavyweight-tee")
+
+    def test_a_media_file_is_served_only_from_inside_the_template(self, ws: Workspace) -> None:
+        path = ws.listing_template_media_file("heavyweight-tee", "assets/chart.png")
+        assert path == ws.listing_template_assets_dir("heavyweight-tee").resolve() / "chart.png"
+        with pytest.raises(InvalidNameError):
+            ws.listing_template_media_file("heavyweight-tee", "template.yaml")
+
+
+def test_a_listing_template_read_while_it_is_replaced_still_loads(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """``template.yaml`` is written atomically (A37), and Windows refuses to
+    open it while the editor's save is replacing it; the read waits that out
+    rather than reporting the template missing or unreadable."""
+    ws = Workspace.discover(root_override=workspace_root)
+    path = ws.listing_template_file("heavyweight-tee")
+    path.parent.mkdir(parents=True)
+    path.write_text(
+        "garment_profile: comfort-colors-1717\ncolors: [black]\nmedia: []\n", encoding="utf-8"
+    )
+    refuse_reads(monkeypatch, 3)
+
+    assert ws.load_listing_template("heavyweight-tee").colors == ["black"]

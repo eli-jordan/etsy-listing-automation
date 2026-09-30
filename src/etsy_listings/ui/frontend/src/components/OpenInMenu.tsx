@@ -1,13 +1,17 @@
+import { ArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
+import { CaretDownIcon } from "@phosphor-icons/react/dist/csr/CaretDown";
 import { useEffect, useRef, useState } from "react";
 import { etsyListingUrl, printifyProductUrl } from "./openOn";
 
 /**
- * The "▾ Open on Etsy / Open on Printify" menu, from the design mockup.
+ * The "Open in Etsy / Printify" menu.
  *
  * One component because two screens show the same menu with the same rules --
- * the listings table's applied rows and the editor's page head. They were
- * always going to carry the same two links, and two copies is two chances for
- * a URL shape to drift.
+ * the listings table's rows and the editor's action row. They were always
+ * going to carry the same two links, and two copies is two chances for a URL
+ * shape to drift. Only the trigger differs: the table's row has room for a
+ * caret, the editor's action row names the action (`variant="action"`), and
+ * there the entries need only say where they go.
  *
  * An id that is absent hides its own entry rather than rendering a dead link:
  * a listing can be published to Etsy without this workspace having ever
@@ -30,11 +34,13 @@ import { etsyListingUrl, printifyProductUrl } from "./openOn";
 interface Props {
   etsyListingId: number | null | undefined;
   printifyProductId: string | null | undefined;
+  variant?: "row" | "action";
 }
 
-export function OpenOnMenu({ etsyListingId, printifyProductId }: Props) {
+export function OpenInMenu({ etsyListingId, printifyProductId, variant = "row" }: Props) {
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const action = variant === "action";
 
   useEffect(() => {
     if (!open) return;
@@ -43,24 +49,44 @@ export function OpenOnMenu({ etsyListingId, printifyProductId }: Props) {
         setOpen(false);
       }
     }
+    function onKey(event: KeyboardEvent) {
+      if (event.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", onPointerDown);
-    return () => document.removeEventListener("mousedown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
   }, [open]);
 
   return (
     <div className="row-menu row-menu--inline" ref={rootRef}>
-      <button
-        type="button"
-        className="row-menu__trigger row-menu__trigger--caret"
-        title="Open on Etsy or Printify"
-        aria-label="Open on Etsy or Printify"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <span className="row-menu__caret" aria-hidden="true">
-          ▾
-        </span>
-      </button>
+      {action ? (
+        <button
+          type="button"
+          className="action-link"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <ArrowSquareOutIcon aria-hidden="true" />
+          Open in
+          <CaretDownIcon className="action-link__caret" weight="bold" aria-hidden="true" />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="row-menu__trigger row-menu__trigger--caret"
+          title="Open in Etsy or Printify"
+          aria-label="Open in Etsy or Printify"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+        >
+          <span className="row-menu__caret" aria-hidden="true">
+            ▾
+          </span>
+        </button>
+      )}
       {open && (
         <div className="row-menu__panel">
           {etsyListingId !== null && etsyListingId !== undefined && (
@@ -71,7 +97,7 @@ export function OpenOnMenu({ etsyListingId, printifyProductId }: Props) {
               rel="noreferrer"
             >
               <span className="row-menu__badge row-menu__badge--etsy">E</span>
-              Open on Etsy
+              {action ? "Etsy" : "Open in Etsy"}
             </a>
           )}
           {printifyProductId !== null && printifyProductId !== undefined && (
@@ -82,7 +108,7 @@ export function OpenOnMenu({ etsyListingId, printifyProductId }: Props) {
               rel="noreferrer"
             >
               <span className="row-menu__badge row-menu__badge--printify">P</span>
-              Open on Printify
+              {action ? "Printify" : "Open in Printify"}
             </a>
           )}
         </div>

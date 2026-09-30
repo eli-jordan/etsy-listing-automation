@@ -1,5 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AiRunsApiError, cancelAiRun, findAiRun, openAiRunStream, startAiRun } from "./aiRuns";
+import {
+  AiRunsApiError,
+  DEPLOYING_MESSAGE,
+  cancelAiRun,
+  findAiRun,
+  openAiRunStream,
+  startAiRun,
+} from "./aiRuns";
 import { api } from "./client";
 import type { AiRunSummary } from "../types";
 
@@ -12,6 +19,7 @@ function summary(over: Partial<AiRunSummary> = {}): AiRunSummary {
     id: "run-1",
     listing: "take-a-hike",
     draft_brief: false,
+    origin: "manual",
     phase: "running",
     steps: [
       { id: "brief", state: "skipped", detail: "You wrote the brief, so it was kept" },
@@ -67,6 +75,15 @@ describe("startAiRun", () => {
     await expect(startAiRun("take-a-hike", { draftBrief: false })).resolves.toEqual({
       kind: "refused",
       reason: "the listing brief is empty",
+    });
+  });
+
+  it("words a deploy's refusal (A43)", async () => {
+    vi.spyOn(api, "POST").mockResolvedValue(answer(409, undefined, { reason: "deploying" }));
+
+    await expect(startAiRun("take-a-hike", { draftBrief: false })).resolves.toEqual({
+      kind: "refused",
+      reason: DEPLOYING_MESSAGE,
     });
   });
 

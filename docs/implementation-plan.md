@@ -1,6 +1,6 @@
 # Implementation Plan: Etsy Listing Automation
 
-Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 67 product
+Companion to [prd.md](prd.md). The PRD settles *what* the tool does and 74 product
 forks; this document settles *how* it is built — module boundaries, core contracts,
 and the order of work. Where the two disagree, the PRD wins and this file is wrong.
 
@@ -10,12 +10,14 @@ both. Delete and retire (PRD 61–67) live in
 editor (A29–A33) live in [deploy-changes.md](deploy-changes.md). Workspace-wide
 review and apply (A34) live in
 [ui-batch-deploy-implementation-plan.md](ui-batch-deploy-implementation-plan.md).
+Listing templates and batch creation (PRD 74, A35–A46) live in
+[listing-batch-creation-implementation-plan.md](listing-batch-creation-implementation-plan.md).
 
 ---
 
 ## Architecture decision log
 
-Thirty-four forks, resolved. Numbered `A#` so they can be cited from code
+Forty-six forks, resolved. Numbered `A#` so they can be cited from code
 comments and commit messages without colliding with the PRD's own decision log.
 
 | # | Fork | Decision |
@@ -28,7 +30,7 @@ comments and commit messages without colliding with the PRD's own decision log.
 | A6 | Run history | SQLite at `.cache/runs.db` in WAL mode, `runs` + `run_events`. One recorder shared by CLI and UI, so CLI runs appear in the dashboard. Disposable: drop-and-recreate rather than migrate. |
 | A7 | Renderer | Pure functions over ndarrays composed in fixed order. Frozen pydantic `RenderConfig`; its canonical JSON is the hash. Explicit determinism controls. Goldens per pass *and* end-to-end. Extended by A12 for `multiple`-kind scenes: a **separate** `render_scene()`/`export_many()`, not a generalisation of the single-layer `render()`/`export()` — zero regression risk to the pre-existing goldens, verified by an explicit byte-identity test. |
 | A8 | Workspace | The data tree is a separate directory you own, marked by `shop.yaml`, discovered by walking up from cwd. `--root` / `ETSY_LISTINGS_ROOT` override. All config paths resolve against the workspace root, never cwd. |
-| A9 | SEO proposal lifecycle | AI Mode is a saved-listing, request-scoped editing aid, not an engine stage or a deploy review gate. Ready local Codex and Claude Code adapters supply one validated proposal; unresolved choices are browser-local for one day, and only individually accepted title, tag, and description-lead values travel through normal autosave. No generated file, lockfile record, server-side proposal cache, or remote write exists. |
+| A9 | SEO proposal lifecycle | AI Mode is a saved-listing, request-scoped editing aid, not an engine stage or a deploy review gate. Ready local Codex and Claude Code adapters supply one validated proposal; unresolved choices are browser-local for one day, and only individually accepted title, tag, and description-lead values travel through normal autosave. No generated file, lockfile record, server-side proposal cache, or remote write exists. **Amended (A41, PRD 74):** the latest proposal per listing and its per-section resolution are kept server-side in `.cache/proposals/`, with no TTL; staleness is computed on the server and a stale proposal stays usable. Still no generated file, lockfile record or remote write. |
 | A10 | Build order | Strict PRD phase order, 0 to 6. |
 | A11 | Template kind schema | Discriminated pydantic union on `kind` (`ColourMatrixTemplate \| MultipleTemplate \| SingleTemplate`, `Field(discriminator="kind")`), loaded via `load_template_config()` — no wrapping model, since the file *is* one of the three shapes. PRD 28. |
 | A12 | Multi-layer rendering | `render_scene()`/`Layer`/`export_many()` in `render/pipeline.py`/`render/passes.py`, `multiple`-kind only. The existing single-layer `render()`/`export()` are untouched, not generalised — see A7. |
@@ -54,6 +56,18 @@ comments and commit messages without colliding with the PRD's own decision log.
 | A32 | Previews render during plan; apply promotes them | The render stage gains `preview()`. It renders, at full size and with two bounded workers, every scene it would (re)render to `Workspace.preview_file(listing, scene, scene_hash)`, where `scene_hash` covers the same inputs `input_hash` folds, restricted to one scene. `RenderStage.apply` copies in a preview whose hash matches rather than rendering again, retaining the preview so a mid-apply page refresh can still serve it; CLI `apply` benefits too. `build_plan` itself stays read-only: previews are a step the UI's plan run takes afterwards, a preview's existence never enters a `Plan`, and nothing is written under `.cache/renders/` or the lockfile. Promotion is safe because render passes are pure and the pins are exact (A7), so a promoted file is the bytes a render would have produced and the `outputs` axis cannot tell the difference. Rejected: downscaled previews, which cannot be promoted and so pay for every render twice. |
 | A33 | Runs in the UI server | A **run** is a server-side resource covering a resolved ordered set of listings (PRD 16 continue-on-error inside it). Locks are per listing, so a second run naming a busy listing gets `409` with the holder's id. A single FIFO executor thread runs one run at a time across the workspace, so any other run is `queued`. Parallelising later means more workers, not a new model. The engine reports planning, preview, apply and progress through one closed `EngineRunEvent` union and one sink; the UI is an adapter from those domain events to the pydantic SSE models exported into `openapi.json` (A5), while the CLI filters the same stream. A stage plan's decision is likewise one closed outcome — idle, work with its required reason, or blocked with its required message — never independent flags and nullable strings. Serialised stage plans are a stage-discriminated union whose stage literal determines its snapshot model. Plan progress remains **in pipeline order**: A21's fan-out stays unbuilt. A plan run can be cancelled before the next stage or preview submission; an apply run cannot (A3). Run commands and runtime state are closed unions: listing/workspace plan/apply commands carry only fields legal for that command, and plan/apply phases cannot be paired with the other kind. The executor thread is not a daemon; runs remain in memory only, and history stays Phase 6's `runs/` recorder. |
 | A34 | Workspace-scoped reviewed runs | Batch planning is a first-class `WorkspacePlan` command on A33's existing run resource. The server resolves `Workspace.listing_names()` when it accepts the command and records the resolved, ordered names on the run; the browser never submits its table rows as the meaning of `--all`. `WorkspaceApply` requires the exact ordered names, A31 fingerprints and `reviewed_run_id`; `ListingPlan` and `ListingApply` require a non-empty explicit listing set, and only apply commands carry fingerprints. These four request variants replace a nullable field bag plus post-parse validation, so an unreviewed workspace apply or a plan carrying apply-only fields is not representable. A workspace-scoped queued or active run conflicts with every listing-scoped run and vice versa; execution still uses the one A33 FIFO worker and stays sequential. The frontend folds one listing's events through one shared projection; individual deploy owns one projection, while batch owns an ordered map plus aggregate facts and preserves the immutable reviewed plan beside the apply overlay. Rejected: `listings: []` as an ambiguous all-listings sentinel; a separate batch resource duplicating locks, events and retention; re-resolving `--all` at apply time; and separate individual/batch interpretations of the same event vocabulary. |
+| A35 | Listing-template storage | `listing-templates/<name>/template.yaml` plus `assets/`, named only in `workspace/layout.py` and reached only through `Workspace` accessors; names are `_segment`-checked. `ListingTemplate` is its own pydantic model (`config/listing_template.py`, `extra="forbid"`) with no design, brief, title, tags, lead or lifecycle, reusing `MediaEntry` and the price models. `./` refs resolve against the template directory through a template-owner variant of `resolve_ref`. Rejected: a design-less `Listing`, which would leak into discovery and deploy. PRD 74. |
+| A36 | Template completeness | `check_listing_template` composes the existing listing checks minus design, brief and copy. Any `block` issue refuses the write, so no incomplete template ever exists on disk; `PUT` answers `200 {saved: false, issues}` and leaves the file alone. Saving never calls a provider. |
+| A37 | Batch cache records | Schema-versioned JSON under `.cache/staging/<id>/`, `.cache/batches/<id>.json` and `.cache/proposals/<listing>.json`, written through one `workspace/atomic.py` helper (tmp + `os.replace`). An unknown schema reads as absent, since cache is disposable. `StagingStore`/`BatchStore` live in `batches/`, `ProposalStore` in `ai/proposals.py` so the engine can reach it without the UI. Rejected: SQLite in the reserved `runs.db`. |
+| A38 | Name allocation | `batches/naming.allocate(base, taken)` returns `base` or the smallest free `base-N` (N ≥ 2) over the casefolded union of listing names, design stems and the batch's other names. Staging previews it and flags typed conflicts; confirm re-allocates per row under `WorkspaceLocks.listing(name)` and records the result before any file is written. PRD 60's no-overwrite rule is unchanged. |
+| A39 | Idempotent row creation | The batch record is written first, then each row runs design → template assets → `listing.yaml` → `created`, recording each step. Retry re-enters at the recorded step; an existing directory at the recorded name counts as the row's own work only if its `design` ref matches. A failure marks only that row. This is the first code that writes to `designs/`. |
+| A40 | Batch AI queue | A `BatchQueue` on `app.state` with one dispatcher thread. It starts ordinary `AiRun`s (`origin="batch"`) through the existing `AiRunner`, at most `batch_ai.concurrency` at a time, round-robin across batches; manual runs don't count. A `Conflict` leaves the row queued. `running` rows return to `queued` on startup. The manual `POST /api/ai/runs` is refused with `batch_pending` while the listing has batch work. It runs only inside the `ui` server, with no guard against a second server on one workspace. |
+| A41 | Durable proposals | `ProposalStore` keeps one record per listing (`proposal`, `snapshot`, `generated_at`, `origin`, per-section `resolution`), written by `AiRunner` before the proposal event for every run. `proposal_staleness` ports the frontend's `isStale` to the server and returns reasons. `_PROPOSAL_TTL` and browser-local proposals are removed; legacy keys are purged, not migrated. Amends A9. |
+| A42 | Rename and delete follow the listing | Rename moves the cached proposal and rewrites batch rows naming the old listing under the existing rename locks. Delete removes the proposal, stops any active run and marks batch rows `deleted`. Batch rows hold the current name; there is no hidden listing id. |
+| A43 | UI deploy precedence | Before the A33 executor plans or applies a listing it calls `BatchQueue.yield_to_deploy`: queued rows become `cancelled_by_deploy`, active AI runs are stopped and awaited, and `POST /api/ai/runs` answers `deploying` while the run holds the listing. Resume never re-queues `cancelled_by_deploy`. CLI `apply` does nothing about AI work, deliberately. |
+| A44 | Proposal cleanup after full success | `engine.run.fully_applied` requires `outcome.ok`, no blocked stage plan, and a lockfile without A29's `incomplete` marker (`ok` alone admits blocked stages). `apply_listings` then removes the listing's proposal, so CLI and UI behave the same. |
+| A45 | Upload and archive limits | Uploads stream to disk with a byte count. Limits: 64 MiB per PNG, 512 MiB per loose upload or ZIP, 1 GiB expanded, 2,000 entries, 100:1 per-entry ratio. ZIPs are read entry by entry, never `extractall`; traversal, absolute or backslash-rooted names, symlinks, encrypted and duplicate entries are refused; PNG is decided by magic bytes. The 25-design limit counts unique content hashes. A refusal leaves nothing on disk. |
+| A46 | Staging lifetime | A staging session expires seven days after its last edit; `StagingStore.sweep()` runs at server start and when the batch index is listed. Confirm deletes the staging directory once every row is materialised (inputs of failed rows are copied into the batch directory for Retry); Cancel deletes it at once. |
 
 ### Toolchain
 
@@ -133,6 +147,10 @@ src/etsy_listings/
     retry.py            backoff policy
   ai/                   SEO proposal contracts, prompt loading, provider adapters,
                         orchestration, hard validation
+    proposals.py        ProposalStore + server-side staleness (A41)
+  listing_templates/    save-as and clone conversion, template-owned assets (A35)
+  batches/              staging, naming, archive intake, row creation, the
+                        StagingStore/BatchStore cache records (A37–A39, A45)
   fx/                   USD to NOK fetch + .cache/fx.json with TTL
   runs/                 SQLite recorder, schema, event types
   ui/
@@ -141,12 +159,18 @@ src/etsy_listings/
                         rail thumbnails
       designs.py        the test-design library — bundled targets plus the
                         user's own uploads (A19)
+    batchqueue.py       the batch AI queue and deploy precedence (A40, A43)
     frontend/           Vite project, dist/ shipped as package data
 ```
 
 The workspace gains one directory for the calibrator: `test-designs/`, holding
 uploaded preview targets. Deliberately not `designs/`, which is artwork that
 ships — a calibration target is not a product (A19).
+
+PRD 74 adds `listing-templates/`, workspace data beside `listings/` that listing
+discovery never scans (A35), and three disposable cache trees:
+`.cache/staging/`, `.cache/batches/` and `.cache/proposals/` (A37). Batch
+creation is the first code that writes `designs/` (A39).
 
 ---
 

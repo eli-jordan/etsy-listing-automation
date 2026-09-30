@@ -1209,6 +1209,34 @@ class TestLifecycle:
         assert "lifecycle" not in written
         assert self._row(client)["gestures"] == ["retire"]
 
+    def test_the_editor_is_offered_the_rows_gestures(
+        self, client: TestClient, workspace_root: Path, etsy_says: EtsyStates
+    ) -> None:
+        """The editor's action row offers what the table's row does, from the
+        same rule: the detail and the summary never disagree."""
+
+        def both() -> tuple[list[str], list[str]]:
+            detail = client.get("/api/listings/take-a-hike").json()
+            return detail["gestures"], self._row(client)["gestures"]
+
+        assert both() == (["delete"], ["delete"])
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
+        etsy_says({555: "inactive"})
+        assert both() == (["retire", "renew"], ["retire", "renew"])
+        retired = client.patch("/api/listings/take-a-hike", json={"lifecycle": "retired"})
+        assert retired.json()["gestures"] == ["un-retire"]
+        assert both() == (["un-retire"], ["un-retire"])
+
+    def test_a_listing_marked_for_deletion_offers_cancel_in_the_editor(
+        self, client: TestClient, workspace_root: Path
+    ) -> None:
+        write_lock(workspace_root, "take-a-hike", etsy_listing_id=555)
+        client.delete("/api/listings/take-a-hike")
+        assert client.get("/api/listings/take-a-hike").json()["gestures"] == ["cancel"]
+
+    def test_the_unsaved_draft_offers_no_gestures(self, client: TestClient) -> None:
+        assert client.get("/api/listing-draft").json()["gestures"] == []
+
     def test_delete_without_remotes_wipes_now(
         self, client: TestClient, workspace_root: Path
     ) -> None:

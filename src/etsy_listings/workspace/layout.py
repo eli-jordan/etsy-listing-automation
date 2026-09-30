@@ -54,15 +54,27 @@ content shared across listings -- but never confused with it: this directory
 holds text a `description.ref` resolves to, not pictures a listing's `media:`
 uploads."""
 LISTINGS_DIR = "listings"
+LISTING_TEMPLATES_DIR = "listing-templates"
+"""A35: a listing's reusable production settings, one directory per listing
+template. A sibling of :data:`LISTINGS_DIR`, never inside it, which is what
+keeps a listing template out of listing discovery, ``plan --all`` and deploy
+without a filter anywhere (spec, *Product invariants* 1)."""
 
 # Per listing, inside LISTINGS_DIR/<name>/
 LISTING_FILE = "listing.yaml"
 GENERATED_FILE = "generated.yaml"
 LOCK_FILE = "state.lock.json"
 
-# Per mockup template set, inside MOCKUP_TEMPLATES_DIR/<name>/
+# Per mockup template set, inside MOCKUP_TEMPLATES_DIR/<name>/, and per
+# listing template, inside LISTING_TEMPLATES_DIR/<name>/ (A35). One name for
+# both files: the directory says which kind of template it is.
 TEMPLATE_FILE = "template.yaml"
 DERIVED_DIR = "_derived"
+LISTING_TEMPLATE_ASSETS_DIR = "assets"
+"""Inside LISTING_TEMPLATES_DIR/<name>/: the listing-local media Save as
+listing template copied, which its ``./assets/...`` refs name (A35). A35
+calls it ``TEMPLATE_ASSETS_DIR``; qualified here because a bare "template"
+means a mockup template (spec, *Terms*)."""
 
 # Inside CACHE_DIR (gitignored, fully derivable -- PRD 22)
 CATALOG_DIR = "catalog"
@@ -82,6 +94,30 @@ listing (``{name}.json``), which moves and goes with the listing as
 MARKET_SEARCH_DIR = "search"
 MARKET_STATS_DIR = "stats"
 MARKET_SNAPSHOTS_DIR = "snapshots"
+STAGING_DIR = "staging"
+"""Batch creation's staging sessions (A37, A46), one directory per session:
+:data:`STAGING_SESSION_FILE`, the frozen listing template's own files in
+:data:`FROZEN_TEMPLATE_DIR` and every upload in :data:`STAGING_UPLOADS_DIR`
+as ``<sha256>.png``. Cache, not workspace data: a session expires seven days
+after its last edit, and clearing ``.cache`` loses only unconfirmed uploads."""
+STAGING_SESSION_FILE = "session.json"
+STAGING_UPLOADS_DIR = "uploads"
+STAGING_ARCHIVE_FILE = "upload.zip"
+"""A dropped ZIP while its PNGs are read out of it, and gone before the
+session is saved (spec, *Frozen staging*; A45)."""
+FROZEN_TEMPLATE_DIR = "template"
+"""Inside a staging session's or a batch's directory: the listing
+template's owned files as they were when staging began, where the frozen
+document's ``./`` refs resolve (spec, *Frozen staging*)."""
+BATCHES_DIR = "batches"
+"""Confirmed batches (A37): ``<id>.json`` is the record, and ``<id>/`` beside
+it keeps the frozen listing template for Retry, plus the upload of any row
+whose creation failed, so the staging session can go (A46)."""
+PROPOSALS_DIR = "proposals"
+"""The latest AI SEO proposal per listing (A41), ``<listing>.json`` (A37, PRD
+4's layout): the exact name, like the market snapshot, so two listings that
+differ only in case -- possible on a case-sensitive filesystem -- never share
+a record. Moves and goes with the listing."""
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 

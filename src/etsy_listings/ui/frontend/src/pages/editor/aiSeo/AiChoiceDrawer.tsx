@@ -16,7 +16,7 @@ function usedInKey(field: Field): "title" | "description_lead" {
 export function AiChoiceDrawer({
   field,
   options,
-  stale,
+  staleReason,
   rationale,
   warnings,
   observedText,
@@ -26,7 +26,9 @@ export function AiChoiceDrawer({
 }: {
   field: Field;
   options: string[];
-  stale: boolean;
+  /** Why the proposal no longer describes the saved listing, from the
+   * server (A41), or `null` while it still does. */
+  staleReason: string | null;
   rationale: SeoRationaleEntry[];
   warnings: SeoWarningEntry[];
   observedText: string;
@@ -42,14 +44,14 @@ export function AiChoiceDrawer({
       className={enter ? "seo-suggestion-slot seo-suggestion-slot--draw" : "seo-suggestion-slot"}
     >
       <aside
-        className={stale ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
+        className={staleReason ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
         role="region"
         aria-label={`${field} AI suggestions`}
       >
         <div className="seo-suggestion__topline">
           <div className="seo-suggestion__identity">
             <AiModeMark />
-            <span>{stale ? "Suggestions are out of date" : "Choose one suggestion"}</span>
+            <SuggestionHeading staleReason={staleReason}>Choose one suggestion</SuggestionHeading>
           </div>
           <button className="seo-suggestion__quiet-action" onClick={onReject} type="button">
             Reject all
@@ -58,7 +60,7 @@ export function AiChoiceDrawer({
 
         <div className="seo-choice-list">
           {options.map((option, index) => (
-            <button disabled={stale} key={option} onClick={() => onChoose(option)} type="button">
+            <button key={option} onClick={() => onChoose(option)} type="button">
               <span>{index + 1}</span>
               {option}
             </button>
@@ -73,6 +75,20 @@ export function AiChoiceDrawer({
       </aside>
     </div>
   );
+}
+
+/** A drawer's heading: its own, or -- for an out-of-date proposal -- what
+ * changed (UI doc §8; `ui-listing-seo-interactions.md` §7). The choices
+ * below stay clickable with no confirmation: the heading is the warning
+ * (PRD 74). */
+export function SuggestionHeading({
+  staleReason,
+  children,
+}: {
+  staleReason: string | null;
+  children: string;
+}) {
+  return <span>{staleReason ? `Out of date: ${staleReason}. Still usable` : children}</span>;
 }
 
 export function AiModeMark() {

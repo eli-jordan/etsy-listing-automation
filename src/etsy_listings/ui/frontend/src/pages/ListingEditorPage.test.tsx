@@ -1,6 +1,7 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
+import * as batchesApi from "../api/batches";
 import * as calibrator from "../api/calibrator";
 import * as listingsApi from "../api/listings";
 import * as seoApi from "../api/seo";
@@ -37,9 +38,14 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    gestures: [],
     description_composed: "",
     ...over,
   };
+}
+
+function NewTemplateProbe() {
+  return <p>new listing template from {useLocation().search}</p>;
 }
 
 function renderAt(path: string) {
@@ -49,6 +55,8 @@ function renderAt(path: string) {
         <Route path="/listings" element={<p>listings page</p>} />
         <Route path="/listings/new" element={<ListingEditorPage />} />
         <Route path="/listings/:name" element={<ListingEditorPage />} />
+        <Route path="/listing-templates/new" element={<NewTemplateProbe />} />
+        <Route path="/batches/:id" element={<p>batch summary</p>} />
       </Routes>
     </MemoryRouter>,
   );
@@ -67,12 +75,181 @@ beforeEach(() => {
     shop_name: "Pine & Thread",
     storage_id: "workspace-1",
   });
-  vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({ ready: false });
+  vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
+    ready: false,
+    batch_pending: false,
+    deploying: false,
+  });
+  vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(null);
 });
 
 afterEach(() => vi.restoreAllMocks());
 
 describe("ListingEditorPage", () => {
+  it("opens the unsaved listing template from a saved listing, with no dialog (UI doc §1)", async () => {
+    vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    renderAt("/listings/take-a-hike");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Create listing template" }));
+
+    expect(
+      await screen.findByText("new listing template from ?from_listing=take-a-hike"),
+    ).toBeInTheDocument();
+  });
+
+  describe("opened from a batch (UI doc §8)", () => {
+    const MEMBER = {
+      batch_id: "b1",
+      label: "heavyweight-tee · 27 Sep 11:42",
+      row_id: "r1",
+      reviewed: false,
+      reviewable: true,
+    };
+
+    it("goes back to the batch it was opened from, in place of the breadcrumb", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(MEMBER);
+      renderAt("/listings/take-a-hike?batch=b1");
+
+      const back = await screen.findByRole("button", { name: "Back to batch" });
+      // Named in its tooltip, so the identity row keeps its room.
+      await waitFor(() =>
+        expect(back).toHaveAttribute("title", "Back to batch heavyweight-tee · 27 Sep 11:42"),
+      );
+      expect(screen.queryByText("Listings")).toBeNull();
+      fireEvent.click(back);
+
+      expect(await screen.findByText("batch summary")).toBeInTheDocument();
+    });
+
+    it("marks the listing reviewed, and back, on the batch's row", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(MEMBER);
+      const row = (reviewed: boolean) => ({ id: "r1", reviewed }) as unknown as batchesApi.BatchRow;
+      const mark = vi
+        .spyOn(batchesApi, "setReviewed")
+        .mockResolvedValueOnce({ rows: [row(true)] } as batchesApi.BatchDetail)
+        .mockResolvedValueOnce({ rows: [row(false)] } as batchesApi.BatchDetail);
+      renderAt("/listings/take-a-hike?batch=b1");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Mark reviewed" }));
+
+      const reviewed = await screen.findByRole("button", { name: "Reviewed" });
+      expect(reviewed).toHaveAttribute("aria-pressed", "true");
+      expect(reviewed).toHaveAttribute("title", "Mark needs review");
+      expect(mark).toHaveBeenCalledWith("b1", "r1", true);
+      fireEvent.click(reviewed);
+
+      expect(await screen.findByRole("button", { name: "Mark reviewed" })).toHaveAttribute(
+        "aria-pressed",
+        "false",
+      );
+      expect(mark).toHaveBeenLastCalledWith("b1", "r1", false);
+    });
+
+    it("offers Mark reviewed from anywhere, but Back to batch only from the batch", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue(MEMBER);
+      renderAt("/listings/take-a-hike");
+
+      await screen.findByRole("button", { name: "Mark reviewed" });
+      expect(screen.queryByRole("button", { name: /Back to batch/ })).toBeNull();
+    });
+
+    it("holds Mark reviewed back while the batch is still drafting the listing", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      vi.spyOn(batchesApi, "getListingBatch").mockResolvedValue({ ...MEMBER, reviewable: false });
+      renderAt("/listings/take-a-hike?batch=b1");
+
+      expect(await screen.findByRole("button", { name: "Mark reviewed" })).toBeDisabled();
+    });
+
+    it("offers neither for a listing no batch made", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+      renderAt("/listings/take-a-hike");
+
+      await screen.findByRole("button", { name: "Create listing template" });
+      expect(screen.queryByRole("button", { name: "Mark reviewed" })).toBeNull();
+      expect(screen.queryByRole("button", { name: /Back to batch/ })).toBeNull();
+    });
+  });
+
+  it("offers no actions before the listing exists", async () => {
+    vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(detail({ name: "" }));
+    renderAt("/listings/new");
+
+    await screen.findByLabelText("Listing name");
+    expect(screen.queryByRole("button", { name: "Create listing template" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Actions" })).toBeNull();
+  });
+
+  describe("lifecycle actions (PRD 66)", () => {
+    it("offers exactly the gestures the server serves", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+        detail({ status: "inactive", etsy_listing_id: 555, gestures: ["retire", "renew"] }),
+      );
+      renderAt("/listings/take-a-hike");
+
+      await screen.findByRole("button", { name: "Retire" });
+      expect(screen.getByRole("button", { name: "Renew" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /deletion|^Delete$/ })).toBeNull();
+    });
+
+    it("deletes a never-pushed listing after asking, and leaves for Listings", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ gestures: ["delete"] }));
+      const del = vi.spyOn(listingsApi, "deleteListing").mockResolvedValue(null);
+      renderAt("/listings/take-a-hike");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Delete" }));
+      expect(screen.getByText("Are you sure you want to delete take-a-hike?")).toBeInTheDocument();
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete" }));
+
+      expect(await screen.findByText("listings page")).toBeInTheDocument();
+      expect(del).toHaveBeenCalledWith("take-a-hike");
+    });
+
+    it("marks a pushed listing for deletion and offers the undo in place", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+        detail({ printify_product_id: "p1", gestures: ["delete"] }),
+      );
+      vi.spyOn(listingsApi, "deleteListing").mockResolvedValue({
+        status: "pending-delete",
+        gestures: ["cancel"],
+      } as unknown as Awaited<ReturnType<typeof listingsApi.deleteListing>>);
+      renderAt("/listings/take-a-hike");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Mark for deletion" }));
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", { name: "Mark for deletion" }),
+      );
+
+      expect(await screen.findByRole("button", { name: "Undo mark for deletion" })).toBeVisible();
+      expect(screen.getByText("Pending delete")).toBeInTheDocument();
+    });
+
+    it("sends a retire as an edit to lifecycle, straight away", async () => {
+      vi.spyOn(listingsApi, "getListing").mockResolvedValue(
+        detail({ status: "live", etsy_listing_id: 555, gestures: ["retire"] }),
+      );
+      const patch = vi
+        .spyOn(listingsApi, "patchListing")
+        .mockResolvedValue(
+          detail({ status: "pending-retire", etsy_listing_id: 555, gestures: ["un-retire"] }),
+        );
+      renderAt("/listings/take-a-hike");
+
+      fireEvent.click(await screen.findByRole("button", { name: "Retire" }));
+
+      await waitFor(() =>
+        expect(patch).toHaveBeenCalledWith(
+          "take-a-hike",
+          expect.objectContaining({ lifecycle: "retired" }),
+        ),
+      );
+      expect(await screen.findByRole("button", { name: "Un-retire" })).toBeInTheDocument();
+    });
+  });
+
   it("loads the listing and shows its name, defaulting to the Variants tab", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
     renderAt("/listings/take-a-hike");
@@ -360,11 +537,18 @@ describe("ListingEditorPage", () => {
     expect(screen.getByRole("heading", { name: "take-a-hike" })).toBeInTheDocument();
   });
 
-  it("shows the listing's path on disk in the page head", async () => {
+  it("shows the listing's path on disk in the auto-save chip's card, with Copy", async () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail());
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
     renderAt("/listings/take-a-hike");
 
-    await screen.findByText("listings/take-a-hike/listing.yaml");
+    fireEvent.click(await screen.findByRole("button", { name: /^Saved / }));
+    expect(screen.getByText("listings/take-a-hike/listing.yaml")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Copy" }));
+
+    expect(await screen.findByRole("button", { name: "Copied" })).toBeInTheDocument();
+    expect(writeText).toHaveBeenCalledWith("listings/take-a-hike/listing.yaml");
   });
 
   it("shows a badge on the tab that owns an issue", async () => {
@@ -389,7 +573,7 @@ describe("ListingEditorPage", () => {
     vi.spyOn(listingsApi, "getListing").mockResolvedValue(detail({ status: "draft" }));
     renderAt("/listings/take-a-hike");
     await screen.findByText("Draft");
-    expect(screen.queryByTitle("Open on Etsy or Printify")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Open in" })).not.toBeInTheDocument();
   });
 
   it("links a live listing at its own Etsy listing editor", async () => {
@@ -399,8 +583,8 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("Live");
 
-    fireEvent.click(screen.getByTitle("Open on Etsy or Printify"));
-    const link = screen.getByRole("link", { name: /Open on Etsy/ });
+    fireEvent.click(screen.getByRole("button", { name: "Open in" }));
+    const link = screen.getByRole("link", { name: /Etsy/ });
     expect(link).toHaveAttribute(
       "href",
       "https://www.etsy.com/your/shops/me/listing-editor/edit/4572960161",
@@ -414,12 +598,12 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("Deployed");
 
-    fireEvent.click(screen.getByTitle("Open on Etsy or Printify"));
-    expect(screen.getByRole("link", { name: /Open on Printify/ })).toHaveAttribute(
+    fireEvent.click(screen.getByRole("button", { name: "Open in" }));
+    expect(screen.getByRole("link", { name: /Printify/ })).toHaveAttribute(
       "href",
       "https://printify.com/app/product-details/6aa332559f8d2ff30103b4c9",
     );
-    expect(screen.queryByRole("link", { name: /Open on Etsy/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /Etsy/ })).not.toBeInTheDocument();
   });
 
   it("goes back to the listings page when the breadcrumb is clicked", async () => {

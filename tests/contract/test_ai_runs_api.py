@@ -17,7 +17,6 @@ import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -42,7 +41,7 @@ from tests.support.ai_runs import (
     wait_for,
 )
 from tests.support.builders import FIXTURE_LISTING as LISTING
-from tests.support.builders import edit_listing
+from tests.support.builders import copy_listing, edit_listing
 
 
 def _context_factory(workspace: Workspace, on_event: EventSink | None) -> RunContext:
@@ -310,11 +309,9 @@ def test_the_detail_carries_every_event_type(client: TestClient) -> None:
     assert set(types) == {"step", "queries", "market", "proposal", "phase"}
     assert [event["seq"] for event in detail["events"]] == list(range(1, len(types) + 1))
     proposal = next(e for e in detail["events"] if e["type"] == "proposal")
-    assert {"titles", "tags", "description_leads", "snapshot", "expires_at"} <= set(proposal)
-    kept_for = datetime.fromisoformat(proposal["expires_at"]) - datetime.fromisoformat(
-        proposal["generated_at"]
-    )
-    assert kept_for == timedelta(days=1)
+    assert {"proposal", "snapshot", "generated_at", "resolution", "stale"} <= set(proposal)
+    assert "expires_at" not in proposal
+    assert {"titles", "tags", "description_leads"} <= set(proposal["proposal"])
     market = next(e for e in detail["events"] if e["type"] == "market")
     assert market["snapshot"]["scored"] == 3
     assert detail["events"][-1] == {
@@ -424,15 +421,19 @@ def test_delete_on_a_finished_run_is_409(client: TestClient) -> None:
 # --------------------------------------------------------- beside plan/apply
 
 
-def test_a_plan_run_finishes_while_an_ai_run_is_in_flight(
-    client: TestClient, provider: ChainProvider
+def test_a_plan_run_finishes_while_another_listing_s_ai_run_is_in_flight(
+    workspace_root: Path, client: TestClient, provider: ChainProvider
 ) -> None:
+    """A deploy never queues behind AI work. Its own listing's is cancelled
+    first (A43, ``tests/behaviour/test_deploy_precedence.py``); another
+    listing's is left to run beside it."""
+    copy_listing(workspace_root, "second")
     gate = provider.gate("seo")
     ai_run = _start(client)
     wait_for(lambda: provider.started["seo"].is_set())
 
     plan = client.post(
-        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": ["second"]}
     )
     assert plan.status_code == 202
     deadline = time.monotonic() + 15

@@ -5,6 +5,10 @@ import {
   listingMediaFileUrl,
   listingMediaThumbnailUrl,
 } from "./api/listings";
+import {
+  listingTemplateMediaFileUrl,
+  listingTemplateMediaThumbnailUrl,
+} from "./api/listingTemplates";
 import type { MediaEntry, TemplateSummary } from "./types";
 
 /**
@@ -145,32 +149,70 @@ export function missingColours(
  */
 export function pictureFor(
   entry: MediaEntry,
-  design: string | null,
+  design: Artwork | null,
   size: PictureSize = "full",
-  listing: string | null = null,
+  owner: MediaOwner | string | null = null,
 ): string {
-  if (typeof entry === "string") return filePicture(entry, size, listing);
+  if (typeof entry === "string") return filePicture(entry, size, ownerOf(owner));
   return templatePicture(entry.template, entry.colour ?? null, design, size);
+}
+
+/** What a render composites onto a template's photo: a listing's design by
+ * name (`GET /api/listing-designs`), or -- in the listing-template editor,
+ * where there is no artwork (UI doc §3) -- a calibrator test design by its
+ * library id. An object for the second so the two cannot be mistaken for each
+ * other: they name files in different directories. */
+export type Artwork = string | { testDesign: string };
+
+/** Whose directory a `./` ref is resolved against: a listing's, or a listing
+ * template's (A35) -- the one other thing that owns files of its own.
+ *
+ * `copies` is for a listing template not saved yet (the *name it* state, UI
+ * doc §1): its `./assets/…` refs are only a plan until the save copies them,
+ * so each is drawn from the ref its source (`name`) still keeps it under. */
+export interface MediaOwner {
+  kind: "listing" | "listing-template";
+  name: string;
+  copies?: Readonly<Record<string, string>>;
+}
+
+/** A bare string is a listing's name -- what every listing caller passes. */
+function ownerOf(owner: MediaOwner | string | null): MediaOwner | null {
+  if (owner === null || owner === "") return null;
+  return typeof owner === "string" ? { kind: "listing", name: owner } : owner;
 }
 
 /**
  * The picture for a file ref, from whichever of PRD 73's two roots it names.
  *
- * A `./` ref is one of `listing`'s own files; with no listing -- the editor's
+ * A `./` ref is one of `owner`'s own files; with no owner -- the editor's
  * unnamed draft, which has no directory -- it names nothing, and the answer is
  * the empty string rather than a URL that would `404`. A video is served as
  * its file at either size: the thumbnail endpoint answers `415` for one,
  * because a muted `<video preload="metadata">` draws its own first frame.
  */
-function filePicture(ref: string, size: PictureSize, listing: string | null): string {
+function filePicture(ref: string, size: PictureSize, owner: MediaOwner | null): string {
   const tile = size === "tile" && mediaKind(ref) === "image";
   if (isListingLocal(ref)) {
-    if (listing === null) return "";
-    const name = ref.slice(2);
-    return tile ? listingMediaThumbnailUrl(listing, name) : listingMediaFileUrl(listing, name);
+    if (owner === null) return "";
+    const name = (owner.copies?.[ref] ?? ref).slice(2);
+    if (owner.kind === "listing-template") {
+      return tile
+        ? listingTemplateMediaThumbnailUrl(owner.name, name)
+        : listingTemplateMediaFileUrl(owner.name, name);
+    }
+    return tile
+      ? listingMediaThumbnailUrl(owner.name, name)
+      : listingMediaFileUrl(owner.name, name);
   }
   const name = sharedName(ref);
   return tile ? commonMediaThumbnailUrl(name) : commonMediaFileUrl(name);
+}
+
+/** A tile-sized picture of one gallery entry, for a listing-template card:
+ * {@link pictureFor} at `tile` size, whoever owns the `./` files. */
+export function ownedTile(entry: MediaEntry, owner: MediaOwner): string {
+  return pictureFor(entry, null, "tile", owner);
 }
 
 /** The same, for a template/colour the locator is offering but the listing has
@@ -178,7 +220,7 @@ function filePicture(ref: string, size: PictureSize, listing: string | null): st
 export function templatePicture(
   template: string,
   colour: string | null,
-  design: string | null,
+  design: Artwork | null,
   size: PictureSize = "full",
 ): string {
   if (size === "tile") return templateThumbnailUrl(template, colour);

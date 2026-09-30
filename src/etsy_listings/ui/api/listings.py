@@ -28,12 +28,12 @@ directory rather than the workspace as a whole.
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -41,6 +41,8 @@ from fastapi.responses import Response
 from pydantic import ValidationError
 
 from etsy_listings import connections
+from etsy_listings.ai.proposals import ProposalStore
+from etsy_listings.batches import BatchStore
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.config.errors import ConfigLoadError
@@ -51,12 +53,15 @@ from etsy_listings.config.listing_validation import (
     check_listing_yaml_present,
 )
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
+from etsy_listings.config.money import Money
+from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.preview import lookup_preview
 from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
 from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.engine.status import (
+    ListingGesture,
     ListingLifecycle,
     ListingStatus,
     edited_since_apply,
@@ -93,6 +98,7 @@ from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.ui.runs.executor import ContextFactory
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.atomic import write_yaml_atomic
 from etsy_listings.workspace.common_copy import CommonCopyError
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import (
@@ -247,31 +253,52 @@ def _etsy_state(workspace: Workspace, etsy_listing_id: int | None) -> str | None
     return etsy_states(workspace.root, [etsy_listing_id]).get(etsy_listing_id)
 
 
-def _pricing_summary(
-    workspace: Workspace, facts: WorkspaceFacts, listing_dir: Path, listing: Listing
+class Priced(Protocol):
+    """What a price summary reads: a listing, or a listing template (A35),
+    which carries the same price fields and the same resolution."""
+
+    garment_profile: str
+    colors: list[str]
+    pricing_plan: str | None
+
+    @property
+    def prices(self) -> Mapping[str, Money]: ...
+
+    def resolved_price(
+        self, color: str, size: str, *, pricing_plan: PricingPlan | None = None
+    ) -> Money: ...
+
+
+def pricing_summary(
+    workspace: Workspace,
+    facts: WorkspaceFacts,
+    priced: Priced,
+    *,
+    resolve: Callable[[str], Path],
 ) -> tuple[str | None, list[ResolvedPrice]]:
     """Display only (selecting a different plan from the UI is deferred): the
     resolved plan's name, and one resolved price per size -- using the
-    listing's first enabled colour as representative, since the mockup's
-    price table has no per-colour axis."""
+    first enabled colour as representative, since the mockup's price table
+    has no per-colour axis. ``resolve`` finds the plan's ref from wherever
+    its owner lives: a listing's directory or a listing template's."""
     plan = None
     plan_name = None
-    if listing.pricing_plan is not None:
+    if priced.pricing_plan is not None:
         try:
-            plan_path = workspace.resolve_ref(listing.pricing_plan, listing_dir=listing_dir)
+            plan_path = resolve(priced.pricing_plan)
             plan = workspace.load_pricing_plan(plan_path)
             plan_name = plan_path.stem
         except ConfigLoadError:
             plan = None
             plan_name = None
 
-    profile = facts.garment_profile(listing.garment_profile)
-    sizes = profile.sizes if profile is not None else sorted(listing.prices)
-    colour = listing.colors[0] if listing.colors else ""
+    profile = facts.garment_profile(priced.garment_profile)
+    sizes = profile.sizes if profile is not None else sorted(priced.prices)
+    colour = priced.colors[0] if priced.colors else ""
     prices: list[ResolvedPrice] = []
     for size in sizes:
         try:
-            money = listing.resolved_price(colour, size, pricing_plan=plan)
+            money = priced.resolved_price(colour, size, pricing_plan=plan)
         except KeyError:
             continue
         prices.append(ResolvedPrice(size=size, amount=str(money)))
@@ -356,6 +383,7 @@ def _detail(
     listing = workspace.load_listing(name)
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
+    published = is_live_etsy_state(etsy_state) if etsy_listing_id is not None else False
     return _describe(
         workspace,
         WorkspaceFacts.gather(workspace),
@@ -373,6 +401,11 @@ def _detail(
         etsy_listing_id=etsy_listing_id,
         printify_product_id=printify_product_id,
         field_errors=field_errors,
+        # The table's row gestures, so the editor's action row offers the
+        # same lifecycle actions (PRD 66) without deciding them itself.
+        gestures=listing_gestures(
+            lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
+        ),
     )
 
 
@@ -388,6 +421,7 @@ def _describe(
     etsy_listing_id: int | None = None,
     printify_product_id: str | None = None,
     field_errors: dict[str, str] | None = None,
+    gestures: Sequence[ListingGesture] = (),
 ) -> ListingDetail:
     """A `Listing` as the editor reads it, whether or not it is on disk.
 
@@ -408,7 +442,12 @@ def _describe(
         else False,
         description_ref_error=str(description.error) if description.error is not None else None,
     )
-    plan_name, resolved_prices = _pricing_summary(workspace, facts, listing_dir, listing)
+    plan_name, resolved_prices = pricing_summary(
+        workspace,
+        facts,
+        listing,
+        resolve=lambda ref: workspace.resolve_ref(ref, listing_dir=listing_dir),
+    )
     profile = facts.garment_profile(listing.garment_profile)
     return ListingDetail.model_validate(
         {
@@ -418,6 +457,7 @@ def _describe(
             "status": status,
             "issues": [i.model_dump() for i in issues],
             "field_errors": field_errors or {},
+            "gestures": list(gestures),
             "etsy_listing_id": etsy_listing_id,
             "printify_product_id": printify_product_id,
             "pricing_plan_name": plan_name,
@@ -437,7 +477,9 @@ def _describe(
     )
 
 
-def _field_errors(exc: ValidationError) -> dict[str, str]:
+def field_errors_of(exc: ValidationError) -> dict[str, str]:
+    """Each failed field, dotted, to pydantic's message: the ``field_errors``
+    a refused write answers with, here and in ``listing_templates.py``."""
     result: dict[str, str] = {}
     for error in exc.errors():
         loc = ".".join(str(part) for part in error["loc"]) or "__root__"
@@ -494,7 +536,7 @@ def get_listing(target: Existing) -> ListingDetail:
 
 
 @router.patch("/{name}", response_model=ListingDetail)
-def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
+def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> ListingDetail:
     workspace, name = target.workspace, target.name
     path = workspace.listing_file(name)
     with target.writing():
@@ -503,8 +545,14 @@ def patch_listing(target: Existing, body: dict[str, Any]) -> ListingDetail:
         try:
             Listing.model_validate(merged, context={"currency": workspace.defaults.etsy.currency})
         except ValidationError as exc:
-            return _detail(workspace, name, field_errors=_field_errors(exc))
-        replace_listing_yaml(path, merged)
+            return _detail(workspace, name, field_errors=field_errors_of(exc))
+        write_yaml_atomic(path, merged)
+    if raw.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
+        # A42's delete, undone: Cancel on a pending delete (PRD 63) means the
+        # listing never went, so the batch rows the delete marked return.
+        design = merged.get("design")
+        default = design.get("default") if isinstance(design, dict) else None
+        _batch_store(request).restore_listing(name, default)
     return _detail(workspace, name)
 
 
@@ -515,15 +563,22 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
 
-    Either way the market snapshot goes now (market-seo.md, *Cache*): a
-    listing pending deletion is one the seller is done researching, and
-    otherwise only the wipe after the remote deletion would remove it.
+    Either way the market snapshot and the cached AI proposal go now
+    (market-seo.md, *Cache*; A42): a listing pending deletion is one the
+    seller is done researching, and otherwise only the wipe after the remote
+    deletion would remove them. An AI run still going is asked to stop
+    first, so it does not write a proposal for a listing being deleted, and
+    the listing's batch rows are marked deleted and leave the queue (A42).
     """
     workspace, name = target.workspace, target.name
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
+    # A42: the rows first, so the queue cannot start one between the stop
+    # and the delete; a run already going is the one stopped next.
+    _batch_store(request).mark_deleted(name)
+    _stop_ai_run(request, name)
     _forget_ai_run(request, name)
     with target.writing():
         if etsy_listing_id is None and printify_product_id is None:
@@ -532,21 +587,11 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
         path = workspace.listing_file(name)
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         raw["lifecycle"] = "deleted"
-        replace_listing_yaml(path, raw)
+        write_yaml_atomic(path, raw)
         workspace.market_snapshot_file(name).unlink(missing_ok=True)
+        _proposals(request).remove(name)
     facts = WorkspaceFacts.gather(workspace)
     return _summarize_listing(workspace, facts, name, live=False, etsy_state=etsy_state)
-
-
-def replace_listing_yaml(path: Path, document: Mapping[str, Any]) -> None:
-    """Replace ``listing.yaml`` without a window where a reader sees it empty.
-
-    ``Path.write_text`` truncates first. The editor's browser tests read the
-    file while a blur is flushing, and an empty read is not a document.
-    """
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(yaml.safe_dump(dict(document), sort_keys=False), encoding="utf-8")
-    os.replace(temporary, path)
 
 
 def _describe_draft(
@@ -574,7 +619,7 @@ def _describe_draft(
         listing = Listing.model_validate(dict(document), context={"currency": currency})
     except ValidationError as exc:
         listing = Listing.empty_draft(currency=currency)
-        field_errors = _field_errors(exc)
+        field_errors = field_errors_of(exc)
     return _describe(
         workspace,
         WorkspaceFacts.gather(workspace),
@@ -627,7 +672,10 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
     generated copy travel together, and `.cache/renders/{name}/` moves with them
     because the render cache is keyed by listing name too -- left behind it
-    would orphan a tree nothing deletes and cost a full re-render.
+    would orphan a tree nothing deletes and cost a full re-render. The market
+    snapshot and the cached AI proposal (A42) move for the same reason, and
+    every batch row naming the listing follows it (A42), so the batch
+    summary opens the new name.
 
     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
     left that way deliberately: nothing reads them, they become true again at
@@ -645,7 +693,10 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         # Blur commits an unchanged name constantly; that is not an error, and
         # it must not be the 409 below either.
         return _detail(workspace, old)
-    with target.locks.listing(old, new):
+    # A42: the batch rows follow the move. The batch locks come first --
+    # the order creating a batch row takes them in -- see
+    # `BatchStore.following_rename`.
+    with _batch_store(request).following_rename(old, new), target.locks.listing(old, new):
         _require_listing(workspace, old)
         if destination.exists():
             raise HTTPException(status_code=409, detail=f"a listing already exists named {new!r}")
@@ -656,8 +707,26 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         snapshot = workspace.market_snapshot_file(old)
         if snapshot.is_file():
             os.replace(snapshot, workspace.market_snapshot_file(new))
+        _proposals(request).move(old, new)
     _forget_ai_run(request, old)
     return _detail(workspace, new)
+
+
+def _proposals(request: Request) -> ProposalStore:
+    store: ProposalStore = request.app.state.proposal_store
+    return store
+
+
+def _batch_store(request: Request) -> BatchStore:
+    store: BatchStore = request.app.state.batch_store
+    return store
+
+
+def _stop_ai_run(request: Request, name: str) -> None:
+    """A42: deleting a listing cancels its active AI run."""
+    run = request.app.state.ai_run_registry.latest(name)
+    if run is not None:
+        run.request_stop("cancelled")
 
 
 def _forget_ai_run(request: Request, name: str) -> None:

@@ -3,8 +3,10 @@ reads, and the helpers AI runs build a proposal with (AI SEO implementation
 plan, PR5; market-seo.md, *AI runs*; market-seo implementation plan, PR 8).
 
 ```
-GET  /api/listings/{name}/ai-seo/readiness  -> SeoReadinessResponse
-GET  /api/listings/{name}/market            -> MarketSnapshot | 404
+GET   /api/listings/{name}/ai-seo/readiness      -> SeoReadinessResponse
+GET   /api/listings/{name}/market                -> MarketSnapshot | 404
+GET   /api/listings/{name}/proposal              -> ListingProposal | 404
+PATCH /api/listings/{name}/proposal/resolution   -> ListingProposal | 404 | 409
 ```
 
 Generation itself is an AI run (``ui/airuns/``, served by
@@ -19,10 +21,7 @@ browser disconnecting -- were retired when the browser moved onto runs
   endpoint answers with for the **AI Mode** button (``draft_brief=True``:
   an empty brief is drafted by that click), so the button is lit exactly
   when ``POST /api/ai/runs`` would accept the run the click starts;
-- turning a saved `Listing` into the `SeoRequest` the orchestrator wants
-  (:func:`build_seo_request`, :func:`primary_design_image`), and the
-  proposal's frozen input snapshot and wire response
-  (:func:`proposal_snapshot`, :func:`proposal_response`);
+- saved-listing preparation and proposal judgment live in ai/listing_inputs;
 - the provider factory ``create_app`` injects (:data:`AiProviderFactory`),
   the seam tests replace with fakes. CI never calls a real Codex or Claude
   CLI, per PR4's own rule.
@@ -31,7 +30,6 @@ browser disconnecting -- were retired when the browser moved onto runs
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
-from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
@@ -39,44 +37,26 @@ from fastapi import APIRouter, HTTPException, Request
 from etsy_listings.ai.claude import ClaudeProvider
 from etsy_listings.ai.codex import CodexProvider
 from etsy_listings.ai.grok import GrokProvider
-from etsy_listings.ai.models import GarmentContext, SeoProposal, SeoRequest
+from etsy_listings.ai.listing_inputs import ListingAiInputs
+from etsy_listings.ai.proposals import (
+    ProposalReplacedError,
+    ProposalStore,
+)
 from etsy_listings.ai.providers import AiProvider
-from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
 from etsy_listings.market import snapshot as market_snapshot
 from etsy_listings.market.snapshot import MarketSnapshot
 from etsy_listings.ui.api.listings import Existing
 from etsy_listings.ui.api.schemas import (
-    SeoProposalResponse,
-    SeoProposalSnapshot,
-    SeoRationaleEntry,
+    AiReadinessBlock,
+    ListingProposal,
+    ProposalResolutionPatch,
     SeoReadinessResponse,
-    SeoWarningEntry,
 )
 from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import InvalidRefError, Workspace
+from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
-
-_PROPOSAL_TTL = timedelta(days=1)
-"""The settled "Proposal persistence" decision: "Store unresolved proposals
-only in browser local storage ... for one day." The server never stores
-one; it only stamps ``expires_at`` so the browser does not have to compute
-the retention window itself from a client clock alone."""
-
-_PREFERRED_DESIGN_KEYS: tuple[str, ...] = ("default", "on-light", "on-dark")
-"""Which artwork key becomes the one image a provider sees, when a listing's
-design map carries more than one (PRD 30's ``on-light``/``on-dark`` split).
-The provider is reading the design once, for SEO copy and OCR text, not
-rendering it per colour -- there is no per-colour resolution to do here, only
-a deterministic single pick. ``"default"`` covers the common single-artwork
-case (`config/listing.py._coerce_design`'s own normalisation target);
-``on-light`` is preferred over ``on-dark`` next only because it has to be
-one of them, arbitrarily, and a fixed order beats letting `dict` iteration
-order decide. Anything not in this tuple falls back to the alphabetically
-first key (`primary_design_image` below), so reordering the mapping cannot
-change the image sent to a provider."""
-
 
 AiProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
 """`create_app`'s injection seam for this module, the same shape
@@ -116,17 +96,6 @@ def _providers(request: Request, workspace: Workspace) -> Sequence[AiProvider]:
     return result
 
 
-def primary_design_image(workspace: Workspace, name: str, listing: Listing) -> Path:
-    listing_dir = workspace.listing_dir(name)
-    key = next((k for k in _PREFERRED_DESIGN_KEYS if k in listing.design), min(listing.design))
-    try:
-        return workspace.resolve_ref(listing.design[key], listing_dir=listing_dir)
-    except InvalidRefError as exc:
-        # A seller's file to fix (PRD 73's legacy form, most likely), so a
-        # 409 naming it, the way a missing garment profile is answered.
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-
-
 def readiness(
     workspace: Workspace,
     listing: Listing,
@@ -155,95 +124,77 @@ def readiness(
         return SeoReadinessResponse(ready=False, reason="the listing brief is empty")
     if WorkspaceFacts.gather(workspace).garment_profile(listing.garment_profile) is None:
         return SeoReadinessResponse(ready=False, reason="the listing has no usable garment profile")
-    prompts = [workspace.seo_prompt_file(), workspace.market_queries_prompt_file()]
-    if drafting:
-        prompts.append(workspace.brief_prompt_file())
-    for prompt_file in prompts:
-        if not prompt_file.is_file():
-            return SeoReadinessResponse(
-                ready=False,
-                reason=f"{prompt_file} is missing; run `etsy-listings setup` to seed it",
-            )
-    checks = [provider.readiness() for provider in providers]
-    if not any(check.ready for check in checks):
-        reasons = "; ".join(check.reason for check in checks if check.reason)
-        detail = reasons or "no provider is configured"
-        return SeoReadinessResponse(ready=False, reason=f"no AI provider is ready ({detail})")
+    prompt_file = missing_prompt(workspace, draft_brief=drafting)
+    if prompt_file is not None:
+        return SeoReadinessResponse(
+            ready=False,
+            reason=f"{prompt_file} is missing; run `etsy-listings setup` to seed it",
+        )
+    unready = provider_problem(providers)
+    if unready is not None:
+        return SeoReadinessResponse(ready=False, reason=f"no AI provider is ready ({unready})")
     return SeoReadinessResponse(ready=True)
 
 
-def build_seo_request(
-    workspace: Workspace,
-    name: str,
-    listing: Listing,
-    profile: GarmentProfile,
-    *,
-    market_block: str = "",
-) -> SeoRequest:
-    """The submitted generation inputs (implementation plan, "Proposal and
-    stale-state rules"), read from the saved listing and its garment profile
-    -- never from a value the browser supplied -- with the AI run's
-    market-data block (``""`` is none).
-
-    ``product_type`` is the garment profile's blueprint title and
-    ``etsy_category`` the listing's shop section: the closest facts a listing
-    carries to the two the prompt asks for."""
-    return SeoRequest(
-        market_block=market_block,
-        brief=listing.brief,
-        product_type=profile.blueprint.display_title,
-        etsy_category=listing.etsy.section or "",
-        materials=tuple(profile.materials),
-        colors=tuple(listing.colors),
-        garment=GarmentContext(brand=profile.blueprint.brand, model=profile.blueprint.model),
-        design_image=primary_design_image(workspace, name, listing),
-    )
+def missing_prompt(workspace: Workspace, *, draft_brief: bool) -> Path | None:
+    """The first prompt file a run needs that is not there: ``seo.md`` and
+    ``market-queries.md`` always, ``brief.md`` when the run drafts."""
+    prompts = [workspace.seo_prompt_file(), workspace.market_queries_prompt_file()]
+    if draft_brief:
+        prompts.append(workspace.brief_prompt_file())
+    return next((prompt for prompt in prompts if not prompt.is_file()), None)
 
 
-def proposal_snapshot(
-    workspace: Workspace, name: str, listing: Listing, seo_request: SeoRequest
-) -> SeoProposalSnapshot:
-    """Freeze the saved inputs before the provider starts its long request."""
-    return SeoProposalSnapshot(
-        brief=seo_request.brief,
-        product_type=seo_request.product_type,
-        etsy_category=seo_request.etsy_category,
-        materials=list(seo_request.materials),
-        colors=list(seo_request.colors),
-        garment_brand=seo_request.garment.brand,
-        garment_model=seo_request.garment.model,
-        garment_profile=listing.garment_profile,
-        design=dict(listing.design),
-        design_content_hash=workspace.design_content_hash(
-            listing.design, listing_dir=workspace.listing_dir(name)
-        ),
-    )
+def provider_problem(providers: Sequence[AiProvider]) -> str | None:
+    """``None`` when some provider is ready, else every provider's reason."""
+    checks = [provider.readiness() for provider in providers]
+    if any(check.ready for check in checks):
+        return None
+    reasons = "; ".join(check.reason for check in checks if check.reason)
+    return reasons or "no provider is configured"
 
 
-def proposal_response(proposal: SeoProposal, snapshot: SeoProposalSnapshot) -> SeoProposalResponse:
-    generated_at = datetime.now(UTC)
-    return SeoProposalResponse(
-        titles=list(proposal.titles),
-        tags=list(proposal.tags),
-        description_leads=list(proposal.description_leads),
-        rationale=[
-            SeoRationaleEntry(
-                phrase=entry.phrase,
-                intent=entry.intent,
-                reason=entry.reason,
-                used_in=list(entry.used_in),
-            )
-            for entry in proposal.rationale
-        ],
-        warnings=[
-            SeoWarningEntry(message=warning.message, kind=warning.kind)
-            for warning in proposal.warnings
-        ],
-        observed_text=proposal.observed_text,
-        snapshot=snapshot,
-        generated_at=generated_at,
-        expires_at=generated_at + _PROPOSAL_TTL,
-    )
+SETUP_REMEDY = "Add one in Setup, then come back. Your staging is kept."
+
+
+def batch_readiness(
+    workspace: Workspace, providers: Sequence[AiProvider], *, has_market: bool
+) -> AiReadinessBlock | None:
+    """Whether a batch created now could draft (spec, *Design validation*):
+    every prompt a drafting run reads, a ready provider -- :func:`readiness`'
+    own two checks -- and Etsy market access, which a manual run only finds
+    missing once it reaches research. ``None`` when all three are there;
+    the wording is ``staging.note.md``'s."""
+    prompt_file = missing_prompt(workspace, draft_brief=True)
+    if prompt_file is not None:
+        shown = prompt_file.relative_to(workspace.root).as_posix()
+        return AiReadinessBlock(
+            message=f"{shown} is missing.",
+            remedy="Run `etsy-listings setup` to seed it, then come back. Your staging is kept.",
+        )
+    if provider_problem(providers) is not None:
+        return AiReadinessBlock(message="No AI provider is ready.", remedy=SETUP_REMEDY)
+    if not has_market:
+        return AiReadinessBlock(
+            message="Etsy market access isn't set up.",
+            remedy="Add the Etsy app key in Setup, then come back. Your staging is kept.",
+        )
+    return None
+
+
+BATCH_PENDING_REASON = "This listing is drafting in a batch. AI Mode is back once that is done."
+"""The editor's hint while a batch row owns the listing's AI (spec,
+*Scheduling*: two runs must never own one listing)."""
+
+
+DEPLOYING_REASON = "This listing is deploying. AI Mode is back once the deploy finishes."
+"""The editor's hint while a UI plan or apply holds the listing (A43; UI doc
+§8, *Deploying takes precedence over AI*)."""
+
+
+def _proposals(request: Request) -> ProposalStore:
+    store: ProposalStore = request.app.state.proposal_store
+    return store
 
 
 @router.get("/{name}/ai-seo/readiness", response_model=SeoReadinessResponse)
@@ -258,6 +209,10 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     `readiness()`, is a local probe (a file's existence, a fast
     `--help`/`login status` subprocess) that changes nothing.
     """
+    if request.app.state.ai_run_registry.deploying(target.name):
+        return SeoReadinessResponse(ready=False, reason=DEPLOYING_REASON, deploying=True)
+    if request.app.state.batch_queue.pending(target.name):
+        return SeoReadinessResponse(ready=False, reason=BATCH_PENDING_REASON, batch_pending=True)
     listing = target.workspace.load_listing(target.name)
     providers = _providers(request, target.workspace)
     return readiness(target.workspace, listing, providers, draft_brief=True)
@@ -278,3 +233,55 @@ def get_market_snapshot(target: Existing) -> MarketSnapshot:
     if snapshot is None:
         raise HTTPException(status_code=404, detail=f"no market snapshot for {target.name!r}")
     return snapshot
+
+
+@router.get(
+    "/{name}/proposal",
+    response_model=ListingProposal,
+    responses={404: {"description": "No such listing, or no proposal cached for it"}},
+)
+def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
+    """The listing's latest AI SEO proposal (A41; spec, *Durable AI
+    proposals*), with which sections were resolved and whether it has gone
+    stale. Written by every AI run before it announces the proposal, so a
+    reload, a server restart or a batch run all find it here."""
+    record = _proposals(request).load(target.name)
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"no proposal for {target.name!r}")
+    return ListingAiInputs.read(target.workspace, target.name).judge(record)
+
+
+@router.patch(
+    "/{name}/proposal/resolution",
+    response_model=ListingProposal,
+    responses={
+        404: {"description": "No such listing, or no proposal cached for it"},
+        409: {"description": "The proposal was regenerated since the page read it"},
+    },
+)
+def resolve_listing_proposal(
+    target: Existing, body: ProposalResolutionPatch, request: Request
+) -> ListingProposal:
+    """Record accepted or dismissed sections (spec, *Durable AI proposals*),
+    so a resolved drawer does not reopen as new after a reload. The chosen
+    value itself reaches ``listing.yaml`` through ordinary autosave; this
+    records only that the section was dealt with. Under the listing's write
+    lock, so a delete or rename cannot land between the read and the write
+    and leave a record behind for a listing that is gone."""
+    store = _proposals(request)
+    with target.writing():
+        try:
+            record = store.resolve(
+                target.name,
+                generated_at=body.generated_at,
+                title=body.title,
+                tags=body.tags,
+                lead=body.lead,
+            )
+        except ProposalReplacedError as exc:
+            raise HTTPException(
+                status_code=409, detail="this proposal was replaced by a newer one"
+            ) from exc
+    if record is None:
+        raise HTTPException(status_code=404, detail=f"no proposal for {target.name!r}")
+    return ListingAiInputs.read(target.workspace, target.name).judge(record)

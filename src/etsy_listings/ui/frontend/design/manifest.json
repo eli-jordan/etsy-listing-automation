@@ -20,6 +20,21 @@
       "description": "Hi-fi mockups: the three-step AI workflow indicator in the top bar and the related listings panel on Listing Details."
     },
     {
+      "name": "batch-create",
+      "title": "Batch Listing Creation",
+      "description": "Hi-fi (round 4) from the app's real components: template editor, templates and batches, staging, batch summary, listing from a batch."
+    },
+    {
+      "name": "editor-header",
+      "title": "Listing editor header",
+      "description": "Chosen listing-editor head (round 4): identity row with auto-save chip over an icon + label action row, its states, and the batch context."
+    },
+    {
+      "name": "template-cards",
+      "title": "Listing template cards",
+      "description": "The listing template card gallery: today's 2fr/1fr/1fr strip beside the shipped fanned stack (C). A and B are on the archive."
+    },
+    {
       "name": "archive",
       "title": "Archive",
       "description": "Retired directions, grouped by feature - history, not options."
@@ -28,10 +43,42 @@
   "scenes": [
     {
       "name": "archive",
-      "frames": 3,
+      "frames": 7,
       "brief": "design/scenes/archive/_brief.md",
       "title": "Archive",
       "description": "Retired directions, kept as history — never linked from a live flow."
+    },
+    {
+      "name": "batch-create-lofi",
+      "frames": 13,
+      "brief": "design/scenes/batch-create-lofi/_brief.md",
+      "title": "Batch Creation — Hi-fi",
+      "description": "Batch listing creation hi-fi — built from the app's real components over a fixture API (round 4; brief UNCONFIRMED)."
+    },
+    {
+      "name": "batch-create-lofi-v1",
+      "frames": 8,
+      "brief": "design/scenes/batch-create-lofi-v1/_brief.md",
+      "description": "Batch creation wireframes v1 — snapshot before round 1 feedback (drop listings filter, lighter template creation, editor pieces)."
+    },
+    {
+      "name": "batch-create-lofi-v2",
+      "frames": 11,
+      "brief": "design/scenes/batch-create-lofi-v2/_brief.md",
+      "description": "Batch creation wireframes v2 — snapshot before round 2 feedback (template editor mirrors listing editor, batch statuses, no stale modal)."
+    },
+    {
+      "name": "batch-create-lofi-v3",
+      "frames": 13,
+      "brief": "design/scenes/batch-create-lofi-v3/_brief.md",
+      "description": "Batch creation wireframes v3 — snapshot before the hi-fi pass (real components, template editor without Clone/Delete/Start batch)."
+    },
+    {
+      "name": "batch-create-specs",
+      "frames": 1,
+      "brief": "design/scenes/batch-create-specs/_brief.md",
+      "title": "Batch Creation — Thinking",
+      "description": "Batch listing creation thinking — brief and flow from docs/listing-batch-creation-spec.md (UNCONFIRMED: self-answered from the spec)."
     },
     {
       "name": "batch-deploy-lofi",
@@ -80,6 +127,22 @@
       "frames": 3
     },
     {
+      "name": "editor-header",
+      "frames": 8
+    },
+    {
+      "name": "editor-header-v1",
+      "frames": 6
+    },
+    {
+      "name": "editor-header-v2",
+      "frames": 6
+    },
+    {
+      "name": "editor-header-v3",
+      "frames": 9
+    },
+    {
       "name": "listing-seo",
       "frames": 1
     },
@@ -117,6 +180,10 @@
     {
       "name": "market-seo",
       "frames": 4
+    },
+    {
+      "name": "template-cards",
+      "frames": 2
     }
   ],
   "frames": [
@@ -146,6 +213,464 @@
       "title": "Batch deployment — review (stage matrix)",
       "viewport": "laptop",
       "description": "Retired: the stage matrix read as a spreadsheet - the plain listing list won, with stages per listing in the bottom sheet."
+    },
+    {
+      "id": "archive/editor-header-icon-only",
+      "file": "design/scenes/archive/editor-header-icon-only.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Editor header - icon-only actions",
+      "viewport": "laptop",
+      "description": "Retired: icon-only action row with hover/focus tips; the icon + label row won - words need no hover and fit the row."
+    },
+    {
+      "id": "archive/editor-header-icon-only-batch",
+      "file": "design/scenes/archive/editor-header-icon-only-batch.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Editor header - icon-only actions, from a batch",
+      "viewport": "laptop",
+      "description": "Retired: the icon-only action row in batch context (Mark reviewed was still a separate button); the icon + label row won."
+    },
+    {
+      "id": "archive/template-card-even-squares",
+      "file": "design/scenes/archive/template-card-even-squares.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Template card - three even squares",
+      "viewport": "laptop",
+      "description": "Retired: C (fanned stack) won -- three small squares read as a summary, not a gallery."
+    },
+    {
+      "id": "archive/template-card-hero-strip",
+      "file": "design/scenes/archive/template-card-hero-strip.tsx",
+      "kind": "tsx",
+      "scene": "archive",
+      "title": "Template card - hero + thumbnail strip",
+      "viewport": "laptop",
+      "description": "Retired: C (fanned stack) won -- the hero made every card poster-tall."
+    },
+    {
+      "id": "batch-create-lofi-v1/batch-summary",
+      "file": "design/scenes/batch-create-lofi-v1/batch-summary.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "Batch summary · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: the batch's one review surface mid-queue: drafted, drafting, queued, failed, not-created and deleted rows."
+    },
+    {
+      "id": "batch-create-lofi-v1/listings-filtered",
+      "file": "design/scenes/batch-create-lofi-v1/listings-filtered.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "Listings — filtered to a batch · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: the ordinary Listings table narrowed to one batch, with a review column and a way back to the summary."
+    },
+    {
+      "id": "batch-create-lofi-v1/new-batch",
+      "file": "design/scenes/batch-create-lofi-v1/new-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "New batch — choose and drop · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: pick one listing template, then drop one ZIP or loose PNGs; offers to resume an unfinished staging session."
+    },
+    {
+      "id": "batch-create-lofi-v1/save-template",
+      "file": "design/scenes/batch-create-lofi-v1/save-template.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "Save as listing template · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: dialog over the listing editor naming the template and showing what it keeps and what each new listing gets fresh."
+    },
+    {
+      "id": "batch-create-lofi-v1/staging",
+      "file": "design/scenes/batch-create-lofi-v1/staging.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "New batch — staging review · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: validated, deduped, auto-named rows ready to confirm; invalid PNGs are shown and left out."
+    },
+    {
+      "id": "batch-create-lofi-v1/staging-blocked",
+      "file": "design/scenes/batch-create-lofi-v1/staging-blocked.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "New batch — names need fixing · v1",
+      "viewport": "laptop",
+      "description": "Wireframe state: an empty slug and a manually typed name conflict block Create until fixed."
+    },
+    {
+      "id": "batch-create-lofi-v1/staging-refused",
+      "file": "design/scenes/batch-create-lofi-v1/staging-refused.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "New batch — upload refused · v1",
+      "viewport": "laptop",
+      "description": "Wireframe error state: a ZIP over the 25-design limit is refused before staging, with the recovery spelled out."
+    },
+    {
+      "id": "batch-create-lofi-v1/templates",
+      "file": "design/scenes/batch-create-lofi-v1/templates.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v1",
+      "title": "Listing templates · v1",
+      "viewport": "laptop",
+      "description": "Wireframe: listing-template cards (one shown mid-drag as a drop target) and the recent-batches list."
+    },
+    {
+      "id": "batch-create-lofi-v2/batch-summary",
+      "file": "design/scenes/batch-create-lofi-v2/batch-summary.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Batch summary · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: the batch's one review surface mid-queue: drafted, drafting, queued, failed, not-created and deleted rows."
+    },
+    {
+      "id": "batch-create-lofi-v2/listing-from-batch",
+      "file": "design/scenes/batch-create-lofi-v2/listing-from-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing — opened from a batch · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: batch listing in the editor with Back to batch, Mark reviewed, and a stale title proposal that can still be used."
+    },
+    {
+      "id": "batch-create-lofi-v2/listing-stale-confirm",
+      "file": "design/scenes/batch-create-lofi-v2/listing-stale-confirm.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing — use a stale suggestion? · v2",
+      "viewport": "laptop",
+      "description": "Wireframe state: the one-time warning before accepting an out-of-date AI suggestion in this editor session."
+    },
+    {
+      "id": "batch-create-lofi-v2/new-batch",
+      "file": "design/scenes/batch-create-lofi-v2/new-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "New batch — choose and drop · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: pick one listing template, then drop one ZIP or loose PNGs; offers to resume an unfinished staging session."
+    },
+    {
+      "id": "batch-create-lofi-v2/staging",
+      "file": "design/scenes/batch-create-lofi-v2/staging.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "note": "### AI readiness shows only when it fails\n\nNothing is said when AI drafting can run. If a prompt, a ready provider or Etsy\nmarket access is missing, a blocking callout replaces the count strip's right\nside and **Create listings** is disabled, e.g.:\n\n> **AI drafting can't run yet.** No AI provider is ready. Add one in Setup, then come back. Your staging is kept.",
+      "title": "New batch — staging review · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: validated, deduped, auto-named rows ready to confirm; invalid PNGs are shown and left out."
+    },
+    {
+      "id": "batch-create-lofi-v2/staging-blocked",
+      "file": "design/scenes/batch-create-lofi-v2/staging-blocked.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "New batch — names need fixing · v2",
+      "viewport": "laptop",
+      "description": "Wireframe state: an empty slug and a manually typed name conflict block Create until fixed."
+    },
+    {
+      "id": "batch-create-lofi-v2/staging-refused",
+      "file": "design/scenes/batch-create-lofi-v2/staging-refused.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "New batch — upload refused · v2",
+      "viewport": "laptop",
+      "description": "Wireframe error state: a ZIP over the 25-design limit is refused before staging, with the recovery spelled out."
+    },
+    {
+      "id": "batch-create-lofi-v2/template-editor",
+      "file": "design/scenes/batch-create-lofi-v2/template-editor.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing template editor · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: editing a template's gallery, previewed with the calibrator's test-design picker (Bundled grid by default)."
+    },
+    {
+      "id": "batch-create-lofi-v2/template-new",
+      "file": "design/scenes/batch-create-lofi-v2/template-new.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing template — new · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: Save as listing template (or Clone) opens the new template with the cursor in the name field; nothing saves until it is named."
+    },
+    {
+      "id": "batch-create-lofi-v2/template-unsaved",
+      "file": "design/scenes/batch-create-lofi-v2/template-unsaved.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing template — change not saved · v2",
+      "viewport": "laptop",
+      "description": "Wireframe state: an edit that makes the template incomplete is held and explained; the last complete version stays saved."
+    },
+    {
+      "id": "batch-create-lofi-v2/templates",
+      "file": "design/scenes/batch-create-lofi-v2/templates.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v2",
+      "title": "Listing templates · v2",
+      "viewport": "laptop",
+      "description": "Wireframe: listing-template cards (one mid-drag; a drop goes straight to staging) and recent batches, including an unconfirmed staging session."
+    },
+    {
+      "id": "batch-create-lofi-v3/batch-summary",
+      "file": "design/scenes/batch-create-lofi-v3/batch-summary.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Batch summary · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: the batch's one review surface mid-queue: drafted, drafting, queued, failed, not-created and deleted rows."
+    },
+    {
+      "id": "batch-create-lofi-v3/listing-from-batch",
+      "file": "design/scenes/batch-create-lofi-v3/listing-from-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing — opened from a batch · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: batch listing in the editor with Back to batch, Mark reviewed, and an out-of-date title proposal that can still be used directly."
+    },
+    {
+      "id": "batch-create-lofi-v3/new-batch",
+      "file": "design/scenes/batch-create-lofi-v3/new-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "New batch — choose and drop · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: pick one listing template, then drop one ZIP or loose PNGs; offers to resume an unfinished staging session."
+    },
+    {
+      "id": "batch-create-lofi-v3/staging",
+      "file": "design/scenes/batch-create-lofi-v3/staging.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "note": "### AI readiness shows only when it fails\n\nNothing is said when AI drafting can run. If a prompt, a ready provider or Etsy\nmarket access is missing, a blocking callout replaces the count strip's right\nside and **Create listings** is disabled, e.g.:\n\n> **AI drafting can't run yet.** No AI provider is ready. Add one in Setup, then come back. Your staging is kept.",
+      "title": "New batch — staging review · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: validated, deduped, auto-named rows ready to confirm; invalid PNGs are shown and left out."
+    },
+    {
+      "id": "batch-create-lofi-v3/staging-blocked",
+      "file": "design/scenes/batch-create-lofi-v3/staging-blocked.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "New batch — names need fixing · v3",
+      "viewport": "laptop",
+      "description": "Wireframe state: an empty slug and a manually typed name conflict block Create until fixed."
+    },
+    {
+      "id": "batch-create-lofi-v3/staging-refused",
+      "file": "design/scenes/batch-create-lofi-v3/staging-refused.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "New batch — upload refused · v3",
+      "viewport": "laptop",
+      "description": "Wireframe error state: a ZIP over the 25-design limit is refused before staging, with the recovery spelled out."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-details",
+      "file": "design/scenes/batch-create-lofi-v3/template-details.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — Listing Details · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Listing Details without brief, title, tags, lead or AI Mode; description body, preview, section and materials remain."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-images",
+      "file": "design/scenes/batch-create-lofi-v3/template-images.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — Listing Images · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Listing Images as in the listing editor (Files group reads This template)."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-new",
+      "file": "design/scenes/batch-create-lofi-v3/template-new.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — new · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Save as listing template (or Clone) opens the new template on Variants with the empty name field focused; nothing saves until named."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-pricing",
+      "file": "design/scenes/batch-create-lofi-v3/template-pricing.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — Pricing · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Pricing tab, identical to the listing editor's plan and per-size prices."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-unsaved",
+      "file": "design/scenes/batch-create-lofi-v3/template-unsaved.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — change not saved · v3",
+      "viewport": "laptop",
+      "description": "Wireframe state: an edit that makes the template incomplete is held and flagged; the last complete version stays saved."
+    },
+    {
+      "id": "batch-create-lofi-v3/template-variants",
+      "file": "design/scenes/batch-create-lofi-v3/template-variants.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "title": "Listing template — Variants · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: Variants tab, identical to the listing editor's; the preview design row (shown open) replaces the listing's design row."
+    },
+    {
+      "id": "batch-create-lofi-v3/templates",
+      "file": "design/scenes/batch-create-lofi-v3/templates.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi-v3",
+      "note": "### Recent batches: one status per batch\n\nDerived from the batch, never set by hand. The title opens it: a **Staging** row reopens staging, every other row opens the batch summary.\n\n| Status | Means |\n|---|---|\n| Staging | Uploaded, not confirmed. Nothing created yet |\n| Drafting | Listings exist, AI queue still working |\n| In review | Drafting done, not every listing marked reviewed |\n| Complete | Every created listing marked reviewed |\n| Stopped | Cancel batch left work undrafted; Resume on the summary |\n\nFailures don't get a status. They show as a red count beside the progress, so a batch with one failed row still reads as \"In review\".\n\n**Open:** should *Complete* also require the listings to be deployed? Here it only needs Reviewed, which the spec keeps separate from deploying.",
+      "title": "Listing templates · v3",
+      "viewport": "laptop",
+      "description": "Wireframe: listing-template cards (one mid-drag; a drop goes straight to staging) and recent batches with a lifecycle status per batch."
+    },
+    {
+      "id": "batch-create-lofi/batch-summary",
+      "file": "design/scenes/batch-create-lofi/batch-summary.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Batch summary",
+      "viewport": "laptop",
+      "description": "The batch's one review surface mid-queue, with the editor's own AI step indicator on running and failed rows."
+    },
+    {
+      "id": "batch-create-lofi/listing-from-batch",
+      "file": "design/scenes/batch-create-lofi/listing-from-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing — opened from a batch",
+      "viewport": "laptop",
+      "description": "Hi-fi: batch listing in the editor with Back to batch, Mark reviewed, and an out-of-date title proposal that can still be used directly."
+    },
+    {
+      "id": "batch-create-lofi/new-batch",
+      "file": "design/scenes/batch-create-lofi/new-batch.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "New batch — choose and drop",
+      "viewport": "laptop",
+      "description": "Hi-fi: pick one listing template, then drop one ZIP or loose PNGs; offers to resume an unfinished staging session."
+    },
+    {
+      "id": "batch-create-lofi/staging",
+      "file": "design/scenes/batch-create-lofi/staging.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "note": "### AI readiness shows only when it fails\n\nNothing is said when AI drafting can run. If a prompt, a ready provider or Etsy\nmarket access is missing, a blocking callout replaces the count strip's right\nside and **Create listings** is disabled, e.g.:\n\n> **AI drafting can't run yet.** No AI provider is ready. Add one in Setup, then come back. Your staging is kept.",
+      "title": "New batch — staging review",
+      "viewport": "laptop",
+      "description": "Hi-fi: validated, deduped, auto-named rows ready to confirm; invalid PNGs are shown and left out."
+    },
+    {
+      "id": "batch-create-lofi/staging-blocked",
+      "file": "design/scenes/batch-create-lofi/staging-blocked.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "New batch — names need fixing",
+      "viewport": "laptop",
+      "description": "Hi-fi state: an empty slug and a manually typed name conflict block Create until fixed."
+    },
+    {
+      "id": "batch-create-lofi/staging-refused",
+      "file": "design/scenes/batch-create-lofi/staging-refused.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "New batch — upload refused",
+      "viewport": "laptop",
+      "description": "Hi-fi error state: a ZIP over the 25-design limit is refused before staging, with the recovery spelled out."
+    },
+    {
+      "id": "batch-create-lofi/template-details",
+      "file": "design/scenes/batch-create-lofi/template-details.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — Listing Details",
+      "viewport": "laptop",
+      "description": "Hi-fi: Listing Details without brief, title, tags, lead or AI Mode; description body, preview, section and materials remain."
+    },
+    {
+      "id": "batch-create-lofi/template-images",
+      "file": "design/scenes/batch-create-lofi/template-images.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — Listing Images",
+      "viewport": "laptop",
+      "description": "Hi-fi: Listing Images is the real ImagesTab (its Files group should read This template)."
+    },
+    {
+      "id": "batch-create-lofi/template-new",
+      "file": "design/scenes/batch-create-lofi/template-new.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — new",
+      "viewport": "laptop",
+      "description": "Hi-fi: Save as listing template (or Clone) opens the new template (real EditableName, empty and focused); nothing saves until named."
+    },
+    {
+      "id": "batch-create-lofi/template-pricing",
+      "file": "design/scenes/batch-create-lofi/template-pricing.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — Pricing",
+      "viewport": "laptop",
+      "description": "Hi-fi: Pricing is the real PricingTab with the template's plan and per-size prices."
+    },
+    {
+      "id": "batch-create-lofi/template-unsaved",
+      "file": "design/scenes/batch-create-lofi/template-unsaved.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "title": "Listing template — change not saved",
+      "viewport": "laptop",
+      "description": "Hi-fi state: an edit that makes the template incomplete is held and flagged; the last complete version stays saved."
+    },
+    {
+      "id": "batch-create-lofi/template-variants",
+      "file": "design/scenes/batch-create-lofi/template-variants.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "note": "### Built from the real editor\n\nThese frames mount the app's own **VariantsTab, PricingTab, ImagesTab, EditableName** and save line over a fixture API (`_mockApi.ts`). Nothing is a lookalike.\n\n**Changes the real components need for templates**\n\n- **DesignSelect**: preview wording (*Preview design…*, *Only for previewing…*) and a preview-design list.\n- **MediaLocator**: the Files group label *This listing* becomes *This template*.\n- **IssuesBanner**: a template wording (*to fix before this template saves*), with no *Prevents deploying* tag.\n- **DetailsTab**: a template mode without brief, title, tags, lead or AI Mode.\n- **AiChoiceDrawer** (listing editor): stale choices stay usable, heading *Out of date: brief edited since. Still usable*.\n\nThe template head has no actions: Clone, Delete and Start batch live on the [Listing templates](goto:batch-create-lofi/templates) page.",
+      "title": "Listing template — Variants",
+      "viewport": "laptop",
+      "description": "Hi-fi: Variants tab is the real VariantsTab; the preview design row (shown open) replaces the listing's design row."
+    },
+    {
+      "id": "batch-create-lofi/templates",
+      "file": "design/scenes/batch-create-lofi/templates.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-lofi",
+      "note": "### Recent batches: one status per batch\n\nDerived from the batch, never set by hand. The title opens it: a **Staging** row reopens staging, every other row opens the batch summary.\n\n| Status | Means |\n|---|---|\n| Staging | Uploaded, not confirmed. Nothing created yet |\n| Drafting | Listings exist, AI queue still working |\n| In review | Drafting done, not every listing marked reviewed |\n| Complete | Every created listing marked reviewed |\n| Stopped | Cancel batch left work undrafted; Resume on the summary |\n\nFailures don't get a status. They show as a red count beside the progress, so a batch with one failed row still reads as \"In review\".\n\n*Complete* needs only every listing marked reviewed; deploying is separate.",
+      "title": "Listing templates",
+      "viewport": "laptop",
+      "description": "Hi-fi: listing-template cards (one mid-drag; a drop goes straight to staging) and recent batches with a lifecycle status per batch."
+    },
+    {
+      "id": "batch-create-specs/flow",
+      "file": "design/scenes/batch-create-specs/flow.tsx",
+      "kind": "tsx",
+      "scene": "batch-create-specs",
+      "title": "Batch creation — flow",
+      "viewport": "laptop",
+      "description": "Flow (round 4): template, staging, batch summary, and the listing editor with its way back to the batch.",
+      "intent": "diagram",
+      "contentWidth": 1280
     },
     {
       "id": "batch-deploy-lofi-v1/listings",
@@ -364,6 +889,294 @@
       "scene": "demo",
       "title": "Demo - welcome",
       "viewport": "mobile"
+    },
+    {
+      "id": "editor-header-v1/a-overflow-menu",
+      "file": "design/scenes/editor-header-v1/a-overflow-menu.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**A · One overflow menu.** Deploy stays the only primary action; everything secondary (Open on Etsy/Printify, Save as listing template, Copy listing path) lives behind one ⋯ next to it. Right-clicking the name opens the same menu.\n\nWhy: the most familiar pattern (GitHub, Linear). The head drops from two rows to one.",
+      "title": "A · One overflow menu · v1",
+      "viewport": "laptop",
+      "description": "Retired in round 2 (C won, taking D's file card): Head keeps name, status, saved state and Deploy; Save as template, Open on and Copy path move into one ⋯ menu (shown open). Right-click on the name opens it too.",
+      "variantGroup": "editor-header-v1",
+      "variant": "a"
+    },
+    {
+      "id": "editor-header-v1/b-name-menu",
+      "file": "design/scenes/editor-header-v1/b-name-menu.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**B · The name is the menu.** Click or right-click the listing name for a file-style menu: Rename, Copy listing path, Open on…, Save as listing template. The right side holds only Deploy.\n\nWhy: every action here is about *this listing file*, so it hangs off the name (Figma/Google Docs). Closest to the right-click idea.",
+      "title": "B · The name is the menu · v1",
+      "viewport": "laptop",
+      "description": "Retired in round 2 (C won, taking D's file card): The listing name is a file-style menu (click or right-click): Rename, Copy listing path, Open on Etsy/Printify, Save as listing template. Deploy stands alone on the right.",
+      "variantGroup": "editor-header-v1",
+      "variant": "b"
+    },
+    {
+      "id": "editor-header-v1/c-action-row",
+      "file": "design/scenes/editor-header-v1/c-action-row.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**C · Identity row + action row.** Name, status and Deploy on top; a quiet link row underneath carries Open on, Save as listing template, Copy path and the saved state.\n\nWhy: nothing hidden behind a click, but secondary actions read as links, not a second primary button.",
+      "title": "C · Identity row + action row · v1",
+      "viewport": "laptop",
+      "description": "Round 1 pick - refined into the live header (Open in dropdown, file card, delete): Two rows: name, status and Deploy on top; a quiet link row underneath carries Open on Etsy/Printify, Save as listing template, Copy path and the saved state. Nothing hidden.",
+      "variantGroup": "editor-header-v1",
+      "variant": "c"
+    },
+    {
+      "id": "editor-header-v1/current",
+      "file": "design/scenes/editor-header-v1/current.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**Today.** Save as listing template sits alone on a row *above* Deploy, the ▾ Open on caret floats beside the name, and the full `listing.yaml` path fights the title for room on one line.",
+      "title": "Today · the head as shipped · v1",
+      "viewport": "laptop",
+      "description": "Baseline: Save as listing template floats on its own row above Deploy; the Open on caret, status, path and saved state all share the title row."
+    },
+    {
+      "id": "editor-header-v1/d-grouped-buttons",
+      "file": "design/scenes/editor-header-v1/d-grouped-buttons.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**D · Grouped buttons + file card.** Save as template and Open on join Deploy in one right-aligned group. The path moves into a card behind *Saved 3 mins ago* (shown open) with Copy and last-deployed.\n\nWhy: the smallest change from today; the template button finally lines up with Deploy.",
+      "title": "D · Grouped buttons + file card · v1",
+      "viewport": "laptop",
+      "description": "Retired in round 2 (C won, taking D's file card): Smallest change: Save as template and Open on join Deploy as one right-aligned button group; the path moves into a file card that opens from Saved 3 mins ago (shown open).",
+      "variantGroup": "editor-header-v1",
+      "variant": "d"
+    },
+    {
+      "id": "editor-header-v1/e-status-bar",
+      "file": "design/scenes/editor-header-v1/e-status-bar.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v1",
+      "note": "**E · Status bar.** The head keeps only crumb, name, status and Deploy. A status bar pinned to the bottom holds the path + Copy, saved state, Open on links and Save as listing template.\n\nWhy: an IDE-style split. Identity and the one action on top, file facts at the bottom, always in view without crowding the head.",
+      "title": "E · Status bar · v1",
+      "viewport": "laptop",
+      "description": "Retired in round 2 (C won, taking D's file card): Head is only crumb, name, status and Deploy; an editor status bar pinned to the bottom holds the file path + Copy, saved state, Open on links and Save as listing template.",
+      "variantGroup": "editor-header-v1",
+      "variant": "e"
+    },
+    {
+      "id": "editor-header-v2/current",
+      "file": "design/scenes/editor-header-v2/current.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "note": "**Today.** Save as listing template sits alone on a row *above* Deploy, the ▾ Open on caret floats beside the name, and the full `listing.yaml` path fights the title for room on one line.",
+      "title": "Today · the head as shipped · v2",
+      "viewport": "laptop",
+      "description": "Baseline: Save as listing template floats on its own row above Deploy; the Open on caret, status, path and saved state all share the title row."
+    },
+    {
+      "id": "editor-header-v2/header",
+      "file": "design/scenes/editor-header-v2/header.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · resting · v2",
+      "viewport": "laptop",
+      "description": "Chosen head: identity row (name, status, Deploy) over a quiet action row - Open in, Create listing template, Mark for deletion, and the saved state."
+    },
+    {
+      "id": "editor-header-v2/header-delete-confirm",
+      "file": "design/scenes/editor-header-v2/header-delete-confirm.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · confirm deletion · v2",
+      "viewport": "laptop",
+      "description": "Mark for deletion asks first, with the Listings table's own dialog and wording; Delete replaces it for a listing with nothing on Etsy or Printify."
+    },
+    {
+      "id": "editor-header-v2/header-file-card",
+      "file": "design/scenes/editor-header-v2/header-file-card.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · file card · v2",
+      "viewport": "laptop",
+      "description": "Saved 3 mins ago opened into the listing file card: the listing.yaml path with Copy, when it saved, when it last deployed."
+    },
+    {
+      "id": "editor-header-v2/header-marked",
+      "file": "design/scenes/editor-header-v2/header-marked.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · marked for deletion · v2",
+      "viewport": "laptop",
+      "description": "After confirming: status reads Pending delete and the action becomes Undo mark for deletion until the next deploy retracts it."
+    },
+    {
+      "id": "editor-header-v2/header-open-in",
+      "file": "design/scenes/editor-header-v2/header-open-in.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v2",
+      "title": "Header · Open in menu · v2",
+      "viewport": "laptop",
+      "description": "The Open in dropdown open: Etsy and Printify, each shown only when the listing has an id there."
+    },
+    {
+      "id": "editor-header-v3/a-labelled",
+      "file": "design/scenes/editor-header-v3/a-labelled.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · icon + label · v3",
+      "viewport": "laptop",
+      "description": "Chosen head: identity row (name, status, auto-save chip, Deploy) over an action row of icon + label actions - Open in, Create listing template, Mark for deletion.",
+      "variantGroup": "editor-header-v3",
+      "variant": "a"
+    },
+    {
+      "id": "editor-header-v3/b-icon-only",
+      "file": "design/scenes/editor-header-v3/b-icon-only.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · icon only · v3",
+      "viewport": "laptop",
+      "description": "Same head with an icon-only action row; each icon names itself on hover and keyboard focus (Create listing template tip pinned open).",
+      "variantGroup": "editor-header-v3",
+      "variant": "b"
+    },
+    {
+      "id": "editor-header-v3/batch/a-labelled",
+      "file": "design/scenes/editor-header-v3/batch/a-labelled.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Batch · icon + label · v3",
+      "viewport": "laptop",
+      "description": "Opened from a batch: Back to batch takes the crumb place; Mark reviewed ends the action row under Deploy. Actions are icon + label.",
+      "variantGroup": "editor-header-v3/batch",
+      "variant": "a"
+    },
+    {
+      "id": "editor-header-v3/batch/b-icon-only",
+      "file": "design/scenes/editor-header-v3/batch/b-icon-only.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Batch · icon only · v3",
+      "viewport": "laptop",
+      "description": "Opened from a batch, icon-only action row (Mark for deletion tip pinned open); Back to batch and Mark reviewed keep their words (they are navigation and a workflow step, not listing actions).",
+      "variantGroup": "editor-header-v3/batch",
+      "variant": "b"
+    },
+    {
+      "id": "editor-header-v3/current",
+      "file": "design/scenes/editor-header-v3/current.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "note": "**Today.** Save as listing template sits alone on a row *above* Deploy, the ▾ Open on caret floats beside the name, and the full `listing.yaml` path fights the title for room on one line.",
+      "title": "Today · the head as shipped · v3",
+      "viewport": "laptop",
+      "description": "Baseline: Save as listing template floats on its own row above Deploy; the Open on caret, status, path and saved state all share the title row."
+    },
+    {
+      "id": "editor-header-v3/header-delete-confirm",
+      "file": "design/scenes/editor-header-v3/header-delete-confirm.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · confirm deletion · v3",
+      "viewport": "laptop",
+      "description": "Mark for deletion asks first, with the Listings table's own dialog and wording; Delete replaces it for a listing with nothing on Etsy or Printify."
+    },
+    {
+      "id": "editor-header-v3/header-file-card",
+      "file": "design/scenes/editor-header-v3/header-file-card.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · file card · v3",
+      "viewport": "laptop",
+      "description": "The auto-save chip beside the status opened into the listing file card: listing.yaml path with Copy, when it saved, when it last deployed."
+    },
+    {
+      "id": "editor-header-v3/header-marked",
+      "file": "design/scenes/editor-header-v3/header-marked.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · marked for deletion · v3",
+      "viewport": "laptop",
+      "description": "After confirming: status reads Pending delete and the action becomes Undo mark for deletion until the next deploy retracts it."
+    },
+    {
+      "id": "editor-header-v3/header-open-in",
+      "file": "design/scenes/editor-header-v3/header-open-in.tsx",
+      "kind": "tsx",
+      "scene": "editor-header-v3",
+      "title": "Header · Open in menu · v3",
+      "viewport": "laptop",
+      "description": "The Open in dropdown open: Etsy and Printify, each shown only when the listing has an id there."
+    },
+    {
+      "id": "editor-header/batch",
+      "file": "design/scenes/editor-header/batch.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · from a batch",
+      "viewport": "laptop",
+      "description": "Opened from a batch: Back to batch takes the crumb place, and Mark reviewed joins the action row beside Mark for deletion, styled like it."
+    },
+    {
+      "id": "editor-header/batch-reviewed",
+      "file": "design/scenes/editor-header/batch-reviewed.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · from a batch, reviewed",
+      "viewport": "laptop",
+      "description": "After Mark reviewed: the action reads Reviewed in the settled green; pressing it again marks the listing as needing review."
+    },
+    {
+      "id": "editor-header/current",
+      "file": "design/scenes/editor-header/current.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "note": "**Today.** Save as listing template sits alone on a row *above* Deploy, the ▾ Open on caret floats beside the name, and the full `listing.yaml` path fights the title for room on one line.",
+      "title": "Today · the head as shipped",
+      "viewport": "laptop",
+      "description": "Baseline: Save as listing template floats on its own row above Deploy; the Open on caret, status, path and saved state all share the title row."
+    },
+    {
+      "id": "editor-header/header",
+      "file": "design/scenes/editor-header/header.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header",
+      "viewport": "laptop",
+      "description": "Chosen head (round 4): identity row (name, status, auto-save chip, Deploy) over an icon + label action row - Open in, Create listing template, Mark for deletion."
+    },
+    {
+      "id": "editor-header/header-delete-confirm",
+      "file": "design/scenes/editor-header/header-delete-confirm.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · confirm deletion",
+      "viewport": "laptop",
+      "description": "Mark for deletion asks first, with the Listings table's own dialog and wording; Delete replaces it for a listing with nothing on Etsy or Printify."
+    },
+    {
+      "id": "editor-header/header-file-card",
+      "file": "design/scenes/editor-header/header-file-card.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · file card",
+      "viewport": "laptop",
+      "description": "The auto-save chip beside the status opened into the listing file card: listing.yaml path with Copy, and when it saved."
+    },
+    {
+      "id": "editor-header/header-marked",
+      "file": "design/scenes/editor-header/header-marked.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · marked for deletion",
+      "viewport": "laptop",
+      "description": "After confirming: status reads Pending delete and the action becomes Undo mark for deletion until the next deploy retracts it."
+    },
+    {
+      "id": "editor-header/header-open-in",
+      "file": "design/scenes/editor-header/header-open-in.tsx",
+      "kind": "tsx",
+      "scene": "editor-header",
+      "title": "Header · Open in menu",
+      "viewport": "laptop",
+      "description": "The Open in dropdown open: Etsy and Printify, each shown only when the listing has an id there."
     },
     {
       "id": "listing-seo-lofi-v1/description-source",
@@ -701,6 +1514,24 @@
       "title": "Market SEO — writing suggestions",
       "viewport": "laptop",
       "description": "Market research done and the top listings panel filled; SEO suggestions is the glowing last node."
+    },
+    {
+      "id": "template-cards/card",
+      "file": "design/scenes/template-cards/card.tsx",
+      "kind": "tsx",
+      "scene": "template-cards",
+      "title": "Template card · fanned stack (shipped)",
+      "viewport": "laptop",
+      "description": "The first mockup whole, on a soft stage, with the next two fanned behind it like a deck of prints and a count chip. Reads as 'a gallery'; one image is simply one print."
+    },
+    {
+      "id": "template-cards/current",
+      "file": "design/scenes/template-cards/current.tsx",
+      "kind": "tsx",
+      "scene": "template-cards",
+      "title": "Today · 2fr/1fr/1fr strip",
+      "viewport": "laptop",
+      "description": "Baseline: square mockups forced into one wide and two skinny 128px tiles with object-fit: cover -- each shows a slice of the middle."
     }
   ]
 }

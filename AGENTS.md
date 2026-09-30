@@ -19,14 +19,18 @@ command or test exists.
 
 | Document | Authority |
 |---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 72 numbered product decisions in its appendix. |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
+| [docs/prd.md](docs/prd.md) | *What* the tool does. 74 numbered product decisions in its appendix. |
+| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 46 architecture decisions, `A1`–`A46`. |
 
-Four subsidiary documents carry detail those two point at rather than repeat:
+Five subsidiary documents carry detail those two point at rather than repeat:
 [docs/multi-placement-rendering.md](docs/multi-placement-rendering.md) (PRD 28),
 [docs/phase-3-etsy.md](docs/phase-3-etsy.md) (PRD 52–59, A24–A28),
-[docs/listing-lifecycle.md](docs/listing-lifecycle.md) (PRD 61–67), and
-[docs/deploy-changes.md](docs/deploy-changes.md) (PRD 20's runner, A29–A33). They are
+[docs/listing-lifecycle.md](docs/listing-lifecycle.md) (PRD 61–67),
+[docs/deploy-changes.md](docs/deploy-changes.md) (PRD 20's runner, A29–A33), and
+[docs/listing-batch-creation-spec.md](docs/listing-batch-creation-spec.md) (PRD 74,
+A35–A46), whose interactions doc
+[docs/ui-batch-creation-interactions.md](docs/ui-batch-creation-interactions.md)
+wins over it where they differ. They are
 not a third authority — where any disagrees with the PRD, the PRD wins.
 
 When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.
@@ -201,6 +205,10 @@ src/etsy_listings/
                   query extraction (three unique, non-empty buyer searches);
                   `SeoRequest.market_block` carries market/'s block into the
                   proposal prompt
+                proposals.py -- `ProposalStore`, the latest proposal per
+                  listing in `.cache/proposals/` with each section's
+                  resolution (A41), and `proposal_staleness`, the one rule
+                  for "out of date" (the editor no longer computes it)
   market/       market-informed SEO's research, in memory: `research()` turns
                 three queries into at most 20 scored listings (percentiles,
                 top-20 review rationing, 5 calls in flight), the ranked
@@ -221,6 +229,16 @@ src/etsy_listings/
                   (`app.state.workspace_locks.listing(name)`). Every
                   read-merge-write of `listing.yaml` in the UI process holds
                   it: PATCH, DELETE, create, rename, and AI runs' brief write
+                batchqueue.py -- the batch AI queue (A40): one dispatcher
+                  thread starting queued batch rows as `origin="batch"` runs,
+                  `batch_ai.concurrency` at a time, round-robin across
+                  batches; `app.state.batch_queue`. Row states live in the
+                  batch record, so a restart requeues what was running.
+                  `yield_to_deploy` is how the runs executor takes a
+                  listing from AI work before a plan or apply reads it
+                  (A43): queued rows become `cancelled_by_deploy`, active
+                  runs are stopped and waited for, and new ones are
+                  refused `deploying` until the run ends
                 airuns/ -- AI runs (market-seo.md, *AI runs*): brief, market
                   research and proposal as one run per listing, each on its
                   own daemon thread (never the plan/apply executor), streamed

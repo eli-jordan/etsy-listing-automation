@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
+import * as templatesApi from "../../api/listingTemplates";
 import type { ListingDetail, MediaFileSummary, TemplateSummary } from "../../types";
 import { ImagesTab } from "./ImagesTab";
 
@@ -34,6 +35,7 @@ function detail(over: Partial<ListingDetail> = {}): ListingDetail {
     printify_product_id: null,
     pricing_plan_name: null,
     resolved_prices: [],
+    gestures: [],
     description_composed: "",
     ...over,
   };
@@ -730,6 +732,29 @@ describe("ImagesTab's full-size carousel", () => {
       "src",
       "/api/templates/flat-lay-01/design-preview?design=take-a-hike&colour=black",
     );
+  });
+
+  it("previews a listing template with its preview design and lists its own files", async () => {
+    /* UI doc §3: the tab is the listing's, unchanged; what differs is the
+       artwork it composites and whose `./` files it offers. */
+    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([summary({ name: "flat-lay-01" })]);
+    const own = vi.spyOn(templatesApi, "listListingTemplateMediaFiles").mockResolvedValue([]);
+    const { container } = render(
+      <ImagesTab
+        detail={{ ...reel, name: "heavyweight-tee", design: {} }}
+        onUpdate={vi.fn()}
+        artwork={{ testDesign: "bundled-grid" }}
+        owner={{ kind: "listing-template", name: "heavyweight-tee" }}
+      />,
+    );
+    fireEvent.mouseEnter(await tile("flat-lay-01 · black"));
+
+    expect(previewImage(container)).toHaveAttribute(
+      "src",
+      "/api/templates/flat-lay-01/design-preview?test_design=bundled-grid&colour=black",
+    );
+    expect(own).toHaveBeenCalledWith("heavyweight-tee");
+    expect(listingsApi.listListingMediaFiles).not.toHaveBeenCalled();
   });
 
   it("does not label the stage or overlay the colour name on it", async () => {

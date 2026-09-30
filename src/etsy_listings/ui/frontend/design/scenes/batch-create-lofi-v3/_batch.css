@@ -1,0 +1,594 @@
+/* Batch-creation wireframe pieces. Tokens only - every value the app's
+   stylesheet already names comes from it. */
+
+.bc-muted {
+  color: color-mix(in srgb, var(--color-text) 58%, transparent);
+}
+.bc-small {
+  font-size: 12.5px;
+}
+.bc-lede {
+  margin: 0 0 var(--space-4);
+  max-width: 72ch;
+  font-size: 14px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.bc-section {
+  margin-top: var(--space-6);
+}
+.bc-section > h2 {
+  font-size: 20px;
+  margin: 0 0 var(--space-3);
+}
+.bc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.bc-spacer {
+  flex: 1;
+}
+.bc-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.bc-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+.bc-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--color-accent-700);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bc-link:hover {
+  color: var(--color-accent-800);
+}
+
+/* — listing-template cards — */
+.bc-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: var(--space-4);
+}
+.bc-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  overflow: hidden;
+  transition: border-color 0.12s ease, box-shadow 0.12s ease;
+}
+.bc-card:hover {
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+.bc-card__gallery {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-rows: 128px;
+  gap: 2px;
+  height: 128px;
+  overflow: hidden;
+  background: var(--color-neutral-200);
+}
+.bc-card__gallery img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+  display: block;
+}
+.bc-card__body {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bc-card__name {
+  font-weight: 700;
+  font-size: 15px;
+}
+.bc-card__facts {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.bc-card__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+.bc-card__drop-hint {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  margin-top: var(--space-1);
+}
+/* A card being dragged over: the whole card becomes the target. */
+.bc-card--over {
+  border: 1.5px dashed var(--color-accent);
+  box-shadow: var(--shadow-md);
+}
+.bc-card__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  text-align: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-accent-100) 92%, transparent);
+  color: var(--color-accent-800);
+  cursor: copy;
+}
+.bc-card__overlay strong {
+  font-size: 15px;
+}
+.bc-card__overlay .bc-icon {
+  width: 28px;
+  height: 28px;
+}
+
+/* — shared data table (staging + batch summary) — */
+table.bc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+table.bc-table thead th {
+  text-align: left;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  padding: 0 var(--space-2) var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+}
+table.bc-table td {
+  padding: 9px var(--space-2);
+  border-bottom: 1px solid var(--color-divider);
+  vertical-align: middle;
+}
+table.bc-table tbody tr:last-child td {
+  border-bottom: none;
+}
+table.bc-table tr.bc-tr--link {
+  cursor: pointer;
+}
+table.bc-table tr.bc-tr--link:hover td {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+table.bc-table tr.bc-tr--muted td {
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+table.bc-table .bc-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+table.bc-table .bc-end {
+  text-align: right;
+  white-space: nowrap;
+}
+.bc-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.bc-cell__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bc-cell__sub {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bc-name-input {
+  width: 100%;
+  max-width: 260px;
+  min-height: 30px !important;
+  padding: 3px 10px !important;
+  font-size: 13px !important;
+}
+.bc-name-input--invalid {
+  border-color: var(--color-danger) !important;
+}
+
+/* — status text inside table cells — */
+.bc-status {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.bc-status .bc-icon {
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+.bc-status--ok {
+  color: var(--color-accent-2-700);
+}
+.bc-status--info {
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+}
+.bc-status--warn {
+  color: var(--color-accent-800);
+}
+.bc-status--error {
+  color: var(--color-danger-700);
+}
+.bc-status__text {
+  color: var(--color-text);
+}
+
+/* — quiet row-level actions — */
+.bc-quiet {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 4px 9px;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bc-quiet:hover:not(:disabled) {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.bc-quiet--on {
+  color: var(--color-accent-2-800);
+  background: var(--color-accent-2-100);
+  border-color: var(--color-accent-2-300);
+}
+.bc-quiet--on:hover:not(:disabled) {
+  color: var(--color-accent-2-900);
+  background: var(--color-accent-2-200);
+  border-color: var(--color-accent-2-400);
+}
+
+/* — count strip above a table — */
+.bc-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  font-size: 13px;
+}
+.bc-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bc-count strong {
+  font-variant-numeric: tabular-nums;
+}
+.bc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  flex: none;
+  background: var(--color-neutral-500);
+}
+.bc-dot--ok {
+  background: var(--color-accent-2);
+}
+.bc-dot--busy {
+  background: var(--color-accent);
+}
+.bc-dot--warn {
+  background: var(--color-warning);
+}
+.bc-dot--error {
+  background: var(--color-danger);
+}
+
+/* — progress bar — */
+.bc-progress {
+  display: flex;
+  height: 6px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--color-neutral-300);
+  margin-bottom: var(--space-3);
+}
+.bc-progress > span {
+  display: block;
+  height: 100%;
+}
+
+/* — New batch: template picker + drop zone — */
+.bc-steps {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 980px;
+}
+.bc-step > h2 {
+  font-size: 20px;
+  margin: 0 0 var(--space-1);
+}
+.bc-step > p {
+  margin: 0 0 var(--space-3);
+}
+.bc-picks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.bc-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.bc-pick:hover {
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.bc-pick--on {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-neutral-100));
+}
+.bc-pick img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex: none;
+}
+.bc-pick__name {
+  font-weight: 700;
+  font-size: 14px;
+}
+.bc-pick__facts {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 58%, transparent);
+}
+.bc-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 230px;
+  padding: var(--space-6);
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 32%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.12s ease, background 0.12s ease;
+}
+.bc-drop:hover {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-neutral-100));
+}
+.bc-drop__icon {
+  width: 36px;
+  height: 36px;
+  color: var(--color-accent-600);
+}
+.bc-drop__title {
+  font-family: var(--font-heading);
+  font-size: 20px;
+}
+.bc-drop--error {
+  border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
+}
+.bc-reqs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.bc-req {
+  display: flex;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.bc-req .bc-icon {
+  color: var(--color-accent-2-700);
+  margin-top: 2px;
+}
+
+/* — callouts reuse .dv-callout; this adds an action slot — */
+.bc-callout-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+  align-self: center;
+}
+
+/* — Save-as-template dialog — */
+.bc-modal {
+  width: 760px !important;
+  max-height: none !important;
+}
+.bc-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.bc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+.bc-list li {
+  display: flex;
+  gap: var(--space-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.bc-list li .bc-icon {
+  margin-top: 1px;
+}
+.bc-list--keep .bc-icon {
+  color: var(--color-accent-2-700);
+}
+.bc-list--reset .bc-icon {
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.bc-quote {
+  margin: 4px 0 0;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 12px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+}
+.bc-dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+/* — filter chip on Listings — */
+.bc-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--color-accent-300);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+  font-size: 13px;
+}
+.bc-filter-chip__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.bc-filter-chip__x:hover {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+.bc-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.bc-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.bc-disclosure > summary:hover {
+  color: var(--color-accent-700);
+}
+
+/* The app's global button padding is wider than these 24-28px icon buttons
+   and squeezes their SVG to zero width. */
+.modal-dialog__close,
+.bc-filter-chip__x {
+  padding: 0;
+}
+.modal-dialog__close svg,
+.bc-filter-chip__x svg {
+  flex: none;
+}
+
+/* — listing-template editor — */
+.bc-tpl-name {
+  width: 300px;
+  font-family: var(--font-heading) !important;
+  font-size: 20px !important;
+}
+.bc-tpl-images {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+  margin-top: var(--space-4);
+}
+.bc-tpl-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.bc-tpl-tile {
+  margin: 0;
+  padding: 4px;
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  cursor: pointer;
+}
+.bc-tpl-tile:hover {
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.bc-tpl-tile--on {
+  border-color: var(--color-accent);
+}
+.bc-tpl-tile img {
+  display: block;
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border-radius: calc(var(--radius-sm) - 3px);
+}
+.bc-tpl-tile figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px 0;
+  font-size: 11.5px;
+}
+
+/* — listing editor opened from a batch — */
+.bc-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: var(--space-2);
+}
+.bc-back svg {
+  width: 14px;
+  height: 14px;
+}

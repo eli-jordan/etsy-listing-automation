@@ -58,6 +58,20 @@ class WorkspaceLocks:
                 stack.enter_context(self._lock(key))
             yield
 
+    @contextmanager
+    def listing_template(self, name: str, *more: str) -> Iterator[None]:
+        """The same, for a listing template's name (A35): creating one checks
+        the name is free and then writes, and so does a ``PUT`` re-checking
+        it still exists. Its own key space -- a ``/`` can never be in a name
+        -- so a template and a listing that share a name never wait on each
+        other. Several names, a rename's two, are taken in :meth:`listing`'s
+        sorted order for the same reason."""
+        keys = sorted({f"listing-templates/{key.casefold()}" for key in (name, *more)})
+        with ExitStack() as stack:
+            for key in keys:
+                stack.enter_context(self._lock(key))
+            yield
+
     def _lock(self, key: str) -> threading.Lock:
         with self._guard:
             return self._locks.setdefault(key, threading.Lock())

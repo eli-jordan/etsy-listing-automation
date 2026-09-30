@@ -1523,6 +1523,8 @@ fieldset label {
   font-size: 15px;
   font-weight: 600;
   cursor: pointer;
+  /* The batch pages' crumbs are real links (`<Link>`), drawn as the rest. */
+  text-decoration: none;
   color: color-mix(in srgb, var(--color-text) 65%, transparent);
 }
 
@@ -1684,6 +1686,7 @@ table.listings tbody tr:last-child td {
 .listing-row__link {
   font-weight: 600;
   cursor: pointer;
+  text-decoration: none;
   background: none;
   border: none;
   padding: 0;
@@ -2512,8 +2515,8 @@ table.listings tbody tr:last-child td {
    while a run goes and stays 4s after the suggestions arrive -- exactly when
    the seller is clicking them -- so if the head wrapped (Deploy dropping to a
    second line), every drawer below would jump under the pointer as the
-   indicator came and went. Instead the listing path gives way first
-   (ellipsis), then the rest of the meta line, and the title last. */
+   indicator came and went. Instead the meta line gives way first
+   (ellipsis), and the title last. */
 .page-head--editor {
   flex-wrap: nowrap;
 }
@@ -2535,14 +2538,10 @@ table.listings tbody tr:last-child td {
   white-space: pre;
 }
 
-.page-head--editor .page-head__path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.page-head--editor .page-head__saved {
-  flex-shrink: 0;
+/* Once saved, the meta is the auto-save chip, whose card must not be
+   clipped by the ellipsis the sentences need. The chip is short. */
+.page-head--editor > .page-head__meta:has(.save-chip) {
+  overflow: visible;
 }
 
 .page-head--editor > .page-head__title {
@@ -2567,6 +2566,222 @@ table.listings tbody tr:last-child td {
   flex: none;
   border-radius: 999px;
   background: var(--color-accent-2);
+}
+
+/* — the editor head: an identity row over an action row (UI doc, *The
+   editor head*). With actions, the rule under the head moves from the
+   identity row to the action row. — */
+.editor-head--actions > .page-head {
+  align-items: center;
+  margin-bottom: 0;
+  padding-bottom: var(--space-2);
+  border-bottom: none;
+}
+
+.action-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  margin-bottom: var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--color-divider);
+  font-size: 13px;
+}
+
+.action-row__divider {
+  width: 1px;
+  height: 14px;
+  background: var(--color-divider);
+}
+
+.action-row__error {
+  font-size: 12px;
+  color: var(--color-danger-700);
+}
+
+/* Quiet icon + label actions: they read as a list of things to do, not a
+   second set of primary buttons beside Deploy. */
+.action-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 -6px;
+  padding: 3px 6px;
+  font: inherit;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+  text-decoration: none;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.action-link svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+}
+
+.action-link svg.action-link__caret {
+  width: 11px;
+  height: 11px;
+  margin-left: -1px;
+}
+
+.action-link:hover:not(:disabled),
+.action-link[aria-expanded="true"] {
+  color: var(--color-accent-700);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+.action-link:focus-visible,
+.back-crumb:focus-visible,
+.save-chip__trigger:focus-visible,
+.save-card__copy:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+/* Destructive, so as quiet as its neighbours until pointed at. */
+.action-link--danger:hover:not(:disabled) {
+  color: var(--color-danger-700);
+  background: color-mix(in srgb, var(--color-danger-700) 9%, transparent);
+}
+
+/* A settled state: Mark reviewed, once pressed. */
+.action-link--done,
+.action-link--done:hover:not(:disabled) {
+  color: var(--color-accent-2-700);
+}
+
+/* Back to batch, in the breadcrumb's place: the crumb's size and colour,
+   outlined because it leaves for the batch rather than for Listings. */
+.back-crumb {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  font: inherit;
+  font-size: 15px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 65%, transparent);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.back-crumb svg {
+  width: 15px;
+  height: 15px;
+}
+
+.back-crumb:hover {
+  color: var(--color-accent-700);
+  background: color-mix(in srgb, var(--color-accent) 8%, transparent);
+}
+
+/* — the auto-save chip and its file card — */
+.save-chip {
+  position: relative;
+  display: inline-flex;
+}
+
+.save-chip__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  font: inherit;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.save-chip__trigger:hover,
+.save-chip__trigger[aria-expanded="true"] {
+  border-color: var(--color-divider);
+  background: color-mix(in srgb, var(--color-text) 5%, transparent);
+}
+
+.save-chip__caret {
+  width: 11px;
+  height: 11px;
+}
+
+.save-card {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 25;
+  width: max-content;
+  max-width: min(460px, calc(100vw - 2 * var(--space-3)));
+  padding: var(--space-3);
+  white-space: normal;
+  color: var(--color-text);
+  background: var(--color-neutral-100);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+}
+
+.save-card__title {
+  margin-bottom: var(--space-2);
+  font-size: 12.5px;
+  font-weight: 600;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+
+.save-card__path {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 6px 8px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+}
+
+.save-card__path .page-head__path {
+  flex: 1;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.save-card__copy {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-accent-700);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.save-card__copy svg {
+  width: 13px;
+  height: 13px;
+}
+
+.save-card__copy:hover {
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+}
+
+.save-card__when {
+  margin-top: var(--space-2);
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
 }
 
 /* — the tab strip's per-tab issue badge — */
@@ -6091,10 +6306,14 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
     padding: 0;
   }
 
+  /* Four items (Listing Templates joined in batch PR 1) no longer fit one
+     row at every phone width and font: wrap rather than push the page wider. */
   .sidebar__nav {
     width: 100%;
     flex-direction: row;
+    flex-wrap: wrap;
     justify-content: space-between;
+    row-gap: 2px;
     margin-top: var(--space-2);
   }
 
@@ -6187,4 +6406,507 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
   .dv-col {
     padding-inline: var(--space-3);
   }
+}
+
+/* — Listing templates (A35; UI doc §2) —
+   Moved from the batch-creation mockups' _batch.css, unchanged, as each
+   surface ships. The `bc-` prefix is the mockups' and is kept so a frame and
+   the app share one rule. */
+.bc-muted {
+  color: color-mix(in srgb, var(--color-text) 58%, transparent);
+}
+.bc-small {
+  font-size: 12.5px;
+}
+.bc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.bc-spacer {
+  flex: 1;
+}
+.bc-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.bc-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: var(--space-4);
+}
+.bc-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  overflow: hidden;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.bc-card:hover {
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+/* The gallery as a fanned stack of prints on a soft stage: the first
+   mockup whole in front, the next two fanned behind it. */
+.bc-card__gallery {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 176px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 50% 60%, var(--color-neutral-100), transparent 70%),
+    var(--color-neutral-200);
+}
+.bc-card__no-gallery {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+}
+.bc-deck {
+  position: relative;
+  width: 132px;
+  height: 132px;
+}
+.bc-deck__print {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: var(--color-neutral-200);
+  border: 3px solid #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-md);
+  transform-origin: 50% 90%;
+}
+.bc-deck__print img,
+.bc-deck__print video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* Front first in the DOM, so a screen reader and the tests meet the gallery
+   in its own order; z-index does the stacking. */
+.bc-deck__print--0 {
+  z-index: 3;
+}
+.bc-deck__print--1 {
+  z-index: 2;
+  transform: translateX(-34px) rotate(-9deg) scale(0.92);
+}
+.bc-deck__print--2 {
+  z-index: 1;
+  transform: translateX(34px) rotate(9deg) scale(0.92);
+}
+.bc-deck__play {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  color: #fff;
+  background: color-mix(in srgb, var(--color-text) 72%, transparent);
+  border-radius: 999px;
+}
+.bc-deck__play svg {
+  width: 11px;
+  height: 11px;
+}
+.bc-deck__count {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  padding: 2px 8px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-neutral-100) 88%, transparent);
+  border: 1px solid var(--color-divider);
+  border-radius: 999px;
+}
+.bc-card__body {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bc-card__name {
+  font-weight: 700;
+  font-size: 15px;
+}
+.bc-card__facts {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.bc-card__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+.bc-card__drop-hint {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 50%, transparent);
+  margin-top: var(--space-1);
+}
+/* A card being dragged over: the whole card becomes the target (UI doc §2). */
+.bc-card--over {
+  border: 1.5px dashed var(--color-accent);
+  box-shadow: var(--shadow-md);
+}
+.bc-card__overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  text-align: center;
+  padding: var(--space-4);
+  background: color-mix(in srgb, var(--color-accent-100) 92%, transparent);
+  color: var(--color-accent-800);
+  cursor: copy;
+}
+.bc-card__overlay strong {
+  font-size: 15px;
+}
+.bc-card__overlay .bc-icon {
+  width: 28px;
+  height: 28px;
+}
+.bc-quiet {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 4px 9px;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bc-quiet:hover:not(:disabled) {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.bc-quiet--on {
+  color: var(--color-accent-2-800);
+  background: var(--color-accent-2-100);
+  border-color: var(--color-accent-2-300);
+}
+.bc-quiet--on:hover:not(:disabled) {
+  color: var(--color-accent-2-900);
+  background: var(--color-accent-2-200);
+  border-color: var(--color-accent-2-400);
+}
+
+/* — Batch creation: New batch, staging review, batch summary (batch plan
+   PR 2; UI doc §4-§7). Moved from _batch.css in the same way. — */
+.bc-mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: 12px;
+}
+.bc-link {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: var(--color-accent-700);
+  cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.bc-link:hover {
+  color: var(--color-accent-800);
+}
+table.bc-table tr.bc-tr--muted td {
+  background: color-mix(in srgb, var(--color-text) 3%, transparent);
+}
+table.bc-table .bc-end {
+  text-align: right;
+  white-space: nowrap;
+}
+.bc-cell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.bc-cell__text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.bc-cell__sub {
+  font-size: 11.5px;
+  color: color-mix(in srgb, var(--color-text) 55%, transparent);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.bc-name-input {
+  width: 100%;
+  max-width: 260px;
+  min-height: 30px !important;
+  padding: 3px 10px !important;
+  font-size: 13px !important;
+}
+.bc-name-input--invalid {
+  border-color: var(--color-danger) !important;
+}
+.bc-status {
+  display: inline-flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12.5px;
+  line-height: 1.4;
+}
+.bc-status .bc-icon {
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+}
+.bc-status--ok {
+  color: var(--color-accent-2-700);
+}
+.bc-status--info {
+  color: color-mix(in srgb, var(--color-text) 72%, transparent);
+}
+.bc-status--warn {
+  color: var(--color-accent-800);
+}
+.bc-status--error {
+  color: var(--color-danger-700);
+}
+.bc-status__text {
+  color: var(--color-text);
+}
+.bc-counts {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-1) var(--space-4);
+  padding: var(--space-2) var(--space-3);
+  margin-bottom: var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  font-size: 13px;
+}
+.bc-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bc-count strong {
+  font-variant-numeric: tabular-nums;
+}
+/* A ZIP's ignored files: a count that opens to their names (UI doc §5). */
+.bc-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.bc-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.bc-disclosure > summary:hover {
+  color: var(--color-accent-700);
+}
+.bc-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 99px;
+  flex: none;
+  background: var(--color-neutral-500);
+}
+.bc-dot--ok {
+  background: var(--color-accent-2);
+}
+.bc-dot--busy {
+  background: var(--color-accent);
+}
+.bc-dot--warn {
+  background: var(--color-warning);
+}
+.bc-dot--error {
+  background: var(--color-danger);
+}
+.bc-steps {
+  display: grid;
+  gap: var(--space-6);
+  max-width: 980px;
+}
+.bc-step > h2 {
+  font-size: 20px;
+  margin: 0 0 var(--space-1);
+}
+.bc-step > p {
+  margin: 0 0 var(--space-3);
+}
+.bc-picks {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.bc-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+.bc-pick:hover {
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.bc-pick--on {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 7%, var(--color-neutral-100));
+}
+.bc-pick img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: var(--radius-sm);
+  flex: none;
+}
+.bc-pick__name {
+  font-weight: 700;
+  font-size: 14px;
+}
+.bc-pick__facts {
+  font-size: 12px;
+  color: color-mix(in srgb, var(--color-text) 58%, transparent);
+}
+.bc-drop {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: 230px;
+  padding: var(--space-6);
+  border: 1.5px dashed color-mix(in srgb, var(--color-text) 32%, transparent);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  text-align: center;
+  cursor: pointer;
+  transition:
+    border-color 0.12s ease,
+    background 0.12s ease;
+}
+.bc-drop:hover {
+  border-color: var(--color-accent);
+  background: color-mix(in srgb, var(--color-accent) 5%, var(--color-neutral-100));
+}
+.bc-drop__icon {
+  width: 36px;
+  height: 36px;
+  color: var(--color-accent-600);
+}
+.bc-drop__title {
+  font-family: var(--font-heading);
+  font-size: 20px;
+}
+.bc-drop--error {
+  border-color: color-mix(in srgb, var(--color-danger) 55%, transparent);
+}
+.bc-reqs {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+.bc-req {
+  display: flex;
+  gap: var(--space-2);
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+.bc-req .bc-icon {
+  color: var(--color-accent-2-700);
+  margin-top: 2px;
+}
+
+/* — Batch summary: the queue (batch plan PR 4; UI doc §7). Moved from
+   _batch.css in the same way. — */
+.bc-progress {
+  display: flex;
+  height: 6px;
+  border-radius: 99px;
+  overflow: hidden;
+  background: var(--color-neutral-300);
+  margin-bottom: var(--space-3);
+}
+.bc-progress > span {
+  display: block;
+  height: 100%;
+}
+
+.bc-aiflow-cell {
+  align-items: flex-start;
+}
+.bc-aiflow-cell .aiflow,
+td > .aiflow {
+  margin-left: 0;
+  align-self: flex-start;
+}
+
+/* — Review and the batch index (batch plan PR 5; UI doc §2, §7, §8).
+   Moved from _batch.css in the same way. — */
+.bc-section {
+  margin-top: var(--space-6);
+}
+.bc-section > h2 {
+  font-size: 20px;
+  margin: 0 0 var(--space-3);
+}
+table.bc-table tr.bc-tr--link {
+  cursor: pointer;
+}
+table.bc-table tr.bc-tr--link:hover td {
+  background: color-mix(in srgb, var(--color-text) 4%, transparent);
+}
+.bc-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.bc-back svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* Staging's AI readiness callout sits in the count strip's right side
+   (staging.note.md), so it keeps to the strip's height. */
+.dv-callout.bc-ai-blocked {
+  gap: 8px;
+  align-items: center;
+  margin: calc(-1 * var(--space-1)) 0;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+.dv-callout.bc-ai-blocked .dv-callout__icon {
+  width: 16px;
+  height: 16px;
+  margin-top: 0;
 }

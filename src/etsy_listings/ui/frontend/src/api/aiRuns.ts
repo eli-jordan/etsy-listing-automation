@@ -12,6 +12,15 @@ import type { AiRunEvent, AiRunSummary } from "../types";
 
 export class AiRunsApiError extends Error {}
 
+/** What the editor says when `POST` answers `batch_pending` (A40). */
+export const BATCH_PENDING_MESSAGE =
+  "This listing is drafting in a batch. AI Mode is back once that is done.";
+
+/** What the editor says when `POST` answers `deploying`: a plan or apply
+ * holds the listing, and deploying takes precedence over AI (A43). */
+export const DEPLOYING_MESSAGE =
+  "This listing is deploying. AI Mode is back once the deploy finishes.";
+
 /** What `POST /api/ai/runs` can answer besides a failure: the run it
  * started, the run already active for the listing (reattach to it rather
  * than retry into the same refusal), or the readiness rule that refused it. */
@@ -30,6 +39,9 @@ export async function startAiRun(
   if (response.status === 409) {
     const refusal = (error ?? {}) as { active_run?: string | null; reason?: string | null };
     if (refusal.active_run) return { kind: "active", runId: refusal.active_run };
+    if (refusal.reason === "batch_pending")
+      return { kind: "refused", reason: BATCH_PENDING_MESSAGE };
+    if (refusal.reason === "deploying") return { kind: "refused", reason: DEPLOYING_MESSAGE };
     if (refusal.reason) return { kind: "refused", reason: refusal.reason };
   }
   if (error || !data) throw new AiRunsApiError(`could not start an AI run for ${listing}`);

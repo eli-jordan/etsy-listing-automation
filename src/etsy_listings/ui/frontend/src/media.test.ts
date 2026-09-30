@@ -4,6 +4,7 @@ import {
   mediaKind,
   mediaLabel,
   missingColours,
+  ownedTile,
   pictureFor,
   refName,
   scenePath,
@@ -261,5 +262,67 @@ describe("scenePath", () => {
 
   it("names scene.png for a fixed-scene template (PRD 28)", () => {
     expect(scenePath(undefined, "rack-shot", null)).toBe("mockup-templates/rack-shot/scene.png");
+  });
+});
+
+describe("pictureFor in the listing-template editor", () => {
+  /* UI doc §3: a listing template has no artwork, so its previews are
+     rendered with a calibrator test design, and its `./` files are its own. */
+  it("renders a template entry with a calibrator test design", () => {
+    expect(
+      pictureFor({ template: "flat-lay-01", colour: "black" }, { testDesign: "bundled-grid" }),
+    ).toBe("/api/templates/flat-lay-01/design-preview?test_design=bundled-grid&colour=black");
+  });
+
+  it("serves a listing template's own file at full size", () => {
+    expect(
+      pictureFor("./assets/shots/back.png", null, "full", {
+        kind: "listing-template",
+        name: "tee",
+      }),
+    ).toBe("/api/listing-templates/tee/media-files/assets/shots/back.png/file");
+  });
+
+  it("draws an unsaved template's file from where its source still keeps it", () => {
+    /* The *name it* state: `./assets/…` is only a plan until the save
+       copies it. */
+    const owner = {
+      kind: "listing" as const,
+      name: "take-a-hike",
+      copies: { "./assets/shots/back.png": "./shots/back.png" },
+    };
+    expect(pictureFor("./assets/shots/back.png", null, "tile", owner)).toBe(
+      "/api/listings/take-a-hike/media-files/shots/back.png/thumbnail",
+    );
+  });
+});
+
+describe("ownedTile", () => {
+  /* A card's picture of one gallery entry, whoever's `./` files it names: a
+     listing's while Save as listing template is still a draft, a listing
+     template's own once it is saved (A35). */
+  it("draws a template entry as its bare thumbnail whoever owns it", () => {
+    const entry = { template: "flat-lay-01", colour: "black" };
+    expect(ownedTile(entry, { kind: "listing-template", name: "tee" })).toBe(
+      "/api/templates/flat-lay-01/thumbnail?colour=black",
+    );
+  });
+
+  it("finds a local file in the listing template's own directory", () => {
+    expect(ownedTile("./assets/shots/back.png", { kind: "listing-template", name: "tee" })).toBe(
+      "/api/listing-templates/tee/media-files/assets/shots/back.png/thumbnail",
+    );
+  });
+
+  it("finds a local file in the listing's directory", () => {
+    expect(ownedTile("./shots/back.png", { kind: "listing", name: "take-a-hike" })).toBe(
+      "/api/listings/take-a-hike/media-files/shots/back.png/thumbnail",
+    );
+  });
+
+  it("serves a shared file from common media", () => {
+    expect(ownedTile("common-media/chart.png", { kind: "listing-template", name: "tee" })).toBe(
+      "/api/common-media/chart.png/thumbnail",
+    );
   });
 });

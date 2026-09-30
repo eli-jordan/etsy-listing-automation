@@ -24,6 +24,7 @@ from __future__ import annotations
 import sys
 import threading
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -368,6 +369,29 @@ def _assert_stopped_growing(path: Path, *, settle: float) -> None:
     )
 
 
+@dataclass(frozen=True)
+class _ExpiresOnceWritten(Deadline):
+    """A deadline that passes only once every marker has been written -- so
+    the tree it kills is known to be up -- or after a generous safety budget,
+    when the assertions below say what never started.
+
+    A fixed 1.5 s deadline raced the process tree's own start: under a
+    loaded full-suite run two interpreter start-ups (the child, then the
+    grandchild it spawns) can take longer than that, the kill landed before
+    the grandchild existed, and the test failed with "never appeared". The
+    cancellation test already waits for the grandchild; this is the timeout
+    path's equivalent."""
+
+    markers: tuple[Path, ...] = ()
+    safety_at: float = field(default_factory=lambda: time.monotonic() + 30.0)
+
+    @property
+    def expired(self) -> bool:
+        if time.monotonic() > self.safety_at:
+            return True
+        return all(m.is_file() and m.stat().st_size > 0 for m in self.markers)
+
+
 def test_run_managed_actually_kills_a_real_process_and_its_grandchild_on_timeout(
     tmp_path: Path,
 ) -> None:
@@ -386,7 +410,7 @@ def test_run_managed_actually_kills_a_real_process_and_its_grandchild_on_timeout
         argv,
         cwd=tmp_path,
         input_text="",
-        deadline=Deadline.starting_now(seconds=1.5),
+        deadline=_ExpiresOnceWritten(markers=(child_marker, grandchild_marker)),
         poll_interval=0.02,
     )
 

@@ -13,7 +13,8 @@ from __future__ import annotations
 
 import threading
 import uuid
-from collections.abc import Callable
+from collections import Counter
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
@@ -30,7 +31,14 @@ from etsy_listings.ui.airuns.events import (
     WorkflowStep,
 )
 
-StopReason = Literal["cancelled", "timeout", "shutdown"]
+StopReason = Literal["cancelled", "timeout", "shutdown", "deploy"]
+"""Why a run was asked to stop. ``deploy`` is a UI deploy taking the listing
+(A43): the run ends ``cancelled`` like any other stop, and a batch row it
+belonged to becomes ``cancelled_by_deploy`` rather than ``cancelled``."""
+RunOrigin = Literal["manual", "batch"]
+"""Who started the run: the editor's AI Mode, or the batch queue (A40). A
+batch run is otherwise an ordinary run -- same chain, same limit."""
+FinishListener = Callable[["AiRun"], None]
 
 
 def _now() -> datetime:
@@ -49,12 +57,20 @@ class AiRun:
     id: str
     listing: str
     draft_brief: bool
+    origin: RunOrigin = "manual"
     created_at: datetime = field(default_factory=_now)
     finished_at: datetime | None = None
     events: list[AnyAiRunEvent] = field(default_factory=list)
     cancel_event: threading.Event = field(default_factory=threading.Event, repr=False)
     stop_reason: StopReason | None = None
     condition: threading.Condition = field(default_factory=threading.Condition, repr=False)
+    on_finish: tuple[FinishListener, ...] = field(default=(), repr=False)
+    """Called once the run has finished, on the thread that finished it and
+    outside ``condition`` -- a listener takes other locks (the batch
+    store's), and a request holding one of those may be reading this run."""
+    _settled: threading.Event = field(default_factory=threading.Event, repr=False)
+    """Set once :meth:`finish` has told every listener: a batch row has its
+    outcome by then, not just the run its phase."""
     _phase: AiRunPhase = "running"
     _steps: dict[StepId, WorkflowStep] = field(
         default_factory=lambda: {i: WorkflowStep(id=i, state="pending") for i in STEP_IDS}
@@ -93,13 +109,24 @@ class AiRun:
         self.emit(lambda seq: AiStepEvent(seq=seq, id=step, state=state, detail=detail))
 
     def finish(self, phase: TerminalPhase, message: str | None = None) -> None:
-        """Emit the terminal ``phase`` event. Only the first call counts."""
+        """Emit the terminal ``phase`` event, then tell the listeners. Only
+        the first call counts."""
         with self.condition:
             if self.finished:
                 return
             self.emit(lambda seq: AiPhaseEvent(seq=seq, phase=phase, message=message))
             self._phase = phase
             self.finished_at = _now()
+        try:
+            for listener in self.on_finish:
+                listener(self)
+        finally:
+            self._settled.set()
+
+    def wait_settled(self, timeout: float | None = None) -> bool:
+        """Block until the run has finished and its listeners have heard.
+        ``False`` on timeout."""
+        return self._settled.wait(timeout)
 
     def request_stop(self, reason: StopReason) -> bool:
         """Ask the run to stop: sets the cancel event, which kills a provider's
@@ -134,22 +161,45 @@ class Conflict:
     active_run: str
 
 
+@dataclass(frozen=True)
+class Deploying:
+    """``create`` refused: a UI deploy holds the listing (A43)."""
+
+
 class AiRunRegistry:
     def __init__(self, *, id_source: Callable[[], str] = lambda: uuid.uuid4().hex) -> None:
         self._lock = threading.Lock()
         self._runs: dict[str, AiRun] = {}
         self._latest: dict[str, str] = {}
         self._id_source = id_source
+        self._listeners: list[FinishListener] = []
+        self._deploying: Counter[str] = Counter()
 
-    def create(self, listing: str, *, draft_brief: bool) -> AiRun | Conflict:
+    def subscribe(self, listener: FinishListener) -> None:
+        """Hear every run this registry creates from now on finish -- the
+        batch queue's wake-up, and how its rows learn their outcome (A40)."""
+        with self._lock:
+            self._listeners.append(listener)
+
+    def create(
+        self, listing: str, *, draft_brief: bool, origin: RunOrigin = "manual"
+    ) -> AiRun | Conflict | Deploying:
         key = listing.casefold()
         with self._lock:
+            if self._deploying[key]:
+                return Deploying()
             previous = self._runs.get(self._latest.get(key, ""))
             if previous is not None:
                 if not previous.finished:
                     return Conflict(active_run=previous.id)
                 del self._runs[previous.id]
-            run = AiRun(id=self._id_source(), listing=listing, draft_brief=draft_brief)
+            run = AiRun(
+                id=self._id_source(),
+                listing=listing,
+                draft_brief=draft_brief,
+                origin=origin,
+                on_finish=tuple(self._listeners),
+            )
             self._runs[run.id] = run
             self._latest[key] = run.id
             return run
@@ -178,3 +228,29 @@ class AiRunRegistry:
     def active(self) -> list[AiRun]:
         with self._lock:
             return [run for run in self._runs.values() if not run.finished]
+
+    # ------------------------------------------------------------ deploys
+
+    def hold_for_deploy(self, listings: Iterable[str]) -> list[AiRun]:
+        """A43: refuse every new run for ``listings`` until
+        :meth:`release_deploy`, and answer the runs still going on them --
+        in one step, so no run can start between the two. Counted, so two
+        holds on one listing need two releases."""
+        keys = {name.casefold() for name in listings}
+        with self._lock:
+            self._deploying.update(keys)
+            return [
+                run
+                for run in self._runs.values()
+                if not run.finished and run.listing.casefold() in keys
+            ]
+
+    def release_deploy(self, listings: Iterable[str]) -> None:
+        keys = {name.casefold() for name in listings}
+        with self._lock:
+            self._deploying.subtract(keys)
+            self._deploying += Counter()  # drop the zeroes
+
+    def deploying(self, listing: str) -> bool:
+        with self._lock:
+            return self._deploying[listing.casefold()] > 0

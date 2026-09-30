@@ -32,10 +32,14 @@ export type TemplatePhoto = components["schemas"]["TemplatePhoto"];
 // ── Listing SEO AI Mode (AI SEO implementation plan, PR7) ───────────────────
 
 export type SeoReadinessResponse = components["schemas"]["SeoReadinessResponse"];
-/** A proposal as the browser keeps it: an AI run's `proposal` event without
- * the event's own `type` and `seq` (the server sends it flat, so the two
- * are the same fields). */
-export type SeoProposalResponse = Omit<components["schemas"]["AiProposalEvent"], "type" | "seq">;
+/** A listing's cached proposal (A41): the choices, their frozen inputs,
+ * which sections the seller resolved, and whether the saved listing has
+ * moved on since (`stale`, computed by the server). An AI run's `proposal`
+ * event is the same shape plus its `type` and `seq`. */
+export type ListingProposal = components["schemas"]["ListingProposal"];
+export type ProposalChoices = components["schemas"]["ProposalChoices"];
+export type ProposalResolution = components["schemas"]["ProposalResolution"];
+export type ProposalResolutionPatch = components["schemas"]["ProposalResolutionPatch"];
 export type SeoProposalSnapshot = components["schemas"]["SeoProposalSnapshot"];
 export type SeoRationaleEntry = components["schemas"]["SeoRationaleEntry"];
 export type SeoWarningEntry = components["schemas"]["SeoWarningEntry"];
@@ -73,6 +77,16 @@ export type TemplateMediaEntry = components["schemas"]["TemplateMediaEntry"];
 /** Either an explicit template reference, or a bare path string to a shared
  * asset under `common-media/` -- mirrors `config/listing.py`'s `MediaEntry`. */
 export type MediaEntry = TemplateMediaEntry | string;
+
+// ── Listing templates (A35, A36) ────────────────────────────────────────────
+
+export type ListingTemplateSummary = components["schemas"]["ListingTemplateSummary"];
+export type ListingTemplateDetail = components["schemas"]["ListingTemplateDetail"];
+/** A detail with `name` `""`: what Save as listing template or Clone would
+ * write, written nowhere. `source` and `assets` say where it came from. */
+export type ListingTemplateDraft = ListingTemplateDetail;
+export type ListingTemplateSource = components["schemas"]["ListingTemplateSource"];
+export type ListingTemplateSaveResult = components["schemas"]["ListingTemplateSaveResult"];
 
 // ── Deploy changes (A29-A33, docs/deploy-changes.md) ────────────────────────
 

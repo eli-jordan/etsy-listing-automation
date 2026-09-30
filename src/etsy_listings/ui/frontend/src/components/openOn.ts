@@ -1,7 +1,7 @@
 /**
- * Where "Open on Etsy" and "Open on Printify" actually go.
+ * Where "Open in Etsy" and "Open in Printify" actually go.
  *
- * Beside `OpenOnMenu` rather than inside it because the listings table asks
+ * Beside `OpenInMenu` rather than inside it because the listings table asks
  * the same question the menu does -- is there anything to open -- before it
  * decides whether to render the menu at all, and a component file that also
  * exports plain functions is a file Vite cannot hot-reload.

@@ -34,17 +34,31 @@ const CREATE_SECTION_VALUE = "create";
  * page-level banner surfaces, but visible without leaving the tab. */
 const DESCRIPTION_ISSUE_WHERE = "Listing Details › Description";
 
-interface Props {
+type Props = {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
   onFlush: () => void;
-  /** AI Mode, owned by `ListingEditorShell` rather than by this tab (PRD
-   * 68): a request has to survive a tab switch, and the chain that starts
-   * one begins at the design strip above the tabs. */
-  aiSeo: AiSeoMode;
-}
+} & (
+  | {
+      kind?: "listing";
+      /** AI Mode, owned by `ListingEditorShell` rather than by this tab (PRD
+       * 68): a request has to survive a tab switch, and the chain that starts
+       * one begins at the design strip above the tabs. */
+      aiSeo: AiSeoMode;
+    }
+  | {
+      /** A listing template's Details (UI doc §3): no Brief, Title, Tags,
+       * Description lead, AI Mode or market panel -- each listing in a batch
+       * writes those for itself -- and a hint that its lead goes above this
+       * body. */
+      kind: "listing-template";
+      aiSeo?: undefined;
+    }
+);
 
-export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
+export function DetailsTab(props: Props) {
+  const { detail, onUpdate, onFlush } = props;
+  const aiSeo = props.kind === "listing-template" ? null : props.aiSeo;
   const [tagDraft, setTagDraft] = useState("");
   const [sections, setSections] = useState<EtsySectionSummary[]>([]);
   const [sectionsAvailable, setSectionsAvailable] = useState(false);
@@ -56,15 +70,17 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewRef = useRef<HTMLDivElement>(null);
   const previewButtonRef = useRef<HTMLButtonElement>(null);
-  const [trackedPhase, setTrackedPhase] = useState(aiSeo.phase);
+  const phase = aiSeo?.phase ?? null;
+  const proposal = aiSeo?.proposal ?? null;
+  const [trackedPhase, setTrackedPhase] = useState(phase);
   const [drawerMotion, setDrawerMotion] = useState(false);
-  if (aiSeo.phase !== trackedPhase) {
-    setTrackedPhase(aiSeo.phase);
+  if (phase !== trackedPhase) {
+    setTrackedPhase(phase);
     if (trackedPhase === "loading") {
-      setDrawerMotion(aiSeo.proposal !== null && document.visibilityState === "visible");
+      setDrawerMotion(proposal !== null && document.visibilityState === "visible");
     }
   }
-  if (aiSeo.proposal === null && drawerMotion) setDrawerMotion(false);
+  if (proposal === null && drawerMotion) setDrawerMotion(false);
   const aiModeButtonRef = useRef<HTMLButtonElement>(null);
   const titleDrawerRef = useRef<HTMLDivElement>(null);
   const hadAiSeoProposal = useRef(false);
@@ -115,14 +131,14 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   // (rejecting, choosing, or resolving each one) is exactly when `proposal`
   // goes back to `null`.
   useEffect(() => {
-    const hasProposal = aiSeo.proposal !== null;
+    const hasProposal = proposal !== null;
     if (hasProposal && !hadAiSeoProposal.current) {
       titleDrawerRef.current?.querySelector<HTMLButtonElement>(".seo-choice-list button")?.focus();
     } else if (!hasProposal && hadAiSeoProposal.current) {
       aiModeButtonRef.current?.focus();
     }
     hadAiSeoProposal.current = hasProposal;
-  }, [aiSeo.proposal]);
+  }, [proposal]);
 
   function setBodySource(source: string | null) {
     if (source === null) {
@@ -173,133 +189,137 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
       <fieldset className="seo-details-fieldset">
         <legend className="seo-details-legend">Listing details</legend>
 
-        <div className="seo-brief-row">
-          <div className="field">
-            <label htmlFor="details-brief">Brief</label>
-            <textarea
-              id="details-brief"
-              placeholder="Describe the design and include any exact words shown in it."
-              value={detail.brief}
-              onChange={(event) => onUpdate({ brief: event.target.value })}
-              onBlur={onFlush}
-            />
-          </div>
-          <AiSeoControl mode={aiSeo} buttonRef={aiModeButtonRef} />
-        </div>
+        {aiSeo !== null && (
+          <>
+            <div className="seo-brief-row">
+              <div className="field">
+                <label htmlFor="details-brief">Brief</label>
+                <textarea
+                  id="details-brief"
+                  placeholder="Describe the design and include any exact words shown in it."
+                  value={detail.brief}
+                  onChange={(event) => onUpdate({ brief: event.target.value })}
+                  onBlur={onFlush}
+                />
+              </div>
+              <AiSeoControl mode={aiSeo} buttonRef={aiModeButtonRef} />
+            </div>
 
-        <div className={titleError ? "field field--invalid" : "field"}>
-          <label htmlFor="details-title">Title</label>
-          <div className="field__line">
-            <div className="field__stack">
-              <input
-                id="details-title"
-                className="input"
-                type="text"
-                placeholder="The title shoppers see on Etsy"
-                value={detail.etsy.title}
-                onChange={(event) => onUpdate({ etsy: { title: event.target.value } })}
+            <div className={titleError ? "field field--invalid" : "field"}>
+              <label htmlFor="details-title">Title</label>
+              <div className="field__line">
+                <div className="field__stack">
+                  <input
+                    id="details-title"
+                    className="input"
+                    type="text"
+                    placeholder="The title shoppers see on Etsy"
+                    value={detail.etsy.title}
+                    onChange={(event) => onUpdate({ etsy: { title: event.target.value } })}
+                    onBlur={onFlush}
+                  />
+                  {titleError && <span className="field__error">{titleError}</span>}
+                  {aiSeo.proposal?.resolution.title === "pending" && (
+                    <div ref={titleDrawerRef}>
+                      <AiChoiceDrawer
+                        enter={drawerMotion}
+                        field="title"
+                        options={aiSeo.proposal.proposal.titles}
+                        staleReason={aiSeo.staleReason}
+                        rationale={aiSeo.proposal.proposal.rationale}
+                        warnings={aiSeo.proposal.proposal.warnings}
+                        observedText={aiSeo.proposal.proposal.observed_text}
+                        onChoose={aiSeo.chooseTitle}
+                        onReject={aiSeo.rejectTitle}
+                      />
+                    </div>
+                  )}
+                </div>
+                <span className="field__count">
+                  {title.length} / {MAX_TITLE_LENGTH}
+                </span>
+              </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="details-tag-draft">Tags</label>
+              <div className="chips">
+                {tags.map((tag) => (
+                  <span key={tag} className="chip">
+                    {tag}
+                    <span className="chip__x" onClick={() => removeTag(tag)}>
+                      ×
+                    </span>
+                  </span>
+                ))}
+                {tags.length === 0 && <span className="chips__empty">No tags yet</span>}
+              </div>
+              <div className="field__line">
+                <div className="field__stack">
+                  <input
+                    id="details-tag-draft"
+                    className="input tag-paste"
+                    type="text"
+                    placeholder="Type or paste tags, comma separated — press Enter to add"
+                    value={tagDraft}
+                    onChange={(event) => setTagDraft(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter") {
+                        event.preventDefault();
+                        commitTags();
+                      }
+                    }}
+                    onBlur={commitTags}
+                  />
+                  {aiSeo.proposal?.resolution.tags === "pending" && (
+                    <AiTagsDrawer
+                      enter={drawerMotion}
+                      tags={aiSeo.proposal.proposal.tags}
+                      selected={tags}
+                      staleReason={aiSeo.staleReason}
+                      rationale={aiSeo.proposal.proposal.rationale}
+                      warnings={aiSeo.proposal.proposal.warnings}
+                      observedText={aiSeo.proposal.proposal.observed_text}
+                      onToggle={aiSeo.toggleTag}
+                      onAcceptBest={aiSeo.acceptBestTags}
+                      onClose={aiSeo.closeTags}
+                    />
+                  )}
+                </div>
+                <span className="field__count">
+                  {tags.length} / {MAX_TAGS}
+                </span>
+              </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="details-description-lead">Description Lead</label>
+              <textarea
+                id="details-description-lead"
+                value={description.lead}
+                onChange={(event) =>
+                  onUpdate({
+                    etsy: { description: { ...description, lead: event.target.value } },
+                  })
+                }
                 onBlur={onFlush}
               />
-              {titleError && <span className="field__error">{titleError}</span>}
-              {aiSeo.proposal?.unresolved.title && (
-                <div ref={titleDrawerRef}>
-                  <AiChoiceDrawer
-                    enter={drawerMotion}
-                    field="title"
-                    options={aiSeo.proposal.proposal.titles}
-                    stale={aiSeo.stale}
-                    rationale={aiSeo.proposal.proposal.rationale}
-                    warnings={aiSeo.proposal.proposal.warnings}
-                    observedText={aiSeo.proposal.proposal.observed_text}
-                    onChoose={aiSeo.chooseTitle}
-                    onReject={aiSeo.rejectTitle}
-                  />
-                </div>
-              )}
-            </div>
-            <span className="field__count">
-              {title.length} / {MAX_TITLE_LENGTH}
-            </span>
-          </div>
-        </div>
-
-        <div className="field">
-          <label htmlFor="details-tag-draft">Tags</label>
-          <div className="chips">
-            {tags.map((tag) => (
-              <span key={tag} className="chip">
-                {tag}
-                <span className="chip__x" onClick={() => removeTag(tag)}>
-                  ×
-                </span>
-              </span>
-            ))}
-            {tags.length === 0 && <span className="chips__empty">No tags yet</span>}
-          </div>
-          <div className="field__line">
-            <div className="field__stack">
-              <input
-                id="details-tag-draft"
-                className="input tag-paste"
-                type="text"
-                placeholder="Type or paste tags, comma separated — press Enter to add"
-                value={tagDraft}
-                onChange={(event) => setTagDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    commitTags();
-                  }
-                }}
-                onBlur={commitTags}
-              />
-              {aiSeo.proposal?.unresolved.tags && (
-                <AiTagsDrawer
+              {aiSeo.proposal?.resolution.lead === "pending" && (
+                <AiChoiceDrawer
                   enter={drawerMotion}
-                  tags={aiSeo.proposal.proposal.tags}
-                  selected={tags}
-                  stale={aiSeo.stale}
+                  field="description lead"
+                  options={aiSeo.proposal.proposal.description_leads}
+                  staleReason={aiSeo.staleReason}
                   rationale={aiSeo.proposal.proposal.rationale}
                   warnings={aiSeo.proposal.proposal.warnings}
                   observedText={aiSeo.proposal.proposal.observed_text}
-                  onToggle={aiSeo.toggleTag}
-                  onAcceptBest={aiSeo.acceptBestTags}
-                  onClose={aiSeo.closeTags}
+                  onChoose={aiSeo.chooseLead}
+                  onReject={aiSeo.rejectLead}
                 />
               )}
             </div>
-            <span className="field__count">
-              {tags.length} / {MAX_TAGS}
-            </span>
-          </div>
-        </div>
-
-        <div className="field">
-          <label htmlFor="details-description-lead">Description Lead</label>
-          <textarea
-            id="details-description-lead"
-            value={description.lead}
-            onChange={(event) =>
-              onUpdate({
-                etsy: { description: { ...description, lead: event.target.value } },
-              })
-            }
-            onBlur={onFlush}
-          />
-          {aiSeo.proposal?.unresolved.lead && (
-            <AiChoiceDrawer
-              enter={drawerMotion}
-              field="description lead"
-              options={aiSeo.proposal.proposal.description_leads}
-              stale={aiSeo.stale}
-              rationale={aiSeo.proposal.proposal.rationale}
-              warnings={aiSeo.proposal.proposal.warnings}
-              observedText={aiSeo.proposal.proposal.observed_text}
-              onChoose={aiSeo.chooseLead}
-              onReject={aiSeo.rejectLead}
-            />
-          )}
-        </div>
+          </>
+        )}
 
         <div className={descriptionIssues.length > 0 ? "field field--invalid" : "field"}>
           <label htmlFor="details-description-source">Description Body</label>
@@ -331,6 +351,11 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
               {issue.message}
             </span>
           ))}
+          {aiSeo === null && (
+            <span className="field__hint">
+              Each listing's own description lead is placed above this body.
+            </span>
+          )}
         </div>
 
         <div className="description-preview-control" ref={previewRef}>
@@ -453,6 +478,10 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
           )}
           {sectionError && <span className="field__error">{sectionError}</span>}
         </div>
+
+        {/* No Materials field: they belong to the garment profile, which
+            every listing on it deploys (docs/phase-5-listings-ui.md), so a
+            read-only copy here only looked editable. */}
       </fieldset>
     </div>
   );
@@ -464,9 +493,9 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
   // never remounted -- losing the seller's focus and caret -- when research
   // starts mid-edit and the panel appears.
   return (
-    <div className={aiSeo.market === null ? undefined : "mkt-layout"}>
+    <div className={aiSeo === null || aiSeo.market === null ? undefined : "mkt-layout"}>
       {fields}
-      {aiSeo.market !== null && (
+      {aiSeo !== null && aiSeo.market !== null && (
         <MarketListingsPanel state={aiSeo.market} proposal={aiSeo.proposal?.proposal ?? null} />
       )}
     </div>

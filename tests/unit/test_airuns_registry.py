@@ -5,7 +5,9 @@ and each run's event buffer -- pure state, no thread and no workspace.
 
 from __future__ import annotations
 
-from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict
+import threading
+
+from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
 
 
 def _registry() -> AiRunRegistry:
@@ -164,3 +166,97 @@ def test_forgetting_a_listing_leaves_a_running_run_to_end_on_its_own() -> None:
     registry.forget("take-a-hike")
 
     assert registry.latest("take-a-hike") is run
+
+
+def test_a_run_is_manual_unless_the_batch_queue_created_it() -> None:
+    """A40: a batch run is an ordinary run with origin ``batch``."""
+    registry = _registry()
+
+    assert _create(registry, "take-a-hike").origin == "manual"
+    batch = registry.create("sunset", draft_brief=True, origin="batch")
+    assert isinstance(batch, AiRun)
+    assert batch.origin == "batch"
+
+
+def test_every_subscriber_hears_each_run_finish_once() -> None:
+    """The batch queue's wake-up and its row update (A40): a run that
+    finishes -- batch or manual -- is handed to every subscriber, after its
+    terminal event, and a second ``finish`` is not heard again."""
+    registry = _registry()
+    heard: list[tuple[str, str]] = []
+    registry.subscribe(lambda run: heard.append((run.id, run.phase)))
+    manual = _create(registry, "take-a-hike")
+    batch = registry.create("sunset", draft_brief=True, origin="batch")
+    assert isinstance(batch, AiRun)
+
+    batch.finish("failed", "no provider")
+    batch.finish("done")
+    manual.finish("cancelled")
+
+    assert heard == [(batch.id, "failed"), (manual.id, "cancelled")]
+
+
+def test_a_subscriber_is_called_outside_the_run_s_lock() -> None:
+    """Another thread can read the run while a subscriber is still being
+    called, so a subscriber that takes the batch store's lock cannot
+    deadlock against a request that holds it and reads the run."""
+    registry = _registry()
+    seen: list[list[str]] = []
+
+    def read_from_another_thread(run: AiRun) -> None:
+        reader = threading.Thread(target=lambda: seen.append([s.state for s in run.steps]))
+        reader.start()
+        reader.join(timeout=5)
+
+    registry.subscribe(read_from_another_thread)
+    run = _create(registry)
+    run.step("brief", "done")
+
+    run.finish("done")
+
+    assert seen == [["done", "pending", "pending"]]
+
+
+# ----------------------------------------------------------------- deploys
+
+
+def test_a_deploy_hold_refuses_new_runs_and_names_the_running_ones() -> None:
+    """A43: one step, so no run can start between the answer and the hold.
+    Listing names compare case-insensitively, as everywhere here."""
+    registry = _registry()
+    running = _create(registry, "take-a-hike")
+    _create(registry, "cedar-trail")
+
+    held = registry.hold_for_deploy(["Take-A-Hike"])
+
+    assert held == [running]
+    assert registry.deploying("take-a-hike")
+    assert not registry.deploying("cedar-trail")
+    running.finish("cancelled")
+    assert isinstance(registry.create("take-a-hike", draft_brief=False), Deploying)
+
+
+def test_two_holds_on_one_listing_need_two_releases() -> None:
+    registry = _registry()
+    registry.hold_for_deploy(["take-a-hike"])
+    registry.hold_for_deploy(["take-a-hike"])
+
+    registry.release_deploy(["take-a-hike"])
+    assert registry.deploying("take-a-hike")
+
+    registry.release_deploy(["take-a-hike"])
+    assert not registry.deploying("take-a-hike")
+    assert isinstance(registry.create("take-a-hike", draft_brief=False), AiRun)
+
+
+def test_a_run_settles_once_its_listeners_have_heard() -> None:
+    registry = _registry()
+    heard: list[bool] = []
+    registry.subscribe(lambda run: heard.append(run.wait_settled(timeout=0)))
+    run = _create(registry)
+
+    assert not run.wait_settled(timeout=0)
+    run.finish("done")
+
+    assert heard == [False]
+    assert run.wait_settled(timeout=0)

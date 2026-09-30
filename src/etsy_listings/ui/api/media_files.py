@@ -111,6 +111,44 @@ def listing_media_file(request: Request, listing: str, path: str) -> FileRespons
     return _file(_existing(_workspace(request).listing_media_file(listing, path), path))
 
 
+@router.get("/api/listing-templates/{template}/media-files", response_model=list[MediaFileSummary])
+def list_listing_template_media_files(request: Request, template: str) -> list[MediaFileSummary]:
+    """The *This template* group (UI doc, *Existing components the template
+    editor needs*): the listing template's own files, each with the ``./``
+    ref that names it from ``template.yaml``. Scoped to ``assets/``."""
+    workspace = _workspace(request)
+    if not workspace.listing_template_file(template).is_file():
+        raise HTTPException(status_code=404, detail=f"no listing template {template!r}")
+    directory = workspace.listing_template_dir(template)
+    rows: list[MediaFileSummary] = []
+    for path in workspace.listing_template_media_files(template):
+        relative = path.relative_to(directory).as_posix()
+        rows.append(
+            _summary(
+                path,
+                directory,
+                file=f"{layout.LISTING_TEMPLATES_DIR}/{template}/{relative}",
+                ref=f"./{relative}",
+            )
+        )
+    return rows
+
+
+@router.get("/api/listing-templates/{template}/media-files/{path:path}/thumbnail")
+def listing_template_media_thumbnail(request: Request, template: str, path: str) -> Response:
+    """A listing template's own file (its ``./`` root, A35) -- the pictures on
+    its card. The same boundary as a listing's: the directory also holds
+    ``template.yaml``."""
+    workspace = _workspace(request)
+    return _thumbnail(_existing(workspace.listing_template_media_file(template, path), path))
+
+
+@router.get("/api/listing-templates/{template}/media-files/{path:path}/file")
+def listing_template_media_file(request: Request, template: str, path: str) -> FileResponse:
+    workspace = _workspace(request)
+    return _file(_existing(workspace.listing_template_media_file(template, path), path))
+
+
 def _summary(path: Path, directory: Path, *, file: str, ref: str) -> MediaFileSummary:
     return MediaFileSummary(
         name=path.relative_to(directory).as_posix(), file=file, ref=ref, kind=media_kind(ref)

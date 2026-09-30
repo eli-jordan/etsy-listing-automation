@@ -28,6 +28,7 @@ from etsy_listings.config.errors import ConfigLoadError, format_validation_error
 from etsy_listings.config.exceptions import load_exceptions
 from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
+from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
 from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.config.settings import Settings
@@ -41,6 +42,7 @@ from etsy_listings.config.slug import ColourExceptions
 from etsy_listings.render.config import AnyTemplate, dump_template_config
 from etsy_listings.render.config import load_template_config as parse_template_config
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.atomic import read_bytes_retrying, write_bytes_atomic
 from etsy_listings.workspace.common_copy import (
     CommonCopyDocument,
     CommonCopyError,
@@ -74,10 +76,12 @@ class InvalidRefError(ConfigLoadError):
     batch carries on (PRD 16).
     """
 
-    def __init__(self, listing_dir: Path, ref: str, detail: str) -> None:
+    def __init__(
+        self, listing_dir: Path, ref: str, detail: str, *, file: str = layout.LISTING_FILE
+    ) -> None:
         self.ref = ref
         self.detail = detail
-        super().__init__(listing_dir / layout.LISTING_FILE, f"ref {ref!r}: {detail}")
+        super().__init__(listing_dir / file, f"ref {ref!r}: {detail}")
 
 
 @dataclass(frozen=True)
@@ -329,26 +333,41 @@ class Workspace:
         has no directory of its own and resolves against a stand-in at the
         same depth. Every refusal is an :class:`InvalidRefError`.
         """
+        return self._resolve_owned_ref(ref, listing_dir, layout.LISTING_FILE)
+
+    def resolve_template_ref(self, ref: str, *, template: str) -> Path:
+        """:meth:`resolve_ref` for a path in a listing template's
+        ``template.yaml`` (A35): the same two roots, with ``./`` meaning the
+        template's own directory, where Save as listing template copies a
+        listing's local media. One interpreter with a second owner, not a
+        second resolver -- a template's refs become a listing's when it is
+        instantiated, so they must mean the same thing."""
+        return self._resolve_owned_ref(
+            ref, self.listing_template_dir(template), layout.TEMPLATE_FILE
+        )
+
+    def _resolve_owned_ref(self, ref: str, owner_dir: Path, owner_file: str) -> Path:
+        def refused(detail: str) -> InvalidRefError:
+            return InvalidRefError(owner_dir, ref, detail, file=owner_file)
+
         if Path(ref).is_absolute() or _looks_like_windows_absolute(ref):
-            raise InvalidRefError(listing_dir, ref, "an absolute path is not a ref")
+            raise refused("an absolute path is not a ref")
         if "\\" in ref:
-            raise InvalidRefError(listing_dir, ref, "use '/' between directories, not a backslash")
+            raise refused("use '/' between directories, not a backslash")
         if ref.startswith("../"):
-            raise InvalidRefError(
-                listing_dir,
-                ref,
+            raise refused(
                 "'..' refs are the old listing-relative form; write it from the workspace "
-                f"root instead (run {MIGRATION_SCRIPT} to rewrite a whole workspace)",
+                f"root instead (run {MIGRATION_SCRIPT} to rewrite a whole workspace)"
             )
         if ".." in ref.split("/"):
-            raise InvalidRefError(listing_dir, ref, "'..' is not allowed in a ref")
-        base, rest = (listing_dir, ref[2:]) if ref.startswith("./") else (self.root, ref)
+            raise refused("'..' is not allowed in a ref")
+        base, rest = (owner_dir, ref[2:]) if ref.startswith("./") else (self.root, ref)
         if all(segment in ("", ".") for segment in rest.split("/")):
-            raise InvalidRefError(listing_dir, ref, "the ref is empty")
+            raise refused("the ref is empty")
         try:
             return self.resolve(rest, relative_to=base)
         except PathEscapesWorkspaceError as exc:
-            raise InvalidRefError(listing_dir, ref, str(exc)) from exc
+            raise refused(str(exc)) from exc
 
     def cache(self, *parts: str) -> Path:
         return self.root.joinpath(layout.CACHE_DIR, *parts)
@@ -379,10 +398,20 @@ class Workspace:
                 names.append(path.name)
         return sorted(names)
 
+    def listing_directory_names(self) -> list[str]:
+        """Every directory under ``listings/``, a listing or not. A name one
+        holds is taken even without a ``listing.yaml`` -- create refuses it
+        -- so this, not :meth:`listing_names`, is what a new name must avoid
+        (A38)."""
+        listings = self.root / layout.LISTINGS_DIR
+        if not listings.is_dir():
+            return []
+        return sorted(path.name for path in listings.iterdir() if path.is_dir())
+
     def remove_listing(self, listing: str) -> None:
         """Wipe ``listings/{name}/``, ``.cache/renders/{name}/`` (PRD 63),
-        ``.cache/previews/{name}/`` (A32) and the market snapshot
-        (market-seo.md, *Cache*).
+        ``.cache/previews/{name}/`` (A32), the market snapshot
+        (market-seo.md, *Cache*) and the cached AI proposal (A42).
 
         Designs, garment profiles and pricing plans stay -- they are reusable.
         """
@@ -394,6 +423,7 @@ class Workspace:
             if path.is_dir():
                 remove_tree(path)
         self.market_snapshot_file(listing).unlink(missing_ok=True)
+        self.proposal_file(listing).unlink(missing_ok=True)
 
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)
@@ -409,6 +439,131 @@ class Workspace:
 
     def listing_file(self, listing: str) -> Path:
         return self.listing_dir(listing) / layout.LISTING_FILE
+
+    def listing_templates_dir(self) -> Path:
+        return self.root / layout.LISTING_TEMPLATES_DIR
+
+    def listing_template_names(self) -> list[str]:
+        """Directories that hold a ``template.yaml`` (A35). Save as listing
+        template creates the directory before it writes the file, and a
+        directory without one is a save still in flight or one that failed,
+        not a template anybody can use."""
+        directory = self.listing_templates_dir()
+        if not directory.is_dir():
+            return []
+        return sorted(
+            path.name
+            for path in directory.iterdir()
+            if path.is_dir() and (path / layout.TEMPLATE_FILE).is_file()
+        )
+
+    def listing_template_dir(self, template: str) -> Path:
+        return self.listing_templates_dir() / _segment(template)
+
+    def listing_template_file(self, template: str) -> Path:
+        return self.listing_template_dir(template) / layout.TEMPLATE_FILE
+
+    def listing_template_assets_dir(self, template: str) -> Path:
+        return self.listing_template_dir(template) / layout.LISTING_TEMPLATE_ASSETS_DIR
+
+    def listing_template_media_file(self, template: str, path: str) -> Path:
+        """One of a listing template's own files, by its path under the
+        template's directory -- a ``./`` ref without the ``./``. The boundary
+        :meth:`listing_media_file` draws, for the same reason: the directory
+        also holds ``template.yaml``."""
+        return self._media_file_in(self.listing_template_dir(template), path)
+
+    def listing_template_media_files(self, template: str) -> list[Path]:
+        """Every image and video under a listing template's ``assets/``: the
+        *This template* group of the file locator. Only ``assets/``, because
+        that is where every file a template owns is put (A35) -- a stray
+        file beside ``template.yaml`` is nothing the template names."""
+        return self._media_files_in(self.listing_template_assets_dir(template))
+
+    def remove_listing_template(self, template: str) -> None:
+        """Wipe ``listing-templates/{name}/``, assets and all. Batches and
+        listings made from it keep their own frozen copies (spec,
+        *Completeness and editing*), so nothing else goes with it."""
+        directory = self.listing_template_dir(template)
+        if directory.is_dir():
+            remove_tree(directory)
+
+    def load_listing_template(self, template: str) -> ListingTemplate:
+        return ListingTemplate.load(
+            self.listing_template_file(template),
+            currency=self.defaults.etsy.currency,
+            read=read_bytes_retrying,
+        )
+
+    def write_listing_template(self, template: str, document: ListingTemplate) -> None:
+        """Write ``template.yaml``, atomically (A37). Defaults are left out, so
+        the file says only what the seller set -- as a hand-written listing
+        does. Whether the document is complete enough to write is the
+        caller's question (A36), not the file's."""
+        dumped = document.model_dump(mode="json", exclude_defaults=True)
+        write_bytes_atomic(
+            self.listing_template_file(template),
+            yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True).encode("utf-8"),
+        )
+
+    def resolve_frozen_template_ref(self, ref: str, *, frozen_dir: Path) -> Path:
+        """:meth:`resolve_template_ref` for a listing template frozen into a
+        staging session or a batch (spec, *Frozen staging*): ``./`` is the
+        frozen copy's directory, a bare ref the live workspace, because
+        shared refs are never frozen."""
+        return self._resolve_owned_ref(ref, frozen_dir, layout.TEMPLATE_FILE)
+
+    # Batch creation's cache records (A37). Ids come from URLs, so every one
+    # goes through `_segment` like a listing name.
+
+    def staging_ids(self) -> list[str]:
+        return self._cache_entries(layout.STAGING_DIR, directories=True)
+
+    def staging_dir(self, session: str) -> Path:
+        return self.cache(layout.STAGING_DIR, _segment(session))
+
+    def staging_session_file(self, session: str) -> Path:
+        return self.staging_dir(session) / layout.STAGING_SESSION_FILE
+
+    def staging_upload_file(self, session: str, sha256: str) -> Path:
+        return self.staging_dir(session) / layout.STAGING_UPLOADS_DIR / f"{_segment(sha256)}.png"
+
+    def staging_archive_file(self, session: str) -> Path:
+        return self.staging_dir(session) / layout.STAGING_ARCHIVE_FILE
+
+    def staging_template_dir(self, session: str) -> Path:
+        return self.staging_dir(session) / layout.FROZEN_TEMPLATE_DIR
+
+    def batch_ids(self) -> list[str]:
+        return self._cache_entries(layout.BATCHES_DIR, directories=False)
+
+    def batch_file(self, batch: str) -> Path:
+        return self.cache(layout.BATCHES_DIR, f"{_segment(batch)}.json")
+
+    def batch_dir(self, batch: str) -> Path:
+        return self.cache(layout.BATCHES_DIR, _segment(batch))
+
+    def batch_template_dir(self, batch: str) -> Path:
+        return self.batch_dir(batch) / layout.FROZEN_TEMPLATE_DIR
+
+    def batch_upload_file(self, batch: str, sha256: str) -> Path:
+        return self.batch_dir(batch) / layout.STAGING_UPLOADS_DIR / f"{_segment(sha256)}.png"
+
+    def _cache_entries(self, directory: str, *, directories: bool) -> list[str]:
+        """The ids under ``.cache/<directory>/``: its subdirectories, or the
+        stems of its ``*.json`` records."""
+        parent = self.cache(directory)
+        if not parent.is_dir():
+            return []
+        if directories:
+            return sorted(p.name for p in parent.iterdir() if p.is_dir())
+        return sorted(p.stem for p in parent.glob("*.json") if p.is_file())
+
+    def design_ref(self, design: str) -> str:
+        """The workspace-rooted ref ``listing.yaml`` names ``designs/<design>.png``
+        by (PRD 73) -- what batch creation writes into every listing it makes
+        (spec, *Design validation*)."""
+        return f"{layout.DESIGNS_DIR}/{_segment(design)}.png"
 
     def design_content_hash(self, design: Mapping[str, str], *, listing_dir: Path) -> str | None:
         """Content identity for the design the editor and SEO request see.
@@ -865,6 +1020,11 @@ class Workspace:
         return self.cache(
             layout.MARKET_DIR, layout.MARKET_SNAPSHOTS_DIR, f"{_segment(listing)}.json"
         )
+
+    def proposal_file(self, listing: str) -> Path:
+        """The listing's cached AI SEO proposal (A41), keyed by its exact
+        name as :meth:`market_snapshot_file` is (A37)."""
+        return self.cache(layout.PROPOSALS_DIR, f"{_segment(listing)}.json")
 
     def preview_dir(self, listing: str) -> Path:
         """Every preview this listing currently holds, one subdirectory per

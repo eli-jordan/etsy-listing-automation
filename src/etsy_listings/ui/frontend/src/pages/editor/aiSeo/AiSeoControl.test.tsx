@@ -16,7 +16,7 @@ function mode(over: Partial<AiSeoMode> = {}): AiSeoMode {
     reason: null,
     phase: "idle",
     proposal: null,
-    stale: false,
+    staleReason: null,
     generate: vi.fn(),
     draftsBrief: false,
     cancel: vi.fn(),
@@ -81,6 +81,21 @@ describe("AiSeoControl", () => {
     render(<AiSeoControl mode={mode({ generate })} />);
     fireEvent.click(screen.getByRole("button", { name: /AI Mode/i }));
     expect(generate).toHaveBeenCalled();
+  });
+
+  it("offers no Cancel for a batch's run: Cancel batch on the summary stops it", () => {
+    render(
+      <AiSeoControl
+        mode={mode({
+          phase: "loading",
+          startedAt: Date.now(),
+          run: aiRunStub({ phase: "running", busy: true, origin: "batch" }),
+        })}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /cancel/i })).toBeNull();
+    expect(screen.getByText("Drafting as part of a batch")).toBeInTheDocument();
   });
 
   it("shows a polite loading status with Cancel while generating, and disables AI Mode", () => {
