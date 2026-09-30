@@ -9,7 +9,7 @@ checking the mockup's assumptions against the real domain model and resolving
 the places they disagreed.
 
 The mockup-template calibrator screen needs no new work beyond mounting the
-existing `ui/frontend/src/App.tsx` under the new shell chrome — everything
+existing `src/ui/src/App.tsx` under the new shell chrome — everything
 below is the listings list and the listing editor.
 
 ---
@@ -344,7 +344,7 @@ therefore costs no remote write and produces no drift.
   for any non-`/api` path, so client-side routing works with zero backend
   change. Routes: `/` (Dashboard stub), `/listings`, `/listings/new`,
   `/listings/:name`, `/templates` (mounts the existing `<App/>` unmodified).
-- **Design tokens**: extend `src/etsy_listings/ui/frontend/src/index.css`
+- **Design tokens**: extend `src/ui/src/index.css`
   in place — it already defines the exact palette/fonts the mockup uses
   (`--color-bg`, `--color-accent`, Caprasimo/Figtree, spacing/radius/shadow
   scale, `.btn`/`.card`/`.tag`/`.seg`/`fieldset` primitives). Do not introduce
@@ -573,7 +573,7 @@ codes.
 
 ## Frontend
 
-`src/etsy_listings/ui/frontend/src/`:
+`src/ui/src/`:
 
 ```
 shell/
@@ -679,7 +679,7 @@ hooks/
 
 - `uv run pytest tests/unit/test_listing_validation.py` and
   `tests/behaviour/test_listings_api.py` for the backend.
-- `npm run test` / `npm run test:coverage` in `ui/frontend/` for the new
+- `npm run test` / `npm run test:coverage` in `src/ui/` for the new
   components.
 - `npm run gen:api` after any endpoint change (`export_openapi.py` →
   `openapi-typescript`), per the README's existing manual step.

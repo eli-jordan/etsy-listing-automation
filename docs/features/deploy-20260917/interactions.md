@@ -2,7 +2,7 @@
 
 Status: settled interaction design. This document accompanies the batch deploy
 frames in
-[`src/etsy_listings/ui/frontend/design/scenes/batch-deploy-lofi/`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-deploy-lofi).
+[`src/ui/design/scenes/batch-deploy-lofi/`](../../../src/ui/design/scenes/batch-deploy-lofi).
 
 This document describes what the seller does, what the interface does in
 response, and why each interaction exists. It extends the individual-listing

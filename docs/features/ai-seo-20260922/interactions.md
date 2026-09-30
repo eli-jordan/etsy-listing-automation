@@ -79,7 +79,7 @@ action.
 
 ## 1. AI Mode entry point
 
-The **AI Mode** control sits to the right of the Brief field, as in the [v3 review mockup](../../../src/etsy_listings/ui/frontend/design/scenes/listing-seo-v3/review.tsx). Its compact
+The **AI Mode** control sits to the right of the Brief field, as in the [v3 review mockup](../../../src/ui/design/scenes/listing-seo-v3/review.tsx). Its compact
 button has a purple and pink sparkle and remains secondary to **Deploy changes**.
 
 | Interaction | What happens | Why it is important |

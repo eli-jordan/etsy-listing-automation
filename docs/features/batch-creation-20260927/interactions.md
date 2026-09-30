@@ -2,7 +2,7 @@
 
 Status: interaction design agreed through four review rounds of mockups. This
 document accompanies the frames in
-[`src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi)
+[`src/ui/design/scenes/batch-create-lofi/`](../../../src/ui/design/scenes/batch-create-lofi)
 on the **Batch Listing Creation** board.
 
 It explains what the seller does, what the interface does in response, and why.
@@ -16,12 +16,12 @@ build is planned in
 [features/batch-creation-20260927/plan.md](plan.md).
 
 Paths below are relative to the repository root. `mockups/` is shorthand for
-`src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/`, and `app/`
-for `src/etsy_listings/ui/frontend/src/`.
+`src/ui/design/scenes/batch-create-lofi/`, and `app/`
+for `src/ui/src/`.
 
 ## Viewing the mockups
 
-1. From `src/etsy_listings/ui/frontend`, run `npx marver dev` and open the
+1. From `src/ui`, run `npx marver dev` and open the
    printed URL.
 2. Choose the **Batch Listing Creation** board. The top band is the flow
    diagram; the bottom band holds every screen, left to right in flow order.
@@ -72,7 +72,7 @@ row (see [the editor head](#the-editor-head)), present on every saved listing.
 **What happens.** The click creates the template straight away from the
 listing's reusable settings and opens it in the listing-template editor, with
 the cursor in an empty name field
-([`template-new`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/template-new.tsx)).
+([`template-new`](../../../src/ui/design/scenes/batch-create-lofi/template-new.tsx)).
 
 Not obvious from the designs:
 
@@ -91,7 +91,7 @@ Not obvious from the designs:
 
 ## 2. The Listing templates page
 
-Frame: [`templates`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/templates.tsx).
+Frame: [`templates`](../../../src/ui/design/scenes/batch-create-lofi/templates.tsx).
 A new **Listing Templates** item in the sidebar leads here.
 
 ### Template cards
@@ -143,15 +143,15 @@ Not obvious from the designs:
   days after its last edit, and the row says when it expires.
 
 The status rules are also in the sticky note
-[`templates.note.md`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/templates.note.md).
+[`templates.note.md`](../../../src/ui/design/scenes/batch-create-lofi/templates.note.md).
 
 ## 3. Editing a listing template
 
-Frames: [`template-variants`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/template-variants.tsx),
-[`template-pricing`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/template-pricing.tsx),
-[`template-images`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/template-images.tsx),
-[`template-details`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/template-details.tsx),
-[`template-unsaved`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/template-unsaved.tsx).
+Frames: [`template-variants`](../../../src/ui/design/scenes/batch-create-lofi/template-variants.tsx),
+[`template-pricing`](../../../src/ui/design/scenes/batch-create-lofi/template-pricing.tsx),
+[`template-images`](../../../src/ui/design/scenes/batch-create-lofi/template-images.tsx),
+[`template-details`](../../../src/ui/design/scenes/batch-create-lofi/template-details.tsx),
+[`template-unsaved`](../../../src/ui/design/scenes/batch-create-lofi/template-unsaved.tsx).
 
 The template editor is the listing editor with the design-specific parts
 removed. It has the same head layout, design row, tab bar and tabs (Variants,
@@ -183,8 +183,8 @@ Not obvious from the designs:
 
 ## 4. Starting a batch: New batch
 
-Frames: [`new-batch`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/new-batch.tsx)
-and the error state [`staging-refused`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/staging-refused.tsx).
+Frames: [`new-batch`](../../../src/ui/design/scenes/batch-create-lofi/new-batch.tsx)
+and the error state [`staging-refused`](../../../src/ui/design/scenes/batch-create-lofi/staging-refused.tsx).
 
 1. **Listing template.** Pick exactly one. Every design in the batch gets its
    settings.
@@ -204,8 +204,8 @@ Not obvious from the designs:
 
 ## 5. Staging review
 
-Frames: [`staging`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/staging.tsx)
-and the blocked state [`staging-blocked`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/staging-blocked.tsx).
+Frames: [`staging`](../../../src/ui/design/scenes/batch-create-lofi/staging.tsx)
+and the blocked state [`staging-blocked`](../../../src/ui/design/scenes/batch-create-lofi/staging-blocked.tsx).
 
 One row per unique design, with its source file name, an editable listing name
 and a check result. A count strip summarises ready, blocked, not-created,
@@ -233,7 +233,7 @@ Not obvious from the designs:
 - **AI readiness is only mentioned when it fails.** When prompts, a provider
   and Etsy market access are all available, nothing is said. When one is
   missing, a blocking callout appears and Create is disabled (wording in
-  [`staging.note.md`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/staging.note.md)).
+  [`staging.note.md`](../../../src/ui/design/scenes/batch-create-lofi/staging.note.md)).
 - **The template is frozen when staging starts.** The page says *Using
   heavyweight-tee as saved at 11:38*. Later edits to the template don't reach
   this batch; there is no refresh.
@@ -257,7 +257,7 @@ Not obvious from the designs:
 
 ## 7. The batch summary
 
-Frame: [`batch-summary`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/batch-summary.tsx).
+Frame: [`batch-summary`](../../../src/ui/design/scenes/batch-create-lofi/batch-summary.tsx).
 
 The batch's only review surface. A progress bar and count strip sit above a
 row per listing, showing AI drafting, the SEO proposal, and the Reviewed flag.
@@ -297,7 +297,7 @@ Not obvious from the designs:
 
 ## 8. A listing opened from a batch
 
-Frame: [`listing-from-batch`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/listing-from-batch.tsx).
+Frame: [`listing-from-batch`](../../../src/ui/design/scenes/batch-create-lofi/listing-from-batch.tsx).
 
 The ordinary listing editor, opened on Listing Details. **Back to batch**
 takes the breadcrumb's place in the head, and **Mark reviewed** joins the
@@ -339,8 +339,8 @@ the record of why.
 
 A **Listing Templates** item between Listings and Mockup Templates.
 
-- Mockup: [`mockups/_Shell.tsx`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_Shell.tsx), the `Shell` component (nav item at line 57).
-- App code: [`app/shell/AppShell.tsx`](../../../src/etsy_listings/ui/frontend/src/shell/AppShell.tsx), the `sidebar__nav` block (lines 33–82).
+- Mockup: [`mockups/_Shell.tsx`](../../../src/ui/design/scenes/batch-create-lofi/_Shell.tsx), the `Shell` component (nav item at line 57).
+- App code: [`app/shell/AppShell.tsx`](../../../src/ui/src/shell/AppShell.tsx), the `sidebar__nav` block (lines 33–82).
 
 ### Listing editor
 
@@ -350,13 +350,13 @@ Three additions, shown in the `listing-from-batch` frame:
    Back to batch replaces the breadcrumb when opened from a batch; Create
    listing template is always in the action row; Mark reviewed joins it for a
    listing in a cached batch.
-   - Mockup: the [`editor-header`](../../../src/etsy_listings/ui/frontend/design/scenes/editor-header) scene (`header`, `batch`, `batch-reviewed` and the state frames); earlier rounds are `editor-header-v1`…`v3` on the archive board.
-   - App code: `EditorHead` in [`app/pages/ListingEditorPage.tsx`](../../../src/etsy_listings/ui/frontend/src/pages/ListingEditorPage.tsx).
+   - Mockup: the [`editor-header`](../../../src/ui/design/scenes/editor-header) scene (`header`, `batch`, `batch-reviewed` and the state frames); earlier rounds are `editor-header-v1`…`v3` on the archive board.
+   - App code: `EditorHead` in [`app/pages/ListingEditorPage.tsx`](../../../src/ui/src/pages/ListingEditorPage.tsx).
 2. **Stale suggestions stay usable.** Today the drawer disables its choices
    and says *Suggestions are out of date*. The mockup applies the new heading
    and re-enables the choices on top of the real drawer (the `useEffect` at
    lines 27–49 of `_ListingEditor.tsx`).
-   - App code: [`app/pages/editor/aiSeo/AiChoiceDrawer.tsx`](../../../src/etsy_listings/ui/frontend/src/pages/editor/aiSeo/AiChoiceDrawer.tsx) lines 52 and 61 (`disabled={stale}`), and the same pattern in [`AiTagsDrawer.tsx`](../../../src/etsy_listings/ui/frontend/src/pages/editor/aiSeo/AiTagsDrawer.tsx) lines 49 and 55.
+   - App code: [`app/pages/editor/aiSeo/AiChoiceDrawer.tsx`](../../../src/ui/src/pages/editor/aiSeo/AiChoiceDrawer.tsx) lines 52 and 61 (`disabled={stale}`), and the same pattern in [`AiTagsDrawer.tsx`](../../../src/ui/src/pages/editor/aiSeo/AiTagsDrawer.tsx) lines 49 and 55.
 3. **Proposals persist server-side.** This isn't visible in a frame, but it is
    what lets a batch run's suggestions be waiting when the editor opens. It
    replaces `aiSeoStorage`'s browser-local proposal store (see the spec's
@@ -396,14 +396,14 @@ dropped in review.
 
 The template editor reuses the listing editor's components. Five need a small
 change, all recorded in
-[`template-variants.note.md`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/template-variants.note.md):
+[`template-variants.note.md`](../../../src/ui/design/scenes/batch-create-lofi/template-variants.note.md):
 
 | Component | Change | Mockup stand-in |
 |---|---|---|
-| `DesignSelect` ([app/pages/editor/DesignSelect.tsx](../../../src/etsy_listings/ui/frontend/src/pages/editor/DesignSelect.tsx)) | Preview wording and a preview-design list (test designs + recent designs) | `PreviewDesign`, `_TemplateEditor.tsx` line 41 |
-| `MediaLocator` ([line 141](../../../src/etsy_listings/ui/frontend/src/pages/editor/MediaLocator.tsx)) | Files group *This listing* → *This template* | Not visible: the frame opens on Mockup templates |
-| `IssuesBanner` ([lines 82–95](../../../src/etsy_listings/ui/frontend/src/pages/editor/IssuesBanner.tsx)) | Template wording: *to fix before this template saves*, *Last complete version is kept until then*, no *Prevents deploying* tag | Banner markup at `_TemplateEditor.tsx` line 209 |
-| `DetailsTab` ([app/pages/editor/DetailsTab.tsx](../../../src/etsy_listings/ui/frontend/src/pages/editor/DetailsTab.tsx)) | A template mode without Brief, Title, Tags, Description lead, AI Mode or the market panel | `TemplateDetailsTab`, `_TemplateEditor.tsx` line 93 |
+| `DesignSelect` ([app/pages/editor/DesignSelect.tsx](../../../src/ui/src/pages/editor/DesignSelect.tsx)) | Preview wording and a preview-design list (test designs + recent designs) | `PreviewDesign`, `_TemplateEditor.tsx` line 41 |
+| `MediaLocator` ([line 141](../../../src/ui/src/pages/editor/MediaLocator.tsx)) | Files group *This listing* → *This template* | Not visible: the frame opens on Mockup templates |
+| `IssuesBanner` ([lines 82–95](../../../src/ui/src/pages/editor/IssuesBanner.tsx)) | Template wording: *to fix before this template saves*, *Last complete version is kept until then*, no *Prevents deploying* tag | Banner markup at `_TemplateEditor.tsx` line 209 |
+| `DetailsTab` ([app/pages/editor/DetailsTab.tsx](../../../src/ui/src/pages/editor/DetailsTab.tsx)) | A template mode without Brief, Title, Tags, Description lead, AI Mode or the market panel | `TemplateDetailsTab`, `_TemplateEditor.tsx` line 93 |
 | `AiChoiceDrawer` / `AiTagsDrawer` | Stale choices usable (listing editor, above) | `_ListingEditor.tsx` lines 27–49 |
 
 `VariantsTab`, `PricingTab`, `ImagesTab`, `EditableName`, `DescriptionSourcePicker`
@@ -418,33 +418,33 @@ shared component with one prop for its state. The component files start with
 
 | Screen | Frame (file in `mockups/`) | Built from |
 |---|---|---|
-| Listing template, new (name it) | `template-new.tsx` | `TemplateEditor mode="new"`, [`_TemplateEditor.tsx`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_TemplateEditor.tsx) line 169 |
+| Listing template, new (name it) | `template-new.tsx` | `TemplateEditor mode="new"`, [`_TemplateEditor.tsx`](../../../src/ui/design/scenes/batch-create-lofi/_TemplateEditor.tsx) line 169 |
 | Listing template, Variants | `template-variants.tsx` | `mode="variants"` (preview-design picker open) |
 | Listing template, change not saved | `template-unsaved.tsx` | `mode="unsaved"`, fixture `incompleteTemplate` in `_editorFixtures.ts` line 62 |
 | Listing template, Pricing | `template-pricing.tsx` | `mode="pricing"` |
 | Listing template, Listing Images | `template-images.tsx` | `mode="images"` |
 | Listing template, Listing Details | `template-details.tsx` | `mode="details"` → `TemplateDetailsTab` |
 | Listing templates page | `templates.tsx` | Inline; `BatchStatusTag` at line 16, drop overlay at line 89, Recent batches at line 108 |
-| New batch | `new-batch.tsx` | `NewBatchPage`, [`_NewBatch.tsx`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_NewBatch.tsx) line 8 |
+| New batch | `new-batch.tsx` | `NewBatchPage`, [`_NewBatch.tsx`](../../../src/ui/design/scenes/batch-create-lofi/_NewBatch.tsx) line 8 |
 | New batch, upload refused | `staging-refused.tsx` | `NewBatchPage refused` (callout at line 50) |
-| Staging review | `staging.tsx` | `StagingPage`, [`_Staging.tsx`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_Staging.tsx) line 87; row checks in `Check` (line 46) |
+| Staging review | `staging.tsx` | `StagingPage`, [`_Staging.tsx`](../../../src/ui/design/scenes/batch-create-lofi/_Staging.tsx) line 87; row checks in `Check` (line 46) |
 | Staging, names need fixing | `staging-blocked.tsx` | `StagingPage blocked`; the two name problems are made in `rowsFor` (line 17) |
 | Batch summary | `batch-summary.tsx` | Inline; `AiCell` (line 33) mounts the real `AiWorkflowIndicator`; batch label is the real `EditableName` (line 108) |
-| Listing opened from a batch | `listing-from-batch.tsx` | `ListingFromBatch`, [`_ListingEditor.tsx`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_ListingEditor.tsx) line 24, around the real `ListingEditorShell` |
+| Listing opened from a batch | `listing-from-batch.tsx` | `ListingFromBatch`, [`_ListingEditor.tsx`](../../../src/ui/design/scenes/batch-create-lofi/_ListingEditor.tsx) line 24, around the real `ListingEditorShell` |
 
 The flow diagram is
-[`design/scenes/batch-create-specs/flow.tsx`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-specs/flow.tsx),
+[`design/scenes/batch-create-specs/flow.tsx`](../../../src/ui/design/scenes/batch-create-specs/flow.tsx),
 with the scene brief in `_brief.md` beside it.
 
 ## Mockup infrastructure
 
 | File (in `mockups/`) | Role |
 |---|---|
-| [`_mockApi.ts`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_mockApi.ts) | Replaces `fetch` so the real editor components get fixture answers for every `/api` call (`jsonFor`, line 133), and points `/api` image URLs at local assets (`fixturePicture`, line 169). **It must be the first import** of any module that mounts app components, because the app's API client captures `fetch` when it loads. Nothing leaves the frame. |
-| [`_editorFixtures.ts`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_editorFixtures.ts) | `ListingDetail` fixtures for the template (`templateDetail`, line 16), the incomplete template (line 62) and the batch listing (line 95), plus the hand-set AI Mode state `staleAiSeo` (line 153). |
-| [`_fixtures.ts`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_fixtures.ts) | Plain fixtures for the new screens: templates, recent batches and their `BatchStatus` (line 67), staging rows (line 130), batch rows (line 190), thumbnail art (`artFor`, line 19). |
-| [`_Shell.tsx`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_Shell.tsx) | The app shell with the new nav item, around the real `ShellSidebar`. |
-| [`_batch.css`](../../../src/etsy_listings/ui/frontend/design/scenes/batch-create-lofi/_batch.css) | Styles for the new surfaces only (cards, drop zone, counts, status cells), all built from the app's tokens. Tables use the app's own `table.listings`. |
+| [`_mockApi.ts`](../../../src/ui/design/scenes/batch-create-lofi/_mockApi.ts) | Replaces `fetch` so the real editor components get fixture answers for every `/api` call (`jsonFor`, line 133), and points `/api` image URLs at local assets (`fixturePicture`, line 169). **It must be the first import** of any module that mounts app components, because the app's API client captures `fetch` when it loads. Nothing leaves the frame. |
+| [`_editorFixtures.ts`](../../../src/ui/design/scenes/batch-create-lofi/_editorFixtures.ts) | `ListingDetail` fixtures for the template (`templateDetail`, line 16), the incomplete template (line 62) and the batch listing (line 95), plus the hand-set AI Mode state `staleAiSeo` (line 153). |
+| [`_fixtures.ts`](../../../src/ui/design/scenes/batch-create-lofi/_fixtures.ts) | Plain fixtures for the new screens: templates, recent batches and their `BatchStatus` (line 67), staging rows (line 130), batch rows (line 190), thumbnail art (`artFor`, line 19). |
+| [`_Shell.tsx`](../../../src/ui/design/scenes/batch-create-lofi/_Shell.tsx) | The app shell with the new nav item, around the real `ShellSidebar`. |
+| [`_batch.css`](../../../src/ui/design/scenes/batch-create-lofi/_batch.css) | Styles for the new surfaces only (cards, drop zone, counts, status cells), all built from the app's tokens. Tables use the app's own `table.listings`. |
 | `design/assets/batch-create/` | Fixture design artwork (SVG) and the size chart. Mockup photos come from `design/assets/batch-deploy/`. |
 
 ## Closed questions
