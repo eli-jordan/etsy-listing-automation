@@ -66,7 +66,7 @@ def _provider(tmp_path: Path, *, binary: str = "claude") -> claude.ClaudeProvide
 
 
 def _task(tmp_path: Path) -> ProviderTask:
-    """An ordinary SEO task, assembled the way `ui/api/seo.py` assembles one
+    """An ordinary SEO task, assembled the way `server/api/seo.py` assembles one
     -- see `test_ai_codex.py._task` for why the seller prose is a plain
     string here and not a file."""
     return build_seo_task("Write great SEO copy.", _request(tmp_path))

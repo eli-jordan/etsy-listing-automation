@@ -503,7 +503,7 @@ def ui(
     Ctrl-C stops the server once any in-flight apply finishes its current stage.
     """
     # Imported here so registering commands does not load FastAPI/uvicorn.
-    from etsy_listings.ui.hosting import serve
+    from etsy_listings.server.hosting import serve
 
     serve(_open_workspace(root), host=host, port=port)
 

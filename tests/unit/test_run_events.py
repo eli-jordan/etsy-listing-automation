@@ -1,4 +1,4 @@
-"""``ui/runs/events.py``: DTO conversion for the SSE stream (ADR-0041, decision 7).
+"""``server/runs/events.py``: DTO conversion for the SSE stream (ADR-0041, decision 7).
 
 Pure, like ``plan_fingerprint`` -- no registry, no executor, no workspace.
 """
@@ -22,7 +22,7 @@ from etsy_listings.core.engine.change import (
     StagePlan,
 )
 from etsy_listings.core.engine.stages.publish import PublishSnapshot
-from etsy_listings.ui.runs.events import (
+from etsy_listings.server.runs.events import (
     BlockedOutcomeDTO,
     IdleOutcomeDTO,
     ListingFailedEvent,

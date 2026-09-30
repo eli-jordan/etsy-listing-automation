@@ -1,4 +1,4 @@
-"""``ui/runs/registry.py`` (ADR-0041, decision 7): per-listing locks, FIFO
+"""``server/runs/registry.py`` (ADR-0041, decision 7): per-listing locks, FIFO
 queueing, cancellation and retention -- all pure state, no executor and no
 workspace, which is what makes this a unit-layer file rather than a
 behaviour one.
@@ -6,7 +6,7 @@ behaviour one.
 
 from __future__ import annotations
 
-from etsy_listings.ui.runs.registry import (
+from etsy_listings.server.runs.registry import (
     Conflict,
     ListingApply,
     ListingPlan,
@@ -265,7 +265,7 @@ def test_cancel_an_already_finished_run_is_refused() -> None:
 
 
 def test_append_assigns_increasing_ids_after_the_initial_phase_event() -> None:
-    from etsy_listings.ui.runs.events import StageCheckingEvent
+    from etsy_listings.server.runs.events import StageCheckingEvent
 
     run = Run(id="r1", command=ListingPlan(("take-a-hike",)))
 
@@ -276,7 +276,7 @@ def test_append_assigns_increasing_ids_after_the_initial_phase_event() -> None:
 
 
 def test_wait_for_events_returns_immediately_when_events_are_already_pending() -> None:
-    from etsy_listings.ui.runs.events import StageCheckingEvent
+    from etsy_listings.server.runs.events import StageCheckingEvent
 
     run = Run(id="r1", command=ListingPlan(("take-a-hike",)))
     run.append(lambda i: StageCheckingEvent(id=i, listing="take-a-hike", stage="render"))

@@ -2,7 +2,7 @@
 ADR-0048, ADR-0051, staging expiry): status codes, payload shape, and what is on disk after
 each answer.
 
-The staging, creation and queue rules are `batches`' and `ui.batchqueue`'s
+The staging, creation and queue rules are `batches`' and `server.batchqueue`'s
 and have their own behaviour tests; these pin what the browser is told, and
 that a reload finds the same session again. The app is given a
 :class:`~tests.support.ai_runs.ChainProvider` and the in-memory Etsy market,
@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from etsy_listings.core.ai.models import ProviderReadiness
 from etsy_listings.core.batches import StagingStore, stage_pngs
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads

@@ -18,7 +18,7 @@ from etsy_listings.cli.app import app as cli
 from etsy_listings.core.listing_templates import from_listing, save
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import FIXTURE_LISTING
 

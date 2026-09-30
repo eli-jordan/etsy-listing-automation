@@ -44,7 +44,7 @@ packages = ["src/etsy_listings"]
 [tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"
 frontend-dir = "src/ui"
-assets-dir = "etsy_listings/ui/static"
+assets-dir = "etsy_listings/server/static"
 
 [dependency-groups]
 dev = [

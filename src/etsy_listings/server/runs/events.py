@@ -494,6 +494,6 @@ AnyRunEvent = (
 discriminator annotation is needed to construct or inspect one."""
 
 RunEvent = Annotated[AnyRunEvent, Field(discriminator="type")]
-"""The typed union :class:`~etsy_listings.ui.api.schemas.RunDetail` exposes,
+"""The typed union :class:`~etsy_listings.server.api.schemas.RunDetail` exposes,
 so ``openapi.json`` -- and ``gen:api`` after it -- carries every event shape a
 frontend needs to switch on by ``type`` (ADR-0041, decision 7)."""

@@ -1,4 +1,4 @@
-"""``ui/airuns/registry.py`` (market-seo implementation plan, PR 5): one
+"""``server/airuns/registry.py`` (market-seo implementation plan, PR 5): one
 active AI run per listing, the latest run kept until the next replaces it,
 and each run's event buffer -- pure state, no thread and no workspace.
 """
@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import threading
 
-from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
+from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
 
 
 def _registry() -> AiRunRegistry:

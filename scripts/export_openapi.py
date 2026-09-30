@@ -15,7 +15,7 @@ from typing import Any
 
 from etsy_listings.core.config.defaults import Defaults, EtsyDefaults
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 REPO_ROOT = Path(__file__).parent.parent
 

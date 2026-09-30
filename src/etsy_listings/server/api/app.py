@@ -21,29 +21,29 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
-from etsy_listings.ui.airuns.registry import AiRunRegistry
-from etsy_listings.ui.airuns.runner import AiRunner, MarketClientFactory
-from etsy_listings.ui.api.airuns import router as ai_runs_router
-from etsy_listings.ui.api.batches import router as batches_router
-from etsy_listings.ui.api.designs import router as designs_router
-from etsy_listings.ui.api.listing_templates import router as listing_templates_router
-from etsy_listings.ui.api.listings import router as listings_router
-from etsy_listings.ui.api.listings import support_router as listings_support_router
-from etsy_listings.ui.api.media_files import router as media_files_router
-from etsy_listings.ui.api.runs import router as runs_router
-from etsy_listings.ui.api.seo import AiProviderFactory, default_ai_providers
-from etsy_listings.ui.api.seo import router as seo_router
-from etsy_listings.ui.api.templates import router as templates_router
-from etsy_listings.ui.batchqueue import BatchQueue
-from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
-from etsy_listings.ui.runs.registry import RunRegistry
-from etsy_listings.ui.workspace_locks import WorkspaceLocks
+from etsy_listings.server.airuns.registry import AiRunRegistry
+from etsy_listings.server.airuns.runner import AiRunner, MarketClientFactory
+from etsy_listings.server.api.airuns import router as ai_runs_router
+from etsy_listings.server.api.batches import router as batches_router
+from etsy_listings.server.api.designs import router as designs_router
+from etsy_listings.server.api.listing_templates import router as listing_templates_router
+from etsy_listings.server.api.listings import router as listings_router
+from etsy_listings.server.api.listings import support_router as listings_support_router
+from etsy_listings.server.api.media_files import router as media_files_router
+from etsy_listings.server.api.runs import router as runs_router
+from etsy_listings.server.api.seo import AiProviderFactory, default_ai_providers
+from etsy_listings.server.api.seo import router as seo_router
+from etsy_listings.server.api.templates import router as templates_router
+from etsy_listings.server.batchqueue import BatchQueue
+from etsy_listings.server.runs.executor import ContextFactory, RunExecutor
+from etsy_listings.server.runs.registry import RunRegistry
+from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 
 def _frontend_dist() -> Path:
-    """The built SPA: an installed wheel carries it in the package's `static`
-    directory (mapped by hatch_build.py); an editable checkout has none there
-    and serves `src/ui/dist`, wherever npm last built it."""
+    """The built SPA: an installed wheel carries it in `etsy_listings/server/static`
+    (pyproject.toml's `assets-dir`, mapped by hatch_build.py); an editable
+    checkout has none there and serves `src/ui/dist`, wherever npm last built it."""
     packaged = Path(__file__).parent.parent / "static"
     return packaged if packaged.is_dir() else Path(__file__).parents[3] / "ui" / "dist"
 
@@ -129,7 +129,7 @@ def create_app(
     # readiness check (`seo.py`) and per run by `ai_runner`.
     app.state.seo_provider_factory = seo_provider_factory
     # Held around every read-merge-write of a listing (`listings.py`, and
-    # PR 5's brief write) -- `ui/workspace_locks.py` says why.
+    # PR 5's brief write) -- `server/workspace_locks.py` says why.
     app.state.workspace_locks = locks
     # AI runs (features/market-seo-20260924/spec.md, *AI runs*): their own registry and a thread per
     # run, never `run_executor`. `market_client_factory` is the test seam for

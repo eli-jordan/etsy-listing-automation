@@ -29,9 +29,9 @@ from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.layout import MARKET_QUERIES_PROMPT_FILE, PROMPTS_DIR
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.airuns.registry import AiRun
-from etsy_listings.ui.api import airuns as airuns_api
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.airuns.registry import AiRun
+from etsy_listings.server.api import airuns as airuns_api
+from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import (
     DRAFTED_BRIEF,

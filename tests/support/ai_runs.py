@@ -49,7 +49,7 @@ from etsy_listings.core.workspace.layout import (
     SEO_PROMPT_FILE,
 )
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.airuns.registry import AiRun
+from etsy_listings.server.airuns.registry import AiRun
 
 Task = Literal["brief", "queries", "seo"]
 

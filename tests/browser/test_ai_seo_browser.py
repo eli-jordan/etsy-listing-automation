@@ -65,7 +65,7 @@ from etsy_listings.core.workspace.layout import (
     SEO_PROMPT_FILE,
 )
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
+from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_snapshot, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING

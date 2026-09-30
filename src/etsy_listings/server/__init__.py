@@ -1,7 +1,12 @@
-"""The dashboard, listings and template editors, calibrator and run runner.
+"""The HTTP server: the dashboard, listings and template editors, calibrator
+and run runner (ADR-0052).
 
-FastAPI serves the React SPA and the workspace-scoped HTTP API. Background
-workers coordinate deployment runs and batch AI drafting.
+FastAPI serves the React SPA and the workspace-scoped HTTP API. Server owns
+routing, wire schemas, HTTP status mapping, SSE framing, HTTP-oriented caches,
+static serving and app startup/shutdown. The background workers that
+coordinate deployment runs and batch AI drafting (``runs``, ``airuns``,
+``batchqueue``, ``workspace_locks``) live here only until the module-structure
+plan moves their application rules into core (PRs 8 and 9).
 
 It is deliberately **not** a second execution path. The preview endpoint runs
 the same renderer ``apply`` runs, over the same photo and derived maps that
@@ -15,15 +20,13 @@ two renderers. The editing canvas asks for a downscale (``?scale=editor``) so
 that dragging a box is live; the Preview tab asks for the photo's own size,
 which is byte-for-byte the shape ``apply`` writes. Both go through
 ``render_scene``. What makes the fast one affordable is
-:mod:`etsy_listings.ui.api.imagecache`, which memoises the decoded photo, the
+:mod:`etsy_listings.server.api.imagecache`, which memoises the decoded photo, the
 decoded design and the derived maps across the burst of requests one drag
 produces.
 
-:func:`create_app` is the HTTP interface; :func:`serve` is what
-``etsy-listings ui`` calls to run it under uvicorn in the foreground.
+Two interfaces, deliberately not re-exported here so each has one import
+path: :func:`etsy_listings.server.api.app.create_app` is the HTTP
+application, and :func:`etsy_listings.server.hosting.serve` is the startup
+interface -- the only server module the CLI may import, from its ``ui``
+launcher (enforced by Import Linter in ``pyproject.toml``).
 """
-
-from etsy_listings.ui.api.app import create_app
-from etsy_listings.ui.hosting import serve
-
-__all__ = ["create_app", "serve"]

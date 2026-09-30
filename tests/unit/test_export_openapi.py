@@ -13,7 +13,7 @@ from pathlib import Path
 import pytest
 from scripts.export_openapi import build_schema
 
-from etsy_listings.ui.api import app as app_module
+from etsy_listings.server.api import app as app_module
 
 
 def _built_spa(root: Path) -> Path:

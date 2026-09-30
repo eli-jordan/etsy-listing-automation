@@ -1,8 +1,12 @@
-"""The workspace HTTP surface: app factory and selected router exports.
+"""The workspace HTTP surface: the app factory and its routers.
 
 The app registers design, template, listing/support, media, listing-template,
-batch, SEO, settings and run routers. The exports below are deliberately a
-subset; create_app is the complete application interface.
+batch, SEO, settings and run routers. Nothing is re-exported here:
+:func:`etsy_listings.server.api.app.create_app` is the complete application
+interface, reached by one path. Re-exporting it would also make importing any
+``server.api`` module load the whole app -- including the workers that import
+``server.api.schemas`` back -- which is an import cycle waiting for the wrong
+import order.
 
 Every path here comes from ``Workspace`` -- and so does every *listing* of
 one. That is deliberate rather than stylistic: template names, colours and
@@ -22,19 +26,3 @@ Request and response shapes live in ``schemas``, except where ``template.yaml``
 *is* the payload -- template CRUD reuses ``render.config``'s models directly,
 since there is no wire-schema divergence to keep separate.
 """
-
-from etsy_listings.ui.api.app import create_app
-from etsy_listings.ui.api.designs import router as designs_router
-from etsy_listings.ui.api.listings import router as listings_router
-from etsy_listings.ui.api.listings import support_router as listings_support_router
-from etsy_listings.ui.api.media_files import router as media_files_router
-from etsy_listings.ui.api.templates import router as templates_router
-
-__all__ = [
-    "create_app",
-    "designs_router",
-    "listings_router",
-    "listings_support_router",
-    "media_files_router",
-    "templates_router",
-]

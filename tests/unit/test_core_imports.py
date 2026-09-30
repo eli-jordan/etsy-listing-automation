@@ -39,7 +39,7 @@ FORBIDDEN = [
     "uvicorn",
     "typer",
     "questionary",
-    "etsy_listings.ui",
+    "etsy_listings.server",
     "etsy_listings.cli",
     "etsy_listings.newcmd",
     "etsy_listings.setupcmd",

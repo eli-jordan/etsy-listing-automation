@@ -34,7 +34,7 @@ npm ci
 ```
 
 Installing a published wheel needs no Node: it ships the built SPA inside the
-package (`etsy_listings/ui/static`). Building a release wheel with `uv build`
+package (`etsy_listings/server/static`). Building a release wheel with `uv build`
 requires Node and always runs `npm ci` and `npm run build` in `src/ui` through
 `hatch_build.py`, so existing assets cannot hide stale source; the sdist
 carries that source and lockfile instead of built assets. Editable installs

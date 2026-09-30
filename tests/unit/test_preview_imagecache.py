@@ -18,7 +18,7 @@ import numpy as np
 import pytest
 from PIL import Image
 
-from etsy_listings.ui.api.imagecache import CACHE_BUDGET_BYTES, PreviewImages, ScaledBase
+from etsy_listings.server.api.imagecache import CACHE_BUDGET_BYTES, PreviewImages, ScaledBase
 
 
 @pytest.fixture

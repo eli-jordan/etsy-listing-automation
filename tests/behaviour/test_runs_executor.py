@@ -1,4 +1,4 @@
-"""``ui/runs/executor.py`` (ADR-0041, decision 7): the FIFO worker thread actually
+"""``server/runs/executor.py`` (ADR-0041, decision 7): the FIFO worker thread actually
 driving ``engine.run`` through the registry, against the fixture workspace and
 in-memory fakes -- no FastAPI, no TestClient (``tests/contract/test_runs_api.py``
 covers the HTTP surface; this is the thread underneath it).
@@ -14,9 +14,9 @@ import pytest
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.runs.events import TERMINAL_PHASES
-from etsy_listings.ui.runs.executor import INTERNAL_ERROR_MESSAGE, RunExecutor
-from etsy_listings.ui.runs.registry import (
+from etsy_listings.server.runs.events import TERMINAL_PHASES
+from etsy_listings.server.runs.executor import INTERNAL_ERROR_MESSAGE, RunExecutor
+from etsy_listings.server.runs.registry import (
     Conflict,
     ListingApply,
     ListingPlan,

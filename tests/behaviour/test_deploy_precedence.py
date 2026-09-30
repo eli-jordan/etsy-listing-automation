@@ -32,8 +32,8 @@ from fastapi.testclient import TestClient
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
-from etsy_listings.ui.batchqueue import BatchQueue
+from etsy_listings.server.api.app import create_app
+from etsy_listings.server.batchqueue import BatchQueue
 
 from tests.support.ai_runs import ChainProvider, has_proposal, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png

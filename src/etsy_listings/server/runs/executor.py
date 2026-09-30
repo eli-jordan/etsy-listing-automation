@@ -53,7 +53,7 @@ from etsy_listings.core.engine.stage import AnyStage
 from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.runs.events import (
+from etsy_listings.server.runs.events import (
     TERMINAL_PHASES,
     ListingFailedEvent,
     ListingPlannedEvent,
@@ -67,7 +67,7 @@ from etsy_listings.ui.runs.events import (
     plan_dto,
     stage_plan_dto,
 )
-from etsy_listings.ui.runs.registry import Run, RunRegistry
+from etsy_listings.server.runs.registry import Run, RunRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -91,7 +91,7 @@ def _nothing_to_yield(listings: Sequence[str]) -> AbstractContextManager[None]:
 @dataclass
 class RunExecutor:
     """Owns the worker thread. One instance per running server
-    (``ui/api/app.py``'s lifespan starts and joins it)."""
+    (``server/api/app.py``'s lifespan starts and joins it)."""
 
     workspace: Workspace
     context_factory: ContextFactory
