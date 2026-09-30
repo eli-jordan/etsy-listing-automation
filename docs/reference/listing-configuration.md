@@ -47,6 +47,9 @@ reported and skipped, because the printer may offer a sparse matrix. See
 ## Etsy resource names
 
 A shop section is chosen by name per listing; it has no shop-wide default.
+The Details editor can create a section through the signed-in Etsy client and
+then save its returned name. That explicit action requires `shops_w`; an
+unresolvable configured name still refuses deployment rather than creating one.
 A shipping profile is also named by its title, with a listing override over
 the shop default. Return policies have no title, so they are matched by their
 return, exchange and deadline terms. These resources resolve against the live

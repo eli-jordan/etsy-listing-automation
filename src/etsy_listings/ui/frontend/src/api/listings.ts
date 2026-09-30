@@ -4,6 +4,7 @@ import type {
   MediaFileSummary,
   CreateListingRequest,
   EtsySectionSummary,
+  EtsySectionsResponse,
   GarmentProfileSummary,
   ListingDesignSummary,
   ListingDetail,
@@ -226,16 +227,28 @@ export async function listListingDesigns(): Promise<ListingDesignSummary[]> {
   return data;
 }
 
-/** The live shop's sections, for the Details tab's Section dropdown. Empty
- * (never an error, never a rejected promise) for a workspace with no
- * `shop_id` or Etsy app key pair yet -- the caller falls back to a plain
- * text field in that case, with nothing to catch. */
-export async function listEtsySections(): Promise<EtsySectionSummary[]> {
+/** The live shop's sections, for the Details tab's Section dropdown.
+ * `available: false` (never a rejected promise) means the workspace has no
+ * usable Etsy connection and the caller should retain the text fallback;
+ * an available empty list can create the shop's first section. */
+export async function listEtsySections(): Promise<EtsySectionsResponse> {
   try {
     const { data, error } = await api.GET("/api/etsy/sections");
-    if (error || !data) return [];
+    if (error || !data) return { available: false, sections: [] };
     return data;
   } catch {
-    return [];
+    return { available: false, sections: [] };
   }
+}
+
+/** Create a live Etsy shop section. Unlike the list above, this needs the
+ * workspace's signed-in Etsy connection because Etsy requires `shops_w`.
+ * The caller adds the returned row to its picker and saves its title into the
+ * listing through normal autosave. */
+export async function createEtsySection(title: string): Promise<EtsySectionSummary> {
+  const { data, error } = await api.POST("/api/etsy/sections", {
+    body: { title },
+  });
+  if (error || !data) throw new ListingsApiError("could not create Etsy section");
+  return data;
 }

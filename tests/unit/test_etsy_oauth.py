@@ -72,10 +72,10 @@ def test_scopes_are_space_separated_and_percent_encoded() -> None:
     assert parse_qs(urlsplit(url).query)["scope"] == [" ".join(oauth.SCOPES)]
 
 
-def test_the_registered_scopes_are_the_ones_phase_3_needs() -> None:
+def test_the_registered_scopes_cover_listing_and_shop_section_writes() -> None:
     """ADR-0026. `listings_d` is deliberately absent: it deletes listings, and
     image delete is covered by `listings_w`."""
-    assert set(oauth.SCOPES) == {"listings_r", "listings_w", "shops_r"}
+    assert set(oauth.SCOPES) == {"listings_r", "listings_w", "shops_r", "shops_w"}
     assert "listings_d" not in oauth.SCOPES
 
 
@@ -130,7 +130,7 @@ PAYLOAD = {
     "token_type": "Bearer",
     "expires_in": 3600,
     "refresh_token": "12345678.refresh",
-    "scope": "listings_r listings_w shops_r",
+    "scope": "listings_r listings_w shops_r shops_w",
 }
 
 
@@ -140,7 +140,7 @@ def test_a_successful_payload_parses() -> None:
     assert parsed.access_token == "12345678.access"
     assert parsed.refresh_token == "12345678.refresh"
     assert parsed.expires_in == 3600
-    assert parsed.scope == "listings_r listings_w shops_r"
+    assert parsed.scope == "listings_r listings_w shops_r shops_w"
 
 
 def test_the_user_id_comes_from_the_token_prefix() -> None:

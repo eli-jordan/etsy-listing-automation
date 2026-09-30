@@ -1,7 +1,9 @@
-"""The Etsy listing surface Phase 3's stages write through: `publish`'s poll
-target, `etsy_listing`'s single PATCH, `etsy_media`'s upload/reorder/
-variation-image calls, and the video upload/attach/delete `etsy_videos`
-places a listing's videos with (ADR-0045, features/etsy-listing-20260910/spec.md decision 9).
+"""The signed-in Etsy surface: the listing writes Phase 3's stages make and
+the shop-section write the listing editor offers. The stage calls are
+`publish`'s poll target, `etsy_listing`'s single PATCH, `etsy_media`'s
+upload/reorder/variation-image calls, and the video upload/attach/delete
+`etsy_videos` places a listing's videos with. Placement is described in
+docs/features/etsy-listing-20260910/spec.md, decision 9.
 
 Built against
 [docs/research/printify-etsy-integration.md](../../../../docs/research/printify-etsy-integration.md)'s
@@ -128,8 +130,9 @@ a different question from one with five."""
 
 class EtsyListingClient(Protocol):
     """Everything Phase 3's stages need from a signed-in Etsy connection:
-    `listings_w` for every write, plus the `shops_r` reads that resolve a
-    shipping profile or production partner by name (decision 2)."""
+    `listings_w` for listing writes, `shops_w` for the editor's section
+    creation, plus the `shops_r` reads that resolve shop resources by name
+    (decision 2)."""
 
     def get_listing(
         self, listing_id: int, *, include_images: bool = False, include_videos: bool = False
@@ -179,6 +182,8 @@ class EtsyListingClient(Protocol):
     def shop_sections(self, shop_id: int) -> list[ShopSection]: ...
 
     def return_policies(self, shop_id: int) -> list[ReturnPolicy]: ...
+
+    def create_shop_section(self, shop_id: int, title: str) -> ShopSection: ...
 
 
 class HttpEtsyListingClient:
@@ -274,6 +279,12 @@ class HttpEtsyListingClient:
         return [ReturnPolicy.model_validate(row) for row in _results(response.json())]
 
     # ------------------------------------------------------------- writes
+
+    def create_shop_section(self, shop_id: int, title: str) -> ShopSection:
+        response = self._transport.post(
+            f"/v3/application/shops/{shop_id}/sections", data={"title": title}
+        )
+        return ShopSection.model_validate(response.json())
 
     def update_listing(self, shop_id: int, listing_id: int, patch: dict[str, Any]) -> Listing:
         body = dict(patch)

@@ -19,9 +19,9 @@ from __future__ import annotations
 
 import hashlib
 import re
-import shutil
 import uuid
 from collections.abc import Iterable, Iterator
+from contextlib import nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
@@ -35,7 +35,7 @@ from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing_validation import check_design_resolution
 from etsy_listings.config.slug import slugify
 from etsy_listings.errors import UserFacingError
-from etsy_listings.listing_templates import owned_refs
+from etsy_listings.listing_templates import FrozenListingTemplate, TemplateLock
 from etsy_listings.workspace.atomic import read_bytes_retrying
 from etsy_listings.workspace.workspace import Workspace, remove_tree
 
@@ -211,18 +211,6 @@ def _receive_zip(
         path.unlink(missing_ok=True)
 
 
-def _freeze(workspace: Workspace, session: str, template: str, refs: list[str]) -> None:
-    """Copy the template's owned files beside the session, where the frozen
-    document's ``./`` refs now resolve (spec, *Frozen staging*)."""
-    frozen = workspace.staging_template_dir(session)
-    frozen.mkdir(parents=True, exist_ok=True)
-    for ref in refs:
-        source = workspace.resolve_template_ref(ref, template=template)
-        target = workspace.resolve_frozen_template_ref(ref, frozen_dir=frozen)
-        target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target)
-
-
 def _default_label(listing_template: str, now: datetime, archive: str | None = None) -> str:
     """The listing template and the date and time, in the server's local
     time -- the seller's, for a desktop tool -- led by the ZIP's name when
@@ -239,6 +227,7 @@ def stage_pngs(
     uploads: Iterable[Upload],
     *,
     now: datetime | None = None,
+    template_lock: TemplateLock = lambda _: nullcontext(),
 ) -> StagingSession:
     """Stage ``uploads`` against ``listing_template``, or raise
     :class:`StagingRefused` with nothing left on disk.
@@ -247,17 +236,19 @@ def stage_pngs(
     template's garment profile (spec, *Design validation*); a design that
     fails is a row that will not be created, not a refusal of the upload."""
     now = now or datetime.now(UTC)
-    template = workspace.load_listing_template(listing_template)
-    try:
-        profile = workspace.load_garment_profile(template.garment_profile)
-    except ConfigLoadError as exc:
-        raise StagingRefused(f"{listing_template} cannot be used: {exc}", _UNDO) from exc
     session = uuid.uuid4().hex
     directory = workspace.staging_dir(session)
     try:
+        frozen = FrozenListingTemplate.capture(
+            workspace, listing_template, workspace.staging_template_dir(session), lock=template_lock
+        )
+        template = frozen.template
+        try:
+            profile = workspace.load_garment_profile(template.garment_profile)
+        except ConfigLoadError as exc:
+            raise StagingRefused(f"{listing_template} cannot be used: {exc}", _UNDO) from exc
         receipt = _receive(workspace, session, uploads)
         rows, ignored = receipt.rows, receipt.ignored
-        _freeze(workspace, session, listing_template, owned_refs(template))
         for row in rows:
             path = workspace.staging_upload_file(session, row.sha256)
             issues = check_design_resolution(path, profile)
@@ -266,12 +257,11 @@ def stage_pngs(
                 # rather than the hash it is stored under.
                 message = issues[0].message.replace(str(path), path.name)
                 row.error = message.replace(path.name, row.sources[0])
-        saved_at = workspace.listing_template_file(listing_template).stat().st_mtime
         record = StagingSession(
             id=session,
             listing_template=listing_template,
             template=template.model_dump(mode="json"),
-            template_saved_at=datetime.fromtimestamp(saved_at, tz=UTC),
+            template_saved_at=frozen.saved_at,
             label=_default_label(listing_template, now, receipt.archive),
             created_at=now,
             updated_at=now,

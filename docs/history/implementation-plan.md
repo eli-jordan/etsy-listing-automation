@@ -143,7 +143,8 @@ src/etsy_listings/
       tokens.py         TokenStore: .auth/etsy-tokens.json, expiry, rotation
       transport.py      both auth headers, retries, error decoding
       shops.py          EtsyShopClient — `setup`'s four unscoped reads
-      listings.py       EtsyListingClient — the listing surface (A28)
+      listings.py       EtsyListingClient — the listing surface plus the
+                        editor's signed-in shop-section creation (A28, PRD 53)
       shopcatalog.py    names to ids, resolved once per run, never cached (A25)
       models.py         listing, image, inventory, shop, section, shipping
                         profile, production partner, return policy
@@ -523,7 +524,8 @@ class PrintifyClient(Protocol):
 
 `EtsyListingClient` mirrors this for `get_listing`, `update_listing`,
 `upload_image`, `delete_image`, `listing_inventory`, `variation_images` and
-`set_variation_images`; `EtsyShopClient` keeps the unscoped shop reads
+`set_variation_images`, and carries the editor's scoped `create_shop_section`;
+`EtsyShopClient` keeps the unscoped shop reads
 `setup` uses, plus `shipping_profiles` and `production_partners` for A25's
 resolver. Two protocols, one transport (A28).
 

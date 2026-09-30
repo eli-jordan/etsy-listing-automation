@@ -18,6 +18,8 @@ src/etsy_listings/
   clients/ printify/ and etsy/ — transport, models, fakes
   ai/ SEO/brief providers (Codex/Claude), prompts, proposals
   market/ market-informed SEO research
+  listing_templates/ template conversion, validation and frozen content capture
+  batches/ staging, naming, archive inspection and ordinary listing creation
   ui/ FastAPI api/ + React frontend/ (see frontend/AGENTS.md)
   newcmd/ setupcmd/ authcmd/ the `new`, `setup` and `auth` wizards
   connections.py credentials.py prompts.py terminal.py client wiring, credential steps, prompt backend, encoding guard

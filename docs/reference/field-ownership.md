@@ -10,6 +10,7 @@ overwrite buyer-facing edits.
 | Colour/size matrix, price and SKU | Printify | Product update, then variants-only selective publish |
 | Title, description, tags and materials | Etsy client | Listing PATCH |
 | Section, production partner, shipping profile, return policy and renewal | Etsy client | Listing PATCH |
+| Shop-section resource | Seller action in Details | Explicit signed-in section creation, followed by saving its name on the listing |
 | Images, order, alt text and variation-image links | Etsy media stage | Hash-driven uploads and ordered image-id associations |
 | Videos and their gallery placement | Etsy video stage | Upload or reattach after image sync |
 | Processing time | Observed from Etsy | Drift is reported; inventory is never replaced |

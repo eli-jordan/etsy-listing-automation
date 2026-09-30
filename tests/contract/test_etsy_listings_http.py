@@ -1,6 +1,6 @@
-"""Contract layer for the listing surface Phase 3's stages write through:
-payload shape, both `image_ids` encodings, and the two asymmetric reads
-(`GET.../listings/{id}` works, `GET.../shops/{shop}/listings/{id}` 404s;
+"""Contract layer for the signed-in Etsy surface the stages and editor use:
+payload shape, shop-section creation, both `image_ids` encodings, and the two asymmetric reads
+(`GET .../listings/{id}` works, `GET .../shops/{shop}/listings/{id}` 404s;
 the images endpoint 404s for every id, valid or invented).
 
 Every payload here is transcribed from a real response recorded on
@@ -52,6 +52,23 @@ LISTING_PAYLOAD = {
 
 def _client(handler) -> HttpEtsyListingClient:  # noqa: ANN001 - a test handler
     return HttpEtsyListingClient(etsy_transport(handler))
+
+
+# ------------------------------------------------------- create_shop_section
+
+
+def test_a_shop_section_is_created_with_etsys_form_body() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == f"/v3/application/shops/{SHOP_ID}/sections"
+        assert request.headers["content-type"].startswith("application/x-www-form-urlencoded")
+        assert request.content == b"title=Trail+Gear"
+        return httpx.Response(200, json={"shop_section_id": 44, "title": "Trail Gear"})
+
+    section = _client(handler).create_shop_section(SHOP_ID, "Trail Gear")
+
+    assert section.shop_section_id == 44
+    assert section.title == "Trail Gear"
 
 
 # --------------------------------------------------------------- get_listing

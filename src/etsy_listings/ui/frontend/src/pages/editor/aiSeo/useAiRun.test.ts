@@ -182,15 +182,17 @@ describe("useAiRun starting and following a run", () => {
     expect(onBrief).toHaveBeenCalledWith("Retro sunset over mountains.");
   });
 
-  it("hands the proposal over as the plain response, without the event's own fields", async () => {
+  it("forwards proposal events with their attachment context", async () => {
     const onProposal = vi.fn();
     const view = setup({}, { onProposal });
     await started(view);
 
     runs.emit(proposalEvent(proposal()));
 
-    expect(onProposal).toHaveBeenCalledWith(proposal());
-    expect(view.result.current.proposal).toEqual(proposal());
+    expect(onProposal).toHaveBeenCalledWith(
+      expect.objectContaining(proposal()),
+      expect.objectContaining({ phase: "running" }),
+    );
   });
 
   it("ends with the run's phase, and a failure keeps its message", async () => {
@@ -282,7 +284,7 @@ describe("useAiRun reattaching", () => {
     });
   });
 
-  it("replays a run that has just finished, but hands over none of its proposal", async () => {
+  it("forwards finished-run proposal replay with its attachment context", async () => {
     /* The cached proposal is the truth once the run is over: it
        carries which sections the seller has resolved since, which the
        replayed event does not. */
@@ -293,8 +295,10 @@ describe("useAiRun reattaching", () => {
     await waitFor(() => expect(runs.streams).toHaveLength(1));
     runs.emit(proposalEvent(proposal()), phaseEvent("done"));
 
-    expect(onProposal).not.toHaveBeenCalled();
-    expect(view.result.current.proposal).toEqual(proposal());
+    expect(onProposal).toHaveBeenCalledWith(
+      expect.objectContaining(proposal()),
+      expect.objectContaining({ phase: "done" }),
+    );
     expect(view.result.current.phase).toBe("done");
   });
 

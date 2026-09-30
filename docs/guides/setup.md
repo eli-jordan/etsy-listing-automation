@@ -16,7 +16,9 @@ Create a Printify API token with access to the catalog, shops, products and
 uploads used by this tool. Register an Etsy developer app and obtain its
 keystring and shared secret. The app must register the exact OAuth callback
 `http://localhost:8517/oauth/callback`; `auth` requests `listings_r`,
-`listings_w` and `shops_r`.
+`listings_w`, `shops_r` and `shops_w`. The last scope allows inline Etsy
+section creation. Existing consents without it need another sign-in with
+`etsy-listings auth etsy` before using that action.
 
 The Etsy shop needs the production partner and shipping profile appropriate
 for the products being listed. Setup discovers shop reference data; the editor

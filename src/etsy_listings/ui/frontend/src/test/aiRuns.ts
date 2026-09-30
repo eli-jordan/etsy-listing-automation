@@ -230,7 +230,6 @@ export function aiRunStub(over: Partial<AiRun> = {}): AiRun {
     steps: [],
     queries: null,
     market: null,
-    proposal: null,
     message: null,
     startedAt: null,
     origin: null,

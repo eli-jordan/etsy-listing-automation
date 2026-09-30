@@ -2,7 +2,7 @@
 
 This is the living description of module boundaries, data flow and invariants.
 Feature requirements live in the [documentation index](README.md#features);
-decision rationale is being extracted into [ADRs](adr/README.md). The
+decision rationale lives in [ADRs](adr/README.md). The
 [original PRD and plan](README.md#history) are retained as historical snapshots.
 
 ## Module boundaries
@@ -14,6 +14,8 @@ graph TD
     UI --> AI[AI runs and proposals]
     AI --> MARKET[Market research]
     UI --> BATCHES[Batch staging and creation]
+    UI --> CLIENTS
+    BATCHES --> TEMPLATES[Frozen listing-template content]
     ENGINE --> WORKSPACE[Workspace: paths and file access]
     ENGINE --> CLIENTS[Clients: Printify and Etsy]
     ENGINE --> RENDER[Pure render passes]
@@ -39,7 +41,8 @@ and what it deliberately withholds.
 | `render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
 | `clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs | Shared transport per vendor; separate caller authority through protocols |
 | `config` | Validated documents, money, slugs and local listing refusals | No knowledge of where configuration lives on disk |
-| `ai` | Provider calls, prompts, validation and cached proposals | Suggestions become deployed content only when accepted into saved fields |
+| `ai` | Provider calls, prompts, saved-listing inputs, validation and cached proposals | Requests and comparison snapshots share one interpretation of saved facts; suggestions enter listing content only through acceptance |
+| `listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to the UI server |
 

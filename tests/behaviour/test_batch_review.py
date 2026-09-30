@@ -300,3 +300,19 @@ def test_clearing_the_cache_loses_the_batches_and_keeps_the_workspace(
     kept = workspace.load_listing("night-hike-club")
     assert kept.etsy.title == "Night Hike Club Tee"
     assert kept.brief != ""
+
+
+def test_a_listing_removed_outside_the_app_does_not_break_its_batch_summary(
+    client: TestClient, workspace: Workspace
+) -> None:
+    batch_id = _batch(client, "missing-tee")
+    row = _drafted(client, batch_id)["rows"][0]
+    store = ProposalStore(workspace)
+    cached = store.load(row["name"])
+    assert cached is not None
+    workspace.listing_file(row["name"]).unlink()
+
+    summary = _summary(client, batch_id)
+
+    assert summary["rows"][0]["proposal"] is None
+    assert store.load(row["name"]) == cached

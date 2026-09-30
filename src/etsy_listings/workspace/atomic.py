@@ -1,8 +1,7 @@
 """Replace a file without a window where a reader sees it half-written.
 
-The one helper cache-record persistence names, so the per-module copies (``replace_listing_yaml``
-and the caches' own) can move onto it as they are touched rather than each
-growing its own spelling of "temporary file, then rename".
+The atomic replacement rule shared by cache records and listing YAML writes.
+JSON and YAML serializers use the same unique temporary and bounded retry.
 """
 
 from __future__ import annotations
@@ -11,7 +10,11 @@ import json
 import os
 import tempfile
 import time
+from collections.abc import Mapping
 from pathlib import Path
+from typing import Any
+
+import yaml
 
 
 def write_bytes_atomic(path: Path, data: bytes) -> None:
@@ -72,3 +75,9 @@ def write_json_atomic(path: Path, document: object) -> None:
     JSON, so a record is readable when somebody opens ``.cache`` to see why."""
     text = json.dumps(document, indent=2, ensure_ascii=False, sort_keys=False)
     write_bytes_atomic(path, (text + "\n").encode("utf-8"))
+
+
+def write_yaml_atomic(path: Path, document: Mapping[str, Any]) -> None:
+    """Write a YAML document through the shared atomic replacement rule."""
+    text = yaml.safe_dump(dict(document), sort_keys=False)
+    write_bytes_atomic(path, text.encode("utf-8"))

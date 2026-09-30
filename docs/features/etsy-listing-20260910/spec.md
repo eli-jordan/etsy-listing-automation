@@ -33,9 +33,9 @@ remembered, because two of the answers are not the obvious ones.
 | video removal | `deleteListingVideo` | `listings_w` | Etsy keeps the file, so a deleted video can be re-attached by id |
 | — | `updateListingInventory` | `listings_w` | **Never called.** ADR-0029 |
 
-Everything here fits inside the scopes already granted — `listings_r
-listings_w shops_r` — so nothing in this phase sends anyone back through
-consent (ADR-0026). `getShopSections` needs no scope at all, which is why a
+Everything in this phase fits inside `listings_r listings_w shops_r`; the
+current consent also carries `shops_w` for Phase 5's inline section creation
+(ADR-0026). `getShopSections` itself needs no scope at all, which is why a
 section can be resolved by name in a workspace whose OAuth consent has lapsed.
 
 ### Three measurements that shape the stages
@@ -196,8 +196,8 @@ out the top two:
    *are* documented as writable on `createDraftListing`.
    `readiness_state_id` also answered `200`, and proves nothing — the shop has
    one definition and it was already the value in place. Testing a real change
-   needs a second profile made by hand, or `shops_w`, which costs every user a
-   second trip through consent (ADR-0026).
+   needs a second profile made by hand. The token now carries `shops_w` for
+   section creation, but profile creation remains a Shop Manager step.
 3. **So: the tool reads processing time and never writes it.** It surfaces
    `readiness_state_id` and `processing_min`/`max` in `plan` and reports drift
    — the same treatment as the shop's draft setting, which it also cannot
@@ -207,12 +207,12 @@ The practical cost is near zero, which is worth saying plainly rather than
 leaving as a disappointment: the shop has exactly one processing profile,
 Printify applies it to every offering at publish, and there is nothing this
 tool would change if it could. If a second profile is ever wanted per listing,
-the two routes are `shops_w` in the scopes or Shop Manager — and that is a
-decision to take then, with a reason, not now.
+the profile remains a Shop Manager responsibility; `shops_w` granted for
+section creation does not broaden that product scope.
 
-### 5. Media: upload what changed, then set `image_ids` — ADR-0031, superseding ADR-0031
+### 5. Media: upload what changed, then set `image_ids` — ADR-0031, superseding the original full-replacement design
 
-ADR-0031 mandates full delete-and-re-upload on the premise that "there is no
+The original media design mandated full delete-and-re-upload on the premise that "there is no
 update-image endpoint" and therefore no way to reorder. The premise is false,
 so the decision built on it goes:
 
@@ -854,9 +854,10 @@ and they need a second shipping profile to exist.** The shop has exactly one,
 the US-origin profile Printify made, and with only that one a republish leaving
 `shipping_profile_id` unchanged is equally consistent with "the flag worked"
 and "Printify reused its own" — precisely the ambiguity round 2 recorded.
-Creating one needs `shops_w`, outside `SCOPES` (ADR-0026), so it is a Shop
-Manager step. Publishing before then would cost a permanent Etsy draft to
-reproduce an answer we already have.
+Creating one needs `shops_w`. The current consent now grants that scope for
+section creation (ADR-0026), but the shipping-profile rule still makes shipping-profile setup a
+Shop Manager step. Publishing before then would cost a permanent Etsy draft
+to reproduce an answer we already have.
 
 They unblock the moment an NOK profile exists, and then ride along with one
 publish — the same run that exercises the media stage end to end.

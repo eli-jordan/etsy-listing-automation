@@ -34,9 +34,9 @@ nothing to pause.
 
 Rejected: one cleanup that does not care about state. That is how a
 fat-finger retracts a listing with reviews. Rejected: adding `listings_d`.
-ADR-0026 stands; changing scopes re-consents every user, and this tool still
-does not call Etsy's `deleteListing`. Draft retraction is Printify's cascade,
-not Etsy's delete.
+ADR-0026's later `shops_w` addition authorises section creation, not
+`deleteListing`; `listings_d` remains absent. Draft retraction is Printify's
+cascade, not Etsy's delete.
 
 ---
 

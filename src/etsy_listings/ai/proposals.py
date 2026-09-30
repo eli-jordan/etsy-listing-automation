@@ -30,8 +30,6 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from etsy_listings.ai.models import SeoProposal
-from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import Listing
 from etsy_listings.workspace.atomic import read_bytes_retrying, write_json_atomic
 from etsy_listings.workspace.workspace import Workspace
 
@@ -267,38 +265,25 @@ class ProposalStore:
                 self._workspace.proposal_file(listing).unlink(missing_ok=True)
 
 
-def input_snapshot(
-    workspace: Workspace, name: str, listing: Listing, profile: GarmentProfile | None
-) -> SeoProposalSnapshot:
-    """The generation inputs as the saved listing and its garment profile
-    give them now: frozen into a proposal before the provider starts, and
-    read again to judge it stale. The same derivations
-    ``ui/api/seo.build_seo_request`` sends the provider -- ``product_type``
-    is the profile's blueprint title and ``etsy_category`` the shop section.
-    A profile that no longer loads leaves its four facts empty, which reads
-    as changed against any proposal made with one."""
-    blueprint = profile.blueprint if profile is not None else None
-    return SeoProposalSnapshot(
-        brief=listing.brief,
-        product_type=blueprint.display_title if blueprint is not None else "",
-        etsy_category=listing.etsy.section or "",
-        materials=list(profile.materials) if profile is not None else [],
-        colors=list(listing.colors),
-        garment_brand=blueprint.brand if blueprint is not None else "",
-        garment_model=blueprint.model if blueprint is not None else "",
-        garment_profile=listing.garment_profile,
-        design=dict(listing.design),
-        design_content_hash=workspace.design_content_hash(
-            listing.design, listing_dir=workspace.listing_dir(name)
-        ),
-    )
-
-
 class ProposalStaleness(BaseModel):
     is_stale: bool
     reasons: list[str]
     """One per input that moved, in a fixed order, each finishing the
     drawer heading's *Out of date: {reason}. Still usable* (UI doc §8)."""
+
+
+class ListingProposal(BaseModel):
+    """A listing's cached proposal as the editor and the batch summary read
+    it: the record, and whether it still describes the saved listing.
+    ``stale`` is computed from the saved listing on every read, never
+    stored."""
+
+    proposal: ProposalChoices
+    snapshot: SeoProposalSnapshot
+    generated_at: datetime
+    origin: ProposalOrigin
+    resolution: ProposalResolution
+    stale: ProposalStaleness
 
 
 def _same_set(frozen: Sequence[str], now: Sequence[str]) -> bool:

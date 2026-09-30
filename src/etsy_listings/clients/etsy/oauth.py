@@ -43,11 +43,12 @@ authentication guide says redirect URIs must be `https://`, while Etsy's own
 quick-start tutorial uses `http://localhost:3003/oauth/redirect` throughout.
 The tutorial is the one that has been run."""
 
-SCOPES: tuple[str, ...] = ("listings_r", "listings_w", "shops_r")
-"""The smallest set covering Phases 3-6. `listings_w` covers image upload
-*and* delete; `listings_d` is for deleting listings, which this tool never
-does. Changing this forces every user through the browser again, so it is a
-decision rather than a default."""
+SCOPES: tuple[str, ...] = ("listings_r", "listings_w", "shops_r", "shops_w")
+"""The smallest set covering Phases 3-6. `shops_w` lets the editor create a
+shop section inline; it does not broaden the tool into managing
+shipping profiles. `listings_w` covers image upload and delete;
+`listings_d` is for deleting listings, which this tool never does. Changing
+this forces every user through the browser again, so it is a decision rather than a default."""
 
 VERIFIER_BYTES = 32
 """32 random bytes is 43 base64url characters -- the shortest verifier RFC
