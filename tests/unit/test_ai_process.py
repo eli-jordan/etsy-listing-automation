@@ -3,7 +3,7 @@ helper both CLI adapters (`ai/codex.py`, `ai/claude.py`) run their child
 process through (AI SEO implementation plan, PR4, item 5: "process-tree
 cleanup for timeouts, cancellation, and request disconnects").
 
-Most tests here replace `etsy_listings.ai.process.subprocess.Popen` with a
+Most tests here replace `etsy_listings.core.ai.process.subprocess.Popen` with a
 hand-rolled double -- never a real child process -- so this suite proves the
 *launch and cleanup wiring* (process-group flags, what gets killed and how,
 on which platform) without depending on timing or an actual hung process.
@@ -30,8 +30,8 @@ from typing import Any
 
 import pytest
 
-from etsy_listings.ai import process
-from etsy_listings.ai.models import Deadline
+from etsy_listings.core.ai import process
+from etsy_listings.core.ai.models import Deadline
 
 
 class FakePopen:

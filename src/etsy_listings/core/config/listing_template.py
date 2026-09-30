@@ -11,7 +11,7 @@ so a hand-edited file that names one is told so instead of quietly dropping
 it at the next save.
 
 The structural rules it shares with a listing are the listing's own
-( :func:`~etsy_listings.config.listing.check_production_fields`): every listing
+( :func:`~etsy_listings.core.config.listing.check_production_fields`): every listing
 made from a template must load, so the two cannot be allowed to disagree about
 what a well-formed gallery or price is. Completeness -- is there a garment, a
 colour, a price source -- is `config/listing_validation.py`'s
@@ -32,10 +32,10 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, ValidationInfo, model_validator
 
-from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.listing import MediaEntry, check_production_fields, resolve_price
-from etsy_listings.config.money import Money, PriceField
-from etsy_listings.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.listing import MediaEntry, check_production_fields, resolve_price
+from etsy_listings.core.config.money import Money, PriceField
+from etsy_listings.core.config.pricing_plan import PricingPlan
 
 
 class TemplateDescriptionConfig(BaseModel):

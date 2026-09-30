@@ -16,13 +16,13 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.clients.printify.models import Variant, VariantOptions, VariantSet
-from etsy_listings.clients.printify.resolve import (
+from etsy_listings.core.clients.printify.models import Variant, VariantOptions, VariantSet
+from etsy_listings.core.clients.printify.resolve import (
     CatalogResolutionError,
     UnknownSizeError,
     resolve_variants,
 )
-from etsy_listings.config.slug import ColourExceptions
+from etsy_listings.core.config.slug import ColourExceptions
 
 
 def _variant(id: int, colour: str, size: str) -> Variant:
@@ -129,7 +129,7 @@ def test_slug_exceptions_are_honoured() -> None:
 def test_a_slug_collision_is_raised_rather_than_silently_picking_one() -> None:
     """Two Printify colours slugging to one name means the listing's `black`
     is ambiguous. `slug_map` already refuses; this just must not swallow it."""
-    from etsy_listings.config.slug import SlugCollisionError
+    from etsy_listings.core.config.slug import SlugCollisionError
 
     colliding = VariantSet(variants=(_variant(1, "Blue Jean", "S"), _variant(2, "Blue-Jean", "S")))
 

@@ -38,14 +38,14 @@ only two stages in the pipeline -- which is what a wide protocol costs when
 the pipeline is about to double.
 
 Listing-level lifecycle -- which pipeline to walk, the published
-fact :attr:`~etsy_listings.engine.change.Plan.is_live` is filled from, wipe
+fact :attr:`~etsy_listings.core.engine.change.Plan.is_live` is filled from, wipe
 after retract, consume ``renew`` -- lives in ``lifecycle``, not split across
 ``plan`` and ``run``. Render previews live in ``preview``, so the
 executor and the listings GET do not each peek at a ``RenderSnapshot``.
 """
 
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import (
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.change import (
     Action,
     Change,
     Drift,
@@ -64,8 +64,8 @@ from etsy_listings.engine.change import (
     scalar,
     sequence,
 )
-from etsy_listings.engine.context import Event, EventSink, RunContext, Swatch
-from etsy_listings.engine.events import (
+from etsy_listings.core.engine.context import Event, EventSink, RunContext, Swatch
+from etsy_listings.core.engine.events import (
     EngineEventSink,
     EngineListingFailed,
     EngineListingPlanned,
@@ -78,7 +78,7 @@ from etsy_listings.engine.events import (
     EngineStageFailed,
     EngineStagePlanned,
 )
-from etsy_listings.engine.lock import (
+from etsy_listings.core.engine.lock import (
     SCHEMA_VERSION,
     Lockfile,
     StageApplyResult,
@@ -86,9 +86,9 @@ from etsy_listings.engine.lock import (
     hash_file,
     to_workspace_relative_posix,
 )
-from etsy_listings.engine.plan import PlannedRun, StageState, build_plan
-from etsy_listings.engine.preview import PreviewLookup, lookup_preview, needs_preview
-from etsy_listings.engine.run import (
+from etsy_listings.core.engine.plan import PlannedRun, StageState, build_plan
+from etsy_listings.core.engine.preview import PreviewLookup, lookup_preview, needs_preview
+from etsy_listings.core.engine.run import (
     ListingOutcome,
     RunReport,
     StalePlanError,
@@ -98,14 +98,14 @@ from etsy_listings.engine.run import (
     plan_listings,
     preview_listing,
 )
-from etsy_listings.engine.stage import (
+from etsy_listings.core.engine.stage import (
     AnyStage,
     Blocked,
     Stage,
     StageBlockedError,
 )
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.status import (
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.status import (
     ListingGesture,
     ListingLifecycle,
     ListingStatus,

@@ -16,10 +16,10 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.ai.market_queries import MarketQueriesRequest, build_market_queries_task
-from etsy_listings.ai.models import GarmentContext, SeoRequest
-from etsy_listings.ai.prompt import build_seo_task
-from etsy_listings.market import MARKET_BEGIN, MARKET_END
+from etsy_listings.core.ai.market_queries import MarketQueriesRequest, build_market_queries_task
+from etsy_listings.core.ai.models import GarmentContext, SeoRequest
+from etsy_listings.core.ai.prompt import build_seo_task
+from etsy_listings.core.market import MARKET_BEGIN, MARKET_END
 
 GOLDENS = Path(__file__).parent / "ai"
 SELLER_PROMPT = "The seller's own instructions.\n"

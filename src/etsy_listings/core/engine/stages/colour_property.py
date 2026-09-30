@@ -6,7 +6,7 @@ garment, "Colors" on the next -- so a rule that read it would break on the
 first garment change, silently, by finding nothing.
 
 Extracted from the `etsy_media` stage for the reason
-:mod:`~etsy_listings.engine.stages.product_diff` was extracted from the
+:mod:`~etsy_listings.core.engine.stages.product_diff` was extracted from the
 product stage: it was already pure -- a function of an inventory, the
 listing's colours and the slug exceptions, with no workspace, no client and no
 lockfile -- but it was not *reachable*. Its only exercise was a full
@@ -20,8 +20,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from etsy_listings.clients.etsy.models import Inventory
-from etsy_listings.config.slug import ColourExceptions, slugify
+from etsy_listings.core.clients.etsy.models import Inventory
+from etsy_listings.core.config.slug import ColourExceptions, slugify
 
 
 @dataclass(frozen=True)

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.workspace import layout, scaffold
+from etsy_listings.core.workspace import layout, scaffold
 
 # --------------------------------------------------------------.gitignore
 

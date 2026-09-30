@@ -4,7 +4,7 @@ Markdown front matter is parsed (AI SEO implementation plan, PR2:
 
 A common-copy file is `---`-delimited YAML front matter (`title`, `targets`,
 optional `summary`) followed by its Markdown body -- the body a
-`description.ref` supplies to :func:`~etsy_listings.config.description.compose_description`.
+`description.ref` supplies to :func:`~etsy_listings.core.config.description.compose_description`.
 :func:`parse_common_copy` is pure: it takes the ref only to name it in a
 refusal, and the raw text `Workspace.load_common_copy` already read. Nothing
 else in the codebase may parse this shape -- see that method's docstring.
@@ -41,7 +41,7 @@ class CommonCopyDocument:
 def parse_common_copy(ref: str, raw: str) -> CommonCopyDocument:
     """``raw`` is the file's full text; ``ref`` is used only to name it in a
     refusal. Reading the file is
-    :meth:`~etsy_listings.workspace.workspace.Workspace.load_common_copy`'s job
+    :meth:`~etsy_listings.core.workspace.workspace.Workspace.load_common_copy`'s job
     -- this function does no I/O, so it is exercised directly against string
     fixtures rather than real files on disk.
     """

@@ -32,12 +32,12 @@ import threading
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
-from etsy_listings.batches import AiState, AiStep, Batch, BatchRow, BatchStore
-from etsy_listings.config.errors import ConfigLoadError
+from etsy_listings.core.batches import AiState, AiStep, Batch, BatchRow, BatchStore
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.airuns.events import AiPhaseEvent
 from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry
 from etsy_listings.ui.airuns.runner import AiRunner
-from etsy_listings.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 

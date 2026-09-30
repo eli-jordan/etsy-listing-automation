@@ -23,14 +23,14 @@ from pathlib import Path
 
 import httpx
 
-from etsy_listings.clients.etsy.listings import EtsyListingClient, HttpEtsyListingClient
-from etsy_listings.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
-from etsy_listings.clients.etsy.oauth import TokenResponse
-from etsy_listings.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
-from etsy_listings.clients.etsy.tokens import TokenStore, utcnow
-from etsy_listings.clients.etsy.transport import OAuthClient
-from etsy_listings.clients.etsy.transport import Transport as EtsyTransport
-from etsy_listings.clients.printify import (
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient, HttpEtsyListingClient
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
+from etsy_listings.core.clients.etsy.oauth import TokenResponse
+from etsy_listings.core.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
+from etsy_listings.core.clients.etsy.tokens import TokenStore, utcnow
+from etsy_listings.core.clients.etsy.transport import OAuthClient
+from etsy_listings.core.clients.etsy.transport import Transport as EtsyTransport
+from etsy_listings.core.clients.printify import (
     CachedCatalogClient,
     CatalogClient,
     HttpCatalogClient,
@@ -38,10 +38,10 @@ from etsy_listings.clients.printify import (
     PrintifyClient,
     Transport,
 )
-from etsy_listings.config.secrets import EtsyAppKey, Secrets
-from etsy_listings.engine.context import EventSink, RunContext
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.config.secrets import EtsyAppKey, Secrets
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.workspace import Workspace
 
 OAuthFactory = Callable[[str], OAuthClient]
 """How to reach Etsy's token endpoint, given a keystring. Injected only so

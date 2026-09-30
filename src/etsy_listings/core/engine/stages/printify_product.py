@@ -25,8 +25,8 @@ to upload id, from the lockfile where it can and by uploading where it cannot.
 What is left here is what genuinely needs a context: resolving a listing into
 a desired product, reading the live one, and sending it. The two documents and
 the gate that reads one live in
-:mod:`~etsy_listings.engine.stages.product_document`, and the comparison over
-them in:mod:`~etsy_listings.engine.stages.product_diff` -- both pure, both
+:mod:`~etsy_listings.core.engine.stages.product_document`, and the comparison over
+them in:mod:`~etsy_listings.core.engine.stages.product_diff` -- both pure, both
 reachable without a workspace. ``plan()`` below assembles a ``Verdict`` from
 what the comparison decided; it decides nothing itself.
 """
@@ -37,39 +37,39 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.models import (
     PlacedImage,
     Placeholder,
     PrintAreaSpec,
     Product,
     ProductSpec,
 )
-from etsy_listings.clients.printify.resolve import (
+from etsy_listings.core.clients.printify.resolve import (
     resolve_blueprint,
     resolve_print_provider,
     resolve_variants,
 )
-from etsy_listings.config.money import Money
-from etsy_listings.engine.change import Verdict
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.gates import (
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.change import Verdict
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
     check_garment_profile_chosen,
     check_price_source,
 )
-from etsy_listings.engine.stages.placement import ArtworkResolutionError, DesignPlacement
-from etsy_listings.engine.stages.product_diff import compare
-from etsy_listings.engine.stages.product_document import (
+from etsy_listings.core.engine.stages.placement import ArtworkResolutionError, DesignPlacement
+from etsy_listings.core.engine.stages.product_diff import compare
+from etsy_listings.core.engine.stages.product_document import (
     AppliedProduct,
     PricedVariant,
     PrintifyProductDesired,
     check_garment_unchanged,
     money,
 )
-from etsy_listings.workspace.common_copy import CommonCopyError
+from etsy_listings.core.workspace.common_copy import CommonCopyError
 
 PRODUCT_ID_KEY = "printify_product_id"
 UPLOAD_IDS_KEY = "printify_upload_ids"
@@ -129,7 +129,7 @@ class PrintifyProductStage:
         """The product this listing wants, or why there cannot be one.
 
         Every reason this stage cannot run comes back as a
-        :class:`~etsy_listings.engine.stage.Blocked` -- the unconfigured
+        :class:`~etsy_listings.core.engine.stage.Blocked` -- the unconfigured
         workspace, the gate refusals and the garment check alike. One
         vocabulary, and now one *place*: the garment check used to refuse from
         ``plan()``, so a stage had two ways to say the same thing and the
@@ -236,7 +236,7 @@ class PrintifyProductStage:
 
         The id -> (colour, size) lookup a live variant needs is
         ``desired.variants``, this run's own resolved matrix -- the same one
-        ``apply`` sends -- since :class:`~etsy_listings.clients.printify.models.ProductVariant`
+        ``apply`` sends -- since :class:`~etsy_listings.core.clients.printify.models.ProductVariant`
         carries no colour or size of its own. A live variant whose id has
         fallen out of that resolution (a garment change would have already
         been blocked; a discontinued cell, missing variant cells) has nothing to be named by

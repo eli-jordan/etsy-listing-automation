@@ -27,17 +27,17 @@ from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import BinaryIO, Literal
 
-from etsy_listings.batches import archive as archive_file
-from etsy_listings.batches.archive import PNG_MAGIC, ArchiveRefused
-from etsy_listings.batches.naming import allocate
-from etsy_listings.batches.records import StagingRow, StagingSession, StagingStore
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.listing_validation import check_design_resolution
-from etsy_listings.config.slug import slugify
-from etsy_listings.errors import UserFacingError
-from etsy_listings.listing_templates import FrozenListingTemplate, TemplateLock
-from etsy_listings.workspace.atomic import read_bytes_retrying
-from etsy_listings.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.batches import archive as archive_file
+from etsy_listings.core.batches.archive import PNG_MAGIC, ArchiveRefused
+from etsy_listings.core.batches.naming import allocate
+from etsy_listings.core.batches.records import StagingRow, StagingSession, StagingStore
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.listing_validation import check_design_resolution
+from etsy_listings.core.config.slug import slugify
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.listing_templates import FrozenListingTemplate, TemplateLock
+from etsy_listings.core.workspace.atomic import read_bytes_retrying
+from etsy_listings.core.workspace.workspace import Workspace, remove_tree
 
 # ADR-0051: safety limits, not settings. Module attributes so a test can lower them.
 MAX_DESIGNS = 25

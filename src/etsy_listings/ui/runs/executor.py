@@ -28,8 +28,8 @@ from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
-from etsy_listings.engine.context import EventSink, RunContext
-from etsy_listings.engine.events import (
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.engine.events import (
     EngineListingFailed,
     EngineListingPlanned,
     EnginePreviewRendered,
@@ -41,17 +41,18 @@ from etsy_listings.engine.events import (
     EngineStageFailed,
     EngineStagePlanned,
 )
-from etsy_listings.engine.preview import needs_preview
-from etsy_listings.engine.run import (
+from etsy_listings.core.engine.preview import needs_preview
+from etsy_listings.core.engine.run import (
     StalePlanError,
     apply_listings,
     plan_fingerprint,
     plan_listings,
     preview_listing,
 )
-from etsy_listings.engine.stage import AnyStage
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.errors import INTERNAL_ERROR_MESSAGE
+from etsy_listings.core.engine.stage import AnyStage
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.runs.events import (
     TERMINAL_PHASES,
     ListingFailedEvent,
@@ -67,12 +68,11 @@ from etsy_listings.ui.runs.events import (
     stage_plan_dto,
 )
 from etsy_listings.ui.runs.registry import Run, RunRegistry
-from etsy_listings.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 
 ContextFactory = Callable[[Workspace, EventSink | None], RunContext]
-"""How the executor builds a run's :class:`~etsy_listings.engine.context.RunContext`
+"""How the executor builds a run's :class:`~etsy_listings.core.engine.context.RunContext`
 (decision 7's "contexts are injected"). ``connections.run_context`` is the
 default every real server uses; a test wires one to in-memory fakes instead,
 by swapping this one callable -- nothing else here knows how a client is

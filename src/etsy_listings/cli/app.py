@@ -16,30 +16,35 @@ from typing import Any
 
 import typer
 
-from etsy_listings import connections, prompts, terminal
+from etsy_listings import prompts, terminal
 from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
 from etsy_listings.authcmd import Part as AuthPart
 from etsy_listings.cli.render import format_blocked, format_plan
-from etsy_listings.clients.printify import (
+from etsy_listings.core import connections
+from etsy_listings.core.clients.printify import (
     PrintifyAuthError,
 )
-from etsy_listings.config.defaults import MissingDefaultError
-from etsy_listings.config.secrets import (
+from etsy_listings.core.config.defaults import MissingDefaultError
+from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
 )
-from etsy_listings.engine.change import Plan
-from etsy_listings.engine.context import Event
-from etsy_listings.engine.events import EngineListingFailed, EngineListingPlanned, EngineRunEvent
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.errors import UserFacingError
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.userpath import to_native_path
-from etsy_listings.workspace.workspace import Workspace, WorkspaceNotFoundError
+from etsy_listings.core.engine.change import Plan
+from etsy_listings.core.engine.context import Event
+from etsy_listings.core.engine.events import (
+    EngineListingFailed,
+    EngineListingPlanned,
+    EngineRunEvent,
+)
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.run import RunReport, apply_listings, plan_listings
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.userpath import to_native_path
+from etsy_listings.core.workspace.workspace import Workspace, WorkspaceNotFoundError
 
 EPILOG = f"""
 [bold]Environment variables[/bold]

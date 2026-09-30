@@ -51,7 +51,7 @@ subprocess layer with a double, and every orchestrator test runs against
 
 from __future__ import annotations
 
-from etsy_listings.ai.brief import (
+from etsy_listings.core.ai.brief import (
     BRIEF_RESPONSE_SCHEMA,
     BriefRequest,
     BriefValidationError,
@@ -60,9 +60,9 @@ from etsy_listings.ai.brief import (
     default_brief_prompt_text,
     validate_brief,
 )
-from etsy_listings.ai.claude import ClaudeProvider
-from etsy_listings.ai.codex import CodexProvider
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai.claude import ClaudeProvider
+from etsy_listings.core.ai.codex import CodexProvider
+from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
     ProviderTimeoutError,
@@ -73,9 +73,9 @@ from etsy_listings.ai.errors import (
     SeoTryAgainError,
     classify_process_failure,
 )
-from etsy_listings.ai.grok import GrokProvider
-from etsy_listings.ai.listing_inputs import ListingAiInputs, PreparedSeo
-from etsy_listings.ai.market_queries import (
+from etsy_listings.core.ai.grok import GrokProvider
+from etsy_listings.core.ai.listing_inputs import ListingAiInputs, PreparedSeo
+from etsy_listings.core.ai.market_queries import (
     MARKET_QUERIES_RESPONSE_SCHEMA,
     MarketQueries,
     MarketQueriesRequest,
@@ -84,7 +84,7 @@ from etsy_listings.ai.market_queries import (
     default_market_queries_prompt_text,
     validate_market_queries,
 )
-from etsy_listings.ai.models import (
+from etsy_listings.core.ai.models import (
     Deadline,
     GarmentContext,
     PhraseRationale,
@@ -96,14 +96,14 @@ from etsy_listings.ai.models import (
     SeoProposal,
     SeoRequest,
 )
-from etsy_listings.ai.orchestrator import (
+from etsy_listings.core.ai.orchestrator import (
     generate_brief,
     generate_market_queries,
     generate_proposal,
     run_task,
 )
-from etsy_listings.ai.process import CliProcessError, ProcessResult, run_managed
-from etsy_listings.ai.prompt import (
+from etsy_listings.core.ai.process import CliProcessError, ProcessResult, run_managed
+from etsy_listings.core.ai.prompt import (
     build_prompt,
     build_repair_prompt,
     build_seo_task,
@@ -112,9 +112,9 @@ from etsy_listings.ai.prompt import (
     seed_prompt,
     sync_prompt,
 )
-from etsy_listings.ai.proposals import ProposalStore
-from etsy_listings.ai.providers import AiProvider, FakeAiProvider
-from etsy_listings.ai.validation import ProposalValidationError, validate_proposal
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
+from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
 
 __all__ = [
     "ListingAiInputs",

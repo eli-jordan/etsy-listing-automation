@@ -39,9 +39,9 @@ from typing import Any
 
 import httpx
 
-from etsy_listings.clients.retry import DEFAULT_POLICY, RetryPolicy, with_retries
-from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.clients.retry import DEFAULT_POLICY, RetryPolicy, with_retries
+from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
+from etsy_listings.core.errors import UserFacingError
 
 BASE_URL = "https://api.printify.com"
 """No ``/v1`` suffix: this transport carries several path families
@@ -79,7 +79,7 @@ class PrintifyAuthError(UserFacingError, RuntimeError):
     because the fix is a specific human action rather than a retry.
 
     A specific human action is exactly what a
-    :class:`~etsy_listings.errors.UserFacingError` is for, and the message
+    :class:`~etsy_listings.core.errors.UserFacingError` is for, and the message
     below has always been written as one. Until it *was* one, a revoked token
     on the third listing of ``--all`` ended the batch with a stack trace
     instead of a line, against continue-on-error.

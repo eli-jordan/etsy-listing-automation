@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.ai.proposals import SeoProposalSnapshot, proposal_staleness
+from etsy_listings.core.ai.proposals import SeoProposalSnapshot, proposal_staleness
 
 
 def _snapshot(**over: object) -> SeoProposalSnapshot:

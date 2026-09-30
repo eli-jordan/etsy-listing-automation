@@ -5,14 +5,14 @@ from pathlib import Path
 import pytest
 import yaml
 
-from etsy_listings.config.defaults import (
+from etsy_listings.core.config.defaults import (
     Defaults,
     EtsyDefaults,
     EtsyListingDefaults,
     MissingDefaultError,
     PrintifyDefaults,
 )
-from etsy_listings.config.errors import ConfigLoadError
+from etsy_listings.core.config.errors import ConfigLoadError
 
 MINIMAL: dict[str, object] = {"etsy": {"shop_id": 12345678, "currency": "NOK"}}
 

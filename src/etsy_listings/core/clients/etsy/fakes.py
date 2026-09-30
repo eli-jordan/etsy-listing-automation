@@ -15,14 +15,14 @@ from typing import Any, Literal, NamedTuple
 
 import httpx
 
-from etsy_listings.clients.etsy.listings import (
+from etsy_listings.core.clients.etsy.listings import (
     DAILY_VIDEO_ASSOCIATIONS,
     VIDEO_SLOTS,
     VideoBudgetExhaustedError,
     VideoSlotsFullError,
     video_content_type,
 )
-from etsy_listings.clients.etsy.models import (
+from etsy_listings.core.clients.etsy.models import (
     ALREADY_DECODED,
     Inventory,
     Listing,
@@ -37,7 +37,7 @@ from etsy_listings.clients.etsy.models import (
     ShopSection,
     VariationImageLink,
 )
-from etsy_listings.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
 
 
 @dataclass(frozen=True)

@@ -16,8 +16,8 @@ import cv2
 import numpy as np
 from PIL import Image
 
-from etsy_listings.render.config import BoundingBox, DisplaceConfig, ShadeConfig
-from etsy_listings.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.render.config import BoundingBox, DisplaceConfig, ShadeConfig
+from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
 DISPLACE_MAX_PX = 24.0
 """Pixel displacement at strength=1.0. A calibration constant, not derived --
@@ -49,7 +49,7 @@ def warp(design: RGBA, bounding_box: BoundingBox, output_size: tuple[int, int]) 
 def displace(img: RGBA, cfg: DisplaceConfig, height: FloatMap) -> RGBA:
     """Standard Photoshop apparel-mockup displacement: remap by the gradient of
     a height field derived from the mockup's own luminance (see
-    :mod:`etsy_listings.render.maps`). Off unless ``cfg.enabled``."""
+    :mod:`etsy_listings.core.render.maps`). Off unless ``cfg.enabled``."""
     if not cfg.enabled or cfg.strength <= 0:
         return img
 

@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Final
 
-from etsy_listings.ai.models import ProviderTask, RepairContext
-from etsy_listings.ai.prompt import build_repair_prompt
+from etsy_listings.core.ai.models import ProviderTask, RepairContext
+from etsy_listings.core.ai.prompt import build_repair_prompt
 
 PRIOR_RESPONSE_BEGIN: Final = "<<<PREVIOUS_RESPONSE>>>"
 PRIOR_RESPONSE_END: Final = "<<<END_PREVIOUS_RESPONSE>>>"

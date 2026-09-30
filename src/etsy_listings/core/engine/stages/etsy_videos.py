@@ -41,25 +41,25 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.clients.etsy.listings import EtsyListingClient
-from etsy_listings.config.media import media_kind
-from etsy_listings.engine.change import Action, Drift, FieldChange, Verdict
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
-from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.etsy_media import IMAGE_IDS_KEY
-from etsy_listings.engine.stages.etsy_target import (
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
+from etsy_listings.core.config.media import media_kind
+from etsy_listings.core.engine.change import Action, Drift, FieldChange, Verdict
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
+from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stages.etsy_media import IMAGE_IDS_KEY
+from etsy_listings.core.engine.stages.etsy_target import (
     check_etsy_shop,
     etsy_listing_id,
     require_etsy_listing_id,
 )
-from etsy_listings.engine.stages.gates import check_videos
-from etsy_listings.engine.stages.variation_links import (
+from etsy_listings.core.engine.stages.gates import check_videos
+from etsy_listings.core.engine.stages.variation_links import (
     manifest_ref,
     set_variation_images,
     swatch_refs,
 )
-from etsy_listings.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.facts import WorkspaceFacts
 
 VIDEO_IDS_KEY = "etsy_video_ids"
 """This stage's key in ``lock.remote``: ref -> Etsy ``video_id``, which

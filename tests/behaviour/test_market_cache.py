@@ -14,11 +14,11 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.etsy import market
-from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
-from etsy_listings.market import research
-from etsy_listings.market.cache import CachedEtsyMarketClient
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.clients.etsy import market
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
+from etsy_listings.core.market import research
+from etsy_listings.core.market.cache import CachedEtsyMarketClient
+from etsy_listings.core.workspace.workspace import Workspace
 
 DAY = 86_400.0
 WEEK = 7 * DAY

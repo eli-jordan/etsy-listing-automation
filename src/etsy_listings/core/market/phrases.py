@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
-from etsy_listings.market.models import PhraseScore, ScoredListing
+from etsy_listings.core.market.models import PhraseScore, ScoredListing
 
 PHRASE_LIMIT = 40
 """How many phrases are listed (features/market-seo-20260924/spec.md)."""

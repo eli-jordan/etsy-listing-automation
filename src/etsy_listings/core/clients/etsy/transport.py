@@ -30,18 +30,18 @@ from typing import Any
 
 import httpx
 
-from etsy_listings.clients.etsy import oauth
-from etsy_listings.clients.etsy.tokens import EtsyAuthError
-from etsy_listings.clients.retry import DEFAULT_POLICY, RetryPolicy, with_retries
-from etsy_listings.config.secrets import ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR, EtsyAppKey
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.clients.etsy import oauth
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.core.clients.retry import DEFAULT_POLICY, RetryPolicy, with_retries
+from etsy_listings.core.config.secrets import ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR, EtsyAppKey
+from etsy_listings.core.errors import UserFacingError
 
 BASE_URL = "https://openapi.etsy.com"
 """The API reference's documented base URL. Its guides and tutorials use
 ``api.etsy.com`` for the same paths; both answer, and the reference is the one
 that describes the endpoints this transport carries. The OAuth token endpoint
 is the exception and keeps the host its own documentation gives it
-( :data:`~etsy_listings.clients.etsy.oauth.TOKEN_URL`)."""
+( :data:`~etsy_listings.core.clients.etsy.oauth.TOKEN_URL`)."""
 
 DEFAULT_TIMEOUT_SECONDS = 120.0
 """Generous for the same reason Printify's is: listing images travel this
@@ -63,7 +63,7 @@ one."""
 class EtsyApiError(UserFacingError, RuntimeError):
     """A request Etsy understood and refused.
 
-    A :class:`~etsy_listings.errors.UserFacingError`, so that one listing
+    A :class:`~etsy_listings.core.errors.UserFacingError`, so that one listing
     Etsy refuses is one listing reported rather than a batch ended.
     The Phase 3 stages that will raise this inherit the behaviour by being
     written against this type.

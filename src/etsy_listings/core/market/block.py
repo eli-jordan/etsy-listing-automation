@@ -24,7 +24,7 @@ import json
 import re
 from typing import Final
 
-from etsy_listings.market.models import MarketResult
+from etsy_listings.core.market.models import MarketResult
 
 MARKET_BEGIN: Final = "<<<MARKET_DATA_JSON>>>"
 MARKET_END: Final = "<<<END_MARKET_DATA_JSON>>>"

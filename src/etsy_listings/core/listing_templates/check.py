@@ -14,12 +14,12 @@ from __future__ import annotations
 from collections.abc import Callable
 from pathlib import Path
 
-from etsy_listings.config.description import DescriptionConfig
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.listing_validation import Issue, check_listing_template
-from etsy_listings.config.media import ProbeFailure, VideoFacts, media_kind
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import InvalidRefError, Workspace
+from etsy_listings.core.config.description import DescriptionConfig
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.listing_validation import Issue, check_listing_template
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts, media_kind
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import InvalidRefError, Workspace
 
 
 def check_listing_template_files(

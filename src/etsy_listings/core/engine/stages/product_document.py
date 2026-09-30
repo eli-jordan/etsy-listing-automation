@@ -8,7 +8,7 @@ document and nothing else.
 
 They live here rather than beside the stage because two modules need them and
 neither should import the other: the stage builds them and sends them, and
-:mod:`~etsy_listings.engine.stages.product_diff` compares them. A module both
+:mod:`~etsy_listings.core.engine.stages.product_diff` compares them. A module both
 can depend on is what keeps the comparison reachable without a workspace, a
 lockfile and two fake clients.
 
@@ -24,9 +24,9 @@ from decimal import Decimal
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.config.money import Money
-from etsy_listings.engine.stage import Blocked
-from etsy_listings.engine.stages.placement import ArtworkGroup
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stages.placement import ArtworkGroup
 
 __all__ = [
     "AppliedPrintArea",
@@ -78,7 +78,7 @@ class AppliedProduct(BaseModel):
 
     It has no ``parse()`` of its own. Decoding a stage's subtree -- including
     what a document that will not decode means -- is
-    :meth:`~etsy_listings.engine.lock.Lockfile.parse_applied_for`'s, so that
+    :meth:`~etsy_listings.core.engine.lock.Lockfile.parse_applied_for`'s, so that
     the rule has one implementation rather than one per stage.
     """
 
@@ -101,7 +101,7 @@ class AppliedProduct(BaseModel):
 class PricedVariant:
     """One colour x size cell, and what it sells for.
 
-    A :class:`~etsy_listings.clients.printify.resolve.ResolvedVariant` plus a
+    A :class:`~etsy_listings.core.clients.printify.resolve.ResolvedVariant` plus a
     price, which is the whole of what this stage needs about a variant. It
     replaces three parallel structures that between them described exactly
     this: ``prices`` keyed by id, ``price_labels`` keyed by id, and the full

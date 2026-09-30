@@ -42,14 +42,14 @@ from __future__ import annotations
 from collections.abc import Mapping
 from pathlib import Path
 
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import Listing
-from etsy_listings.config.listing_validation import TemplateInfo
-from etsy_listings.config.media import ProbeFailure, VideoFacts, media_kind
-from etsy_listings.render.config import ColourMatrixTemplate, MultipleTemplate
-from etsy_listings.workspace.video import probe_video
-from etsy_listings.workspace.workspace import InvalidNameError, InvalidRefError, Workspace
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.garment_profile import GarmentProfile
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.listing_validation import TemplateInfo
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts, media_kind
+from etsy_listings.core.render.config import ColourMatrixTemplate, MultipleTemplate
+from etsy_listings.core.workspace.video import probe_video
+from etsy_listings.core.workspace.workspace import InvalidNameError, InvalidRefError, Workspace
 
 
 class WorkspaceFacts:

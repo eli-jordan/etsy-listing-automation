@@ -20,7 +20,7 @@ exactly the kind of near-duplicate that drifts one fix at a time.
 
 Classification summary (implementation plan, "Timeout and retries"):
 
-- A :class:`~etsy_listings.ai.errors.ProviderUnavailableError` from the
+- A :class:`~etsy_listings.core.ai.errors.ProviderUnavailableError` from the
   *first* call to a provider falls through to the next one in ``providers``.
 - Any proposal-shape problem -- the raw text is not JSON, not an object, or
   fails `ai/validation.py.validate_proposal` -- counts as "malformed" and
@@ -31,10 +31,10 @@ Classification summary (implementation plan, "Timeout and retries"):
 - Anything else -- the repaired response is still invalid, the repair call
   itself could not even reach the provider, an unrecognised process error,
   or the deadline expiring -- surfaces as "Try again"
-  ( :class:`~etsy_listings.ai.errors.SeoTryAgainError`). None of these retry
+  ( :class:`~etsy_listings.core.ai.errors.SeoTryAgainError`). None of these retry
   a second provider; the settled plan only permits fallback on the first,
   recognised-unavailable failure.
-- :class:`~etsy_listings.ai.errors.ProviderCancelledError` is never caught
+- :class:`~etsy_listings.core.ai.errors.ProviderCancelledError` is never caught
   here -- it propagates as-is, since a cancelled request retains no result
   and is not a failure to report as "Try again".
 """
@@ -45,30 +45,36 @@ import json
 import threading
 from collections.abc import Callable, Mapping, Sequence
 
-from etsy_listings.ai.brief import (
+from etsy_listings.core.ai.brief import (
     BriefRequest,
     BriefValidationError,
     DesignBrief,
     build_brief_task,
     validate_brief,
 )
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai.errors import (
     ProviderUnavailableError,
     SeoAllProvidersUnavailableError,
     SeoDeadlineExceededError,
     SeoTryAgainError,
 )
-from etsy_listings.ai.market_queries import (
+from etsy_listings.core.ai.market_queries import (
     MarketQueries,
     MarketQueriesRequest,
     MarketQueriesValidationError,
     build_market_queries_task,
     validate_market_queries,
 )
-from etsy_listings.ai.models import Deadline, ProviderTask, RepairContext, SeoProposal, SeoRequest
-from etsy_listings.ai.prompt import build_seo_task
-from etsy_listings.ai.providers import AiProvider
-from etsy_listings.ai.validation import ProposalValidationError, validate_proposal
+from etsy_listings.core.ai.models import (
+    Deadline,
+    ProviderTask,
+    RepairContext,
+    SeoProposal,
+    SeoRequest,
+)
+from etsy_listings.core.ai.prompt import build_seo_task
+from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
 
 _DEFAULT_SECONDS = 60.0
 """The settled whole-request budget: provider call, one same-provider
@@ -194,7 +200,7 @@ def run_task[Result](
     a recognised availability failure,
     `SeoDeadlineExceededError`/`SeoTryAgainError` for everything the settled
     plan surfaces as "Try again", and lets a
-    `~etsy_listings.ai.errors.ProviderCancelledError` propagate untouched.
+    `~etsy_listings.core.ai.errors.ProviderCancelledError` propagate untouched.
     """
     if deadline is None:
         deadline = Deadline.starting_now(seconds=seconds)

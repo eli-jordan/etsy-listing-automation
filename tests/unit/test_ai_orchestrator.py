@@ -17,23 +17,23 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.ai import orchestrator
-from etsy_listings.ai.brief import BriefRequest, build_brief_task
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai import orchestrator
+from etsy_listings.core.ai.brief import BriefRequest, build_brief_task
+from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     SeoAllProvidersUnavailableError,
     SeoDeadlineExceededError,
     SeoTryAgainError,
 )
-from etsy_listings.ai.models import (
+from etsy_listings.core.ai.models import (
     Deadline,
     GarmentContext,
     ProviderReadiness,
     ProviderTask,
     SeoRequest,
 )
-from etsy_listings.ai.prompt import build_seo_task
-from etsy_listings.ai.providers import FakeAiProvider
+from etsy_listings.core.ai.prompt import build_seo_task
+from etsy_listings.core.ai.providers import FakeAiProvider
 
 _PROMPT = "Write SEO copy.\n"
 """Stands in for the seller's `prompts/seo.md`. The orchestrator takes the
@@ -106,7 +106,7 @@ def test_unavailable_first_provider_falls_through_to_the_second() -> None:
 
 
 def _raise_unavailable(provider: str):  # noqa: ANN201 - test helper
-    from etsy_listings.ai.errors import ProviderUnavailableError
+    from etsy_listings.core.ai.errors import ProviderUnavailableError
 
     def _generate(request, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
         raise ProviderUnavailableError(provider, "not authenticated")
@@ -261,7 +261,7 @@ def test_valid_json_that_is_not_an_object_is_treated_as_malformed() -> None:
 
 
 def test_provider_becoming_unavailable_during_repair_surfaces_as_try_again() -> None:
-    from etsy_listings.ai.errors import ProviderUnavailableError
+    from etsy_listings.core.ai.errors import ProviderUnavailableError
 
     codex = FakeAiProvider(name="codex", responses=["not json"])
     calls = {"count": 0}
@@ -333,7 +333,7 @@ def test_brief_drafting_falls_through_to_the_second_provider_too() -> None:
     )
 
     def _unavailable(task, deadline, *, repair=None, cancel_event=None):  # noqa: ANN001, ANN202
-        from etsy_listings.ai.errors import ProviderUnavailableError
+        from etsy_listings.core.ai.errors import ProviderUnavailableError
 
         raise ProviderUnavailableError("codex", "not signed in")
 

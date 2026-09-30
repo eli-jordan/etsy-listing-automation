@@ -24,8 +24,8 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Final
 
-from etsy_listings.ai.models import ProviderTask
-from etsy_listings.ai.prompt import build_task_prompt
+from etsy_listings.core.ai.models import ProviderTask
+from etsy_listings.core.ai.prompt import build_task_prompt
 
 QUERY_COUNT: Final = 3
 
@@ -84,7 +84,7 @@ def default_market_queries_prompt_text() -> str:
     """The packaged default ``prompts/market-queries.md``, read fresh each
     call like the other two packaged prompts."""
     return (
-        resources.files("etsy_listings.ai.resources")
+        resources.files("etsy_listings.core.ai.resources")
         .joinpath("market-queries.md")
         .read_text(encoding="utf-8")
     )

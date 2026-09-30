@@ -55,36 +55,36 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.listing import TemplateMediaEntry
-from etsy_listings.engine.change import Action, Verdict
-from etsy_listings.engine.context import RunContext, Swatch
-from etsy_listings.engine.lock import (
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.listing import TemplateMediaEntry
+from etsy_listings.core.engine.change import Action, Verdict
+from etsy_listings.core.engine.context import RunContext, Swatch
+from etsy_listings.core.engine.lock import (
     Lockfile,
     canonical_hash,
     hash_file,
     to_workspace_relative_posix,
 )
-from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.gates import (
+from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stages.gates import (
     check_garment_profile_chosen,
     check_render_photo,
     check_render_template,
     check_scene_colour,
 )
-from etsy_listings.engine.stages.placement import ArtworkResolutionError, DesignPlacement
-from etsy_listings.render.config import (
+from etsy_listings.core.engine.stages.placement import ArtworkResolutionError, DesignPlacement
+from etsy_listings.core.render.config import (
     AnyTemplate,
     ColourMatrixTemplate,
     RenderConfig,
     SingleTemplate,
 )
-from etsy_listings.render.io import load_design, load_template_base, save_png
-from etsy_listings.render.maps import DerivedMapCache
-from etsy_listings.render.pipeline import Layer, render_scene
-from etsy_listings.render.swatch import sample_swatch
-from etsy_listings.render.types import RGBA
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.render.io import load_design, load_template_base, save_png
+from etsy_listings.core.render.maps import DerivedMapCache
+from etsy_listings.core.render.pipeline import Layer, render_scene
+from etsy_listings.core.render.swatch import sample_swatch
+from etsy_listings.core.render.types import RGBA
+from etsy_listings.core.workspace.workspace import Workspace
 
 PREVIEW_WORKERS = 2
 """Maximum full-size preview renders in flight.
@@ -121,7 +121,7 @@ class ResolvedLayer:
     """One design, placed at one bounding box, inside a scene.
 
     ``artwork`` has already been resolved through
-    :meth:`~etsy_listings.engine.stages.placement.DesignPlacement.artwork_for`
+    :meth:`~etsy_listings.core.engine.stages.placement.DesignPlacement.artwork_for`
     and ``design`` is the file it landed on -- so nothing downstream repeats
     that resolution, and the answer that got hashed is the answer that gets
     rendered.
@@ -335,7 +335,7 @@ class RenderApplied(BaseModel):
     compare.
 
     A model rather than a dataclass with a hand-written ``parse``, so that
-    :meth:`~etsy_listings.engine.lock.Lockfile.parse_applied_for` can decode
+    :meth:`~etsy_listings.core.engine.lock.Lockfile.parse_applied_for` can decode
     it under the same rule as every other stage's document. The hand-written
     one indexed ``data["input_hash"]`` and raised ``KeyError`` on a truncated
     lockfile, where the product stage's returned ``None`` -- one rule, two
@@ -654,7 +654,7 @@ class RenderStage:
     ) -> tuple[SceneWork, ...]:
         """Render a full-size preview for every scene :meth:`snapshot` calls
         ``stale`` or ``missing``, through the same pipeline ``apply``
-        uses, to :meth:`~etsy_listings.workspace.workspace.Workspace.preview_file`;
+        uses, to :meth:`~etsy_listings.core.workspace.workspace.Workspace.preview_file`;
         prune every preview this listing holds whose hash no longer matches
         any currently-referenced scene, in the same pass.
 
@@ -790,7 +790,7 @@ class RenderStage:
 
         ADR-0040: before rendering a scene, this looks for a preview
         :meth:`preview` may already have left at
-        :meth:`~etsy_listings.workspace.workspace.Workspace.preview_file` for
+        :meth:`~etsy_listings.core.workspace.workspace.Workspace.preview_file` for
         its current hash. If one is there it is copied into place instead of
         rendered again -- a promoted file is
         exactly the bytes a fresh render would produce, since both come from

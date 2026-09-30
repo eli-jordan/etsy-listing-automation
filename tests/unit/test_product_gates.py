@@ -27,11 +27,11 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from etsy_listings.config import listing_validation as rules
-from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
-from etsy_listings.config.media import ProbeFailure, VideoFacts
-from etsy_listings.engine.stage import Blocked
-from etsy_listings.engine.stages.gates import (
+from etsy_listings.core.config import listing_validation as rules
+from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stages.gates import (
     check_copy_is_concrete,
     check_design_resolution,
     check_garment_profile_chosen,

@@ -22,7 +22,7 @@ from pathlib import Path
 
 import av
 
-from etsy_listings.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts
 
 __all__ = ["ProbeFailure", "VideoFacts", "probe_video"]
 

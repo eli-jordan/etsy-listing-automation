@@ -16,19 +16,19 @@ from pydantic import (
     model_validator,
 )
 
-from etsy_listings.config.description import DescriptionConfig
-from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.media import (
+from etsy_listings.core.config.description import DescriptionConfig
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.media import (
     MAX_IMAGES,
     MAX_VIDEOS,
     MediaKind,
     UnknownMediaTypeError,
     media_kind,
 )
-from etsy_listings.config.media import MediaEntry as MediaEntry
-from etsy_listings.config.media import TemplateMediaEntry as TemplateMediaEntry
-from etsy_listings.config.money import Money, PriceField, require_currency
-from etsy_listings.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.media import MediaEntry as MediaEntry
+from etsy_listings.core.config.media import TemplateMediaEntry as TemplateMediaEntry
+from etsy_listings.core.config.money import Money, PriceField, require_currency
+from etsy_listings.core.config.pricing_plan import PricingPlan
 
 EMPTY_DRAFT: Final[dict[str, Any]] = {
     "garment_profile": "",

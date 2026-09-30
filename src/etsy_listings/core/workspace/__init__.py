@@ -24,11 +24,11 @@ videos `media:` names, each probed once. :func:`probe_video` is the
 probe itself, the one reader of a clip's facts.
 """
 
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.userpath import to_native_path
-from etsy_listings.workspace.video import probe_video
-from etsy_listings.workspace.workspace import (
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.userpath import to_native_path
+from etsy_listings.core.workspace.video import probe_video
+from etsy_listings.core.workspace.workspace import (
     AmbiguousColourSuffixError,
     DescriptionResolution,
     InvalidNameError,

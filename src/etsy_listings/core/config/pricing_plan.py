@@ -17,8 +17,8 @@ from pathlib import Path
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, ValidationInfo, model_validator
 
-from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.money import Money, PriceField, require_currency
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.money import Money, PriceField, require_currency
 
 
 class PricingPlan(BaseModel):

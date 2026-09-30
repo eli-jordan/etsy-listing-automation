@@ -13,12 +13,12 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 
-from etsy_listings.clients.etsy.listings import EtsyListingClient
-from etsy_listings.clients.etsy.models import VariationImageLink
-from etsy_listings.config.listing import TemplateMediaEntry
-from etsy_listings.config.media import MediaEntry
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.stages.colour_property import resolve_colour_property
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
+from etsy_listings.core.clients.etsy.models import VariationImageLink
+from etsy_listings.core.config.listing import TemplateMediaEntry
+from etsy_listings.core.config.media import MediaEntry
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.stages.colour_property import resolve_colour_property
 
 
 def manifest_ref(entry: MediaEntry) -> str:

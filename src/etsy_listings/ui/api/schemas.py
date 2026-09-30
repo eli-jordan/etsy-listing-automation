@@ -1,5 +1,5 @@
 """API request/response shapes. Template CRUD (list/get/put config) reuses
-:mod:`etsy_listings.render.config`'s models directly -- ``template.yaml`` *is*
+:mod:`etsy_listings.core.render.config`'s models directly -- ``template.yaml`` *is*
 what the calibrator edits, so there is no meaningful wire-schema divergence to
 keep separate here, unlike the preview endpoint's request shapes below (which
 add a ``design`` selector nothing in the engine's config needs).
@@ -12,24 +12,24 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from etsy_listings.ai.proposals import (
+from etsy_listings.core.ai.proposals import (
     ListingProposal as ListingProposal,
 )
-from etsy_listings.ai.proposals import (
+from etsy_listings.core.ai.proposals import (
     Resolution,
 )
-from etsy_listings.batches import AiState
-from etsy_listings.config.listing import Listing
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.media import MediaEntry, MediaKind
+from etsy_listings.core.batches import AiState
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.media import MediaEntry, MediaKind
 
 # ``draft``/``deployed``/``live``/``dirty``, imported rather than restated:
 # the lifecycle rule is the engine's (the UI's badge and Phase 6's `status`
 # command have to agree on it), and a second `Literal` here would be a second
 # place a state could be added to. Derived on every read, never persisted --
 # the same principle `TemplateSummary.status` states below.
-from etsy_listings.engine.status import ListingGesture, ListingStatus
-from etsy_listings.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
+from etsy_listings.core.engine.status import ListingGesture, ListingStatus
+from etsy_listings.core.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
 from etsy_listings.ui.runs.events import ApplyRunPhase, PlanRunPhase, RunEvent, RunScope
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]

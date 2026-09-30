@@ -34,18 +34,20 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, Request
 
-from etsy_listings.ai.claude import ClaudeProvider
-from etsy_listings.ai.codex import CodexProvider
-from etsy_listings.ai.grok import GrokProvider
-from etsy_listings.ai.listing_inputs import ListingAiInputs
-from etsy_listings.ai.proposals import (
+from etsy_listings.core.ai.claude import ClaudeProvider
+from etsy_listings.core.ai.codex import CodexProvider
+from etsy_listings.core.ai.grok import GrokProvider
+from etsy_listings.core.ai.listing_inputs import ListingAiInputs
+from etsy_listings.core.ai.proposals import (
     ProposalReplacedError,
     ProposalStore,
 )
-from etsy_listings.ai.providers import AiProvider
-from etsy_listings.config.listing import Listing
-from etsy_listings.market import snapshot as market_snapshot
-from etsy_listings.market.snapshot import MarketSnapshot
+from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.market import snapshot as market_snapshot
+from etsy_listings.core.market.snapshot import MarketSnapshot
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.listings import Existing
 from etsy_listings.ui.api.schemas import (
     AiReadinessBlock,
@@ -53,8 +55,6 @@ from etsy_listings.ui.api.schemas import (
     ProposalResolutionPatch,
     SeoReadinessResponse,
 )
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
 

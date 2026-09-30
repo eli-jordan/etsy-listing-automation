@@ -18,7 +18,7 @@ ones and each has produced a plausible-looking wrong implementation:
   the server stops a re-run making a second product.
 
 The token, the retries and the error shapes are
-:mod:`~etsy_listings.clients.printify.transport`, shared with the catalog
+:mod:`~etsy_listings.core.clients.printify.transport`, shared with the catalog
 reader. What is *not* shared is the surface: reaching these calls means
 holding a :class:`PrintifyClient`, which a caller that only reads the catalog
 never does.
@@ -29,15 +29,15 @@ from __future__ import annotations
 import base64
 from typing import Any
 
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.models import (
     PrintAreaSpec,
     Product,
     ProductSpec,
     Shop,
     Upload,
 )
-from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.clients.printify.transport import (
+from etsy_listings.core.clients.printify.protocol import PrintifyClient
+from etsy_listings.core.clients.printify.transport import (
     HTTP_NOT_FOUND,
     WRONG_SHOP_CODE,
     PrintifyApiError,
@@ -77,7 +77,7 @@ class HttpPrintifyClient(PrintifyClient):
         happen, and it means "create one", not "crash".
 
         Two answers mean the same thing here. `404` is the id nothing knows,
-        and `400`/ :data:`~etsy_listings.clients.printify.transport.WRONG_SHOP_CODE`
+        and `400`/ :data:`~etsy_listings.core.clients.printify.transport.WRONG_SHOP_CODE`
         is the id another shop holds -- which, from this shop's side, is the
         same absence. Catching only the first turns reconnecting a store into
         a hard failure on the next `plan`, because the lockfile still names
@@ -153,7 +153,7 @@ class HttpPrintifyClient(PrintifyClient):
         survived, re-applies after the user removed the draft. The
         product is gone; treating that 404 as a crash leaves the local files
         stuck. Same two absences as :meth:`get_product`: `404` is unknown to
-        every shop, `400`/ :data:`~etsy_listings.clients.printify.transport.WRONG_SHOP_CODE`
+        every shop, `400`/ :data:`~etsy_listings.core.clients.printify.transport.WRONG_SHOP_CODE`
         is a product another shop holds.
         """
         try:

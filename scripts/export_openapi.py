@@ -12,9 +12,9 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from etsy_listings.config.defaults import Defaults, EtsyDefaults
+from etsy_listings.core.config.defaults import Defaults, EtsyDefaults
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 REPO_ROOT = Path(__file__).parent.parent
 

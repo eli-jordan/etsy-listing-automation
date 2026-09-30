@@ -13,9 +13,9 @@ import re
 from collections.abc import Collection, Sequence
 from dataclasses import dataclass
 
-from etsy_listings.clients.printify.models import Blueprint, PrintProvider, VariantSet
-from etsy_listings.config.slug import ColourExceptions, slug_map
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.core.config.slug import ColourExceptions, slug_map
+from etsy_listings.core.errors import UserFacingError
 
 _TRADEMARK = re.compile(r"[®™©]")
 _WHITESPACE = re.compile(r"\s+")

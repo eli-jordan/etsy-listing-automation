@@ -15,14 +15,14 @@ from typing import Any
 
 import pytest
 
-from etsy_listings.ai import claude
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai import claude
+from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
-from etsy_listings.ai.models import (
+from etsy_listings.core.ai.models import (
     Deadline,
     GarmentContext,
     ProviderReadiness,
@@ -30,8 +30,8 @@ from etsy_listings.ai.models import (
     RepairContext,
     SeoRequest,
 )
-from etsy_listings.ai.process import ProcessResult
-from etsy_listings.ai.prompt import RESPONSE_SCHEMA, build_seo_task
+from etsy_listings.core.ai.process import ProcessResult
+from etsy_listings.core.ai.prompt import RESPONSE_SCHEMA, build_seo_task
 
 _HELP_TEXT = """
 Options:

@@ -4,7 +4,7 @@
 reference data holds a :class:`CatalogClient` and cannot reach a call that
 creates, updates or deletes anything -- not by discipline, but because the
 method is not on the type it was handed. The plumbing underneath them is
-shared (:mod:`~etsy_listings.clients.printify.transport`); the authority is
+shared (:mod:`~etsy_listings.core.clients.printify.transport`); the authority is
 not, and that is the half worth keeping apart.
 
 The two also differ in what may be done *with* a result. A catalog read is
@@ -22,7 +22,7 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintProvider,
     Product,

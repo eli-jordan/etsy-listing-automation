@@ -19,7 +19,7 @@ findings make the obvious implementation wrong:
   the unscoped path (`/v3/application/listings/{id}`); the shop-scoped one is
   for `PATCH`/`DELETE` only.
 
-Separate from :class:`~etsy_listings.clients.etsy.shops.EtsyShopClient` for
+Separate from :class:`~etsy_listings.core.clients.etsy.shops.EtsyShopClient` for
 the reason ADR-0024 gives: authority is a property of the type, so a caller
 resolving `setup`'s four unscoped reads cannot reach `updateListing` however
 much transport plumbing the two share. `shop_sections` and `return_policies`
@@ -38,7 +38,7 @@ from collections.abc import Sequence
 from pathlib import PurePosixPath
 from typing import Any, Protocol
 
-from etsy_listings.clients.etsy.models import (
+from etsy_listings.core.clients.etsy.models import (
     Inventory,
     Listing,
     ListingImage,
@@ -49,7 +49,7 @@ from etsy_listings.clients.etsy.models import (
     ShopSection,
     VariationImageLink,
 )
-from etsy_listings.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
 
 HTTP_BAD_REQUEST = 400
 HTTP_CONFLICT = 409
@@ -84,7 +84,7 @@ class VideoBudgetExhaustedError(EtsyApiError):
     Re-worded because Etsy's own text says the listing is full, and the
     listing may hold no videos at all. The tool does not predict the budget;
     it explains the refusal when it comes. A
-    :class:`~etsy_listings.errors.UserFacingError` through
+    :class:`~etsy_listings.core.errors.UserFacingError` through
     :class:`EtsyApiError`, so a batch reports this listing and carries on
     .
     """

@@ -4,8 +4,8 @@ skipped by default.
 Where Phase 2's e2e layer was recon over raw ``httpx`` -- the client did not
 exist yet -- this drives the real pipeline: ``plan_listings``/
 ``apply_listings`` over the actual ``STAGES``, against
-:class:`~etsy_listings.clients.printify.HttpPrintifyClient` and
-:class:`~etsy_listings.clients.etsy.HttpEtsyListingClient`. The recon this
+:class:`~etsy_listings.core.clients.printify.HttpPrintifyClient` and
+:class:`~etsy_listings.core.clients.etsy.HttpEtsyListingClient`. The recon this
 phase was built from lives in
 [docs/research/printify-etsy-integration.md](../../docs/research/printify-etsy-integration.md);
 this is what re-takes it once the code exists to take it with.
@@ -48,17 +48,17 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.etsy import HttpEtsyListingClient
-from etsy_listings.clients.printify import HttpCatalogClient
-from etsy_listings.clients.printify import Transport as PrintifyTransport
-from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.clients.etsy import HttpEtsyListingClient
+from etsy_listings.core.clients.printify import HttpCatalogClient
+from etsy_listings.core.clients.printify import Transport as PrintifyTransport
+from etsy_listings.core.clients.printify.protocol import PrintifyClient
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.run import RunReport, apply_listings, plan_listings
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
+from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.conftest import FIXTURE_WORKSPACE
 from tests.e2e.conftest import PrerequisiteMissing, point_at_throwaway_shops

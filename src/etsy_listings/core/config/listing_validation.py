@@ -43,10 +43,10 @@ from typing import Literal
 
 from PIL import Image, UnidentifiedImageError
 
-from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import Listing, TemplateMediaEntry
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.config.garment_profile import GarmentProfile
+from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts
 
 Severity = Literal["block", "warn", "info"]
 """``info`` is a note about what Etsy will do, not a problem with the listing
@@ -249,7 +249,7 @@ def check_description_ref(ref: str | None, error: str | None) -> list[Issue]:
     """Refuse a `description.ref` that does not resolve to usable common copy.
 
     ``error`` is the message a caller's own
-    :meth:`~etsy_listings.workspace.workspace.Workspace.load_common_copy`
+    :meth:`~etsy_listings.core.workspace.workspace.Workspace.load_common_copy`
     attempt raised, or ``None`` when it resolved fine -- this module never
     touches the filesystem itself (see this file's own docstring), so the
     caller has already done the one read that can fail and hands back only

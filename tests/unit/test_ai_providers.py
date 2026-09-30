@@ -17,8 +17,8 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.ai.models import Deadline, ProviderReadiness, ProviderTask
-from etsy_listings.ai.providers import AiProvider, FakeAiProvider
+from etsy_listings.core.ai.models import Deadline, ProviderReadiness, ProviderTask
+from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
 
 
 def _task(prompt_text: str = "do the thing") -> ProviderTask:

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.config.media import TemplateMediaEntry, UnknownMediaTypeError, media_kind
+from etsy_listings.core.config.media import TemplateMediaEntry, UnknownMediaTypeError, media_kind
 
 
 def test_a_template_entry_is_an_image() -> None:

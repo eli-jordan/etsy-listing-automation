@@ -19,7 +19,7 @@ is shared. All three calls are unscoped -- the app key pair is enough --
 so the client needs no sign-in (see ``connections.etsy_market_client``).
 
 Pacing and retries are the transport's: header pacing through
-:class:`~etsy_listings.clients.etsy.transport.RateGate`, and the shared retry
+:class:`~etsy_listings.core.clients.etsy.transport.RateGate`, and the shared retry
 policy for 429, 5xx and network errors. What surfaces here after those is a
 failure research reports as *Etsy market search failed*.
 """
@@ -30,8 +30,8 @@ import re
 from collections.abc import Sequence
 from typing import Any, Protocol
 
-from etsy_listings.clients.etsy.models import MarketCandidate, MarketListing
-from etsy_listings.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing
+from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
 
 SEARCH_PATH = "/v3/application/listings/active"
 BATCH_PATH = "/v3/application/listings/batch"

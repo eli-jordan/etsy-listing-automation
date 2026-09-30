@@ -13,9 +13,9 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from etsy_listings import connections
 from etsy_listings.cli.app import app
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core import connections
+from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_lock, set_shop_id

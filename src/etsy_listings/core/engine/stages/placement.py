@@ -21,12 +21,12 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
-from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import Listing
-from etsy_listings.config.listing_validation import check_artwork_resolved
-from etsy_listings.engine.lock import hash_file
-from etsy_listings.errors import UserFacingError
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.config.garment_profile import GarmentProfile
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.listing_validation import check_artwork_resolved
+from etsy_listings.core.engine.lock import hash_file
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.workspace.workspace import Workspace
 
 
 class ArtworkResolutionError(UserFacingError):

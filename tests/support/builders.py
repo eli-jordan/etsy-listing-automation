@@ -25,12 +25,12 @@ import yaml
 from PIL import Image
 
 from etsy_listings import __about__
-from etsy_listings.clients.etsy.listings import EtsyListingClient
-from etsy_listings.clients.printify.fakes import FakeCatalogClient
-from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
-from etsy_listings.engine.context import Event, RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
+from etsy_listings.core.clients.printify.protocol import CatalogClient, PrintifyClient
+from etsy_listings.core.engine.context import Event, RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.workspace.workspace import Workspace
 
 FIXTURE_LISTING = "take-a-hike"
 """The listing in ``tests/fixtures/workspace``. Named rather than repeated,

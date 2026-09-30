@@ -11,10 +11,10 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.plan import build_plan
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.render import RenderStage
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.plan import build_plan
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.render import RenderStage
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock

@@ -32,8 +32,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-from etsy_listings.clients.etsy.oauth import OAuthError, TokenResponse
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.clients.etsy.oauth import OAuthError, TokenResponse
+from etsy_listings.core.errors import UserFacingError
 
 REFRESH_MARGIN = timedelta(minutes=5)
 """How much of an access token's hour is treated as already spent. Long enough
@@ -57,7 +57,7 @@ class EtsyAuthError(UserFacingError, RuntimeError):
     and a missing one call for the same next step.
 
     Naming the command that fixes it is the definition of a
-    :class:`~etsy_listings.errors.UserFacingError`; being one is what keeps a
+    :class:`~etsy_listings.core.errors.UserFacingError`; being one is what keeps a
     signed-out workspace reporting that fact per listing rather than aborting
     the run on the first.
     """

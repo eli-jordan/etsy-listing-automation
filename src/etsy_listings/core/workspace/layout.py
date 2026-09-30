@@ -1,6 +1,6 @@
 """The names of everything in a workspace tree. ADR-0013.
 
-Only :class:`etsy_listings.workspace.workspace.Workspace` reads these -- the
+Only :class:`etsy_listings.core.workspace.workspace.Workspace` reads these -- the
 rest of the codebase asks it for a path rather than joining names itself, so
 this file is the single place the layout is defined.
 """

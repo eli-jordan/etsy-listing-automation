@@ -19,9 +19,9 @@ from fastapi import APIRouter, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from PIL import Image, UnidentifiedImageError
 
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.schemas import DesignSummary
 from etsy_listings.ui.api.thumbnails import thumbnail_response
-from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/designs", tags=["designs"])
 

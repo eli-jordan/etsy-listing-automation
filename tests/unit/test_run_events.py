@@ -10,8 +10,8 @@ from decimal import Decimal
 import pytest
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from etsy_listings.config.money import Money
-from etsy_listings.engine.change import (
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.change import (
     Action,
     Drift,
     FieldChange,
@@ -21,7 +21,7 @@ from etsy_listings.engine.change import (
     PriceChange,
     StagePlan,
 )
-from etsy_listings.engine.stages.publish import PublishSnapshot
+from etsy_listings.core.engine.stages.publish import PublishSnapshot
 from etsy_listings.ui.runs.events import (
     BlockedOutcomeDTO,
     IdleOutcomeDTO,

@@ -18,7 +18,7 @@ import pytest
 import yaml
 from playwright.sync_api import expect
 
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import GARMENT_PROFILE, LISTING_TEMPLATE, a_listing_template
 from tests.support.builders import edit_garment_profile

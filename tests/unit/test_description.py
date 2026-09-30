@@ -13,7 +13,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from etsy_listings.config.description import DescriptionConfig, compose_description
+from etsy_listings.core.config.description import DescriptionConfig, compose_description
 
 
 class TestDescriptionConfig:

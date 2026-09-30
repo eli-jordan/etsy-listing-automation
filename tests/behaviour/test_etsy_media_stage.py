@@ -12,22 +12,22 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.clients.etsy.models import (
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.models import (
     Inventory,
     InventoryProduct,
     InventoryPropertyValue,
 )
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import MediaChange
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun, build_plan
-from etsy_listings.engine.stages.etsy_media import (
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.change import MediaChange
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import PlannedRun, build_plan
+from etsy_listings.core.engine.stages.etsy_media import (
     EtsyMediaStage,
     MediaNotRenderedError,
 )
-from etsy_listings.engine.stages.etsy_target import EtsyListingNotMintedError
+from etsy_listings.core.engine.stages.etsy_target import EtsyListingNotMintedError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, edit_listing, set_etsy_shop_id

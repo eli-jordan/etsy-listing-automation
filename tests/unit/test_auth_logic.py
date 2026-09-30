@@ -10,9 +10,9 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 from etsy_listings.authcmd import logic
-from etsy_listings.clients.etsy.oauth import TokenResponse
-from etsy_listings.clients.etsy.tokens import StoredTokens
-from etsy_listings.config.secrets import (
+from etsy_listings.core.clients.etsy.oauth import TokenResponse
+from etsy_listings.core.clients.etsy.tokens import StoredTokens
+from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,

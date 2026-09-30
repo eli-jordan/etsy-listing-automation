@@ -12,11 +12,11 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.config.listing import Listing, TemplateMediaEntry
-from etsy_listings.config.media import ProbeFailure, VideoFacts
-from etsy_listings.workspace import facts as facts_module
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.config.listing import Listing, TemplateMediaEntry
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.workspace import facts as facts_module
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import garment_profile_file
 

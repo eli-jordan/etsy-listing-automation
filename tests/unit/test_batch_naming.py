@@ -4,7 +4,7 @@ against everything a name must not collide with."""
 
 from __future__ import annotations
 
-from etsy_listings.batches.naming import allocate
+from etsy_listings.core.batches.naming import allocate
 
 
 def test_a_free_base_name_is_kept() -> None:

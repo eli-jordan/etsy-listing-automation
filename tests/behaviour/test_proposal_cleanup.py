@@ -19,14 +19,14 @@ from fastapi.testclient import TestClient
 from typer.testing import CliRunner
 
 from etsy_listings.cli import app as cli_app
-from etsy_listings.clients.etsy.transport import EtsyApiError
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
-from etsy_listings.engine.context import EventSink, RunContext
-from etsy_listings.engine.events import EngineRunEvent, EngineStageApplying
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.run import apply_listings, fully_applied, plan_listings
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.engine.events import EngineRunEvent, EngineStageApplying
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.run import apply_listings, fully_applied, plan_listings
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.ai_runs import has_proposal, seed_proposal
 from tests.support.builders import FIXTURE_LISTING as LISTING

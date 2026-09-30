@@ -3,11 +3,11 @@ render, without the executor peeking at ``RenderSnapshot``."""
 
 from __future__ import annotations
 
-from etsy_listings.engine.change import Plan, StagePlan
-from etsy_listings.engine.plan import PlannedRun, StageState
-from etsy_listings.engine.preview import needs_preview
-from etsy_listings.engine.stage import Blocked
-from etsy_listings.engine.stages.render import (
+from etsy_listings.core.engine.change import Plan, StagePlan
+from etsy_listings.core.engine.plan import PlannedRun, StageState
+from etsy_listings.core.engine.preview import needs_preview
+from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stages.render import (
     RenderSceneSnapshot,
     RenderSceneState,
     RenderSnapshot,

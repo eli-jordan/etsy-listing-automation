@@ -14,10 +14,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from etsy_listings.engine.lock import canonical_hash
-from etsy_listings.engine.stage import Blocked
-from etsy_listings.engine.stages.placement import ArtworkGroup
-from etsy_listings.engine.stages.product_document import (
+from etsy_listings.core.engine.lock import canonical_hash
+from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stages.placement import ArtworkGroup
+from etsy_listings.core.engine.stages.product_document import (
     AppliedProduct,
     PricedVariant,
     PrintifyProductDesired,

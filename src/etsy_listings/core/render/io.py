@@ -1,5 +1,5 @@
 """The renderer's I/O boundary: loading design/template images and saving
-results. Deliberately kept out of:mod:`etsy_listings.render.pipeline` so the
+results. Deliberately kept out of:mod:`etsy_listings.core.render.pipeline` so the
 render passes themselves stay pure."""
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
-from etsy_listings.render.types import RGB, RGBA
+from etsy_listings.core.render.types import RGB, RGBA
 
 
 class DesignValidationError(ValueError):

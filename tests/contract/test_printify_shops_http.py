@@ -16,12 +16,12 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.clients.printify import (
+from etsy_listings.core.clients.printify import (
     HttpPrintifyClient,
     PrintifyApiError,
     PrintifyAuthError,
 )
-from etsy_listings.clients.retry import RetryPolicy
+from etsy_listings.core.clients.retry import RetryPolicy
 
 from tests.support.http import always, transport
 

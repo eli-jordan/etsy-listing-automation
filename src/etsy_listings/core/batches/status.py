@@ -26,7 +26,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Literal
 
-from etsy_listings.batches.records import DRAFTING, AiState, BatchRow, has_listing
+from etsy_listings.core.batches.records import DRAFTING, AiState, BatchRow, has_listing
 
 BatchStatus = Literal["drafting", "in_review", "complete", "stopped"]
 

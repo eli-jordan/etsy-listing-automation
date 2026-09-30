@@ -8,7 +8,7 @@ from typing import Literal
 import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from etsy_listings.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
 
 
 class MissingDefaultError(ValueError):

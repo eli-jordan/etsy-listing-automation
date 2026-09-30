@@ -25,8 +25,8 @@ from typing import Any, Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from etsy_listings.workspace.atomic import read_bytes_retrying, write_json_atomic
-from etsy_listings.workspace.workspace import Workspace, remove_tree
+from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_json_atomic
+from etsy_listings.core.workspace.workspace import Workspace, remove_tree
 
 SCHEMA = 1
 

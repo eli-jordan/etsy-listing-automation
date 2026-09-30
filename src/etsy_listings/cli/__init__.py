@@ -1,6 +1,6 @@
 """The Typer command line: the human-facing entry point.
 
-Owns turning a :class:`~etsy_listings.engine.change.Plan` into terminal text
+Owns turning a :class:`~etsy_listings.core.engine.change.Plan` into terminal text
 and nothing else. It never compares state -- that is ``engine``'s job, and
 keeping presentation on this side is what lets the CLI and the UI enforce
 identical rules. In particular nothing in ``cli.render`` may stat

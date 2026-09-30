@@ -11,9 +11,9 @@ from __future__ import annotations
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field, replace
 
-from etsy_listings.clients.etsy.listings import EtsyListingClient
-from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
+from etsy_listings.core.clients.printify.protocol import CatalogClient, PrintifyClient
+from etsy_listings.core.workspace.workspace import Workspace
 
 
 class MissingClientError(RuntimeError):
@@ -97,7 +97,7 @@ class RunContext:
         one -- so it is here, once, beside the field it unwraps.
 
         A :class:`MissingClientError` and not a
-        :class:`~etsy_listings.errors.UserFacingError`: reaching here means a
+        :class:`~etsy_listings.core.errors.UserFacingError`: reaching here means a
         stage the plan flagged was run without its client, which is a wiring
         defect and deserves the traceback a defect gets.
         """

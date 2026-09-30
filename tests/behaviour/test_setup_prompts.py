@@ -18,16 +18,16 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from etsy_listings.ai.brief import default_brief_prompt_text
-from etsy_listings.ai.market_queries import default_market_queries_prompt_text
-from etsy_listings.ai.prompt import default_seo_prompt_text
 from etsy_listings.cli.app import app
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
-from etsy_listings.clients.printify.models import Shop
-from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR
+from etsy_listings.core.ai.brief import default_brief_prompt_text
+from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
+from etsy_listings.core.ai.prompt import default_seo_prompt_text
+from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.clients.printify.models import Shop
+from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.setupcmd.interactive import run_setup
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.workspace import Workspace
 
 HAPPY_PATH = {
     "token": "printify-token-abc",

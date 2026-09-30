@@ -26,9 +26,9 @@ from typer.testing import CliRunner
 
 from etsy_listings.cli.app import app
 from etsy_listings.cli.render import format_plan
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import Drift, Plan, StagePlan, Verdict
-from etsy_listings.engine.plan import build_plan
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.change import Drift, Plan, StagePlan, Verdict
+from etsy_listings.core.engine.plan import build_plan
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, copy_listing, set_copy, set_shop_id

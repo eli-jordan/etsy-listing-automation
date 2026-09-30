@@ -15,7 +15,7 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.clients.retry import RetryPolicy, should_retry, wait_for, with_retries
+from etsy_listings.core.clients.retry import RetryPolicy, should_retry, wait_for, with_retries
 
 
 def _response(status: int, **headers: str) -> httpx.Response:

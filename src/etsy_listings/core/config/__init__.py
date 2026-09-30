@@ -10,18 +10,18 @@ types they are built from.
 ``workspace``'s job, and it knows nothing about ``render`` or ``catalog``.
 
 A *mockup* template's ``template.yaml`` is deliberately not here: it is render
-geometry, so its models live in:mod:`etsy_listings.render`.
+geometry, so its models live in:mod:`etsy_listings.core.render`.
 """
 
-from etsy_listings.config.defaults import Defaults
-from etsy_listings.config.description import DescriptionConfig, compose_description
-from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.exceptions import load_exceptions
-from etsy_listings.config.garment_profile import GarmentProfile, PrintArea
-from etsy_listings.config.listing import EtsyListingConfig, Listing
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.market_weights import MarketWeights
-from etsy_listings.config.media import (
+from etsy_listings.core.config.defaults import Defaults
+from etsy_listings.core.config.description import DescriptionConfig, compose_description
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.exceptions import load_exceptions
+from etsy_listings.core.config.garment_profile import GarmentProfile, PrintArea
+from etsy_listings.core.config.listing import EtsyListingConfig, Listing
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.market_weights import MarketWeights
+from etsy_listings.core.config.media import (
     MAX_IMAGES,
     MAX_VIDEOS,
     MediaEntry,
@@ -32,15 +32,15 @@ from etsy_listings.config.media import (
     VideoFacts,
     media_kind,
 )
-from etsy_listings.config.money import Money, PriceField, require_currency
-from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.secrets import (
+from etsy_listings.core.config.money import Money, PriceField, require_currency
+from etsy_listings.core.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
     Secrets,
 )
-from etsy_listings.config.slug import ColourExceptions, SlugCollisionError, slug_map, slugify
+from etsy_listings.core.config.slug import ColourExceptions, SlugCollisionError, slug_map, slugify
 
 __all__ = [
     # One class per config file.

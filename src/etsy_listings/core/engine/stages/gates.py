@@ -3,7 +3,7 @@
 The rules themselves live in `config/listing_validation.py`, which is the one
 module that knows every reason a listing cannot run. This is the adapter a
 stage reads them through: same three names, same signatures, an
-:class:`~etsy_listings.engine.stage.Blocked` instead of an ``Issue``.
+:class:`~etsy_listings.core.engine.stage.Blocked` instead of an ``Issue``.
 
 There used to be two modules, each with its own copy of some of the rules, and
 they had already diverged -- ``check_garment_profile_chosen`` accepted a
@@ -21,7 +21,7 @@ the other way: it is entirely about the product stage's own applied document,
 which is now a type rather than a dict, and a shared module has no business
 knowing that type. It lives beside the document it reads.
 
-**Each returns a** :class:`~etsy_listings.engine.stage.Blocked` **rather than
+**Each returns a** :class:`~etsy_listings.core.engine.stage.Blocked` **rather than
 raising one.** A refusal is something `plan` has to report, and raising made
 it something `plan` could only die of: the exception unwound the stage walk,
 so a design a hundred pixels short took the render stage's plan with it and
@@ -36,11 +36,11 @@ from __future__ import annotations
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 
-from etsy_listings.config import listing_validation as rules
-from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing_validation import Issue
-from etsy_listings.config.media import ProbeFailure, VideoFacts
-from etsy_listings.engine.stage import Blocked
+from etsy_listings.core.config import listing_validation as rules
+from etsy_listings.core.config.garment_profile import GarmentProfile
+from etsy_listings.core.config.listing_validation import Issue
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.engine.stage import Blocked
 
 
 def _refuse(issues: Sequence[Issue]) -> Blocked | None:

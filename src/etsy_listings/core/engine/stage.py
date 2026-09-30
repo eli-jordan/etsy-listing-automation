@@ -19,10 +19,10 @@ from typing import Any, Protocol, TypeVar
 
 from pydantic import BaseModel
 
-from etsy_listings.engine.change import Verdict
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile, StageApplyResult
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.engine.change import Verdict
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile, StageApplyResult
+from etsy_listings.core.errors import UserFacingError
 
 D = TypeVar("D")
 A = TypeVar("A", bound=BaseModel)
@@ -30,7 +30,7 @@ L = TypeVar("L")
 
 __all__ = ["AnyStage", "Blocked", "Stage", "StageApplyResult", "StageBlockedError"]
 """``StageApplyResult`` is re-exported, not defined here: it lives in ``lock``,
-beside :meth:`~etsy_listings.engine.lock.Lockfile.fold`, which is the only
+beside :meth:`~etsy_listings.core.engine.lock.Lockfile.fold`, which is the only
 thing that reads it. A stage still imports it from here, because returning one
 is part of *this* protocol."""
 
@@ -71,7 +71,7 @@ class Stage(Protocol[D, A, L]):
 
     What a stage author must supply is deliberately smaller than it was. The
     engine now owns: looking up this stage's lockfile subtree, decoding it
-    ( :meth:`~etsy_listings.engine.lock.Lockfile.parse_applied_for`), naming
+    ( :meth:`~etsy_listings.core.engine.lock.Lockfile.parse_applied_for`), naming
     the stage in the plan it produced, and turning a refusal into a blocked
     plan. Each of those was written out once per stage, and each had already
     been written two different ways with only two stages in the pipeline.
@@ -84,7 +84,7 @@ class Stage(Protocol[D, A, L]):
     """The stage a reader shows this one under, or ``None`` for a stage of
     its own. ``etsy_videos`` is ``"etsy_media"``'s: one gallery, two stages
     . Data the engine hands out on every
-    :class:`~etsy_listings.engine.change.StagePlan`, so the CLI and the UI
+    :class:`~etsy_listings.core.engine.change.StagePlan`, so the CLI and the UI
     group by the same answer rather than each inferring one from a name.
     """
 
@@ -107,7 +107,7 @@ class Stage(Protocol[D, A, L]):
     the earliest point one can be raised, and raising it here is what stops a
     fully resolved document being built for a run that was never going to
     happen. The exception is a refusal only the live state can prove, which
-    belongs to ``plan()`` as :meth:`~etsy_listings.engine.change.Verdict.refused`
+    belongs to ``plan()`` as :meth:`~etsy_listings.core.engine.change.Verdict.refused`
     because the fact it turns on does not exist yet.
 
     ``applied`` is passed because some refusals are about what was applied
@@ -131,13 +131,13 @@ class Stage(Protocol[D, A, L]):
 
     """Compare the three states. ADR-0008: every stage writes its own.
 
-    It returns a :class:`~etsy_listings.engine.change.Verdict` rather than a
+    It returns a :class:`~etsy_listings.core.engine.change.Verdict` rather than a
     ``StagePlan`` because the one thing a ``StagePlan`` has and a verdict does
     not -- the stage's own name -- is the engine's to supply, and a name a
     stage stamps for itself is a name it can stamp wrongly.
 
     A verdict may also *refuse*
-    ( :meth:`~etsy_listings.engine.change.Verdict.refused`), for the refusals
+    ( :meth:`~etsy_listings.core.engine.change.Verdict.refused`), for the refusals
     that only ``live`` could have proved. It is the same refusal ``desired()``
     speaks and lands in the same place; what a verdict must never do is
     decline to run while reporting a mere ``reason``, which renders as

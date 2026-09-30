@@ -16,12 +16,12 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import Plan, StagePlan
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun, StageState
-from etsy_listings.engine.stage import StageApplyResult
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.change import Plan, StagePlan
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import PlannedRun, StageState
+from etsy_listings.core.engine.stage import StageApplyResult
 
 from tests.support.builders import a_context, a_lock
 

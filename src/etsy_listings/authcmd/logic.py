@@ -13,8 +13,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import datetime
 
-from etsy_listings.clients.etsy.tokens import RENEW_WARNING, StoredTokens
-from etsy_listings.config.secrets import (
+from etsy_listings.core.clients.etsy.tokens import RENEW_WARNING, StoredTokens
+from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,

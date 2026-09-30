@@ -17,9 +17,9 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from etsy_listings.batches import Batch
+from etsy_listings.core.batches import Batch
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.batches import png
 from tests.support.builders import FIXTURE_LISTING, edit_garment_profile, edit_listing

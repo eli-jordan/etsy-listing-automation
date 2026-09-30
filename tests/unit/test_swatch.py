@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from etsy_listings.render.config import Point
-from etsy_listings.render.swatch import sample_swatch
+from etsy_listings.core.render.config import Point
+from etsy_listings.core.render.swatch import sample_swatch
 
 
 def _box(x0: float, y0: float, x1: float, y1: float):

@@ -18,14 +18,14 @@ from typing import Any
 
 import pytest
 
-from etsy_listings.clients.etsy.fakes import (
+from etsy_listings.core.clients.etsy.fakes import (
     FakeEtsyMarketClient,
     market_listing,
     network_error,
     server_error,
 )
-from etsy_listings.clients.etsy.models import MarketCandidate, MarketListing, ShopStats
-from etsy_listings.market import (
+from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing, ShopStats
+from etsy_listings.core.market import (
     MarketResearchError,
     MarketWeights,
     ResearchCancelled,

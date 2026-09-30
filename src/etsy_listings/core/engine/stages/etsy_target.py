@@ -15,26 +15,26 @@ workspace where its neighbour rendered as a fact about the listing. Building
 the sentence from the caller's own phrase makes that shape structural rather
 than remembered.
 
-This module lives beside:mod:`~etsy_listings.engine.stages.gates` on the same
+This module lives beside:mod:`~etsy_listings.core.engine.stages.gates` on the same
 argument: it is stage-level knowledge that belongs to no single stage. It owns
 :data:`ETSY_LISTING_ID_KEY` for the same reason -- the key was `publish`'s only
 by accident of who writes it first, and two stages that merely *read* it had
 to import from the stage that does (ADR-0034 still holds: the ``etsy_*`` prefix is
 this module's, and `publish` is still the only writer).
 
-:class:`~etsy_listings.engine.stages.publish.PublishWithoutProductError` is
+:class:`~etsy_listings.core.engine.stages.publish.PublishWithoutProductError` is
 deliberately not folded in here, despite looking like a third copy. It is
 about the *Printify* product id, it is a
-:class:`~etsy_listings.errors.UserFacingError` rather than a wiring defect,
+:class:`~etsy_listings.core.errors.UserFacingError` rather than a wiring defect,
 and it names a genuine gap between two independently-gated stages -- three
 differences that the shared shape would flatten.
 """
 
 from __future__ import annotations
 
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stage import Blocked
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.stage import Blocked
 
 ETSY_LISTING_ID_KEY = "etsy_listing_id"
 """The Etsy listing id in ``lock.remote``. Written by `publish`, read by

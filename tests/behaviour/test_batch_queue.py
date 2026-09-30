@@ -20,15 +20,22 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings.ai.proposals import ProposalStore
-from etsy_listings.batches import Batch, BatchRow, BatchStore, StagingStore, confirm, stage_pngs
-from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.batches import (
+    Batch,
+    BatchRow,
+    BatchStore,
+    StagingStore,
+    confirm,
+    stage_pngs,
+)
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry
 from etsy_listings.ui.airuns.runner import AiRunner
 from etsy_listings.ui.api.app import create_app
 from etsy_listings.ui.batchqueue import BatchQueue
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.ai_runs import TODAY, ChainProvider, Task, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads

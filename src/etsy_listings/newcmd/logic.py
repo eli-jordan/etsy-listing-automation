@@ -17,17 +17,17 @@ from typing import Any, Literal
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.clients.printify.models import Blueprint, ShippingRates, VariantSet
-from etsy_listings.clients.printify.resolve import normalise
-from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
-from etsy_listings.config.listing import Listing
-from etsy_listings.config.media import MAX_IMAGES
-from etsy_listings.config.money import Money
-from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.slug import ColourExceptions, slug_map, slugify
+from etsy_listings.core.clients.printify.models import Blueprint, ShippingRates, VariantSet
+from etsy_listings.core.clients.printify.resolve import normalise
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.media import MAX_IMAGES
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.slug import ColourExceptions, slug_map, slugify
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.newcmd.fx_rate import FxRate
-from etsy_listings.workspace.workspace import Workspace
 
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "tshirt": ("t-shirt", "tee", "shirt"),

@@ -15,7 +15,7 @@ from dataclasses import dataclass
 
 from pydantic import RootModel
 
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.errors import UserFacingError
 
 _NON_ALNUM = re.compile(r"[^a-z0-9]+")
 

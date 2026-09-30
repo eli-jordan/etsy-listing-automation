@@ -15,11 +15,11 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.clients.etsy.market import HttpEtsyMarketClient
-from etsy_listings.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
-from etsy_listings.clients.etsy.transport import EtsyApiError
-from etsy_listings.clients.etsy.transport import Transport as EtsyTransport
-from etsy_listings.config.secrets import EtsyAppKey
+from etsy_listings.core.clients.etsy.market import HttpEtsyMarketClient
+from etsy_listings.core.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.etsy.transport import Transport as EtsyTransport
+from etsy_listings.core.config.secrets import EtsyAppKey
 
 from tests.support.http import etsy_transport
 

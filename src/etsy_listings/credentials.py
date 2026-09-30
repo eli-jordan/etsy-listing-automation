@@ -10,7 +10,7 @@ step will want the third of them.
 A credential step is six things, and this module is all six of them:
 
 1. **Where it already lives.** Environment first, then the workspace's
-   ``.env`` -- the same precedence :class:`~etsy_listings.config.secrets.Secrets`
+   ``.env`` -- the same precedence :class:`~etsy_listings.core.config.secrets.Secrets`
    uses, so a wizard cannot disagree with the rest of the tool about which
    credential is in play. A wizard that stores a token the next command then
    ignores is worse than one that never ran.
@@ -47,14 +47,14 @@ from typing import NoReturn
 import typer
 
 from etsy_listings import prompts
-from etsy_listings.config.secrets import (
+from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     PRINTIFY_TOKEN_VAR,
     Secrets,
 )
-from etsy_listings.workspace import layout, scaffold
+from etsy_listings.core.workspace import layout, scaffold
 
 __all__ = [
     "ANTHROPIC",
@@ -175,7 +175,7 @@ class Capture[T]:
 def stored(root: Path, variable: str) -> str | None:
     """A credential this machine already has, environment first.
 
-    :class:`~etsy_listings.config.secrets.Secrets`' own precedence, read
+    :class:`~etsy_listings.core.config.secrets.Secrets`' own precedence, read
     through the one accessor that knows the layout -- both wizards used to
     join ``root / layout.ENV_FILE`` for themselves.
     """

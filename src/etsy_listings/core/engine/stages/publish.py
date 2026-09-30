@@ -23,7 +23,7 @@ shape this stage:
   anything is sent (ADR-0020's amendment).
 
 The desired variant matrix is rebuilt through
-:func:`~etsy_listings.engine.stages.printify_product.resolve_variant_pricing`,
+:func:`~etsy_listings.core.engine.stages.printify_product.resolve_variant_pricing`,
 the same pure resolution `printify_product` uses, rather than read out of that
 stage's lockfile subtree -- decision 1's stage independence.
 """
@@ -36,21 +36,24 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.clients.printify.models import Product
-from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.config.money import Money
-from etsy_listings.engine.change import Drift, Verdict
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
-from etsy_listings.engine.stages.gates import (
+from etsy_listings.core.clients.printify.models import Product
+from etsy_listings.core.clients.printify.protocol import PrintifyClient
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.change import Drift, Verdict
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
+from etsy_listings.core.engine.stages.gates import (
     check_copy_is_concrete,
     check_garment_profile_chosen,
 )
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY, resolve_variant_pricing
-from etsy_listings.engine.stages.product_document import AppliedVariant, PricedVariant, money
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.engine.stages.printify_product import (
+    PRODUCT_ID_KEY,
+    resolve_variant_pricing,
+)
+from etsy_listings.core.engine.stages.product_document import AppliedVariant, PricedVariant, money
+from etsy_listings.core.errors import UserFacingError
 
 ETSY_LISTING_HANDLE_KEY = "etsy_listing_handle"
 PUBLISH_LOCKED_KEY = "printify_publish_locked"

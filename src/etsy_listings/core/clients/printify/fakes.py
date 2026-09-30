@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import hashlib
 
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintProvider,
     Product,
@@ -29,8 +29,8 @@ from etsy_listings.clients.printify.models import (
     Upload,
     VariantSet,
 )
-from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
-from etsy_listings.clients.printify.transport import PrintifyAuthError
+from etsy_listings.core.clients.printify.protocol import CatalogClient, PrintifyClient
+from etsy_listings.core.clients.printify.transport import PrintifyAuthError
 
 
 class FakeCatalogClient(CatalogClient):

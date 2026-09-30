@@ -21,7 +21,7 @@ Two passes, always in this order:
 
 Trademark findings never raise :class:`ProposalValidationError`. They are
 appended to the built proposal's own ``warnings`` as
-:class:`~etsy_listings.ai.models.ProposalWarning` entries with
+:class:`~etsy_listings.core.ai.models.ProposalWarning` entries with
 ``kind="trademark"`` -- the settled decision is that these are warnings, not
 a hard refusal, because accurate copy is allowed to name a real product,
 character, or brand (`seo_prompt.md`: "Do not exclude an accurate,
@@ -39,8 +39,8 @@ import re
 from collections.abc import Mapping, Sequence
 from typing import Any
 
-from etsy_listings.ai.models import PhraseRationale, ProposalWarning, SeoProposal
-from etsy_listings.config.listing import MAX_TAG_LENGTH, MAX_TITLE_LENGTH
+from etsy_listings.core.ai.models import PhraseRationale, ProposalWarning, SeoProposal
+from etsy_listings.core.config.listing import MAX_TAG_LENGTH, MAX_TITLE_LENGTH
 
 ALLOWED_INTENTS = frozenset({"core_product", "bottom_of_funnel", "style"})
 ALLOWED_USED_IN = frozenset({"title", "tags", "description_lead"})

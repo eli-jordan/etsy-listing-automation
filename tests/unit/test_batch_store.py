@@ -16,8 +16,8 @@ from typing import Any
 
 import pytest
 
-from etsy_listings.batches import Batch, BatchRow, BatchStore, NotReviewable
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.batches import Batch, BatchRow, BatchStore, NotReviewable
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.refusals import refuse_reads
 

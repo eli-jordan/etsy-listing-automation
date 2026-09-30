@@ -32,6 +32,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.airuns.events import (
     AiRunDetail,
     AiRunRefusal,
@@ -44,7 +45,6 @@ from etsy_listings.ui.airuns.runner import AiRunner
 from etsy_listings.ui.api.runs import last_event_id
 from etsy_listings.ui.api.seo import readiness
 from etsy_listings.ui.batchqueue import BatchQueue
-from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
 

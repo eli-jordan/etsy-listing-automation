@@ -42,7 +42,7 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Final, Literal
 
-from etsy_listings.ai.models import ProviderTask, SeoRequest
+from etsy_listings.core.ai.models import ProviderTask, SeoRequest
 
 CONTEXT_BEGIN: Final = "<<<LISTING_CONTEXT_JSON>>>"
 CONTEXT_END: Final = "<<<END_LISTING_CONTEXT_JSON>>>"
@@ -111,7 +111,9 @@ def default_seo_prompt_text() -> str:
     data each call rather than cached at import time, so nothing in this
     process can mutate a shared constant out from under a later read."""
     return (
-        resources.files("etsy_listings.ai.resources").joinpath("seo.md").read_text(encoding="utf-8")
+        resources.files("etsy_listings.core.ai.resources")
+        .joinpath("seo.md")
+        .read_text(encoding="utf-8")
     )
 
 

@@ -11,16 +11,16 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from etsy_listings.ai.models import GarmentContext, SeoRequest
-from etsy_listings.ai.proposals import (
+from etsy_listings.core.ai.models import GarmentContext, SeoRequest
+from etsy_listings.core.ai.proposals import (
     ListingProposal,
     ProposalRecord,
     SeoProposalSnapshot,
     proposal_staleness,
 )
-from etsy_listings.errors import UserFacingError
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 
 _PREFERRED_DESIGN_KEYS = ("default", "on-light", "on-dark")
 # one image for AI, not a per-colour render; unfamiliar keys sort

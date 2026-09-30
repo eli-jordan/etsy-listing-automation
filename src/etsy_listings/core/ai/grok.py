@@ -37,22 +37,22 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
     ProviderTimeoutError,
     ProviderUnavailableError,
     classify_process_failure,
 )
-from etsy_listings.ai.models import (
+from etsy_listings.core.ai.models import (
     Deadline,
     ProviderReadiness,
     ProviderTask,
     RawProviderResult,
     RepairContext,
 )
-from etsy_listings.ai.process import run_managed
-from etsy_listings.ai.repair import prompt_text_for
+from etsy_listings.core.ai.process import run_managed
+from etsy_listings.core.ai.repair import prompt_text_for
 
 PROVIDER_NAME = "grok"
 

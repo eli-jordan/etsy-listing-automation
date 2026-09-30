@@ -33,7 +33,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from etsy_listings.ai.models import Deadline
+from etsy_listings.core.ai.models import Deadline
 
 _DEFAULT_POLL_INTERVAL = 0.05
 """How often the polling loop below wakes up to check the deadline and the

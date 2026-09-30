@@ -4,7 +4,7 @@ from pathlib import Path
 
 import numpy as np
 
-from etsy_listings.render.maps import DerivedMapCache, height_map, luminance_map
+from etsy_listings.core.render.maps import DerivedMapCache, height_map, luminance_map
 
 GRADIENT = np.tile(np.linspace(0, 255, 64, dtype=np.uint8), (64, 1))
 GRADIENT_RGB = np.stack([GRADIENT] * 3, axis=-1)

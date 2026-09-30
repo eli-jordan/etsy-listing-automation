@@ -2,11 +2,11 @@
 chain, a seeded Etsy market, the three prompt files, and a wait.
 
 :class:`ChainProvider` tells the tasks apart by their response schema --
-the one thing about a :class:`~etsy_listings.ai.models.ProviderTask` that
+the one thing about a :class:`~etsy_listings.core.ai.models.ProviderTask` that
 says which feature asked. A task can be made to fail, or to block on a gate
 until the test opens it or the run's cancel event is set, which is how a
 test holds a run at one step. A blocked call that sees the cancel event
-raises :class:`~etsy_listings.ai.errors.ProviderCancelledError`, as the real
+raises :class:`~etsy_listings.core.ai.errors.ProviderCancelledError`, as the real
 adapters do once ``run_managed`` has killed the process tree.
 """
 
@@ -22,34 +22,34 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
-from etsy_listings.ai.brief import BRIEF_RESPONSE_SCHEMA
-from etsy_listings.ai.errors import ProviderCancelledError
-from etsy_listings.ai.market_queries import MARKET_QUERIES_RESPONSE_SCHEMA
-from etsy_listings.ai.models import (
+from etsy_listings.core.ai.brief import BRIEF_RESPONSE_SCHEMA
+from etsy_listings.core.ai.errors import ProviderCancelledError
+from etsy_listings.core.ai.market_queries import MARKET_QUERIES_RESPONSE_SCHEMA
+from etsy_listings.core.ai.models import (
     Deadline,
     ProviderReadiness,
     ProviderTask,
     RawProviderResult,
     RepairContext,
 )
-from etsy_listings.ai.proposals import (
+from etsy_listings.core.ai.proposals import (
     ProposalChoices,
     ProposalRecord,
     ProposalStore,
     SeoProposalSnapshot,
 )
-from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
-from etsy_listings.market import MarketResult, PhraseScore, ScoredListing
-from etsy_listings.market import snapshot as market_snapshot
-from etsy_listings.market.snapshot import MarketSnapshot
-from etsy_listings.ui.airuns.registry import AiRun
-from etsy_listings.workspace.layout import (
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
+from etsy_listings.core.market import MarketResult, PhraseScore, ScoredListing
+from etsy_listings.core.market import snapshot as market_snapshot
+from etsy_listings.core.market.snapshot import MarketSnapshot
+from etsy_listings.core.workspace.layout import (
     BRIEF_PROMPT_FILE,
     MARKET_QUERIES_PROMPT_FILE,
     PROMPTS_DIR,
     SEO_PROMPT_FILE,
 )
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.ui.airuns.registry import AiRun
 
 Task = Literal["brief", "queries", "seo"]
 

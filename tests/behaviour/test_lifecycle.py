@@ -11,16 +11,16 @@ from pathlib import Path
 
 import yaml
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.clients.etsy.models import ReturnPolicy, ShippingProfile
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
-from etsy_listings.config.listing_validation import DELETED_ON_PUBLISHED, RETIRED_ON_NEVER_LIVE
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import build_plan
-from etsy_listings.engine.run import apply_listings, plan_listings
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.etsy_listing import EtsyListingStage
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.models import ReturnPolicy, ShippingProfile
+from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.config.listing_validation import DELETED_ON_PUBLISHED, RETIRED_ON_NEVER_LIVE
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import build_plan
+from etsy_listings.core.engine.run import apply_listings, plan_listings
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.etsy_listing import EtsyListingStage
+from etsy_listings.core.errors import UserFacingError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (
@@ -258,8 +258,8 @@ class TestRetract:
 
 class TestEtsyStateWrites:
     def _apply_etsy(self, root: Path, etsy: FakeEtsyListingClient, lock: Lockfile) -> Lockfile:
-        from etsy_listings.engine.apply import execute
-        from etsy_listings.engine.plan import build_plan
+        from etsy_listings.core.engine.apply import execute
+        from etsy_listings.core.engine.plan import build_plan
 
         ctx = a_context(root, etsy=etsy)
         planned = build_plan(ctx, LISTING, lock, [EtsyListingStage()])

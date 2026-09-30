@@ -14,8 +14,8 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.etsy.oauth import OAuthError, TokenResponse
-from etsy_listings.clients.etsy.tokens import (
+from etsy_listings.core.clients.etsy.oauth import OAuthError, TokenResponse
+from etsy_listings.core.clients.etsy.tokens import (
     REFRESH_TOKEN_LIFETIME,
     EtsyAuthError,
     StoredTokens,

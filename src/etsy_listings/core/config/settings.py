@@ -11,7 +11,7 @@ It holds two blocks: the market scoring weights (features/market-seo-20260924/sp
       concurrency: 1
 
 Everything is optional. A missing file, section or key falls back to the
-spec's defaults -- :class:`~etsy_listings.market.models.MarketWeights` owns
+spec's defaults -- :class:`~etsy_listings.core.market.models.MarketWeights` owns
 those, and its validation (no negatives, not all zero, no unknown metric) is
 the file's. Unknown keys are refused rather than ignored: a misspelt
 ``market-seo:`` that quietly changed nothing would look like tuning that
@@ -29,8 +29,8 @@ from typing import Any
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator
 
-from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.market_weights import MarketWeights
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.market_weights import MarketWeights
 
 
 def _absent_is_empty(value: Any) -> Any:  # noqa: ANN401 - pre-validation YAML

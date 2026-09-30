@@ -23,17 +23,17 @@ import pytest
 
 from etsy_listings import prompts
 from etsy_listings.authcmd.interactive import Backends, run_auth
-from etsy_listings.clients.etsy.callback import Callback
-from etsy_listings.clients.etsy.oauth import OAuthError, TokenResponse
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
-from etsy_listings.clients.printify.models import Shop
-from etsy_listings.config.secrets import (
+from etsy_listings.core.clients.etsy.callback import Callback
+from etsy_listings.core.clients.etsy.oauth import OAuthError, TokenResponse
+from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.clients.printify.models import Shop
+from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     PRINTIFY_TOKEN_VAR,
 )
-from etsy_listings.workspace import layout
+from etsy_listings.core.workspace import layout
 
 from tests.support import scripted
 

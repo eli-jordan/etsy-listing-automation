@@ -2,7 +2,7 @@
 editor renders at.
 
 The render *stage* reads each image once per run, so it has never needed a
-cache and does not get one --:mod:`etsy_listings.render.io` stays the plain
+cache and does not get one --:mod:`etsy_listings.core.render.io` stays the plain
 I/O boundary it is documented as. The calibrator is the opposite shape: it
 re-renders the same photo, against the same test design, several times a
 second while a box is being dragged. Without this, every one of those frames
@@ -41,9 +41,9 @@ from typing import Any, TypeVar
 import numpy as np
 from PIL import Image
 
-from etsy_listings.render.io import load_design
-from etsy_listings.render.maps import DerivedMapCache
-from etsy_listings.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.render.io import load_design
+from etsy_listings.core.render.maps import DerivedMapCache
+from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
 EDITOR_MAX_EDGE = 900
 """Longest edge, in px, that the editor's canvas renders at.

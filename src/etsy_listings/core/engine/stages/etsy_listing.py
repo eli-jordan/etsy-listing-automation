@@ -5,8 +5,8 @@ trio, production partners and renewal (features/etsy-listing-20260910/spec.md, d
 Everything a name resolves to comes from :class:`EtsyShopCatalog`,
 built fresh each call to ``desired`` -- cheap, since the catalog itself
 fetches each of its four lists at most once and this stage asks for at most
-three of them. Every :class:`~etsy_listings.clients.etsy.shopcatalog.ShopCatalogError`
-becomes a :class:`~etsy_listings.engine.stage.Blocked`: a name that will not
+three of them. Every :class:`~etsy_listings.core.clients.etsy.shopcatalog.ShopCatalogError`
+becomes a :class:`~etsy_listings.core.engine.stage.Blocked`: a name that will not
 resolve is exactly the kind of refusal `desired()` exists to report, listing
 every candidate the shop actually has rather than sending Etsy a PATCH that
 would answer `400` and fail the whole thing (a stale `shop_section_id` fails
@@ -27,14 +27,14 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.clients.etsy.models import Listing as EtsyListing
-from etsy_listings.clients.etsy.shopcatalog import (
+from etsy_listings.core.clients.etsy.models import Listing as EtsyListing
+from etsy_listings.core.clients.etsy.shopcatalog import (
     EtsyShopCatalog,
     ReturnPolicyTerms,
     ShopCatalogError,
 )
-from etsy_listings.config.defaults import EtsyReturnPolicyDefaults
-from etsy_listings.engine.change import (
+from etsy_listings.core.config.defaults import EtsyReturnPolicyDefaults
+from etsy_listings.core.engine.change import (
     Change,
     Drift,
     FieldChange,
@@ -43,16 +43,19 @@ from etsy_listings.engine.change import (
     scalar,
     sequence,
 )
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.etsy_target import (
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stages.etsy_target import (
     check_etsy_shop,
     etsy_listing_id,
     require_etsy_listing_id,
 )
-from etsy_listings.engine.stages.gates import check_copy_is_concrete, check_garment_profile_chosen
-from etsy_listings.workspace.common_copy import CommonCopyError
+from etsy_listings.core.engine.stages.gates import (
+    check_copy_is_concrete,
+    check_garment_profile_chosen,
+)
+from etsy_listings.core.workspace.common_copy import CommonCopyError
 
 NO_SHOP_CONSEQUENCE = "this listing's copy and settings cannot be patched on Etsy"
 
@@ -65,7 +68,7 @@ class ReturnPolicyApplied(BaseModel):
     within_days: int | None = None
 
     def describe(self) -> str:
-        """Mirrors :meth:`~etsy_listings.clients.etsy.models.ReturnPolicy.describe`
+        """Mirrors :meth:`~etsy_listings.core.clients.etsy.models.ReturnPolicy.describe`
         -- a return policy has no title of its own, so this is the
         same human sentence, built from the same three fields this stage
         already carries, used as a drift label where the live side has

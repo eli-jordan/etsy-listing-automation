@@ -12,8 +12,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.clients.etsy.shops import HttpEtsyShopClient
-from etsy_listings.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.etsy.shops import HttpEtsyShopClient
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
 
 from tests.support.http import etsy_transport
 

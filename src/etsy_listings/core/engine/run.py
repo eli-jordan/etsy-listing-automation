@@ -10,7 +10,7 @@ hold whichever entry point drives it. The only thing the CLI added was the
 words.
 
 So this module is to ``build_plan``/``execute`` what
-:class:`~etsy_listings.engine.change.Plan` is to ``cli.render.format_plan``:
+:class:`~etsy_listings.core.engine.change.Plan` is to ``cli.render.format_plan``:
 the same seam, one level up. ``cli`` formats the :class:`RunReport`; the UI
 (Phase 5) will serialise it; neither re-derives what a run does, and continue-on-error is
 now testable without a terminal.
@@ -32,24 +32,24 @@ from datetime import UTC, datetime
 from typing import Any
 
 from etsy_listings import __about__
-from etsy_listings.ai import ProposalStore
-from etsy_listings.config.money import Money
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import Plan
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.events import (
+from etsy_listings.core.ai import ProposalStore
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.change import Plan
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.events import (
     EngineEventSink,
     EngineListingFailed,
     EngineListingPlanned,
     EnginePreviewRendered,
     ignore_engine_event,
 )
-from etsy_listings.engine.lifecycle import after_apply
-from etsy_listings.engine.lock import Lockfile, canonical_hash
-from etsy_listings.engine.plan import PlannedRun, build_plan
-from etsy_listings.engine.preview import render_pending
-from etsy_listings.engine.stage import AnyStage
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.engine.lifecycle import after_apply
+from etsy_listings.core.engine.lock import Lockfile, canonical_hash
+from etsy_listings.core.engine.plan import PlannedRun, build_plan
+from etsy_listings.core.engine.preview import render_pending
+from etsy_listings.core.engine.stage import AnyStage
+from etsy_listings.core.errors import UserFacingError
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ class ListingOutcome:
     not described by the plan it started from, and reporting one as though it
     had been carried out is worse than reporting none.
 
-    ``error`` is a :class:`~etsy_listings.errors.UserFacingError` and nothing
+    ``error`` is a :class:`~etsy_listings.core.errors.UserFacingError` and nothing
     else. That is the whole point of the type: a config mistake, a design too
     small, a colour that does not exist are all things the *user* can act on,
     and a run must survive them to reach the next listing. A defect still
@@ -121,13 +121,13 @@ class StalePlanError(UserFacingError):
     """``apply`` was asked to run a plan whose fingerprint no longer matches
     what re-planning this listing produces right now.
 
-    Carries the fresh :class:`~etsy_listings.engine.plan.PlannedRun`, so a
+    Carries the fresh :class:`~etsy_listings.core.engine.plan.PlannedRun`, so a
     caller that reviewed a stale plan -- the editor, in a later PR -- can show
     what changed rather than only that it did. Raised **before** ``execute``
     runs a single stage: acting on a plan that may no longer describe the
     live state (Etsy drifted, or a hand edit changed ``listing.yaml``) would
     risk reverting something the reviewer never saw reverted. It is a
-    :class:`~etsy_listings.errors.UserFacingError`, so continue-on-error already covers
+    :class:`~etsy_listings.core.errors.UserFacingError`, so continue-on-error already covers
     it -- one stale listing in a many-listing ``apply`` does not stop the rest.
     """
 
@@ -142,10 +142,10 @@ class StalePlanError(UserFacingError):
 def plan_fingerprint(plan: Plan) -> str:
     """A stable digest of everything a plan reviewed.
 
-    :func:`~etsy_listings.engine.lock.canonical_hash` over a canonical
+    :func:`~etsy_listings.core.engine.lock.canonical_hash` over a canonical
     rendering of ``plan``, with every
-    :attr:`~etsy_listings.engine.change.StagePlan.snapshot` left out and every
-    :class:`~etsy_listings.config.money.Money` rendered as the string a
+    :attr:`~etsy_listings.core.engine.change.StagePlan.snapshot` left out and every
+    :class:`~etsy_listings.core.config.money.Money` rendered as the string a
     listing would recognise (``"349 NOK"``) rather than a ``Decimal``
     ``json.dumps`` cannot serialise.
 
@@ -166,11 +166,11 @@ def plan_fingerprint(plan: Plan) -> str:
 
 def _canonical(value: Any) -> Any:  # noqa: ANN401 - a generic tree walk, by construction
     """``value``, rendered into the ``dict``/``list``/scalar tree
-    :func:`~etsy_listings.engine.lock.canonical_hash` can hash.
+    :func:`~etsy_listings.core.engine.lock.canonical_hash` can hash.
 
     A stage's ``snapshot`` is dropped by name rather than by type, which is
-    safe because no other field on :class:`~etsy_listings.engine.change.Plan`,
-    :class:`~etsy_listings.engine.change.StagePlan` or a ``Change`` is ever
+    safe because no other field on :class:`~etsy_listings.core.engine.change.Plan`,
+    :class:`~etsy_listings.core.engine.change.StagePlan` or a ``Change`` is ever
     called ``snapshot``. ``Money`` is checked before the generic dataclass
     branch below, since it is itself a (frozen) dataclass and would otherwise
     be unrolled into its raw ``Decimal`` amount rather than the string form a
@@ -234,17 +234,17 @@ def preview_listing(
     nothing to plan here, only to render ahead of an ``apply`` that has not
     happened yet.
 
-    Finds the render stage's own :class:`~etsy_listings.engine.plan.StageState`
+    Finds the render stage's own :class:`~etsy_listings.core.engine.plan.StageState`
     in ``planned.states`` and asks *it* for previews, rather than knowing
     anything about scenes itself -- that type-peek lives in
-    :mod:`~etsy_listings.engine.preview`, so this module emits the ready event
+    :mod:`~etsy_listings.core.engine.preview`, so this module emits the ready event
     and nothing else. Previewing is render-specific by design (`stage.py`'s
     note on why), not an optional extension every stage might grow.
 
     Does nothing, quietly, for a listing with no render state at all (a
     ``deleted``/``retired`` listing's plan is retract-only) or whose render
     stage is itself blocked (no garment profile chosen yet) -- there is no
-    :class:`~etsy_listings.engine.stages.render.RenderDesired` to preview in
+    :class:`~etsy_listings.core.engine.stages.render.RenderDesired` to preview in
     either case.
     """
     listing = planned.plan.listing

@@ -13,8 +13,8 @@ Deliberately withheld: instantiating a template into listings. That is
 asks FrozenListingTemplate to capture, carry and check its owned content.
 """
 
-from etsy_listings.listing_templates.check import template_issues
-from etsy_listings.listing_templates.convert import (
+from etsy_listings.core.listing_templates.check import template_issues
+from etsy_listings.core.listing_templates.convert import (
     AssetCopy,
     ListingTemplateDraft,
     ListingTemplateExistsError,
@@ -25,7 +25,7 @@ from etsy_listings.listing_templates.convert import (
     owned_refs,
     save,
 )
-from etsy_listings.listing_templates.frozen import FrozenListingTemplate, TemplateLock
+from etsy_listings.core.listing_templates.frozen import FrozenListingTemplate, TemplateLock
 
 __all__ = [
     "FrozenListingTemplate",

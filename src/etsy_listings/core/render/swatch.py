@@ -17,8 +17,8 @@ import math
 
 import numpy as np
 
-from etsy_listings.render.config import BoundingBox
-from etsy_listings.render.types import RGB
+from etsy_listings.core.render.config import BoundingBox
+from etsy_listings.core.render.types import RGB
 
 
 def sample_swatch(base: RGB, box: BoundingBox) -> tuple[int, int, int]:

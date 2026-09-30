@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.workspace.common_copy import CommonCopyError, parse_common_copy
+from etsy_listings.core.workspace.common_copy import CommonCopyError, parse_common_copy
 
 REF = "common-copy/comfort-colors.md"
 

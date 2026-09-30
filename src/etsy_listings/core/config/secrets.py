@@ -16,7 +16,7 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.errors import UserFacingError
 
 PRINTIFY_TOKEN_VAR = "PRINTIFY_API_TOKEN"
 ANTHROPIC_KEY_VAR = "ANTHROPIC_API_KEY"
@@ -31,7 +31,7 @@ page and a user pasting them should not have to assemble anything."""
 class MissingCredentialError(UserFacingError, RuntimeError):
     """A credential this run needs is not set anywhere.
 
-    A :class:`~etsy_listings.errors.UserFacingError`, because the message
+    A :class:`~etsy_listings.core.errors.UserFacingError`, because the message
     below *is* the whole useful output -- it names the variable, the file and
     the way to get one. Typed as anything else it reaches ``--all`` as a
     traceback that ends the batch on its first unconfigured listing, which is

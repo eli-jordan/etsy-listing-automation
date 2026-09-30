@@ -13,6 +13,6 @@ against transcripts of real responses.
 
 Where one API carries more authority in one place than another -- Printify's
 catalog reads versus its product writes -- the separation is a protocol, not a
-package. See:mod:`etsy_listings.clients.printify` for why that distinction is
+package. See:mod:`etsy_listings.core.clients.printify` for why that distinction is
 the one worth drawing.
 """

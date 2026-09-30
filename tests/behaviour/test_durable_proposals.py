@@ -18,8 +18,8 @@ from typing import Any
 
 from fastapi.testclient import TestClient
 
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.ai_runs import ChainProvider, proposal_payload, seed_prompts, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING

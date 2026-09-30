@@ -20,15 +20,15 @@ from __future__ import annotations
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from etsy_listings.clients.etsy.listings import EtsyListingClient
-from etsy_listings.clients.etsy.models import (
+from etsy_listings.core.clients.etsy.listings import EtsyListingClient
+from etsy_listings.core.clients.etsy.models import (
     ProductionPartner,
     ReturnPolicy,
     ShippingProfile,
     ShopSection,
 )
-from etsy_listings.clients.printify.resolve import normalise
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.clients.printify.resolve import normalise
+from etsy_listings.core.errors import UserFacingError
 
 SHOP_MANAGER_HINT = "create one in Shop Manager -- the API cannot"
 

@@ -17,9 +17,9 @@ from typing import Any
 
 import pytest
 
-from etsy_listings.ai.models import ProposalWarning
-from etsy_listings.ai.validation import ProposalValidationError, validate_proposal
-from etsy_listings.config.listing import MAX_TAG_LENGTH, MAX_TITLE_LENGTH
+from etsy_listings.core.ai.models import ProposalWarning
+from etsy_listings.core.ai.validation import ProposalValidationError, validate_proposal
+from etsy_listings.core.config.listing import MAX_TAG_LENGTH, MAX_TITLE_LENGTH
 
 
 def _rationale(phrase: str = "retro hiking shirt", **overrides: object) -> dict[str, Any]:

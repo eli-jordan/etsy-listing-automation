@@ -29,16 +29,16 @@ business calling -- a command that finds itself opening a browser mid-run is a
 command that should have failed with :class:`EtsyAuthError` instead.
 """
 
-from etsy_listings.clients.etsy.listings import (
+from etsy_listings.core.clients.etsy.listings import (
     EtsyListingClient,
     HttpEtsyListingClient,
     VideoBudgetExhaustedError,
     VideoSlotsFullError,
 )
-from etsy_listings.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
-from etsy_listings.clients.etsy.oauth import OAuthError, Pkce, TokenResponse
-from etsy_listings.clients.etsy.tokens import EtsyAuthError, StoredTokens, TokenStore
-from etsy_listings.clients.etsy.transport import EtsyApiError, OAuthClient, Transport
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
+from etsy_listings.core.clients.etsy.oauth import OAuthError, Pkce, TokenResponse
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError, StoredTokens, TokenStore
+from etsy_listings.core.clients.etsy.transport import EtsyApiError, OAuthClient, Transport
 
 __all__ = [
     "EtsyApiError",

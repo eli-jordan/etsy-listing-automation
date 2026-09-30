@@ -22,33 +22,33 @@ from pathlib import Path, PureWindowsPath
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.config.defaults import Defaults
-from etsy_listings.config.description import DescriptionConfig, compose_description
-from etsy_listings.config.errors import ConfigLoadError, format_validation_error
-from etsy_listings.config.exceptions import load_exceptions
-from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import Listing
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
-from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.settings import Settings
-from etsy_listings.config.slug import ColourExceptions
+from etsy_listings.core.config.defaults import Defaults
+from etsy_listings.core.config.description import DescriptionConfig, compose_description
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.exceptions import load_exceptions
+from etsy_listings.core.config.garment_profile import GarmentProfile
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.media import IMAGE_EXTENSIONS, VIDEO_EXTENSIONS
+from etsy_listings.core.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.settings import Settings
+from etsy_listings.core.config.slug import ColourExceptions
 
 # `template.yaml` is render geometry and render settings from top to bottom, so
 # its models belong to `render`, next to the passes that consume them -- not to
 # `config`, which owns the commercial/product files. Loading it here is the same
 # edge `load_listing` already has to `config`: the workspace knows where every
 # file lives, and asks whichever module owns a file's shape to parse it.
-from etsy_listings.render.config import AnyTemplate, dump_template_config
-from etsy_listings.render.config import load_template_config as parse_template_config
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.atomic import read_bytes_retrying, write_bytes_atomic
-from etsy_listings.workspace.common_copy import (
+from etsy_listings.core.render.config import AnyTemplate, dump_template_config
+from etsy_listings.core.render.config import load_template_config as parse_template_config
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
+from etsy_listings.core.workspace.common_copy import (
     CommonCopyDocument,
     CommonCopyError,
     parse_common_copy,
 )
-from etsy_listings.workspace.userpath import to_native_path
+from etsy_listings.core.workspace.userpath import to_native_path
 
 
 class WorkspaceNotFoundError(FileNotFoundError):
@@ -132,7 +132,7 @@ def _is_media_file_in(path: Path, directory: Path) -> bool:
     name. Inside the workspace root is not enough -- these directories are
     what a picture endpoint serves, and they hold ``listing.yaml`` and the
     lockfile beside the pictures. The extension is matched case-insensitively,
-    as :func:`~etsy_listings.config.media.media_kind` matches it, and it is
+    as :func:`~etsy_listings.core.config.media.media_kind` matches it, and it is
     also what keeps those two files out.
     """
     if not path.is_file():
@@ -634,7 +634,7 @@ class Workspace:
         mockup.
 
         Only the types ``media:`` accepts, matched case-insensitively
-        as :func:`~etsy_listings.config.media.media_kind` matches them, so
+        as :func:`~etsy_listings.core.config.media.media_kind` matches them, so
         nothing is offered that a listing would then refuse to load. Sorted
         by path rather than mtime -- unlike a design, a shared asset is
         written once and reused for years, so recency says nothing useful.
@@ -751,7 +751,7 @@ class Workspace:
         """A `description.ref`'s parsed front matter and body.
 
         The one place a common-copy file's bytes are read: `common_copy.py`'s
-        :func:`~etsy_listings.workspace.common_copy.parse_common_copy` owns the
+        :func:`~etsy_listings.core.workspace.common_copy.parse_common_copy` owns the
         parsing itself (pure, tested directly against string fixtures), and
         this is the I/O around it -- the same split `load_template_config`
         already draws between reading `template.yaml` and parsing it.
@@ -784,10 +784,10 @@ class Workspace:
         "Description and common-copy boundaries").
 
         Loads ``description.ref`` through :meth:`load_common_copy` when one is
-        set -- raising :class:`~etsy_listings.workspace.common_copy.CommonCopyError`
+        set -- raising :class:`~etsy_listings.core.workspace.common_copy.CommonCopyError`
         for a caller to turn into a `Blocked` stage or a banner issue -- then
         hands the resolved lead/body pair to the pure
-        :func:`~etsy_listings.config.description.compose_description`, which
+        :func:`~etsy_listings.core.config.description.compose_description`, which
         knows nothing about `ref` or the filesystem.
         """
         resolved = self.resolve_description(description)

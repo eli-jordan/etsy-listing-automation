@@ -1,7 +1,7 @@
 """Retract a never-live listing: Printify DELETE, confirm the Etsy draft
 went with it, then the run wipes local files.
 
-Not in :data:`STAGES`. :func:`~etsy_listings.engine.lifecycle.walk` hands
+Not in :data:`STAGES`. :func:`~etsy_listings.core.engine.lifecycle.walk` hands
 this stage to ``build_plan`` *instead* of the pipeline when
 ``lifecycle: deleted`` is the right verb, so a listing we are about to
 destroy is never rendered, PUT, or PATCHed -- updating it first is wasted
@@ -26,13 +26,13 @@ from dataclasses import dataclass
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.engine.change import Action, Verdict
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile, StageApplyResult
-from etsy_listings.engine.stage import Blocked
-from etsy_listings.engine.stages.etsy_target import etsy_listing_id
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.engine.change import Action, Verdict
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile, StageApplyResult
+from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stages.etsy_target import etsy_listing_id
+from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.core.errors import UserFacingError
 
 POLL_INITIAL_DELAY = 1.0
 POLL_MAX_DELAY = 4.0

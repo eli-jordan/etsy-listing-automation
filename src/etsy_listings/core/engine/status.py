@@ -37,11 +37,11 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
-from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.workspace import Workspace
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.stages.etsy_listing import AppliedEtsyListing
+from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
+from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.core.workspace import Workspace
 
 ListingLifecycle = Literal["retired", "deleted", "renew"]
 ListingStatus = Literal[

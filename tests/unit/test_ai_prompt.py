@@ -14,8 +14,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from etsy_listings.ai.models import GarmentContext, SeoRequest
-from etsy_listings.ai.prompt import (
+from etsy_listings.core.ai.models import GarmentContext, SeoRequest
+from etsy_listings.core.ai.prompt import (
     CONTEXT_BEGIN,
     CONTEXT_END,
     RESPONSE_SCHEMA,

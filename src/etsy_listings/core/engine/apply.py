@@ -7,8 +7,8 @@ from collections.abc import Callable
 from datetime import UTC, datetime
 
 from etsy_listings import __about__
-from etsy_listings.engine.context import Event, RunContext
-from etsy_listings.engine.events import (
+from etsy_listings.core.engine.context import Event, RunContext
+from etsy_listings.core.engine.events import (
     EngineEventSink,
     EngineProgress,
     EngineStageApplied,
@@ -16,9 +16,9 @@ from etsy_listings.engine.events import (
     EngineStageFailed,
     ignore_engine_event,
 )
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun
-from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import PlannedRun
+from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 
 RecordSink = Callable[[Lockfile], None]
 """Called with the stamped, folded lockfile after every stage `execute`

@@ -14,11 +14,11 @@ from pathlib import Path
 
 from PIL import Image
 
-from etsy_listings.config.description import DescriptionConfig
-from etsy_listings.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
-from etsy_listings.config.listing import EtsyListingConfig, Listing, TemplateMediaEntry
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.listing_validation import (
+from etsy_listings.core.config.description import DescriptionConfig
+from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
+from etsy_listings.core.config.listing import EtsyListingConfig, Listing, TemplateMediaEntry
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.listing_validation import (
     Issue,
     TemplateInfo,
     check_lifecycle_verb,
@@ -27,7 +27,7 @@ from etsy_listings.config.listing_validation import (
     check_listing_yaml_present,
     check_videos,
 )
-from etsy_listings.config.media import ProbeFailure, VideoFacts
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts
 
 PROFILE = GarmentProfile(
     blueprint=BlueprintRef(brand="Comfort Colors", model="1717"),

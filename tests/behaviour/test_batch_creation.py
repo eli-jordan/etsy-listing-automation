@@ -17,7 +17,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from etsy_listings.batches import (
+from etsy_listings.core.batches import (
     Batch,
     BatchStore,
     ConfirmRefused,
@@ -27,7 +27,7 @@ from etsy_listings.batches import (
     retry_row,
     stage_pngs,
 )
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import LOCAL_PICTURE, a_listing_template, png, uploads
 from tests.support.builders import FIXTURE_LISTING, copy_listing

@@ -18,13 +18,13 @@ from typing import Any
 
 from pydantic import TypeAdapter
 
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintProvider,
     ShippingRates,
     VariantSet,
 )
-from etsy_listings.clients.printify.protocol import CatalogClient
+from etsy_listings.core.clients.printify.protocol import CatalogClient
 
 DEFAULT_TTL = timedelta(days=1)
 

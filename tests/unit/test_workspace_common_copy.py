@@ -18,9 +18,9 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.config.description import DescriptionConfig
-from etsy_listings.workspace.common_copy import CommonCopyError
-from etsy_listings.workspace.workspace import PathEscapesWorkspaceError, Workspace
+from etsy_listings.core.config.description import DescriptionConfig
+from etsy_listings.core.workspace.common_copy import CommonCopyError
+from etsy_listings.core.workspace.workspace import PathEscapesWorkspaceError, Workspace
 
 FRONT_MATTER = "title: Comfort Colors\ntargets: [description]\n"
 

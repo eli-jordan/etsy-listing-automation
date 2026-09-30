@@ -28,9 +28,9 @@ import pytest
 import yaml
 from fastapi.testclient import TestClient
 
-from etsy_listings.engine.lock import Lockfile
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 NAME = "take-a-hike"
 

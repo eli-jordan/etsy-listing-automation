@@ -10,9 +10,9 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass
 
-from etsy_listings.engine.change import Plan, StagePlan
-from etsy_listings.engine.context import Swatch
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.engine.change import Plan, StagePlan
+from etsy_listings.core.engine.context import Swatch
+from etsy_listings.core.errors import UserFacingError
 
 
 @dataclass(frozen=True)

@@ -173,7 +173,7 @@ class Lockfile(BaseModel):
         It was written twice, and the copies disagreed. The product stage
         caught ``ValidationError`` and answered ``None``; the render stage
         indexed ``data["input_hash"]`` and raised ``KeyError`` -- which is not
-        a :class:`~etsy_listings.errors.UserFacingError`, so a single
+        a :class:`~etsy_listings.core.errors.UserFacingError`, so a single
         truncated lockfile ended a whole ``--all`` batch with a traceback.
         Neither stage decides this any more.
         """

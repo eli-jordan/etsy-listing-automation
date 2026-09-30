@@ -45,18 +45,18 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.config.listing import TemplateMediaEntry
-from etsy_listings.config.media import media_kind
-from etsy_listings.engine.change import Action, Drift, MediaChange, Verdict
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
-from etsy_listings.engine.stage import Blocked, StageApplyResult
-from etsy_listings.engine.stages.etsy_target import (
+from etsy_listings.core.config.listing import TemplateMediaEntry
+from etsy_listings.core.config.media import media_kind
+from etsy_listings.core.engine.change import Action, Drift, MediaChange, Verdict
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile, hash_file, to_workspace_relative_posix
+from etsy_listings.core.engine.stage import Blocked, StageApplyResult
+from etsy_listings.core.engine.stages.etsy_target import (
     check_etsy_shop,
     etsy_listing_id,
     require_etsy_listing_id,
 )
-from etsy_listings.engine.stages.variation_links import manifest_ref, set_variation_images
+from etsy_listings.core.engine.stages.variation_links import manifest_ref, set_variation_images
 
 IMAGE_IDS_KEY = "etsy_image_ids"
 """This stage's key in ``lock.remote`` -- keyed by manifest ref, so a
@@ -456,7 +456,7 @@ def _actions(desired: EtsyMediaDesired) -> tuple[Action, ...]:
 def _media_changes(
     desired: EtsyMediaDesired, applied: AppliedEtsyMedia | None
 ) -> tuple[MediaChange, ...]:
-    """One :class:`~etsy_listings.engine.change.MediaChange` per rank whose
+    """One :class:`~etsy_listings.core.engine.change.MediaChange` per rank whose
     ref differs between what was last applied and what this run wants.
 
     Replaces the single "the media manifest changed" reason the plan already

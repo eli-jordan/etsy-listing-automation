@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -23,12 +23,13 @@ from etsy_listings.clients.printify.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.clients.printify.resolve import normalise
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.media import MAX_IMAGES
-from etsy_listings.config.money import Money
-from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.slug import ColourExceptions, SlugCollisionError
+from etsy_listings.core.clients.printify.resolve import normalise
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.media import MAX_IMAGES
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.slug import ColourExceptions, SlugCollisionError
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.newcmd.fx_rate import FxRate
 from etsy_listings.newcmd.logic import (
     build_blueprint_choices,
@@ -51,7 +52,6 @@ from etsy_listings.newcmd.logic import (
     write_listing,
     write_pricing_plan,
 )
-from etsy_listings.workspace.workspace import Workspace
 
 TSHIRT = Blueprint(
     id=6, title="Unisex Garment-Dyed Heavy Weight Tee", brand="Comfort Colors", model="1717"

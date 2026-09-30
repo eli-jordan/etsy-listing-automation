@@ -22,9 +22,9 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from etsy_listings.market.block import market_block
-from etsy_listings.market.models import MarketResult, PhraseScore, ScoredListing
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.market.block import market_block
+from etsy_listings.core.market.models import MarketResult, PhraseScore, ScoredListing
+from etsy_listings.core.workspace.workspace import Workspace
 
 
 class MarketSnapshot(BaseModel):
@@ -44,7 +44,7 @@ class MarketSnapshot(BaseModel):
     relaxed: bool
     empty: bool
     block: str
-    """What :func:`~etsy_listings.market.block.market_block` gave the
+    """What :func:`~etsy_listings.core.market.block.market_block` gave the
     proposal: ``""`` for an empty result."""
 
     @classmethod

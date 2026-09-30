@@ -12,11 +12,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.context import Event, RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import build_plan
-from etsy_listings.engine.stages import STAGES
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.context import Event, RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import build_plan
+from etsy_listings.core.engine.stages import STAGES
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock

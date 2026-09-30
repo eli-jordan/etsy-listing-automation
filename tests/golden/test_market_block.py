@@ -17,9 +17,9 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
-from etsy_listings.clients.etsy.models import ShopStats
-from etsy_listings.market import MARKET_BEGIN, MARKET_END, MarketResult, market_block, research
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
+from etsy_listings.core.clients.etsy.models import ShopStats
+from etsy_listings.core.market import MARKET_BEGIN, MARKET_END, MarketResult, market_block, research
 
 GOLDEN = Path(__file__).parent / "market" / "market_block.txt"
 TODAY = datetime(2026, 9, 24, tzinfo=UTC)

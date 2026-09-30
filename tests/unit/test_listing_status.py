@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.engine.status import (
+from etsy_listings.core.engine.status import (
     edited_since_apply,
     is_live_etsy_state,
     listing_gestures,

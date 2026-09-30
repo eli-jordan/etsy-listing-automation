@@ -7,8 +7,8 @@ from pathlib import Path
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.config.errors import format_validation_error
-from etsy_listings.config.slug import ColourExceptions
+from etsy_listings.core.config.errors import format_validation_error
+from etsy_listings.core.config.slug import ColourExceptions
 
 
 def load_exceptions(path: Path) -> ColourExceptions:

@@ -28,9 +28,9 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from PIL import Image
 
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.slug import SlugCollisionError, slug_map
-from etsy_listings.render.config import (
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.slug import SlugCollisionError, slug_map
+from etsy_listings.core.render.config import (
     AnyTemplate,
     BoundingBox,
     ColourMatrixTemplate,
@@ -40,9 +40,10 @@ from etsy_listings.render.config import (
     SingleTemplate,
     TemplateConfig,
 )
-from etsy_listings.render.io import encode_png
-from etsy_listings.render.pipeline import Layer, render_scene
-from etsy_listings.render.swatch import sample_swatch
+from etsy_listings.core.render.io import encode_png
+from etsy_listings.core.render.pipeline import Layer, render_scene
+from etsy_listings.core.render.swatch import sample_swatch
+from etsy_listings.core.workspace.workspace import AmbiguousColourSuffixError, Workspace
 from etsy_listings.ui.api.designs import resolve_design
 from etsy_listings.ui.api.imagecache import (
     EDITOR_MAX_EDGE,
@@ -62,7 +63,6 @@ from etsy_listings.ui.api.schemas import (
     TemplateSummary,
 )
 from etsy_listings.ui.api.thumbnails import thumbnail_response
-from etsy_listings.workspace.workspace import AmbiguousColourSuffixError, Workspace
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -373,7 +373,7 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
     Not a render: the rail shows every template in the workspace at once, and
     running the real pipeline once per row would make opening the calibrator
     cost as much as calibrating. Which photo is shown is
-    :meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s
+    :meth:`~etsy_listings.core.workspace.workspace.Workspace.template_preview_photo`'s
     question, not this endpoint's.
 
     ``colour`` narrows that to one photo of a ``colour-matrix`` set, for
@@ -382,7 +382,7 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
     ``media`` entry, and without this every colour of a set drew the same
     picture, since ``template_preview_photo`` deliberately answers "any one
     of them". Resolution goes through
-    :meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,
+    :meth:`~etsy_listings.core.workspace.workspace.Workspace.template_base_image`,
     which owns ADR-0004's filename convention and its trailing-segment
     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
 

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from pydantic import ValidationError
 
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.errors import UserFacingError
 
 
 class ConfigLoadError(UserFacingError, ValueError):

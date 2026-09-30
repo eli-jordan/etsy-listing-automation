@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import numpy as np
 
-from etsy_listings.render.config import DisplaceConfig, Point, ShadeConfig
-from etsy_listings.render.passes import displace, export, export_many, shade, warp
+from etsy_listings.core.render.config import DisplaceConfig, Point, ShadeConfig
+from etsy_listings.core.render.passes import displace, export, export_many, shade, warp
 
 IDENTITY_QUAD = (
     Point(x=0.0, y=0.0),

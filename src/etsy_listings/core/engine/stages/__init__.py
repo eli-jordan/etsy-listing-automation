@@ -23,18 +23,18 @@ Running ``setup`` is what opts a workspace in. ``Publish``/``EtsyListing``/
 
 :data:`STAGES` is the interface. A stage's own types (``RenderDesired`` and
 friends) are its business; the engine only ever sees them through the
-:class:`~etsy_listings.engine.stage.Stage` protocol, with their types erased.
+:class:`~etsy_listings.core.engine.stage.Stage` protocol, with their types erased.
 """
 
 from __future__ import annotations
 
-from etsy_listings.engine.stage import AnyStage
-from etsy_listings.engine.stages.etsy_listing import EtsyListingStage
-from etsy_listings.engine.stages.etsy_media import EtsyMediaStage
-from etsy_listings.engine.stages.etsy_videos import EtsyVideosStage
-from etsy_listings.engine.stages.printify_product import PrintifyProductStage
-from etsy_listings.engine.stages.publish import PublishStage
-from etsy_listings.engine.stages.render import RenderStage
+from etsy_listings.core.engine.stage import AnyStage
+from etsy_listings.core.engine.stages.etsy_listing import EtsyListingStage
+from etsy_listings.core.engine.stages.etsy_media import EtsyMediaStage
+from etsy_listings.core.engine.stages.etsy_videos import EtsyVideosStage
+from etsy_listings.core.engine.stages.printify_product import PrintifyProductStage
+from etsy_listings.core.engine.stages.publish import PublishStage
+from etsy_listings.core.engine.stages.render import RenderStage
 
 STAGES: list[AnyStage] = [
     RenderStage(),

@@ -2,7 +2,7 @@
 
 One request, one result, then gone. It exists for the few seconds between
 opening the browser and the user granting consent, and it takes its address
-from :data:`~etsy_listings.clients.etsy.oauth.REDIRECT_URI` rather than a port
+from :data:`~etsy_listings.core.clients.etsy.oauth.REDIRECT_URI` rather than a port
 constant of its own -- Etsy matches the redirect against a registered string
 exactly, so that string is the only thing entitled to say which port this
 listens on.
@@ -16,7 +16,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from typing import Any
 from urllib.parse import parse_qs, urlsplit
 
-from etsy_listings.clients.etsy.oauth import REDIRECT_URI, OAuthError
+from etsy_listings.core.clients.etsy.oauth import REDIRECT_URI, OAuthError
 
 DEFAULT_TIMEOUT_SECONDS = 300.0
 """Five minutes to click through Etsy's consent screen, sign in if the browser

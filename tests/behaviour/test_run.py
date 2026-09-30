@@ -14,28 +14,28 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.clients.printify.models import Blueprint
-from etsy_listings.clients.printify.transport import PrintifyApiError, PrintifyAuthError
-from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.events import (
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
+from etsy_listings.core.clients.printify.models import Blueprint
+from etsy_listings.core.clients.printify.transport import PrintifyApiError, PrintifyAuthError
+from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.events import (
     EngineListingFailed,
     EngineListingPlanned,
     EngineRunEvent,
     EngineStageChecking,
     EngineStagePlanned,
 )
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun
-from etsy_listings.engine.run import (
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import PlannedRun
+from etsy_listings.core.engine.run import (
     StalePlanError,
     apply_listings,
     plan_fingerprint,
     plan_listings,
 )
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.render import RenderStage
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.render import RenderStage
 
 from tests.support.builders import (
     APPLIED_AT,

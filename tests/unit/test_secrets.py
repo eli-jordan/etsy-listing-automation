@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.config.secrets import (
+from etsy_listings.core.config.secrets import (
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     MissingCredentialError,

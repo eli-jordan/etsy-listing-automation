@@ -13,12 +13,12 @@ from __future__ import annotations
 from decimal import Decimal
 from pathlib import Path
 
-from etsy_listings.clients.printify.models import Product, ProductVariant
-from etsy_listings.config.money import Money
-from etsy_listings.engine.change import Drift, FieldChange, ListChange, PriceChange
-from etsy_listings.engine.stages.placement import ArtworkGroup
-from etsy_listings.engine.stages.product_diff import compare
-from etsy_listings.engine.stages.product_document import (
+from etsy_listings.core.clients.printify.models import Product, ProductVariant
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.change import Drift, FieldChange, ListChange, PriceChange
+from etsy_listings.core.engine.stages.placement import ArtworkGroup
+from etsy_listings.core.engine.stages.product_diff import compare
+from etsy_listings.core.engine.stages.product_document import (
     PricedVariant,
     PrintifyProductDesired,
 )

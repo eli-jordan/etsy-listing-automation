@@ -34,19 +34,19 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings import connections
-from etsy_listings.ai.brief import default_brief_prompt_text
-from etsy_listings.ai.market_queries import default_market_queries_prompt_text
-from etsy_listings.ai.prompt import default_seo_prompt_text
-from etsy_listings.ai.providers import AiProvider
-from etsy_listings.clients.etsy import HttpEtsyListingClient
-from etsy_listings.clients.printify import PrintifyClient
-from etsy_listings.engine.context import EventSink, RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.core import connections
+from etsy_listings.core.ai.brief import default_brief_prompt_text
+from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
+from etsy_listings.core.ai.prompt import default_seo_prompt_text
+from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.clients.etsy import HttpEtsyListingClient
+from etsy_listings.core.clients.printify import PrintifyClient
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
+from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.conftest import FIXTURE_WORKSPACE
 from tests.e2e.conftest import PrerequisiteMissing, point_at_throwaway_shops

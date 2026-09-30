@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 
 from etsy_listings import prompts
-from etsy_listings.clients.printify.models import Blueprint
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.clients.printify.models import Blueprint
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.doubles import replies
 
@@ -28,8 +28,8 @@ def _one_garment_catalog():
     -- the pricing-plan picker's "create new" flow always calls
     `catalog.shipping()`, and the fake raises on an unfixtured key rather than
     degrading, unlike the real fail-soft cost/FX fetches."""
-    from etsy_listings.clients.printify.fakes import FakeCatalogClient
-    from etsy_listings.clients.printify.models import (
+    from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
+    from etsy_listings.core.clients.printify.models import (
         PrintAreaPlaceholder,
         PrintProvider,
         ShippingCost,
@@ -168,7 +168,7 @@ def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
     """A `single`-kind template has one output and no colour to name.
     `new` used to write one `{template, colour}` entry per colour regardless of
     kind, which is not a listing the renderer accepts."""
-    from etsy_listings.config.listing import Listing
+    from etsy_listings.core.config.listing import Listing
     from etsy_listings.newcmd.interactive import run_new
 
     _no_network_pricing_plan_generation(monkeypatch)
@@ -202,8 +202,8 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     from datetime import UTC, datetime
     from decimal import Decimal
 
-    from etsy_listings.config.listing import Listing
-    from etsy_listings.config.money import Money
+    from etsy_listings.core.config.listing import Listing
+    from etsy_listings.core.config.money import Money
     from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
     from etsy_listings.newcmd.fx_rate import FxRate
     from etsy_listings.newcmd.interactive import run_new
@@ -237,7 +237,7 @@ def test_new_offers_an_existing_compatible_pricing_plan(
 ) -> None:
     """A plan already on disk for this garment profile is picked straight
     from the list -- the wizard only needs to create one when none exist."""
-    from etsy_listings.config.listing import Listing
+    from etsy_listings.core.config.listing import Listing
     from etsy_listings.newcmd.interactive import run_new
 
     _no_network_pricing_plan_generation(monkeypatch)
@@ -296,7 +296,7 @@ def _write_single_kind_template(directory: Path) -> None:
 
 
 def test_cancelling_the_garment_picker_stops_new(workspace_root: Path, scripted) -> None:
-    from etsy_listings.clients.printify.fakes import FakeCatalogClient
+    from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
     from etsy_listings.newcmd.interactive import run_new
 
     scripted({**NEW_WIZARD, "Garment": None})

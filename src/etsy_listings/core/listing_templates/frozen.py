@@ -16,12 +16,12 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.listing_validation import Issue
-from etsy_listings.listing_templates.check import check_listing_template_files
-from etsy_listings.listing_templates.convert import AssetCopy, owned_refs
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.listing_validation import Issue
+from etsy_listings.core.listing_templates.check import check_listing_template_files
+from etsy_listings.core.listing_templates.convert import AssetCopy, owned_refs
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 
 TemplateLock = Callable[[str], AbstractContextManager[object]]
 

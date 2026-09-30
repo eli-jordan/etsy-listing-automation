@@ -1,5 +1,5 @@
 """The 7-day market caches (features/market-seo-20260924/spec.md, *Cache*), wrapping any
-:class:`~etsy_listings.clients.etsy.market.EtsyMarketClient` the way
+:class:`~etsy_listings.core.clients.etsy.market.EtsyMarketClient` the way
 ``clients/printify/cache.py`` wraps a catalog client.
 
 Two caches, both under ``.cache/market/`` (gitignored, fully derivable --
@@ -37,9 +37,9 @@ from typing import Any
 
 from pydantic import TypeAdapter, ValidationError
 
-from etsy_listings.clients.etsy.market import EtsyMarketClient, search_params
-from etsy_listings.clients.etsy.models import ALREADY_DECODED, MarketCandidate, MarketListing
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient, search_params
+from etsy_listings.core.clients.etsy.models import ALREADY_DECODED, MarketCandidate, MarketListing
+from etsy_listings.core.workspace.workspace import Workspace
 
 DEFAULT_TTL = timedelta(days=7)
 

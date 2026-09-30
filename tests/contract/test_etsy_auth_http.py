@@ -18,9 +18,9 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.clients.etsy import oauth
-from etsy_listings.clients.etsy.tokens import EtsyAuthError
-from etsy_listings.clients.etsy.transport import PING_PATH, EtsyApiError
+from etsy_listings.core.clients.etsy import oauth
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.core.clients.etsy.transport import PING_PATH, EtsyApiError
 
 from tests.support.http import etsy_oauth_client, etsy_transport
 

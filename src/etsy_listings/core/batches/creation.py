@@ -34,18 +34,18 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.batches.naming import allocate
-from etsy_listings.batches.records import Batch, BatchRow, BatchStore, StagingStore
-from etsy_listings.batches.staging import review, taken_for, workspace_names
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.listing import Listing
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.errors import UserFacingError
-from etsy_listings.listing_templates import FrozenListingTemplate
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.atomic import write_bytes_atomic
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.batches.naming import allocate
+from etsy_listings.core.batches.records import Batch, BatchRow, BatchStore, StagingStore
+from etsy_listings.core.batches.staging import review, taken_for, workspace_names
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.listing_templates import FrozenListingTemplate
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.atomic import write_bytes_atomic
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 
 NameLock = Callable[[str], AbstractContextManager[object]]
 """A listing name's write lock -- the UI's ``WorkspaceLocks.listing`` -- held

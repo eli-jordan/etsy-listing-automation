@@ -16,7 +16,7 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from etsy_listings.ai.models import (
+from etsy_listings.core.ai.models import (
     Deadline,
     GarmentContext,
     PhraseRationale,

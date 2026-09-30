@@ -28,10 +28,10 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings.clients.printify.fakes import FakeCatalogClient
-from etsy_listings.engine.context import EventSink, RunContext
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import copy_listing

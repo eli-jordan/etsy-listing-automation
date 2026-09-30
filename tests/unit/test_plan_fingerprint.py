@@ -2,7 +2,7 @@
 before running a single stage.
 
 Pure and unit-testable without a workspace, a lockfile or a fake client --
-``plan_fingerprint`` takes only a :class:`~etsy_listings.engine.change.Plan`.
+``plan_fingerprint`` takes only a :class:`~etsy_listings.core.engine.change.Plan`.
 """
 
 from __future__ import annotations
@@ -11,8 +11,8 @@ from decimal import Decimal
 
 from pydantic import BaseModel
 
-from etsy_listings.config.money import Money
-from etsy_listings.engine.change import (
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.change import (
     Action,
     Drift,
     FieldChange,
@@ -21,7 +21,7 @@ from etsy_listings.engine.change import (
     PriceChange,
     StagePlan,
 )
-from etsy_listings.engine.run import plan_fingerprint
+from etsy_listings.core.engine.run import plan_fingerprint
 
 
 class _Snapshot(BaseModel):

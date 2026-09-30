@@ -13,8 +13,8 @@ from __future__ import annotations
 import shutil
 from pathlib import Path
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.engine.run import apply_listings, plan_listings
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.engine.run import apply_listings, plan_listings
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing

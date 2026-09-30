@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.ai.brief import (
+from etsy_listings.core.ai.brief import (
     BRIEF_RESPONSE_SCHEMA,
     MAX_BRIEF_LENGTH,
     BriefRequest,
@@ -25,7 +25,7 @@ from etsy_listings.ai.brief import (
     default_brief_prompt_text,
     validate_brief,
 )
-from etsy_listings.ai.prompt import CONTEXT_BEGIN, CONTEXT_END, SCHEMA_BEGIN, SCHEMA_END
+from etsy_listings.core.ai.prompt import CONTEXT_BEGIN, CONTEXT_END, SCHEMA_BEGIN, SCHEMA_END
 
 
 def _request() -> BriefRequest:

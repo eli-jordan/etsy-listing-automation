@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai.errors import (
     ProviderGenerationError,
     ProviderUnavailableError,
     SeoTryAgainError,

@@ -17,8 +17,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
-from etsy_listings.ai.proposals import ListingProposal
-from etsy_listings.market.snapshot import MarketSnapshot
+from etsy_listings.core.ai.proposals import ListingProposal
+from etsy_listings.core.market.snapshot import MarketSnapshot
 from etsy_listings.ui.api.schemas import StepId as StepId
 from etsy_listings.ui.api.schemas import StepState as StepState
 from etsy_listings.ui.api.schemas import WorkflowStep as WorkflowStep

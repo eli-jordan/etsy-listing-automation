@@ -17,12 +17,12 @@ from pathlib import Path
 import httpx
 import pytest
 
-from etsy_listings.clients.printify import (
+from etsy_listings.core.clients.printify import (
     HttpCatalogClient,
     PrintifyApiError,
     PrintifyAuthError,
 )
-from etsy_listings.config.secrets import MissingCredentialError, Secrets
+from etsy_listings.core.config.secrets import MissingCredentialError, Secrets
 
 from tests.support.http import transport
 

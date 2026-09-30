@@ -36,16 +36,16 @@ import uvicorn
 import yaml
 from playwright.sync_api import Page, expect
 
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
     ProviderUnavailableError,
 )
-from etsy_listings.ai.models import Deadline, ProviderReadiness, RawProviderResult
-from etsy_listings.ai.providers import AiProvider, FakeAiProvider
-from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient
-from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.ai.models import Deadline, ProviderReadiness, RawProviderResult
+from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -55,17 +55,17 @@ from etsy_listings.clients.printify.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.config.description import compose_description
-from etsy_listings.engine.context import EventSink, RunContext
-from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
-from etsy_listings.workspace.layout import (
+from etsy_listings.core.config.description import compose_description
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.workspace.layout import (
     BRIEF_PROMPT_FILE,
     COMMON_COPY_DIR,
     MARKET_QUERIES_PROMPT_FILE,
     PROMPTS_DIR,
     SEO_PROMPT_FILE,
 )
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
 
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_snapshot, seeded_market
 from tests.support.builders import FIXTURE_LISTING as LISTING

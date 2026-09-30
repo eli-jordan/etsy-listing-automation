@@ -29,9 +29,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
-from etsy_listings.ai.models import SeoProposal
-from etsy_listings.workspace.atomic import read_bytes_retrying, write_json_atomic
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.ai.models import SeoProposal
+from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_json_atomic
+from etsy_listings.core.workspace.workspace import Workspace
 
 SCHEMA = 1
 

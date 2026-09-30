@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from etsy_listings.engine.change import (
+from etsy_listings.core.engine.change import (
     FieldChange,
     StageBlocked,
     StageIdle,

@@ -30,7 +30,7 @@ import threading
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
-from etsy_listings.ai.models import (
+from etsy_listings.core.ai.models import (
     Deadline,
     ProviderReadiness,
     ProviderTask,

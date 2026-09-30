@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from etsy_listings.workspace import layout
+from etsy_listings.core.workspace import layout
 
 GITIGNORE_ENTRIES: tuple[tuple[str, str], ...] = (
     (layout.ENV_FILE, "API tokens -- never commit"),

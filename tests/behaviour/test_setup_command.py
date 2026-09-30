@@ -18,15 +18,15 @@ import typer
 import yaml
 
 from etsy_listings import prompts
-from etsy_listings.clients.etsy.fakes import FakeEtsyShopClient
-from etsy_listings.clients.etsy.models import ReturnPolicy
-from etsy_listings.clients.etsy.models import Shop as EtsyShop
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
-from etsy_listings.clients.printify.models import Shop
-from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyShopClient
+from etsy_listings.core.clients.etsy.models import ReturnPolicy
+from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
+from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.clients.printify.models import Shop
+from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.setupcmd.interactive import EtsyAccess, run_setup
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.workspace import Workspace
 
 ONE_SHOP = [Shop(id=28819281, title="My new store", sales_channel="disconnected")]
 CONNECTED_SHOP = [Shop(id=28819281, title="TakeAHikeTees", sales_channel="etsy")]

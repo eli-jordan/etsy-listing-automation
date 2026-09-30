@@ -24,13 +24,13 @@ import shutil
 from dataclasses import dataclass
 from pathlib import Path
 
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.listing_validation import Issue
-from etsy_listings.errors import UserFacingError
-from etsy_listings.listing_templates.check import check_listing_template_files
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import InvalidRefError, Workspace, remove_tree
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.listing_validation import Issue
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.listing_templates.check import check_listing_template_files
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import InvalidRefError, Workspace, remove_tree
 
 _ASSETS_REF = f"./{layout.LISTING_TEMPLATE_ASSETS_DIR}/"
 

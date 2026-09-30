@@ -13,7 +13,7 @@ it did not need was a second copy of the plumbing. Both halves carried their
 own ``TokenSource``, lazy token resolve, ``401/403`` branch, auth error, base
 URL and ``httpx.Client`` -- and the copies had already drifted, the catalog
 reader having no retries at all while the identical failure on a write rode
-out its backoff.:mod:`~etsy_listings.clients.printify.transport` is now
+out its backoff.:mod:`~etsy_listings.core.clients.printify.transport` is now
 the one implementation, and the authority lives where it always belonged, in
 the protocols.
 
@@ -33,10 +33,10 @@ state this tool is converging on, and a cached read of them would make ``plan``
 report a diff against a stale world.
 """
 
-from etsy_listings.clients.printify.cache import DEFAULT_TTL, CachedCatalogClient
-from etsy_listings.clients.printify.catalog import HttpCatalogClient
-from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.cache import DEFAULT_TTL, CachedCatalogClient
+from etsy_listings.core.clients.printify.catalog import HttpCatalogClient
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -47,9 +47,9 @@ from etsy_listings.clients.printify.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.clients.printify.products import HttpPrintifyClient
-from etsy_listings.clients.printify.protocol import CatalogClient, PrintifyClient
-from etsy_listings.clients.printify.resolve import (
+from etsy_listings.core.clients.printify.products import HttpPrintifyClient
+from etsy_listings.core.clients.printify.protocol import CatalogClient, PrintifyClient
+from etsy_listings.core.clients.printify.resolve import (
     AmbiguousBlueprintError,
     CatalogResolutionError,
     ResolvedVariant,
@@ -59,7 +59,7 @@ from etsy_listings.clients.printify.resolve import (
     resolve_print_provider,
     resolve_variants,
 )
-from etsy_listings.clients.printify.transport import (
+from etsy_listings.core.clients.printify.transport import (
     BASE_URL,
     PrintifyApiError,
     PrintifyAuthError,

@@ -23,17 +23,17 @@ from datetime import datetime
 
 import httpx
 
-from etsy_listings.clients.etsy.market import EtsyMarketClient
-from etsy_listings.clients.etsy.models import MarketCandidate, MarketListing
-from etsy_listings.config.market_weights import MarketWeights, Metric
-from etsy_listings.errors import UserFacingError
-from etsy_listings.market.block import lead
-from etsy_listings.market.models import (
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient
+from etsy_listings.core.clients.etsy.models import MarketCandidate, MarketListing
+from etsy_listings.core.config.market_weights import MarketWeights, Metric
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.market.block import lead
+from etsy_listings.core.market.models import (
     MarketResult,
     ScoredListing,
 )
-from etsy_listings.market.phrases import rank_phrases
-from etsy_listings.market.scoring import display_score, rescaled, weighted
+from etsy_listings.core.market.phrases import rank_phrases
+from etsy_listings.core.market.scoring import display_score, rescaled, weighted
 
 SEARCH_LIMIT = 25
 """Results per query: 3 x 25 gives about sixty unique candidates."""

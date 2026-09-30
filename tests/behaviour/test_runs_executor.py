@@ -11,8 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.printify.fakes import FakeCatalogClient
-from etsy_listings.engine.context import EventSink, RunContext
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.runs.events import TERMINAL_PHASES
 from etsy_listings.ui.runs.executor import INTERNAL_ERROR_MESSAGE, RunExecutor
 from etsy_listings.ui.runs.registry import (
@@ -23,7 +24,6 @@ from etsy_listings.ui.runs.registry import (
     RunRegistry,
     WorkspacePlan,
 )
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import copy_listing

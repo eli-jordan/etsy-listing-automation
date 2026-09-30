@@ -32,14 +32,14 @@ from pydantic import ValidationError
 
 # By module: the draft endpoint's query parameters are called ``from_listing``
 # and ``from_template`` (the plan's route), which would shadow the functions.
-from etsy_listings import listing_templates as conversion
-from etsy_listings.batches import BatchStore, StagingStore
-from etsy_listings.config.description import DescriptionConfig
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.listing_validation import Issue as ValidationIssue
-from etsy_listings.config.listing_validation import required_design_pixels
-from etsy_listings.listing_templates import (
+from etsy_listings.core import listing_templates as conversion
+from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.config.description import DescriptionConfig
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.listing_validation import Issue as ValidationIssue
+from etsy_listings.core.config.listing_validation import required_design_pixels
+from etsy_listings.core.listing_templates import (
     ListingTemplateDraft,
     ListingTemplateExistsError,
     UnreadableAssetError,
@@ -47,6 +47,8 @@ from etsy_listings.listing_templates import (
     save,
     template_issues,
 )
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.listings import field_errors_of, pricing_summary
 from etsy_listings.ui.api.schemas import (
     CreateListingTemplateRequest,
@@ -60,8 +62,6 @@ from etsy_listings.ui.api.schemas import (
     RenameListingRequest,
 )
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/listing-templates", tags=["listing-templates"])
 

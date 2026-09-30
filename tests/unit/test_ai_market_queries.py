@@ -17,17 +17,17 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.ai.errors import ProviderUnavailableError, SeoTryAgainError
-from etsy_listings.ai.market_queries import (
+from etsy_listings.core.ai.errors import ProviderUnavailableError, SeoTryAgainError
+from etsy_listings.core.ai.market_queries import (
     MarketQueries,
     MarketQueriesRequest,
     MarketQueriesValidationError,
     build_market_queries_task,
     validate_market_queries,
 )
-from etsy_listings.ai.models import Deadline, ProviderTask, RawProviderResult, RepairContext
-from etsy_listings.ai.orchestrator import generate_market_queries
-from etsy_listings.ai.providers import FakeAiProvider
+from etsy_listings.core.ai.models import Deadline, ProviderTask, RawProviderResult, RepairContext
+from etsy_listings.core.ai.orchestrator import generate_market_queries
+from etsy_listings.core.ai.providers import FakeAiProvider
 
 PROMPT = "Write three queries.\n"
 

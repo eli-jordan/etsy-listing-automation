@@ -24,9 +24,9 @@ import pytest
 from PIL import Image
 from scripts.migrate_workspace_refs import main as migrate
 
-from etsy_listings.engine.change import MediaChange
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.run import apply_listings, plan_listings
+from etsy_listings.core.engine.change import MediaChange
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.run import apply_listings, plan_listings
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing, listing_file

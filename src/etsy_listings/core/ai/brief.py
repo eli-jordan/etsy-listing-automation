@@ -27,8 +27,8 @@ from importlib import resources
 from pathlib import Path
 from typing import Any, Final
 
-from etsy_listings.ai.models import ProviderTask
-from etsy_listings.ai.prompt import build_task_prompt
+from etsy_listings.core.ai.models import ProviderTask
+from etsy_listings.core.ai.prompt import build_task_prompt
 
 MAX_BRIEF_LENGTH: Final = 1000
 """A ceiling, not a target -- `prompts/brief.md` asks for under 500
@@ -107,7 +107,7 @@ def default_brief_prompt_text() -> str:
     data each call, for the same reason
     `ai/prompt.py.default_seo_prompt_text` is."""
     return (
-        resources.files("etsy_listings.ai.resources")
+        resources.files("etsy_listings.core.ai.resources")
         .joinpath("brief.md")
         .read_text(encoding="utf-8")
     )

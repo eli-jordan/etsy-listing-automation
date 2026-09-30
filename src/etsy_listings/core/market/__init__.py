@@ -6,10 +6,10 @@ Research results are in memory. Disk cache/snapshot adapters are imported
 by their own module names. MarketWeights is owned by config and re-exported
 here for compatibility; settings loading never imports market.
 
-- ``market.cache`` -- :class:`~etsy_listings.market.cache.CachedEtsyMarketClient`,
+- ``market.cache`` -- :class:`~etsy_listings.core.market.cache.CachedEtsyMarketClient`,
   the 7-day caches wrapped around any
-  :class:`~etsy_listings.clients.etsy.market.EtsyMarketClient`;
-- ``market.snapshot`` -- :class:`~etsy_listings.market.snapshot.MarketSnapshot`
+  :class:`~etsy_listings.core.clients.etsy.market.EtsyMarketClient`;
+- ``market.snapshot`` -- :class:`~etsy_listings.core.market.snapshot.MarketSnapshot`
   and its ``save``/``load``, the latest research per listing.
 
 - ``research`` -- :func:`research`, the whole search, filter, stats and
@@ -27,9 +27,9 @@ one way to compute each.
 
 from __future__ import annotations
 
-from etsy_listings.market.block import MARKET_BEGIN, MARKET_END, lead, market_block
-from etsy_listings.market.models import MarketResult, MarketWeights, PhraseScore, ScoredListing
-from etsy_listings.market.research import MarketResearchError, ResearchCancelled, research
+from etsy_listings.core.market.block import MARKET_BEGIN, MARKET_END, lead, market_block
+from etsy_listings.core.market.models import MarketResult, MarketWeights, PhraseScore, ScoredListing
+from etsy_listings.core.market.research import MarketResearchError, ResearchCancelled, research
 
 __all__ = [
     "MARKET_BEGIN",

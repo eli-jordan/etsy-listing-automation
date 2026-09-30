@@ -14,8 +14,8 @@ from __future__ import annotations
 
 from typing import Any, Protocol
 
-from etsy_listings.clients.etsy.models import ReturnPolicy, Shop, ShopSection
-from etsy_listings.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
+from etsy_listings.core.clients.etsy.models import ReturnPolicy, Shop, ShopSection
+from etsy_listings.core.clients.etsy.transport import HTTP_NOT_FOUND, EtsyApiError, Transport
 
 
 class EtsyShopClient(Protocol):

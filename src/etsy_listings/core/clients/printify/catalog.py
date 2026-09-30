@@ -12,7 +12,7 @@ Printify answers ``401 Unauthorized``. That mistake is why ``new`` died on a
 raw httpx traceback.
 
 Everything between a path and a decoded response -- the token, the retries,
-the error shapes -- is :mod:`~etsy_listings.clients.printify.transport`,
+the error shapes -- is :mod:`~etsy_listings.core.clients.printify.transport`,
 shared with the write side. What is not shared is the surface: this class
 satisfies :class:`CatalogClient` and nothing else, so a caller holding one
 cannot reach a call that creates a product.
@@ -20,7 +20,7 @@ cannot reach a call that creates a product.
 
 from __future__ import annotations
 
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -31,8 +31,8 @@ from etsy_listings.clients.printify.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.clients.printify.protocol import CatalogClient
-from etsy_listings.clients.printify.transport import Transport
+from etsy_listings.core.clients.printify.protocol import CatalogClient
+from etsy_listings.core.clients.printify.transport import Transport
 
 
 class HttpCatalogClient(CatalogClient):

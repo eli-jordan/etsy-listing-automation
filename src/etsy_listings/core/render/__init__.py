@@ -1,7 +1,7 @@
 """Turning a design and a blank mockup photo into a composite. ADR-0012.
 
 Pure: ndarrays and frozen config in, an image out. No I/O outside
-:mod:`~etsy_listings.render.io` and :class:`DerivedMapCache`, no globals, no
+:mod:`~etsy_listings.core.render.io` and :class:`DerivedMapCache`, no globals, no
 clock -- which is what makes both the lockfile's input hash and the golden
 suite meaningful. Nothing here knows a workspace, a listing or a Printify
 product exists; callers own opening files and handing over arrays.
@@ -12,7 +12,7 @@ what reads and writes it (``load_template_config`` here only parses data
 already in hand).
 """
 
-from etsy_listings.render.config import (
+from etsy_listings.core.render.config import (
     AnyTemplate,
     BoundingBox,
     ColourMatrixTemplate,
@@ -27,17 +27,17 @@ from etsy_listings.render.config import (
     dump_template_config,
     load_template_config,
 )
-from etsy_listings.render.io import (
+from etsy_listings.core.render.io import (
     DesignValidationError,
     encode_png,
     load_design,
     load_template_base,
     save_png,
 )
-from etsy_listings.render.maps import DerivedMapCache, height_map, luminance_map
-from etsy_listings.render.pipeline import Layer, render_scene
-from etsy_listings.render.swatch import sample_swatch
-from etsy_listings.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.render.maps import DerivedMapCache, height_map, luminance_map
+from etsy_listings.core.render.pipeline import Layer, render_scene
+from etsy_listings.core.render.swatch import sample_swatch
+from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
 __all__ = [
     # The array vocabulary every function here speaks.

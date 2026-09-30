@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.config.slug import ColourExceptions, SlugCollisionError, slug_map, slugify
+from etsy_listings.core.config.slug import ColourExceptions, SlugCollisionError, slug_map, slugify
 
 
 @pytest.mark.parametrize(

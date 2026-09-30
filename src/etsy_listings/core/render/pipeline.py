@@ -3,7 +3,7 @@ layer, in fixed order, then folded over one base.
 
 One function for all three template kinds. There used to be a second,
 ``render()``, for the single-layer case -- but it was the same sequence ending
-in :func:`~etsy_listings.render.passes.export` instead of ``export_many``, and
+in :func:`~etsy_listings.core.render.passes.export` instead of ``export_many``, and
 those perform identical arithmetic over one layer (pinned by
 ``test_export_many_with_one_layer_matches_export``, and by the end-to-end
 goldens). Both callers -- the render stage and the calibrator's preview
@@ -21,9 +21,9 @@ from dataclasses import dataclass
 
 from PIL import Image
 
-from etsy_listings.render.config import RenderConfig
-from etsy_listings.render.passes import displace, export_many, shade, warp
-from etsy_listings.render.types import RGB, RGBA, FloatMap
+from etsy_listings.core.render.config import RenderConfig
+from etsy_listings.core.render.passes import displace, export_many, shade, warp
+from etsy_listings.core.render.types import RGB, RGBA, FloatMap
 
 
 @dataclass(frozen=True)

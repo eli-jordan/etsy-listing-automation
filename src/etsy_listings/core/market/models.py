@@ -3,16 +3,16 @@ proposal sees*), and the weights it scores with.
 
 All of it is in memory and frozen: research returns a :class:`MarketResult`
 and forgets it. Persisting one is the snapshot's job (PR 3), and sending one
-to a model is :mod:`etsy_listings.market.block`'s.
+to a model is :mod:`etsy_listings.core.market.block`'s.
 """
 
 from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.config.market_weights import METRICS as METRICS
-from etsy_listings.config.market_weights import MarketWeights as MarketWeights
-from etsy_listings.config.market_weights import Metric as Metric
+from etsy_listings.core.config.market_weights import METRICS as METRICS
+from etsy_listings.core.config.market_weights import MarketWeights as MarketWeights
+from etsy_listings.core.config.market_weights import Metric as Metric
 
 
 class ScoredListing(BaseModel):

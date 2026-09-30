@@ -15,11 +15,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
 
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun
-from etsy_listings.engine.stage import Blocked
-from etsy_listings.engine.stages.render import (
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import PlannedRun
+from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stages.render import (
     RenderApplied,
     RenderSnapshot,
     RenderStage,
@@ -91,7 +91,7 @@ def lookup_preview(
     *current* hash -- never a path built from ``template``/``colour``
     directly. Both arrive from a URL; ``Workspace.preview_file`` is what
     turns them into a real path, and only once this recomputes the same
-    :func:`~etsy_listings.engine.stages.render.scene_hash` a plan run would
+    :func:`~etsy_listings.core.engine.stages.render.scene_hash` a plan run would
     right now -- a stale preview from before the last edit must not be
     served as if it still matched.
     """

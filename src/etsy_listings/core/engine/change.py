@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
-from etsy_listings.config.money import Money
+from etsy_listings.core.config.money import Money
 
 
 @dataclass(frozen=True)
@@ -61,7 +61,7 @@ class Drift:
     drift is already scalar text (a title, a boolean) with nothing to name,
     and a stage with no catalog to ask (``product_diff``, ``publish``) simply
     never sets these. Filled by `etsy_listing._drift` from the
-    :class:`~etsy_listings.clients.etsy.shopcatalog.EtsyShopCatalog` ADR-0033
+    :class:`~etsy_listings.core.clients.etsy.shopcatalog.EtsyShopCatalog` ADR-0033
     already resolved this run, so naming an id costs no request `plan()`'s own
     comparison was not already going to make -- `plan()` stays pure (no
     client) by never asking one itself."""

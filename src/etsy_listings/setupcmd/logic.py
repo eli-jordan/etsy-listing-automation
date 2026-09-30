@@ -15,9 +15,9 @@ from typing import Any
 
 import yaml
 
-from etsy_listings.clients.etsy.models import Shop as EtsyShop
-from etsy_listings.clients.printify.models import Shop
-from etsy_listings.workspace import layout
+from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
+from etsy_listings.core.clients.printify.models import Shop
+from etsy_listings.core.workspace import layout
 
 WORKSPACE_DIRS: tuple[str, ...] = (
     layout.DESIGNS_DIR,

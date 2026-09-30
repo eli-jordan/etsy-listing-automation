@@ -26,8 +26,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from etsy_listings.clients.printify.models import Product
-from etsy_listings.engine.change import (
+from etsy_listings.core.clients.printify.models import Product
+from etsy_listings.core.engine.change import (
     Action,
     Change,
     Drift,
@@ -39,7 +39,7 @@ from etsy_listings.engine.change import (
     scalar,
     sequence,
 )
-from etsy_listings.engine.stages.product_document import (
+from etsy_listings.core.engine.stages.product_document import (
     AppliedProduct,
     PrintifyProductDesired,
     money,
@@ -52,7 +52,7 @@ __all__ = ["ProductComparison", "compare"]
 class ProductComparison:
     """What a run would do about this product, and why.
 
-    The fields map one-to-one onto the :class:`~etsy_listings.engine.change.StagePlan`
+    The fields map one-to-one onto the :class:`~etsy_listings.core.engine.change.StagePlan`
     the stage returns, so the stage assembles rather than decides.
     """
 
@@ -166,7 +166,7 @@ def _colour_change(wanted: AppliedProduct, was: AppliedProduct) -> Change | None
     """A named colour added or removed.
 
     Read straight off each variant's own ``colour_slug`` -- carried on
-    :class:`~etsy_listings.engine.stages.product_document.AppliedVariant`
+    :class:`~etsy_listings.core.engine.stages.product_document.AppliedVariant`
     itself rather than looked up from this run's catalog resolution, which is
     what lets a colour Printify has since discontinued still be
     named in ``removed``: it has no cell left to resolve, but it still has the
