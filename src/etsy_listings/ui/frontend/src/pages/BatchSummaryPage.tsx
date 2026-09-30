@@ -41,7 +41,8 @@ import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
  * the seller's own judgement, offered only where the server says the row
  * is reviewable. The label renames by double-click, and Delete batch record
  * removes only the batch's own history (spec, *Cancellation and deletion*).
- * A deleted listing's row stays, struck through (A42). Open carries
+ * A deleted listing's row stays, struck through (A42). A row whose AI work a
+ * deploy cancelled says so and keeps its own Retry (A43; UI doc §8). Open carries
  * `?batch=`, which is what shows the editor's Back to batch (UI doc §8).
  */
 
@@ -59,7 +60,8 @@ function createdAt(iso: string): string {
   return `${today ? "today" : `on ${dayMonth(created)}`} at ${clock(created)}`;
 }
 
-type Kind = "drafted" | "drafting" | "queued" | "retry" | "stopped" | "deleted" | "none";
+type Kind =
+  "drafted" | "drafting" | "queued" | "retry" | "stopped" | "deployed" | "deleted" | "none";
 
 function kindOf(row: BatchRow): Kind {
   if (row.deleted) return "deleted";
@@ -77,6 +79,8 @@ function kindOf(row: BatchRow): Kind {
     case "stopped":
     case "cancelled":
       return "stopped";
+    case "cancelled_by_deploy":
+      return "deployed";
     default:
       return "none";
   }
@@ -154,6 +158,15 @@ function AiCell({ row }: { row: BatchRow }) {
         <span className="bc-status bc-status--info">
           <MinusCircleIcon className="bc-icon" />
           Stopped. Resume queues it again.
+        </span>
+      );
+    case "cancelled_by_deploy":
+      // A43: a deploy of the listing cancelled its AI work, and Resume
+      // leaves it so no proposal lands on the deployed listing.
+      return (
+        <span className="bc-status bc-status--info">
+          <MinusCircleIcon className="bc-icon" />
+          Cancelled for deploy. Retry drafts it again.
         </span>
       );
     default:
@@ -367,6 +380,11 @@ export function BatchSummaryPage() {
                 <strong>{count("stopped")}</strong> stopped
               </span>
             )}
+            {count("deployed") > 0 && (
+              <span className="bc-count bc-muted">
+                <strong>{count("deployed")}</strong> cancelled for deploy
+              </span>
+            )}
             {count("deleted") > 0 && (
               <span className="bc-count bc-muted">
                 <strong>{count("deleted")}</strong> deleted
@@ -413,7 +431,9 @@ export function BatchSummaryPage() {
             <tbody>
               {rows.map((row, index) => {
                 const open = row.creation === "created" && !row.deleted;
-                const retryable = kinds[index] === "retry";
+                // A deploy's cancelled row has only its own Retry: Resume
+                // skips it, and it is not a failure for Retry N failed (A43).
+                const retryable = kinds[index] === "retry" || kinds[index] === "deployed";
                 return (
                   <tr key={row.id} className={open ? undefined : "bc-tr--muted"}>
                     <td>

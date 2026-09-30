@@ -91,16 +91,23 @@ def printify_client_for(token: str) -> PrintifyClient:
     return HttpPrintifyClient(Transport(token))
 
 
-def catalog_client(workspace: Workspace) -> CatalogClient:
-    """Blueprints, providers and variants, over the workspace's disk cache."""
+def catalog_client(workspace: Workspace, *, credentials_root: Path | None = None) -> CatalogClient:
+    """Blueprints, providers and variants, over the workspace's disk cache.
+
+    ``credentials_root`` lets the E2E layer borrow a configured workspace's
+    token while keeping all derived cache state in its disposable workspace.
+    """
     return CachedCatalogClient(
-        HttpCatalogClient(printify_transport(workspace.root)), workspace.catalog_cache_dir()
+        HttpCatalogClient(printify_transport(credentials_root or workspace.root)),
+        workspace.catalog_cache_dir(),
     )
 
 
-def printify_client(workspace: Workspace) -> PrintifyClient:
+def printify_client(
+    workspace: Workspace, *, credentials_root: Path | None = None
+) -> PrintifyClient:
     """The shop-scoped, writing half of the Printify surface."""
-    return HttpPrintifyClient(printify_transport(workspace.root))
+    return HttpPrintifyClient(printify_transport(credentials_root or workspace.root))
 
 
 # ---------------------------------------------------------------------- Etsy
@@ -214,19 +221,29 @@ def etsy_market_client(root: Path, *, http: httpx.Client | None = None) -> EtsyM
 # ------------------------------------------------------------------- the run
 
 
-def run_context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
+def run_context(
+    workspace: Workspace,
+    on_event: EventSink | None = None,
+    *,
+    credentials_root: Path | None = None,
+) -> RunContext:
     """Everything a run may need, none of it demanded up front.
 
     The optional clients are what let one context serve every phase: a
     workspace with no Printify shop and no Etsy sign-in still plans and still
     renders, and the stages that need a client report themselves blocked
     rather than the run failing to start (A20, A26).
+
+    ``credentials_root`` is the E2E seam for a disposable data workspace that
+    borrows a configured workspace's secrets. Only credentials come from it;
+    the catalog cache remains under ``workspace`` (A8).
     """
     sink = {"on_event": on_event} if on_event is not None else {}
+    root = credentials_root or workspace.root
     return RunContext(
         workspace=workspace,
-        catalog=catalog_client(workspace),
-        printify=printify_client(workspace),
-        etsy=etsy_listing_client(workspace.root),
+        catalog=catalog_client(workspace, credentials_root=root),
+        printify=printify_client(workspace, credentials_root=root),
+        etsy=etsy_listing_client(root),
         **sink,
     )

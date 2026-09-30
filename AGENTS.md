@@ -233,7 +233,12 @@ src/etsy_listings/
                   thread starting queued batch rows as `origin="batch"` runs,
                   `batch_ai.concurrency` at a time, round-robin across
                   batches; `app.state.batch_queue`. Row states live in the
-                  batch record, so a restart requeues what was running
+                  batch record, so a restart requeues what was running.
+                  `yield_to_deploy` is how the runs executor takes a
+                  listing from AI work before a plan or apply reads it
+                  (A43): queued rows become `cancelled_by_deploy`, active
+                  runs are stopped and waited for, and new ones are
+                  refused `deploying` until the run ends
                 airuns/ -- AI runs (market-seo.md, *AI runs*): brief, market
                   research and proposal as one run per listing, each on its
                   own daemon thread (never the plan/apply executor), streamed

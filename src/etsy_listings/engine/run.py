@@ -32,6 +32,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from etsy_listings import __about__
+from etsy_listings.ai import ProposalStore
 from etsy_listings.config.money import Money
 from etsy_listings.engine.apply import execute
 from etsy_listings.engine.change import Plan
@@ -93,6 +94,23 @@ class RunReport:
     @property
     def failures(self) -> tuple[ListingOutcome, ...]:
         return tuple(outcome for outcome in self.outcomes if not outcome.ok)
+
+
+def fully_applied(outcome: ListingOutcome, lock: Lockfile) -> bool:
+    """Whether ``outcome``'s apply was a *full success* (A44; spec,
+    *Deployment interaction*): the listing is ``ok``, no stage of its plan
+    was blocked, and ``lock`` -- the lockfile the apply left -- carries no
+    ``incomplete`` marker (A29).
+
+    ``ok`` alone is not enough: a blocked stage is not a failure (the CLI
+    says so out loud rather than failing the run), so a listing whose Etsy
+    stages were all blocked reads ``ok`` having deployed nothing there.
+    """
+    if not outcome.ok or outcome.planned is None:
+        return False
+    if any(stage_plan.blocked for stage_plan in outcome.planned.plan.stage_plans):
+        return False
+    return lock.incomplete is None
 
 
 def _never_stop() -> bool:
@@ -268,6 +286,10 @@ def apply_listings(
     inside the *current* listing's apply is also a place this can stop --
     which is the shutdown guarantee decision 7 makes (finish the stage in
     progress, start no other). ``None`` behaves exactly as before.
+
+    A listing that ends :func:`fully_applied` loses its cached AI proposal
+    (A44): the proposal described copy that is now deployed or deliberately
+    not taken, and every entry point must leave the same proposal state.
     """
     stop = should_stop or _never_stop
 
@@ -280,15 +302,35 @@ def apply_listings(
                 raise StalePlanError(listing, planned)
         on_event(EngineListingPlanned(listing, planned.plan))
         lock_file = ctx.workspace.lock_file(listing)
-        execute(
+        halted = False
+
+        def stop_here() -> bool:
+            # `execute` breaks out of its loop the first time this answers
+            # True, so remembering that answer is knowing it stopped.
+            nonlocal halted
+            halted = halted or stop()
+            return halted
+
+        applied = execute(
             ctx,
             planned,
             lock,
             on_event=on_event,
             record=lambda updated: updated.write(lock_file),
-            should_stop=stop,
+            should_stop=stop_here,
         )
+        if halted:
+            # A33's graceful stop skipped stages the plan meant to run, so
+            # the listing-level half of the apply did not happen either: a
+            # retract that never ran must not wipe the listing, and a renew
+            # never sent must stay marked (PRD 62, 64). Nor is it a full
+            # success, so the proposal stays too.
+            return planned
         after_apply(ctx, listing, planned)
+        if fully_applied(ListingOutcome(listing=listing, planned=planned), applied):
+            # A44: here, not in an entry point, so a CLI apply and a UI
+            # apply leave the same proposal state.
+            ProposalStore(ctx.workspace).remove(listing)
         return planned
 
     return _over(listings, work, on_event, should_stop=stop)

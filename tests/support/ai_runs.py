@@ -32,6 +32,12 @@ from etsy_listings.ai.models import (
     RawProviderResult,
     RepairContext,
 )
+from etsy_listings.ai.proposals import (
+    ProposalChoices,
+    ProposalRecord,
+    ProposalStore,
+    SeoProposalSnapshot,
+)
 from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
 from etsy_listings.market import MarketResult, PhraseScore, ScoredListing
 from etsy_listings.market import snapshot as market_snapshot
@@ -217,6 +223,32 @@ def scored_listing(listing_id: int, **over: object) -> ScoredListing:
     }
     fields.update(over)
     return ScoredListing.model_validate(fields)
+
+
+def seed_proposal(root: Path, listing: str = "take-a-hike") -> ProposalRecord:
+    """Caches a proposal for ``listing`` as a finished run would have (A41)."""
+    return ProposalStore(Workspace.discover(root_override=root)).put(
+        listing,
+        ProposalChoices.model_validate_json(proposal_payload()),
+        SeoProposalSnapshot(
+            brief=DRAFTED_BRIEF,
+            product_type="Tee",
+            etsy_category="",
+            materials=[],
+            colors=[],
+            garment_brand="",
+            garment_model="",
+            garment_profile="",
+            design={},
+            design_content_hash=None,
+        ),
+        generated_at=TODAY,
+        origin="batch",
+    )
+
+
+def has_proposal(root: Path, listing: str = "take-a-hike") -> bool:
+    return ProposalStore(Workspace.discover(root_override=root)).load(listing) is not None
 
 
 def seed_snapshot(

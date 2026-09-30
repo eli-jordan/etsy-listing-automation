@@ -10,11 +10,13 @@ not know, a file that is not JSON -- is no record, because it is cache.
 from __future__ import annotations
 
 import json
+import threading
 from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
+from etsy_listings.ai import proposals
 from etsy_listings.ai.proposals import (
     ProposalChoices,
     ProposalReplacedError,
@@ -282,3 +284,38 @@ def test_listings_differing_only_in_case_keep_their_own_proposals(
     other = store.load("Take-A-Hike-2")
     assert other is not None
     assert other.proposal.titles[0] == "The Other Listing"
+
+
+def test_a_resolution_cannot_bring_back_a_proposal_another_store_removed(
+    workspace: Workspace, store: ProposalStore, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The engine removes a fully applied listing's proposal through its own
+    store (A44) while the UI's store may be recording a resolution. Their
+    per-record locks are one set, so the remove waits for the resolution's
+    read-modify-write instead of landing inside it and being overwritten.
+
+    The hook fires just before the resolution writes and starts the remove
+    on another thread. Unlocked, the remove finishes inside the hook and the
+    write puts the record back; locked, it waits and runs after -- the
+    outcome does not depend on how long the hook waits."""
+    _put(store)
+    engine_store = ProposalStore(workspace)
+    removing = threading.Thread(target=engine_store.remove, args=("take-a-hike",))
+    real_write = proposals.write_json_atomic
+    hooked = {"fired": False}
+
+    def write_after_starting_the_remove(path: Path, document: object) -> None:
+        if not hooked["fired"]:
+            hooked["fired"] = True
+            removing.start()
+            removing.join(timeout=0.5)  # time to finish, if nothing holds it back
+        real_write(path, document)
+
+    monkeypatch.setattr(proposals, "write_json_atomic", write_after_starting_the_remove)
+
+    store.resolve("take-a-hike", generated_at=GENERATED, title="accepted")
+    removing.join(timeout=10)
+
+    assert hooked["fired"]
+    assert not removing.is_alive()
+    assert store.load("take-a-hike") is None

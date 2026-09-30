@@ -20,6 +20,7 @@ from etsy_listings.ai.proposals import (
     Resolution,
     SeoProposalSnapshot,
 )
+from etsy_listings.batches import AiState
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.media import MediaEntry, MediaKind
@@ -601,8 +602,9 @@ class BatchRowDetail(BaseModel):
     design: str
     creation: Literal["pending", "created", "failed"]
     error: str | None
-    ai: Literal["queued", "running", "done", "failed", "stopped", "cancelled"] | None = None
-    """The row's AI work (A40); ``None`` until its listing exists."""
+    ai: AiState | None = None
+    """The row's AI work (A40, and A43's ``cancelled_by_deploy``); ``None``
+    until its listing exists."""
     ai_steps: list[WorkflowStep] = []
     """The live run's nodes while running, else the last run's as it ended."""
     ai_error: str | None = None
@@ -789,6 +791,9 @@ class SeoReadinessResponse(BaseModel):
     batch_pending: bool = False
     """A batch row owns this listing's AI (A40): the editor follows the
     batch run instead of offering its own."""
+    deploying: bool = False
+    """A UI plan or apply holds this listing (A43): the editor asks again
+    until the deploy lets it go."""
 
 
 class ListingProposal(BaseModel):

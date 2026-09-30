@@ -880,7 +880,8 @@
                   "done",
                   "failed",
                   "stopped",
-                  "cancelled"
+                  "cancelled",
+                  "cancelled_by_deploy"
                 ],
                 "type": "string"
               },
@@ -4900,6 +4901,11 @@
           "batch_pending": {
             "default": false,
             "title": "Batch Pending",
+            "type": "boolean"
+          },
+          "deploying": {
+            "default": false,
+            "title": "Deploying",
             "type": "boolean"
           },
           "ready": {

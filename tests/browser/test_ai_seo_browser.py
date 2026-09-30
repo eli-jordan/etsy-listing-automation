@@ -1404,6 +1404,13 @@ def test_nothing_below_the_head_moves_when_the_indicator_comes_and_goes(
         _open_details_tab(page)
         tabs = page.locator(".tabs")
 
+        # The app deliberately loads its display faces from Google Fonts and
+        # falls back to system-ui offline. Measure only after that independent
+        # font choice has settled: FontFaceSet.ready resolves after the font
+        # swap's layout work, so a late Figtree response cannot be mistaken
+        # for the workflow indicator moving the editor.
+        page.evaluate("async () => { await document.fonts.ready }")
+
         def tabs_top() -> float:
             # Suggestions focus their first drawer, which can scroll the page.
             # Compare document positions so that scroll is not mistaken for a

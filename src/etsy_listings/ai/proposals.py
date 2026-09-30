@@ -145,15 +145,23 @@ class ProposalReplacedError(Exception):
     """A resolution named a proposal that has since been regenerated."""
 
 
+_GUARD = threading.Lock()
+_LOCKS: dict[tuple[str, str], threading.Lock] = {}
+"""Every record's lock in this process, keyed by the resolved proposals
+directory and the casefolded listing name. Process-wide, not per store:
+the engine removes a fully applied listing's proposal through a store of
+its own (A44) while the UI's store may be resolving the same record, and
+two sets of locks would let the remove land inside that read-modify-write
+and be written back over."""
+
+
 class ProposalStore:
     """The one reader and writer of proposal records. Every mutation is a
-    read-modify-write under the record's lock (A37); one store per process,
-    or the locks are not shared."""
+    read-modify-write under the record's lock (A37), and every store over
+    one workspace shares those locks, so a store is cheap to make."""
 
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
-        self._guard = threading.Lock()
-        self._locks: dict[str, threading.Lock] = {}
 
     @contextmanager
     def _lock(self, *listings: str) -> Iterator[None]:
@@ -161,10 +169,11 @@ class ProposalStore:
         opposite directions cannot deadlock. Keyed by casefold, as the
         listing write locks are, so two spellings that may be one file on
         disk are never written at once."""
+        directory = str(self._workspace.proposal_file(listings[0]).parent.resolve())
         with ExitStack() as stack:
-            for key in sorted({name.casefold() for name in listings}):
-                with self._guard:
-                    lock = self._locks.setdefault(key, threading.Lock())
+            for name in sorted({name.casefold() for name in listings}):
+                with _GUARD:
+                    lock = _LOCKS.setdefault((directory, name), threading.Lock())
                 stack.enter_context(lock)
             yield
 

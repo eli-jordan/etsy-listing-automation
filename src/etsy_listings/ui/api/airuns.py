@@ -5,6 +5,7 @@
 POST   /api/ai/runs              {listing, draft_brief} -> 202 AiRunSummary
                                  | 409 {active_run} | 409 {reason}
                                  | 409 {reason: "batch_pending"} (A40)
+                                 | 409 {reason: "deploying"} (A43)
 GET    /api/ai/runs?listing=     the listing's current or most recent run, or 404
 GET    /api/ai/runs/{id}         AiRunDetail: phase, steps, events so far
 GET    /api/ai/runs/{id}/events  text/event-stream; replays after Last-Event-ID
@@ -38,7 +39,7 @@ from etsy_listings.ui.airuns.events import (
     AnyAiRunEvent,
     CreateAiRunRequest,
 )
-from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict
+from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
 from etsy_listings.ui.airuns.runner import AiRunner
 from etsy_listings.ui.api.runs import last_event_id
 from etsy_listings.ui.api.seo import readiness
@@ -50,6 +51,10 @@ router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
 BATCH_PENDING = "batch_pending"
 """The refusal's ``reason`` while batch work owns the listing (A40), a code
 the editor words itself rather than a sentence."""
+
+DEPLOYING = "deploying"
+"""The refusal's ``reason`` while a UI plan or apply holds the listing
+(A43): deploying takes precedence over AI."""
 
 _EVENT_WAIT_TIMEOUT = 1.0
 """One SSE poll's longest block, as in ``ui/api/runs.py``."""
@@ -100,6 +105,10 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
     workspace: Workspace = request.app.state.workspace
     if not workspace.listing_file(body.listing).is_file():
         raise HTTPException(status_code=404, detail=f"no listing {body.listing!r}")
+    # A43: a deploy holding the listing wins over everything below. The
+    # registry refuses again at `create`, which is what closes the race.
+    if registry.deploying(body.listing):
+        return _refused(AiRunRefusal(reason=DEPLOYING))
     # A40: a queued or running batch row owns the listing's AI, even while
     # no run holds it yet -- two runs must never own one listing.
     queue: BatchQueue = request.app.state.batch_queue
@@ -119,6 +128,8 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
     run = registry.create(body.listing, draft_brief=body.draft_brief)
     if isinstance(run, Conflict):
         return _refused(AiRunRefusal(active_run=run.active_run))
+    if isinstance(run, Deploying):
+        return _refused(AiRunRefusal(reason=DEPLOYING))
     runner: AiRunner = request.app.state.ai_runner
     runner.start(run)
     return _summary(run)

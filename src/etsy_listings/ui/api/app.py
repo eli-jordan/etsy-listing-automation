@@ -65,7 +65,6 @@ def create_app(
     market_client_factory: MarketClientFactory = default_market_client,
 ) -> FastAPI:
     registry = RunRegistry()
-    executor = RunExecutor(workspace=workspace, context_factory=context_factory, registry=registry)
     locks = WorkspaceLocks()
     ai_registry = AiRunRegistry()
     proposal_store = ProposalStore(workspace)
@@ -81,6 +80,12 @@ def create_app(
     batch_store = BatchStore(workspace)
     batch_queue = BatchQueue(
         workspace=workspace, batches=batch_store, registry=ai_registry, runner=ai_runner
+    )
+    executor = RunExecutor(
+        workspace=workspace,
+        context_factory=context_factory,
+        registry=registry,
+        yield_to_deploy=batch_queue.yield_to_deploy,
     )
 
     @asynccontextmanager

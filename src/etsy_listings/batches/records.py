@@ -97,11 +97,15 @@ class StagingSession(_Record):
 
 Creation = Literal["pending", "created", "failed"]
 
-AiState = Literal["queued", "running", "done", "failed", "stopped", "cancelled"]
+AiState = Literal[
+    "queued", "running", "done", "failed", "stopped", "cancelled", "cancelled_by_deploy"
+]
 """Where a created row's AI work is (A40), set by the batch queue.
 ``stopped`` is a queued row **Cancel batch** took out of the queue;
 ``cancelled`` is a run that was stopped part-way. **Resume** queues both
-again."""
+again. ``cancelled_by_deploy`` is work a UI deploy of the listing cancelled,
+queued or running (A43): Resume leaves it, so no proposal lands on a listing
+after its deploy, and only the row's own Retry queues it again."""
 
 
 class AiStep(BaseModel):
