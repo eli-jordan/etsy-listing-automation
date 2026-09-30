@@ -193,7 +193,9 @@ def create_app(
         # dev server instead and hit uvicorn only for /api.
         app.mount("/assets", StaticFiles(directory=FRONTEND_DIST / "assets"), name="assets")
 
-        @app.get("/{full_path:path}")
+        # Out of the schema: it is not API, and the exported contract must
+        # not depend on whether this checkout has a built SPA.
+        @app.get("/{full_path:path}", include_in_schema=False)
         def spa_fallback(full_path: str, request: Request) -> Response:
             if full_path.startswith("api/"):
                 return JSONResponse(status_code=404, content={"detail": "not found"})
