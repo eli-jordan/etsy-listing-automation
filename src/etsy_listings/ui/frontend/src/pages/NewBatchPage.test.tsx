@@ -94,6 +94,45 @@ describe("NewBatchPage", () => {
     expect(screen.getByText("Drop a different ZIP or PNGs")).toBeInTheDocument();
   });
 
+  it("shows a refusal handed over by a card drop, with that template chosen", async () => {
+    /* UI doc, closed question 2: a refused drop on a template card lands
+       here with the template preselected and the refusal shown. */
+    vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
+      card("heavyweight-tee", "Comfort Colors 1717", 3402),
+      card("everyday-tee", "Bella + Canvas 3001", 3000),
+    ]);
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: "/batches/new",
+            search: "?template=everyday-tee",
+            state: {
+              refused: {
+                message: "26 designs is more than one batch takes.",
+                remedy: "Split them into two batches of at most 25.",
+                files: ["a.png", "b.png"],
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/batches/new" element={<NewBatchPage />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole("radio", { name: /everyday-tee/ })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    const callout = screen.getByRole("alert");
+    expect(callout).toHaveTextContent("These files were not staged.");
+    expect(callout).toHaveTextContent("26 designs is more than one batch takes.");
+    expect(callout).toHaveTextContent("Split them into two batches of at most 25.");
+  });
+
   it("says any other failure as a page error", async () => {
     vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
       card("heavyweight-tee", "Comfort Colors 1717", 3402),

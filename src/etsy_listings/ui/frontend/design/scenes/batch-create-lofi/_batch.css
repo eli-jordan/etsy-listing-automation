@@ -9,39 +9,6 @@
   font-size: 14px;
   color: color-mix(in srgb, var(--color-text) 70%, transparent);
 }
-/* — listing-template cards — */
-.bc-card__drop-hint {
-  font-size: 11.5px;
-  color: color-mix(in srgb, var(--color-text) 50%, transparent);
-  margin-top: var(--space-1);
-}
-/* A card being dragged over: the whole card becomes the target. */
-.bc-card--over {
-  border: 1.5px dashed var(--color-accent);
-  box-shadow: var(--shadow-md);
-}
-.bc-card__overlay {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: var(--space-1);
-  text-align: center;
-  padding: var(--space-4);
-  background: color-mix(in srgb, var(--color-accent-100) 92%, transparent);
-  color: var(--color-accent-800);
-  cursor: copy;
-}
-.bc-card__overlay strong {
-  font-size: 15px;
-}
-.bc-card__overlay .bc-icon {
-  width: 28px;
-  height: 28px;
-}
-
 /* — shared data table (staging + batch summary) — */
 table.bc-table .bc-num {
   font-variant-numeric: tabular-nums;

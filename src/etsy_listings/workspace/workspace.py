@@ -473,6 +473,13 @@ class Workspace:
         also holds ``template.yaml``."""
         return self._media_file_in(self.listing_template_dir(template), path)
 
+    def listing_template_media_files(self, template: str) -> list[Path]:
+        """Every image and video under a listing template's ``assets/``: the
+        *This template* group of the file locator. Only ``assets/``, because
+        that is where every file a template owns is put (A35) -- a stray
+        file beside ``template.yaml`` is nothing the template names."""
+        return self._media_files_in(self.listing_template_assets_dir(template))
+
     def remove_listing_template(self, template: str) -> None:
         """Wipe ``listing-templates/{name}/``, assets and all. Batches and
         listings made from it keep their own frozen copies (spec,

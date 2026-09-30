@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createListing, describeListingDraft, patchListing, renameListing } from "../api/listings";
 import { listingDocument } from "../pages/editor/listingDocument";
-import type { ListingDetail } from "../types";
+import type { Issue, ListingDetail } from "../types";
 
 /** How long the editor waits after the last edit before saving -- long
  * enough that a run of keystrokes in a text field collapses into one
@@ -26,6 +26,45 @@ export type SaveState =
   | { kind: "unsaved" }
   | { kind: "name-taken"; name: string }
   | { kind: "save-failed" };
+
+/** What one write came to. `saved: false` is a document the server would
+ * not write -- nothing on disk changed -- carrying what to show about why:
+ * the field errors, and the issues where they describe the candidate (a
+ * listing template's valid-only save, A36) rather than something else. */
+export type SaveOutcome =
+  | { saved: true; detail: ListingDetail }
+  | { saved: false; issues: Issue[] | null; field_errors: Record<string, string> };
+
+/** How a document reaches the disk. The editor's three states (see
+ * {@link useAutosave}) are the same for a listing and a listing template;
+ * what differs is the endpoints and the document, so that is what a
+ * transport supplies. `describe` is `null` where an unnamed draft has
+ * nothing to ask the server. */
+export interface AutosaveTransport {
+  /** The stored document, out of what the editor shows. */
+  document: (detail: ListingDetail) => Patch;
+  describe: ((candidate: Patch) => Promise<ListingDetail>) | null;
+  create: (name: string, candidate: Patch) => Promise<SaveOutcome>;
+  /** `patch` is the edits since the last save; `candidate` the whole
+   * document with them applied. A transport sends whichever it writes. */
+  save: (name: string, patch: Patch, candidate: Patch) => Promise<SaveOutcome>;
+  rename: (from: string, to: string) => Promise<ListingDetail>;
+}
+
+/** A listing: `POST /api/listing-draft`, `POST /api/listings`, a PATCH of
+ * the delta and the rename. A refused create answers the *empty* draft
+ * beside its field errors, so only the errors are news. */
+export const LISTING_TRANSPORT: AutosaveTransport = {
+  document: (detail) => listingDocument(detail),
+  describe: (candidate) => describeListingDraft(candidate),
+  create: async (name, candidate) => {
+    const fresh = await createListing({ name, document: candidate });
+    if (fresh.name === "") return { saved: false, issues: null, field_errors: fresh.field_errors };
+    return { saved: true, detail: fresh };
+  },
+  save: async (name, patch) => ({ saved: true, detail: await patchListing(name, patch) }),
+  rename: (from, to) => renameListing(from, to),
+};
 
 /** A `{ kind: "saved" }` stamped with when. Successful writes use the browser
  * clock; the initial state can instead use `listing.yaml`'s mtime supplied by
@@ -116,7 +155,14 @@ interface UseAutosave {
 export function useAutosave(
   name: string | null,
   initial: ListingDetail,
-  options: { onNamed?: (name: string, fresh: ListingDetail) => void } = {},
+  options: {
+    onNamed?: (name: string, fresh: ListingDetail) => void;
+    /** The listing's by default. Must keep its identity across renders --
+     * a module constant, or memoized -- since every callback here
+     * depends on it, and the flush-on-unmount effect runs whenever those
+     * change. */
+    transport?: AutosaveTransport;
+  } = {},
 ): UseAutosave {
   const [detail, setDetail] = useState(initial);
   const [save, setSave] = useState<SaveState>(() =>
@@ -160,6 +206,7 @@ export function useAutosave(
   // on screen when the debounce was armed.
   const latest = useRef(detail);
   const onNamed = options.onNamed;
+  const transport = options.transport ?? LISTING_TRANSPORT;
 
   const clearTimer = useCallback(() => {
     if (timer.current !== null) {
@@ -171,8 +218,8 @@ export function useAutosave(
   /** Whatever the server should be told about right now: the last response
    * with every pending edit merged over it, as a `listing.yaml` document. */
   const candidate = useCallback((): Patch => {
-    return mergePatch(listingDocument(latest.current) as Patch, pending.current ?? {});
-  }, []);
+    return mergePatch(transport.document(latest.current), pending.current ?? {});
+  }, [transport]);
 
   /** `sentWith` is `adopted` as it stood when the request was sent. */
   const applyResponse = useCallback((fresh: ListingDetail, sentWith: Patch | null) => {
@@ -196,6 +243,17 @@ export function useAutosave(
     );
   }, []);
 
+  /** A write the server refused: the edits stay on screen, and so does
+   * everything else, with what the refusal said about them laid over. */
+  const applyRefusal = useCallback((outcome: SaveOutcome & { saved: false }) => {
+    setDetail((current) => ({
+      ...current,
+      field_errors: outcome.field_errors,
+      ...(outcome.issues === null ? {} : { issues: outcome.issues }),
+    }));
+    setSave({ kind: "unsaved" });
+  }, []);
+
   const create = useCallback(
     async (next: string) => {
       setSave({ kind: "saving" });
@@ -209,15 +267,15 @@ export function useAutosave(
       // exactly this window, and it went missing every time.
       const sent = pending.current;
       const sentWith = adopted.current;
-      const fresh = await createListing({ name: next, document: candidate() });
-      if (fresh.name === "") {
+      const outcome = await transport.create(next, candidate());
+      if (!outcome.saved) {
         // The server would not write it -- `field_errors` says why. `pending`
         // stays put, and so does the name, so the edit that fixes the document
         // is what retries the create.
-        applyResponse(fresh, sentWith);
-        setSave({ kind: "unsaved" });
+        applyRefusal(outcome);
         return;
       }
+      const fresh = outcome.detail;
       if (pending.current === sent) pending.current = null;
       savedName.current = next;
       applyResponse(fresh, sentWith);
@@ -227,7 +285,7 @@ export function useAutosave(
       if (pending.current === null) setSave(saved());
       onNamed?.(next, fresh);
     },
-    [applyResponse, candidate, onNamed],
+    [applyRefusal, applyResponse, candidate, onNamed, transport],
   );
 
   const flush = useCallback(async (): Promise<void> => {
@@ -261,12 +319,22 @@ export function useAutosave(
         patching.current = true;
         setSave({ kind: "saving" });
         const sentWith = adopted.current;
+        // The whole document as well as the delta, for a transport that
+        // writes all of it (a listing template's `PUT`). The delta is out of
+        // `pending` already, so it is merged back in.
+        const whole = mergePatch(candidate(), patch);
         try {
-          const fresh = await patchListing(currentName, patch);
-          applyResponse(fresh, sentWith);
-          // A newer edit may already be waiting. Marking this one saved would
-          // hide it until the next iteration starts.
-          if (pending.current === null) setSave(saved());
+          const outcome = await transport.save(currentName, patch, whole);
+          if (outcome.saved) {
+            applyResponse(outcome.detail, sentWith);
+            // A newer edit may already be waiting. Marking this one saved
+            // would hide it until the next iteration starts.
+            if (pending.current === null) setSave(saved());
+          } else {
+            // Not written (A36): the values stay on screen, and the next edit
+            // sends the whole document again -- which is the retry.
+            applyRefusal(outcome);
+          }
         } catch {
           // Swallowed, not rethrown: nothing that calls `flush()` (the
           // debounce timer, `onBlur`, unmount) is set up to catch it, and a
@@ -303,10 +371,11 @@ export function useAutosave(
     // Not on disk and not named: describe the candidate so the issues banner
     // stays true. Nothing is written, so `pending` is not cleared -- it is what
     // the create will carry once a name arrives.
+    if (transport.describe === null) return;
     const sentWith = adopted.current;
-    const fresh = await describeListingDraft(candidate());
+    const fresh = await transport.describe(candidate());
     applyResponse(fresh, sentWith);
-  }, [applyResponse, candidate, clearTimer, create]);
+  }, [applyRefusal, applyResponse, candidate, clearTimer, create, transport]);
 
   const update = useCallback(
     (patch: Patch) => {
@@ -341,8 +410,15 @@ export function useAutosave(
         const patch = pending.current;
         pending.current = null;
         const sentWith = adopted.current;
-        if (patch !== null) applyResponse(await patchListing(savedName.current, patch), sentWith);
-        const fresh = await renameListing(savedName.current, next);
+        if (patch !== null) {
+          const outcome = await transport.save(
+            savedName.current,
+            patch,
+            mergePatch(candidate(), patch),
+          );
+          if (outcome.saved) applyResponse(outcome.detail, sentWith);
+        }
+        const fresh = await transport.rename(savedName.current, next);
         savedName.current = next;
         // Read from the file after the drain, under the rename's lock: it
         // carries anything adopted before it.
@@ -360,7 +436,7 @@ export function useAutosave(
           }
         });
     },
-    [applyResponse, clearTimer, create, flush, onNamed],
+    [applyResponse, candidate, clearTimer, create, flush, onNamed, transport],
   );
 
   useEffect(() => {

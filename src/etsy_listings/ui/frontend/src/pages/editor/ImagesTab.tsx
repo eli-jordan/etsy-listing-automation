@@ -1,8 +1,16 @@
 import { useEffect, useState } from "react";
 import { listTemplates } from "../../api/calibrator";
 import { listCommonMedia, listListingMediaFiles } from "../../api/listings";
+import { listListingTemplateMediaFiles } from "../../api/listingTemplates";
 import { Lightbox, type LightboxItem } from "../../components/Lightbox";
-import { mediaKind, mediaLabel, pictureFor, singleDesignName } from "../../media";
+import {
+  type Artwork,
+  type MediaOwner,
+  mediaKind,
+  mediaLabel,
+  pictureFor,
+  singleDesignName,
+} from "../../media";
 import type { MediaFileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { MediaLocator } from "./MediaLocator";
 import { MediaReel } from "./MediaReel";
@@ -40,9 +48,15 @@ import * as edits from "./mediaEdits";
 interface Props {
   detail: ListingDetail;
   onUpdate: (patch: Record<string, unknown>) => void;
+  /** What the renders composite, when it is not the listing's own design:
+   * the listing-template editor's preview design (UI doc §3). */
+  artwork?: Artwork | null;
+  /** Whose `./` files these are, when not the listing's: a listing
+   * template's. One with `copies` is not saved yet and has no directory. */
+  owner?: MediaOwner | null;
 }
 
-export function ImagesTab({ detail, onUpdate }: Props) {
+export function ImagesTab({ detail, onUpdate, artwork, owner }: Props) {
   const [templates, setTemplates] = useState<TemplateSummary[]>([]);
   const [shared, setShared] = useState<MediaFileSummary[]>([]);
   const [local, setLocal] = useState<MediaFileSummary[]>([]);
@@ -62,15 +76,22 @@ export function ImagesTab({ detail, onUpdate }: Props) {
   }, []);
 
   // A draft has no directory, so nothing of its own to list (PRD 73).
-  const listing = detail.name || null;
+  const listing: MediaOwner | null =
+    owner === undefined ? (detail.name ? { kind: "listing", name: detail.name } : null) : owner;
+  const directory = listing === null || listing.copies !== undefined ? null : listing;
+  const directoryKind = directory?.kind ?? null;
+  const directoryName = directory?.name ?? null;
   useEffect(() => {
-    if (listing === null) return;
-    listListingMediaFiles(listing)
+    if (directoryName === null) return;
+    (directoryKind === "listing-template"
+      ? listListingTemplateMediaFiles(directoryName)
+      : listListingMediaFiles(directoryName)
+    )
       .then(setLocal)
       .catch(() => setStatus("failed to load this listing's files"));
-  }, [listing]);
+  }, [directoryKind, directoryName]);
 
-  const design = singleDesignName(detail.design);
+  const design = artwork !== undefined ? artwork : singleDesignName(detail.design);
 
   /** Every edit is a patch or nothing: a rule that declines (the twentieth
    * image is already there) returns `null` rather than an unchanged document,
@@ -88,7 +109,7 @@ export function ImagesTab({ detail, onUpdate }: Props) {
     kind: mediaKind(entry),
   }));
 
-  const view = focus === null ? null : viewFocus(focus, detail, templates, design);
+  const view = focus === null ? null : viewFocus(focus, detail, templates, design, listing);
 
   function toggleFocused() {
     if (focus === null) return;
@@ -104,7 +125,8 @@ export function ImagesTab({ detail, onUpdate }: Props) {
       <MediaLocator
         detail={detail}
         templates={templates}
-        local={listing === null ? null : local}
+        local={directory === null ? null : local}
+        owner={listing}
         shared={shared}
         onToggleTemplate={(template, colour) => apply(edits.toggleEntry(detail, template, colour))}
         onToggleFile={(ref) => apply(edits.toggleFile(detail, ref))}
@@ -192,7 +214,7 @@ export function ImagesTab({ detail, onUpdate }: Props) {
           swatchTemplate={detail.etsy.variation_images ?? null}
           selectedIndex={selectedIndex}
           listing={listing}
-          files={listing === null ? shared : [...local, ...shared]}
+          files={directory === null ? shared : [...local, ...shared]}
           onOpen={(index) => {
             setSelectedIndex(index);
             setLightboxIndex(index);

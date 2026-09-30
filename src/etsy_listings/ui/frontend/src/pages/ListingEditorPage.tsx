@@ -10,13 +10,14 @@ import { OpenOnMenu } from "../components/OpenOnMenu";
 import { hasOpenTargets } from "../components/openOn";
 import { StatusTag } from "../components/StatusTag";
 import { useAutosave } from "../hooks/useAutosave";
-import { refName } from "../media";
+import { type MediaOwner, refName } from "../media";
 import type { Issue, IssueTab, ListingDetail } from "../types";
 import type { AiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { AiWorkflowIndicator } from "./editor/aiSeo/AiWorkflowIndicator";
 import { useAiSeoMode } from "./editor/aiSeo/useAiSeoMode";
 import { DeployControl } from "./editor/DeployControl";
 import { DesignSelect } from "./editor/DesignSelect";
+import { DEFAULT_PREVIEW, type PreviewDesign, previewArtwork } from "./editor/previewDesign";
 import { DetailsTab } from "./editor/DetailsTab";
 import { PricingTab } from "./editor/PricingTab";
 import { IssuesBanner } from "./editor/IssuesBanner";
@@ -374,6 +375,7 @@ export function EditorHead({
   meta,
   flush,
   activity,
+  kind = "listing",
 }: {
   detail: ListingDetail;
   onBack: () => void;
@@ -384,16 +386,21 @@ export function EditorHead({
    * (PRD 68). `null` whenever nothing is running, which is most of the
    * time. */
   activity?: ReactNode;
+  /** A listing template's head has no actions (UI doc §3): no status, no
+   * Open on, no Deploy -- a template never deploys, and Clone, Delete and
+   * Start batch live on its card. */
+  kind?: "listing" | "listing-template";
 }) {
+  const listing = kind === "listing";
   // Not keyed off `status`: a listing can carry a Printify product without an
   // Etsy listing id, and an id it has is worth a link whatever state Etsy
   // reports it in. `OpenOnMenu` hides the entry it has no id for.
-  const hasLinks = hasOpenTargets(detail.etsy_listing_id, detail.printify_product_id);
+  const hasLinks = listing && hasOpenTargets(detail.etsy_listing_id, detail.printify_product_id);
 
   return (
     <div className="page-head page-head--editor">
       <span className="page-head__crumb" onClick={onBack}>
-        Listings
+        {listing ? "Listings" : "Listing templates"}
       </span>
       <span className="page-head__sep">/</span>
       {title}
@@ -405,11 +412,11 @@ export function EditorHead({
         />
       )}
 
-      <StatusTag status={detail.status} />
+      {listing && <StatusTag status={detail.status} />}
       <span className="page-head__meta">{meta}</span>
       {activity}
 
-      {detail.name !== "" && (
+      {listing && detail.name !== "" && (
         <div className="page-head__actions dv-head-actions">
           <DeployControl name={detail.name} flush={flush} />
         </div>
@@ -418,31 +425,48 @@ export function EditorHead({
   );
 }
 
-export function ListingEditorShell({
-  detail,
-  update,
-  flush,
-  onPickDesign,
-  aiSeo,
-  head,
-  above,
-}: {
+type ShellProps = {
   detail: ListingDetail;
   update: (patch: Record<string, unknown>) => void;
   flush: () => void;
-  /** Everything one design pick sets off -- the edit, naming an unnamed
-   * draft, and arming the AI chain. Built by `ListingEditorPageContent`, which is
-   * the layer that has `commitName`. */
-  onPickDesign: (ref: string) => void;
-  /** Owned by `ListingEditorPageContent`, not by this shell and not by
-   * `DetailsTab`: a run outlives the tab it was started from -- switching to
-   * Variants unmounts the tab. */
-  aiSeo: AiSeoMode;
   head: ReactNode;
   /** The row above the head, when there is one. */
   above?: ReactNode;
-}) {
+} & (
+  | {
+      kind?: "listing";
+      /** Everything one design pick sets off -- the edit, naming an unnamed
+       * draft, and arming the AI chain. Built by `ListingEditorPageContent`,
+       * which is the layer that has `commitName`. */
+      onPickDesign: (ref: string) => void;
+      /** Owned by `ListingEditorPageContent`, not by this shell and not by
+       * `DetailsTab`: a run outlives the tab it was started from --
+       * switching to Variants unmounts the tab. */
+      aiSeo: AiSeoMode;
+    }
+  | {
+      /** The listing-template editor (UI doc §3): the same shell minus the
+       * design-specific parts. The design row picks a preview design, the
+       * banner uses the template wording, and Details has no per-listing
+       * copy. Variants, Pricing and Listing Images are unchanged. */
+      kind: "listing-template";
+      /** Whose `./` files the Images tab shows: the template's, or -- not
+       * saved yet -- its source's, through `copies`. */
+      owner: MediaOwner | null;
+    }
+);
+
+export function ListingEditorShell(props: ShellProps) {
+  const { detail, update, flush, head, above } = props;
+  const template = props.kind === "listing-template";
+  const aiSeo = props.kind === "listing-template" ? null : props.aiSeo;
   const [tab, setTab] = useState<Tab>("variants");
+  // The listing template's preview design (UI doc §3): component state, so
+  // it is never in the document and is back to the bundled grid every time
+  // the editor opens.
+  const [preview, setPreview] = useState<PreviewDesign>(DEFAULT_PREVIEW);
+  const artwork = template ? previewArtwork(preview) : undefined;
+  const owner = props.kind === "listing-template" ? props.owner : undefined;
 
   function pickTab(next: Tab) {
     flush();
@@ -454,7 +478,8 @@ export function ListingEditorShell({
       {/* On document.body, not inside a tab: DetailsTab unmounts on every
           other tab, and the chain starts from the design strip, which is
           usually Variants. */}
-      {aiSeo.run.autoNotice &&
+      {aiSeo !== null &&
+        aiSeo.run.autoNotice &&
         aiSeo.run.busy &&
         createPortal(
           <div className="ai-auto-toast" role="status">
@@ -468,12 +493,32 @@ export function ListingEditorShell({
       {above}
       {head}
 
-      <IssuesBanner issues={detail.issues} activeTab={tab} onJumpTo={pickTab} />
+      {template ? (
+        <IssuesBanner
+          issues={detail.issues}
+          activeTab={tab}
+          onJumpTo={pickTab}
+          subject="listing-template"
+          // A block is what stops the save (A36); warnings alone stop
+          // nothing, so they are not told the file is being held back.
+          when={
+            detail.issues.some((issue) => issue.severity === "block")
+              ? "Last complete version is kept until then"
+              : "Checked against this template’s own configuration"
+          }
+        />
+      ) : (
+        <IssuesBanner issues={detail.issues} activeTab={tab} onJumpTo={pickTab} />
+      )}
 
       {/* Above the tabs, not inside one: the artwork is what both Variants
           (which colours suit it) and Listing Images (which mockups show it)
           are about. */}
-      <DesignSelect design={detail.design} onPick={onPickDesign} />
+      {props.kind === "listing-template" ? (
+        <DesignSelect preview={preview} onPreview={setPreview} />
+      ) : (
+        <DesignSelect design={detail.design} onPick={props.onPickDesign} />
+      )}
 
       <div className="tabs seg">
         {TABS.map((t) => {
@@ -497,12 +542,28 @@ export function ListingEditorShell({
         })}
       </div>
 
-      {tab === "variants" && <VariantsTab detail={detail} onUpdate={update} />}
-      {tab === "pricing" && <PricingTab detail={detail} onUpdate={update} onFlush={flush} />}
-      {tab === "images" && <ImagesTab detail={detail} onUpdate={update} />}
-      {tab === "details" && (
-        <DetailsTab detail={detail} onUpdate={update} onFlush={flush} aiSeo={aiSeo} />
+      {tab === "variants" && (
+        <VariantsTab
+          detail={detail}
+          onUpdate={update}
+          {...(artwork === undefined ? {} : { artwork })}
+        />
       )}
+      {tab === "pricing" && <PricingTab detail={detail} onUpdate={update} onFlush={flush} />}
+      {tab === "images" && (
+        <ImagesTab
+          detail={detail}
+          onUpdate={update}
+          {...(artwork === undefined ? {} : { artwork })}
+          {...(owner === undefined ? {} : { owner })}
+        />
+      )}
+      {tab === "details" &&
+        (aiSeo === null ? (
+          <DetailsTab kind="listing-template" detail={detail} onUpdate={update} onFlush={flush} />
+        ) : (
+          <DetailsTab detail={detail} onUpdate={update} onFlush={flush} aiSeo={aiSeo} />
+        ))}
     </div>
   );
 }

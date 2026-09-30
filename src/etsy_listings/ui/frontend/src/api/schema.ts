@@ -360,6 +360,27 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/designs/{design}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Design Thumbnail
+     * @description A test design, small: what the listing-template editor's
+     *     preview-design row shows beside *Preview design: …* (UI doc §3).
+     */
+    get: operations["design_thumbnail_api_designs__design__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/etsy/sections": {
     parameters: {
       query?: never;
@@ -577,6 +598,60 @@ export interface paths {
      *     and a listing never had a link to it (spec, *Completeness and editing*).
      */
     delete: operations["delete_listing_template_api_listing_templates__name__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{name}/rename": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Rename Listing Template
+     * @description Move a listing template, whole, to a new name -- double-click the
+     *     name, exactly as a listing (UI doc §3). Its name is its directory (A35),
+     *     so the rename is a directory move and its ``./`` refs, which name that
+     *     directory, need no rewrite. A taken name is a 409 and never suffixed
+     *     (spec, *Storage and identity*).
+     *
+     *     Staging sessions and batch records made from it follow it by name --
+     *     the name, not the frozen copy they each keep (A37), which is untouched.
+     *     That name is the card's *Used by N batches* and the staging page's
+     *     *Using X*, the seller's link between a template and its batches. It
+     *     is rewritten after the move, under each record's lock; a crash between
+     *     the two leaves records naming a template that is gone, which is what a
+     *     delete leaves too, and harms nothing a batch needs.
+     */
+    post: operations["rename_listing_template_api_listing_templates__name__rename_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listing-templates/{template}/media-files": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * List Listing Template Media Files
+     * @description The *This template* group (UI doc, *Existing components the template
+     *     editor needs*): the listing template's own files, each with the ``./``
+     *     ref that names it from ``template.yaml``. Scoped to ``assets/``.
+     */
+    get: operations["list_listing_template_media_files_api_listing_templates__template__media_files_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
     options?: never;
     head?: never;
     patch?: never;
@@ -1235,6 +1310,12 @@ export interface paths {
      *     ``Workspace.design_file`` -- deliberately not :func:`resolve_design`,
      *     which is the calibrator's own test-design library and never sees a
      *     listing's real artwork.
+     *
+     *     ``test_design`` is that library's id instead, for the listing-template
+     *     editor (UI doc §3): a listing template has no artwork, so it is viewed
+     *     through a calibrator test design, bundled grid by default. Exactly one of
+     *     the two -- they name files in different places, and guessing which one a
+     *     bare name meant is how a test target would end up judged as artwork.
      */
     get: operations["design_preview_api_templates__name__design_preview_get"];
     put?: never;
@@ -2030,6 +2111,10 @@ export interface components {
      *     (``from_template``) -- exactly one. There is no blank creation (spec).
      */
     CreateListingTemplateRequest: {
+      /** Document */
+      document?: {
+        [key: string]: unknown;
+      } | null;
       /** From Listing */
       from_listing?: string | null;
       /** From Template */
@@ -2676,6 +2761,11 @@ export interface components {
       /** Colors */
       colors: string[];
       /**
+       * Description Composed
+       * @default
+       */
+      description_composed: string;
+      /**
        * @default {
        *       "description": {}
        *     }
@@ -2683,6 +2773,14 @@ export interface components {
       etsy: components["schemas"]["TemplateEtsyConfig"];
       /** Garment */
       garment?: string | null;
+      /** Garment Brand */
+      garment_brand?: string | null;
+      /** Garment Materials */
+      garment_materials?: string[] | null;
+      /** Garment Model */
+      garment_model?: string | null;
+      /** Garment Product Type */
+      garment_product_type?: string | null;
       /** Garment Profile */
       garment_profile: string;
       /** Issues */
@@ -2713,6 +2811,11 @@ export interface components {
       pricing_plan?: string | null;
       /** Pricing Plan Name */
       pricing_plan_name?: string | null;
+      /**
+       * Resolved Prices
+       * @default []
+       */
+      resolved_prices: components["schemas"]["ResolvedPrice"][];
       source?: components["schemas"]["ListingTemplateSource"] | null;
     };
     /**
@@ -4694,6 +4797,37 @@ export interface operations {
       };
     };
   };
+  design_thumbnail_api_designs__design__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        design: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   list_etsy_sections_api_etsy_sections_get: {
     parameters: {
       query?: never;
@@ -5030,6 +5164,72 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  rename_listing_template_api_listing_templates__name__rename_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RenameListingRequest"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingTemplateDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_listing_template_media_files_api_listing_templates__template__media_files_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        template: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["MediaFileSummary"][];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -6196,8 +6396,9 @@ export interface operations {
   };
   design_preview_api_templates__name__design_preview_get: {
     parameters: {
-      query: {
-        design: string;
+      query?: {
+        design?: string | null;
+        test_design?: string | null;
         colour?: string | null;
         scale?: "editor" | "full";
       };

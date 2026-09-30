@@ -2,7 +2,7 @@ import { CheckCircleIcon } from "@phosphor-icons/react/dist/csr/CheckCircle";
 import { FileZipIcon } from "@phosphor-icons/react/dist/csr/FileZip";
 import { WarningCircleIcon } from "@phosphor-icons/react/dist/csr/WarningCircle";
 import { useEffect, useRef, useState, type DragEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { stageDesigns, StagingRefused, type StagingRefusal } from "../api/batches";
 import { listListingTemplates } from "../api/listingTemplates";
 import { ownedTile } from "../media";
@@ -17,25 +17,30 @@ import type { ListingTemplateSummary } from "../types";
  *
  * Loose PNGs only in this slice (batch plan PR 2): a ZIP is refused by the
  * server as coming soon until PR 7.
+ *
+ * A drop on a listing-template card that the server refuses lands here too,
+ * the refusal in the navigation's state (UI doc §2, closed question 2), so
+ * a card has no refusal state of its own.
  */
 
-interface Refused extends StagingRefusal {
-  files: File[];
+/** A refusal, and the names of the files it was about. Names rather than
+ * the files: it may arrive in history state from a card drop. */
+export interface Refused extends StagingRefusal {
+  files: string[];
 }
 
-function refusedHeading(files: File[]): string {
+function refusedHeading(files: string[]): string {
   const [only] = files;
-  return files.length === 1 && only
-    ? `${only.name} was not staged.`
-    : "These files were not staged.";
+  return files.length === 1 && only ? `${only} was not staged.` : "These files were not staged.";
 }
 
 export function NewBatchPage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+  const handed = (useLocation().state as { refused?: Refused } | null)?.refused ?? null;
   const [templates, setTemplates] = useState<ListingTemplateSummary[] | null>(null);
   const [chosen, setChosen] = useState(params.get("template") ?? "");
-  const [refused, setRefused] = useState<Refused | null>(null);
+  const [refused, setRefused] = useState<Refused | null>(handed);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const input = useRef<HTMLInputElement>(null);
@@ -62,8 +67,9 @@ export function NewBatchPage() {
       .then((session) => navigate(`/batches/staging/${session.id}`))
       .catch((exc: unknown) => {
         setBusy(false);
-        if (exc instanceof StagingRefused) setRefused({ ...exc.refusal, files });
-        else setError(exc instanceof Error ? exc.message : "The designs could not be staged.");
+        if (exc instanceof StagingRefused) {
+          setRefused({ ...exc.refusal, files: files.map((file) => file.name) });
+        } else setError(exc instanceof Error ? exc.message : "The designs could not be staged.");
       });
   }
 

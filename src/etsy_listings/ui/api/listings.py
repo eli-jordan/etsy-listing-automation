@@ -28,12 +28,12 @@ directory rather than the workspace as a whole.
 from __future__ import annotations
 
 import os
-from collections.abc import Iterator, Mapping
+from collections.abc import Callable, Iterator, Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Any
+from typing import Annotated, Any, Protocol
 
 import yaml
 from fastapi import APIRouter, Depends, HTTPException, Request
@@ -53,6 +53,8 @@ from etsy_listings.config.listing_validation import (
     check_listing_yaml_present,
 )
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
+from etsy_listings.config.money import Money
+from etsy_listings.config.pricing_plan import PricingPlan
 from etsy_listings.engine.lock import Lockfile
 from etsy_listings.engine.preview import lookup_preview
 from etsy_listings.engine.stages.etsy_listing import AppliedEtsyListing
@@ -247,31 +249,52 @@ def _etsy_state(workspace: Workspace, etsy_listing_id: int | None) -> str | None
     return etsy_states(workspace.root, [etsy_listing_id]).get(etsy_listing_id)
 
 
-def _pricing_summary(
-    workspace: Workspace, facts: WorkspaceFacts, listing_dir: Path, listing: Listing
+class Priced(Protocol):
+    """What a price summary reads: a listing, or a listing template (A35),
+    which carries the same price fields and the same resolution."""
+
+    garment_profile: str
+    colors: list[str]
+    pricing_plan: str | None
+
+    @property
+    def prices(self) -> Mapping[str, Money]: ...
+
+    def resolved_price(
+        self, color: str, size: str, *, pricing_plan: PricingPlan | None = None
+    ) -> Money: ...
+
+
+def pricing_summary(
+    workspace: Workspace,
+    facts: WorkspaceFacts,
+    priced: Priced,
+    *,
+    resolve: Callable[[str], Path],
 ) -> tuple[str | None, list[ResolvedPrice]]:
     """Display only (selecting a different plan from the UI is deferred): the
     resolved plan's name, and one resolved price per size -- using the
-    listing's first enabled colour as representative, since the mockup's
-    price table has no per-colour axis."""
+    first enabled colour as representative, since the mockup's price table
+    has no per-colour axis. ``resolve`` finds the plan's ref from wherever
+    its owner lives: a listing's directory or a listing template's."""
     plan = None
     plan_name = None
-    if listing.pricing_plan is not None:
+    if priced.pricing_plan is not None:
         try:
-            plan_path = workspace.resolve_ref(listing.pricing_plan, listing_dir=listing_dir)
+            plan_path = resolve(priced.pricing_plan)
             plan = workspace.load_pricing_plan(plan_path)
             plan_name = plan_path.stem
         except ConfigLoadError:
             plan = None
             plan_name = None
 
-    profile = facts.garment_profile(listing.garment_profile)
-    sizes = profile.sizes if profile is not None else sorted(listing.prices)
-    colour = listing.colors[0] if listing.colors else ""
+    profile = facts.garment_profile(priced.garment_profile)
+    sizes = profile.sizes if profile is not None else sorted(priced.prices)
+    colour = priced.colors[0] if priced.colors else ""
     prices: list[ResolvedPrice] = []
     for size in sizes:
         try:
-            money = listing.resolved_price(colour, size, pricing_plan=plan)
+            money = priced.resolved_price(colour, size, pricing_plan=plan)
         except KeyError:
             continue
         prices.append(ResolvedPrice(size=size, amount=str(money)))
@@ -408,7 +431,12 @@ def _describe(
         else False,
         description_ref_error=str(description.error) if description.error is not None else None,
     )
-    plan_name, resolved_prices = _pricing_summary(workspace, facts, listing_dir, listing)
+    plan_name, resolved_prices = pricing_summary(
+        workspace,
+        facts,
+        listing,
+        resolve=lambda ref: workspace.resolve_ref(ref, listing_dir=listing_dir),
+    )
     profile = facts.garment_profile(listing.garment_profile)
     return ListingDetail.model_validate(
         {

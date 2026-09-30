@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router-dom";
 import * as batchesApi from "../api/batches";
 import * as templatesApi from "../api/listingTemplates";
 import type { ListingTemplateSummary } from "../types";
@@ -150,4 +150,116 @@ describe("ListingTemplatesPage", () => {
 
     expect(await screen.findByText("Could not load listing templates")).toBeInTheDocument();
   });
+
+  it("edits and clones from the card, the only places those actions live (UI doc §2)", async () => {
+    vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
+      card({ name: "heavyweight-tee" }),
+    ]);
+    renderPage();
+    await screen.findByText("heavyweight-tee");
+
+    expect(screen.getByRole("link", { name: "Edit" })).toHaveAttribute(
+      "href",
+      "/listing-templates/heavyweight-tee",
+    );
+    // Clone opens the same *name it* state Save as does (UI doc §1).
+    expect(screen.getByRole("link", { name: "Clone heavyweight-tee" })).toHaveAttribute(
+      "href",
+      "/listing-templates/new?from_template=heavyweight-tee",
+    );
+  });
 });
+
+describe("a listing-template card as a drop target (UI doc §2)", () => {
+  function pngs(count: number): File[] {
+    return Array.from(
+      { length: count },
+      (_, i) => new File(["png"], `design-${i}.png`, { type: "image/png" }),
+    );
+  }
+
+  function transfer(files: File[]) {
+    return {
+      files,
+      items: files.map((f) => ({ kind: "file", type: f.type })),
+      types: ["Files"],
+    };
+  }
+
+  function renderRoutes() {
+    return render(
+      <MemoryRouter initialEntries={["/listing-templates"]}>
+        <Routes>
+          <Route path="/listing-templates" element={<ListingTemplatesPage />} />
+          <Route path="/batches/staging/:id" element={<p>staging review</p>} />
+          <Route path="/batches/new" element={<RefusalProbe />} />
+        </Routes>
+      </MemoryRouter>,
+    );
+  }
+
+  beforeEach(() => {
+    vi.spyOn(templatesApi, "listListingTemplates").mockResolvedValue([
+      card({ name: "heavyweight-tee" }),
+      card({ name: "trail-hoodie" }),
+    ]);
+  });
+
+  it("says what a drop will do only while files are over it", async () => {
+    renderRoutes();
+    await screen.findByText("heavyweight-tee");
+    const target = cardFor("heavyweight-tee");
+
+    fireEvent.dragEnter(target, { dataTransfer: transfer(pngs(14)) });
+
+    expect(within(target).getByText("Drop to stage 14 PNGs")).toBeInTheDocument();
+    expect(within(target).getByText(/with heavyweight-tee/)).toBeInTheDocument();
+    expect(within(cardFor("trail-hoodie")).queryByText(/Drop to stage/)).not.toBeInTheDocument();
+
+    fireEvent.dragLeave(target, { dataTransfer: transfer(pngs(14)) });
+    expect(within(target).queryByText(/Drop to stage/)).not.toBeInTheDocument();
+  });
+
+  it("posts a drop straight to staging with that template, skipping New batch", async () => {
+    const stage = vi
+      .spyOn(batchesApi, "stageDesigns")
+      .mockResolvedValue({ id: "s1" } as batchesApi.StagingDetail);
+    renderRoutes();
+    await screen.findByText("heavyweight-tee");
+    const files = pngs(2);
+
+    fireEvent.drop(cardFor("trail-hoodie"), { dataTransfer: transfer(files) });
+
+    expect(await screen.findByText("staging review")).toBeInTheDocument();
+    expect(stage).toHaveBeenCalledWith("trail-hoodie", files);
+  });
+
+  it("lands a refused drop on New batch with the template chosen and the refusal shown", async () => {
+    vi.spyOn(batchesApi, "stageDesigns").mockRejectedValue(
+      new batchesApi.StagingRefused({
+        message: "26 designs is more than one batch takes.",
+        remedy: "Split them into two batches of at most 25.",
+      }),
+    );
+    renderRoutes();
+    await screen.findByText("heavyweight-tee");
+
+    fireEvent.drop(cardFor("heavyweight-tee"), { dataTransfer: transfer(pngs(26)) });
+
+    expect(await screen.findByText("template=heavyweight-tee")).toBeInTheDocument();
+    expect(
+      screen.getByText("refused: 26 designs is more than one batch takes."),
+    ).toBeInTheDocument();
+  });
+});
+
+function RefusalProbe() {
+  const location = useLocation();
+  const refused = (location.state as { refused?: { message: string } } | null)?.refused;
+  return (
+    <>
+      <p>{location.search.slice(1)}</p>
+      <p>refused: {refused?.message}</p>
+    </>
+  );
+}
