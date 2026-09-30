@@ -39,7 +39,16 @@ from etsy_listings.ui.runs.registry import RunRegistry
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
-FRONTEND_DIST = Path(__file__).parent.parent / "frontend" / "dist"
+
+def _frontend_dist() -> Path:
+    """The built SPA: an installed wheel carries it in the package's `static`
+    directory (mapped by hatch_build.py); an editable checkout has none there
+    and serves `src/ui/dist`, wherever npm last built it."""
+    packaged = Path(__file__).parent.parent / "static"
+    return packaged if packaged.is_dir() else Path(__file__).parents[3] / "ui" / "dist"
+
+
+FRONTEND_DIST = _frontend_dist()
 
 
 def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:

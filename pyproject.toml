@@ -36,13 +36,15 @@ etsy-listings = "etsy_listings.cli.app:main"
 [tool.hatch.build.targets.wheel]
 packages = ["src/etsy_listings"]
 
-[tool.hatch.build]
-# ui/frontend/dist/ is gitignored (built, not source) but must ship in the
-# wheel -- hatchling excludes gitignored paths from artifacts by default.
-artifacts = ["src/etsy_listings/ui/frontend/dist/**"]
-
-[tool.hatch.build.hooks.custom]
+# Wheels only: the hook rebuilds the npm project at frontend-dir and maps its
+# gitignored dist/ to assets-dir inside the package, where the server finds it
+# once installed. The sdist carries the npm source, lockfile and this hook
+# instead (node_modules/ and dist/ stay out as gitignored), so building a
+# wheel from it rebuilds the same assets.
+[tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"
+frontend-dir = "src/ui"
+assets-dir = "etsy_listings/ui/static"
 
 [dependency-groups]
 dev = [
