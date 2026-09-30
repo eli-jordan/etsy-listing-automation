@@ -29,7 +29,7 @@ echo "== mypy =="
 uv run mypy src
 
 # Coverage is measured over the whole suite, browser layer included. Those
-# tests skip themselves when chromium or ui/frontend/dist is missing, which
+# tests skip themselves when chromium or src/ui/dist is missing, which
 # costs about a point -- the gate has enough headroom to pass either way, so a
 # missing browser never fails the build for the wrong reason.
 echo "== pytest + coverage (branch, fail under 85%) =="
@@ -40,7 +40,7 @@ uv run pytest --cov --cov-report=term-missing --cov-report=html
 # self-skip pattern the browser pytest layer uses for missing chromium, so a
 # Python-only contributor's check.sh run isn't blocked by a toolchain they
 # don't have installed.
-FRONTEND_DIR="src/etsy_listings/ui/frontend"
+FRONTEND_DIR="src/ui"
 if command -v npm >/dev/null 2>&1; then
   echo "== frontend: prettier, lint, typecheck, test + coverage (branch, fail under 85%) =="
   # `npm run format` writes, exactly as `ruff format .` does above: this script
