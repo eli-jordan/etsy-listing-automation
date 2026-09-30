@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { SaveState } from "../../../hooks/useAutosave";
-import { getListingProposal, getSeoReadiness, resolveListingProposal } from "../../../api/seo";
-import type { ListingDetail, ListingProposal, ProposalResolution } from "../../../types";
-import { canToggleTag } from "./aiSeoTags";
+import { getSeoReadiness } from "../../../api/seo";
+import type { ListingDetail, ListingProposal } from "../../../types";
+import { useProposalReview } from "./useProposalReview";
 import { type AiRun, useAiRun } from "./useAiRun";
 import type { MarketPanelState } from "../market/MarketListingsPanel";
 import { useMarketPanel } from "../market/useMarketPanel";
@@ -47,14 +47,11 @@ import { useMarketPanel } from "../market/useMarketPanel";
  * disabled with the server's hint and asks again every {@link BATCH_POLL_MS}
  * until the deploy lets the listing go.
  *
- * A resolution shows at once and is sent behind it. Every read and every
- * resolution takes a ticket, and only the latest one's answer is kept, so a
- * read that set off before a click cannot reopen the drawer it closed.
+ * useProposalReview owns cached/live proposal reconciliation and resolutions;
+ * this module supplies readiness, run tracking and brief adoption.
  */
 
 export type AiSeoPhase = "idle" | "loading" | "failed";
-
-type Section = keyof ProposalResolution;
 
 export interface AiSeoMode {
   /** Whether the AI Mode control can start a request. The button stays
@@ -101,8 +98,6 @@ export interface AiSeoMode {
   closeTags: () => void;
 }
 
-const SECTIONS: Section[] = ["title", "tags", "lead"];
-
 /** How often the editor looks again while batch work owns the listing. */
 export const BATCH_POLL_MS = 3000;
 
@@ -129,43 +124,14 @@ export function useAiSeoMode(
   const [deploying, setDeploying] = useState(false);
   /** Bumped by the batch poll, to ask readiness again. */
   const [poll, setPoll] = useState(0);
-  const [record, setRecord] = useState<ListingProposal | null>(null);
-  // `onUpdate`/`onFlush`/`detail` as a run's events should see them when they
-  // arrive -- a run can take minutes, during which the seller may keep
-  // editing, and the acceptance actions must always act on what is on screen
-  // *now*, not what was on screen when `generate()` was called. Mirrors
-  // `useAutosave`'s own `latest` ref for the same reason.
+  const review = useProposalReview(detail, onUpdate, onFlush, save);
+  // A run outlives edits; brief adoption must see the current field and callback.
   const latestDetail = useRef(detail);
-  const latestOnUpdate = useRef(onUpdate);
-  const latestOnFlush = useRef(onFlush);
   const latestOnAdopt = useRef(onAdopt);
-  const latestRecord = useRef(record);
   useEffect(() => {
     latestDetail.current = detail;
-    latestOnUpdate.current = onUpdate;
-    latestOnFlush.current = onFlush;
     latestOnAdopt.current = onAdopt;
-    latestRecord.current = record;
   });
-  /** The newest read or resolution; an answer to any older one is dropped. */
-  const ticket = useRef(0);
-
-  const read = useCallback((name: string) => {
-    const mine = ++ticket.current;
-    getListingProposal(name)
-      .then((cached) => {
-        if (mine === ticket.current) setRecord(cached);
-      })
-      .catch(() => {});
-  }, []);
-
-  // A live run's proposal is the record the server has just written, so it
-  // opens the drawers without a second round trip.
-  const onProposal = useCallback((proposal: ListingProposal) => {
-    ++ticket.current;
-    setRecord(proposal);
-  }, []);
-
   // Only into an empty field: the seller may have started typing their own
   // brief while it was drafted, and their text wins. (The server made the
   // same check before it wrote, but the editor can be ahead of the disk.)
@@ -174,7 +140,7 @@ export function useAiSeoMode(
     latestOnAdopt.current?.({ brief: text });
   }, []);
 
-  const run = useAiRun(detail, save, { onBrief, onProposal });
+  const run = useAiRun(detail, save, { onBrief, onProposal: review.onProposal });
   const market = useMarketPanel(detail.name, run);
 
   const hasDesign = Object.keys(detail.design).length > 0;
@@ -191,8 +157,8 @@ export function useAiSeoMode(
   const canCheck = prerequisitesMet && saved;
 
   // A check after an edit can read the old file. Recheck when autosave
-  // succeeds, even if modified_at is unchanged -- and read the proposal
-  // again with it, since staleness is judged against the saved listing.
+  // succeeds, even if modified_at is unchanged. Proposal review observes
+  // the same saves to refresh server-computed staleness.
   useEffect(() => {
     if (!canCheck) return;
     let current = true;
@@ -213,21 +179,22 @@ export function useAiSeoMode(
           setDeploying(false);
         }
       });
-    read(name);
     return () => {
       current = false;
     };
-  }, [canCheck, name, detail.modified_at, save, read, poll]);
+  }, [canCheck, name, detail.modified_at, save, poll]);
 
   const follow = run.follow;
+  const refreshProposal = review.refresh;
   useEffect(() => {
     if (!batchPending && !deploying) return;
     const timer = setInterval(() => {
       if (batchPending) follow();
       setPoll((n) => n + 1);
+      refreshProposal();
     }, BATCH_POLL_MS);
     return () => clearInterval(timer);
-  }, [batchPending, deploying, follow]);
+  }, [batchPending, deploying, follow, refreshProposal]);
 
   const ready = canCheck && remoteReady;
   const reason = canCheck && !ready ? (remoteReason ?? "Checking AI setup...") : null;
@@ -237,17 +204,6 @@ export function useAiSeoMode(
     { label: "SEO prompt and AI provider ready", ready },
   ];
 
-  // Dropped during render, not from an effect, the same way `PreviewPanel`
-  // adjusts state while rendering rather than paying for a second render:
-  // a listing switch never briefly shows the previous listing's drawers
-  // before the read for the new one comes back. A `useState` comparison, not
-  // a ref, because refs may not be read during render (`react-hooks/refs`).
-  const [loadedName, setLoadedName] = useState(name);
-  if (loadedName !== name) {
-    setLoadedName(name);
-    setRecord(null);
-  }
-
   const startRun = run.start;
   const generate = useCallback(
     () => startRun({ draftBrief: latestDetail.current.brief.trim() === "" }),
@@ -255,81 +211,13 @@ export function useAiSeoMode(
   );
   const phase: AiSeoPhase = run.busy ? "loading" : run.phase === "failed" ? "failed" : "idle";
 
-  const resolve = useCallback(
-    (section: Section, state: "accepted" | "dismissed") => {
-      const current = latestRecord.current;
-      if (current === null) return;
-      const listing = latestDetail.current.name;
-      const mine = ++ticket.current;
-      setRecord((shown) =>
-        shown !== null && shown.generated_at === current.generated_at
-          ? { ...shown, resolution: { ...shown.resolution, [section]: state } }
-          : shown,
-      );
-      resolveListingProposal(listing, { generated_at: current.generated_at, [section]: state })
-        .then((next) => {
-          if (mine !== ticket.current) return;
-          // Gone, or replaced by a newer proposal: show what is there now.
-          if (next === null) read(listing);
-          else setRecord(next);
-        })
-        .catch(() => {});
-    },
-    [read],
-  );
-
-  const chooseTitle = useCallback(
-    (value: string) => {
-      latestOnUpdate.current({ etsy: { title: value } });
-      latestOnFlush.current();
-      resolve("title", "accepted");
-    },
-    [resolve],
-  );
-
-  const rejectTitle = useCallback(() => resolve("title", "dismissed"), [resolve]);
-
-  const chooseLead = useCallback(
-    (value: string) => {
-      latestOnUpdate.current({
-        etsy: { description: { ...latestDetail.current.etsy.description, lead: value } },
-      });
-      latestOnFlush.current();
-      resolve("lead", "accepted");
-    },
-    [resolve],
-  );
-
-  const rejectLead = useCallback(() => resolve("lead", "dismissed"), [resolve]);
-
-  const toggleTag = useCallback((tag: string) => {
-    const tags = latestDetail.current.etsy.tags;
-    if (!canToggleTag(tags, tag)) return;
-    const next = tags.includes(tag) ? tags.filter((t) => t !== tag) : [...tags, tag];
-    latestOnUpdate.current({ etsy: { tags: next } });
-    latestOnFlush.current();
-  }, []);
-
-  const acceptBestTags = useCallback(() => {
-    const current = latestRecord.current;
-    if (current === null) return;
-    latestOnUpdate.current({ etsy: { tags: current.proposal.tags.slice(0, 13) } });
-    latestOnFlush.current();
-    resolve("tags", "accepted");
-  }, [resolve]);
-
-  const closeTags = useCallback(() => resolve("tags", "dismissed"), [resolve]);
-
-  const pending = record !== null && SECTIONS.some((s) => record.resolution[s] === "pending");
-  const proposal = pending ? record : null;
-
   return {
     available: ready,
     requirements,
     reason,
     phase,
-    proposal,
-    staleReason: proposal?.stale.is_stale ? proposal.stale.reasons.join(", ") : null,
+    proposal: review.proposal,
+    staleReason: review.staleReason,
     generate,
     draftsBrief: !hasBrief,
     cancel: run.cancel,
@@ -337,12 +225,6 @@ export function useAiSeoMode(
     startedAt: run.startedAt,
     run,
     market,
-    chooseTitle,
-    rejectTitle,
-    chooseLead,
-    rejectLead,
-    toggleTag,
-    acceptBestTags,
-    closeTags,
+    ...review.actions,
   };
 }

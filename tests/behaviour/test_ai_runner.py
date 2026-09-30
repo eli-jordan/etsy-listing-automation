@@ -12,6 +12,7 @@ sequences are the *Scenarios* table in ``ui-market-seo-interactions.md``.
 from __future__ import annotations
 
 import hashlib
+import json
 import shutil
 import threading
 from collections.abc import Callable, Iterator
@@ -617,3 +618,30 @@ def test_each_run_reads_the_weights_from_settings_yaml(chain: Chain) -> None:
     detail = _detail(run, "market")
     assert detail is not None
     assert "at least one market_seo weight must be above zero" in detail
+
+
+def test_an_invalid_design_ref_fails_with_the_sellers_actionable_reason(chain: Chain) -> None:
+    edit_listing(chain.workspace.root, design={"default": "../outside-artwork.png"})
+
+    run = wait_until_finished(chain.start(draft_brief=False))
+
+    assert run.phase == "failed"
+    message = run.events[-1].model_dump()["message"]
+    assert "../outside-artwork.png" in message
+    assert message != INTERNAL_ERROR_MESSAGE
+
+
+def test_an_edit_during_generation_is_judged_against_the_prepared_inputs(chain: Chain) -> None:
+    original = chain.saved_brief()
+    chain.provider.during["seo"] = lambda: edit_listing(chain.workspace.root, brief=SELLER_BRIEF)
+
+    run = chain.run(draft_brief=False)
+
+    assert run.phase == "done"
+    announced = next(e for e in run.events if e.type == "proposal").model_dump()
+    assert announced["snapshot"]["brief"] == original
+    assert announced["stale"] == {"is_stale": True, "reasons": ["brief edited since"]}
+    assert json.dumps(original) in chain.provider.task("seo").prompt_text
+    cached = chain.proposals.load(LISTING)
+    assert cached is not None
+    assert cached.snapshot.brief == original

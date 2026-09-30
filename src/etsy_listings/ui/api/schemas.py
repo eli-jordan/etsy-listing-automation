@@ -13,12 +13,10 @@ from typing import Annotated, Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from etsy_listings.ai.proposals import (
-    ProposalChoices,
-    ProposalOrigin,
-    ProposalResolution,
-    ProposalStaleness,
+    ListingProposal as ListingProposal,
+)
+from etsy_listings.ai.proposals import (
     Resolution,
-    SeoProposalSnapshot,
 )
 from etsy_listings.batches import AiState
 from etsy_listings.config.listing import Listing
@@ -798,20 +796,6 @@ class SeoReadinessResponse(BaseModel):
     deploying: bool = False
     """A UI plan or apply holds this listing (A43): the editor asks again
     until the deploy lets it go."""
-
-
-class ListingProposal(BaseModel):
-    """A listing's cached proposal as the editor and the batch summary read
-    it (A41): the record, and whether it still describes the saved listing.
-    ``stale`` is computed from the saved listing on every read, never
-    stored."""
-
-    proposal: ProposalChoices
-    snapshot: SeoProposalSnapshot
-    generated_at: datetime
-    origin: ProposalOrigin
-    resolution: ProposalResolution
-    stale: ProposalStaleness
 
 
 class ProposalResolutionPatch(BaseModel):

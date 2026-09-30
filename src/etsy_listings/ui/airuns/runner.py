@@ -43,13 +43,12 @@ import yaml
 
 from etsy_listings.ai.brief import BriefRequest
 from etsy_listings.ai.errors import ProviderCancelledError, SeoGenerationError
+from etsy_listings.ai.listing_inputs import ListingAiInputs, PreparedSeo
 from etsy_listings.ai.market_queries import MarketQueriesRequest
 from etsy_listings.ai.orchestrator import generate_brief, generate_market_queries, generate_proposal
-from etsy_listings.ai.proposals import ProposalChoices, ProposalStore, input_snapshot
+from etsy_listings.ai.proposals import ProposalChoices, ProposalStore
 from etsy_listings.ai.providers import AiProvider
 from etsy_listings.clients.etsy.market import EtsyMarketClient
-from etsy_listings.config.garment_profile import GarmentProfile
-from etsy_listings.config.listing import Listing
 from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 from etsy_listings.market import MarketResearchError, ResearchCancelled, research
 from etsy_listings.market import snapshot as market_snapshot
@@ -62,10 +61,8 @@ from etsy_listings.ui.airuns.events import (
     AiQueriesEvent,
 )
 from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry
-from etsy_listings.ui.api.listings import replace_listing_yaml
-from etsy_listings.ui.api.seo import build_seo_request, listing_proposal, primary_design_image
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace.facts import WorkspaceFacts
+from etsy_listings.workspace.atomic import write_yaml_atomic
 from etsy_listings.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -198,25 +195,18 @@ class AiRunner:
         if run.cancel_event.is_set():
             raise _Stopped
 
-    def _load(self, run: AiRun) -> tuple[Listing, GarmentProfile]:
-        """The listing as saved now, and its garment profile."""
-        if not self.workspace.listing_file(run.listing).is_file():
-            raise UserFacingError(f"the listing {run.listing!r} no longer exists")
-        listing = self.workspace.load_listing(run.listing)
-        profile = WorkspaceFacts.gather(self.workspace).garment_profile(listing.garment_profile)
-        if profile is None:
-            raise UserFacingError("the listing has no usable garment profile")
-        return listing, profile
+    def _load(self, run: AiRun, *, market_block: str = "") -> PreparedSeo:
+        return ListingAiInputs.read(self.workspace, run.listing).prepare(market_block=market_block)
 
     def _chain(self, run: AiRun) -> None:
         # A batch run can be asked to stop before its thread starts (Cancel
         # batch landing just after the queue claimed the row, A40).
         self._check(run)
         workspace = self.workspace
-        listing, profile = self._load(run)
+        inputs = self._load(run)
         providers = self.providers(workspace)
-        design = primary_design_image(workspace, run.listing, listing)
-        drafting = run.draft_brief and not listing.brief.strip()
+        design = inputs.request.design_image
+        drafting = run.draft_brief and not inputs.request.brief.strip()
 
         run.step("brief", "pending" if drafting else "skipped", None if drafting else KEPT_BRIEF)
         run.step("market", "pending")
@@ -240,16 +230,16 @@ class AiRunner:
                 if written
                 else "You wrote the brief, so yours was kept",
             )
-            listing, profile = self._load(run)
+            inputs = self._load(run)
 
         run.step("market", "active", "Choosing Etsy searches from the brief")
-        if not listing.brief.strip():
+        if not inputs.request.brief.strip():
             raise UserFacingError("the listing brief is empty")
         queries = generate_market_queries(
             MarketQueriesRequest(
-                brief=listing.brief,
-                garment_title=profile.blueprint.display_title,
-                design_image=design,
+                brief=inputs.request.brief,
+                garment_title=inputs.request.product_type,
+                design_image=inputs.request.design_image,
             ),
             _read_prompt(workspace.market_queries_prompt_file()),
             providers,
@@ -290,13 +280,9 @@ class AiRunner:
             if result.empty
             else "Writing from the market data",
         )
-        listing, profile = self._load(run)
-        request = build_seo_request(
-            workspace, run.listing, listing, profile, market_block=snapshot.block
-        )
-        frozen = input_snapshot(workspace, run.listing, listing, profile)
+        inputs = self._load(run, market_block=snapshot.block)
         proposal = generate_proposal(
-            request,
+            inputs.request,
             _read_prompt(workspace.seo_prompt_file()),
             providers,
             cancel_event=run.cancel_event,
@@ -313,11 +299,11 @@ class AiRunner:
             record = self.proposals.put(
                 run.listing,
                 ProposalChoices.of(proposal),
-                frozen,
+                inputs.snapshot,
                 generated_at=datetime.now(UTC),
                 origin=run.origin,
             )
-            announced = listing_proposal(workspace, run.listing, record)
+            announced = ListingAiInputs.read(workspace, run.listing).judge(record)
         run.emit(lambda seq: AiProposalEvent(seq=seq, **announced.model_dump()))
         run.step(
             "seo",
@@ -338,7 +324,7 @@ class AiRunner:
             if str(document.get("brief") or "").strip():
                 return False
             document["brief"] = text
-            replace_listing_yaml(path, document)
+            write_yaml_atomic(path, document)
             return True
 
 

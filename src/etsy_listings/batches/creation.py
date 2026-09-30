@@ -25,7 +25,6 @@ with its upload copied beside the batch for Retry (A46).
 from __future__ import annotations
 
 import hashlib
-import shutil
 from collections.abc import Callable
 from contextlib import AbstractContextManager, nullcontext, suppress
 from datetime import UTC, datetime
@@ -42,8 +41,7 @@ from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.errors import UserFacingError
-from etsy_listings.listing_templates import owned_refs
-from etsy_listings.listing_templates.check import check_listing_template_files
+from etsy_listings.listing_templates import FrozenListingTemplate
 from etsy_listings.workspace import layout
 from etsy_listings.workspace.atomic import write_bytes_atomic
 from etsy_listings.workspace.facts import WorkspaceFacts
@@ -62,22 +60,9 @@ class ConfirmRefused(UserFacingError, ValueError):
     """The session cannot become a batch yet, and nothing was written."""
 
 
-def _template(workspace: Workspace, batch: Batch) -> ListingTemplate:
-    return ListingTemplate.model_validate(
-        batch.template, context={"currency": workspace.defaults.etsy.currency}
-    )
-
-
-def _revalidate(workspace: Workspace, template: ListingTemplate, frozen: Path, name: str) -> None:
-    """The frozen document's shared refs -- garment profile, pricing plan,
-    common copy, mockup templates -- may have changed since staging began
-    (spec, *Design validation*)."""
-    issues = check_listing_template_files(
-        workspace,
-        template,
-        resolve=lambda ref: workspace.resolve_frozen_template_ref(ref, frozen_dir=frozen),
-        facts=WorkspaceFacts.gather(workspace),
-    )
+def _revalidate(frozen: FrozenListingTemplate, name: str) -> None:
+    """Current shared refs may have changed since staging began (PRD 74)."""
+    issues = frozen.issues(facts=WorkspaceFacts.gather(frozen.workspace))
     blocking = [issue.message for issue in issues if issue.severity == "block"]
     if blocking:
         raise ConfirmRefused(f"{name} as staged can no longer make listings: {' '.join(blocking)}")
@@ -122,13 +107,15 @@ def _start(
         )
     if not reviewed.creatable:
         raise ConfirmRefused("There is no design here that can become a listing.")
-    template = ListingTemplate.model_validate(
-        session.template, context={"currency": workspace.defaults.etsy.currency}
+    frozen = FrozenListingTemplate.restore(
+        workspace,
+        session.template,
+        workspace.staging_template_dir(session_id),
+        session.template_saved_at,
     )
-    frozen = workspace.staging_template_dir(session_id)
-    _revalidate(workspace, template, frozen, session.listing_template)
+    _revalidate(frozen, session.listing_template)
     # Kept for Retry after the staging session has gone (A37).
-    shutil.copytree(frozen, workspace.batch_template_dir(session_id), dirs_exist_ok=True)
+    frozen.copy_to(workspace.batch_template_dir(session_id))
     by_id = {row.id: row for row in session.rows}
     others = {row.name.casefold() for row in reviewed.creatable}
     allocated: set[str] = set()
@@ -198,12 +185,17 @@ def create_rows(
         batch = batches.load(batch_id)
         if batch is None:
             raise KeyError(batch_id)
-        template = _template(workspace, batch)
+        frozen = FrozenListingTemplate.restore(
+            workspace,
+            batch.template,
+            workspace.batch_template_dir(batch.id),
+            batch.template_saved_at,
+        )
         for index, row in enumerate(batch.rows):
             if row.creation == "created" or (only is not None and row.id not in only):
                 continue
             try:
-                row = _create(workspace, batches, batch, index, template, lock)
+                row = _create(workspace, batches, batch, index, frozen, lock)
             except (OSError, ConfigLoadError, ValidationError, UserFacingError) as exc:
                 row = batch.rows[index].model_copy(
                     update={"creation": "failed", "error": _failure(row, exc)}
@@ -290,7 +282,7 @@ def _create(
     batches: BatchStore,
     batch: Batch,
     index: int,
-    template: ListingTemplate,
+    frozen: FrozenListingTemplate,
     lock: NameLock,
 ) -> BatchRow:
     row = batch.rows[index]
@@ -301,7 +293,7 @@ def _create(
                     row = row.model_copy(update={"claimed": True})
                     batch.rows[index] = row
                     batches.save(batch)
-                _write(workspace, batch, row, template)
+                _write(workspace, batch, row, frozen)
                 # Created is queued (spec, *Confirming a batch*), in the same
                 # save, so a crash cannot leave a listing the queue never sees.
                 return row.model_copy(update={"creation": "created", "error": None, "ai": "queued"})
@@ -326,17 +318,21 @@ def _put(workspace: Workspace, target: Path, data: bytes) -> None:
         raise OSError(exc.errno, exc.strerror or str(exc), where) from exc
 
 
-def _write(workspace: Workspace, batch: Batch, row: BatchRow, template: ListingTemplate) -> None:
+def _write(
+    workspace: Workspace, batch: Batch, row: BatchRow, frozen: FrozenListingTemplate
+) -> None:
     listing_dir = workspace.listing_dir(row.name)
     listing_dir.mkdir(parents=True, exist_ok=True)
     design = workspace.design_file(row.design)
     if not design.is_file():
         _put(workspace, design, _input(workspace, batch, row).read_bytes())
-    frozen = workspace.batch_template_dir(batch.id)
-    for ref in owned_refs(template):
-        source = workspace.resolve_frozen_template_ref(ref, frozen_dir=frozen)
-        _put(workspace, workspace.resolve_ref(ref, listing_dir=listing_dir), source.read_bytes())
-    document = _listing_document(workspace, template, row.design)
+    for asset in frozen.assets():
+        _put(
+            workspace,
+            workspace.resolve_ref(asset.ref, listing_dir=listing_dir),
+            asset.source.read_bytes(),
+        )
+    document = _listing_document(workspace, frozen.template, row.design)
     Listing.model_validate(document, context={"currency": workspace.defaults.etsy.currency})
     _put(
         workspace,

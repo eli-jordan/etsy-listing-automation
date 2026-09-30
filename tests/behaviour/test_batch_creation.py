@@ -11,6 +11,7 @@ from __future__ import annotations
 import contextlib
 import os
 from datetime import UTC, datetime
+from io import BytesIO
 from pathlib import Path
 
 import pytest
@@ -21,6 +22,7 @@ from etsy_listings.batches import (
     BatchStore,
     ConfirmRefused,
     StagingStore,
+    Upload,
     confirm,
     retry_row,
     stage_pngs,
@@ -258,6 +260,102 @@ class TestFailureAndRetry:
 
 
 class TestFrozenTemplate:
+    def test_capture_observes_the_template_lock_but_upload_does_not_hold_it(
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+    ) -> None:
+        locked = False
+        acquired: list[str] = []
+        path = workspace.listing_template_file("heavyweight-tee")
+        changed = workspace.load_listing_template("heavyweight-tee").model_dump(mode="json")
+        changed["colors"] = ["black"]
+        changed["media"] = [
+            ref for ref in changed["media"] if isinstance(ref, str) or ref.get("colour") == "black"
+        ]
+        asset_ref = next(ref for ref in changed["media"] if isinstance(ref, str))
+        asset = workspace.resolve_template_ref(asset_ref, template="heavyweight-tee")
+
+        @contextlib.contextmanager
+        def template_lock(name: str):
+            nonlocal locked
+            acquired.append(name)
+            locked = True
+            path.write_text(yaml.safe_dump(changed), encoding="utf-8")
+            asset.write_bytes(png(99))
+            try:
+                yield
+            finally:
+                locked = False
+
+        class UploadOutsideLock(BytesIO):
+            def read(self, size: int = -1) -> bytes:
+                assert acquired == ["heavyweight-tee"]
+                assert not locked
+                return super().read(size)
+
+        session = stage_pngs(
+            workspace,
+            staging,
+            "heavyweight-tee",
+            [Upload(DESIGNS[0][0], UploadOutsideLock(DESIGNS[0][1]))],
+            template_lock=template_lock,
+            now=NOW,
+        )
+        batch = _confirm(workspace, staging, batches, session.id)
+
+        assert session.template_saved_at == datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+        assert _listing(workspace, batch.rows[0].name)["colors"] == ["black"]
+        copied = workspace.resolve_ref(
+            asset_ref, listing_dir=workspace.listing_dir(batch.rows[0].name)
+        )
+        assert copied.read_bytes() == png(99)
+
+    @pytest.mark.parametrize("change", ["edit", "delete", "rename"])
+    def test_template_content_is_frozen_before_the_upload_is_read(
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore, change: str
+    ) -> None:
+        path = workspace.listing_template_file("heavyweight-tee")
+        original = workspace.load_listing_template("heavyweight-tee")
+        asset_ref = next(ref for ref in original.media if isinstance(ref, str))
+        asset = workspace.resolve_template_ref(asset_ref, template="heavyweight-tee")
+        original_bytes = asset.read_bytes()
+        saved_at = datetime.fromtimestamp(path.stat().st_mtime, tz=UTC)
+
+        class ChangingUpload(BytesIO):
+            changed = False
+
+            def read(self, size: int = -1) -> bytes:
+                if not self.changed:
+                    self.changed = True
+                    if change == "delete":
+                        workspace.remove_listing_template("heavyweight-tee")
+                    elif change == "rename":
+                        workspace.listing_template_dir("heavyweight-tee").rename(
+                            workspace.listing_template_dir("renamed-tee")
+                        )
+                    else:
+                        document = original.model_dump(mode="json")
+                        document["colors"] = ["black"]
+                        path.write_text(yaml.safe_dump(document), encoding="utf-8")
+                        os.utime(path, (saved_at.timestamp() + 60, saved_at.timestamp() + 60))
+                        asset.write_bytes(png(99))
+                return super().read(size)
+
+        session = stage_pngs(
+            workspace,
+            staging,
+            "heavyweight-tee",
+            [Upload(filename=DESIGNS[0][0], stream=ChangingUpload(DESIGNS[0][1]))],
+            now=NOW,
+        )
+        batch = _confirm(workspace, staging, batches, session.id)
+
+        assert session.template_saved_at == saved_at
+        assert _listing(workspace, batch.rows[0].name)["colors"] == original.colors
+        copied = workspace.resolve_ref(
+            asset_ref, listing_dir=workspace.listing_dir(batch.rows[0].name)
+        )
+        assert copied.read_bytes() == original_bytes
+
     def test_an_edit_after_staging_does_not_reach_the_listings(
         self, workspace: Workspace, staging: StagingStore, batches: BatchStore
     ) -> None:
