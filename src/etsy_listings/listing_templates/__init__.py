@@ -5,11 +5,12 @@ The model is `config.ListingTemplate` and the files are `Workspace`'s
 (``listing_template_*``). This package is what happens between them: turning
 a listing -- or another listing template -- into a draft
 (:func:`from_listing`, :func:`from_template`), judging it complete, and
-writing it (:func:`save`), which is the only step that touches the disk.
+writing it (:func:`save`). FrozenListingTemplate captures the document,
+owned assets and saved-at time together for a staging session.
 
 Deliberately withheld: instantiating a template into listings. That is
 `batches`' (A39), which freezes a template before it creates anything and
-asks :func:`owned_refs` which files go with it.
+asks FrozenListingTemplate to capture, carry and check its owned content.
 """
 
 from etsy_listings.listing_templates.check import template_issues
@@ -24,8 +25,11 @@ from etsy_listings.listing_templates.convert import (
     owned_refs,
     save,
 )
+from etsy_listings.listing_templates.frozen import FrozenListingTemplate, TemplateLock
 
 __all__ = [
+    "FrozenListingTemplate",
+    "TemplateLock",
     # A draft: the document, and the files it will own.
     "ListingTemplateDraft",
     "AssetCopy",

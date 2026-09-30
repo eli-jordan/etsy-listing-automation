@@ -494,6 +494,154 @@ describe("useAiSeoMode acceptance", () => {
   });
 });
 
+describe("useAiSeoMode proposal reconciliation", () => {
+  it("finishes queued choices on their listing after the editor navigates away", async () => {
+    const { result, rerender, body } = await readyHookWithProposal();
+    let finish!: (value: ListingProposal | null) => void;
+    runs.resolveProposal.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    act(() => {
+      result.current.rejectTitle();
+      result.current.rejectLead();
+    });
+    runs.cached.proposal = null;
+    rerender(detail({ name: "another-listing" }));
+    await waitFor(() => expect(runs.loadProposal).toHaveBeenCalledWith("another-listing"));
+    const acknowledged = {
+      ...body,
+      resolution: { ...body.resolution, title: "dismissed" as const },
+    };
+    runs.cached.proposal = acknowledged;
+    await act(async () => finish(acknowledged));
+
+    await waitFor(() => expect(runs.resolveProposal).toHaveBeenCalledTimes(2));
+    expect(runs.resolveProposal).toHaveBeenLastCalledWith("take-a-hike", {
+      generated_at: body.generated_at,
+      lead: "dismissed",
+    });
+    expect(result.current.proposal).toBeNull();
+  });
+  it("keeps later choices closed when an earlier resolution is acknowledged", async () => {
+    const { result, body } = await readyHookWithProposal();
+    let finish!: (value: ListingProposal | null) => void;
+    runs.resolveProposal.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+
+    act(() => {
+      result.current.rejectTitle();
+      result.current.rejectLead();
+    });
+    expect(result.current.proposal?.resolution).toEqual({
+      title: "dismissed",
+      lead: "dismissed",
+      tags: "pending",
+    });
+    expect(runs.resolveProposal).toHaveBeenCalledTimes(1);
+    runs.cached.proposal = { ...body, resolution: { ...body.resolution, title: "dismissed" } };
+    await act(async () => finish(runs.cached.proposal));
+
+    await waitFor(() => expect(runs.cached.proposal?.resolution.lead).toBe("dismissed"));
+    expect(result.current.proposal?.resolution).toEqual({
+      title: "dismissed",
+      lead: "dismissed",
+      tags: "pending",
+    });
+  });
+
+  it("ignores an old resolution response after a replacement proposal arrives", async () => {
+    const { result, rerender, body } = await readyHookWithProposal();
+    let finish!: (value: ListingProposal | null) => void;
+    runs.resolveProposal.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    act(() => {
+      result.current.rejectTitle();
+      result.current.rejectLead();
+    });
+    const fresh = proposal({ generated_at: "2026-09-24T00:00:00Z" });
+    runs.cached.proposal = fresh;
+    rerender(detail({ modified_at: "2026-09-17T10:10:00Z" }));
+    await waitFor(() => expect(result.current.proposal).toEqual(fresh));
+
+    await act(async () =>
+      finish({ ...body, resolution: { ...body.resolution, title: "dismissed" } }),
+    );
+    expect(result.current.proposal).toEqual(fresh);
+    expect(runs.resolveProposal).toHaveBeenCalledTimes(1);
+  });
+
+  it("restores the server drawer state if a resolution fails", async () => {
+    const { result, body } = await readyHookWithProposal();
+    runs.resolveProposal.mockRejectedValueOnce(new Error("offline"));
+
+    act(() => result.current.rejectTitle());
+    expect(result.current.proposal?.resolution.title).toBe("dismissed");
+
+    await waitFor(() => expect(result.current.proposal).toEqual(body));
+  });
+
+  it("ignores a late cache read once a live proposal has arrived", async () => {
+    mockReadiness({ ready: true, batch_pending: false, deploying: false });
+    let finish!: (value: ListingProposal | null) => void;
+    runs.loadProposal.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    await waitFor(() => expect(result.current.available).toBe(true));
+    act(() => result.current.generate());
+    const fresh = proposal({ generated_at: "2026-09-24T00:00:00Z" });
+    await delivers(fresh);
+    await waitFor(() => expect(result.current.proposal).toEqual(fresh));
+
+    await act(async () => finish(proposal()));
+    expect(result.current.proposal).toEqual(fresh);
+  });
+  it("keeps a chosen drawer closed when a save reads the proposal before resolution finishes", async () => {
+    const { result, rerender, body } = await readyHookWithProposal();
+    let finish!: (value: ListingProposal | null) => void;
+    runs.resolveProposal.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+
+    let refresh!: (value: ListingProposal | null) => void;
+    runs.loadProposal.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          refresh = resolve;
+        }),
+    );
+    act(() => result.current.chooseTitle("Title B"));
+    rerender(detail({ modified_at: "2026-09-17T10:10:00Z" }));
+    await waitFor(() => expect(runs.loadProposal).toHaveBeenCalledTimes(2));
+    await act(async () => refresh(body));
+
+    expect(result.current.proposal?.resolution.title).toBe("accepted");
+    await act(async () =>
+      finish({
+        ...body,
+        resolution: { ...body.resolution, title: "accepted" },
+      }),
+    );
+  });
+});
+
 describe("useAiSeoMode stale state", () => {
   it("names what changed, from the server, and keeps every choice usable", async () => {
     mockReadiness({ ready: true, batch_pending: false, deploying: false });

@@ -96,6 +96,7 @@ from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.ui.runs.executor import ContextFactory
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace import layout
+from etsy_listings.workspace.atomic import write_yaml_atomic
 from etsy_listings.workspace.common_copy import CommonCopyError
 from etsy_listings.workspace.facts import WorkspaceFacts
 from etsy_listings.workspace.workspace import (
@@ -543,7 +544,7 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
             Listing.model_validate(merged, context={"currency": workspace.defaults.etsy.currency})
         except ValidationError as exc:
             return _detail(workspace, name, field_errors=field_errors_of(exc))
-        replace_listing_yaml(path, merged)
+        write_yaml_atomic(path, merged)
     if raw.get("lifecycle") == "deleted" and merged.get("lifecycle") != "deleted":
         # A42's delete, undone: Cancel on a pending delete (PRD 63) means the
         # listing never went, so the batch rows the delete marked return.
@@ -584,22 +585,11 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
         path = workspace.listing_file(name)
         raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
         raw["lifecycle"] = "deleted"
-        replace_listing_yaml(path, raw)
+        write_yaml_atomic(path, raw)
         workspace.market_snapshot_file(name).unlink(missing_ok=True)
         _proposals(request).remove(name)
     facts = WorkspaceFacts.gather(workspace)
     return _summarize_listing(workspace, facts, name, live=False, etsy_state=etsy_state)
-
-
-def replace_listing_yaml(path: Path, document: Mapping[str, Any]) -> None:
-    """Replace ``listing.yaml`` without a window where a reader sees it empty.
-
-    ``Path.write_text`` truncates first. The editor's browser tests read the
-    file while a blur is flushing, and an empty read is not a document.
-    """
-    temporary = path.with_name(path.name + ".tmp")
-    temporary.write_text(yaml.safe_dump(dict(document), sort_keys=False), encoding="utf-8")
-    os.replace(temporary, path)
 
 
 def _describe_draft(

@@ -27,6 +27,7 @@ from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import ValidationError
 
+from etsy_listings.ai.listing_inputs import ListingAiInputs
 from etsy_listings.ai.proposals import ProposalStore
 from etsy_listings.batches import (
     Batch,
@@ -64,7 +65,7 @@ from etsy_listings.ui.api.schemas import (
     StagingRowDetail,
     WorkflowStep,
 )
-from etsy_listings.ui.api.seo import batch_readiness, listing_proposal
+from etsy_listings.ui.api.seo import batch_readiness
 from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.ui.batchqueue import RETRYABLE, BatchQueue
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
@@ -167,7 +168,7 @@ def _proposal(
     if record is None:
         return None, []
     try:
-        wire = listing_proposal(workspace, row.name, record, facts=facts)
+        wire = ListingAiInputs.read(workspace, row.name, facts=facts).judge(record)
     except (ConfigLoadError, OSError, ValidationError):
         return None, []
     if all(state != "pending" for state in wire.resolution.model_dump().values()):
@@ -231,7 +232,13 @@ def create_staging(
         raise HTTPException(status_code=404, detail=f"no listing template {listing_template!r}")
     received = [Upload(filename=f.filename or "unnamed.png", stream=f.file) for f in files or []]
     try:
-        session = stage_pngs(workspace, _staging(request), listing_template, received)
+        session = stage_pngs(
+            workspace,
+            _staging(request),
+            listing_template,
+            received,
+            template_lock=request.app.state.workspace_locks.listing_template,
+        )
     except StagingRefused as exc:
         refusal = StagingRefusal(message=exc.message, remedy=exc.remedy)
         raise HTTPException(status_code=422, detail=refusal.model_dump()) from exc

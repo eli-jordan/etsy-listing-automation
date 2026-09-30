@@ -21,10 +21,7 @@ browser disconnecting -- were retired when the browser moved onto runs
   endpoint answers with for the **AI Mode** button (``draft_brief=True``:
   an empty brief is drafted by that click), so the button is lit exactly
   when ``POST /api/ai/runs`` would accept the run the click starts;
-- turning a saved `Listing` into the `SeoRequest` the orchestrator wants
-  (:func:`build_seo_request`, :func:`primary_design_image`), and a cached
-  proposal into its wire form, judged stale against the saved listing
-  (:func:`listing_proposal`; A41);
+- saved-listing preparation and proposal judgment live in ai/listing_inputs;
 - the provider factory ``create_app`` injects (:data:`AiProviderFactory`),
   the seam tests replace with fakes. CI never calls a real Codex or Claude
   CLI, per PR4's own rule.
@@ -40,16 +37,12 @@ from fastapi import APIRouter, HTTPException, Request
 from etsy_listings.ai.claude import ClaudeProvider
 from etsy_listings.ai.codex import CodexProvider
 from etsy_listings.ai.grok import GrokProvider
-from etsy_listings.ai.models import GarmentContext, SeoRequest
+from etsy_listings.ai.listing_inputs import ListingAiInputs
 from etsy_listings.ai.proposals import (
-    ProposalRecord,
     ProposalReplacedError,
     ProposalStore,
-    input_snapshot,
-    proposal_staleness,
 )
 from etsy_listings.ai.providers import AiProvider
-from etsy_listings.config.garment_profile import GarmentProfile
 from etsy_listings.config.listing import Listing
 from etsy_listings.market import snapshot as market_snapshot
 from etsy_listings.market.snapshot import MarketSnapshot
@@ -61,23 +54,9 @@ from etsy_listings.ui.api.schemas import (
     SeoReadinessResponse,
 )
 from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import InvalidRefError, Workspace
+from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
-
-_PREFERRED_DESIGN_KEYS: tuple[str, ...] = ("default", "on-light", "on-dark")
-"""Which artwork key becomes the one image a provider sees, when a listing's
-design map carries more than one (PRD 30's ``on-light``/``on-dark`` split).
-The provider is reading the design once, for SEO copy and OCR text, not
-rendering it per colour -- there is no per-colour resolution to do here, only
-a deterministic single pick. ``"default"`` covers the common single-artwork
-case (`config/listing.py._coerce_design`'s own normalisation target);
-``on-light`` is preferred over ``on-dark`` next only because it has to be
-one of them, arbitrarily, and a fixed order beats letting `dict` iteration
-order decide. Anything not in this tuple falls back to the alphabetically
-first key (`primary_design_image` below), so reordering the mapping cannot
-change the image sent to a provider."""
-
 
 AiProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
 """`create_app`'s injection seam for this module, the same shape
@@ -115,17 +94,6 @@ def _providers(request: Request, workspace: Workspace) -> Sequence[AiProvider]:
     factory = request.app.state.seo_provider_factory
     result: Sequence[AiProvider] = factory(workspace)
     return result
-
-
-def primary_design_image(workspace: Workspace, name: str, listing: Listing) -> Path:
-    listing_dir = workspace.listing_dir(name)
-    key = next((k for k in _PREFERRED_DESIGN_KEYS if k in listing.design), min(listing.design))
-    try:
-        return workspace.resolve_ref(listing.design[key], listing_dir=listing_dir)
-    except InvalidRefError as exc:
-        # A seller's file to fix (PRD 73's legacy form, most likely), so a
-        # 409 naming it, the way a missing garment profile is answered.
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
 def readiness(
@@ -214,58 +182,6 @@ def batch_readiness(
     return None
 
 
-def build_seo_request(
-    workspace: Workspace,
-    name: str,
-    listing: Listing,
-    profile: GarmentProfile,
-    *,
-    market_block: str = "",
-) -> SeoRequest:
-    """The submitted generation inputs (implementation plan, "Proposal and
-    stale-state rules"), read from the saved listing and its garment profile
-    -- never from a value the browser supplied -- with the AI run's
-    market-data block (``""`` is none).
-
-    ``product_type`` is the garment profile's blueprint title and
-    ``etsy_category`` the listing's shop section: the closest facts a listing
-    carries to the two the prompt asks for."""
-    return SeoRequest(
-        market_block=market_block,
-        brief=listing.brief,
-        product_type=profile.blueprint.display_title,
-        etsy_category=listing.etsy.section or "",
-        materials=tuple(profile.materials),
-        colors=tuple(listing.colors),
-        garment=GarmentContext(brand=profile.blueprint.brand, model=profile.blueprint.model),
-        design_image=primary_design_image(workspace, name, listing),
-    )
-
-
-def listing_proposal(
-    workspace: Workspace,
-    name: str,
-    record: ProposalRecord,
-    *,
-    facts: WorkspaceFacts | None = None,
-) -> ListingProposal:
-    """``record`` on the wire, judged against the saved listing as it is now
-    (A41). Server-side, so the editor and the batch summary agree. A caller
-    judging many listings passes the ``facts`` it gathered once."""
-    listing = workspace.load_listing(name)
-    facts = facts or WorkspaceFacts.gather(workspace)
-    profile = facts.garment_profile(listing.garment_profile)
-    now = input_snapshot(workspace, name, listing, profile)
-    return ListingProposal(
-        proposal=record.proposal,
-        snapshot=record.snapshot,
-        generated_at=record.generated_at,
-        origin=record.origin,
-        resolution=record.resolution,
-        stale=proposal_staleness(record.snapshot, now),
-    )
-
-
 BATCH_PENDING_REASON = "This listing is drafting in a batch. AI Mode is back once that is done."
 """The editor's hint while a batch row owns the listing's AI (spec,
 *Scheduling*: two runs must never own one listing)."""
@@ -332,7 +248,7 @@ def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
     record = _proposals(request).load(target.name)
     if record is None:
         raise HTTPException(status_code=404, detail=f"no proposal for {target.name!r}")
-    return listing_proposal(target.workspace, target.name, record)
+    return ListingAiInputs.read(target.workspace, target.name).judge(record)
 
 
 @router.patch(
@@ -368,4 +284,4 @@ def resolve_listing_proposal(
             ) from exc
     if record is None:
         raise HTTPException(status_code=404, detail=f"no proposal for {target.name!r}")
-    return listing_proposal(target.workspace, target.name, record)
+    return ListingAiInputs.read(target.workspace, target.name).judge(record)
