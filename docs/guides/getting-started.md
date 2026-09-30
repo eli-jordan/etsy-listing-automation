@@ -203,7 +203,7 @@ UI that renders through the real pipeline live as you drag. Build the
 frontend once, then run both halves:
 
 ```bash
-cd src/etsy_listings/ui/frontend && npm install && npm run build && cd -
+cd src/ui && npm install && npm run build && cd -
 uv run etsy-listings ui --root ~/etsy-listings --port 8000
 ```
 
@@ -233,7 +233,7 @@ run the dev server instead of the built one in a second terminal (it proxies
 `/api` to the backend):
 
 ```bash
-cd src/etsy_listings/ui/frontend && npm run dev # http://localhost:5173
+cd src/ui && npm run dev # http://localhost:5173
 ```
 
 You can also hand-write `template.yaml` — no calibrator required, just less
