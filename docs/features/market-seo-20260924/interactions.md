@@ -9,22 +9,22 @@ the chain runs, and afterwards: the elements, their states, interactions and
 animations, and why each is shaped the way it is.
 
 The mockup is a Marver scene. Run `npx marver dev` in
-`src/etsy_listings/ui/frontend` and open the **Market-informed SEO** board.
+`src/ui` and open the **Market-informed SEO** board.
 
 | Frame | Shows |
 |---|---|
-| [`researching`](../../../src/etsy_listings/ui/frontend/design/scenes/market-seo/researching.tsx) | Brief done, market research running, panel loading |
-| [`suggesting`](../../../src/etsy_listings/ui/frontend/design/scenes/market-seo/suggesting.tsx) | Market research done, suggestions being written, panel filled |
-| [`ready`](../../../src/etsy_listings/ui/frontend/design/scenes/market-seo/ready.tsx) | Suggestions ready, drawers open, first listing expanded |
-| [`states`](../../../src/etsy_listings/ui/frontend/design/scenes/market-seo/states.tsx) | Every indicator state with its hover card pinned open, plus the panel's Phrases, empty and failed states |
+| [`researching`](../../../src/ui/design/scenes/market-seo/researching.tsx) | Brief done, market research running, panel loading |
+| [`suggesting`](../../../src/ui/design/scenes/market-seo/suggesting.tsx) | Market research done, suggestions being written, panel filled |
+| [`ready`](../../../src/ui/design/scenes/market-seo/ready.tsx) | Suggestions ready, drawers open, first listing expanded |
+| [`states`](../../../src/ui/design/scenes/market-seo/states.tsx) | Every indicator state with its hover card pinned open, plus the panel's Phrases, empty and failed states |
 
-The mockup code lives in `src/etsy_listings/ui/frontend/design/screens/marketSeo/`:
+The mockup code lives in `src/ui/design/screens/marketSeo/`:
 
-- [`AiWorkflowIndicator.tsx`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/AiWorkflowIndicator.tsx): the page-head indicator.
-- [`MarketListingsPanel.tsx`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx): the right-hand panel.
-- [`MarketSeoScreen.tsx`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketSeoScreen.tsx): the editor around them, mirroring the real `ListingEditorPage` and `DetailsTab` markup.
-- [`marketSeo.css`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/marketSeo.css): all new styles.
-- Fixture data is in [`scenes/market-seo/_fixtures.ts`](../../../src/etsy_listings/ui/frontend/design/scenes/market-seo/_fixtures.ts).
+- [`AiWorkflowIndicator.tsx`](../../../src/ui/design/screens/marketSeo/AiWorkflowIndicator.tsx): the page-head indicator.
+- [`MarketListingsPanel.tsx`](../../../src/ui/design/screens/marketSeo/MarketListingsPanel.tsx): the right-hand panel.
+- [`MarketSeoScreen.tsx`](../../../src/ui/design/screens/marketSeo/MarketSeoScreen.tsx): the editor around them, mirroring the real `ListingEditorPage` and `DetailsTab` markup.
+- [`marketSeo.css`](../../../src/ui/design/screens/marketSeo/marketSeo.css): all new styles.
+- Fixture data is in [`scenes/market-seo/_fixtures.ts`](../../../src/ui/design/scenes/market-seo/_fixtures.ts).
 
 Nothing in `src/` may import from `design/`. Port the markup and styles into
 the app; don't reference the mockup files.
@@ -67,7 +67,7 @@ latest `step` event for each node. It works the same after a reload, because
 the editor reattaches to the run and the events replay.
 
 In the mockup it sits straight after `page-head__meta`
-([`MarketSeoScreen.tsx:87-88`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketSeoScreen.tsx#L87)):
+([`MarketSeoScreen.tsx:87-88`](../../../src/ui/design/screens/marketSeo/MarketSeoScreen.tsx#L87)):
 
 ```tsx
 <span className="page-head__meta">Saved a moment ago</span>
@@ -90,9 +90,9 @@ between them. The node's hover-card detail line can tell them apart (see
 [States](#states)).
 
 Step metadata is in `STEPS`
-([`AiWorkflowIndicator.tsx:8-27`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/AiWorkflowIndicator.tsx#L8)).
+([`AiWorkflowIndicator.tsx:8-27`](../../../src/ui/design/screens/marketSeo/AiWorkflowIndicator.tsx#L8)).
 The markup
-([`AiWorkflowIndicator.tsx:60-96`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/AiWorkflowIndicator.tsx#L60)):
+([`AiWorkflowIndicator.tsx:60-96`](../../../src/ui/design/screens/marketSeo/AiWorkflowIndicator.tsx#L60)):
 
 ```tsx
 <div className="aiflow" role="status" aria-live="polite" aria-label={`AI Mode: ${line.text}`}>
@@ -115,7 +115,7 @@ The markup
 **Why a text label as well as the nodes.** Icons alone make the seller hover to
 learn anything. The label means the chain reads at a glance, and it keeps the
 old indicator's wording style (*Drafting brief…*). It comes from `summary()`
-([`AiWorkflowIndicator.tsx:39-45`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/AiWorkflowIndicator.tsx#L39)):
+([`AiWorkflowIndicator.tsx:39-45`](../../../src/ui/design/screens/marketSeo/AiWorkflowIndicator.tsx#L39)):
 a failed step wins, then the active step's label, otherwise *Suggestions ready*.
 
 **Why small and quiet.** It shares a line with the title, status tag and
@@ -145,10 +145,10 @@ rather than a solid fill. Only the running node carries colour and motion.
 ### States
 
 Each step is a `WorkflowStep { id, state, detail? }`
-([`AiWorkflowIndicator.tsx:4-6`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/AiWorkflowIndicator.tsx#L4)),
+([`AiWorkflowIndicator.tsx:4-6`](../../../src/ui/design/screens/marketSeo/AiWorkflowIndicator.tsx#L4)),
 with `state` one of `pending | active | done | skipped | warning | failed`. The
 `states` frame shows every combination. The fixture sets are `steps.*` in
-[`_fixtures.ts:101-137`](../../../src/etsy_listings/ui/frontend/design/scenes/market-seo/_fixtures.ts#L101).
+[`_fixtures.ts:101-137`](../../../src/ui/design/scenes/market-seo/_fixtures.ts#L101).
 
 | State | Look | Badge | CSS |
 |---|---|---|---|
@@ -165,7 +165,7 @@ that need a second look.
 
 A connector is solid once the step before it is `done`, `skipped` or `warning`,
 meaning the chain moved past it
-([`AiWorkflowIndicator.tsx:68-72`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/AiWorkflowIndicator.tsx#L68)).
+([`AiWorkflowIndicator.tsx:68-72`](../../../src/ui/design/screens/marketSeo/AiWorkflowIndicator.tsx#L68)).
 
 ```css
 /* marketSeo.css:34-43 */
@@ -281,7 +281,7 @@ they breathe together.
 
 **Reduced motion: slow the pulse down, don't remove it.** Under
 `prefers-reduced-motion: reduce` the period goes to 3s
-([`marketSeo.css:110-116`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/marketSeo.css#L110)).
+([`marketSeo.css:110-116`](../../../src/ui/design/screens/marketSeo/marketSeo.css#L110)).
 This follows the lesson in the old `AiActivityIndicator`'s comment: a spinner that
 stopped on a Windows machine with animations off read as a hang. Here the
 motion *is* the information, so it is softened rather than removed.
@@ -305,7 +305,7 @@ as AI Mode's own tip: 250px, a purple-tinted border, `--shadow-md`.
 The card has three parts:
 
 - **Head:** the step name and a state word from `STATE_WORD`
-  ([L29](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/AiWorkflowIndicator.tsx#L29)),
+  ([L29](../../../src/ui/design/screens/marketSeo/AiWorkflowIndicator.tsx#L29)),
   coloured by state.
 - **About:** a sentence on what the step does, the same every run.
 - **Detail:** this run's specifics, below a divider, in tabular numbers.
@@ -363,7 +363,7 @@ they do. Market data is now the main driver of wording, so the listings and
 phrases the model saw sit beside the drawers the seller is choosing from.
 
 Markup root
-([`MarketListingsPanel.tsx:171-237`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L171)):
+([`MarketListingsPanel.tsx:171-237`](../../../src/ui/design/screens/marketSeo/MarketListingsPanel.tsx#L171)):
 
 ```tsx
 <aside className="mkt-panel" aria-label="Similar Etsy Listings">
@@ -402,7 +402,7 @@ Lead, where the comparison matters most.
   time\>*, in tabular numbers. It shows how big the sample was and how fresh it
   is, because the snapshot outlives the session.
 - **Searches line**
-  ([`Queries`, L63-75](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L63)):
+  ([`Queries`, L63-75](../../../src/ui/design/screens/marketSeo/MarketListingsPanel.tsx#L63)):
   *🔍 Searched Etsy for "a", "b" and "c"*. These are the three queries AI Mode
   wrote from the brief.
 
@@ -428,7 +428,7 @@ Extraction isn't cached, so they change from run to run.
 ### Listings view (default)
 
 Top-level structure
-([`Listings`, L120-144](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L120)):
+([`Listings`, L120-144](../../../src/ui/design/screens/marketSeo/MarketListingsPanel.tsx#L120)):
 
 - A group label, **Examples shown to AI Mode**, over the top 8 (`EXAMPLES = 8`).
 - A dashed **Show \<n\> more scored listings** button, where n is scored − 8.
@@ -441,7 +441,7 @@ model actually read, and keeps the default panel short.
 
 #### Listing row
 
-([`ListingRow`, L77-118](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L77))
+([`ListingRow`, L77-118](../../../src/ui/design/screens/marketSeo/MarketListingsPanel.tsx#L77))
 
 ```tsx
 <li className={open ? "mkt-row mkt-row--open": "mkt-row"}>
@@ -549,7 +549,7 @@ So the selected option is the app's accent, not the mockup's white pill.
 and draws the focus ring inside each option, where `.seg`'s overflow
 clipping can't hide it.
 
-([`Phrases`, L146-165](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L146))
+([`Phrases`, L146-165](../../../src/ui/design/screens/marketSeo/MarketListingsPanel.tsx#L146))
 
 ```tsx
 <p className="mkt-group">Tags the top listings share, strongest first</p>
@@ -588,7 +588,7 @@ AI Mode picked up.
 | `failed` | The market node ended in `failed` while the editor was watching the run | The panel is not rendered. The reason is the AI Mode toast, not a note in this column. A failed run doesn't replace the snapshot, so a reload shows the previous results again. The reload replays the failed run, but it does not put the panel back just to repeat the failure | `states` |
 
 The `PanelState` union is at
-[`MarketListingsPanel.tsx:31-35`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketListingsPanel.tsx#L31).
+[`MarketListingsPanel.tsx:31-35`](../../../src/ui/design/screens/marketSeo/MarketListingsPanel.tsx#L31).
 The empty and failed notes share `.mkt-note` (L618-643).
 
 The loading state is designed around the queries. They exist before any
@@ -646,7 +646,7 @@ Every clickable part has `cursor: pointer` and a hover state:
 
 The Listing Details tab becomes two columns: the existing fieldset on the left
 and the panel on the right
-([`MarketSeoScreen.tsx:111-192`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/MarketSeoScreen.tsx#L111)).
+([`MarketSeoScreen.tsx:111-192`](../../../src/ui/design/screens/marketSeo/MarketSeoScreen.tsx#L111)).
 
 ```tsx
 <div className="mkt-layout">
@@ -693,7 +693,7 @@ in it is new, apart from sharing the row with the panel.
   that they were declared again on each AI selector (`.seo-suggestion`,
   `.seo-brief-row`, `.seo-ai-mode-anchor`), and the ink was a literal
   `#593baf`. The mockup still declares them on `.aiflow,.mkt-panel`
-  ([`marketSeo.css:4-9`](../../../src/etsy_listings/ui/frontend/design/screens/marketSeo/marketSeo.css#L4)).
+  ([`marketSeo.css:4-9`](../../../src/ui/design/screens/marketSeo/marketSeo.css#L4)).
 - **Neutral for data, purple for AI.** Listing tags, the Your shop pill and the
   notes use the app's neutral and accent tokens. Purple is kept for scores, the
   AI-chain nodes and interaction affordances, so it keeps its meaning.
