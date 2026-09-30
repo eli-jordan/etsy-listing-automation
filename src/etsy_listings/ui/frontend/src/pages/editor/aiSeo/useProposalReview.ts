@@ -28,6 +28,12 @@ interface ReviewSession {
   disposed: boolean;
 }
 
+function settleResolution(current: ReviewSession, job: ResolutionJob): boolean {
+  if (current.disposed || current.record?.generated_at !== job.generation) return false;
+  if (current.pending[job.section]?.token === job.token) current.pending[job.section] = undefined;
+  return true;
+}
+
 /**
  * A41: one owner for proposal identity, live-event/cache precedence and
  * optimistic drawer resolutions. Resolution writes are serial; pending
@@ -126,24 +132,29 @@ export function useProposalReview(
       const job = current.queue.shift();
       if (job === undefined) return;
       current.active = true;
-      ++current.version;
+      const version = ++current.version;
       resolveListingProposal(current.name, {
         generated_at: job.generation,
         [job.section]: job.state,
       })
         .then((next) => {
-          if (current.disposed || current.record?.generated_at !== job.generation) return;
+          if (!settleResolution(current, job)) return;
+          const changedWhileSaving = version !== current.version;
           ++current.version;
-          if (current.pending[job.section]?.token === job.token)
-            current.pending[job.section] = undefined;
           if (next === null) read(current);
-          else commit(current, next);
+          else if (changedWhileSaving && current.record !== null) {
+            // A later read may have judged this proposal stale. Acknowledge
+            // the section without replacing that newer comparison, then
+            // reread in case a save's request was still in flight.
+            commit(current, {
+              ...current.record,
+              resolution: { ...current.record.resolution, [job.section]: job.state },
+            });
+            read(current);
+          } else commit(current, next);
         })
         .catch(() => {
-          if (current.disposed || current.record?.generated_at !== job.generation) return;
-          if (current.pending[job.section]?.token === job.token)
-            current.pending[job.section] = undefined;
-          read(current);
+          if (settleResolution(current, job)) read(current);
         })
         .finally(() => {
           current.active = false;

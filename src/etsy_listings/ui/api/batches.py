@@ -50,6 +50,7 @@ from etsy_listings.batches import (
     upload_path,
 )
 from etsy_listings.config.errors import ConfigLoadError
+from etsy_listings.errors import UserFacingError
 from etsy_listings.ui.airuns.registry import AiRunRegistry
 from etsy_listings.ui.api.schemas import (
     AiReadinessBlock,
@@ -169,7 +170,7 @@ def _proposal(
         return None, []
     try:
         wire = ListingAiInputs.read(workspace, row.name, facts=facts).judge(record)
-    except (ConfigLoadError, OSError, ValidationError):
+    except (UserFacingError, OSError, ValidationError):
         return None, []
     if all(state != "pending" for state in wire.resolution.model_dump().values()):
         return "resolved", []

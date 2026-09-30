@@ -495,6 +495,38 @@ describe("useAiSeoMode acceptance", () => {
 });
 
 describe("useAiSeoMode proposal reconciliation", () => {
+  it("keeps a newer staleness judgment when an older resolution response arrives", async () => {
+    const { result, rerender, body } = await readyHookWithProposal();
+    let finish!: (value: ListingProposal | null) => void;
+    runs.resolveProposal.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    act(() => result.current.rejectTitle());
+    const stale = {
+      ...body,
+      stale: { is_stale: true, reasons: ["brief edited since"] },
+    };
+    runs.cached.proposal = stale;
+    rerender(detail({ brief: "Edited brief", modified_at: "2026-09-17T10:10:00Z" }));
+    await waitFor(() => expect(result.current.staleReason).toBe("brief edited since"));
+
+    runs.cached.proposal = {
+      ...stale,
+      resolution: { ...body.resolution, title: "dismissed" },
+    };
+    await act(async () =>
+      finish({
+        ...body,
+        resolution: { ...body.resolution, title: "dismissed" },
+      }),
+    );
+
+    expect(result.current.staleReason).toBe("brief edited since");
+    expect(result.current.proposal?.resolution.title).toBe("dismissed");
+  });
   it("finishes queued choices on their listing after the editor navigates away", async () => {
     const { result, rerender, body } = await readyHookWithProposal();
     let finish!: (value: ListingProposal | null) => void;
