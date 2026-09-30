@@ -1,10 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  deleteListing,
-  listListings,
-  patchListing,
-} from "../api/listings";
+import { deleteListing, listListings, patchListing } from "../api/listings";
 import { createRun, currentWorkspaceRun, getRun } from "../api/runs";
 import { ConfirmDialog } from "../components/ConfirmDialog";
 import { ListingHover } from "../components/ListingHover";
