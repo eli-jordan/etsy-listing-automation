@@ -6069,10 +6069,14 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
     padding: 0;
   }
 
+  /* Four items (Listing Templates joined in batch PR 1) no longer fit one
+     row at every phone width and font: wrap rather than push the page wider. */
   .sidebar__nav {
     width: 100%;
     flex-direction: row;
+    flex-wrap: wrap;
     justify-content: space-between;
+    row-gap: 2px;
     margin-top: var(--space-2);
   }
 
@@ -6165,4 +6169,115 @@ button.seo-ai-mode.seo-ai-mode--busy:disabled {
   .dv-col {
     padding-inline: var(--space-3);
   }
+}
+
+/* — Listing templates (A35; UI doc §2) —
+   Moved from the batch-creation mockups' _batch.css, unchanged, as each
+   surface ships. The `bc-` prefix is the mockups' and is kept so a frame and
+   the app share one rule. */
+.bc-muted {
+  color: color-mix(in srgb, var(--color-text) 58%, transparent);
+}
+.bc-small {
+  font-size: 12.5px;
+}
+.bc-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+.bc-spacer {
+  flex: 1;
+}
+.bc-icon {
+  width: 16px;
+  height: 16px;
+  flex: none;
+}
+.bc-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: var(--space-4);
+}
+.bc-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  overflow: hidden;
+  transition:
+    border-color 0.12s ease,
+    box-shadow 0.12s ease;
+}
+.bc-card:hover {
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+  box-shadow: var(--shadow-sm);
+}
+.bc-card__gallery {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  grid-template-rows: 128px;
+  gap: 2px;
+  height: 128px;
+  overflow: hidden;
+  background: var(--color-neutral-200);
+}
+.bc-card__gallery img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: cover;
+  display: block;
+}
+.bc-card__body {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.bc-card__name {
+  font-weight: 700;
+  font-size: 15px;
+}
+.bc-card__facts {
+  font-size: 12.5px;
+  color: color-mix(in srgb, var(--color-text) 60%, transparent);
+}
+.bc-card__foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+.bc-quiet {
+  font-family: var(--font-body);
+  font-weight: 600;
+  font-size: 12px;
+  line-height: 1.2;
+  padding: 4px 9px;
+  color: color-mix(in srgb, var(--color-text) 68%, transparent);
+  background: transparent;
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.bc-quiet:hover:not(:disabled) {
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-text) 8%, transparent);
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.bc-quiet--on {
+  color: var(--color-accent-2-800);
+  background: var(--color-accent-2-100);
+  border-color: var(--color-accent-2-300);
+}
+.bc-quiet--on:hover:not(:disabled) {
+  color: var(--color-accent-2-900);
+  background: var(--color-accent-2-200);
+  border-color: var(--color-accent-2-400);
 }

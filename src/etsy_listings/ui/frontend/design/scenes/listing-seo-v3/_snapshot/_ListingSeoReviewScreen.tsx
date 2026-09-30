@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ShellSidebar } from "../../../src/shell/ShellSidebar";
+import { ShellSidebar } from "../../../../src/shell/ShellSidebar";
 import "./listingSeoReview.css";
 
 export type SeoReviewState = "readiness" | "loading" | "proposal" | "stale" | "failed";

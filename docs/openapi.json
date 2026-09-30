@@ -968,6 +968,42 @@
         "title": "CreateListingRequest",
         "type": "object"
       },
+      "CreateListingTemplateRequest": {
+        "description": "Save as listing template (``from_listing``) or Clone\n(``from_template``) -- exactly one. There is no blank creation (spec).",
+        "properties": {
+          "from_listing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Listing"
+          },
+          "from_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Template"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateListingTemplateRequest",
+        "type": "object"
+      },
       "DescriptionConfig": {
         "additionalProperties": false,
         "properties": {
@@ -2317,6 +2353,289 @@
           "issue_counts"
         ],
         "title": "ListingSummary",
+        "type": "object"
+      },
+      "ListingTemplateAsset": {
+        "description": "A file the draft will copy: the ``./`` ref the template will name it\nby, and the ref it has in its source -- which is where the *name it*\npage's thumbnail has to come from, since the copy does not exist yet.",
+        "properties": {
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source_ref": {
+            "title": "Source Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "source_ref"
+        ],
+        "title": "ListingTemplateAsset",
+        "type": "object"
+      },
+      "ListingTemplateDetail": {
+        "additionalProperties": false,
+        "description": "A listing template as its pages read it, saved or not -- one shape for\nboth, as `ListingDetail` is one shape for a listing and the unnamed draft.\n\nA draft (``GET /draft``: Save as listing template or Clone, written\nnowhere, UI doc \u00a71) has ``name`` ``\"\"``, no ``modified_at``, and says\nwhere it came from in ``source`` and ``assets``.",
+        "properties": {
+          "assets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ListingTemplateAsset"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Colors",
+            "type": "array"
+          },
+          "etsy": {
+            "$ref": "#/components/schemas/TemplateEtsyConfig",
+            "default": {
+              "description": {}
+            }
+          },
+          "garment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment"
+          },
+          "garment_profile": {
+            "title": "Garment Profile",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "media": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TemplateMediaEntry"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Media",
+            "type": "array"
+          },
+          "modified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_overrides": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "examples": [
+                  "349 NOK"
+                ],
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Price Overrides",
+            "type": "object"
+          },
+          "prices": {
+            "additionalProperties": {
+              "examples": [
+                "349 NOK"
+              ],
+              "type": "string"
+            },
+            "default": {},
+            "title": "Prices",
+            "type": "object"
+          },
+          "pricing_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Plan"
+          },
+          "pricing_plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Plan Name"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListingTemplateSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "garment_profile",
+          "colors",
+          "media",
+          "name",
+          "modified_at",
+          "issues"
+        ],
+        "title": "ListingTemplateDetail",
+        "type": "object"
+      },
+      "ListingTemplateSaveResult": {
+        "description": "What a create or ``PUT`` did (A36). Refusing an incomplete document is\na 200 with ``saved: false``, as a listing's malformed PATCH is, because the\neditor shows the issues and keeps going; nothing was written.",
+        "properties": {
+          "field_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "saved": {
+            "title": "Saved",
+            "type": "boolean"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListingTemplateDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "saved",
+          "issues"
+        ],
+        "title": "ListingTemplateSaveResult",
+        "type": "object"
+      },
+      "ListingTemplateSource": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "listing",
+              "listing-template"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "ListingTemplateSource",
+        "type": "object"
+      },
+      "ListingTemplateSummary": {
+        "description": "One card on the Listing templates page (UI doc \u00a72).",
+        "properties": {
+          "batch_count": {
+            "default": 0,
+            "title": "Batch Count",
+            "type": "integer"
+          },
+          "colour_count": {
+            "title": "Colour Count",
+            "type": "integer"
+          },
+          "garment": {
+            "title": "Garment",
+            "type": "string"
+          },
+          "media": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TemplateMediaEntry"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Media",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pricing_plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Plan Name"
+          }
+        },
+        "required": [
+          "name",
+          "garment",
+          "colour_count",
+          "pricing_plan_name",
+          "media"
+        ],
+        "title": "ListingTemplateSummary",
         "type": "object"
       },
       "LiveImageSnapshot": {
@@ -4286,6 +4605,96 @@
         "title": "SwatchResponse",
         "type": "object"
       },
+      "TemplateDescriptionConfig": {
+        "additionalProperties": false,
+        "description": "A description *body*: inline ``text`` or a common-copy ``ref``, and no\n``lead``. The lead is the opening a shopper reads about one design, so\nevery listing made from the template gets its own (spec, copy table).",
+        "properties": {
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "title": "TemplateDescriptionConfig",
+        "type": "object"
+      },
+      "TemplateEtsyConfig": {
+        "additionalProperties": false,
+        "description": "`EtsyListingConfig` without the copy an instance writes for itself.\nThe four settings keep the meanings `EtsyListingConfig` documents.",
+        "properties": {
+          "description": {
+            "$ref": "#/components/schemas/TemplateDescriptionConfig",
+            "default": {}
+          },
+          "renewal": {
+            "anyOf": [
+              {
+                "enum": [
+                  "manual",
+                  "auto"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "shipping_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipping Profile"
+          },
+          "variation_images": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variation Images"
+          }
+        },
+        "title": "TemplateEtsyConfig",
+        "type": "object"
+      },
       "TemplateMediaEntry": {
         "additionalProperties": false,
         "description": "Always-explicit template reference -- there is no bare-colour\nshorthand. ``colour`` is required when the referenced template is\n``colour-matrix`` kind (which colour's photo) and must be omitted for\n``multiple``/``single`` kind (exactly one output each, nothing to\ndisambiguate).",
@@ -5298,6 +5707,366 @@
         "summary": "Describe Listing Draft",
         "tags": [
           "listings-support"
+        ]
+      }
+    },
+    "/api/listing-templates": {
+      "get": {
+        "description": "Every listing template, as its card on the Listing templates page shows\nit (UI doc \u00a72). A template whose file will not load is left out rather\nthan failing the page; it can only get that way by a hand edit.",
+        "operationId": "list_listing_templates_api_listing_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ListingTemplateSummary"
+                  },
+                  "title": "Response List Listing Templates Api Listing Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Listing Templates",
+        "tags": [
+          "listing-templates"
+        ]
+      },
+      "post": {
+        "description": "Naming the draft is what writes it (UI doc \u00a71). The name is checked\nfirst, so a bad one is a 400 before any source is read.",
+        "operationId": "create_listing_template_api_listing_templates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateListingTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateSaveResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/draft": {
+      "get": {
+        "description": "The template Save as listing template or Clone would write, written\nnowhere: what the *name it* page shows before the seller commits a name\n(UI doc \u00a71).",
+        "operationId": "listing_template_draft_api_listing_templates_draft_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from_listing",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Listing"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_template",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Template"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Template Draft",
+        "tags": [
+          "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/{name}": {
+      "delete": {
+        "description": "Allowed whatever was made from it: batches keep their own frozen copy,\nand a listing never had a link to it (spec, *Completeness and editing*).",
+        "operationId": "delete_listing_template_api_listing_templates__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      },
+      "get": {
+        "operationId": "get_listing_template_api_listing_templates__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      },
+      "put": {
+        "description": "A36: write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\n(PR 6) keeps the unsaved values on its side.",
+        "operationId": "put_listing_template_api_listing_templates__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateSaveResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/{template}/media-files/{path}/file": {
+      "get": {
+        "operationId": "listing_template_media_file_api_listing_templates__template__media_files__path__file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Template Media File",
+        "tags": [
+          "media-files"
+        ]
+      }
+    },
+    "/api/listing-templates/{template}/media-files/{path}/thumbnail": {
+      "get": {
+        "description": "A listing template's own file (its ``./`` root, A35) -- the pictures on\nits card. The same boundary as a listing's: the directory also holds\n``template.yaml``.",
+        "operationId": "listing_template_media_thumbnail_api_listing_templates__template__media_files__path__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Template Media Thumbnail",
+        "tags": [
+          "media-files"
         ]
       }
     },

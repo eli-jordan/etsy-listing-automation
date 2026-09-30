@@ -73,6 +73,16 @@ export type TemplateMediaEntry = components["schemas"]["TemplateMediaEntry"];
  * asset under `common-media/` -- mirrors `config/listing.py`'s `MediaEntry`. */
 export type MediaEntry = TemplateMediaEntry | string;
 
+// ── Listing templates (A35, A36) ────────────────────────────────────────────
+
+export type ListingTemplateSummary = components["schemas"]["ListingTemplateSummary"];
+export type ListingTemplateDetail = components["schemas"]["ListingTemplateDetail"];
+/** A detail with `name` `""`: what Save as listing template or Clone would
+ * write, written nowhere. `source` and `assets` say where it came from. */
+export type ListingTemplateDraft = ListingTemplateDetail;
+export type ListingTemplateSource = components["schemas"]["ListingTemplateSource"];
+export type ListingTemplateSaveResult = components["schemas"]["ListingTemplateSaveResult"];
+
 // ── Deploy changes (A29-A33, docs/deploy-changes.md) ────────────────────────
 
 export type RunSummary =

@@ -1,3 +1,4 @@
+import { StackIcon } from "@phosphor-icons/react/dist/csr/Stack";
 import { useEffect, useState } from "react";
 import { NavLink, Outlet } from "react-router-dom";
 import { getWorkspace } from "../api/listings";
@@ -64,6 +65,13 @@ export function AppShell() {
               <line x1="8.5" y1="18" x2="20" y2="18" />
             </svg>
             Listings
+          </NavLink>
+          {/* Between Listings and Mockup Templates (UI doc, *App sidebar*):
+              a listing template is made from a listing, and names mockup
+              templates in its gallery. */}
+          <NavLink to="/listing-templates" className={navClass}>
+            <StackIcon />
+            Listing Templates
           </NavLink>
           <NavLink to="/templates" className={navClass}>
             <svg

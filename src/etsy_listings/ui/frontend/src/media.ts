@@ -5,6 +5,7 @@ import {
   listingMediaFileUrl,
   listingMediaThumbnailUrl,
 } from "./api/listings";
+import { listingTemplateMediaThumbnailUrl } from "./api/listingTemplates";
 import type { MediaEntry, TemplateSummary } from "./types";
 
 /**
@@ -171,6 +172,24 @@ function filePicture(ref: string, size: PictureSize, listing: string | null): st
   }
   const name = sharedName(ref);
   return tile ? commonMediaThumbnailUrl(name) : commonMediaFileUrl(name);
+}
+
+/** Whose directory a `./` ref is resolved against: a listing's, or a listing
+ * template's (A35) -- the one other thing that owns files of its own. */
+export interface MediaOwner {
+  kind: "listing" | "listing-template";
+  name: string;
+}
+
+/** A tile-sized picture of one gallery entry, for a listing-template card.
+ * The same answers as {@link pictureFor} at `tile` size, except that a `./`
+ * ref may name a listing template's own files, which live behind their own
+ * endpoint. */
+export function ownedTile(entry: MediaEntry, owner: MediaOwner): string {
+  if (typeof entry === "string" && isListingLocal(entry) && owner.kind === "listing-template") {
+    return listingTemplateMediaThumbnailUrl(owner.name, entry.slice(2));
+  }
+  return pictureFor(entry, null, "tile", owner.kind === "listing" ? owner.name : null);
 }
 
 /** The same, for a template/colour the locator is offering but the listing has

@@ -126,10 +126,17 @@ class WorkspaceFacts:
             except InvalidRefError as exc:
                 result[entry] = ProbeFailure(f"cannot be used: {exc.detail}")
                 continue
-            if path not in self._probes:
-                self._probes[path] = probe_video(path)
-            result[entry] = self._probes[path]
+            result[entry] = self.video(path)
         return result
+
+    def video(self, path: Path) -> VideoFacts | ProbeFailure:
+        """One file's probe, kept by path. Public for a caller whose refs are
+        not a listing's -- a listing template's, which resolve against the
+        template directory, or the files Save as listing template is about to
+        copy (A36)."""
+        if path not in self._probes:
+            self._probes[path] = probe_video(path)
+        return self._probes[path]
 
     def _load_garment_profile(self, name: str) -> GarmentProfile | None:
         try:

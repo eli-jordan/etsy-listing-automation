@@ -4,6 +4,7 @@ import {
   mediaKind,
   mediaLabel,
   missingColours,
+  ownedTile,
   pictureFor,
   refName,
   scenePath,
@@ -261,5 +262,35 @@ describe("scenePath", () => {
 
   it("names scene.png for a fixed-scene template (PRD 28)", () => {
     expect(scenePath(undefined, "rack-shot", null)).toBe("mockup-templates/rack-shot/scene.png");
+  });
+});
+
+describe("ownedTile", () => {
+  /* A card's picture of one gallery entry, whoever's `./` files it names: a
+     listing's while Save as listing template is still a draft, a listing
+     template's own once it is saved (A35). */
+  it("draws a template entry as its bare thumbnail whoever owns it", () => {
+    const entry = { template: "flat-lay-01", colour: "black" };
+    expect(ownedTile(entry, { kind: "listing-template", name: "tee" })).toBe(
+      "/api/templates/flat-lay-01/thumbnail?colour=black",
+    );
+  });
+
+  it("finds a local file in the listing template's own directory", () => {
+    expect(ownedTile("./assets/shots/back.png", { kind: "listing-template", name: "tee" })).toBe(
+      "/api/listing-templates/tee/media-files/assets/shots/back.png/thumbnail",
+    );
+  });
+
+  it("finds a local file in the listing's directory", () => {
+    expect(ownedTile("./shots/back.png", { kind: "listing", name: "take-a-hike" })).toBe(
+      "/api/listings/take-a-hike/media-files/shots/back.png/thumbnail",
+    );
+  });
+
+  it("serves a shared file from common media", () => {
+    expect(ownedTile("common-media/chart.png", { kind: "listing-template", name: "tee" })).toBe(
+      "/api/common-media/chart.png/thumbnail",
+    );
   });
 });

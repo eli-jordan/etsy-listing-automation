@@ -156,6 +156,7 @@ function ListingEditorPageContent({
   const { detail, update, adopt, flush, commitName, save } = useAutosave(name, initial, {
     onNamed,
   });
+  const navigate = useNavigate();
   // AI Mode, and the AI run behind it, live here rather than inside a tab: a
   // run outlives the tab that was showing when it started, and the chain
   // that begins one begins at the design strip, above the tab strip (PRD
@@ -206,6 +207,13 @@ function ListingEditorPageContent({
       update={update}
       flush={flush}
       onPickDesign={pickDesign}
+      above={
+        detail.name !== "" && (
+          <SaveAsTemplateRow
+            onSave={() => void flush().then(() => navigate(saveAsUrl(detail.name)))}
+          />
+        )
+      }
       aiSeo={aiSeo}
       head={
         <EditorHead
@@ -230,6 +238,27 @@ function ListingEditorPageContent({
         />
       }
     />
+  );
+}
+
+/** Where Save as listing template opens the unsaved template (UI doc §1). */
+function saveAsUrl(listing: string): string {
+  return `/listing-templates/new?from_listing=${encodeURIComponent(listing)}`;
+}
+
+/** The row above the head (UI doc, *Listing editor*): Save as listing
+ * template now; Back to batch and Mark reviewed join it with batches (PR 5).
+ * Only for a listing that exists, since a template is made from its file. No
+ * dialog: `onSave` flushes the pending edit first, so the draft is made from
+ * what the seller is looking at. */
+function SaveAsTemplateRow({ onSave }: { onSave: () => void }) {
+  return (
+    <div className="bc-row" style={{ marginBottom: "var(--space-2)" }}>
+      <span className="bc-spacer" />
+      <button type="button" className="btn btn-ghost" onClick={onSave}>
+        Save as listing template
+      </button>
+    </div>
   );
 }
 
@@ -300,6 +329,7 @@ export function ListingEditorShell({
   onPickDesign,
   aiSeo,
   head,
+  above,
 }: {
   detail: ListingDetail;
   update: (patch: Record<string, unknown>) => void;
@@ -313,6 +343,8 @@ export function ListingEditorShell({
    * Variants unmounts the tab. */
   aiSeo: AiSeoMode;
   head: ReactNode;
+  /** The row above the head, when there is one. */
+  above?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("variants");
 
@@ -337,6 +369,7 @@ export function ListingEditorShell({
           </div>,
           document.body,
         )}
+      {above}
       {head}
 
       <IssuesBanner issues={detail.issues} activeTab={tab} onJumpTo={pickTab} />
