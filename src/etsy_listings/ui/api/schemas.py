@@ -12,6 +12,14 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from etsy_listings.ai.proposals import (
+    ProposalChoices,
+    ProposalOrigin,
+    ProposalResolution,
+    ProposalStaleness,
+    Resolution,
+    SeoProposalSnapshot,
+)
 from etsy_listings.config.listing import Listing
 from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.media import MediaEntry, MediaKind
@@ -640,14 +648,14 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 
 
 # ──────────────────────────────────────────────────────────────────────────
-# AI SEO (AI SEO implementation plan, PR5). The proposal reaches the browser
-# as an AI run's `proposal` event (`ui/airuns/events.py`) and is kept there,
-# in local storage -- never in a lockfile or a server-side cache. The
-# proposal's own field shapes mirror `ai/models.py.SeoProposal` field for
-# field, the same "wire shape *is* the domain shape" rule `ListingDetail`
-# follows for `Listing` above, rather than reusing those frozen dataclasses
-# directly -- pydantic, not a dataclass, is what FastAPI serialises a
-# response with.
+# AI SEO (AI SEO implementation plan, PR5; A41). A proposal is cached on the
+# server (`ai/proposals.py`) and reaches the browser two ways: as an AI
+# run's `proposal` event (`ui/airuns/events.py`) the moment it is written,
+# and from `GET /api/listings/{name}/proposal` after that. Both are
+# :class:`ListingProposal`. The choices' field shapes mirror
+# `ai/models.py.SeoProposal` field for field, the same "wire shape *is* the
+# domain shape" rule `ListingDetail` follows for `Listing` above; they live
+# in `ai/proposals.py` because the cache record is made of them.
 # ──────────────────────────────────────────────────────────────────────────
 
 
@@ -661,69 +669,27 @@ class SeoReadinessResponse(BaseModel):
     reason: str | None = None
 
 
-SeoRationaleIntent = Literal["core_product", "bottom_of_funnel", "style"]
-SeoRationaleField = Literal["title", "tags", "description_lead"]
-SeoWarningKind = Literal["general", "trademark"]
+class ListingProposal(BaseModel):
+    """A listing's cached proposal as the editor and the batch summary read
+    it (A41): the record, and whether it still describes the saved listing.
+    ``stale`` is computed from the saved listing on every read, never
+    stored."""
 
-
-class SeoRationaleEntry(BaseModel):
-    """One of the proposal's seven priority-phrase rationales -- the wire
-    shape of `ai/models.py.PhraseRationale`."""
-
-    phrase: str
-    intent: SeoRationaleIntent
-    reason: str
-    used_in: list[SeoRationaleField]
-
-
-class SeoWarningEntry(BaseModel):
-    """The wire shape of `ai/models.py.ProposalWarning`."""
-
-    message: str
-    kind: SeoWarningKind = "general"
-
-
-class SeoProposalSnapshot(BaseModel):
-    """The submitted generation inputs, echoed back beside the proposal
-    (implementation plan, PR5 item 4: "input snapshot data").
-
-    This is what a future frontend (PR7) compares its own current editor
-    state against to decide a pending proposal has gone stale
-    (`docs/ui-listing-seo-interactions.md` section 7) -- everything
-    `ai/models.py.SeoRequest` sent to the provider except the design image
-    itself. Design identity and content are captured before generation, rather
-    than inferred from whichever editor state exists when the response arrives.
-    """
-
-    brief: str
-    product_type: str
-    etsy_category: str
-    materials: list[str]
-    colors: list[str]
-    garment_brand: str
-    garment_model: str
-    garment_profile: str
-    design: dict[str, str]
-    design_content_hash: str | None
-
-
-class SeoProposalResponse(BaseModel):
-    """A complete, hard-validated proposal plus what PR5 item 4 promises
-    beside it: the input snapshot and expiry metadata. Never cached
-    server-side past this one response -- `ui/api/seo.py` builds this,
-    returns it, and keeps nothing."""
-
-    titles: list[str]
-    tags: list[str]
-    description_leads: list[str]
-    rationale: list[SeoRationaleEntry]
-    warnings: list[SeoWarningEntry]
-    observed_text: str
+    proposal: ProposalChoices
     snapshot: SeoProposalSnapshot
     generated_at: datetime
-    expires_at: datetime
-    """``generated_at`` plus the settled one-day local-storage retention
-    (implementation plan, "Proposal persistence") -- the browser's own
-    expiry clock (PR7's job to enforce) is seeded from the server's clock
-    rather than computed from a client-side timestamp that skew or a
-    suspended laptop could stretch past a day."""
+    origin: ProposalOrigin
+    resolution: ProposalResolution
+    stale: ProposalStaleness
+
+
+class ProposalResolutionPatch(BaseModel):
+    """``PATCH /api/listings/{name}/proposal/resolution``: the sections to
+    record, on the proposal generated at ``generated_at`` -- a regeneration
+    that landed meanwhile is a different proposal, and is a 409. ``pending``
+    reopens a section."""
+
+    generated_at: datetime
+    title: Resolution | None = None
+    tags: Resolution | None = None
+    lead: Resolution | None = None

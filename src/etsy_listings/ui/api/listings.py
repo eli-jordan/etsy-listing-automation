@@ -41,6 +41,7 @@ from fastapi.responses import Response
 from pydantic import ValidationError
 
 from etsy_listings import connections
+from etsy_listings.ai.proposals import ProposalStore
 from etsy_listings.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.clients.etsy.transport import EtsyApiError
 from etsy_listings.config.errors import ConfigLoadError
@@ -515,15 +516,18 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
 
-    Either way the market snapshot goes now (market-seo.md, *Cache*): a
-    listing pending deletion is one the seller is done researching, and
-    otherwise only the wipe after the remote deletion would remove it.
+    Either way the market snapshot and the cached AI proposal go now
+    (market-seo.md, *Cache*; A42): a listing pending deletion is one the
+    seller is done researching, and otherwise only the wipe after the remote
+    deletion would remove them. An AI run still going is asked to stop
+    first, so it does not write a proposal for a listing being deleted.
     """
     workspace, name = target.workspace, target.name
     etsy_listing_id, printify_product_id = _remote_ids(workspace, name)
     etsy_state = _etsy_state(workspace, etsy_listing_id)
     if is_live_etsy_state(etsy_state):
         raise HTTPException(status_code=409, detail=DELETED_ON_PUBLISHED)
+    _stop_ai_run(request, name)
     _forget_ai_run(request, name)
     with target.writing():
         if etsy_listing_id is None and printify_product_id is None:
@@ -534,6 +538,7 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
         raw["lifecycle"] = "deleted"
         replace_listing_yaml(path, raw)
         workspace.market_snapshot_file(name).unlink(missing_ok=True)
+        _proposals(request).remove(name)
     facts = WorkspaceFacts.gather(workspace)
     return _summarize_listing(workspace, facts, name, live=False, etsy_state=etsy_state)
 
@@ -627,7 +632,8 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
     generated copy travel together, and `.cache/renders/{name}/` moves with them
     because the render cache is keyed by listing name too -- left behind it
-    would orphan a tree nothing deletes and cost a full re-render.
+    would orphan a tree nothing deletes and cost a full re-render. The market
+    snapshot and the cached AI proposal (A42) move for the same reason.
 
     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
     left that way deliberately: nothing reads them, they become true again at
@@ -656,8 +662,21 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
         snapshot = workspace.market_snapshot_file(old)
         if snapshot.is_file():
             os.replace(snapshot, workspace.market_snapshot_file(new))
+        _proposals(request).move(old, new)
     _forget_ai_run(request, old)
     return _detail(workspace, new)
+
+
+def _proposals(request: Request) -> ProposalStore:
+    store: ProposalStore = request.app.state.proposal_store
+    return store
+
+
+def _stop_ai_run(request: Request, name: str) -> None:
+    """A42: deleting a listing cancels its active AI run."""
+    run = request.app.state.ai_run_registry.latest(name)
+    if run is not None:
+        run.request_stop("cancelled")
 
 
 def _forget_ai_run(request: Request, name: str) -> None:

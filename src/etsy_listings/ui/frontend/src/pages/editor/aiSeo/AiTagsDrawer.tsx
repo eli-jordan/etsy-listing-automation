@@ -1,5 +1,5 @@
 import type { SeoRationaleEntry, SeoWarningEntry } from "../../../types";
-import { AiModeMark, AiSeoDisclosure } from "./AiChoiceDrawer";
+import { AiModeMark, AiSeoDisclosure, SuggestionHeading } from "./AiChoiceDrawer";
 import { canToggleTag, MAX_TAGS } from "./aiSeoTags";
 
 /** The tag drawer (`docs/ui-listing-seo-interactions.md` section 4): 20
@@ -9,7 +9,7 @@ import { canToggleTag, MAX_TAGS } from "./aiSeoTags";
 export function AiTagsDrawer({
   tags,
   selected,
-  stale,
+  staleReason,
   rationale,
   warnings,
   observedText,
@@ -20,7 +20,8 @@ export function AiTagsDrawer({
 }: {
   tags: string[];
   selected: string[];
-  stale: boolean;
+  /** See `AiChoiceDrawer`'s: out of date, and still usable. */
+  staleReason: string | null;
   rationale: SeoRationaleEntry[];
   warnings: SeoWarningEntry[];
   observedText: string;
@@ -39,39 +40,27 @@ export function AiTagsDrawer({
       className={enter ? "seo-suggestion-slot seo-suggestion-slot--draw" : "seo-suggestion-slot"}
     >
       <aside
-        className={stale ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
+        className={staleReason ? "seo-suggestion seo-suggestion--stale" : "seo-suggestion"}
         role="region"
         aria-label="tag AI suggestions"
       >
         <div className="seo-suggestion__topline">
           <div className="seo-suggestion__identity">
             <AiModeMark />
-            <span>{stale ? "Suggestions are out of date" : "20 ranked suggestions"}</span>
+            <SuggestionHeading staleReason={staleReason}>20 ranked suggestions</SuggestionHeading>
           </div>
           <div className="seo-suggestion__actions">
             <button className="seo-suggestion__quiet-action" onClick={onClose} type="button">
               Close
             </button>
-            <button disabled={stale} onClick={onAcceptBest} type="button">
+            <button onClick={onAcceptBest} type="button">
               Accept best 13
             </button>
           </div>
         </div>
 
-        <TagPool
-          label="Best 13"
-          tags={best13}
-          selected={selected}
-          stale={stale}
-          onToggle={onToggle}
-        />
-        <TagPool
-          label="More options"
-          tags={more}
-          selected={selected}
-          stale={stale}
-          onToggle={onToggle}
-        />
+        <TagPool label="Best 13" tags={best13} selected={selected} onToggle={onToggle} />
+        <TagPool label="More options" tags={more} selected={selected} onToggle={onToggle} />
 
         <p className="seo-suggestion__count">
           {selected.length} of {MAX_TAGS} tags selected
@@ -91,13 +80,11 @@ function TagPool({
   label,
   tags,
   selected,
-  stale,
   onToggle,
 }: {
   label: string;
   tags: string[];
   selected: string[];
-  stale: boolean;
   onToggle: (tag: string) => void;
 }) {
   return (
@@ -106,7 +93,7 @@ function TagPool({
       <div className="seo-tag-pool">
         {tags.map((tag) => {
           const active = selected.includes(tag);
-          const disabled = stale || !canToggleTag(selected, tag);
+          const disabled = !canToggleTag(selected, tag);
           return (
             <button
               aria-disabled={disabled}

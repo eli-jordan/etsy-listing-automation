@@ -21,6 +21,7 @@ import pytest
 import yaml
 
 from etsy_listings.ai.errors import SeoTryAgainError
+from etsy_listings.ai.proposals import ProposalStore
 from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient, server_error
 from etsy_listings.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.market import snapshot as market_snapshot
@@ -70,12 +71,14 @@ class Chain:
         self.provider = provider
         self.market = market
         self.clock = Clock()
+        self.proposals = ProposalStore(self.workspace)
         self.runner = AiRunner(
             workspace=self.workspace,
             registry=self.registry,
             locks=self.locks,
             providers=lambda _workspace: [provider],
             market_client=lambda _workspace: market,
+            proposals=self.proposals,
             now=lambda: TODAY,
             monotonic=self.clock,
             watch_interval=0.01,
@@ -171,8 +174,66 @@ def test_the_events_carry_the_brief_queries_snapshot_and_proposal(chain: Chain) 
     assert saved is not None
     assert saved.model_dump() == market
     proposal = by_type["proposal"].model_dump()
-    assert proposal["titles"][0] == "Retro Sunset Hike Tee"
+    assert proposal["proposal"]["titles"][0] == "Retro Sunset Hike Tee"
     assert proposal["snapshot"]["brief"] == DRAFTED_BRIEF
+
+
+def test_a_finished_run_caches_the_proposal_it_announced(chain: Chain) -> None:
+    """A41: the record is written before the event, for every run, so the
+    proposal outlives the run, the registry and the server."""
+    run = chain.run(draft_brief=False)
+
+    announced = next(e for e in run.events if e.type == "proposal").model_dump()
+    cached = chain.proposals.load(LISTING)
+    assert cached is not None
+    assert cached.origin == "manual"
+    assert cached.generated_at == announced["generated_at"]
+    assert cached.proposal.model_dump() == announced["proposal"]
+    assert cached.snapshot.model_dump() == announced["snapshot"]
+    assert cached.resolution.model_dump() == announced["resolution"]
+    assert announced["stale"] == {"is_stale": False, "reasons": []}
+
+
+def test_a_failed_proposal_keeps_the_last_cached_one(workspace_root: Path) -> None:
+    seed_prompts(workspace_root)
+    chain = Chain(workspace_root, ChainProvider(), seeded_market())
+    first = chain.run(draft_brief=False)
+    assert first.phase == "done"
+    kept = chain.proposals.load(LISTING)
+    chain.provider.failures["seo"] = SeoTryAgainError("codex: still malformed")
+
+    second = chain.run(draft_brief=False)
+
+    assert second.phase == "failed"
+    assert chain.proposals.load(LISTING) == kept
+
+
+def test_a_listing_deleted_while_its_proposal_is_written_caches_nothing(chain: Chain) -> None:
+    chain.provider.during["seo"] = lambda: chain.workspace.remove_listing(LISTING)
+
+    wait_until_finished(chain.start(draft_brief=False))
+
+    assert chain.proposals.load(LISTING) is None
+    assert not chain.workspace.proposal_file(LISTING).exists()
+
+
+def test_a_stop_while_the_proposal_waits_for_the_lock_caches_nothing(chain: Chain) -> None:
+    """A delete stops the run, then takes the listing's lock to clean up
+    (A42). A proposal that was already queued on that lock must not land
+    after the cleanup."""
+    gate = chain.provider.gate("seo")
+    run = chain.start(draft_brief=False)
+    wait_for(lambda: chain.provider.started["seo"].is_set())
+
+    with chain.locks.listing(LISTING):
+        gate.set()
+        wait_for(lambda: chain.provider.count("seo") == 1)
+        threading.Event().wait(0.2)  # the chain reaches the lock and waits
+        run.request_stop("cancelled")
+    wait_until_finished(run)
+
+    assert run.phase == "cancelled"
+    assert chain.proposals.load(LISTING) is None
 
 
 def test_extraction_and_the_proposal_see_the_drafted_brief_and_the_market(chain: Chain) -> None:

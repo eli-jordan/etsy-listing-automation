@@ -594,9 +594,11 @@ export interface paths {
      *     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
      *     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
      *
-     *     Either way the market snapshot goes now (market-seo.md, *Cache*): a
-     *     listing pending deletion is one the seller is done researching, and
-     *     otherwise only the wipe after the remote deletion would remove it.
+     *     Either way the market snapshot and the cached AI proposal go now
+     *     (market-seo.md, *Cache*; A42): a listing pending deletion is one the
+     *     seller is done researching, and otherwise only the wipe after the remote
+     *     deletion would remove them. An AI run still going is asked to stop
+     *     first, so it does not write a proposal for a listing being deleted.
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
@@ -698,6 +700,54 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/listings/{name}/proposal": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Listing Proposal
+     * @description The listing's latest AI SEO proposal (A41; spec, *Durable AI
+     *     proposals*), with which sections were resolved and whether it has gone
+     *     stale. Written by every AI run before it announces the proposal, so a
+     *     reload, a server restart or a batch run all find it here.
+     */
+    get: operations["get_listing_proposal_api_listings__name__proposal_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/listings/{name}/proposal/resolution": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    /**
+     * Resolve Listing Proposal
+     * @description Record accepted or dismissed sections (spec, *Durable AI proposals*),
+     *     so a resolved drawer does not reopen as new after a reload. The chosen
+     *     value itself reaches ``listing.yaml`` through ordinary autosave; this
+     *     records only that the section was dealt with. Under the listing's write
+     *     lock, so a delete or rename cannot land between the read and the write
+     *     and leave a record behind for a listing that is gone.
+     */
+    patch: operations["resolve_listing_proposal_api_listings__name__proposal_resolution_patch"];
+    trace?: never;
+  };
   "/api/listings/{name}/rename": {
     parameters: {
       query?: never;
@@ -715,7 +765,8 @@ export interface paths {
      *     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
      *     generated copy travel together, and `.cache/renders/{name}/` moves with them
      *     because the render cache is keyed by listing name too -- left behind it
-     *     would orphan a tree nothing deletes and cost a full re-render.
+     *     would orphan a tree nothing deletes and cost a full re-render. The market
+     *     snapshot and the cached AI proposal (A42) move for the same reason.
      *
      *     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
      *     left that way deliberately: nothing reads them, they become true again at
@@ -1248,40 +1299,32 @@ export interface components {
     };
     /**
      * AiProposalEvent
-     * @description The validated proposal: :class:`SeoProposalResponse` unchanged, plus
-     *     ``type`` and ``seq``.
+     * @description The validated proposal, once it is cached (A41): what ``GET
+     *     /api/listings/{name}/proposal`` answers at that moment, plus ``type``
+     *     and ``seq``.
      */
     AiProposalEvent: {
-      /** Description Leads */
-      description_leads: string[];
-      /**
-       * Expires At
-       * Format: date-time
-       */
-      expires_at: string;
       /**
        * Generated At
        * Format: date-time
        */
       generated_at: string;
-      /** Observed Text */
-      observed_text: string;
-      /** Rationale */
-      rationale: components["schemas"]["SeoRationaleEntry"][];
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "manual" | "batch";
+      proposal: components["schemas"]["ProposalChoices"];
+      resolution: components["schemas"]["ProposalResolution"];
       /** Seq */
       seq: number;
       snapshot: components["schemas"]["SeoProposalSnapshot"];
-      /** Tags */
-      tags: string[];
-      /** Titles */
-      titles: string[];
+      stale: components["schemas"]["ProposalStaleness"];
       /**
        * @description discriminator enum property added by openapi-typescript
        * @enum {string}
        */
       type: "proposal";
-      /** Warnings */
-      warnings: components["schemas"]["SeoWarningEntry"][];
     };
     /**
      * AiQueriesEvent
@@ -2232,6 +2275,29 @@ export interface components {
        */
       type: "listing_planned";
     };
+    /**
+     * ListingProposal
+     * @description A listing's cached proposal as the editor and the batch summary read
+     *     it (A41): the record, and whether it still describes the saved listing.
+     *     ``stale`` is computed from the saved listing on every read, never
+     *     stored.
+     */
+    ListingProposal: {
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string;
+      /**
+       * Origin
+       * @enum {string}
+       */
+      origin: "manual" | "batch";
+      proposal: components["schemas"]["ProposalChoices"];
+      resolution: components["schemas"]["ProposalResolution"];
+      snapshot: components["schemas"]["SeoProposalSnapshot"];
+      stale: components["schemas"]["ProposalStaleness"];
+    };
     /** ListingSummary */
     ListingSummary: {
       /** Colour Count */
@@ -2819,6 +2885,78 @@ export interface components {
       type: "progress";
     };
     /**
+     * ProposalChoices
+     * @description What the seller chooses from: the validated `ai/models.py.SeoProposal`,
+     *     field for field, as JSON can carry it.
+     */
+    ProposalChoices: {
+      /** Description Leads */
+      description_leads: string[];
+      /** Observed Text */
+      observed_text: string;
+      /** Rationale */
+      rationale: components["schemas"]["SeoRationaleEntry"][];
+      /** Tags */
+      tags: string[];
+      /** Titles */
+      titles: string[];
+      /** Warnings */
+      warnings: components["schemas"]["SeoWarningEntry"][];
+    };
+    /**
+     * ProposalResolution
+     * @description Each section's state (spec, *Durable AI proposals*): a section the
+     *     seller accepted or dismissed stays resolved after a reload, so its drawer
+     *     does not present itself as new again. ``pending`` is still open.
+     */
+    ProposalResolution: {
+      /**
+       * Lead
+       * @default pending
+       * @enum {string}
+       */
+      lead: "pending" | "accepted" | "dismissed";
+      /**
+       * Tags
+       * @default pending
+       * @enum {string}
+       */
+      tags: "pending" | "accepted" | "dismissed";
+      /**
+       * Title
+       * @default pending
+       * @enum {string}
+       */
+      title: "pending" | "accepted" | "dismissed";
+    };
+    /**
+     * ProposalResolutionPatch
+     * @description ``PATCH /api/listings/{name}/proposal/resolution``: the sections to
+     *     record, on the proposal generated at ``generated_at`` -- a regeneration
+     *     that landed meanwhile is a different proposal, and is a 409. ``pending``
+     *     reopens a section.
+     */
+    ProposalResolutionPatch: {
+      /**
+       * Generated At
+       * Format: date-time
+       */
+      generated_at: string;
+      /** Lead */
+      lead?: ("pending" | "accepted" | "dismissed") | null;
+      /** Tags */
+      tags?: ("pending" | "accepted" | "dismissed") | null;
+      /** Title */
+      title?: ("pending" | "accepted" | "dismissed") | null;
+    };
+    /** ProposalStaleness */
+    ProposalStaleness: {
+      /** Is Stale */
+      is_stale: boolean;
+      /** Reasons */
+      reasons: string[];
+    };
+    /**
      * PublishSnapshot
      * @description Domain facts for the review (A30): only the rows the stage's own
      *     ``plan()`` would refuse over, so the price table's red marker is never a
@@ -2992,15 +3130,10 @@ export interface components {
     };
     /**
      * SeoProposalSnapshot
-     * @description The submitted generation inputs, echoed back beside the proposal
-     *     (implementation plan, PR5 item 4: "input snapshot data").
-     *
-     *     This is what a future frontend (PR7) compares its own current editor
-     *     state against to decide a pending proposal has gone stale
-     *     (`docs/ui-listing-seo-interactions.md` section 7) -- everything
-     *     `ai/models.py.SeoRequest` sent to the provider except the design image
-     *     itself. Design identity and content are captured before generation, rather
-     *     than inferred from whichever editor state exists when the response arrives.
+     * @description The generation inputs, frozen before the provider starts: everything
+     *     `ai/models.py.SeoRequest` sent except the design image itself, plus the
+     *     design's identity and content hash. :func:`proposal_staleness` compares
+     *     one of these against the same inputs read from the listing now.
      */
     SeoProposalSnapshot: {
       /** Brief */
@@ -4758,6 +4891,93 @@ export interface operations {
         content: {
           "application/json": unknown;
         };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_listing_proposal_api_listings__name__proposal_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingProposal"];
+        };
+      };
+      /** @description No such listing, or no proposal cached for it */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  resolve_listing_proposal_api_listings__name__proposal_resolution_patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        name: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ProposalResolutionPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ListingProposal"];
+        };
+      };
+      /** @description No such listing, or no proposal cached for it */
+      404: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description The proposal was regenerated since the page read it */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
       };
       /** @description Validation Error */
       422: {

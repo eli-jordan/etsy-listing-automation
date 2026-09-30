@@ -173,13 +173,13 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
                 onBlur={onFlush}
               />
               {titleError && <span className="field__error">{titleError}</span>}
-              {aiSeo.proposal?.unresolved.title && (
+              {aiSeo.proposal?.resolution.title === "pending" && (
                 <div ref={titleDrawerRef}>
                   <AiChoiceDrawer
                     enter={drawerMotion}
                     field="title"
                     options={aiSeo.proposal.proposal.titles}
-                    stale={aiSeo.stale}
+                    staleReason={aiSeo.staleReason}
                     rationale={aiSeo.proposal.proposal.rationale}
                     warnings={aiSeo.proposal.proposal.warnings}
                     observedText={aiSeo.proposal.proposal.observed_text}
@@ -225,12 +225,12 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
                 }}
                 onBlur={commitTags}
               />
-              {aiSeo.proposal?.unresolved.tags && (
+              {aiSeo.proposal?.resolution.tags === "pending" && (
                 <AiTagsDrawer
                   enter={drawerMotion}
                   tags={aiSeo.proposal.proposal.tags}
                   selected={tags}
-                  stale={aiSeo.stale}
+                  staleReason={aiSeo.staleReason}
                   rationale={aiSeo.proposal.proposal.rationale}
                   warnings={aiSeo.proposal.proposal.warnings}
                   observedText={aiSeo.proposal.proposal.observed_text}
@@ -258,12 +258,12 @@ export function DetailsTab({ detail, onUpdate, onFlush, aiSeo }: Props) {
             }
             onBlur={onFlush}
           />
-          {aiSeo.proposal?.unresolved.lead && (
+          {aiSeo.proposal?.resolution.lead === "pending" && (
             <AiChoiceDrawer
               enter={drawerMotion}
               field="description lead"
               options={aiSeo.proposal.proposal.description_leads}
-              stale={aiSeo.stale}
+              staleReason={aiSeo.staleReason}
               rationale={aiSeo.proposal.proposal.rationale}
               warnings={aiSeo.proposal.proposal.warnings}
               observedText={aiSeo.proposal.proposal.observed_text}

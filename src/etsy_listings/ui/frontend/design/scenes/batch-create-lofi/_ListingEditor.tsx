@@ -3,9 +3,9 @@
 // with AI Mode). The head copies EditorHead's markup and adds the three
 // batch pieces: Back to batch, Mark reviewed and Save as listing template.
 //
-// Two proposed changes to the shipped AiChoiceDrawer are applied on mount so
-// the frame shows the design, not today's behaviour: an out-of-date proposal
-// keeps its choices usable, and its heading says so.
+// The out-of-date title drawer is the real AiChoiceDrawer: since batch PR 3
+// it keeps a stale proposal's choices usable and names what changed in its
+// heading, which this frame used to patch in on mount.
 import "./_mockApi";
 import { ArrowLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowLeft";
 import { CheckIcon } from "@phosphor-icons/react/dist/csr/Check";
@@ -19,7 +19,6 @@ import { batchListing, staleAiSeo } from "./_editorFixtures";
 import { batchLabel } from "./_fixtures";
 
 const noop = () => {};
-const STALE_HEADING = "Out of date: brief edited since. Still usable";
 
 export function ListingFromBatch() {
   const root = useRef<HTMLDivElement>(null);
@@ -32,20 +31,6 @@ export function ListingFromBatch() {
       (t) => t.textContent?.startsWith("Listing Details"),
     );
     details?.click();
-    const apply = () => {
-      el.querySelectorAll(".seo-suggestion--stale").forEach((drawer) => {
-        const heading = drawer.querySelector(".seo-suggestion__identity > span:last-child");
-        // Write only on a difference: every write is itself a mutation.
-        if (heading && heading.textContent !== STALE_HEADING) heading.textContent = STALE_HEADING;
-        drawer.querySelectorAll<HTMLButtonElement>(".seo-choice-list button").forEach((b) => {
-          if (b.disabled) b.disabled = false;
-        });
-      });
-    };
-    apply();
-    const observer = new MutationObserver(apply);
-    observer.observe(el, { childList: true, subtree: true });
-    return () => observer.disconnect();
   }, []);
 
   const head = (
