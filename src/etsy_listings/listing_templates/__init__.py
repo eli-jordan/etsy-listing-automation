@@ -7,8 +7,9 @@ a listing -- or another listing template -- into a draft
 (:func:`from_listing`, :func:`from_template`), judging it complete, and
 writing it (:func:`save`), which is the only step that touches the disk.
 
-Deliberately withheld: instantiating a template into listings. That is batch
-creation's (A39), which freezes a template before it creates anything.
+Deliberately withheld: instantiating a template into listings. That is
+`batches`' (A39), which freezes a template before it creates anything and
+asks :func:`owned_refs` which files go with it.
 """
 
 from etsy_listings.listing_templates.check import template_issues
@@ -20,6 +21,7 @@ from etsy_listings.listing_templates.convert import (
     draft_issues,
     from_listing,
     from_template,
+    owned_refs,
     save,
 )
 
@@ -29,6 +31,7 @@ __all__ = [
     "AssetCopy",
     "from_listing",
     "from_template",
+    "owned_refs",
     # Completeness (A36), for a draft and for a named template.
     "draft_issues",
     "template_issues",

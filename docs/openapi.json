@@ -701,6 +701,96 @@
         "title": "AssignKindRequest",
         "type": "object"
       },
+      "BatchDetail": {
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "listing_template": {
+            "title": "Listing Template",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BatchRowDetail"
+            },
+            "title": "Rows",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "listing_template",
+          "created_at",
+          "rows"
+        ],
+        "title": "BatchDetail",
+        "type": "object"
+      },
+      "BatchRowDetail": {
+        "properties": {
+          "creation": {
+            "enum": [
+              "pending",
+              "created",
+              "failed"
+            ],
+            "title": "Creation",
+            "type": "string"
+          },
+          "design": {
+            "title": "Design",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "sources",
+          "name",
+          "design",
+          "creation",
+          "error"
+        ],
+        "title": "BatchRowDetail",
+        "type": "object"
+      },
       "BelowCostRow": {
         "description": "One variant priced under what Printify charges to make it -- the\nrow `plan()` already refuses over (:func:`_below_cost`), named for the\nbefore/after review (A30) rather than left as a bare variant id.",
         "properties": {
@@ -754,6 +844,34 @@
           "message"
         ],
         "title": "BlockedOutcomeDTO",
+        "type": "object"
+      },
+      "Body_create_staging_api_staging_post": {
+        "properties": {
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "contentMediaType": "application/octet-stream",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "listing_template": {
+            "title": "Listing Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "listing_template"
+        ],
+        "title": "Body_create_staging_api_staging_post",
         "type": "object"
       },
       "Body_upload_design_api_designs_post": {
@@ -2594,6 +2712,16 @@
             "title": "Colour Count",
             "type": "integer"
           },
+          "design_minimum": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PixelSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "garment": {
             "title": "Garment",
             "type": "string"
@@ -3031,6 +3159,24 @@
           "score"
         ],
         "title": "PhraseScore",
+        "type": "object"
+      },
+      "PixelSize": {
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height"
+        ],
+        "title": "PixelSize",
         "type": "object"
       },
       "Placement": {
@@ -4591,6 +4737,180 @@
         "title": "StagePlannedEvent",
         "type": "object"
       },
+      "StagingDetail": {
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "listing_template": {
+            "title": "Listing Template",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/StagingRowDetail"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "template_saved_at": {
+            "format": "date-time",
+            "title": "Template Saved At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing_template",
+          "label",
+          "template_saved_at",
+          "expires_at",
+          "rows"
+        ],
+        "title": "StagingDetail",
+        "type": "object"
+      },
+      "StagingPatch": {
+        "description": "Every staging edit, applied in order: label, names, removals.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Names",
+            "type": "object"
+          },
+          "remove": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Remove",
+            "type": "array"
+          }
+        },
+        "title": "StagingPatch",
+        "type": "object"
+      },
+      "StagingRefusal": {
+        "description": "A ``422``'s ``detail`` for an upload refused before staging (A45).",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "remedy": {
+            "title": "Remedy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "remedy"
+        ],
+        "title": "StagingRefusal",
+        "type": "object"
+      },
+      "StagingRowDetail": {
+        "description": "One unique design on the staging page (UI doc \u00a75).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "ready",
+              "name",
+              "invalid"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          },
+          "typed": {
+            "title": "Typed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "sources",
+          "name",
+          "typed",
+          "state",
+          "message",
+          "note",
+          "suggestion"
+        ],
+        "title": "StagingRowDetail",
+        "type": "object"
+      },
       "SwatchResponse": {
         "description": "A colour-matrix colour's real garment shade, sampled off its own scene\nphoto (`render/swatch.py`'s `sample_swatch`) rather than an invented or\nhand-typed hex value -- nothing in the domain model stores one.",
         "properties": {
@@ -5309,6 +5629,100 @@
         "summary": "Stream Ai Run Events",
         "tags": [
           "ai-runs"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}": {
+      "get": {
+        "operationId": "get_batch_api_batches__batch_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/rows/{row}/retry": {
+      "post": {
+        "description": "Retry a row whose creation failed (UI doc \u00a77). The AI half of Retry\narrives with the batch queue (batch plan PR 4).",
+        "operationId": "retry_batch_row_api_batches__batch_id__rows__row__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "title": "Row",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Batch Row",
+        "tags": [
+          "batches"
         ]
       }
     },
@@ -7081,6 +7495,271 @@
         ]
       }
     },
+    "/api/staging": {
+      "post": {
+        "description": "Stage loose PNGs (spec, *Accepted input*). Starlette has already\nspooled the parts to temporary files; `stage_pngs` streams each one on to\nits content-addressed upload with a running count (A45). A ZIP is\nrefused as *coming soon* until batch plan PR 7.",
+        "operationId": "create_staging_api_staging_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_staging_api_staging_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagingRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Content"
+          }
+        },
+        "summary": "Create Staging",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/staging/{session_id}": {
+      "delete": {
+        "description": "Cancel staging: the uploads go at once (A46). The seller's own files\nwere never touched.",
+        "operationId": "cancel_staging_api_staging__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Staging",
+        "tags": [
+          "batches"
+        ]
+      },
+      "get": {
+        "description": "A reload reattaches here (spec, *Frozen staging*).",
+        "operationId": "get_staging_api_staging__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Staging",
+        "tags": [
+          "batches"
+        ]
+      },
+      "patch": {
+        "description": "Edit the label, type names, remove rows. Every edit moves the\nsession's expiry to seven days from now (A46).",
+        "operationId": "patch_staging_api_staging__session_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StagingPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Staging",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/staging/{session_id}/confirm": {
+      "post": {
+        "description": "Create N listings (UI doc \u00a76). Repeating it -- a double click, a retry\nafter a dropped response -- finishes the same batch rather than making a\nsecond one (A39).",
+        "operationId": "confirm_staging_api_staging__session_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "The session cannot be confirmed yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Staging",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/staging/{session_id}/rows/{row}/thumbnail": {
+      "get": {
+        "operationId": "staging_row_thumbnail_api_staging__session_id__rows__row__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "title": "Row",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Staging Row Thumbnail",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
     "/api/templates": {
       "get": {
         "operationId": "list_templates_api_templates_get",
@@ -7706,43 +8385,6 @@
         "tags": [
           "listings-support"
         ]
-      }
-    },
-    "/{full_path}": {
-      "get": {
-        "operationId": "spa_fallback__full_path__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "full_path",
-            "required": true,
-            "schema": {
-              "title": "Full Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Spa Fallback"
       }
     }
   }

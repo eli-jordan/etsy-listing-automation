@@ -70,6 +70,44 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/batches/{batch_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Get Batch */
+    get: operations["get_batch_api_batches__batch_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/batches/{batch_id}/rows/{row}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Retry Batch Row
+     * @description Retry a row whose creation failed (UI doc §7). The AI half of Retry
+     *     arrives with the batch queue (batch plan PR 4).
+     */
+    post: operations["retry_batch_row_api_batches__batch_id__rows__row__retry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/common-copy": {
     parameters: {
       query?: never;
@@ -810,6 +848,98 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/staging": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Create Staging
+     * @description Stage loose PNGs (spec, *Accepted input*). Starlette has already
+     *     spooled the parts to temporary files; `stage_pngs` streams each one on to
+     *     its content-addressed upload with a running count (A45). A ZIP is
+     *     refused as *coming soon* until batch plan PR 7.
+     */
+    post: operations["create_staging_api_staging_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/staging/{session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /**
+     * Get Staging
+     * @description A reload reattaches here (spec, *Frozen staging*).
+     */
+    get: operations["get_staging_api_staging__session_id__get"];
+    put?: never;
+    post?: never;
+    /**
+     * Cancel Staging
+     * @description Cancel staging: the uploads go at once (A46). The seller's own files
+     *     were never touched.
+     */
+    delete: operations["cancel_staging_api_staging__session_id__delete"];
+    options?: never;
+    head?: never;
+    /**
+     * Patch Staging
+     * @description Edit the label, type names, remove rows. Every edit moves the
+     *     session's expiry to seven days from now (A46).
+     */
+    patch: operations["patch_staging_api_staging__session_id__patch"];
+    trace?: never;
+  };
+  "/api/staging/{session_id}/confirm": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    /**
+     * Confirm Staging
+     * @description Create N listings (UI doc §6). Repeating it -- a double click, a retry
+     *     after a dropped response -- finishes the same batch rather than making a
+     *     second one (A39).
+     */
+    post: operations["confirm_staging_api_staging__session_id__confirm_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/staging/{session_id}/rows/{row}/thumbnail": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    /** Staging Row Thumbnail */
+    get: operations["staging_row_thumbnail_api_staging__session_id__rows__row__thumbnail_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/templates": {
     parameters: {
       query?: never;
@@ -1041,23 +1171,6 @@ export interface paths {
     };
     /** Get Workspace */
     get: operations["get_workspace_api_workspace_get"];
-    put?: never;
-    post?: never;
-    delete?: never;
-    options?: never;
-    head?: never;
-    patch?: never;
-    trace?: never;
-  };
-  "/{full_path}": {
-    parameters: {
-      query?: never;
-      header?: never;
-      path?: never;
-      cookie?: never;
-    };
-    /** Spa Fallback */
-    get: operations["spa_fallback__full_path__get"];
     put?: never;
     post?: never;
     delete?: never;
@@ -1361,6 +1474,40 @@ export interface components {
        */
       kind: "colour-matrix" | "multiple" | "single";
     };
+    /** BatchDetail */
+    BatchDetail: {
+      /**
+       * Created At
+       * Format: date-time
+       */
+      created_at: string;
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
+      /** Listing Template */
+      listing_template: string;
+      /** Rows */
+      rows: components["schemas"]["BatchRowDetail"][];
+    };
+    /** BatchRowDetail */
+    BatchRowDetail: {
+      /**
+       * Creation
+       * @enum {string}
+       */
+      creation: "pending" | "created" | "failed";
+      /** Design */
+      design: string;
+      /** Error */
+      error: string | null;
+      /** Id */
+      id: string;
+      /** Name */
+      name: string;
+      /** Sources */
+      sources: string[];
+    };
     /**
      * BelowCostRow
      * @description One variant priced under what Printify charges to make it -- the
@@ -1392,6 +1539,13 @@ export interface components {
        * @enum {string}
        */
       type: "blocked";
+    };
+    /** Body_create_staging_api_staging_post */
+    Body_create_staging_api_staging_post: {
+      /** Files */
+      files?: string[] | null;
+      /** Listing Template */
+      listing_template: string;
     };
     /** Body_upload_design_api_designs_post */
     Body_upload_design_api_designs_post: {
@@ -2223,6 +2377,7 @@ export interface components {
       batch_count: number;
       /** Colour Count */
       colour_count: number;
+      design_minimum?: components["schemas"]["PixelSize"] | null;
       /** Garment */
       garment: string;
       /** Media */
@@ -2422,6 +2577,13 @@ export interface components {
       phrase: string;
       /** Score */
       score: number;
+    };
+    /** PixelSize */
+    PixelSize: {
+      /** Height */
+      height: number;
+      /** Width */
+      width: number;
     };
     /**
      * Placement
@@ -3099,6 +3261,82 @@ export interface components {
        */
       type: "stage_planned";
     };
+    /** StagingDetail */
+    StagingDetail: {
+      /**
+       * Expires At
+       * Format: date-time
+       */
+      expires_at: string;
+      /** Id */
+      id: string;
+      /** Label */
+      label: string;
+      /** Listing Template */
+      listing_template: string;
+      /** Rows */
+      rows: components["schemas"]["StagingRowDetail"][];
+      /**
+       * Template Saved At
+       * Format: date-time
+       */
+      template_saved_at: string;
+    };
+    /**
+     * StagingPatch
+     * @description Every staging edit, applied in order: label, names, removals.
+     */
+    StagingPatch: {
+      /** Label */
+      label?: string | null;
+      /**
+       * Names
+       * @default {}
+       */
+      names: {
+        [key: string]: string;
+      };
+      /**
+       * Remove
+       * @default []
+       */
+      remove: string[];
+    };
+    /**
+     * StagingRefusal
+     * @description A ``422``'s ``detail`` for an upload refused before staging (A45).
+     */
+    StagingRefusal: {
+      /** Message */
+      message: string;
+      /** Remedy */
+      remedy: string;
+    };
+    /**
+     * StagingRowDetail
+     * @description One unique design on the staging page (UI doc §5).
+     */
+    StagingRowDetail: {
+      /** Id */
+      id: string;
+      /** Message */
+      message: string | null;
+      /** Name */
+      name: string;
+      /** Note */
+      note: string | null;
+      /** Sources */
+      sources: string[];
+      /**
+       * State
+       * @enum {string}
+       */
+      state: "ready" | "name" | "invalid";
+      /** Suggestion */
+      suggestion: string | null;
+      /** Typed */
+      typed: boolean;
+    };
     /**
      * SwatchResponse
      * @description A colour-matrix colour's real garment shade, sampled off its own scene
@@ -3509,6 +3747,69 @@ export interface operations {
           [name: string]: unknown;
         };
         content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_batch_api_batches__batch_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  retry_batch_row_api_batches__batch_id__rows__row__retry_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        batch_id: string;
+        row: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
       };
       /** @description Validation Error */
       422: {
@@ -4734,6 +5035,204 @@ export interface operations {
       };
     };
   };
+  create_staging_api_staging_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": components["schemas"]["Body_create_staging_api_staging_post"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StagingDetail"];
+        };
+      };
+      /** @description Unprocessable Content */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StagingRefusal"];
+        };
+      };
+    };
+  };
+  get_staging_api_staging__session_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StagingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  cancel_staging_api_staging__session_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  patch_staging_api_staging__session_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["StagingPatch"];
+      };
+    };
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["StagingDetail"];
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  confirm_staging_api_staging__session_id__confirm_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["BatchDetail"];
+        };
+      };
+      /** @description The session cannot be confirmed yet */
+      409: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  staging_row_thumbnail_api_staging__session_id__rows__row__thumbnail_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        session_id: string;
+        row: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      /** @description Successful Response */
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": unknown;
+        };
+      };
+      /** @description Validation Error */
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   list_templates_api_templates_get: {
     parameters: {
       query?: never;
@@ -5088,37 +5587,6 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["WorkspaceSummary"];
-        };
-      };
-    };
-  };
-  spa_fallback__full_path__get: {
-    parameters: {
-      query?: never;
-      header?: never;
-      path: {
-        full_path: string;
-      };
-      cookie?: never;
-    };
-    requestBody?: never;
-    responses: {
-      /** @description Successful Response */
-      200: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": unknown;
-        };
-      };
-      /** @description Validation Error */
-      422: {
-        headers: {
-          [name: string]: unknown;
-        };
-        content: {
-          "application/json": components["schemas"]["HTTPValidationError"];
         };
       };
     };

@@ -94,6 +94,22 @@ listing (``{name}.json``), which moves and goes with the listing as
 MARKET_SEARCH_DIR = "search"
 MARKET_STATS_DIR = "stats"
 MARKET_SNAPSHOTS_DIR = "snapshots"
+STAGING_DIR = "staging"
+"""Batch creation's staging sessions (A37, A46), one directory per session:
+:data:`STAGING_SESSION_FILE`, the frozen listing template's own files in
+:data:`FROZEN_TEMPLATE_DIR` and every upload in :data:`STAGING_UPLOADS_DIR`
+as ``<sha256>.png``. Cache, not workspace data: a session expires seven days
+after its last edit, and clearing ``.cache`` loses only unconfirmed uploads."""
+STAGING_SESSION_FILE = "session.json"
+STAGING_UPLOADS_DIR = "uploads"
+FROZEN_TEMPLATE_DIR = "template"
+"""Inside a staging session's or a batch's directory: the listing
+template's owned files as they were when staging began, where the frozen
+document's ``./`` refs resolve (spec, *Frozen staging*)."""
+BATCHES_DIR = "batches"
+"""Confirmed batches (A37): ``<id>.json`` is the record, and ``<id>/`` beside
+it keeps the frozen listing template for Retry, plus the upload of any row
+whose creation failed, so the staging session can go (A46)."""
 RUNS_DB = "runs.db"
 FX_CACHE_FILE = "fx.json"
 

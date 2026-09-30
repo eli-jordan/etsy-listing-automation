@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from datetime import UTC, datetime
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -25,10 +26,12 @@ from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings import connections
+from etsy_listings.batches import BatchStore, StagingStore
 from etsy_listings.clients.etsy.market import EtsyMarketClient
 from etsy_listings.ui.airuns.registry import AiRunRegistry
 from etsy_listings.ui.airuns.runner import AiRunner, MarketClientFactory
 from etsy_listings.ui.api.airuns import router as ai_runs_router
+from etsy_listings.ui.api.batches import router as batches_router
 from etsy_listings.ui.api.designs import router as designs_router
 from etsy_listings.ui.api.listing_templates import router as listing_templates_router
 from etsy_listings.ui.api.listings import router as listings_router
@@ -70,6 +73,7 @@ def create_app(
         providers=seo_provider_factory,
         market_client=market_client_factory,
     )
+    staging_store = StagingStore(workspace)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -81,7 +85,10 @@ def create_app(
 
         AI runs are cancelled first: each is on its own daemon thread, and
         cancelling kills its provider subprocess tree, so a server stopping
-        never waits out a model."""
+        never waits out a model.
+
+        Expired staging sessions are swept on the way in (A46)."""
+        staging_store.sweep(now=datetime.now(UTC))
         executor.start()
         try:
             yield
@@ -109,6 +116,10 @@ def create_app(
     # Etsy market search, as `seo_provider_factory` is for the providers.
     app.state.ai_run_registry = ai_registry
     app.state.ai_runner = ai_runner
+    # Batch creation's cache records (A37): one store of each per process, so
+    # their per-record locks mean something.
+    app.state.staging_store = staging_store
+    app.state.batch_store = BatchStore(workspace)
 
     # Permissive CORS for local dev only -- the Vite dev server proxies /api in
     # production-shaped use, but running `uvicorn` and `vite` as two separate
@@ -138,6 +149,7 @@ def create_app(
     app.include_router(listings_router)
     app.include_router(listings_support_router)
     app.include_router(listing_templates_router)
+    app.include_router(batches_router)
     app.include_router(media_files_router)
     app.include_router(runs_router)
     app.include_router(ai_runs_router)

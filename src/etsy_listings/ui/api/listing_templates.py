@@ -20,6 +20,7 @@ a name: a template called that could be created and never opened.
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import UTC, datetime
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -31,9 +32,11 @@ from pydantic import ValidationError
 # By module: the draft endpoint's query parameters are called ``from_listing``
 # and ``from_template`` (the plan's route), which would shadow the functions.
 from etsy_listings import listing_templates as conversion
+from etsy_listings.batches import BatchStore
 from etsy_listings.config.errors import ConfigLoadError
 from etsy_listings.config.listing_template import ListingTemplate
 from etsy_listings.config.listing_validation import Issue as ValidationIssue
+from etsy_listings.config.listing_validation import required_design_pixels
 from etsy_listings.listing_templates import (
     ListingTemplateDraft,
     ListingTemplateExistsError,
@@ -51,6 +54,7 @@ from etsy_listings.ui.api.schemas import (
     ListingTemplateSaveResult,
     ListingTemplateSource,
     ListingTemplateSummary,
+    PixelSize,
 )
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
 from etsy_listings.workspace.facts import WorkspaceFacts
@@ -89,6 +93,14 @@ def _garment(facts: WorkspaceFacts, template: ListingTemplate) -> str | None:
     if profile is None:
         return None
     return f"{profile.blueprint.brand} {profile.blueprint.model}"
+
+
+def _design_minimum(facts: WorkspaceFacts, template: ListingTemplate) -> PixelSize | None:
+    profile = facts.garment_profile(template.garment_profile)
+    if profile is None:
+        return None
+    width, height = required_design_pixels(profile)
+    return PixelSize(width=width, height=height)
 
 
 def _plan_name(template: ListingTemplate) -> str | None:
@@ -159,6 +171,8 @@ def list_listing_templates(request: Request) -> list[ListingTemplateSummary]:
     than failing the page; it can only get that way by a hand edit."""
     workspace = _workspace(request)
     facts = WorkspaceFacts.gather(workspace)
+    batch_store: BatchStore = request.app.state.batch_store
+    used = Counter(batch.listing_template for batch in batch_store.all())
     cards: list[ListingTemplateSummary] = []
     for name in workspace.listing_template_names():
         try:
@@ -172,6 +186,8 @@ def list_listing_templates(request: Request) -> list[ListingTemplateSummary]:
                 colour_count=len(template.colors),
                 pricing_plan_name=_plan_name(template),
                 media=template.media,
+                batch_count=used[name],
+                design_minimum=_design_minimum(facts, template),
             )
         )
     return cards

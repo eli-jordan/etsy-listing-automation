@@ -398,6 +398,16 @@ class Workspace:
                 names.append(path.name)
         return sorted(names)
 
+    def listing_directory_names(self) -> list[str]:
+        """Every directory under ``listings/``, a listing or not. A name one
+        holds is taken even without a ``listing.yaml`` -- create refuses it
+        -- so this, not :meth:`listing_names`, is what a new name must avoid
+        (A38)."""
+        listings = self.root / layout.LISTINGS_DIR
+        if not listings.is_dir():
+            return []
+        return sorted(path.name for path in listings.iterdir() if path.is_dir())
+
     def remove_listing(self, listing: str) -> None:
         """Wipe ``listings/{name}/``, ``.cache/renders/{name}/`` (PRD 63),
         ``.cache/previews/{name}/`` (A32) and the market snapshot
@@ -485,6 +495,62 @@ class Workspace:
             self.listing_template_file(template),
             yaml.safe_dump(dumped, sort_keys=False, allow_unicode=True).encode("utf-8"),
         )
+
+    def resolve_frozen_template_ref(self, ref: str, *, frozen_dir: Path) -> Path:
+        """:meth:`resolve_template_ref` for a listing template frozen into a
+        staging session or a batch (spec, *Frozen staging*): ``./`` is the
+        frozen copy's directory, a bare ref the live workspace, because
+        shared refs are never frozen."""
+        return self._resolve_owned_ref(ref, frozen_dir, layout.TEMPLATE_FILE)
+
+    # Batch creation's cache records (A37). Ids come from URLs, so every one
+    # goes through `_segment` like a listing name.
+
+    def staging_ids(self) -> list[str]:
+        return self._cache_entries(layout.STAGING_DIR, directories=True)
+
+    def staging_dir(self, session: str) -> Path:
+        return self.cache(layout.STAGING_DIR, _segment(session))
+
+    def staging_session_file(self, session: str) -> Path:
+        return self.staging_dir(session) / layout.STAGING_SESSION_FILE
+
+    def staging_upload_file(self, session: str, sha256: str) -> Path:
+        return self.staging_dir(session) / layout.STAGING_UPLOADS_DIR / f"{_segment(sha256)}.png"
+
+    def staging_template_dir(self, session: str) -> Path:
+        return self.staging_dir(session) / layout.FROZEN_TEMPLATE_DIR
+
+    def batch_ids(self) -> list[str]:
+        return self._cache_entries(layout.BATCHES_DIR, directories=False)
+
+    def batch_file(self, batch: str) -> Path:
+        return self.cache(layout.BATCHES_DIR, f"{_segment(batch)}.json")
+
+    def batch_dir(self, batch: str) -> Path:
+        return self.cache(layout.BATCHES_DIR, _segment(batch))
+
+    def batch_template_dir(self, batch: str) -> Path:
+        return self.batch_dir(batch) / layout.FROZEN_TEMPLATE_DIR
+
+    def batch_upload_file(self, batch: str, sha256: str) -> Path:
+        return self.batch_dir(batch) / layout.STAGING_UPLOADS_DIR / f"{_segment(sha256)}.png"
+
+    def _cache_entries(self, directory: str, *, directories: bool) -> list[str]:
+        """The ids under ``.cache/<directory>/``: its subdirectories, or the
+        stems of its ``*.json`` records."""
+        parent = self.cache(directory)
+        if not parent.is_dir():
+            return []
+        if directories:
+            return sorted(p.name for p in parent.iterdir() if p.is_dir())
+        return sorted(p.stem for p in parent.glob("*.json") if p.is_file())
+
+    def design_ref(self, design: str) -> str:
+        """The workspace-rooted ref ``listing.yaml`` names ``designs/<design>.png``
+        by (PRD 73) -- what batch creation writes into every listing it makes
+        (spec, *Design validation*)."""
+        return f"{layout.DESIGNS_DIR}/{_segment(design)}.png"
 
     def design_content_hash(self, design: Mapping[str, str], *, listing_dir: Path) -> str | None:
         """Content identity for the design the editor and SEO request see.
