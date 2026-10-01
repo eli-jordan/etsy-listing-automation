@@ -155,6 +155,25 @@ def test_a_finished_run_is_replaced_by_the_next(client: TestClient) -> None:
     _finished(client, second["id"])
 
 
+def test_a_listing_a_deploy_holds_is_409_deploying_and_not_ready(client: TestClient) -> None:
+    """ADR-0050's refusal on the wire: the reason is a code the editor words
+    itself, and readiness carries the flag and the hint."""
+    ai = client.app.state.ai  # type: ignore[attr-defined]
+
+    with ai.yield_to_deploy([LISTING]):
+        refused = client.post("/api/ai/runs", json={"listing": LISTING, "draft_brief": False})
+        readiness = client.get(f"/api/listings/{LISTING}/ai-seo/readiness").json()
+
+    assert refused.status_code == 409
+    assert refused.json() == {"active_run": None, "reason": "deploying"}
+    assert readiness == {
+        "ready": False,
+        "reason": "This listing is deploying. AI Mode is back once the deploy finishes.",
+        "batch_pending": False,
+        "deploying": True,
+    }
+
+
 def test_post_for_an_unknown_listing_is_404(client: TestClient) -> None:
     response = client.post("/api/ai/runs", json={"listing": "never-saved"})
 
