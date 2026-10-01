@@ -77,6 +77,10 @@ a comparison for full-size review. White, saturated colour, fine text and
 transparent-edge targets expose failures that distressed art can hide.
 
 Drag corners, exclude foreground with the brush, or restore a mistaken exclusion.
+**Reset placement & corrections** restores the selected photo's original placement
+and mask (including its supplied exclusions), clears patches and anchors, and
+returns to Corners mode. It keeps depth, illumination, texture, highlights and
+the loaded artwork. Reset refits from cached predictions and replaces an imported map.
 For an actual overlap, click around a visible patch and finish it. Its U/V offset
 represents a hidden material interval in the shared artwork plane. Larger patch
 order is frontmost. This is a corrective prior, not an inferred cloth measurement.

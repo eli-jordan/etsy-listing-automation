@@ -243,6 +243,20 @@ class Trial:
         self.outputs = {}
         self.diagnostics = {}
 
+    def reset_calibration(self) -> None:
+        """Restore source placement/corrections, retaining the chosen appearance."""
+        sample = self.samples[self.active]
+        self.controls = Controls(
+            box=sample["box"],
+            strokes=sample.get("strokes", []),
+            depth=self.controls.depth,
+            illumination=self.controls.illumination,
+            texture=self.controls.texture,
+            residual=self.controls.residual,
+        )
+        self.imported = None
+        self.key = None
+
     def metadata(self) -> dict:
         return {
             "samples": [{"name": s["name"], "provenance": s["provenance"]} for s in self.samples],
@@ -641,6 +655,15 @@ def create_app(trial: Trial) -> FastAPI:
             trial.imported = None
             try:
                 return trial.render()
+            except (ValueError, FileNotFoundError) as error:
+                raise HTTPException(400, str(error)) from error
+
+    @app.post("/reset")
+    def reset() -> dict:
+        with trial.lock:
+            trial.reset_calibration()
+            try:
+                return {"state": trial.metadata(), "metrics": trial.render()}
             except (ValueError, FileNotFoundError) as error:
                 raise HTTPException(400, str(error)) from error
 
