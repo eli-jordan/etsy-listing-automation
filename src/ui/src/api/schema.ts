@@ -1042,7 +1042,8 @@ export interface paths {
      * Create Run
      * @description A ``409`` names the run already holding one of these listings, so the
      *     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-     *     retrying into the same refusal.
+     *     retrying into the same refusal. A workspace apply that is not exactly
+     *     its review is a ``409`` too, carrying the refusal's message.
      */
     post: operations["create_run_api_runs_post"];
     delete?: never;

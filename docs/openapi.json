@@ -8553,7 +8553,7 @@
         ]
       },
       "post": {
-        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal.",
+        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace apply that is not exactly\nits review is a ``409`` too, carrying the refusal's message.",
         "operationId": "create_run_api_runs_post",
         "requestBody": {
           "content": {
