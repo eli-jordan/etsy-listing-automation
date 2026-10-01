@@ -86,8 +86,8 @@ def _nothing_to_yield(listings: Sequence[str]) -> AbstractContextManager[None]:
 
 @dataclass
 class RunExecutor:
-    """Owns the worker thread. One instance per running server
-    (``server/api/app.py``'s lifespan starts and joins it)."""
+    """Owns the worker thread. One per ``deployments.Deployments``, whose
+    ``start``/``stop`` the host calls (the UI server's lifespan)."""
 
     workspace: Workspace
     context_factory: ContextFactory

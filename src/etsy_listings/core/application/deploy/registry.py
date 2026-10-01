@@ -242,7 +242,7 @@ class Conflict:
 
 @dataclass
 class RunRegistry:
-    """Every run this server process has seen and its current scope holder.
+    """Every run this process has seen and its current scope holder.
 
     Listing-scoped runs use ``_holder``. Workspace runs use the separate
     ``_workspace_holder`` because a terminal workspace plan remains the

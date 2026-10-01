@@ -53,7 +53,8 @@ import names the module it depends on. Public interfaces:
     refusals; ``ListingTemplateMissing``, ``ReservedListingTemplateName``,
     ``ListingTemplateSourceRefused``; ``StagingMissing``, ``StagedRowMissing``,
     ``BatchMissing``, ``BatchRowMissing``, ``BatchRowUploadMissing``,
-    ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``.
+    ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``;
+    ``ReviewedPlanRefused``.
 ``workspace_locks``
     ``WorkspaceLocks``: the per-listing and per-listing-template write locks
     every read-merge-write holds, one instance per application runtime.

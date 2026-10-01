@@ -16,6 +16,12 @@ interfaces:
     ``wait_for_events`` an SSE loop polls; the commands ``ListingPlan``,
     ``WorkspacePlan``, ``ListingApply``, ``WorkspaceApply`` (``RunCommand``);
     ``Conflict``.
+``deployments``
+    ``Deployments`` -- the coordinator a host constructs once, starts and
+    stops: ``submit``, ``cancel``, ``get``, ``runs``.
+``review``
+    ``check_reviewed_apply`` -- a workspace apply names exactly its review
+    (ADR-0042), or ``refusals.ReviewedPlanRefused``.
 ``executor``
     ``RunExecutor`` -- the one FIFO worker thread; ``ContextFactory``.
 ``events``

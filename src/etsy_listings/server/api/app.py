@@ -18,8 +18,8 @@ from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
-from etsy_listings.core.application.deploy.executor import ContextFactory, RunExecutor
-from etsy_listings.core.application.deploy.registry import RunRegistry
+from etsy_listings.core.application.deploy.deployments import Deployments
+from etsy_listings.core.application.deploy.executor import ContextFactory
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
@@ -66,7 +66,6 @@ def create_app(
     seo_provider_factory: AiProviderFactory = default_ai_providers,
     market_client_factory: MarketClientFactory = default_market_client,
 ) -> FastAPI:
-    registry = RunRegistry()
     locks = WorkspaceLocks()
     ai_registry = AiRunRegistry()
     proposal_store = ProposalStore(workspace)
@@ -83,16 +82,15 @@ def create_app(
     batch_queue = BatchQueue(
         workspace=workspace, batches=batch_store, registry=ai_registry, runner=ai_runner
     )
-    executor = RunExecutor(
-        workspace=workspace,
-        context_factory=context_factory,
-        registry=registry,
-        yield_to_deploy=batch_queue.yield_to_deploy,
+    # Constructing it starts nothing; the lifespan below does. Deploying
+    # takes precedence over AI work through the batch queue (ADR-0050).
+    deployments = Deployments(
+        workspace, context_factory, yield_to_deploy=batch_queue.yield_to_deploy
     )
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        """Starts the runs executor's worker thread with the app, and waits
+        """Starts the deployment worker thread with the app, and waits
         for it on the way out -- "finish what's in flight, start nothing
         else" (decision 7), on the path every ASGI server already calls
         (uvicorn's own shutdown when ``ui`` is interrupted, and
@@ -107,23 +105,22 @@ def create_app(
         running to the queue, and stops before the AI runs are cancelled, so
         it starts nothing into a runner that is shutting down."""
         staging_store.sweep(now=datetime.now(UTC))
-        executor.start()
+        deployments.start()
         batch_queue.start()
         try:
             yield
         finally:
             batch_queue.stop()
             ai_runner.shutdown()
-            executor.stop()
+            deployments.stop()
 
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
     app.state.workspace = workspace
-    app.state.run_registry = registry
-    app.state.run_executor = executor
+    app.state.deployments = deployments
     # Shared with the preview endpoint (`listings.py`), which needs a
     # `RunContext` to ask the render stage for a scene's current hash but has
-    # nothing to do with running a run -- reaching through `run_executor` for
-    # it would couple that endpoint to the executor's own shape for no reason.
+    # nothing to do with running a run -- reaching through `deployments` for
+    # it would couple that endpoint to deployment's own shape for no reason.
     app.state.context_factory = context_factory
     # The AI providers' injection seam, read per request by AI Mode's
     # readiness check (`seo.py`) and per run by `ai_runner`.
@@ -132,7 +129,7 @@ def create_app(
     # PR 5's brief write) -- `core/application/workspace_locks.py` says why.
     app.state.workspace_locks = locks
     # AI runs (features/market-seo-20260924/spec.md, *AI runs*): their own registry and a thread per
-    # run, never `run_executor`. `market_client_factory` is the test seam for
+    # run, never `deployments`. `market_client_factory` is the test seam for
     # Etsy market search, as `seo_provider_factory` is for the providers.
     app.state.ai_run_registry = ai_registry
     app.state.ai_runner = ai_runner

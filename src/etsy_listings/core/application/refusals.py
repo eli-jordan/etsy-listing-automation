@@ -229,3 +229,9 @@ class AiDraftingBlocked(ConfirmRefused):
     def __init__(self, reason: str) -> None:
         super().__init__(f"AI drafting can't run yet. {reason}")
         self.reason = reason
+
+
+class ReviewedPlanRefused(UserFacingError, ValueError):
+    """ADR-0042: a workspace apply names exactly the listings and plan
+    fingerprints of a ready workspace plan the seller reviewed, or it is not
+    queued. The message says which part did not hold."""

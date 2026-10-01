@@ -4,7 +4,7 @@ transport, because the thing under test *is* the wire format.
 
 Every test opens the client as ``with TestClient(app) as client:`` rather than
 constructing one bare -- that is what runs the FastAPI lifespan (startup
-starts the runs executor's worker thread; shutdown joins it), and a run
+starts the deployment worker thread; shutdown joins it), and a run
 created against a client that never entered its ``with`` block would sit
 `queued` forever with nothing to dequeue it.
 
@@ -18,9 +18,12 @@ of that same surface.
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
 import time
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -31,6 +34,7 @@ from fastapi.testclient import TestClient
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api import runs as runs_api
 from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
@@ -177,22 +181,17 @@ def test_workspace_apply_reuses_exact_reviewed_targets_and_retains_the_plan(
     _wait_until_terminal(client, body["id"])
 
 
-@pytest.mark.parametrize("change", ["omit", "extra", "fingerprint"])
-def test_workspace_apply_must_match_the_reviewed_names_and_fingerprints(
-    client: TestClient, change: str
+def test_a_workspace_apply_differing_from_its_review_is_409_with_the_refusal(
+    client: TestClient,
 ) -> None:
+    """Which differences are refused is ``tests/behaviour/test_deployments.py``'s;
+    this is how one reaches the wire."""
     reviewed = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
     detail = _wait_until_terminal(client, reviewed["id"])
     planned = [event for event in detail["events"] if event["type"] == "listing_planned"]
     listings = [event["listing"] for event in planned]
     expect = {event["listing"]: event["fingerprint"] for event in planned}
-    if change == "omit":
-        listings = []
-    elif change == "extra":
-        listings = [*listings, "created-after-review"]
-        expect["created-after-review"] = "sha256:" + "0" * 64
-    else:
-        expect[listings[0]] = "sha256:" + "0" * 64
+    expect[listings[0]] = "sha256:" + "0" * 64
 
     response = client.post(
         "/api/runs",
@@ -206,7 +205,10 @@ def test_workspace_apply_must_match_the_reviewed_names_and_fingerprints(
     )
 
     assert response.status_code == 409
-    assert "reviewed workspace plan" in response.text or "reviewed" in response.text
+    assert response.json() == {
+        "detail": "apply fingerprints must exactly match the reviewed workspace plan"
+    }
+    assert client.get("/api/runs", params={"scope": "workspace"}).json()[0]["id"] == reviewed["id"]
 
 
 def test_workspace_apply_requires_a_ready_workspace_plan(client: TestClient) -> None:
@@ -443,6 +445,65 @@ def test_an_invalid_last_event_id_replays_everything(client: TestClient) -> None
 
 def test_streaming_an_unknown_run_is_404(client: TestClient) -> None:
     assert client.get("/api/runs/nope/events").status_code == 404
+
+
+def test_the_stream_is_an_unbuffered_event_stream(client: TestClient) -> None:
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    _wait_until_terminal(client, created["id"])
+
+    response = client.get(f"/api/runs/{created['id']}/events")
+
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
+
+
+def test_closing_the_stream_does_not_cancel_the_run(workspace_root: Path) -> None:
+    """The browser leaving is the stream's generator seeing a disconnect;
+    the run goes on, and a later connection can replay it."""
+    planning = threading.Event()
+    release = threading.Event()
+
+    def gated(workspace: Workspace, on_event: EventSink | None) -> RunContext:
+        planning.set()
+        assert release.wait(timeout=15)
+        return _context_factory(workspace, on_event)
+
+    app = create_app(Workspace.discover(root_override=workspace_root), context_factory=gated)
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+        ).json()
+        assert planning.wait(timeout=15)
+        run = app.state.deployments.get(created["id"])
+
+        class Leaving:
+            """Connected for the first poll, gone from the second."""
+
+            polls = 0
+
+            async def is_disconnected(self) -> bool:
+                self.polls += 1
+                return self.polls > 1
+
+        async def read_until_gone() -> list[bytes]:
+            return [frame async for frame in runs_api._sse_events(Leaving(), run, 0)]  # type: ignore[arg-type]
+
+        # Its own thread: another test layer (Playwright) may leave this
+        # thread with a running event loop, and asyncio.run refuses that.
+        with ThreadPoolExecutor(1) as pool:
+            frames = pool.submit(asyncio.run, read_until_gone()).result(timeout=15)
+
+        assert frames[0].startswith(b"id: 1\nevent: phase\n")
+        assert run.phase == "planning"
+        assert not run.cancel_requested
+        release.set()
+
+        assert _wait_until_terminal(client, created["id"])["phase"] == "ready"
+        replayed = _parse_sse(client.get(f"/api/runs/{created['id']}/events").text)
+        assert replayed[-1]["data"]["phase"] == "ready"
 
 
 # --------------------------------------------------------------------- openapi
