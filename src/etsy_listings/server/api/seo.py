@@ -9,7 +9,7 @@ GET /api/listings/{name}/proposal -> ListingProposal | 404
 PATCH /api/listings/{name}/proposal/resolution -> ListingProposal | 404 | 409
 ```
 
-Generation itself is an AI run (``server/airuns/``, served by
+Generation itself is an AI run (``core/application/ai/``, served by
 ``server/api/airuns.py``): the brief, market research and the proposal as one
 run per listing, on its own thread, reattachable and cancellable. The two
 request-scoped generation endpoints that used to live here -- one for a

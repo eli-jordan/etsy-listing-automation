@@ -19,7 +19,7 @@ provider.
 :func:`reviewable`, which rows Mark reviewed applies to (batch plan PR 5).
 
 A created row is queued for AI (``BatchRow.ai``); the queue that drafts it
-is the UI server's (``server/batchqueue.py``, ADR-0048), since only that process runs
+is the UI server's (``core/application/ai/batch_queue.py``, ADR-0048), since only that process runs
 AI.
 """
 

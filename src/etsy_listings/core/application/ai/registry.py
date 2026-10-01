@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Literal
 
-from etsy_listings.server.airuns.events import (
+from etsy_listings.core.application.ai.events import (
     STEP_IDS,
     AiPhaseEvent,
     AiRunPhase,

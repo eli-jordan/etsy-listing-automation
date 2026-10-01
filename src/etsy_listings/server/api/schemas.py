@@ -18,6 +18,13 @@ from etsy_listings.core.ai.proposals import (
 from etsy_listings.core.ai.proposals import (
     Resolution,
 )
+from etsy_listings.core.application.ai.events import (
+    AiRunEvent,
+    AiRunPhase,
+)
+from etsy_listings.core.application.ai.events import (
+    WorkflowStep as WorkflowStep,
+)
 from etsy_listings.core.application.deploy.events import (
     ApplyRunPhase,
     PlanRunPhase,
@@ -614,19 +621,6 @@ class StagingPatch(BaseModel):
     remove: list[str] = []
 
 
-StepId = Literal["brief", "market", "seo"]
-StepState = Literal["pending", "active", "done", "skipped", "warning", "failed"]
-
-
-class WorkflowStep(BaseModel):
-    """One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
-    ``WorkflowStep``): an AI run's, or a batch row's."""
-
-    id: StepId
-    state: StepState
-    detail: str | None = None
-
-
 class BatchRowDetail(BaseModel):
     id: str
     sources: list[str]
@@ -804,7 +798,7 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 # ──────────────────────────────────────────────────────────────────────────
 # AI SEO (AI SEO implementation plan, PR5; ADR-0049). A proposal is cached on the
 # server (`ai/proposals.py`) and reaches the browser two ways: as an AI
-# run's `proposal` event (`server/airuns/events.py`) the moment it is written,
+# run's `proposal` event (`core/application/ai/events.py`) the moment it is written,
 # and from `GET /api/listings/{name}/proposal` after that. Both are
 # :class:`ListingProposal`. The choices' field shapes mirror
 # `ai/models.py.SeoProposal` field for field, the same "wire shape *is* the
@@ -839,3 +833,41 @@ class ProposalResolutionPatch(BaseModel):
     title: Resolution | None = None
     tags: Resolution | None = None
     lead: Resolution | None = None
+
+
+# ──────────────────────────────────────────────────────────────────────────
+# AI runs (features/market-seo-20260924/spec.md, *AI runs*): what
+# `server/api/airuns.py` takes and answers besides the events themselves,
+# which are core's (`core/application/ai/events.py`) and travel unchanged.
+# ──────────────────────────────────────────────────────────────────────────
+
+
+class CreateAiRunRequest(BaseModel):
+    listing: str
+    draft_brief: bool = False
+    """Draft the brief first. Only honoured while the saved brief is empty;
+    a run whose listing already has one skips the Brief node."""
+
+
+class AiRunRefusal(BaseModel):
+    """A ``409`` from ``POST /api/ai/runs``: exactly one of the two is set.
+    ``active_run`` names the run to reattach to; ``reason`` says which
+    readiness rule failed."""
+
+    active_run: str | None = None
+    reason: str | None = None
+
+
+class AiRunSummary(BaseModel):
+    id: str
+    listing: str
+    draft_brief: bool
+    origin: Literal["manual", "batch"]
+    phase: AiRunPhase
+    steps: list[WorkflowStep]
+    created_at: datetime
+    finished_at: datetime | None
+
+
+class AiRunDetail(AiRunSummary):
+    events: list[AiRunEvent]

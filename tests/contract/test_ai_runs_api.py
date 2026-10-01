@@ -24,12 +24,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.ai.models import ProviderReadiness
+from etsy_listings.core.application.ai.registry import AiRun
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.layout import MARKET_QUERIES_PROMPT_FILE, PROMPTS_DIR
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.registry import AiRun
 from etsy_listings.server.api import airuns as airuns_api
 from etsy_listings.server.api.app import create_app
 

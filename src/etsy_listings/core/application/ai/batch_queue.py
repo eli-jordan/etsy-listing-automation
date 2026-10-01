@@ -1,6 +1,6 @@
 """The batch AI queue (spec, *Batch AI queue*; ADR-0048): every created batch row
 drafts its brief, researches the market and gets a proposal, through the
-same :class:`~etsy_listings.server.airuns.runner.AiRunner` a manual run uses.
+same :class:`~etsy_listings.core.application.ai.runner.AiRunner` a manual run uses.
 
 **One dispatcher thread**, woken by a condition whenever a row, a batch or a
 run changes. Each wake reads ``batch_ai.concurrency`` afresh, counts the
@@ -32,12 +32,12 @@ import threading
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
+from etsy_listings.core.application.ai.events import AiPhaseEvent
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
+from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.events import AiPhaseEvent
-from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
-from etsy_listings.server.airuns.runner import AiRunner
 
 logger = logging.getLogger(__name__)
 

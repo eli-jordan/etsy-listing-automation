@@ -52,6 +52,14 @@ from etsy_listings.core.ai.orchestrator import (
 )
 from etsy_listings.core.ai.proposals import ProposalChoices, ProposalStore
 from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.application.ai.events import (
+    STEP_IDS,
+    AiBriefEvent,
+    AiMarketEvent,
+    AiProposalEvent,
+    AiQueriesEvent,
+)
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
@@ -60,14 +68,6 @@ from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.cache import CachedEtsyMarketClient
 from etsy_listings.core.workspace.atomic import write_yaml_atomic
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.events import (
-    STEP_IDS,
-    AiBriefEvent,
-    AiMarketEvent,
-    AiProposalEvent,
-    AiQueriesEvent,
-)
-from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
 
 logger = logging.getLogger(__name__)
 

@@ -18,14 +18,15 @@ from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.ai.batch_queue import BatchQueue
+from etsy_listings.core.application.ai.registry import AiRunRegistry
+from etsy_listings.core.application.ai.runner import AiRunner, MarketClientFactory
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.deploy.executor import ContextFactory
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
-from etsy_listings.server.airuns.registry import AiRunRegistry
-from etsy_listings.server.airuns.runner import AiRunner, MarketClientFactory
 from etsy_listings.server.api.airuns import router as ai_runs_router
 from etsy_listings.server.api.batches import router as batches_router
 from etsy_listings.server.api.designs import router as designs_router
@@ -37,7 +38,6 @@ from etsy_listings.server.api.runs import router as runs_router
 from etsy_listings.server.api.seo import AiProviderFactory, default_ai_providers
 from etsy_listings.server.api.seo import router as seo_router
 from etsy_listings.server.api.templates import router as templates_router
-from etsy_listings.server.batchqueue import BatchQueue
 
 
 def _frontend_dist() -> Path:

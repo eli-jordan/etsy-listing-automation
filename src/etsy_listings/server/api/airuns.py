@@ -14,7 +14,7 @@ DELETE /api/ai/runs/{id} cancel; 409 if already finished
 
 ``POST`` re-checks readiness here, whatever the browser last saw
 (``seo.readiness`` with the run's rules). The chain itself is
-``server/airuns/runner.py``'s, on its own thread; this module only starts,
+``core/application/ai/runner.py``'s, on its own thread; this module only starts,
 reads and cancels runs.
 
 **The SSE bridge** is ``server/api/runs.py``'s: a blocking wait on the run's
@@ -32,19 +32,19 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from etsy_listings.core.application.ai.batch_queue import BatchQueue
+from etsy_listings.core.application.ai.events import AnyAiRunEvent
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry, Conflict, Deploying
+from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.events import (
+from etsy_listings.server.api.runs import last_event_id
+from etsy_listings.server.api.schemas import (
     AiRunDetail,
     AiRunRefusal,
     AiRunSummary,
-    AnyAiRunEvent,
     CreateAiRunRequest,
 )
-from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
-from etsy_listings.server.airuns.runner import AiRunner
-from etsy_listings.server.api.runs import last_event_id
 from etsy_listings.server.api.seo import readiness
-from etsy_listings.server.batchqueue import BatchQueue
 
 router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
 

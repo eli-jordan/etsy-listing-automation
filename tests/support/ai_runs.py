@@ -38,6 +38,7 @@ from etsy_listings.core.ai.proposals import (
     ProposalStore,
     SeoProposalSnapshot,
 )
+from etsy_listings.core.application.ai.registry import AiRun
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, market_listing
 from etsy_listings.core.market import MarketResult, PhraseScore, ScoredListing
 from etsy_listings.core.market import snapshot as market_snapshot
@@ -49,7 +50,6 @@ from etsy_listings.core.workspace.layout import (
     SEO_PROMPT_FILE,
 )
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.registry import AiRun
 
 Task = Literal["brief", "queries", "seo"]
 
