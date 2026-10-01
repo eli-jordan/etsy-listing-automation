@@ -16,7 +16,7 @@ import { stagePlan as makeStagePlan, type StagePlanOverrides } from "../../test/
  * table names: plan, blocked, nothing to do, stale, failed mid-apply,
  * reattach mid-apply.
  *
- * Event shapes are exactly what `ui/runs/events.py`'s DTOs serialise --
+ * Event shapes are exactly what `server/runs/events.py`'s DTOs serialise --
  * `type`/`id` discriminated, stage plans nested verbatim -- so a fixture here
  * is what `GET /api/runs/{id}` would actually hand back, not an invented
  * shorthand.

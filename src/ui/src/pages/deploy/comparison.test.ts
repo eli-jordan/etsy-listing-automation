@@ -15,7 +15,7 @@ import { stagePlan } from "../../test/helpers";
  * Pure: snapshots + changes -> before/after blocks, impact tags, price rows,
  * image badges (docs/features/deploy-20260917/spec.md, Frontend module table; decision 3/4).
  *
- * Every fixture below is shaped exactly like the real DTOs (`ui/runs/events.py`,
+ * Every fixture below is shaped exactly like the real DTOs (`server/runs/events.py`,
  * the five stages' own `snapshot()` methods) so a passing test here is a
  * passing test against the wire format, not an invented shorthand.
  */

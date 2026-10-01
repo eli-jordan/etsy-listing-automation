@@ -16,7 +16,7 @@ export class RunsApiError extends Error {}
 
 /** `202` with the new run's summary, or `409` naming the run already holding
  * one of these listings -- the caller reattaches to that one instead of
- * retrying into the same refusal (`ui/api/runs.py`'s own docstring). */
+ * retrying into the same refusal (`server/api/runs.py`'s own docstring). */
 export type CreateRunResult =
   { kind: "created"; run: RunSummary } | { kind: "conflict"; activeRun: string };
 
