@@ -1,0 +1,11 @@
+# THROWAWAY authoring worker only. Install torch from its CUDA wheel index first:
+# uv pip install --python <worker-python> torch==2.8.0 --index-url https://download.pytorch.org/whl/cu128
+torch==2.8.0
+diffusers==0.35.1
+transformers==4.56.2
+accelerate==1.10.1
+huggingface-hub==0.35.1
+numpy==2.2.6
+pillow==10.4.0
+safetensors==0.6.2
+scipy==1.16.2
