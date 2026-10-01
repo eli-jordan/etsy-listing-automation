@@ -17,7 +17,6 @@ second one in sight, which left an interface for it nothing to vary.
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping, Sequence
-from contextlib import AbstractContextManager
 from typing import Literal, Protocol
 
 EtsyStates = Callable[[Sequence[int]], Mapping[int, str | None]]
@@ -41,14 +40,6 @@ class ListingAiRuns(Protocol):
     def latest(self, listing: str) -> StoppableRun | None: ...
 
     def forget(self, listing: str) -> None: ...
-
-
-YieldToDeploy = Callable[[Sequence[str]], AbstractContextManager[None]]
-"""The deploy-to-AI handoff (ADR-0050: deploying takes precedence over AI
-work): how a deployment run takes its listings from AI work before it reads
-them. ``BatchQueue.yield_to_deploy`` in the UI process, the server's until
-PR 9 of the module-structure plan moves AI coordination. It returns once the
-listings' AI work has stopped, and holds them until the ``with`` ends."""
 
 
 AiBlocked = Callable[[], str | None]

@@ -127,7 +127,7 @@ def _batch_store(request: Request) -> BatchStore:
 
 
 def _ai_runs(request: Request) -> ListingAiRuns:
-    runs: ListingAiRuns = request.app.state.ai_run_registry
+    runs: ListingAiRuns = request.app.state.ai.registry
     return runs
 
 

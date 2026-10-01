@@ -28,7 +28,7 @@ from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
-from etsy_listings.core.application.dependencies import YieldToDeploy
+from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.deploy.events import (
     TERMINAL_PHASES,
     ListingFailedEvent,
@@ -80,10 +80,6 @@ by swapping this one callable -- nothing else here knows how a client is
 assembled."""
 
 
-def _nothing_to_yield(listings: Sequence[str]) -> AbstractContextManager[None]:
-    return nullcontext()
-
-
 @dataclass
 class RunExecutor:
     """Owns the worker thread. One per ``deployments.Deployments``, whose
@@ -93,7 +89,9 @@ class RunExecutor:
     context_factory: ContextFactory
     registry: RunRegistry
     stages: list[AnyStage] = field(default_factory=lambda: list(STAGES))
-    yield_to_deploy: YieldToDeploy = _nothing_to_yield
+    ai: AiCoordinator | None = None
+    """Whose AI work a run takes its listings from before reading them
+    (ADR-0050); a host with no AI work passes none."""
     _thread: threading.Thread | None = field(default=None, init=False, repr=False)
     _stop: threading.Event = field(default_factory=threading.Event, init=False, repr=False)
 
@@ -136,12 +134,15 @@ class RunExecutor:
             return self._stop.is_set()
         return run.cancel_requested or self._stop.is_set()
 
+    def _yield_to_deploy(self, listings: Sequence[str]) -> AbstractContextManager[None]:
+        return nullcontext() if self.ai is None else self.ai.yield_to_deploy(listings)
+
     def _execute(self, run: Run) -> None:
         try:
             # ADR-0050: deploying takes precedence over AI. A plan counts as a
             # deploy (spec, *Deployment interaction*), since what it shows
             # is what the apply after it will be checked against.
-            with self.yield_to_deploy(run.listings):
+            with self._yield_to_deploy(run.listings):
                 if run.kind == "plan":
                     self._run_plan(run)
                 else:

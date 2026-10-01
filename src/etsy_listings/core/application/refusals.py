@@ -231,6 +231,45 @@ class AiDraftingBlocked(ConfirmRefused):
         self.reason = reason
 
 
+class AiRunRefused(UserFacingError, ValueError):
+    """An AI run may not start for this listing now; the message says why,
+    in words the editor shows as AI Mode's hint. One of the three below."""
+
+    def __init__(self, name: str, message: str) -> None:
+        super().__init__(message)
+        self.name = name
+
+
+class ListingDeploying(AiRunRefused):
+    """ADR-0050: a UI plan or apply holds the listing, and deploying takes
+    precedence over AI. AI Mode is back once the deploy ends."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            name, "This listing is deploying. AI Mode is back once the deploy finishes."
+        )
+
+
+class ListingDraftingInBatch(AiRunRefused):
+    """ADR-0048: a queued or running batch row owns the listing's AI, even
+    while no run holds it yet -- two runs must never own one listing."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            name, "This listing is drafting in a batch. AI Mode is back once that is done."
+        )
+
+
+class AiNotReady(AiRunRefused):
+    """A readiness rule failed (``ai/readiness.py``): the listing lacks a
+    design, a brief or a usable garment profile, a prompt file is missing,
+    or no provider is ready."""
+
+    def __init__(self, name: str, reason: str) -> None:
+        super().__init__(name, reason)
+        self.reason = reason
+
+
 class ReviewedPlanRefused(UserFacingError, ValueError):
     """ADR-0042: a workspace apply names exactly the listings and plan
     fingerprints of a ready workspace plan the seller reviewed, or it is not

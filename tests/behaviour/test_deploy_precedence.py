@@ -133,7 +133,7 @@ def _finished(client: TestClient, run_id: str) -> str:
 
 
 def _queue(client: TestClient) -> BatchQueue:
-    queue: BatchQueue = client.app.state.batch_queue  # type: ignore[attr-defined]
+    queue: BatchQueue = client.app.state.ai.queue  # type: ignore[attr-defined]
     return queue
 
 
@@ -147,7 +147,7 @@ def test_an_apply_waits_for_the_running_row_to_stop_and_resume_leaves_it(
     gate = provider.gate("brief")
     batch_id = _batch(client, "night-hike-club")
     wait_for(lambda: provider.started["brief"].is_set())
-    run = client.app.state.ai_run_registry.latest("night-hike-club")  # type: ignore[attr-defined]
+    run = client.app.state.ai.registry.latest("night-hike-club")  # type: ignore[attr-defined]
     seen: list[str] = []
     deploys.on_start = lambda: seen.append(run.phase)
 
@@ -195,7 +195,7 @@ def test_deploy_ownership_wins_when_stop_already_requested(
     provider.gate("brief")
     batch_id = _batch(client, "night-hike-club")
     wait_for(lambda: provider.started["brief"].is_set())
-    registry = client.app.state.ai_run_registry  # type: ignore[attr-defined]
+    registry = client.app.state.ai.registry  # type: ignore[attr-defined]
     run = registry.latest("night-hike-club")
     assert run is not None
 

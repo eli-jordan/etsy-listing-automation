@@ -41,6 +41,7 @@ from pathlib import Path
 
 import yaml
 
+from etsy_listings.core import connections
 from etsy_listings.core.ai.brief import BriefRequest
 from etsy_listings.core.ai.errors import ProviderCancelledError, SeoGenerationError
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs, PreparedSeo
@@ -86,6 +87,14 @@ NO_ETSY_KEY = "no Etsy API key is configured; run `etsy-listings setup`"
 MarketClientFactory = Callable[[Workspace], EtsyMarketClient | None]
 """The uncached market client, or ``None`` when the workspace has no Etsy
 key. The runner wraps it in the workspace's caches itself."""
+
+
+def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
+    """The real, read-only Etsy market client (the app key only), or
+    ``None`` when the workspace has none."""
+    if connections.etsy_app_key(workspace.root) is None:
+        return None
+    return connections.etsy_market_client(workspace.root)
 
 
 class _Stopped(Exception):

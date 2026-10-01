@@ -16,9 +16,8 @@ is checked before it is queued, so a refusal leaves nothing behind.
 from __future__ import annotations
 
 from collections.abc import Sequence
-from contextlib import AbstractContextManager, nullcontext
 
-from etsy_listings.core.application.dependencies import YieldToDeploy
+from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.deploy.events import RunScope
 from etsy_listings.core.application.deploy.executor import ContextFactory, RunExecutor
 from etsy_listings.core.application.deploy.registry import (
@@ -34,19 +33,20 @@ from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.workspace.workspace import Workspace
 
 
-def _nothing_to_yield(listings: Sequence[str]) -> AbstractContextManager[None]:
-    return nullcontext()
-
-
 class Deployments:
-    """Plan and apply runs for one workspace, executed one at a time."""
+    """Plan and apply runs for one workspace, executed one at a time.
+
+    With ``ai``, each run first takes its listings from that coordinator's
+    AI work and holds them until it ends (ADR-0050: deploying takes
+    precedence over AI); the UI server passes its own. Without, nothing is
+    yielded -- there is no AI work to take them from."""
 
     def __init__(
         self,
         workspace: Workspace,
         context_factory: ContextFactory,
         *,
-        yield_to_deploy: YieldToDeploy = _nothing_to_yield,
+        ai: AiCoordinator | None = None,
         stages: Sequence[AnyStage] = STAGES,
     ) -> None:
         self._registry = RunRegistry()
@@ -55,7 +55,7 @@ class Deployments:
             context_factory=context_factory,
             registry=self._registry,
             stages=list(stages),
-            yield_to_deploy=yield_to_deploy,
+            ai=ai,
         )
 
     def start(self) -> None:

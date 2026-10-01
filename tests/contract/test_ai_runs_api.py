@@ -362,7 +362,7 @@ def test_closing_the_stream_does_not_cancel_the_run(
     gate = provider.gate("seo")
     with _client(workspace_root, provider) as client:
         run_id = _start(client)["id"]
-        run = client.app.state.ai_run_registry.get(run_id)  # type: ignore[attr-defined]
+        run = client.app.state.ai.registry.get(run_id)  # type: ignore[attr-defined]
         assert isinstance(run, AiRun)
 
         wait_for(lambda: provider.started["seo"].is_set())
@@ -452,7 +452,7 @@ def test_leaving_the_app_cancels_active_runs(workspace_root: Path, provider: Cha
     with _client(workspace_root, provider) as client:
         run_id = _start(client)["id"]
         wait_for(lambda: provider.started["queries"].is_set())
-        run = client.app.state.ai_run_registry.get(run_id)  # type: ignore[attr-defined]
+        run = client.app.state.ai.registry.get(run_id)  # type: ignore[attr-defined]
 
     assert run.phase == "cancelled"
     assert provider.cancelled == ["queries"]

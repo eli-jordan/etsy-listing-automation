@@ -119,7 +119,7 @@ def _locks(request: Request) -> WorkspaceLocks:
 
 
 def _queue(request: Request) -> BatchQueue:
-    queue: BatchQueue = request.app.state.batch_queue
+    queue: BatchQueue = request.app.state.ai.queue
     return queue
 
 
@@ -163,7 +163,7 @@ def _staging_detail(request: Request, session: StagingSession) -> StagingDetail:
 def _steps(request: Request, row: BatchRow) -> list[WorkflowStep]:
     """A running row's live run, else its last run as it ended."""
     if row.ai == "running":
-        registry: AiRunRegistry = request.app.state.ai_run_registry
+        registry: AiRunRegistry = request.app.state.ai.registry
         run = registry.latest(row.name)
         if run is not None and run.origin == "batch" and not run.finished:
             return run.steps

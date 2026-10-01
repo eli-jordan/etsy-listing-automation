@@ -20,8 +20,6 @@ run is refused by, which the **AI Mode** button is lit by, are core's
 
 from __future__ import annotations
 
-from collections.abc import Sequence
-
 from fastapi import APIRouter, HTTPException, Request
 
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs
@@ -29,11 +27,10 @@ from etsy_listings.core.ai.proposals import (
     ProposalReplacedError,
     ProposalStore,
 )
-from etsy_listings.core.ai.providers import AiProvider
-from etsy_listings.core.application.ai.readiness import unready_reason
+from etsy_listings.core.application.ai.coordinator import AiCoordinator
+from etsy_listings.core.application.refusals import ListingDeploying, ListingDraftingInBatch
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.snapshot import MarketSnapshot
-from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.listings import Existing
 from etsy_listings.server.api.schemas import (
     ListingProposal,
@@ -42,22 +39,6 @@ from etsy_listings.server.api.schemas import (
 )
 
 router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
-
-
-def _providers(request: Request, workspace: Workspace) -> Sequence[AiProvider]:
-    factory = request.app.state.seo_provider_factory
-    result: Sequence[AiProvider] = factory(workspace)
-    return result
-
-
-BATCH_PENDING_REASON = "This listing is drafting in a batch. AI Mode is back once that is done."
-"""The editor's hint while a batch row owns the listing's AI (spec,
-*Scheduling*: two runs must never own one listing)."""
-
-
-DEPLOYING_REASON = "This listing is deploying. AI Mode is back once the deploy finishes."
-"""The editor's hint while a UI plan or apply holds the listing (ADR-0050; UI doc
-§8, *Deploying takes precedence over AI*)."""
 
 
 def _proposals(request: Request) -> ProposalStore:
@@ -73,14 +54,16 @@ def get_seo_readiness(target: Existing, request: Request) -> SeoReadinessRespons
     empty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``. A lit
     button is one the server will not refuse. Read-only.
     """
-    if request.app.state.ai_run_registry.deploying(target.name):
-        return SeoReadinessResponse(ready=False, reason=DEPLOYING_REASON, deploying=True)
-    if request.app.state.batch_queue.pending(target.name):
-        return SeoReadinessResponse(ready=False, reason=BATCH_PENDING_REASON, batch_pending=True)
-    listing = target.workspace.load_listing(target.name)
-    providers = _providers(request, target.workspace)
-    reason = unready_reason(target.workspace, listing, providers, draft_brief=True)
-    return SeoReadinessResponse(ready=reason is None, reason=reason)
+    ai: AiCoordinator = request.app.state.ai
+    refused = ai.blocked(target.name)
+    if refused is None:
+        return SeoReadinessResponse(ready=True)
+    return SeoReadinessResponse(
+        ready=False,
+        reason=str(refused),
+        deploying=isinstance(refused, ListingDeploying),
+        batch_pending=isinstance(refused, ListingDraftingInBatch),
+    )
 
 
 @router.get(
