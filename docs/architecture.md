@@ -108,7 +108,7 @@ and what it deliberately withholds.
 | `listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to the UI server |
-| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices | Owns locking around read/merge/write and the records that follow a listing; answers with results or typed refusals, never status codes; takes server-held locks, AI runs and Etsy states through small interfaces (ADR-0052) |
+| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices; mockup-template calibration and preview scenes; listing-template create/edit/rename/delete; batch staging, confirm, retry, review and reads | Owns locking around read/merge/write and the records that follow a listing or listing template; answers with results or typed refusals, never status codes; takes server-held locks, AI runs, Etsy states, the batch queue and AI readiness through small interfaces (ADR-0052); takes decoded images and upload streams, never request objects or caches |
 
 `core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
 bearers resolve at request time, but the Etsy app key pair is read during
@@ -260,11 +260,14 @@ instead of rendering again, retaining the preview for reattachment (ADR-0040).
 Those deployment previews are distinct from the calibrator's HTTP previews.
 
 "Real renderer" is now structural rather than a claim maintained by hand. Both
-routes ask `Workspace.scene_photo()` which photo a scene composites over and
+paths ask `Workspace.scene_photo()` which photo a scene composites over and
 what its derived maps cache under, and both composite through
 `render_scene()`. The one thing the preview does differently is where its
 geometry comes from — the unsaved boxes under the user's cursor, not the file
 on disk — which is exactly the difference that makes it a preview.
+`application.mockup_templates` decides the scene (photo, layers, design) and
+composites it from images the server supplies out of its memo; encoding the
+frame as WebP or PNG is the server's.
 
 ### Two sizes, one pipeline
 
@@ -296,7 +299,7 @@ set that had just been rendered.
 Two consequences worth knowing:
 
 - **Bounding boxes stay in the photo's true pixel space.** `template.yaml`
-  stores them there, so the endpoint scales them (and `displace.strength`,
+  stores them there, so `application.mockup_templates.scaled` scales them (and `displace.strength`,
   which is denominated in absolute pixels) onto the smaller canvas, and the
   client is *told* the true size in `TemplateSummary.width`/`height` rather
   than measuring the image it is drawing over. Measuring it would save every
