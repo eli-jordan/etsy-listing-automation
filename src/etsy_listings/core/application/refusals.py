@@ -270,6 +270,25 @@ class AiNotReady(AiRunRefused):
         self.reason = reason
 
 
+class ProposalMissing(UserFacingError, LookupError):
+    """No proposal is cached for the listing: none was generated, or a
+    replacement, deletion, fully successful apply or cache clearing removed
+    it (ADR-0049)."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"no proposal for {name!r}")
+        self.name = name
+
+
+class ProposalReplaced(UserFacingError, ValueError):
+    """A resolution named a proposal regenerated since the page read it;
+    nothing was recorded."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__("this proposal was replaced by a newer one")
+        self.name = name
+
+
 class ReviewedPlanRefused(UserFacingError, ValueError):
     """ADR-0042: a workspace apply names exactly the listings and plan
     fingerprints of a ready workspace plan the seller reviewed, or it is not

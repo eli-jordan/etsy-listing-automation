@@ -22,13 +22,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter, HTTPException, Request
 
-from etsy_listings.core.ai.listing_inputs import ListingAiInputs
-from etsy_listings.core.ai.proposals import (
-    ProposalReplacedError,
-    ProposalStore,
-)
+from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
-from etsy_listings.core.application.refusals import ListingDeploying, ListingDraftingInBatch
+from etsy_listings.core.application.ai.listing_proposals import read_proposal, resolve_proposal
+from etsy_listings.core.application.refusals import (
+    ListingDeploying,
+    ListingDraftingInBatch,
+    ListingMissing,
+    ProposalMissing,
+    ProposalReplaced,
+)
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.snapshot import MarketSnapshot
 from etsy_listings.server.api.listings import Existing
@@ -93,10 +97,10 @@ def get_listing_proposal(target: Existing, request: Request) -> ListingProposal:
     proposals*), with which sections were resolved and whether it has gone
     stale. Written by every AI run before it announces the proposal, so a
     reload, a server restart or a batch run all find it here."""
-    record = _proposals(request).load(target.name)
-    if record is None:
-        raise HTTPException(status_code=404, detail=f"no proposal for {target.name!r}")
-    return ListingAiInputs.read(target.workspace, target.name).judge(record)
+    try:
+        return read_proposal(target.workspace, _proposals(request), target.name)
+    except (ListingMissing, ProposalMissing) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.patch(
@@ -116,20 +120,19 @@ def resolve_listing_proposal(
     records only that the section was dealt with. Under the listing's write
     lock, so a delete or rename cannot land between the read and the write
     and leave a record behind for a listing that is gone."""
-    store = _proposals(request)
-    with target.writing():
-        try:
-            record = store.resolve(
-                target.name,
-                generated_at=body.generated_at,
-                title=body.title,
-                tags=body.tags,
-                lead=body.lead,
-            )
-        except ProposalReplacedError as exc:
-            raise HTTPException(
-                status_code=409, detail="this proposal was replaced by a newer one"
-            ) from exc
-    if record is None:
-        raise HTTPException(status_code=404, detail=f"no proposal for {target.name!r}")
-    return ListingAiInputs.read(target.workspace, target.name).judge(record)
+    locks: WorkspaceLocks = request.app.state.workspace_locks
+    try:
+        return resolve_proposal(
+            target.workspace,
+            _proposals(request),
+            target.name,
+            locks=locks,
+            generated_at=body.generated_at,
+            title=body.title,
+            tags=body.tags,
+            lead=body.lead,
+        )
+    except (ListingMissing, ProposalMissing) as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ProposalReplaced as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
