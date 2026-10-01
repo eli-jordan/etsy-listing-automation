@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
+from etsy_listings.core.batches import ConfirmRefused
 from etsy_listings.core.config.listing_validation import DELETED_ON_PUBLISHED
 from etsy_listings.core.errors import UserFacingError
 
@@ -158,3 +159,73 @@ class ListingTemplateSourceRefused(UserFacingError, ValueError):
     exactly one source, a ``./`` file that cannot be read, a source document
     that will not load, or an edit naming a ``./`` file the template does
     not copy."""
+
+
+# ------------------------------------------------------- staging and batches
+#
+# Batch creation's own refusals stay the domain's: ``batches.StagingRefused``
+# for an upload refused before staging (ADR-0051's limits and archive
+# safety), ``batches.ConfirmRefused`` for a session that cannot be confirmed
+# yet. These are the ones the operations around them add.
+
+
+class StagingMissing(UserFacingError, LookupError):
+    """No staging session by this id: never staged, cancelled, confirmed and
+    materialised, or swept seven days after its last edit."""
+
+    def __init__(self, session_id: str) -> None:
+        super().__init__(f"no staging session {session_id!r}")
+        self.session_id = session_id
+
+
+class StagedRowMissing(UserFacingError, LookupError):
+    def __init__(self, row: str) -> None:
+        super().__init__(f"no staged row {row!r}")
+        self.row = row
+
+
+class BatchMissing(UserFacingError, LookupError):
+    def __init__(self, batch_id: str) -> None:
+        super().__init__(f"no batch {batch_id!r}")
+        self.batch_id = batch_id
+
+
+class BatchRowMissing(UserFacingError, LookupError):
+    def __init__(self, row: str) -> None:
+        super().__init__(f"no batch row {row!r}")
+        self.row = row
+
+
+class BatchRowUploadMissing(UserFacingError, LookupError):
+    """A never-created row whose upload is no longer kept anywhere."""
+
+    def __init__(self, row: str) -> None:
+        super().__init__(f"batch row {row!r} has no upload kept")
+        self.row = row
+
+
+class NothingToRetry(UserFacingError, ValueError):
+    """The row was created and its AI is neither failed nor stopped -- or
+    its listing was deleted, leaving nothing to draft."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name} has nothing to retry")
+        self.name = name
+
+
+class BatchRowNotReviewable(UserFacingError, ValueError):
+    """Mark reviewed on a row still queued or drafting, deleted, or never
+    created (spec, *Review workflow*)."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name} has no listing to review yet")
+        self.name = name
+
+
+class AiDraftingBlocked(ConfirmRefused):
+    """Spec, *Design validation*: a batch is not knowingly created into a
+    queue that cannot run. Nothing is created and the staging stays."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"AI drafting can't run yet. {reason}")
+        self.reason = reason

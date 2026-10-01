@@ -37,14 +37,27 @@ import names the module it depends on. Public interfaces:
     ``ListingTemplateView``, ``create_listing_template`` /
     ``edit_listing_template`` -> ``TemplateSave``,
     ``rename_listing_template``, ``delete_listing_template``.
+``batch_staging``
+    ``stage_upload``, ``read_staging``, ``edit_staging``, ``cancel_staging``,
+    ``staged_upload``: an upload's bytes and filenames arrive as
+    ``batches.Upload`` streams; limits and archive safety stay ``batches``'.
+``batch_workflow``
+    ``confirm_batch``, ``retry_batch_row``, ``retry_batch``,
+    ``cancel_batch``, ``resume_batch``, ``delete_batch``, ``rename_batch``,
+    ``mark_reviewed``, ``read_batch``, ``batch_row_upload``,
+    ``listing_batch`` -> ``ListingMembership``, ``recent_batches`` ->
+    ``RecentBatch``, ``row_proposal``.
 ``refusals``
     ``ListingMissing``, ``ListingNameTaken``, ``PublishedListingDeletion``,
     ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
     refusals; ``ListingTemplateMissing``, ``ReservedListingTemplateName``,
-    ``ListingTemplateSourceRefused``.
+    ``ListingTemplateSourceRefused``; ``StagingMissing``, ``StagedRowMissing``,
+    ``BatchMissing``, ``BatchRowMissing``, ``BatchRowUploadMissing``,
+    ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``.
 ``dependencies``
     ``ListingLocks``, ``ListingTemplateLocks``, ``ListingAiRuns`` /
-    ``StoppableRun``, ``EtsyStates``:
-    what operations take the UI process's write locks, AI run registry and
-    Etsy state memo through while those live in the server.
+    ``StoppableRun``, ``EtsyStates``, ``BatchQueueControl``, ``AiBlocked``:
+    what operations take the UI process's write locks, AI run registry,
+    Etsy state memo, batch queue and AI readiness through while those live
+    in the server.
 """

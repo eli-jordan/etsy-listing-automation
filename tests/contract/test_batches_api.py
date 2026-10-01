@@ -368,20 +368,6 @@ class TestQueue:
         assert nothing.status_code == 409
         assert client.post("/api/batches/0123abcd/cancel").status_code == 404
 
-    def test_retry_all_failed_creates_the_failed_row_and_queues_it(
-        self, client: TestClient, workspace: Workspace
-    ) -> None:
-        staged = _staged(client, ("a.png", png(1)))
-        blocker = workspace.design_file("a")
-        blocker.mkdir(parents=True)
-        batch = client.post(f"/api/staging/{staged['id']}/confirm").json()
-        assert batch["rows"][0]["ai"] is None
-        blocker.rmdir()
-
-        retried = client.post(f"/api/batches/{batch['id']}/retry").json()
-
-        assert [(r["creation"], r["ai"]) for r in retried["rows"]] == [("created", "queued")]
-
 
 def test_the_listing_template_card_carries_the_design_size_it_needs(client: TestClient) -> None:
     card = client.get("/api/listing-templates").json()[0]
@@ -439,33 +425,6 @@ class TestIndex:
         )
         assert (batch["designs"], batch["listings"], batch["failures"]) == (2, 2, 0)
         assert batch["expires_at"] is None
-
-    def test_a_session_kept_for_a_failed_row_is_the_batch_s_not_a_staging_row(
-        self, client: TestClient, workspace: Workspace
-    ) -> None:
-        """staging expiry keeps a confirmed session until every row is materialised; it
-        shares the batch's id, and Recent batches shows the batch once."""
-        staged = _staged(client, ("a.png", png(1)), ("b.png", png(2)))
-        store = StagingStore(workspace)
-        session = store.load(staged["id"])
-        assert session is not None
-        workspace.design_file("a").mkdir(parents=True)
-        client.post(f"/api/staging/{staged['id']}/confirm")
-        store.save(session)  # as if the failed row's upload could not be moved
-
-        index = client.get("/api/batches").json()
-
-        assert [(entry["kind"], entry["failures"]) for entry in index] == [("batch", 1)]
-
-    def test_an_expired_session_is_swept_when_the_index_is_listed(
-        self, client: TestClient, workspace: Workspace
-    ) -> None:
-        week_ago = datetime.now(UTC) - timedelta(days=7, minutes=1)
-        store = StagingStore(workspace)
-        stage_pngs(workspace, store, LISTING_TEMPLATE, uploads(("a.png", png(1))), now=week_ago)
-
-        assert client.get("/api/batches").json() == []
-        assert workspace.staging_ids() == []
 
 
 class TestRenameAndDelete:

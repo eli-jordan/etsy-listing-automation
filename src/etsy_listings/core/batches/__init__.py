@@ -32,6 +32,7 @@ from etsy_listings.core.batches.creation import (
 )
 from etsy_listings.core.batches.naming import allocate
 from etsy_listings.core.batches.records import (
+    RETRYABLE,
     AiState,
     AiStep,
     Batch,
@@ -64,6 +65,7 @@ __all__ = [
     "BatchRow",
     "AiState",
     "AiStep",
+    "RETRYABLE",
     "BatchStore",
     # Staging and its review.
     "Upload",

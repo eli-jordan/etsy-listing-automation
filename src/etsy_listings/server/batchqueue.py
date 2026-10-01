@@ -32,7 +32,7 @@ import threading
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
-from etsy_listings.core.batches import AiState, AiStep, Batch, BatchRow, BatchStore
+from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.airuns.events import AiPhaseEvent
@@ -48,7 +48,6 @@ refused while one exists (spec, *Scheduling*)."""
 RESUMABLE: frozenset[AiState] = frozenset({"stopped", "cancelled"})
 """Not ``cancelled_by_deploy``: work a deploy cancelled must not resume onto
 the deployed listing (ADR-0050; spec, *Deployment interaction*)."""
-RETRYABLE: frozenset[AiState] = frozenset({"failed", "stopped", "cancelled", "cancelled_by_deploy"})
 
 _ENDED: dict[str, AiState] = {"done": "done", "failed": "failed", "cancelled": "cancelled"}
 
