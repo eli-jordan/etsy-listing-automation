@@ -39,7 +39,8 @@ from fastapi.responses import Response
 
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
-from etsy_listings.core.application.dependencies import EtsyStates, ListingAiRuns
+from etsy_listings.core.application.ai.registry import AiRunRegistry
+from etsy_listings.core.application.dependencies import EtsyStates
 from etsy_listings.core.application.deploy.executor import ContextFactory
 from etsy_listings.core.application.listing_creation import create_listing as create
 from etsy_listings.core.application.listing_edits import edit_listing
@@ -126,8 +127,8 @@ def _batch_store(request: Request) -> BatchStore:
     return store
 
 
-def _ai_runs(request: Request) -> ListingAiRuns:
-    runs: ListingAiRuns = request.app.state.ai.registry
+def _ai_runs(request: Request) -> AiRunRegistry:
+    runs: AiRunRegistry = request.app.state.ai.registry
     return runs
 
 
