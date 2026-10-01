@@ -73,3 +73,56 @@ def field_errors_of(exc: ValidationError) -> dict[str, str]:
         loc = ".".join(str(part) for part in error["loc"]) or "__root__"
         result[loc] = error["msg"]
     return result
+
+
+# ---------------------------------------------------------- mockup templates
+#
+# The calibrator's (module-structure plan, PR 7). A mockup template is a
+# folder of photos the seller put in the workspace; nothing creates one, so
+# every operation names one that must already exist.
+
+
+class TemplateMissing(UserFacingError, LookupError):
+    """No ``mockup-templates/{name}/`` directory."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"no template {name!r}")
+        self.name = name
+
+
+class TemplateConfigMissing(UserFacingError, LookupError):
+    """The template has no ``template.yaml`` -- the normal state of a folder
+    nobody has given a kind yet: absent, not broken."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"no template.yaml for {name!r}")
+        self.name = name
+
+
+class TemplateAlreadyCalibrated(UserFacingError, ValueError):
+    """Kind decides the whole ``template.yaml`` shape, so assigning another
+    would silently discard the calibration done in the old one's fields."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name!r} already has a template.yaml; delete it to change kind")
+        self.name = name
+
+
+class TemplateKindRefused(UserFacingError, ValueError):
+    """The folder's photos cannot be the kind asked for: none at all, or a
+    set where a fixed scene takes exactly one."""
+
+
+class TemplatePreviewKindMismatch(UserFacingError, ValueError):
+    """Unsaved preview geometry shaped for another kind than the template
+    is -- a well-formed request that is wrong for this template."""
+
+    def __init__(self, kind: str) -> None:
+        super().__init__(f"expected a {kind} preview body")
+        self.kind = kind
+
+
+class TemplatePhotoMissing(UserFacingError, LookupError):
+    """There is no one photo to show, sample or composite over: none for the
+    colour asked about, an ambiguous colour suffix, or a template kind that
+    has no per-colour photos at all. The message names what was asked for."""

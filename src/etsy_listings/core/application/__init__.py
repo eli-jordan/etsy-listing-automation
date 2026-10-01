@@ -25,9 +25,16 @@ import names the module it depends on. Public interfaces:
 ``pricing_plans``
     ``load_candidate_pricing_plans``, ``pricing_plan_options`` /
     ``PricingPlanOption``, ``pricing_plan_ref``.
+``mockup_templates``
+    The calibrator: ``list_templates`` -> ``TemplateOverview``,
+    ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,
+    ``template_photo``, ``template_swatch``, and the preview scene --
+    ``saved_preview`` / ``unsaved_preview`` -> ``PreviewScene``,
+    ``compose_preview``, ``scaled``. Images arrive decoded from the caller.
 ``refusals``
     ``ListingMissing``, ``ListingNameTaken``, ``PublishedListingDeletion``,
-    ``InvalidListing``, ``field_errors_of``.
+    ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
+    refusals.
 ``dependencies``
     ``ListingLocks``, ``ListingAiRuns`` / ``StoppableRun``, ``EtsyStates``:
     what operations take the UI process's write locks, AI run registry and
