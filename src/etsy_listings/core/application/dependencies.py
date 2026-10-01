@@ -50,3 +50,13 @@ class ListingLocks(Protocol):
     """
 
     def listing(self, name: str, *more: str) -> AbstractContextManager[None]: ...
+
+
+class ListingTemplateLocks(Protocol):
+    """Per-listing-template write locks: ``WorkspaceLocks`` again, in a key
+    space of their own (plan, PR 7). Held around a template's name check and
+    write, a ``PUT``'s re-check and write, a rename's move and a delete --
+    and around staging's capture of a template's frozen content, so a batch
+    never freezes a half-written template (ADR-0047)."""
+
+    def listing_template(self, name: str, *more: str) -> AbstractContextManager[None]: ...

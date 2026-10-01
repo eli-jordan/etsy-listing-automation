@@ -31,12 +31,20 @@ import names the module it depends on. Public interfaces:
     ``template_photo``, ``template_swatch``, and the preview scene --
     ``saved_preview`` / ``unsaved_preview`` -> ``PreviewScene``,
     ``compose_preview``, ``scaled``. Images arrive decoded from the caller.
+``listing_template_library``
+    ``list_listing_templates`` -> ``ListingTemplateCard``,
+    ``read_listing_template`` / ``draft_listing_template`` ->
+    ``ListingTemplateView``, ``create_listing_template`` /
+    ``edit_listing_template`` -> ``TemplateSave``,
+    ``rename_listing_template``, ``delete_listing_template``.
 ``refusals``
     ``ListingMissing``, ``ListingNameTaken``, ``PublishedListingDeletion``,
     ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
-    refusals.
+    refusals; ``ListingTemplateMissing``, ``ReservedListingTemplateName``,
+    ``ListingTemplateSourceRefused``.
 ``dependencies``
-    ``ListingLocks``, ``ListingAiRuns`` / ``StoppableRun``, ``EtsyStates``:
+    ``ListingLocks``, ``ListingTemplateLocks``, ``ListingAiRuns`` /
+    ``StoppableRun``, ``EtsyStates``:
     what operations take the UI process's write locks, AI run registry and
     Etsy state memo through while those live in the server.
 """

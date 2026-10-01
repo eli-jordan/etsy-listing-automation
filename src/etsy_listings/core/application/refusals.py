@@ -126,3 +126,35 @@ class TemplatePhotoMissing(UserFacingError, LookupError):
     """There is no one photo to show, sample or composite over: none for the
     colour asked about, an ambiguous colour suffix, or a template kind that
     has no per-colour photos at all. The message names what was asked for."""
+
+
+# --------------------------------------------------------- listing templates
+#
+# ADR-0047, template completeness. A name already taken is the domain's own
+# ``listing_templates.ListingTemplateExistsError``, for a create and a rename
+# alike; a refused *document* is not raised but answered (``TemplateSave``).
+
+
+class ListingTemplateMissing(UserFacingError, LookupError):
+    """No ``listing-templates/{name}/template.yaml`` -- never was, or a rename
+    or delete holding the template's lock moved it first."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"no listing template {name!r}")
+        self.name = name
+
+
+class ReservedListingTemplateName(UserFacingError, ValueError):
+    """``draft`` names the *name it* page's unsaved template, so a listing
+    template called that could be created and never opened."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name!r} is reserved; pick another name")
+        self.name = name
+
+
+class ListingTemplateSourceRefused(UserFacingError, ValueError):
+    """What a new listing template is made from cannot become one: not
+    exactly one source, a ``./`` file that cannot be read, a source document
+    that will not load, or an edit naming a ``./`` file the template does
+    not copy."""
