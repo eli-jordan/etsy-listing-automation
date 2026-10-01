@@ -129,6 +129,7 @@ Or the individual steps:
 uv run ruff format .           # formatter
 uv run ruff check .            # linter
 uv run mypy src                # strict type check
+uv run lint-imports            # core/server/CLI import contracts
 uv run pytest                  # full suite (excludes -m e2e by default)
 uv run pytest --cov            # ...with the branch-coverage gate
 ```

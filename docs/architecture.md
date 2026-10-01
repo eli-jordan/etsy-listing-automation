@@ -41,13 +41,13 @@ not the latest vendor releases.
 | Videos | PyAV (`av>=15`, locked 18.1.0) probes streams, dimensions and duration; the tool uploads original video bytes rather than encoding them |
 | Web server | FastAPI (0.141.1), python-multipart and uvicorn; `ui` runs the application under uvicorn in the foreground and the user opens it in a browser |
 | Frontend | React/React DOM 19, React Router 7, Phosphor icons and openapi-fetch; TypeScript 5 and Vite 8 build the SPA; openapi-typescript generates `src/api/schema.ts` from `docs/openapi.json` (ADR-0011) |
-| Development | uv/hatchling, ruff, strict mypy, pytest/pytest-cov, Playwright; frontend ESLint, Prettier, Vitest, Testing Library and V8 coverage; marver is a design dependency |
+| Development | uv/hatchling, ruff, strict mypy, Import Linter, pytest/pytest-cov, Playwright; frontend ESLint, Prettier, Vitest, Testing Library and V8 coverage; marver is a design dependency |
 | AI processes | Installed, signed-in `codex`, `claude` and `grok` CLIs, invoked behind `AiProvider`; these are external executables, not Python SDK dependencies |
 
 `hatch_build.py` rebuilds release-wheel assets in `src/ui` with `npm ci` and
 `npm run build`; Node/npm are required even when `src/ui/dist/` already exists.
-The hook maps that `dist/` to `etsy_listings/ui/static` inside the wheel, where
-`ui/api/app.py` finds it once installed, so the wheel needs neither Node nor
+The hook maps that `dist/` to `etsy_listings/server/static` inside the wheel, where
+`server/api/app.py` finds it once installed, so the wheel needs neither Node nor
 the checkout. The sdist carries the npm source, lockfile and hook instead of
 built assets. Editable installs map nothing: the server falls back to the
 checkout's `src/ui/dist`, the hook reuses existing assets and, when npm is
@@ -96,9 +96,9 @@ and what it deliberately withholds.
 
 | Module | Owns | Boundary |
 |---|---|---|
-| `cli` | Typer commands and terminal presentation | Uses engine reports rather than computing a second diff |
+| `cli` | Typer commands and terminal presentation | Uses engine reports rather than computing a second diff; only the `ui` launcher (`cli/ui.py`) imports the server, and only `server.hosting` |
 | `newcmd`, `setupcmd`, `authcmd` | Picker and workspace/credential workflows | Prompt sequencing is separate from their testable logic |
-| `ui` | HTTP contracts and hosting, React presentation, deployment/AI resources and batch dispatch | Adapts engine events; a FIFO deployment worker, per-run AI threads and a batch dispatcher remain separate |
+| `server` | HTTP contracts, hosting/startup, static assets, deployment/AI resources and batch dispatch | Adapts engine events; a FIFO deployment worker, per-run AI threads and a batch dispatcher remain separate |
 | `engine` | Stage protocol, comparison, lockfile, lifecycle and runs | Stages return values; the engine decides execution and records progress |
 | `workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, video probes and request facts | Owns workspace layout and containment; callers may do I/O on paths it supplies |
 | `render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
@@ -239,9 +239,9 @@ Preview completion and transient CDN URLs remain excluded from review identity.
 
 ```mermaid
 graph LR
-    Canvas["Calibrate tab<br/>quad handles + sliders"] -->|"POST /preview?scale=editor<br/>(debounced)"| API["ui/api"]
+    Canvas["Calibrate tab<br/>quad handles + sliders"] -->|"POST /preview?scale=editor<br/>(debounced)"| API["server/api"]
     Tab["Preview tab<br/><i>on demand</i>"] -->|"POST /preview?scale=full"| API
-    API --> Cache["ui.api.imagecache<br/><i>decoded photo, design, maps</i>"]
+    API --> Cache["server.api.imagecache<br/><i>decoded photo, design, maps</i>"]
     Cache --> RenderPipe["render.pipeline<br/><i>the same code apply runs</i>"]
     RenderPipe -->|WebP| Canvas
     RenderPipe -->|PNG| Tab
@@ -300,16 +300,16 @@ Two consequences worth knowing:
   client is *told* the true size in `TemplateSummary.width`/`height` rather
   than measuring the image it is drawing over. Measuring it would save every
   box a few times too small, with nothing on screen looking wrong.
-- **`ui.api.imagecache` memoises what the loop re-reads** — the decoded photo
+- **`server.api.imagecache` memoises what the loop re-reads** — the decoded photo
   at each size, the decoded design, and the derived maps — keyed on path and
-  mtime, bounded by total bytes rather than entry count. It sits in `ui`, not
+  mtime, bounded by total bytes rather than entry count. It sits in `server`, not
   in `render.io`: the render stage reads each file once per run and needs no
   cache, and giving it one would put mutable process state under the pure
   layer for nobody's benefit.
 
 ## UI resources, AI and batch creation
 
-`ui/api/app.py` assembles one workspace, deployment registry/executor, AI
+`server/api/app.py` assembles one workspace, deployment registry/executor, AI
 registry/runner, proposal store, staging/batch stores, write-lock collection
 and batch queue per server process. FastAPI serves the generated-contract
 routes and built SPA. React Router provides the dashboard, listings and editor,
@@ -589,7 +589,9 @@ Reach for a fake to test behaviour and a cassette to test payload shape. The
 browser layer exists because nothing below it can catch a wiring mistake
 between three otherwise-tested pieces.
 
-`scripts/check.sh` formats, lints, typechecks and runs Python coverage, then
+`scripts/check.sh` formats, lints, typechecks, checks the Import Linter
+contracts in `pyproject.toml` (core/server/CLI dependency direction, ADR-0052)
+and runs Python coverage, then
 the equivalent frontend gates when npm is available. Both coverage gates use
 an 85% floor with branch measurement. Browser tests skip when prerequisites
 are missing unless `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1`; E2E tests have
