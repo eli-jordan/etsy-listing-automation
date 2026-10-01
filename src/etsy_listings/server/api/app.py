@@ -19,6 +19,7 @@ from starlette.responses import FileResponse, JSONResponse, Response
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
+from etsy_listings.core.application.ai.readiness import ProviderFactory, default_ai_providers
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner, MarketClientFactory
 from etsy_listings.core.application.deploy.deployments import Deployments
@@ -35,7 +36,6 @@ from etsy_listings.server.api.listings import router as listings_router
 from etsy_listings.server.api.listings import support_router as listings_support_router
 from etsy_listings.server.api.media_files import router as media_files_router
 from etsy_listings.server.api.runs import router as runs_router
-from etsy_listings.server.api.seo import AiProviderFactory, default_ai_providers
 from etsy_listings.server.api.seo import router as seo_router
 from etsy_listings.server.api.templates import router as templates_router
 
@@ -63,7 +63,7 @@ def create_app(
     workspace: Workspace,
     *,
     context_factory: ContextFactory = connections.run_context,
-    seo_provider_factory: AiProviderFactory = default_ai_providers,
+    seo_provider_factory: ProviderFactory = default_ai_providers,
     market_client_factory: MarketClientFactory = default_market_client,
 ) -> FastAPI:
     locks = WorkspaceLocks()

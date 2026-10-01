@@ -215,7 +215,7 @@
         "type": "object"
       },
       "AiReadinessBlock": {
-        "description": "Why a batch could not draft if it were created now (spec, *Design\nvalidation*; ``staging.note.md``): the sentence after *AI drafting can't\nrun yet.*, and what to do about it.",
+        "description": "Why a batch could not draft if it were created now (spec, *Design\nvalidation*; ``staging.note.md``): the sentence after *AI drafting can't\nrun yet.*, and what to do about it. Transport-independent, so it is the\nstaging detail's ``ai_blocked`` as it stands.",
         "properties": {
           "message": {
             "title": "Message",
@@ -8012,7 +8012,7 @@
     },
     "/api/listings/{name}/ai-seo/readiness": {
       "get": {
-        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button drafts a brief when the saved one is\nempty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``: an\nempty brief is allowed, and then ``prompts/brief.md`` is required. A\nfilled brief skips drafting. A lit button is one the server will not\nrefuse. Read-only: every check here, including each provider's own\n`readiness()`, is a local probe (a file's existence, a fast\n`--help`/`login status` subprocess) that changes nothing.",
+        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button drafts a brief when the saved one is\nempty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``. A lit\nbutton is one the server will not refuse. Read-only.",
         "operationId": "get_seo_readiness_api_listings__name__ai_seo_readiness_get",
         "parameters": [
           {

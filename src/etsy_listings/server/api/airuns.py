@@ -34,6 +34,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.events import AnyAiRunEvent
+from etsy_listings.core.application.ai.readiness import unready_reason
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry, Conflict, Deploying
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.workspace.workspace import Workspace
@@ -44,7 +45,6 @@ from etsy_listings.server.api.schemas import (
     AiRunSummary,
     CreateAiRunRequest,
 )
-from etsy_listings.server.api.seo import readiness
 
 router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
 
@@ -119,11 +119,11 @@ def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | 
     if active is not None and not active.finished:
         return _refused(AiRunRefusal(active_run=active.id))
     providers = request.app.state.seo_provider_factory(workspace)
-    ready = readiness(
+    reason = unready_reason(
         workspace, workspace.load_listing(body.listing), providers, draft_brief=body.draft_brief
     )
-    if not ready.ready:
-        return _refused(AiRunRefusal(reason=ready.reason))
+    if reason is not None:
+        return _refused(AiRunRefusal(reason=reason))
 
     run = registry.create(body.listing, draft_brief=body.draft_brief)
     if isinstance(run, Conflict):

@@ -25,6 +25,9 @@ from etsy_listings.core.application.ai.events import (
 from etsy_listings.core.application.ai.events import (
     WorkflowStep as WorkflowStep,
 )
+from etsy_listings.core.application.ai.readiness import (
+    AiReadinessBlock as AiReadinessBlock,
+)
 from etsy_listings.core.application.deploy.events import (
     ApplyRunPhase,
     PlanRunPhase,
@@ -578,15 +581,6 @@ class StagingRowDetail(BaseModel):
     reuse: str | None
     """The ``designs/`` stem with this row's exact bytes, which its listing
     will name instead of writing its own (spec, *Content deduplication*)."""
-
-
-class AiReadinessBlock(BaseModel):
-    """Why a batch could not draft if it were created now (spec, *Design
-    validation*; ``staging.note.md``): the sentence after *AI drafting can't
-    run yet.*, and what to do about it."""
-
-    message: str
-    remedy: str
 
 
 class StagingDetail(BaseModel):

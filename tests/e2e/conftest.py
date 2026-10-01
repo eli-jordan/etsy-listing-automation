@@ -23,12 +23,12 @@ import pytest
 
 from etsy_listings.core import connections
 from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
+from etsy_listings.core.application.ai.readiness import default_ai_providers
 from etsy_listings.core.clients.etsy import EtsyAuthError, HttpEtsyListingClient
 from etsy_listings.core.clients.printify import HttpCatalogClient, PrintifyClient, Transport
 from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError, Secrets
 from etsy_listings.core.workspace.userpath import to_native_path
 from etsy_listings.core.workspace.workspace import Workspace, layout
-from etsy_listings.server.api.seo import default_ai_providers
 
 from tests.support.ai_runs import DRAFTED_BRIEF, QUERIES, proposal_payload
 from tests.support.builders import (

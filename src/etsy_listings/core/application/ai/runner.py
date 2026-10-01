@@ -34,7 +34,7 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,7 +51,6 @@ from etsy_listings.core.ai.orchestrator import (
     generate_proposal,
 )
 from etsy_listings.core.ai.proposals import ProposalChoices, ProposalStore
-from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.application.ai.events import (
     STEP_IDS,
     AiBriefEvent,
@@ -59,6 +58,7 @@ from etsy_listings.core.application.ai.events import (
     AiProposalEvent,
     AiQueriesEvent,
 )
+from etsy_listings.core.application.ai.readiness import ProviderFactory
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
@@ -83,7 +83,6 @@ NOT_STARTED = "Not started"
 CANCELLED = "Cancelled"
 NO_ETSY_KEY = "no Etsy API key is configured; run `etsy-listings setup`"
 
-ProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
 MarketClientFactory = Callable[[Workspace], EtsyMarketClient | None]
 """The uncached market client, or ``None`` when the workspace has no Etsy
 key. The runner wraps it in the workspace's caches itself."""

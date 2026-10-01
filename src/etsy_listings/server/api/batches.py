@@ -31,6 +31,7 @@ from fastapi.responses import Response
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application import batch_staging, batch_workflow
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
+from etsy_listings.core.application.ai.readiness import batch_blocked
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.batch_workflow import RecentBatch
 from etsy_listings.core.application.refusals import (
@@ -74,7 +75,6 @@ from etsy_listings.server.api.schemas import (
     StagingRowDetail,
     WorkflowStep,
 )
-from etsy_listings.server.api.seo import batch_readiness
 from etsy_listings.server.api.thumbnails import thumbnail_response
 
 router = APIRouter(tags=["batches"])
@@ -125,7 +125,7 @@ def _queue(request: Request) -> BatchQueue:
 
 def _ai_blocked(request: Request) -> AiReadinessBlock | None:
     workspace = _workspace(request)
-    return batch_readiness(
+    return batch_blocked(
         workspace,
         request.app.state.seo_provider_factory(workspace),
         has_market=request.app.state.market_client_factory(workspace) is not None,
