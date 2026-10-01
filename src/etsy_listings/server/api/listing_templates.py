@@ -33,6 +33,8 @@ from pydantic import ValidationError
 # By module: the draft endpoint's query parameters are called ``from_listing``
 # and ``from_template`` (the plan's route), which would shadow the functions.
 from etsy_listings.core import listing_templates as conversion
+from etsy_listings.core.application.listing_reads import pricing_summary
+from etsy_listings.core.application.refusals import field_errors_of
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.errors import ConfigLoadError
@@ -49,7 +51,7 @@ from etsy_listings.core.listing_templates import (
 )
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.api.listings import field_errors_of, pricing_summary
+from etsy_listings.server.api.listings import wire_prices
 from etsy_listings.server.api.schemas import (
     CreateListingTemplateRequest,
     Issue,
@@ -139,7 +141,7 @@ def _view(
         "issues": [i.model_dump() for i in _wire(issues)],
         "garment": _garment(facts, template),
         "pricing_plan_name": _plan_name(template),
-        "resolved_prices": [p.model_dump() for p in resolved_prices],
+        "resolved_prices": [p.model_dump() for p in wire_prices(resolved_prices)],
         "garment_materials": profile.materials if profile is not None else [],
         "garment_product_type": profile.blueprint.display_title if profile is not None else None,
         "garment_brand": profile.blueprint.brand if profile is not None else None,

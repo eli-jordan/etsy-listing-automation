@@ -77,7 +77,7 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-/** The same one-level-deep merge `server/api/listings.py`'s `_merge` applies
+/** The same one-level-deep merge `core/application/listing_edits.py`'s `_merge` applies
  * server-side, mirrored here so the optimistic local state -- and the
  * accumulation of several edits made before the debounce fires -- agrees
  * with what the server will actually end up storing. */

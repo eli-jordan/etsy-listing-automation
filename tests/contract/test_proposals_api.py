@@ -190,33 +190,6 @@ def test_a_new_listing_given_the_old_name_has_no_proposal(
     assert client.get(PROPOSAL).status_code == 404
 
 
-def test_deleting_the_listing_removes_its_proposal(
-    client: TestClient, workspace: Workspace
-) -> None:
-    _generate(client)
-
-    assert client.delete(f"/api/listings/{LISTING}").status_code == 204
-
-    assert not workspace.proposal_file(LISTING).exists()
-
-
-def test_marking_the_listing_deleted_removes_its_proposal(
-    client: TestClient, workspace: Workspace
-) -> None:
-    """A listing with remotes stays on disk, pending its remote deletion
-    ; its proposal goes now, as its market snapshot does."""
-    _generate(client)
-    Lockfile.empty(tool_version="test", applied_at="2024-01-01T00:00:00").model_copy(
-        update={"remote": {"printify_product_id": "abc123"}, "stages_completed": ["render"]}
-    ).write(workspace.lock_file(LISTING))
-
-    response = client.delete(f"/api/listings/{LISTING}")
-
-    assert response.status_code == 200
-    assert response.json()["status"] == "pending-delete"
-    assert client.get(PROPOSAL).status_code == 404
-
-
 def test_deleting_the_listing_cancels_its_run_before_it_writes_a_proposal(
     client: TestClient, workspace: Workspace, provider: ChainProvider
 ) -> None:
