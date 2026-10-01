@@ -188,8 +188,8 @@ def run_task[Result](
     when a provider is retried.
 
     ``cancel_event`` is the one `threading.Event` the settled "Cancellation"
-    decision describes: the browser leaving the editor or its connection
-    closing (`server/api/seo.py`'s job to detect) sets it, and this is the single
+    decision describes: an AI run being cancelled, timing out or shut down
+    (`core/application/ai/runner.py`) sets it, and this is the single
     place that forwards it to whichever provider is currently running -- both
     real adapters already pass it straight through to
     `ai/process.py.run_managed`, which is what actually kills the subprocess

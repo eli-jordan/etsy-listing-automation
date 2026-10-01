@@ -98,7 +98,7 @@ and what it deliberately withholds.
 |---|---|---|
 | `cli` | Typer commands and terminal presentation | Uses engine reports rather than computing a second diff; only the `ui` launcher (`cli/ui.py`) imports the server, and only `server.hosting` |
 | `newcmd`, `setupcmd`, `authcmd` | Picker and workspace/credential workflows | Prompt sequencing is separate from their testable logic |
-| `server` | HTTP contracts, hosting/startup, static assets, SSE framing, AI resources and batch dispatch | Starts and stops core's deployment coordinator; per-run AI threads and a batch dispatcher remain separate |
+| `server` | HTTP contracts, hosting/startup, static assets, SSE framing and status mapping for deployment and AI resources | Constructs one of each core coordinator, store and lock set per process, and starts and stops the deployment and AI coordinators in the lifespan |
 | `engine` | Stage protocol, comparison, lockfile, lifecycle and runs | Stages return values; the engine decides execution and records progress |
 | `workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, video probes and request facts | Owns workspace layout and containment; callers may do I/O on paths it supplies |
 | `render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
@@ -107,8 +107,8 @@ and what it deliberately withholds.
 | `ai` | Provider calls, prompts, saved-listing inputs, validation and cached proposals | Requests and comparison snapshots share one interpretation of saved facts; suggestions enter listing content only through acceptance |
 | `listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
-| `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to the UI server |
-| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices; mockup-template calibration and preview scenes; listing-template create/edit/rename/delete; batch staging, confirm, retry, review and reads; per-listing write locks; deployment runs (`deploy`: coordinator, registry, FIFO executor, reviewed-apply check and run events) | Owns locking around read/merge/write and the records that follow a listing or listing template; answers with results or typed refusals, never status codes; takes AI runs, Etsy states, the batch queue, AI readiness and the deploy-to-AI handoff through small interfaces (ADR-0052); constructing the deployment coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
+| `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai`, run only by the UI server |
+| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices; mockup-template calibration and preview scenes; listing-template create/edit/rename/delete; batch staging, confirm, retry, review and reads; per-listing write locks; deployment runs (`deploy`: coordinator, registry, FIFO executor, reviewed-apply check and run events); AI work (`ai`: coordinator, run registry, runner, batch queue, readiness, proposal read/resolve and run events) | Owns locking around read/merge/write and the records that follow a listing or listing template; answers with results or typed refusals, never status codes; takes only the Etsy state memo through an interface (ADR-0052); constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 
 `core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
 bearers resolve at request time, but the Etsy app key pair is read during
@@ -313,9 +313,12 @@ Two consequences worth knowing:
 
 ## UI resources, AI and batch creation
 
-`server/api/app.py` assembles one workspace, deployment coordinator (`core/application/deploy`), AI
-registry/runner, proposal store, staging/batch stores, write-lock collection
-and batch queue per server process. FastAPI serves the generated-contract
+`server/api/app.py` assembles one workspace, deployment coordinator
+(`core/application/deploy`), AI coordinator (`core/application/ai`: run
+registry, runner and batch queue), proposal store, staging/batch stores and
+write-lock collection per server process. Its lifespan starts deployments then
+AI work, and stops AI work -- the batch queue, then the runs -- before
+deployments. FastAPI serves the generated-contract
 routes and built SPA. React Router provides the dashboard, listings and editor,
 individual/workspace deployment, listing-template editor, batch upload/staging/
 summary and mockup calibrator routes (`src/ui/src/main.tsx`). Setup and
@@ -341,8 +344,9 @@ brief after rechecking that it is still empty; SEO suggestions enter the listing
 through the seller's acceptance workflow (ADR-0003).
 
 `ProposalStore` retains one latest proposal with its input snapshot, generation
-time, origin and per-section resolutions. Staleness is judged on the server;
-stale proposals remain reviewable. A proposal is persisted before its streamed
+time, origin and per-section resolutions. Staleness is judged on every read
+(`core/application/ai/listing_proposals.py`), never stored; stale proposals
+remain reviewable. A proposal is persisted before its streamed
 event, and full successful apply clears it through the engine, including CLI
 apply (ADR-0049, ADR-0050).
 
@@ -358,8 +362,9 @@ rows through the existing AI runner, defaults to one concurrent batch row,
 reads the workspace concurrency setting, and recovers interrupted rows on
 restart (ADR-0048).
 
-Before a UI plan or apply begins, the batch queue cancels queued AI for its
-listings, stops and awaits active AI, and holds those names against new AI
+Before a UI plan or apply begins, the deployment coordinator yields its
+listings to the AI coordinator, which cancels their queued batch AI, stops and
+awaits active AI, and holds those names against new AI
 until deployment ends. CLI does not coordinate with this queue (ADR-0050).
 `WorkspaceLocks` serializes UI read/merge/write operations and name changes
 inside one process. There is no cross-process lock protecting concurrent CLI

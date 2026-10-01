@@ -20,9 +20,9 @@ run does not survive its server, and its listing already exists, so the
 rerun creates nothing twice. A run stopped by the server shutting down is
 left ``running`` for that reason.
 
-Only inside the ``ui`` server: there is no guard against two servers on one
-workspace, and the in-process locks are enough (batch plan, *Where the queue
-runs*).
+Run only by the ``ui`` server, through its AI coordinator: there is no guard
+against two servers on one workspace, and the in-process locks are enough
+(batch plan, *Where the queue runs*). CLI apply never touches it (ADR-0050).
 """
 
 from __future__ import annotations

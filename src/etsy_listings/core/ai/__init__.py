@@ -43,7 +43,9 @@ deadline are shared, which is what `ProviderTask` exists to make possible.
 - ``process`` -- `run_managed`: cross-platform subprocess-tree launch and
   cleanup for timeouts, cancellation, and request disconnects (PR4).
 
-`server/api/seo.py` is where this package is wired to HTTP. CI never invokes a
+`core/application/ai/` coordinates this package into runs, readiness and
+proposal operations; `server/api/airuns.py` and `server/api/seo.py` serve
+those over HTTP. CI never invokes a
 real provider binary: every adapter test replaces the
 subprocess layer with a double, and every orchestrator test runs against
 `FakeAiProvider`.
