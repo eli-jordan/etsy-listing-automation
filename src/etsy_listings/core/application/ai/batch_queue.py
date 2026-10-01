@@ -33,6 +33,7 @@ from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
 from etsy_listings.core.application.ai.events import AiPhaseEvent
+from etsy_listings.core.application.ai.readiness import AiReadinessBlock, batch_blocked
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
@@ -327,6 +328,19 @@ class BatchQueue:
 
     def concurrency(self) -> int:
         return self._limit()
+
+    def blocked(self) -> AiReadinessBlock | None:
+        """Why a batch created now could not draft -- a prompt, a ready
+        provider or Etsy market access missing -- or ``None`` while it could
+        (spec, *Design validation*). Asks the providers and market client
+        this queue's runs would use, so a batch is not knowingly created
+        into a queue that cannot run."""
+        workspace = self._workspace
+        return batch_blocked(
+            workspace,
+            self._runner.providers(workspace),
+            has_market=self._runner.market_client(workspace) is not None,
+        )
 
     # -------------------------------------------------------------- helpers
 

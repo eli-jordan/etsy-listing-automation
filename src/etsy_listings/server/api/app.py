@@ -107,10 +107,6 @@ def create_app(
     # nothing to do with running a run -- reaching through `deployments` for
     # it would couple that endpoint to deployment's own shape for no reason.
     app.state.context_factory = context_factory
-    # The AI providers' and Etsy market search's injection seams, which
-    # staging's AI readiness asks.
-    app.state.seo_provider_factory = seo_provider_factory
-    app.state.market_client_factory = market_client_factory
     # Held around every read-merge-write of a listing (`listings.py`, and
     # PR 5's brief write) -- `core/application/workspace_locks.py` says why.
     app.state.workspace_locks = locks

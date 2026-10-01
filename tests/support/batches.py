@@ -58,24 +58,3 @@ def a_listing_template(workspace: Workspace, name: str = LISTING_TEMPLATE) -> st
         facts=WorkspaceFacts.gather(workspace),
     )
     return name
-
-
-class RecordingQueue:
-    """The batch queue as the seller's batch controls steer it: each call
-    recorded, nothing dispatched (module-structure plan, PR 7). Whether the
-    real queue then starts the right rows is ``test_batch_queue``'s."""
-
-    def __init__(self) -> None:
-        self.calls: list[tuple[str, ...]] = []
-
-    def wake(self) -> None:
-        self.calls.append(("wake",))
-
-    def retry(self, batch_id: str, row_id: str | None = None) -> None:
-        self.calls.append(("retry", batch_id) if row_id is None else ("retry", batch_id, row_id))
-
-    def cancel(self, batch_id: str) -> None:
-        self.calls.append(("cancel", batch_id))
-
-    def resume(self, batch_id: str) -> None:
-        self.calls.append(("resume", batch_id))

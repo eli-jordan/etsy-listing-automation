@@ -6,8 +6,9 @@ AI queue -- cancel, resume, retry.
 The operations are :mod:`etsy_listings.core.application.batch_staging`'s and
 :mod:`~etsy_listings.core.application.batch_workflow`'s (module-structure
 plan, PR 7). This module decodes the multipart upload into ``Upload``
-streams, supplies the queue, the locks and AI readiness, and decides only
-what each answer is on the wire:
+streams, supplies the AI coordinator's batch queue -- which also says whether
+AI could run -- and the locks, and decides only what each answer is on the
+wire:
 
 * An upload refused before staging is a ``422`` whose ``detail`` is the
   sentence and the remedy (`StagingRefusal`), with nothing on disk.
@@ -31,7 +32,6 @@ from fastapi.responses import Response
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application import batch_staging, batch_workflow
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
-from etsy_listings.core.application.ai.readiness import batch_blocked
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.batch_workflow import RecentBatch
 from etsy_listings.core.application.refusals import (
@@ -62,7 +62,6 @@ from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.schemas import (
-    AiReadinessBlock,
     BatchDetail,
     BatchIndexEntry,
     BatchPatch,
@@ -123,20 +122,11 @@ def _queue(request: Request) -> BatchQueue:
     return queue
 
 
-def _ai_blocked(request: Request) -> AiReadinessBlock | None:
-    workspace = _workspace(request)
-    return batch_blocked(
-        workspace,
-        request.app.state.seo_provider_factory(workspace),
-        has_market=request.app.state.market_client_factory(workspace) is not None,
-    )
-
-
 def _staging_detail(request: Request, session: StagingSession) -> StagingDetail:
     workspace = _workspace(request)
     reviewed = review(workspace, session)
     return StagingDetail(
-        ai_blocked=_ai_blocked(request),
+        ai_blocked=_queue(request).blocked(),
         id=session.id,
         listing_template=session.listing_template,
         label=session.label,
@@ -297,11 +287,6 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
     """Create N listings (UI doc §6). Repeating it -- a double click, a retry
     after a dropped response -- finishes the same batch rather than making a
     second one."""
-
-    def ai_blocked() -> str | None:
-        blocked = _ai_blocked(request)
-        return blocked.message if blocked is not None else None
-
     try:
         batch = batch_workflow.confirm_batch(
             _workspace(request),
@@ -310,7 +295,6 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
             session_id,
             locks=_locks(request),
             queue=_queue(request),
-            ai_blocked=ai_blocked,
         )
     except StagingMissing as exc:
         raise _not_found(exc) from exc
