@@ -28,6 +28,7 @@ from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
+from etsy_listings.core.application.dependencies import YieldToDeploy
 from etsy_listings.core.application.deploy.events import (
     TERMINAL_PHASES,
     ListingFailedEvent,
@@ -77,11 +78,6 @@ ContextFactory = Callable[[Workspace, EventSink | None], RunContext]
 default every real server uses; a test wires one to in-memory fakes instead,
 by swapping this one callable -- nothing else here knows how a client is
 assembled."""
-
-YieldToDeploy = Callable[[Sequence[str]], AbstractContextManager[None]]
-"""How a run takes its listings from AI work before it reads them:
-``BatchQueue.yield_to_deploy`` in every real server. It returns once the
-listings' AI work has stopped, and holds them until the ``with`` ends."""
 
 
 def _nothing_to_yield(listings: Sequence[str]) -> AbstractContextManager[None]:

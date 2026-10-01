@@ -54,10 +54,16 @@ import names the module it depends on. Public interfaces:
     ``ListingTemplateSourceRefused``; ``StagingMissing``, ``StagedRowMissing``,
     ``BatchMissing``, ``BatchRowMissing``, ``BatchRowUploadMissing``,
     ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``.
+``workspace_locks``
+    ``WorkspaceLocks``: the per-listing and per-listing-template write locks
+    every read-merge-write holds, one instance per application runtime.
+``deploy``
+    Deployment runs -- registry, FIFO executor and their event log; see the
+    subpackage's own initialiser.
 ``dependencies``
-    ``ListingLocks``, ``ListingTemplateLocks``, ``ListingAiRuns`` /
-    ``StoppableRun``, ``EtsyStates``, ``BatchQueueControl``, ``AiBlocked``:
-    what operations take the UI process's write locks, AI run registry,
-    Etsy state memo, batch queue and AI readiness through while those live
-    in the server.
+    ``ListingAiRuns`` / ``StoppableRun``, ``EtsyStates``,
+    ``BatchQueueControl``, ``AiBlocked``, ``YieldToDeploy``: what operations
+    take the UI process's AI run registry, Etsy state memo, batch queue, AI
+    readiness and the deploy-to-AI handoff through while those live in the
+    server.
 """

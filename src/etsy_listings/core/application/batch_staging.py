@@ -19,12 +19,12 @@ from collections.abc import Iterable, Mapping, Sequence
 from datetime import UTC, datetime
 from pathlib import Path
 
-from etsy_listings.core.application.dependencies import ListingTemplateLocks
 from etsy_listings.core.application.refusals import (
     ListingTemplateMissing,
     StagedRowMissing,
     StagingMissing,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     StagingSession,
     StagingStore,
@@ -41,7 +41,7 @@ def stage_upload(
     listing_template: str,
     uploads: Iterable[Upload],
     *,
-    locks: ListingTemplateLocks,
+    locks: WorkspaceLocks,
     now: datetime | None = None,
 ) -> StagingSession:
     """Stage one ZIP or loose PNGs against ``listing_template``.

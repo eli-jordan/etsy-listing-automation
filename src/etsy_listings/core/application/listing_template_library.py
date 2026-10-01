@@ -6,7 +6,7 @@ module-structure plan, PR 7).
 The conversion and completeness rules are ``listing_templates``'
 (``from_listing``, ``from_template``, ``save``, ``template_issues``); this
 module coordinates them with the template's write lock and with the records
-that name a template. Every write takes ``ListingTemplateLocks`` and
+that name a template. Every write takes the template's write lock and
 re-checks the template once it holds it, so a create and a rename to one
 name cannot both win, and an edit waiting behind a rename finds the template
 gone rather than recreating it under the old name.
@@ -31,7 +31,6 @@ from typing import Any, Literal
 from pydantic import ValidationError
 
 from etsy_listings.core import listing_templates as conversion
-from etsy_listings.core.application.dependencies import ListingTemplateLocks
 from etsy_listings.core.application.listing_reads import PricedSize, pricing_summary
 from etsy_listings.core.application.refusals import (
     ListingMissing,
@@ -40,6 +39,7 @@ from etsy_listings.core.application.refusals import (
     ReservedListingTemplateName,
     field_errors_of,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.config.description import DescriptionConfig
 from etsy_listings.core.config.errors import ConfigLoadError
@@ -198,7 +198,7 @@ def create_listing_template(
     from_listing: str | None,
     from_template: str | None,
     document: Mapping[str, Any] | None = None,
-    locks: ListingTemplateLocks,
+    locks: WorkspaceLocks,
 ) -> TemplateSave:
     """Naming the draft is what writes it (UI doc §1).
 
@@ -228,7 +228,7 @@ def create_listing_template(
 
 
 def edit_listing_template(
-    workspace: Workspace, name: str, document: Mapping[str, Any], *, locks: ListingTemplateLocks
+    workspace: Workspace, name: str, document: Mapping[str, Any], *, locks: WorkspaceLocks
 ) -> TemplateSave:
     """Write the whole ``document`` as listing template ``name``, only if it
     is complete (template completeness). :class:`ListingTemplateMissing`
@@ -254,7 +254,7 @@ def rename_listing_template(
     old: str,
     new: str,
     *,
-    locks: ListingTemplateLocks,
+    locks: WorkspaceLocks,
     staging: StagingStore,
     batches: BatchStore,
 ) -> None:
@@ -284,9 +284,7 @@ def rename_listing_template(
         batches.rename_listing_template(old, new)
 
 
-def delete_listing_template(
-    workspace: Workspace, name: str, *, locks: ListingTemplateLocks
-) -> None:
+def delete_listing_template(workspace: Workspace, name: str, *, locks: WorkspaceLocks) -> None:
     """Allowed whatever was made from it: batches keep their own frozen
     copy, and a listing never had a link to it (spec, *Completeness and
     editing*)."""
