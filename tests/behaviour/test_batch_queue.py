@@ -21,6 +21,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
     BatchRow,
@@ -35,7 +36,6 @@ from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
 from etsy_listings.server.airuns.runner import AiRunner
 from etsy_listings.server.api.app import create_app
 from etsy_listings.server.batchqueue import BatchQueue
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 from tests.support.ai_runs import TODAY, ChainProvider, Task, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads

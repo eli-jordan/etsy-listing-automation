@@ -7,14 +7,14 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from etsy_listings.server.api.schemas import RunSummary
-from etsy_listings.server.runs.registry import (
+from etsy_listings.core.application.deploy.registry import (
     ListingApply,
     ListingPlan,
     Run,
     WorkspaceApply,
     WorkspacePlan,
 )
+from etsy_listings.server.api.schemas import RunSummary
 
 
 @pytest.mark.parametrize(

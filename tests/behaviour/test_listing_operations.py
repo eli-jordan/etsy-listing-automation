@@ -39,10 +39,10 @@ from etsy_listings.core.application.refusals import (
     ListingNameTaken,
     PublishedListingDeletion,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.config.listing import EMPTY_DRAFT
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 from tests.support.ai_runs import has_proposal, seed_proposal, seed_snapshot
 from tests.support.builders import FIXTURE_LISTING

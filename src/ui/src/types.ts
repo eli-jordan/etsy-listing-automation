@@ -156,7 +156,7 @@ export type RenderSceneSnapshot = components["schemas"]["RenderSceneSnapshot"];
 export type RenderSnapshot = components["schemas"]["RenderSnapshot"];
 
 /** `engine/stages/printify_product.py`'s `ProductSnapshot`. `price` is a
- * `Money` rendered as `"349 NOK"` (see `server/runs/events.py`'s `_jsonable`). */
+ * `Money` rendered as `"349 NOK"` (see `core/application/deploy/events.py`'s `_jsonable`). */
 export type ProductVariantSnapshot = components["schemas"]["ProductVariantSnapshot"];
 export type ProductSnapshot = components["schemas"]["ProductSnapshot"];
 

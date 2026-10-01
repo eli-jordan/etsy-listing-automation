@@ -60,7 +60,7 @@ router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
 
 AiProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
 """`create_app`'s injection seam for this module, the same shape
-`server/runs/executor.py.ContextFactory` already is for the runs executor: a
+`core/application/deploy/executor.py.ContextFactory` already is for the runs executor: a
 real server passes none and gets :func:`default_ai_providers`, a test
 passes a factory that returns `FakeAiProvider` doubles instead. Per-request,
 not per-app -- called fresh on every readiness check and every AI run,

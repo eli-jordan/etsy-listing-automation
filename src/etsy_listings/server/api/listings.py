@@ -40,6 +40,7 @@ from fastapi.responses import Response
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.dependencies import EtsyStates, ListingAiRuns
+from etsy_listings.core.application.deploy.executor import ContextFactory
 from etsy_listings.core.application.listing_creation import create_listing as create
 from etsy_listings.core.application.listing_edits import edit_listing
 from etsy_listings.core.application.listing_identity import delete_listing as delete
@@ -65,6 +66,7 @@ from etsy_listings.core.application.refusals import (
     ListingNameTaken,
     PublishedListingDeletion,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
@@ -95,8 +97,6 @@ from etsy_listings.server.api.schemas import (
     WorkspaceSummary,
 )
 from etsy_listings.server.api.thumbnails import thumbnail_response
-from etsy_listings.server.runs.executor import ContextFactory
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
 

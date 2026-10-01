@@ -59,6 +59,7 @@ from etsy_listings.core.application.refusals import (
     StagedRowMissing,
     StagingMissing,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
     BatchStore,
@@ -71,7 +72,6 @@ from etsy_listings.core.batches import (
 from etsy_listings.core.batches import staging as staging_module
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 from tests.support.ai_runs import seed_proposal
 from tests.support.batches import (

@@ -84,7 +84,7 @@ TERMINAL_PHASES: frozenset[RunPhase] = frozenset(
     {"ready", "applied", "failed", "stale", "cancelled"}
 )
 """A run in one of these will never emit another event. The SSE route polls
-this to know when to close the stream (``api/runs.py``); the registry polls it
+this to know when to close the stream (``server/api/runs.py``); the registry polls it
 to know a listing's lock may be released."""
 
 

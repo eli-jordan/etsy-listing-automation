@@ -4,7 +4,7 @@ One active run per listing: a second ``create`` while one is running is a
 :class:`Conflict` naming it. A finished run stays the listing's latest until
 the next run replaces it, and is then forgotten. Nothing survives a restart.
 
-Unlike ``server/runs``, nothing here is queued: every run gets its own thread
+Unlike ``core/application/deploy``, nothing here is queued: every run gets its own thread
 (``runner.py``), so the registry only answers who holds a listing. Listing
 names are compared case-insensitively, as the write locks compare them.
 """
@@ -145,7 +145,7 @@ class AiRun:
     ) -> tuple[list[AnyAiRunEvent], bool]:
         """Block up to ``timeout`` seconds for events past ``after_seq``.
         ``done`` is true once the run has finished and every event has been
-        returned -- ``server/runs``' contract, so the SSE loop is the same."""
+        returned -- ``core/application/deploy``' contract, so the SSE loop is the same."""
         with self.condition:
             pending = self.events[after_seq:]
             if not pending and not self.finished:

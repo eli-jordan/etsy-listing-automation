@@ -18,6 +18,9 @@ from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.deploy.executor import ContextFactory, RunExecutor
+from etsy_listings.core.application.deploy.registry import RunRegistry
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
@@ -35,9 +38,6 @@ from etsy_listings.server.api.seo import AiProviderFactory, default_ai_providers
 from etsy_listings.server.api.seo import router as seo_router
 from etsy_listings.server.api.templates import router as templates_router
 from etsy_listings.server.batchqueue import BatchQueue
-from etsy_listings.server.runs.executor import ContextFactory, RunExecutor
-from etsy_listings.server.runs.registry import RunRegistry
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 
 def _frontend_dist() -> Path:
@@ -129,7 +129,7 @@ def create_app(
     # readiness check (`seo.py`) and per run by `ai_runner`.
     app.state.seo_provider_factory = seo_provider_factory
     # Held around every read-merge-write of a listing (`listings.py`, and
-    # PR 5's brief write) -- `server/workspace_locks.py` says why.
+    # PR 5's brief write) -- `core/application/workspace_locks.py` says why.
     app.state.workspace_locks = locks
     # AI runs (features/market-seo-20260924/spec.md, *AI runs*): their own registry and a thread per
     # run, never `run_executor`. `market_client_factory` is the test seam for

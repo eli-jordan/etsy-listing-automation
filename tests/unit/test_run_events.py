@@ -1,4 +1,4 @@
-"""``server/runs/events.py``: DTO conversion for the SSE stream (ADR-0041, decision 7).
+"""``core/application/deploy/events.py``: DTO conversion for the SSE stream (ADR-0041, decision 7).
 
 Pure, like ``plan_fingerprint`` -- no registry, no executor, no workspace.
 """
@@ -10,19 +10,7 @@ from decimal import Decimal
 import pytest
 from pydantic import BaseModel, TypeAdapter, ValidationError
 
-from etsy_listings.core.config.money import Money
-from etsy_listings.core.engine.change import (
-    Action,
-    Drift,
-    FieldChange,
-    ListChange,
-    MediaChange,
-    Plan,
-    PriceChange,
-    StagePlan,
-)
-from etsy_listings.core.engine.stages.publish import PublishSnapshot
-from etsy_listings.server.runs.events import (
+from etsy_listings.core.application.deploy.events import (
     BlockedOutcomeDTO,
     IdleOutcomeDTO,
     ListingFailedEvent,
@@ -36,6 +24,18 @@ from etsy_listings.server.runs.events import (
     plan_dto,
     stage_plan_dto,
 )
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.change import (
+    Action,
+    Drift,
+    FieldChange,
+    ListChange,
+    MediaChange,
+    Plan,
+    PriceChange,
+    StagePlan,
+)
+from etsy_listings.core.engine.stages.publish import PublishSnapshot
 
 
 class _WrongSnapshot(BaseModel):

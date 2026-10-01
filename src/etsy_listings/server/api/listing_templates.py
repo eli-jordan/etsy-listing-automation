@@ -39,6 +39,7 @@ from etsy_listings.core.application.refusals import (
     ListingTemplateSourceRefused,
     ReservedListingTemplateName,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.config.listing_validation import Issue as ValidationIssue
 from etsy_listings.core.listing_templates import ListingTemplateExistsError
@@ -55,7 +56,6 @@ from etsy_listings.server.api.schemas import (
     PixelSize,
     RenameListingRequest,
 )
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 router = APIRouter(prefix="/api/listing-templates", tags=["listing-templates"])
 

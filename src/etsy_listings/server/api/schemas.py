@@ -18,6 +18,12 @@ from etsy_listings.core.ai.proposals import (
 from etsy_listings.core.ai.proposals import (
     Resolution,
 )
+from etsy_listings.core.application.deploy.events import (
+    ApplyRunPhase,
+    PlanRunPhase,
+    RunEvent,
+    RunScope,
+)
 from etsy_listings.core.batches import AiState
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
@@ -30,7 +36,6 @@ from etsy_listings.core.config.media import MediaEntry, MediaKind
 # the same principle `TemplateSummary.status` states below.
 from etsy_listings.core.engine.status import ListingGesture, ListingStatus
 from etsy_listings.core.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
-from etsy_listings.server.runs.events import ApplyRunPhase, PlanRunPhase, RunEvent, RunScope
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
@@ -715,7 +720,7 @@ class ListingBatch(BaseModel):
 
 # ──────────────────────────────────────────────────────────────────────────
 # Runs. ``RunEvent`` itself, and the ``Plan``/``StagePlan`` DTOs it
-# carries, live in ``server/runs/events.py`` beside the engine types they mirror --
+# carries, live in ``core/application/deploy/events.py`` beside the engine types they mirror --
 # only the request/response envelope belongs here, next to every other
 # endpoint's shapes.
 # ──────────────────────────────────────────────────────────────────────────
