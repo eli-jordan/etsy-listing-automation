@@ -41,15 +41,12 @@ from etsy_listings.newcmd.logic import (
     compute_starting_prices,
     filter_blueprints_by_category,
     garment_profile_slug_for,
-    load_candidate_pricing_plans,
     load_template_kind,
     local_blueprint_keys,
-    pricing_plan_ref,
     resolve_colour_slugs,
     sort_sizes,
     validate_listing_stub,
     write_garment_profile_if_absent,
-    write_listing,
     write_pricing_plan,
 )
 
@@ -352,20 +349,6 @@ def test_template_names_is_empty_without_a_templates_directory(tmp_path: Path) -
     assert Workspace.discover(root_override=tmp_path).template_names() == []
 
 
-def test_write_listing_refuses_to_overwrite_an_existing_listing(workspace_root: Path) -> None:
-    workspace = Workspace.discover(root_override=workspace_root)
-    data = build_listing_stub(
-        garment_profile_slug="comfort-colors-1717",
-        design_ref="designs/take-a-hike.png",
-        colours=["black"],
-        pricing_plan_ref="pricing-plans/x.yaml",
-        brief="",
-        media=[{"template": "flat-lay-01", "colour": "black"}],
-    )
-    with pytest.raises(FileExistsError):
-        write_listing(workspace, "take-a-hike", data)  # fixture already has this listing
-
-
 # --- pricing plans -----------------------------------------------
 
 
@@ -382,34 +365,6 @@ def test_build_pricing_plan_choices_marks_the_exact_profile_match(tmp_path: Path
     assert choices[0].value.stem == "a-matching"
     assert choices[0].label.strip().endswith("a-matching")
     assert choices[1].label.startswith("  ")  # no marker for the non-matching row
-
-
-def test_load_candidate_pricing_plans_skips_a_broken_plan_not_the_whole_picker(
-    workspace_root: Path,
-) -> None:
-    plans_dir = workspace_root / "pricing-plans"
-    plans_dir.mkdir()
-    (plans_dir / "good.yaml").write_text(
-        "garment_profile: comfort-colors-1717\nprices:\n  S: 100 NOK\n", encoding="utf-8"
-    )
-    (plans_dir / "bad.yaml").write_text("garment_profile: x\nprices:\n  S: 100\n", encoding="utf-8")
-
-    workspace = Workspace.discover(root_override=workspace_root)
-    candidates = load_candidate_pricing_plans(workspace)
-
-    assert [path.stem for path, _ in candidates] == ["good"]
-
-
-def test_pricing_plan_ref_is_written_from_the_workspace_root(tmp_path: Path) -> None:
-    # ADR-0046: no prefix is the workspace root, whichever listing stores it.
-    flat = tmp_path / "pricing-plans" / "launch-low.yaml"
-    assert pricing_plan_ref(flat, root=tmp_path) == "pricing-plans/launch-low.yaml"
-
-    nested = tmp_path / "pricing-plans" / "comfort-colors-1717" / "launch-low.yaml"
-    assert (
-        pricing_plan_ref(nested, root=tmp_path)
-        == "pricing-plans/comfort-colors-1717/launch-low.yaml"
-    )
 
 
 def test_write_pricing_plan_sets_profile_from_the_chosen_garment_profile(

@@ -17,6 +17,7 @@ from typing import Any, Literal
 import yaml
 from pydantic import ValidationError
 
+from etsy_listings.core.application.pricing_plans import pricing_plan_options
 from etsy_listings.core.clients.printify.models import Blueprint, ShippingRates, VariantSet
 from etsy_listings.core.clients.printify.resolve import normalise
 from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
@@ -254,7 +255,7 @@ def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Cho
     filesystem-dependent.
 
     A design that already has a listing is marked: ``new`` refuses to
-    overwrite one ( :func:`write_listing`), so the row would otherwise look
+    overwrite one (``write_listing``), so the row would otherwise look
     like a choice and behave like a dead end. Marked as a trailing note rather
     than through :func:`marked_choices` -- this callout is a warning, and
     sorting warnings to the top would be exactly wrong.
@@ -338,47 +339,24 @@ PORTAL_VERIFICATION_NOTE = (
 )
 
 
-def load_candidate_pricing_plans(workspace: Workspace) -> list[tuple[Path, PricingPlan]]:
-    """Every discovered plan that actually loads. A plan that won't parse or
-    fails currency validation is skipped, not fatal -- same precedent as
-    :func:`local_blueprint_keys` skipping a broken garment profile."""
-    result: list[tuple[Path, PricingPlan]] = []
-    for path in workspace.pricing_plan_files():
-        try:
-            result.append((path, workspace.load_pricing_plan(path)))
-        except (ConfigLoadError, ValidationError):
-            continue
-    return result
-
-
 def build_pricing_plan_choices(
     plans: list[tuple[Path, PricingPlan]],
     garment_profile_slug: str,
     *,
     marker: str = LOCAL_MARKER,
 ) -> list[Choice[Path]]:
-    """Rows for the picker: plans declaring this exact garment profile sort
-    first and carry the marker -- an *exact*
-    ``plan.garment_profile == garment_profile_slug`` match, since a plan
-    declares its garment directly, unlike the blueprint picker's
-    marker, which infers "already used here"."""
-    compatible = {path for path, plan in plans if plan.garment_profile == garment_profile_slug}
-    return marked_choices(
-        [path for path, _ in plans],
-        marked=lambda path: path in compatible,
-        sort_key=lambda path: path.stem.lower(),
-        label=lambda path: path.stem,
-        marker=marker,
-    )
-
-
-def pricing_plan_ref(plan_path: Path, *, root: Path) -> str:
-    """The write-side counterpart to :meth:`Workspace.resolve_ref` -- a
-    workspace-rooted POSIX ref, e.g. ``'pricing-plans/tee-basic.yaml'``.
-    Needed because (unlike ``design``, which has one fixed directory) discovery
-    under ``pricing-plans/`` allows nesting, so the ref can't be hardcoded the
-    way ``designs/{name}.png`` is."""
-    return plan_path.resolve().relative_to(root.resolve()).as_posix()
+    """Rows for the picker, in :func:`pricing_plan_options`' order -- plans
+    declaring this exact garment profile first -- with those carrying the
+    marker. Which plans suit a garment is core's answer, shared with the
+    listings editor's picker; only the rendering is the wizard's."""
+    return [
+        Choice(
+            value=option.path,
+            marked=option.compatible,
+            label=f"{marker if option.compatible else ' ' * MARKER_WIDTH}  {option.path.stem}",
+        )
+        for option in pricing_plan_options(plans, garment_profile_slug)
+    ]
 
 
 def compute_starting_prices(
@@ -463,8 +441,9 @@ def write_pricing_plan(
     notes: list[str],
 ) -> Path:
     """Writes ``pricing-plans/{slugify(name)}.yaml``, refusing to overwrite
-    (mirrors :func:`write_listing`). ``price_overrides`` is written empty --
-    the wizard never guesses a per-colour markup, only the flat table."""
+    (mirrors core's ``listing_creation.write_listing``). ``price_overrides``
+    is written empty -- the wizard never guesses a per-colour markup, only
+    the flat table."""
     path = workspace.pricing_plans_dir() / f"{slugify(name)}.yaml"
     if path.is_file():
         raise FileExistsError(f"a pricing plan already exists at {path}")
@@ -521,12 +500,3 @@ def validate_listing_stub(data: dict[str, Any], *, currency: str) -> Listing:
         return Listing.model_validate(data, context={"currency": currency})
     except ValidationError as exc:
         raise format_validation_error(Path("<new listing stub>"), exc) from exc
-
-
-def write_listing(workspace: Workspace, design_name: str, data: dict[str, Any]) -> Path:
-    path = workspace.listing_file(design_name)
-    if path.is_file():
-        raise FileExistsError(f"a listing already exists at {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump(data, sort_keys=False), encoding="utf-8")
-    return path

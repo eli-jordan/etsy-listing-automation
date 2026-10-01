@@ -42,6 +42,13 @@ from pydantic import ValidationError
 
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.listing_creation import create_listing as create
+from etsy_listings.core.application.pricing_plans import (
+    load_candidate_pricing_plans,
+    pricing_plan_options,
+    pricing_plan_ref,
+)
+from etsy_listings.core.application.refusals import ListingNameTaken
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
@@ -72,12 +79,6 @@ from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import (
     InvalidRefError,
     Workspace,
-)
-from etsy_listings.newcmd.logic import (
-    build_pricing_plan_choices,
-    load_candidate_pricing_plans,
-    pricing_plan_ref,
-    write_listing,
 )
 from etsy_listings.server.api.etsystate import etsy_states
 from etsy_listings.server.api.schemas import (
@@ -595,19 +596,12 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
     ``etsy_listing_id``.
     """
     workspace = _workspace(request)
-    path = workspace.listing_file(body.name)
-    with _locks(request).listing(body.name):
-        if path.parent.exists():
-            raise HTTPException(
-                status_code=409, detail=f"a listing already exists named {body.name!r}"
-            )
-        try:
-            Listing.model_validate(
-                body.document, context={"currency": workspace.defaults.etsy.currency}
-            )
-        except ValidationError:
-            return _describe_draft(workspace, body.document)
-        write_listing(workspace, body.name, dict(body.document))
+    try:
+        refused = create(workspace, body.name, body.document, locks=_locks(request))
+    except ListingNameTaken as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if refused is not None:
+        return _describe_draft(workspace, body.document)
     return _detail(workspace, body.name)
 
 
@@ -779,17 +773,15 @@ def list_pricing_plans(request: Request, garment_profile: str = "") -> list[Pric
     honestly, and the editor then drops the "different garment" note rather than
     labelling every plan as differing from a garment nobody picked."""
     workspace = _workspace(request)
-    candidates = load_candidate_pricing_plans(workspace)
-    by_path = dict(candidates)
-    choices = build_pricing_plan_choices(candidates, garment_profile)
+    options = pricing_plan_options(load_candidate_pricing_plans(workspace), garment_profile)
     return [
         PricingPlanSummary(
-            name=choice.value.stem,
-            garment_profile=by_path[choice.value].garment_profile,
-            compatible=choice.marked,
-            ref=pricing_plan_ref(choice.value, root=workspace.root),
+            name=option.path.stem,
+            garment_profile=option.plan.garment_profile,
+            compatible=option.compatible,
+            ref=pricing_plan_ref(option.path, root=workspace.root),
         )
-        for choice in choices
+        for option in options
     ]
 
 
