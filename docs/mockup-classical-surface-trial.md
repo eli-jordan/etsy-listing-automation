@@ -16,10 +16,10 @@ PYTHONPATH=src uv run --no-sync python scripts/prototype_surface.py \
   --colour pepper \
   --samples C:/Users/Admin/Desktop/try-workspace/.cache/surface-fold-trial-2026-10-01/samples.json \
   --design C:/Users/Admin/Desktop/try-workspace/designs/coding-x-music-master-of-packets.png \
-  --port 8767
+  --port 8770 --start-sample 2
 ```
 
-Open <http://localhost:8767>. The three reconstructed blanks, trial manifest, maps,
+Open <http://localhost:8770>. The three reconstructed blanks, trial manifest, maps,
 and image exports live in the user workspace, outside this repository. The
 manifest is specific to this trial and is not committed. Omit `--samples` to use
 just the genuine blank. Omit `--design` to use the procedural landscape artwork.
@@ -45,6 +45,9 @@ command above bypasses that build and uses this checkout's `src` directly.
 4. Drag placement corners if necessary. Brush out overlapping hands, necklaces,
    or clothing. Candidate numbers let you disable suspect fold regions without
    tracing individual folds. The moss preset includes an initial arm mask.
+   Mesh detail defaults to 49×49; 33×33 and the original 17×17 are available for
+   comparison. Switching photos now retains each photo's corners, mask, and
+   controls in memory. A server restart still requires an exported calibration.
 5. If the broad estimate is implausibly flat, turn off automatic curvature and
    make one small adjustment. The batch experiment also tried curve `0.2` and
    relief `0.09`, unchanged across all three worn shirts. These are hypotheses,
@@ -61,11 +64,15 @@ has been performed.
 
 The print quad is rectified to a 256px crop. A multiscale Hessian identifies
 elongated brightness structures after texture suppression. A smooth least-squares
-fit uses those regions as weak relief constraints on a 17×17 surface. The broad
+fit uses those regions as weak relief constraints on a 49×49 surface. The broad
 component is a cylindrical height profile; its automatic amplitude comes from
 coarse cross-shirt lighting. A stress-minimizing flattening solve turns surface
 edge lengths into material UV coordinates. Triangle interpolation bakes a
 photo-to-artwork map. A foldover guard blends towards a neutral map if needed.
+The fit and flattening use a sparse graph and preconditioned conjugate gradients,
+avoiding a dense inverse when increasing mesh detail. Weak connected regions grow
+from strong detector seeds. Relief is not forced to zero at the print boundary,
+because a print quad crops an interior part of the cloth.
 
 Visibility and normalized local illumination are separate arrays. Artwork is
 filtered in premultiplied linear color before resampling, preventing hidden RGB
@@ -80,6 +87,9 @@ template schema. Full-resolution maps are baked from the preview's fitted mesh,
 so preview and export use the same calibration.
 
 ## Initial observations, 2026-10-01
+
+These initial numbers describe the original 17×17 detector/fit, before the
+finer-mesh revision below.
 
 Four cases were exercised with the workspace's **Master of Packets** artwork,
 followed by the white grid:
@@ -143,6 +153,51 @@ For the second trial append `--sample 1 2 3 --curve 0.2 --relief 0.09` and choos
 another output directory. The verifier mutates the server's in-memory sample and
 artwork selection; use it while nobody is interacting with the page. It restores
 the fence and supplied artwork afterward.
+
+## Finer mesh revision after the pepper trial
+
+The user reported a missed upper-right-to-lower-left ripple and poor lower-left
+deep folds. A focused, synthetic Lambertian-surface loop reproduced weak-feature
+rejection and edge-fold attenuation at the original default relief setting:
+
+```sh
+PYTHONPATH=src uv run --no-sync python scripts/debug_surface_features.py --mesh 49
+```
+
+The original loop failed: only 22.2% of the gentle band had detector support, and
+the deep edge fold retained 17.5% of its known height variation, producing 0.23%
+maximum material shift. These thresholds check whether a feature is suppressed;
+they are not a physical-accuracy acceptance test for real photographs.
+
+Growing weaker connected pixels from strong seeds improved gentle-band coverage
+to 36.0%. Removing the artificial zero-height constraint at the **print** boundary
+made the deep response substantially stronger. Increasing mesh resolution then
+retained more detail:
+
+| Corrected mesh | Deep relief response ratio | Maximum UV shift | Two synthetic checks |
+|---|---:|---:|---:|
+| 17×17 | 41.6% | 1.54% | 0.17 s |
+| 33×33 | 55.5% | 3.41% | 0.43 s |
+| 49×49 | 62.2% | 4.78% | 1.05 s |
+
+All three pass the focused checks with no flipped cells. The ratio is variation
+retained in this particular fixture, not a claim that the model recovers 62% of
+arbitrary cloth depth. The same brightness-to-height proxy can overestimate the
+gentle fixture's relief, so passing does not resolve the depth ambiguity.
+
+The new default is 49×49 (2401 vertices versus the original 289). An isolated
+four-photo batch passed full-resolution map roundtrips with both artworks and no
+flipped cells; fit plus four previews took 1.7–1.9 seconds in the recorded runs.
+Artifacts are under `finer-mesh/` beside the original trial results. The revised
+pepper grid bends more strongly into the creases, but correctness of the gentle
+ripple and deep cloth geometry still needs visual evaluation. Self-occlusion and
+hidden cloth remain outside this height-field model.
+
+The updated interactive instance uses port 8770. The original port 8767 instance
+was left running during diagnosis to preserve the user's live calibration. Use
+an isolated port for batch verification. `--controls <state.json>` can initialize
+the updated trial from a captured `/state` response; its active photo index is
+reused unless `--start-sample` is supplied explicitly.
 
 Current verdict: **the deterministic render/export path is feasible; the goal of
 better geometry with automatic calibration remains unproven**. If a few control

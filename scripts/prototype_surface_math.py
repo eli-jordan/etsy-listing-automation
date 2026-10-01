@@ -15,7 +15,7 @@ from numpy.typing import NDArray
 Float = NDArray[np.float32]
 Pixels = NDArray[np.uint8]
 SIZE = 256
-MESH = 17
+MESH = 49
 
 
 def resize(array: NDArray, size: tuple[int, int]) -> NDArray:
@@ -52,18 +52,74 @@ def rectify(array: NDArray, box: Float) -> NDArray:
     )
 
 
-def graph() -> tuple[NDArray, NDArray, NDArray]:
-    ids = np.arange(MESH * MESH).reshape(MESH, MESH)
+def graph(mesh: int) -> tuple[NDArray, NDArray, NDArray]:
+    ids = np.arange(mesh * mesh).reshape(mesh, mesh)
     starts = np.concatenate(
         [ids[:, :-1].ravel(), ids[:-1, :].ravel(), ids[:-1, :-1].ravel(), ids[:-1, 1:].ravel()]
     )
     ends = np.concatenate(
         [ids[:, 1:].ravel(), ids[1:, :].ravel(), ids[1:, 1:].ravel(), ids[1:, :-1].ravel()]
     )
-    incidence = np.zeros((len(starts), MESH * MESH), np.float64)
-    incidence[np.arange(len(starts)), starts] = -1
-    incidence[np.arange(len(starts)), ends] = 1
-    return starts, ends, incidence
+    degree = np.bincount(np.concatenate([starts, ends]), minlength=mesh * mesh).astype(np.float64)
+    return starts, ends, degree
+
+
+def laplace(values: NDArray, starts: NDArray, ends: NDArray) -> NDArray:
+    differences = values[ends] - values[starts]
+    return np.bincount(ends, weights=differences, minlength=len(values)) - np.bincount(
+        starts, weights=differences, minlength=len(values)
+    )
+
+
+def solve_graph(
+    rhs: NDArray,
+    starts: NDArray,
+    ends: NDArray,
+    degree: NDArray,
+    weights: NDArray,
+    strength: float,
+    *,
+    fixed: NDArray | None = None,
+    initial: NDArray | None = None,
+) -> NDArray:
+    """Jacobi-preconditioned CG; O(edges) storage instead of a dense inverse."""
+    value = np.zeros_like(rhs) if initial is None else initial.copy()
+    diagonal = np.maximum(weights + strength * degree, 1e-8)
+    if fixed is not None:
+        value[fixed] = 0
+        rhs = rhs.copy()
+        rhs[fixed] = 0
+
+    def multiply(vector: NDArray) -> NDArray:
+        product = weights * vector + strength * laplace(vector, starts, ends)
+        if fixed is not None:
+            product[fixed] = 0
+        return product
+
+    residual = rhs - multiply(value)
+    tolerance = max(float(np.linalg.norm(rhs)) * 1e-7, 1e-10)
+    if np.linalg.norm(residual) <= tolerance:
+        return value
+    preconditioned = residual / diagonal
+    direction = preconditioned.copy()
+    dot = float(residual @ preconditioned)
+    for _ in range(500):
+        product = multiply(direction)
+        denominator = float(direction @ product)
+        if denominator <= 1e-20:
+            break
+        step = dot / denominator
+        value += step * direction
+        residual -= step * product
+        if np.linalg.norm(residual) <= tolerance:
+            break
+        preconditioned = residual / diagonal
+        following = float(residual @ preconditioned)
+        direction = preconditioned + (following / dot) * direction
+        dot = following
+    if np.linalg.norm(rhs - multiply(value)) > max(tolerance * 10, 1e-7):
+        raise ValueError("Mesh solve did not converge; reduce mesh detail for this trial")
+    return value
 
 
 @dataclass
@@ -103,12 +159,14 @@ def analyse(base: Pixels, box: Float, exclusion: Pixels) -> Analysis:
     allowed[:, :20] = allowed[:, -20:] = False
     best *= allowed
     threshold = max(0.075, float(np.percentile(best[allowed], 88))) if allowed.any() else 1
-    binary = (best > threshold).astype(np.uint8)
+    # Grow weak, connected fold structure from strong seeds instead of keeping
+    # only its brightest Hessian pixels. This preserves low-contrast ripple tails.
+    binary = (best > threshold * 0.35).astype(np.uint8)
     count, regions, stats, centres = cv2.connectedComponentsWithStats(binary, connectivity=8)
     candidates = []
     for label in range(1, count):
         x, y, w, h, area = stats[label]
-        if area >= 18 and max(w, h) >= 12:
+        if area >= 18 and max(w, h) >= 12 and np.any(best[regions == label] > threshold):
             candidates.append(
                 (int(area), label, float(centres[label, 0]), float(centres[label, 1]))
             )
@@ -138,23 +196,27 @@ def analyse(base: Pixels, box: Float, exclusion: Pixels) -> Analysis:
 
 
 def fit_surface(
-    analysis: Analysis, aspect: float, curvature: float, relief: float, disabled: list[int]
+    analysis: Analysis,
+    aspect: float,
+    curvature: float,
+    relief: float,
+    disabled: list[int],
+    mesh: int = MESH,
 ) -> tuple[Float, Float]:
-    yy, xx = np.meshgrid(np.linspace(0, aspect, MESH), np.linspace(0, 1, MESH), indexing="ij")
+    yy, xx = np.meshgrid(np.linspace(0, aspect, mesh), np.linspace(0, 1, mesh), indexing="ij")
     broad = curvature * np.sqrt(np.maximum(0, 1 - (1.8 * (xx - 0.5)) ** 2))
     confidence = analysis.confidence.copy()
     confidence[np.isin(analysis.labels, disabled)] = 0
-    confidence = resize(blur(confidence, 3), (MESH, MESH)).ravel().astype(np.float64)
-    target = resize(analysis.target, (MESH, MESH)).ravel().astype(np.float64)
-    _, _, incidence = graph()
-    laplacian = incidence.T @ incidence
+    confidence = resize(blur(confidence, 3), (mesh, mesh)).ravel().astype(np.float64)
+    target = resize(analysis.target, (mesh, mesh)).ravel().astype(np.float64)
+    starts, ends, degree = graph(mesh)
     # Penalized least squares: fold proxy constraints + smoothness + broad prior.
     weights = 0.25 + confidence * 5
-    fitted = np.linalg.solve(np.diag(weights) + 0.6 * laplacian, confidence * 5 * target * relief)
-    fitted = fitted.reshape(MESH, MESH)
-    # Do not turn ROI boundary/seams into a floating edge.
-    fade = np.sin(np.pi * xx) * np.sin(np.pi * yy / aspect)
-    z = broad + fitted * fade
+    fitted = solve_graph(confidence * 5 * target * relief, starts, ends, degree, weights, 0.6)
+    fitted = fitted.reshape(mesh, mesh)
+    # A print quad is an interior cloth crop, not the garment's physical edge.
+    # Forcing its relief to zero erased creases where the print meets the crop.
+    z = broad + fitted
     return np.stack([xx, yy, z], axis=-1).astype(np.float32), broad.astype(np.float32)
 
 
@@ -168,33 +230,52 @@ def signed_areas(uv: Float) -> Float:
 
 
 def flatten(surface: Float) -> tuple[Float, dict[str, float | int]]:
-    starts, ends, incidence = graph()
+    mesh = surface.shape[0]
+    starts, ends, degree = graph(mesh)
     p = surface.reshape(-1, 3).astype(np.float64)
     rest = np.linalg.norm(p[ends] - p[starts], axis=1)
     width = float(np.mean(np.linalg.norm(np.diff(surface, axis=1), axis=2).sum(axis=1)))
     height = float(np.mean(np.linalg.norm(np.diff(surface, axis=0), axis=2).sum(axis=0)))
-    yy, xx = np.meshgrid(np.linspace(0, height, MESH), np.linspace(0, width, MESH), indexing="ij")
+    yy, xx = np.meshgrid(np.linspace(0, height, mesh), np.linspace(0, width, mesh), indexing="ij")
     uv = np.stack([xx, yy], axis=-1).reshape(-1, 2)
-    corners = np.array([0, MESH - 1, MESH * MESH - 1, MESH * (MESH - 1)])
-    free = np.setdiff1d(np.arange(MESH * MESH), corners)
-    laplacian = incidence.T @ incidence
-    system = laplacian[np.ix_(free, free)]
-    # Solve the same positive-definite system with many RHSs; numpy only.
-    inverse = np.linalg.solve(system, np.eye(len(free)))
-    fixed = laplacian[np.ix_(free, corners)] @ uv[corners]
+    corners = np.array([0, mesh - 1, mesh * mesh - 1, mesh * (mesh - 1)])
+    anchor = np.zeros_like(uv)
+    anchor[corners] = uv[corners]
+    fixed_rhs = np.stack([laplace(anchor[:, axis], starts, ends) for axis in range(2)], axis=-1)
+    weights = np.zeros(len(uv), np.float64)
     for _ in range(24):
         edges = uv[ends] - uv[starts]
         target = edges * (rest / np.maximum(np.linalg.norm(edges, axis=1), 1e-8))[:, None]
-        rhs = incidence.T @ target
+        rhs = (
+            np.stack(
+                [
+                    np.bincount(ends, weights=target[:, axis], minlength=len(uv))
+                    - np.bincount(starts, weights=target[:, axis], minlength=len(uv))
+                    for axis in range(2)
+                ],
+                axis=-1,
+            )
+            - fixed_rhs
+        )
         proposal = uv.copy()
-        proposal[free] = inverse @ (rhs[free] - fixed)
+        for axis in range(2):
+            proposal[:, axis] = solve_graph(
+                rhs[:, axis],
+                starts,
+                ends,
+                degree,
+                weights,
+                1,
+                fixed=corners,
+                initial=uv[:, axis] - anchor[:, axis],
+            )
+        proposal += anchor
         delta = float(np.max(np.abs(proposal - uv)))
         uv = proposal
         if delta < 1e-6:
             break
-    strain = np.linalg.norm(uv[ends] - uv[starts], axis=1) / rest - 1
-    uv = (uv / [width, height]).reshape(MESH, MESH, 2).astype(np.float32)
-    yy, xx = np.meshgrid(np.linspace(0, 1, MESH), np.linspace(0, 1, MESH), indexing="ij")
+    uv = (uv / [width, height]).reshape(mesh, mesh, 2).astype(np.float32)
+    yy, xx = np.meshgrid(np.linspace(0, 1, mesh), np.linspace(0, 1, mesh), indexing="ij")
     neutral = np.stack([xx, yy], axis=-1).astype(np.float32)
     amount = 1.0
     while signed_areas(uv).min() < 1e-5 and amount > 1 / 128:
@@ -202,6 +283,8 @@ def flatten(surface: Float) -> tuple[Float, dict[str, float | int]]:
         uv = neutral + (uv - neutral) * 0.5
     if signed_areas(uv).min() <= 0:
         raise ValueError("surface map has flipped cells; reduce relief or curvature")
+    final = uv.reshape(-1, 2).astype(np.float64) * [width, height]
+    strain = np.linalg.norm(final[ends] - final[starts], axis=1) / rest - 1
     return uv, {
         "flipped_cells": int((signed_areas(uv) <= 0).sum()),
         "rms_edge_strain": float(np.sqrt(np.mean(strain**2))),
@@ -213,6 +296,7 @@ def flatten(surface: Float) -> tuple[Float, dict[str, float | int]]:
 def bake(uv: Float, box: Float, size: tuple[int, int]) -> tuple[Float, Float]:
     """Fixed diagonal triangle interpolation; photo -> material, never inverted by negation."""
     width, height = size
+    mesh = uv.shape[0]
     yy, xx = np.mgrid[:height, :width].astype(np.float32)
     matrix = rectification(box)
     den = matrix[2, 0] * xx + matrix[2, 1] * yy + matrix[2, 2]
@@ -220,9 +304,9 @@ def bake(uv: Float, box: Float, size: tuple[int, int]) -> tuple[Float, Float]:
     x = (matrix[0, 0] * xx + matrix[0, 1] * yy + matrix[0, 2]) / den / (SIZE - 1)
     y = (matrix[1, 0] * xx + matrix[1, 1] * yy + matrix[1, 2]) / den / (SIZE - 1)
     valid = (x >= 0) & (x <= 1) & (y >= 0) & (y <= 1) & np.isfinite(x + y)
-    gx = np.clip(np.nan_to_num(x), 0, 1) * (MESH - 1)
-    gy = np.clip(np.nan_to_num(y), 0, 1) * (MESH - 1)
-    ix, iy = np.minimum(gx.astype(int), MESH - 2), np.minimum(gy.astype(int), MESH - 2)
+    gx = np.clip(np.nan_to_num(x), 0, 1) * (mesh - 1)
+    gy = np.clip(np.nan_to_num(y), 0, 1) * (mesh - 1)
+    ix, iy = np.minimum(gx.astype(int), mesh - 2), np.minimum(gy.astype(int), mesh - 2)
     fx, fy = gx - ix, gy - iy
     a, b, c, d = uv[iy, ix], uv[iy, ix + 1], uv[iy + 1, ix], uv[iy + 1, ix + 1]
     lower = a + fx[..., None] * (b - a) + fy[..., None] * (c - a)

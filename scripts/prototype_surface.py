@@ -13,6 +13,7 @@ import json
 import threading
 import time
 from pathlib import Path
+from typing import Literal
 
 import cv2
 import numpy as np
@@ -68,6 +69,7 @@ class Controls(BaseModel):
     lighting: float = Field(default=0.7, ge=0, le=1)
     disabled: list[int] = Field(default_factory=list)
     strokes: list[dict] = Field(default_factory=list)
+    mesh: Literal[17, 33, 49] = 49
 
 
 class Trial:
@@ -86,6 +88,8 @@ class Trial:
         self.select(0)
 
     def select(self, index: int) -> None:
+        if hasattr(self, "controls"):
+            self.samples[self.active]["edited_controls"] = self.controls.model_copy(deep=True)
         sample = self.samples[index]
         self.active = index
         self.base = load_template_base(Path(sample["path"]))
@@ -93,7 +97,9 @@ class Trial:
         self.scale = min(1, 960 / max(self.base.shape[:2]))
         h, w = self.base.shape[:2]
         self.preview = math.resize(self.base, (round(w * self.scale), round(h * self.scale)))
-        self.controls = Controls(box=sample["box"], strokes=sample.get("strokes", []))
+        self.controls = sample.get(
+            "edited_controls", Controls(box=sample["box"], strokes=sample.get("strokes", []))
+        ).model_copy(deep=True)
         self.imported = None
         self.outputs.clear()
         self.prepared_key = None
@@ -141,10 +147,15 @@ class Trial:
             np.linalg.norm(box[1] - box[0]) + np.linalg.norm(box[2] - box[3])
         )
         curve = analysis.curvature if self.controls.curvature is None else self.controls.curvature
-        flat_surface, _ = math.fit_surface(analysis, aspect, 0, 0, [])
-        broad_surface, _ = math.fit_surface(analysis, aspect, curve, 0, [])
+        flat_surface, _ = math.fit_surface(analysis, aspect, 0, 0, [], self.controls.mesh)
+        broad_surface, _ = math.fit_surface(analysis, aspect, curve, 0, [], self.controls.mesh)
         fold_surface, _ = math.fit_surface(
-            analysis, aspect, curve, self.controls.relief, self.controls.disabled
+            analysis,
+            aspect,
+            curve,
+            self.controls.relief,
+            self.controls.disabled,
+            self.controls.mesh,
         )
         neutral, _ = math.flatten(flat_surface)
         broad, broad_metrics = math.flatten(broad_surface)
@@ -153,6 +164,7 @@ class Trial:
         self.meshes = {"quad": neutral, "surface": broad, "folds": folds}
         metrics = {
             "curvature": curve,
+            "mesh": self.controls.mesh,
             "fold_candidates": analysis.folds,
             "active_folds": len(
                 [f for f in analysis.folds if f["id"] not in self.controls.disabled]
@@ -392,6 +404,10 @@ def main() -> None:
     parser.add_argument("--samples", help="JSON list of additional photo paths/normalized boxes")
     parser.add_argument("--design", help="RGBA design; otherwise the built-in landscape")
     parser.add_argument("--port", type=int, default=8766)
+    parser.add_argument("--start-sample", type=int)
+    parser.add_argument(
+        "--controls", help="Saved controls or /state snapshot for the starting photo"
+    )
     args = parser.parse_args()
     samples = []
     if args.template:
@@ -445,6 +461,15 @@ def main() -> None:
         parser.error("Supply --template and --root, or --photo")
     artwork = load_design(to_native_path(args.design)) if args.design else diagnostic("landscape")
     trial = Trial(samples, artwork, "custom" if args.design else "landscape")
+    saved = {}
+    if args.controls:
+        saved = json.loads(to_native_path(args.controls).read_text(encoding="utf-8"))
+    selected = args.start_sample if args.start_sample is not None else saved.get("active", 0)
+    if not 0 <= selected < len(samples):
+        parser.error("Starting photo index is outside the trial sample list")
+    trial.select(selected)
+    if args.controls:
+        trial.controls = Controls.model_validate(saved.get("controls", saved))
     uvicorn.run(create_app(trial), host="127.0.0.1", port=args.port)
 
 
