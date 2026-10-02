@@ -1,23 +1,36 @@
-"""Every decision ``setup`` makes, as a function of its inputs.
+"""Configuring a workspace: what ``setup`` writes, and the rules it writes by.
 
-Pure where it can be, and a small checkable file operation where it cannot --
-the same split ``newcmd`` uses (``logic`` decides, ``interactive`` asks), and
-for the same reason: sequencing questions is the one part no test can drive
-cheaply, so as little as possible belongs there.
+The directories a workspace needs, the packaged prompts it is seeded with,
+and ``shop.yaml`` -- read raw, merged with what ``setup`` asked, rendered with
+a comment per field, and saved after the token that goes with it. Finding
+the shops those answers name is :mod:`shop_discovery`'s; asking the questions
+is the CLI's (``cli/setup.py``), the one part no test can drive cheaply.
+
+The one rule that shapes all of it: **`setup` fills gaps, it does not
+correct answers.** Re-running it on a configured workspace must be safe, so an
+existing value always wins over a freshly collected one, and the ids Phase 3
+fills in are never dropped. Prompts are the one opt-in exception (ADR-0044).
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import yaml
 
-from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
-from etsy_listings.core.clients.printify.models import Shop
-from etsy_listings.core.workspace import layout
+from etsy_listings.core.ai.brief import default_brief_prompt_text
+from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
+from etsy_listings.core.ai.prompt import (
+    PromptSync,
+    backup_path,
+    default_seo_prompt_text,
+    sync_prompt,
+)
+from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
+from etsy_listings.core.workspace import layout, scaffold
 
 WORKSPACE_DIRS: tuple[str, ...] = (
     layout.DESIGNS_DIR,
@@ -55,46 +68,20 @@ def create_directories(root: Path) -> tuple[str, ...]:
     return created
 
 
-@dataclass(frozen=True)
-class ShopSelection:
-    """The outcome of asking Printify which shops a token can reach.
+POD_DEFAULTS: dict[str, Any] = {
+    "who_made": "someone_else",
+    "when_made": "made_to_order",
+    "is_supply": False,
+    "renewal": "manual",
+}
+"""What every print-on-demand t-shirt listing answers (ADR-0028: the shirt
+genuinely was made by another company), so a wizard can offer them as one
+confirmation rather than four questions.
 
-    Three outcomes, not two: exactly one shop answers the question outright,
-    several make it a question for the user, and none is a problem no prompt
-    can fix.
-    """
-
-    shop: Shop | None = None
-    needs_choice: bool = False
-    problem: str | None = None
-
-
-def select_shop(shops: Sequence[Shop]) -> ShopSelection:
-    if not shops:
-        return ShopSelection(
-            problem=(
-                "this Printify account has no shops, so there is nowhere to create "
-                "products. Create one at printify.com (My stores -> Add new store); "
-                "an 'API' store is enough for everything up to publishing."
-            )
-        )
-    if len(shops) == 1:
-        return ShopSelection(shop=shops[0])
-    return ShopSelection(needs_choice=True)
-
-
-def exact_shop_match(candidates: Sequence[EtsyShop], name: str) -> EtsyShop | None:
-    """The one shop whose name *is* ``name``, or ``None``.
-
-    Etsy's shop search matches loosely -- it is built for buyers browsing, not
-    for resolving an identifier -- so "TakeAHike" can come back alongside
-    "TakeAHikeVintage" and a dozen others. Taking the first row would give a
-    workspace that publishes to a stranger's shop, so anything less certain
-    than a single exact match (case aside) is treated as no answer at all and
-    put in front of the user.
-    """
-    matches = [shop for shop in candidates if shop.shop_name.casefold() == name.casefold()]
-    return matches[0] if len(matches) == 1 else None
+``who_made: someone_else`` requires a production partner attached to the
+listing (decision 3) -- not enforced here, since resolving a *name* to a
+partner needs the shop's live list, which `setup` may not be able to reach.
+`plan` is where an unresolvable or missing partner blocks."""
 
 
 @dataclass(frozen=True)
@@ -309,3 +296,86 @@ def render_shop_yaml(document: dict[str, Any]) -> str:
             lines.append(f"{' ' * indent}# {comment}")
         lines.append(line)
     return SHOP_YAML_HEADER + "\n".join(lines) + "\n"
+
+
+# ------------------------------------------------------------ packaged prompts
+
+PACKAGED_PROMPTS: tuple[tuple[str, Callable[[], str], str], ...] = (
+    (layout.SEO_PROMPT_FILE, default_seo_prompt_text, "AI SEO"),
+    (layout.BRIEF_PROMPT_FILE, default_brief_prompt_text, "design brief"),
+    (layout.MARKET_QUERIES_PROMPT_FILE, default_market_queries_prompt_text, "market queries"),
+)
+"""Every prompt `setup` ships: its file under ``prompts/``, its packaged
+default, and the name a report gives it. A file in ``prompts/`` that is not
+here is the seller's own and `setup` never touches it."""
+
+
+@dataclass(frozen=True)
+class PackagedPrompt:
+    """What syncing one packaged prompt did, in workspace-relative terms."""
+
+    where: str
+    label: str
+    backup: str
+    """Where a replaced prompt was kept, whether or not this run replaced it --
+    a ``differs`` report names it as where ``--replace-prompts`` would put it."""
+    outcome: PromptSync
+
+
+def sync_packaged_prompts(root: Path, *, replace: bool) -> tuple[PackagedPrompt, ...]:
+    """Seed, check or replace each packaged prompt.
+
+    `setup` fills gaps and does not correct answers; prompts are the one
+    opt-in exception, because a workspace would otherwise never receive new
+    instructions such as `seo.md`'s market-data rules. Without ``replace``, a
+    prompt that differs from its default is left byte for byte (ADR-0044).
+    """
+    outcomes: list[PackagedPrompt] = []
+    for filename, default_text, label in PACKAGED_PROMPTS:
+        path = root / layout.PROMPTS_DIR / filename
+        outcomes.append(
+            PackagedPrompt(
+                where=f"{layout.PROMPTS_DIR}/{filename}",
+                label=label,
+                backup=f"{layout.PROMPTS_DIR}/{backup_path(path).name}",
+                outcome=sync_prompt(path, default_text(), replace=replace),
+            )
+        )
+    return tuple(outcomes)
+
+
+# ----------------------------------------------------------- reading and saving
+
+
+def read_shop_document(root: Path) -> dict[str, Any] | None:
+    """The current ``shop.yaml`` as a raw mapping, or ``None``.
+
+    Raw rather than a parsed ``Defaults``: a workspace whose file does not
+    validate is exactly the one `setup` should be able to repair, and parsing
+    it first would refuse the job.
+    """
+    path = root / layout.SHOP_FILE
+    if not path.is_file():
+        return None
+    loaded = yaml.safe_load(path.read_text(encoding="utf-8"))
+    return loaded if isinstance(loaded, dict) else None
+
+
+def save_setup(
+    root: Path,
+    *,
+    printify_token: str,
+    answers: SetupAnswers,
+    existing: dict[str, Any] | None,
+) -> Path:
+    """Store the verified token, then write ``shop.yaml``; the file's path.
+
+    Called once every question is answered, never before: a token left
+    behind by a cancelled run is a workspace that looks configured and is not.
+    ``shop.yaml`` goes last because it is the file that makes a directory a
+    workspace, so writing it means "this worked".
+    """
+    scaffold.write_env_value(root, PRINTIFY_TOKEN_VAR, printify_token)
+    path = root / layout.SHOP_FILE
+    path.write_text(render_shop_yaml(shop_yaml_document(answers, existing)), encoding="utf-8")
+    return path
