@@ -11,7 +11,7 @@ from __future__ import annotations
 import pytest
 
 from etsy_listings.cli import terminal
-from etsy_listings.core.application.garment_profiles import LOCAL_MARKER, LOCAL_MARKER_FALLBACK
+from etsy_listings.cli.pickers import LOCAL_MARKER, LOCAL_MARKER_FALLBACK
 
 # --- the marker glyph
 

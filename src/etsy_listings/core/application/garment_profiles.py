@@ -1,34 +1,30 @@
-"""Pure logic behind the ``new`` picker: everything that doesn't touch
-a terminal, so it's testable through the fake catalog client with no
-interactive prompting -- ``newcmd/interactive.py`` only sequences the
-questions, and ``prompts.py`` picks a backend that can actually drive
-the terminal it was given.
+"""Garment profiles: which catalog blueprints a workspace sells, and the
+profile ``new`` records for one.
+
+Filtering the catalog by category, keying a blueprint by brand and model,
+sorting sizes, slugging colours, and recording a profile the first time a
+garment is used -- reusing it, hand edits and all, every time after. The
+wizard that asks which garment is the CLI's (``cli/new.py``); everything
+here is tested through the fake catalog client with no terminal.
 """
 
 from __future__ import annotations
 
-from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from datetime import datetime
-from decimal import Decimal
-from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.core.application.pricing_plans import pricing_plan_options
-from etsy_listings.core.clients.fx_rate import FxRate
-from etsy_listings.core.clients.printify.models import Blueprint, ShippingRates, VariantSet
+from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
 from etsy_listings.core.clients.printify.resolve import normalise
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
-from etsy_listings.core.config.listing import Listing
-from etsy_listings.core.config.media import MAX_IMAGES
-from etsy_listings.core.config.money import Money
-from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.config.slug import ColourExceptions, slug_map, slugify
 from etsy_listings.core.workspace.workspace import Workspace
+
+DEFAULT_PLACEHOLDER = "front"
+"""The print area a new garment profile records."""
 
 CATEGORY_KEYWORDS: dict[str, tuple[str, ...]] = {
     "tshirt": ("t-shirt", "tee", "shirt"),
@@ -55,74 +51,6 @@ def filter_blueprints_by_category(blueprints: list[Blueprint], category: str) ->
     return [b for b in blueprints if matches(b)]
 
 
-# ----------------------------------------------------------------------
-# The garment picker's rows.
-#
-# Printify offers hundreds of blueprints and `--category tshirt` still leaves
-# dozens, so the rows are columned -- marker, brand, model, title -- and the
-# ones this workspace already has a garment profile for sort to the top. Building them
-# lives here rather than in the prompt so it can be tested without a terminal,
-# the same reason every other decision in `new` does. Filtering, on a terminal
-# that can do it at all, is fzf's job -- see `prompts.py`.
-# ----------------------------------------------------------------------
-
-LOCAL_MARKER = "⭐"
-LOCAL_MARKER_FALLBACK = "* "
-"""Two terminal columns either way -- ``⭐`` is East Asian Wide, so it occupies
-the same width as the two-character ASCII fallback and the marker column stays
-aligned on a terminal that cannot print it."""
-
-MARKER_WIDTH = 2
-
-
-@dataclass(frozen=True)
-class Choice[T]:
-    """One row of a picker: the thing itself, and the text offered for it.
-
-    Three of these existed -- ``BlueprintChoice``, ``DesignChoice``,
-    ``PricingPlanChoice`` -- each holding a domain object, a flag, and a
-    rendered label, and each with its own builder doing the same three steps.
-    The picker only ever reads ``label`` (to offer it) and ``value`` (to act on
-    the answer), so the per-type fields were paid for and never spent.
-    """
-
-    value: T
-    label: str
-    marked: bool = False
-    """Whether this row is called out, and why is the picker's business: a
-    garment already used in this workspace, a plan whose sizes match, a design
-    that already has a listing. The *rendering* of the callout differs (a
-    marker column, a trailing note) and so does whether it sorts first, which
-    is why those stay with each picker rather than moving in here."""
-
-
-def marked_choices[T](
-    items: Iterable[T],
-    *,
-    marked: Callable[[T], bool],
-    sort_key: Callable[[T], Any],
-    label: Callable[[T], str],
-    marker: str = LOCAL_MARKER,
-) -> list[Choice[T]]:
-    """Rows with the marked ones first, each label behind an aligned marker column.
-
-    The shape both "which of these have I used before?" pickers want: mark,
-    sort marked-first then by the picker's own key, and reserve the marker
-    column on every row so the columns after it line up whether or not the row
-    carries one.
-    """
-    entries = [(item, marked(item)) for item in items]
-    entries.sort(key=lambda entry: (not entry[1], sort_key(entry[0])))
-    return [
-        Choice(
-            value=item,
-            marked=is_marked,
-            label=f"{marker if is_marked else ' ' * MARKER_WIDTH}  {label(item)}",
-        )
-        for item, is_marked in entries
-    ]
-
-
 def local_blueprint_keys(workspace: Workspace) -> set[tuple[str, str]]:
     """The ``(brand, model)`` pairs this workspace already has a garment
     profile for, normalised for comparison.
@@ -143,34 +71,6 @@ def local_blueprint_keys(workspace: Workspace) -> set[tuple[str, str]]:
             continue
         keys.add((normalise(ref.brand), normalise(ref.model)))
     return keys
-
-
-def build_blueprint_choices(
-    blueprints: list[Blueprint],
-    local_keys: set[tuple[str, str]],
-    *,
-    marker: str = LOCAL_MARKER,
-) -> list[Choice[Blueprint]]:
-    """Blueprints as aligned ``marker brand model title`` rows.
-
-    Brand and model are what identify a garment to anyone who buys blanks --
-    "Gildan 18500" is the thing you look up, while Printify's titles bury it
-    ("Unisex Pullover Hoodie" is sold under half a dozen brands). Garments
-    this workspace already has a garment profile for come first and carry the marker:
-    in practice a shop reuses a handful of blueprints over and over, and
-    having to re-find the one used yesterday is the picker failing at its most
-    common job. Within each group, rows sort by brand then title, so the brand
-    column reads as blocks rather than as noise.
-    """
-    brand_width = max((len(b.brand) for b in blueprints), default=0)
-    model_width = max((len(b.model) for b in blueprints), default=0)
-    return marked_choices(
-        blueprints,
-        marked=lambda b: (normalise(b.brand), normalise(b.model)) in local_keys,
-        sort_key=lambda b: (b.brand.lower(), b.title.lower()),
-        label=lambda b: f"{b.brand.ljust(brand_width)}  {b.model.ljust(model_width)}  {b.title}",
-        marker=marker,
-    )
 
 
 def sort_sizes(sizes: set[str]) -> list[str]:
@@ -233,50 +133,6 @@ def build_garment_profile(
     )
 
 
-# ----------------------------------------------------------------------
-# The design picker's rows.
-#
-# `new` is a wizard, so the design it builds a listing for is picked from
-# what is on disk rather than typed -- the same reasoning that moved the
-# mockup template off a typed name. Ordering is by modification time,
-# newest first: artwork is made minutes before the listing that ships it, so
-# the design you want is nearly always the one you just saved.
-# ----------------------------------------------------------------------
-
-
-def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Choice[Path]]:
-    """Designs as ``date name`` rows, newest first.
-
-    The date is in the row rather than implied by the order because "newest
-    first" is invisible otherwise -- and fzf reorders the rows the moment a
-    query is typed, at which point the only thing still saying how fresh a
-    design is, is the row itself. Ties (a batch exported in one go all carry
-    the same second) break on name, so the order is stable rather than
-    filesystem-dependent.
-
-    A design that already has a listing is marked: ``new`` refuses to
-    overwrite one (``write_listing``), so the row would otherwise look
-    like a choice and behave like a dead end. Marked as a trailing note rather
-    than through :func:`marked_choices` -- this callout is a warning, and
-    sorting warnings to the top would be exactly wrong.
-    """
-    entries = sorted(
-        ((path, path.stat().st_mtime) for path in paths),
-        key=lambda entry: (-entry[1], entry[0].stem.lower()),
-    )
-    return [
-        Choice(
-            value=path,
-            marked=path.stem in listing_names,
-            label=(
-                f"{datetime.fromtimestamp(modified):%Y-%m-%d %H:%M}  {path.stem}"
-                f"{'  (listing exists)' if path.stem in listing_names else ''}"
-            ),
-        )
-        for path, modified in entries
-    ]
-
-
 def write_garment_profile_if_absent(
     workspace: Workspace, slug: str, garment_profile: GarmentProfile
 ) -> bool:
@@ -293,210 +149,45 @@ def write_garment_profile_if_absent(
     return True
 
 
-def load_template_kind(workspace: Workspace, template: str) -> str:
-    """Which of the three kinds ``template`` is.
-
-    ``new`` has to know: the shape of a valid ``media`` entry depends on it,
-    and writing the wrong shape produces a listing that only fails later, at
-    render time, with nothing pointing back at ``new``.
-    """
-    return workspace.load_template_config(template).kind
+@dataclass(frozen=True)
+class SavedGarmentProfile:
+    slug: str
+    profile: GarmentProfile
+    """What is on disk now: the new profile, or the existing one as edited."""
+    written: bool
 
 
-def build_media_entries(*, template: str, kind: str, colours: list[str]) -> list[dict[str, str]]:
-    """The stub's ``media:``, which depends on the referenced template's kind.
-
-    ``colour-matrix`` gets one entry per colour, each naming its colour --
-    but capped at Etsy's 20-image limit, because a print provider can offer
-    far more colours than Etsy accepts photos: Comfort Colors 1717 / Monster
-    Digital offers 33, and one entry each is a listing Etsy will reject.
-    Which 20 is genuinely arbitrary, so it is the first 20 in offer order and
-    ``new`` says that it truncated. Every colour still appears in ``colors:``
-    -- that decides which Printify variants sell, not which photos get
-    rendered.
-
-    ``multiple`` and ``single`` get exactly one entry and **no** ``colour``:
-    each produces one output, so there is nothing to disambiguate.
-    """
-    if kind == "colour-matrix":
-        return [{"template": template, "colour": colour} for colour in colours[:MAX_IMAGES]]
-    return [{"template": template}]
-
-
-# ----------------------------------------------------------------------
-# Pricing plans: the picker's rows, the "create new plan" cost
-# calculation, and writing the resulting file. Pure logic only -- terminal
-# sequencing lives in newcmd/interactive.py, the same split as everything
-# else in this module.
-# ----------------------------------------------------------------------
-
-CREATE_NEW_PLAN_LABEL = "+ create a new pricing plan"
-
-PORTAL_VERIFICATION_NOTE = (
-    "Verify current costs on Printify's own portal: open this blueprint in "
-    "the product catalog, choose the print provider manually, and check the "
-    '"Product variants" tab\'s Price column.'
-)
-
-
-def build_pricing_plan_choices(
-    plans: list[tuple[Path, PricingPlan]],
-    garment_profile_slug: str,
-    *,
-    marker: str = LOCAL_MARKER,
-) -> list[Choice[Path]]:
-    """Rows for the picker, in :func:`pricing_plan_options`' order -- plans
-    declaring this exact garment profile first -- with those carrying the
-    marker. Which plans suit a garment is core's answer, shared with the
-    listings editor's picker; only the rendering is the wizard's."""
-    return [
-        Choice(
-            value=option.path,
-            marked=option.compatible,
-            label=f"{marker if option.compatible else ' ' * MARKER_WIDTH}  {option.path.stem}",
-        )
-        for option in pricing_plan_options(plans, garment_profile_slug)
-    ]
-
-
-def compute_starting_prices(
-    *,
-    sizes: list[str],
-    variant_set: VariantSet,
-    variant_costs: dict[int, int],
-    shipping: ShippingRates,
-    fx_rate: FxRate | None,
-    target_currency: str,
-    margin_multiplier: Decimal = Decimal("1.10"),
-) -> tuple[dict[str, Money], list[str]]:
-    """size -> starting ``Money``, plus human-readable note lines for the
-    generated file's comment block. Never raises -- every failure mode
-    (missing cost, missing shipping, no fx rate) degrades to a 0-price entry
-    and a note explaining why.
-
-    Manufacturing + shipping cost is per (colour, size) variant, but a plan
-    has no colour axis: usually every colour offering a size costs the same,
-    so that shared figure is used; where colours disagree, the max is used
-    and the disagreement is called out in the notes, so the generated file
-    is honest about the simplification.
-    """
-    prices: dict[str, Money] = {}
-    notes: list[str] = [PORTAL_VERIFICATION_NOTE, ""]
-    for size in sizes:
-        totals_cents: dict[str, int] = {}
-        missing_colours: list[str] = []
-        for variant in variant_set.variants:
-            if variant.options.size != size:
-                continue
-            mfg = variant_costs.get(variant.id)
-            ship = shipping.first_item_cost_cents(variant.id)
-            if mfg is None or ship is None:
-                missing_colours.append(variant.options.color)
-                continue
-            totals_cents[variant.options.color] = mfg + ship
-
-        if missing_colours:
-            notes.append(
-                f"{size}: no cost/shipping data for colour(s) "
-                f"{', '.join(sorted(missing_colours))} -- excluded from the calculation"
-            )
-        if not totals_cents:
-            prices[size] = Money(Decimal(0), target_currency)
-            notes.append(f"{size}: no cost data available at all -- priced at 0, fill in manually")
-            continue
-
-        distinct = set(totals_cents.values())
-        chosen_cents = max(distinct)
-        if len(distinct) > 1:
-            breakdown = ", ".join(
-                f"{colour}=${cents / 100:.2f}" for colour, cents in sorted(totals_cents.items())
-            )
-            notes.append(f"{size}: cost varies by colour ({breakdown}); using the max")
-
-        usd_amount = (Decimal(chosen_cents) / Decimal(100)) * margin_multiplier
-        if fx_rate is None:
-            prices[size] = Money(Decimal(0), target_currency)
-            notes.append(
-                f"{size}: cost+shipping+margin is ${usd_amount:.2f} USD, but no FX rate could "
-                f"be fetched -- priced at 0, fill in manually using "
-                f"today's USD->{target_currency} rate"
-            )
-            continue
-
-        converted = (usd_amount * fx_rate.rate).quantize(Decimal("0.01"))
-        prices[size] = Money(converted, target_currency)
-        notes.append(
-            f"{size}: (${chosen_cents / 100:.2f} cost+shipping) x {margin_multiplier} margin "
-            f"x {fx_rate.rate} {target_currency}/USD ({fx_rate.source}, "
-            f"{fx_rate.fetched_at.isoformat()}) = {converted} {target_currency}"
-        )
-    return prices, notes
-
-
-def write_pricing_plan(
+def ensure_garment_profile(
     workspace: Workspace,
-    name: str,
-    garment_profile_slug: str,
-    prices: dict[str, Money],
-    notes: list[str],
-) -> Path:
-    """Writes ``pricing-plans/{slugify(name)}.yaml``, refusing to overwrite
-    (mirrors core's ``listing_creation.write_listing``). ``price_overrides``
-    is written empty -- the wizard never guesses a per-colour markup, only
-    the flat table."""
-    path = workspace.pricing_plans_dir() / f"{slugify(name)}.yaml"
-    if path.is_file():
-        raise FileExistsError(f"a pricing plan already exists at {path}")
-    path.parent.mkdir(parents=True, exist_ok=True)
-    header = "\n".join(
-        [
-            "# Generated by `new` -- a starting point, not a final price. Formula",
-            "# per size: (manufacturing cost + shipping cost) x 1.10 margin,",
-            "# converted from USD at a one-off live FX rate. Adjust these numbers.",
-            "#",
-            *(f"# {line}" if line else "#" for line in notes),
-        ]
-    )
-    body = yaml.safe_dump(
-        {
-            "garment_profile": garment_profile_slug,
-            "prices": {size: str(price) for size, price in prices.items()},
-            "price_overrides": {},
-        },
-        sort_keys=False,
-    )
-    path.write_text(f"{header}\n{body}", encoding="utf-8")
-    return path
-
-
-def build_listing_stub(
+    blueprint: Blueprint,
+    provider: PrintProvider,
+    variant_set: VariantSet,
     *,
-    garment_profile_slug: str,
-    design_ref: str,
-    colours: list[str],
-    pricing_plan_ref: str,
-    brief: str,
-    media: list[dict[str, str]],
-) -> dict[str, Any]:
-    """A starting ``listing.yaml`` document: prices come from the referenced
-    pricing plan (per-size/per-colour adjustment is a manual edit), the media entries
-    :func:`build_media_entries` decided, and blank
-    title, description and tags -- ordinary editable values, nothing
-    invented."""
-    return {
-        "garment_profile": garment_profile_slug,
-        "design": design_ref,
-        "colors": colours,
-        "brief": brief,
-        "pricing_plan": pricing_plan_ref,
-        "prices": {},
-        "etsy": {"title": "", "description": {}, "tags": []},
-        "media": media,
-    }
+    placeholder: str = DEFAULT_PLACEHOLDER,
+) -> SavedGarmentProfile:
+    """The garment profile for ``blueprint``, recorded if this is its first use.
+
+    An existing profile is never overwritten and is read back as it stands,
+    so hand edits since it was written -- a trimmed colour list -- carry into
+    every listing made from it. Raises ``ValueError`` when the provider offers
+    no ``placeholder`` print area.
+    """
+    built = build_garment_profile(
+        blueprint=blueprint,
+        provider_title=provider.title,
+        placeholder=placeholder,
+        variant_set=variant_set,
+    )
+    slug = garment_profile_slug_for(blueprint)
+    written = write_garment_profile_if_absent(workspace, slug, built)
+    profile = built if written else workspace.load_garment_profile(slug)
+    return SavedGarmentProfile(slug=slug, profile=profile, written=written)
 
 
-def validate_listing_stub(data: dict[str, Any], *, currency: str) -> Listing:
-    try:
-        return Listing.model_validate(data, context={"currency": currency})
-    except ValidationError as exc:
-        raise format_validation_error(Path("<new listing stub>"), exc) from exc
+def listing_colours(profile: GarmentProfile, colour_slugs: dict[str, str]) -> list[str]:
+    """The colours a new listing sells: whatever the garment profile lists --
+    reflecting any hand editing since it was written -- else every catalog
+    colour, the first time a garment is used."""
+    if profile.colors:
+        return sorted(profile.colors)
+    return sorted(colour_slugs.values())

@@ -12,22 +12,28 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.application.garment_profiles import (
+from etsy_listings.cli.pickers import (
     build_blueprint_choices,
     build_design_choices,
-    build_garment_profile,
-    build_listing_stub,
-    build_media_entries,
     build_pricing_plan_choices,
-    compute_starting_prices,
+)
+from etsy_listings.core.application.garment_profiles import (
+    build_garment_profile,
     filter_blueprints_by_category,
     garment_profile_slug_for,
-    load_template_kind,
     local_blueprint_keys,
     resolve_colour_slugs,
     sort_sizes,
-    validate_listing_stub,
     write_garment_profile_if_absent,
+)
+from etsy_listings.core.application.listing_creation import (
+    build_listing_stub,
+    build_media_entries,
+    load_template_kind,
+    validate_listing_stub,
+)
+from etsy_listings.core.application.pricing_plans import (
+    compute_starting_prices,
     write_pricing_plan,
 )
 from etsy_listings.core.clients.fx_rate import FxRate
@@ -561,7 +567,7 @@ def test_design_files_is_empty_without_a_designs_directory(tmp_path: Path) -> No
 # --- the garment rows, and which count as "already used here" ----------------
 #
 # Moved here from the prompts file, where they sat because the marker glyph is
-# printed by a picker. They are about `newcmd.logic`, which is what this file
+# printed by a picker. They are about the picker rows and core rules, which is what this file
 # tests; the glyph is `terminal`'s, tested in tests/unit/test_terminal.py.
 
 COMFORT_TEE = Blueprint(
