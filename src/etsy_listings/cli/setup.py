@@ -31,6 +31,7 @@ from etsy_listings.core import connections
 from etsy_listings.core.ai.brief import default_brief_prompt_text
 from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
 from etsy_listings.core.ai.prompt import backup_path, default_seo_prompt_text, sync_prompt
+from etsy_listings.core.application import credentials as core_credentials
 from etsy_listings.core.application import workspace_setup as logic
 from etsy_listings.core.clients.etsy.models import ReturnPolicy
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
@@ -124,7 +125,7 @@ def _verified_token(root: Path, factory: ClientFactory) -> tuple[str, list[Shop]
 
     def verify(values: tuple[str, ...]) -> tuple[list[Shop], str]:
         try:
-            shops = factory(values[0]).shops()
+            shops = core_credentials.verify_printify_token(values[0], client_for=factory)
         except PrintifyAuthError as exc:
             credentials.refuse(str(exc), command="setup")
         return shops, f"verified -- the token can reach {len(shops)} shop(s)."
