@@ -18,8 +18,7 @@ from typing import Any, Literal
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy.models import ReturnPolicy
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
-from etsy_listings.core.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
-from etsy_listings.core.clients.etsy.transport import Transport as EtsyTransport
+from etsy_listings.core.clients.etsy.shops import EtsyShopClient
 from etsy_listings.core.clients.printify.models import Shop
 
 # ------------------------------------------------------------------- Printify
@@ -73,18 +72,17 @@ class EtsyAccess:
 def etsy_access(root: Path) -> EtsyAccess | None:
     """Etsy access from what the workspace has stored, or ``None`` when it
     holds no app key pair -- which is every workspace before ``auth etsy``,
-    and must not stop ``setup`` from writing one."""
-    app_key = connections.etsy_app_key(root)
-    if app_key is None:
-        return None
+    and must not stop ``setup`` from writing one.
 
-    store = connections.etsy_token_store(root)
-    tokens = store.load()
-    # Every call discovery makes is unscoped, so a bearer is a bonus rather
-    # than a requirement -- it is what makes `shop_by_owner` possible.
-    bearer = store.access_token if tokens is not None else None
-    transport = EtsyTransport(app_key, bearer=bearer)
-    return EtsyAccess(HttpEtsyShopClient(transport), tokens.user_id if tokens else None)
+    The client is ``connections``' shop client, as for every other Etsy
+    caller: discovery's calls are unscoped, and that client adds the bearer
+    only when someone has signed in -- which is what makes ``shop_by_owner``
+    possible.
+    """
+    if connections.etsy_app_key(root) is None:
+        return None
+    tokens = connections.etsy_token_store(root).load()
+    return EtsyAccess(connections.etsy_shop_client(root), tokens.user_id if tokens else None)
 
 
 def exact_shop_match(candidates: Sequence[EtsyShop], name: str) -> EtsyShop | None:

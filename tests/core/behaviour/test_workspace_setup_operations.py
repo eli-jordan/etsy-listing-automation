@@ -130,6 +130,23 @@ def test_a_stored_app_key_gives_access_even_before_anyone_signs_in(tmp_path: Pat
     assert access.user_id is None
 
 
+def test_access_reads_etsy_through_the_one_wired_shop_client(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Setup builds no Etsy client of its own: ``connections`` decides when
+    the app key and bearer are resolved, for setup as for everything else."""
+    (tmp_path / layout.ENV_FILE).write_text(
+        f"{ETSY_KEYSTRING_VAR}=k\n{ETSY_SHARED_SECRET_VAR}=s\n", encoding="utf-8"
+    )
+    wired = FakeEtsyShopClient([])
+    monkeypatch.setattr(shop_discovery.connections, "etsy_shop_client", lambda root: wired)
+
+    access = shop_discovery.etsy_access(tmp_path)
+
+    assert access is not None
+    assert access.client is wired
+
+
 def test_a_connected_printify_shop_names_its_etsy_shop() -> None:
     client = FakeEtsyShopClient([ETSY_SHOP])
 
