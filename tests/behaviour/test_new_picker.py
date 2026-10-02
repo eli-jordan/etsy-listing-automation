@@ -12,6 +12,25 @@ from pathlib import Path
 
 import pytest
 
+from etsy_listings.core.application.garment_profiles import (
+    build_blueprint_choices,
+    build_design_choices,
+    build_garment_profile,
+    build_listing_stub,
+    build_media_entries,
+    build_pricing_plan_choices,
+    compute_starting_prices,
+    filter_blueprints_by_category,
+    garment_profile_slug_for,
+    load_template_kind,
+    local_blueprint_keys,
+    resolve_colour_slugs,
+    sort_sizes,
+    validate_listing_stub,
+    write_garment_profile_if_absent,
+    write_pricing_plan,
+)
+from etsy_listings.core.clients.fx_rate import FxRate
 from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
@@ -30,25 +49,6 @@ from etsy_listings.core.config.money import Money
 from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.config.slug import ColourExceptions, SlugCollisionError
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.newcmd.fx_rate import FxRate
-from etsy_listings.newcmd.logic import (
-    build_blueprint_choices,
-    build_design_choices,
-    build_garment_profile,
-    build_listing_stub,
-    build_media_entries,
-    build_pricing_plan_choices,
-    compute_starting_prices,
-    filter_blueprints_by_category,
-    garment_profile_slug_for,
-    load_template_kind,
-    local_blueprint_keys,
-    resolve_colour_slugs,
-    sort_sizes,
-    validate_listing_stub,
-    write_garment_profile_if_absent,
-    write_pricing_plan,
-)
 
 TSHIRT = Blueprint(
     id=6, title="Unisex Garment-Dyed Heavy Weight Tee", brand="Comfort Colors", model="1717"

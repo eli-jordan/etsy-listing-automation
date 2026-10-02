@@ -1,5 +1,5 @@
 """The ``new`` picker's interactive shell. Thin by design -- every
-decision it makes is delegated to:mod:`etsy_listings.newcmd.logic`, which is
+decision it makes is delegated to:mod:`etsy_listings.core.application.garment_profiles`, which is
 what the behaviour tests exercise through a fake catalog. This module only
 sequences the questions; *how* a question gets asked is
 :mod:`etsy_listings.cli.prompts`, which picks a backend that can actually
@@ -13,16 +13,7 @@ from pathlib import Path
 import typer
 
 from etsy_listings.cli import prompts, terminal
-from etsy_listings.core.application.listing_creation import write_listing
-from etsy_listings.core.application.pricing_plans import load_candidate_pricing_plans
-from etsy_listings.core.application.pricing_plans import pricing_plan_ref as make_pricing_plan_ref
-from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
-from etsy_listings.core.clients.printify.protocol import CatalogClient
-from etsy_listings.core.config.media import MAX_IMAGES
-from etsy_listings.core.config.slug import SlugCollisionError
-from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
-from etsy_listings.newcmd.logic import (
+from etsy_listings.core.application.garment_profiles import (
     CREATE_NEW_PLAN_LABEL,
     LOCAL_MARKER,
     LOCAL_MARKER_FALLBACK,
@@ -42,6 +33,16 @@ from etsy_listings.newcmd.logic import (
     write_garment_profile_if_absent,
     write_pricing_plan,
 )
+from etsy_listings.core.application.listing_creation import write_listing
+from etsy_listings.core.application.pricing_plans import load_candidate_pricing_plans
+from etsy_listings.core.application.pricing_plans import pricing_plan_ref as make_pricing_plan_ref
+from etsy_listings.core.clients import fx_rate
+from etsy_listings.core.clients.printify import unofficial_variant_costs
+from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.core.clients.printify.protocol import CatalogClient
+from etsy_listings.core.config.media import MAX_IMAGES
+from etsy_listings.core.config.slug import SlugCollisionError
+from etsy_listings.core.workspace.workspace import Workspace
 
 DEFAULT_PLACEHOLDER = "front"
 

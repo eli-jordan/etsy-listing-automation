@@ -22,7 +22,7 @@ from urllib.parse import parse_qs, urlsplit
 import pytest
 
 from etsy_listings.cli import prompts
-from etsy_listings.authcmd.interactive import Backends, run_auth
+from etsy_listings.cli.auth import Backends, run_auth
 from etsy_listings.core.clients.etsy.callback import Callback
 from etsy_listings.core.clients.etsy.oauth import OAuthError, TokenResponse
 from etsy_listings.core.clients.printify.fakes import FakePrintifyClient

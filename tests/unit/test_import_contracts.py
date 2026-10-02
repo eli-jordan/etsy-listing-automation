@@ -94,12 +94,16 @@ VIOLATIONS = {
         f"{PACKAGE}.core.leak": f"import {PACKAGE}.helper\n",
         f"{PACKAGE}.helper": f"import {PACKAGE}.cli.app\n",
     },
+    "core reaches the prompt adapter indirectly": {
+        f"{PACKAGE}.core.leak": f"import {PACKAGE}.helper\n",
+        f"{PACKAGE}.helper": f"import {PACKAGE}.cli.prompts\n",
+    },
     "server imports the CLI": {
         f"{PACKAGE}.server.leak": f"import {PACKAGE}.cli\n",
     },
-    "server reaches a wizard indirectly": {
+    "server reaches a CLI wizard indirectly": {
         f"{PACKAGE}.server.leak": f"import {PACKAGE}.helper\n",
-        f"{PACKAGE}.helper": f"import {PACKAGE}.setupcmd\n",
+        f"{PACKAGE}.helper": f"import {PACKAGE}.cli.setup\n",
     },
     "an ordinary CLI module imports server startup": {
         f"{PACKAGE}.cli.other": f"import {PACKAGE}.server.hosting\n",

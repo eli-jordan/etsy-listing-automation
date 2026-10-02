@@ -19,6 +19,7 @@ import pytest
 from typer.testing import CliRunner
 
 from etsy_listings.cli.app import app
+from etsy_listings.cli.setup import run_setup
 from etsy_listings.core.ai.brief import default_brief_prompt_text
 from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
 from etsy_listings.core.ai.prompt import default_seo_prompt_text
@@ -27,7 +28,6 @@ from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.setupcmd.interactive import run_setup
 
 HAPPY_PATH = {
     "token": "printify-token-abc",
@@ -217,7 +217,7 @@ def test_the_cli_flag_reaches_setup(tmp_path: Path, monkeypatch) -> None:
     def fake_run_setup(root: Path, *, replace_prompts: bool = False) -> None:
         seen.update(root=root, replace_prompts=replace_prompts)
 
-    monkeypatch.setattr("etsy_listings.setupcmd.run_setup", fake_run_setup)
+    monkeypatch.setattr("etsy_listings.cli.setup.run_setup", fake_run_setup)
 
     result = CliRunner().invoke(app, ["setup", "--root", str(tmp_path), "--replace-prompts"])
 

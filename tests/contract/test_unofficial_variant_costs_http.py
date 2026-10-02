@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import httpx
 
-from etsy_listings.newcmd.unofficial_variant_costs import fetch_variant_costs
+from etsy_listings.core.clients.printify.unofficial_variant_costs import fetch_variant_costs
 
 REAL_SHAPED_PAYLOAD = {
     "total": 1,

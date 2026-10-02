@@ -9,7 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from etsy_listings.authcmd import logic
+from etsy_listings.core.application import credentials as logic
 from etsy_listings.core.clients.etsy.oauth import TokenResponse
 from etsy_listings.core.clients.etsy.tokens import StoredTokens
 from etsy_listings.core.config.secrets import (

@@ -26,12 +26,12 @@ from typing import Any
 import typer
 import yaml
 
-from etsy_listings import credentials
-from etsy_listings.cli import prompts
+from etsy_listings.cli import credentials, prompts
 from etsy_listings.core import connections
 from etsy_listings.core.ai.brief import default_brief_prompt_text
 from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
 from etsy_listings.core.ai.prompt import backup_path, default_seo_prompt_text, sync_prompt
+from etsy_listings.core.application import workspace_setup as logic
 from etsy_listings.core.clients.etsy.models import ReturnPolicy
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.core.clients.etsy.shops import EtsyShopClient, HttpEtsyShopClient
@@ -43,7 +43,6 @@ from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.clients.printify.protocol import PrintifyClient
 from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR
 from etsy_listings.core.workspace import layout, scaffold
-from etsy_listings.setupcmd import logic
 
 ClientFactory = Callable[[str], PrintifyClient]
 """Builds a client from a *candidate* token. Injected rather than imported so

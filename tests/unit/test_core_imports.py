@@ -41,10 +41,6 @@ FORBIDDEN = [
     "questionary",
     "etsy_listings.server",
     "etsy_listings.cli",
-    "etsy_listings.newcmd",
-    "etsy_listings.setupcmd",
-    "etsy_listings.authcmd",
-    "etsy_listings.credentials",
 ]
 
 _PROBE = """
