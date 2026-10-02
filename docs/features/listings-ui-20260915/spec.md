@@ -264,8 +264,11 @@ incomplete reaches disk — so the draft is a `Listing` with exactly one rule
 waived: "set `pricing_plan` or `prices`". `Listing.draft()` and
 `Listing.empty_draft()` pass a private context key; `Listing.load()`, `PATCH`
 and `POST /api/listings` all go through plain `model_validate` and cannot.
-`tests/unit/test_draft_context_is_private.py` keeps the key private by grep,
-the technique `tests/core/unit/test_no_bare_cv2.py` already established.
+A grep test kept the key private while the waiver existed. The ADR-0043
+amendment below removed both the waiver and the key: `Listing` now parses
+without a price source, and `tests/core/unit/test_listing.py` pins that a
+listing with neither `pricing_plan` nor `prices` parses and that an empty
+draft builds.
 
 Rejected: `model_construct`, which skips coercion as well as validation — so
 `_coerce_design` would not run and the object's annotations would lie about
