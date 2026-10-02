@@ -77,7 +77,13 @@ from etsy_listings.core.batches import staging as staging_module
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
-from tests.support.ai_runs import ChainProvider, seed_prompts, seed_proposal, seeded_market
+from tests.support.ai_runs import (
+    ChainProvider,
+    seed_prompts,
+    seed_proposal,
+    seeded_market,
+    wait_for,
+)
 from tests.support.batches import (
     LISTING_TEMPLATE,
     a_listing_template,
@@ -571,6 +577,44 @@ class TestSteerAndKeep:
         assert workspace.listing_file("a").is_file() and workspace.design_file("a").is_file()
         with pytest.raises(BatchMissing):
             delete_batch(workspace, batches, batch.id, queue=queue)
+
+    def test_delete_stops_a_row_still_drafting(
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+    ) -> None:
+        """The record goes, but the work it started must not carry on: a
+        running row's run is asked to stop, which kills its provider call."""
+        provider = ChainProvider()
+        provider.gate("brief")
+        market = seeded_market()
+        ai = AiCoordinator(
+            workspace,
+            locks=WorkspaceLocks(),
+            proposals=ProposalStore(workspace),
+            batches=batches,
+            providers=lambda _workspace: [provider],
+            market_client=lambda _workspace: market,
+        )
+        ai.start()
+        try:
+            batch = _confirm(
+                workspace,
+                staging,
+                batches,
+                _stage(workspace, staging, ("a.png", png(1))).id,
+                ai.queue,
+            )
+            wait_for(lambda: provider.started["brief"].is_set())
+            run = ai.registry.latest("a")
+            assert run is not None
+
+            delete_batch(workspace, batches, batch.id, queue=ai.queue)
+
+            wait_for(lambda: run.finished)
+            assert (run.stop_reason, run.phase) == ("cancelled", "cancelled")
+            assert provider.cancelled == ["brief"]
+            assert workspace.batch_ids() == []
+        finally:
+            ai.stop()
 
     def test_rename_changes_the_label_only_and_a_blank_keeps_it(
         self,
