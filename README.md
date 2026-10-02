@@ -148,8 +148,8 @@ running one file doesn't trip a gate it could never meet; the gate lives in
 `htmlcov/index.html` shows which branches are missed.
 
 ```bash
-uv run pytest tests/unit/test_money.py                      # one file
-uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
+uv run pytest tests/core/unit/test_money.py                      # one file
+uv run pytest tests/core/unit/test_money.py::test_parses_amount_and_currency  # one test
 uv run pytest -k "currency"                                   # by keyword
 uv run pytest -m browser                                       # only the browser tests
 uv run pytest -m "not browser and not e2e"                     # hermetic layers

@@ -2,7 +2,7 @@
 
 One subject -- what the module answers, and that it only reads each file once.
 Whether the *endpoints* gather one per request is a behaviour question and
-lives with them (`tests/behaviour/test_listings_api.py`).
+lives with them (`tests/server/behaviour/test_listings_api.py`).
 """
 
 from __future__ import annotations
@@ -127,7 +127,7 @@ class TestTemplates:
         assert facts.templates, "the calibrated ones are still there"
 
 
-VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+VIDEOS = Path(__file__).parents[2] / "fixtures" / "video"
 
 
 def _video_listing(workspace: Workspace, media: list[object]) -> Listing:

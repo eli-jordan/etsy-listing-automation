@@ -2,7 +2,7 @@
 
 Pure, so the whole transition table fits here without a workspace, a lockfile
 or a network. The end-to-end version -- where the three facts actually come
-from -- is `tests/behaviour/test_listings_api.py`'s `TestListingStatus`.
+from -- is `tests/server/behaviour/test_listings_api.py`'s `TestListingStatus`.
 """
 
 from __future__ import annotations

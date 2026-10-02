@@ -17,7 +17,7 @@ import textwrap
 import zipfile
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parents[2]
+ROOT = Path(__file__).resolve().parents[1]
 
 # Where the wheel carries the built SPA, relative to its root.
 WHEEL_ASSETS = "etsy_listings/server/static"

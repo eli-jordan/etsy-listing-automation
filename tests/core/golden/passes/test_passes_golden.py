@@ -13,7 +13,7 @@ from etsy_listings.core.render.io import load_design, load_template_base
 from etsy_listings.core.render.maps import height_map, luminance_map
 from etsy_listings.core.render.passes import displace, export, shade, warp
 
-FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
+FIXTURES = Path(__file__).parents[3] / "fixtures"
 DESIGN_PATH = FIXTURES / "render" / "grid-target.png"
 TEMPLATE_BASE_PATH = FIXTURES / "mockup-templates" / "synthetic-tee" / "black.png"
 GOLDENS = Path(__file__).parent / "goldens"

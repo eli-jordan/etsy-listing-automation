@@ -184,7 +184,7 @@ def test_workspace_apply_reuses_exact_reviewed_targets_and_retains_the_plan(
 def test_a_workspace_apply_differing_from_its_review_is_409_with_the_refusal(
     client: TestClient,
 ) -> None:
-    """Which differences are refused is ``tests/behaviour/test_deployments.py``'s;
+    """Which differences are refused is ``tests/core/behaviour/test_deployments.py``'s;
     this is how one reaches the wire."""
     reviewed = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
     detail = _wait_until_terminal(client, reviewed["id"])

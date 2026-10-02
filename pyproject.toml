@@ -60,9 +60,9 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 # The repo root, so `tests.support` (shared builders and prompt doubles) and
-# `tests.contract` (whose payload transcripts the e2e layer re-checks against
+# `tests.core.contract` (whose payload transcripts the e2e layer re-checks against
 # the live API) are importable from any layer. `tests/` is deliberately not a
-# package -- the layers stay flat directories -- so they resolve as namespace
+# package -- the owner/layer directories stay plain -- so they resolve as namespace
 # packages off the root, which is what this puts on `sys.path`.
 pythonpath = ["."]
 markers = [
@@ -150,7 +150,7 @@ warn_required_dynamic_aliases = true
 # temporary exclusion cannot outlive the code it excuses. Every temporary
 # exclusion names the PR of docs/features/module-structure-20260930/plan.md
 # that removes it; none may survive PR 11. `uv run lint-imports` runs in
-# scripts/check.sh and CI; tests/unit/test_import_contracts.py proves these
+# scripts/check.sh and CI; tests/test_import_contracts.py proves these
 # contracts reject representative violations.
 #
 # Wizard sequencing, prompts and terminal output are all under etsy_listings.cli

@@ -178,7 +178,7 @@ def test_an_empty_error_body_still_names_the_status() -> None:
 
 # ------------------------------------------------------------------- retries
 
-# ADR-0009. The policy itself is unit-tested in tests/unit/test_retry.py; what
+# ADR-0009. The policy itself is unit-tested in tests/core/unit/test_retry.py; what
 # these pin is that the client actually goes through it, and that the caller
 # still sees a real decoded error when the retries run out.
 

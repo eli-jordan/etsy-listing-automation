@@ -30,7 +30,7 @@ from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING, edit_listing
 
-VIDEO = Path(__file__).parents[1] / "fixtures" / "video" / "valid-3s-512.mp4"
+VIDEO = Path(__file__).parents[2] / "fixtures" / "video" / "valid-3s-512.mp4"
 
 
 @pytest.fixture

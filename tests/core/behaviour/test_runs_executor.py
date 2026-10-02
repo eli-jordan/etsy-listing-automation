@@ -1,6 +1,6 @@
 """``core/application/deploy/executor.py`` (ADR-0041, decision 7): the FIFO worker thread actually
 driving ``engine.run`` through the registry, against the fixture workspace and
-in-memory fakes -- no FastAPI, no TestClient (``tests/contract/test_runs_api.py``
+in-memory fakes -- no FastAPI, no TestClient (``tests/server/contract/test_runs_api.py``
 covers the HTTP surface; this is the thread underneath it).
 """
 

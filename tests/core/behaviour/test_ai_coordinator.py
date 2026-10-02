@@ -7,7 +7,7 @@ deploy-to-AI handoff (ADR-0050), and the coordinator's lifetime: built
 without a thread, started with interrupted rows returned to the queue, and
 stopped so that nothing new starts while active runs are cancelled
 (ADR-0048). The HTTP mapping of each answer is
-``tests/contract/test_ai_runs_api.py``'s and ``test_ai_seo_api.py``'s.
+``tests/server/contract/test_ai_runs_api.py``'s and ``test_ai_seo_api.py``'s.
 """
 
 from __future__ import annotations

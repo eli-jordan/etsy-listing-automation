@@ -20,7 +20,7 @@ from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing
 from tests.support.pipeline import ETSY_LISTING_ID, a_deployable_context, real_stages
 
-VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+VIDEOS = Path(__file__).parents[2] / "fixtures" / "video"
 THUMB = {"template": "flat-lay-01", "colour": "black"}
 SECOND = {"template": "flat-lay-01", "colour": "moss"}
 CLIP = "common-media/size-guide.mp4"

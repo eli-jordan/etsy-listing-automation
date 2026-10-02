@@ -14,7 +14,7 @@ import pytest
 
 from etsy_listings.core.workspace.video import ProbeFailure, VideoFacts, probe_video
 
-VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+VIDEOS = Path(__file__).parents[2] / "fixtures" / "video"
 
 
 def _facts(name: str) -> VideoFacts:

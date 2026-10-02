@@ -9,7 +9,7 @@ import yaml
 
 
 def test_python_ci_collects_only_hermetic_layers(tmp_path: Path) -> None:
-    root = Path(__file__).resolve().parents[2]
+    root = Path(__file__).resolve().parents[1]
     workflow = yaml.safe_load((root / ".github/workflows/ci.yml").read_text())
     command = next(
         step["run"]
@@ -36,6 +36,7 @@ def test_python_ci_collects_only_hermetic_layers(tmp_path: Path) -> None:
         check=True,
     )
     selected = result.stdout.replace("\\", "/")
-    assert "tests/behaviour/" in selected
+    for owner in ("core", "server", "cli"):
+        assert f"tests/{owner}/behaviour/" in selected
     assert "tests/e2e/" not in selected
     assert "tests/browser/" not in selected

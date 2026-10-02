@@ -1,8 +1,8 @@
 """Shared golden-comparison fixture for both golden layers (per-pass and e2e).
 
 A fixture rather than an importable helper module -- ``tests/`` isn't a
-package (no ``__init__.py``), which is deliberate so ``tests/unit``,
-``tests/behaviour`` etc. stay simple flat test directories; a fixture avoids
+package (no ``__init__.py``), which is deliberate so ``tests/core/unit``,
+``tests/core/behaviour`` etc. stay simple flat test directories; a fixture avoids
 needing cross-directory imports to reach it.
 """
 

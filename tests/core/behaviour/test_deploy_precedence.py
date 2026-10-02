@@ -17,7 +17,7 @@ starts: it is called once the executor has taken the listing, just before
 the plan reads it. The fixture workspace has no shop, so a deploy renders
 and blocks every other stage -- enough to be a deploy, and nothing here is
 about what it deploys. The HTTP mapping of the ``deploying`` refusal is
-``tests/contract/test_ai_runs_api.py``'s.
+``tests/server/contract/test_ai_runs_api.py``'s.
 """
 
 from __future__ import annotations

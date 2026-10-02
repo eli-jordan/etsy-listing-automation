@@ -447,7 +447,7 @@ def test_template_names_can_include_uncalibrated_directories(workspace_root: Pat
     order to calibrate it. A stray file stays out either way.
 
     The default (calibrated-only) behaviour the `new` picker relies on is
-    covered in tests/behaviour/test_new_picker.py.
+    covered in tests/cli/behaviour/test_new_picker.py.
     """
     templates = workspace_root / "mockup-templates"
     (templates / "not-calibrated-yet").mkdir()

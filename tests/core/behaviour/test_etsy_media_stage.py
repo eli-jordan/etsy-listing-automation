@@ -402,7 +402,7 @@ def test_no_matching_colour_property_skips_the_feature_without_failing(
 
 # ------------------------------------------------ videos and JPEGs
 
-VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+VIDEOS = Path(__file__).parents[2] / "fixtures" / "video"
 ALL_COLOURS_MEDIA = [{"template": TEMPLATE, "colour": c} for c in COLOURS]
 
 

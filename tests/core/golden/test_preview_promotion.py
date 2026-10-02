@@ -19,7 +19,7 @@ from etsy_listings.core.engine.stages.render import RenderStage
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock
 
-FIXTURE_WORKSPACE = Path(__file__).parent.parent / "fixtures" / "workspace"
+FIXTURE_WORKSPACE = Path(__file__).parents[2] / "fixtures" / "workspace"
 
 
 def _fresh_workspace(tmp_path: Path, name: str) -> Path:

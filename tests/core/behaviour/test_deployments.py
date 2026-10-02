@@ -4,7 +4,7 @@ directly -- no FastAPI, no TestClient (module-structure plan, PR 8).
 Conflicts, the exact reviewed set a workspace apply must name (ADR-0042),
 FIFO execution and the deploy-to-AI handoff (ADR-0041, ADR-0050),
 retention, cancellation, shutdown and replay after an event id. The HTTP
-mapping of each answer stays in ``tests/contract/test_runs_api.py``.
+mapping of each answer stays in ``tests/server/contract/test_runs_api.py``.
 """
 
 from __future__ import annotations

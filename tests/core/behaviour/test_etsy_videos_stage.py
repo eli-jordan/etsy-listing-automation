@@ -39,7 +39,7 @@ SHOP_ID = 12345678
 STAGES = [EtsyMediaStage(), EtsyVideosStage()]
 TEMPLATE = "flat-lay-01"
 COLOURS = ["black", "blue-jean", "ivory", "moss"]
-VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+VIDEOS = Path(__file__).parents[2] / "fixtures" / "video"
 FEATURED = "common-media/size-guide.mp4"
 SECOND = "./how-it-fits.mp4"
 

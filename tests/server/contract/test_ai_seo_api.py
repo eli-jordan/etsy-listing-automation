@@ -4,7 +4,7 @@ button may start a run (features/market-seo-20260924/spec.md, *AI runs*; impleme
 The button drafts a brief when the saved one is empty, so readiness answers
 with the rules ``POST /api/ai/runs`` applies to ``draft_brief=true``. The
 rules themselves are core's and tested directly
-(``tests/behaviour/test_ai_readiness.py``); this pins how the endpoint
+(``tests/core/behaviour/test_ai_readiness.py``); this pins how the endpoint
 carries their answer: a 404 for an unsaved listing, and the response shape
 either way.
 """

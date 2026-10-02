@@ -6,7 +6,7 @@ requires a title, so an empty one would be published as an empty string.
 
 The garment-change refusal used to live here too. It reads the product stage's
 own applied document, so it moved beside it -- see
-tests/unit/test_product_document.py.
+tests/core/unit/test_product_document.py.
 
 A gate *returns* its refusal rather than raising it. That is what lets `plan`
 report the blocked stage alongside everything else the run would do, instead

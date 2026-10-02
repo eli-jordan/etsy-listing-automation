@@ -34,7 +34,7 @@ from tests.support.builders import (
     set_etsy_shop_id,
 )
 
-VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
+VIDEOS = Path(__file__).parents[2] / "fixtures" / "video"
 
 
 @pytest.fixture

@@ -8,7 +8,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-RENDER_SRC = Path(__file__).parent.parent.parent / "src" / "etsy_listings" / "core" / "render"
+RENDER_SRC = Path(__file__).parents[3] / "src" / "etsy_listings" / "core" / "render"
 
 RESAMPLING_CALLS = {
     # warpPerspective/warpAffine take the interpolation *flag* via `flags=`,

@@ -3,7 +3,7 @@
 
 A prompt is prose, so these tests pin the rules the spec makes, not the
 wording around them: each assertion names a rule a later edit must not drop.
-How the prompts are assembled into a task is `tests/golden/test_ai_prompts.py`'s
+How the prompts are assembled into a task is `tests/core/golden/test_ai_prompts.py`'s
 subject.
 """
 

@@ -5,7 +5,7 @@ Whether a run may start for a listing, and whether a batch created now could
 draft, without a request or a running server: the rules the **AI Mode**
 button, ``POST /api/ai/runs`` and staging's *AI drafting can't run yet*
 all answer with. The HTTP mapping of these answers is
-``tests/contract/test_ai_seo_api.py``'s and ``test_batches_api.py``'s.
+``tests/server/contract/test_ai_seo_api.py``'s and ``test_batches_api.py``'s.
 """
 
 from __future__ import annotations

@@ -3,7 +3,7 @@ per-scene state, and ``engine.run.preview_listing`` -- through the real
 engine (`build_plan`/`execute`) against the fixture workspace, the same way
 ``test_render_stage.py`` covers plan/apply. Byte-identity between a promoted
 preview and a fresh render is the golden layer's job
-(``tests/golden/test_preview_promotion.py``); this file is about which files
+(``tests/core/golden/test_preview_promotion.py``); this file is about which files
 exist, which get reused, which get pruned, and what gets reported."""
 
 from __future__ import annotations

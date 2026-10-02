@@ -568,7 +568,7 @@ def test_design_files_is_empty_without_a_designs_directory(tmp_path: Path) -> No
 #
 # Moved here from the prompts file, where they sat because the marker glyph is
 # printed by a picker. They are about the picker rows and core rules, which is what this file
-# tests; the glyph is `terminal`'s, tested in tests/unit/test_terminal.py.
+# tests; the glyph is `terminal`'s, tested in tests/cli/unit/test_terminal.py.
 
 COMFORT_TEE = Blueprint(
     id=6, title="Unisex Garment-Dyed Heavy Weight Tee", brand="Comfort Colors", model="1717"

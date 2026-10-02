@@ -1,7 +1,7 @@
 """`new`, walked end to end on the backend a cygwin pty actually gets.
 
 The plain-`input()` selector, not the prompt double: the wizard's *sequencing*
-is what `tests/behaviour/test_new_picker.py` covers through `scripted`, and
+is what `tests/cli/behaviour/test_new_picker.py` covers through `scripted`, and
 what this file adds is that the whole thing survives the one backend that has
 to keep working when neither fzf nor prompt_toolkit can run (CLAUDE.md, "the
 cygwin pty is not a Windows console").

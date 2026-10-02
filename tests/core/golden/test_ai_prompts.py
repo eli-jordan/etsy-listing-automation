@@ -5,7 +5,7 @@ the proposal prompt with and without a market block.
 A short stand-in replaces the seller's prompt file, so these goldens pin the
 *assembly* -- which blocks appear, in what order, inside which delimiters --
 and do not churn every time the packaged prose is edited. What the packaged
-prompts say is `tests/unit/test_ai_packaged_prompts.py`'s subject.
+prompts say is `tests/core/unit/test_ai_packaged_prompts.py`'s subject.
 
 Regenerate with ``--update-goldens`` after reading the diff.
 """

@@ -14,7 +14,7 @@ lockfile and two fake clients.
 
 Nothing here does I/O, holds a client, or reads a clock -- which is what makes
 the comparison built on it a pure function, and what lets
-``tests/unit/test_product_document.py`` exercise it directly.
+``tests/core/unit/test_product_document.py`` exercise it directly.
 """
 
 from __future__ import annotations

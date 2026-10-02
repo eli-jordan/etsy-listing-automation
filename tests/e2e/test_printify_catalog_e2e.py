@@ -1,7 +1,7 @@
 """The Printify catalog, against the real API. ``-m e2e``, skipped by default.
 
 Everything below this layer talks to an ``httpx.MockTransport`` fed by payloads
-typed into ``tests/contract/test_catalog_http.py``. Transcripts beat invented
+typed into ``tests/core/contract/test_catalog_http.py``. Transcripts beat invented
 fixtures -- that file records what an invented one cost: ``placeholders`` was
 put at the top level, which Printify does not do, and every layer agreed with
 the fiction while none agreed with the API, so a profile shipped with no print

@@ -8,7 +8,7 @@ nothing else; a regenerated proposal refuses a resolution meant for the old
 one. Resolving never clears a proposal: only replacement, deletion, a fully
 successful apply or clearing the cache does, which the runner's, the listing
 operations' and the engine's tests pin. The HTTP mapping is
-``tests/contract/test_proposals_api.py``'s.
+``tests/server/contract/test_proposals_api.py``'s.
 """
 
 from __future__ import annotations

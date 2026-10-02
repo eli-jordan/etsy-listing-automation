@@ -1,5 +1,5 @@
 """Pure parsing only -- no httpx. Network behaviour is covered by the
-contract layer (tests/contract/test_unofficial_variant_costs.py)."""
+contract layer (tests/core/contract/test_unofficial_variant_costs_http.py)."""
 
 from __future__ import annotations
 

@@ -4,7 +4,7 @@ FastAPI runs endpoints and the real engine agree about a whole plan -> apply
 loop, streamed over SSE.
 
 Runs against ``create_app(context_factory=fakes)``, following the same fake
-`tests/contract/test_runs_api.py` and `tests/behaviour/test_runs_executor.py`
+`tests/server/contract/test_runs_api.py` and `tests/core/behaviour/test_runs_executor.py`
 already established: the fixture workspace has no shop configured, so
 `printify_product`/`publish`/`etsy_listing`/`etsy_media` all report
 themselves blocked and only `render` actually does anything -- real local

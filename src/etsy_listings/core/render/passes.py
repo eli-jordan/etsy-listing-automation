@@ -4,7 +4,7 @@ No I/O, no globals, no clock. Every array is 8-bit sRGB; RGBA where alpha
 matters (the design and its warped/displaced/shaded print layer), RGB for the
 opaque mockup base photo. Every ``cv2`` call passes explicit ``interpolation``
 and ``borderMode`` -- relying on defaults makes output depend on the library
-version (docs/architecture.md, Rendering invariants), so ``tests/unit/test_no_bare_cv2.py``
+version (docs/architecture.md, Rendering invariants), so ``tests/core/unit/test_no_bare_cv2.py``
 greps this module for the ones that aren't.
 """
 
