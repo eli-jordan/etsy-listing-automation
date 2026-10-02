@@ -1,7 +1,7 @@
 """Automation that takes a print-on-demand t-shirt design to a reviewable Etsy draft.
 
-The current module map and invariants live in docs/architecture.md. Entry
-points (cli/ui and the setup/auth/new wizards) compose the transport-independent
+The current module map and invariants live in docs/architecture.md. The
+``server`` and ``cli`` adapters compose the transport-independent
 ``core`` packages: engine, workspace, config, clients, rendering, AI, market
 research, listing templates and batches. Only core.engine computes deployment
 diffs and merges stage results into lockfiles; core.workspace owns the
