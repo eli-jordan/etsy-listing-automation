@@ -1,6 +1,6 @@
 # Module structure implementation plan
 
-Status: implemented. Delivered by [#99](https://github.com/eli-jordan/etsy-listing-automation/pull/99), [#100](https://github.com/eli-jordan/etsy-listing-automation/pull/100), [#101](https://github.com/eli-jordan/etsy-listing-automation/pull/101), [#102](https://github.com/eli-jordan/etsy-listing-automation/pull/102), [#103](https://github.com/eli-jordan/etsy-listing-automation/pull/103), [#104](https://github.com/eli-jordan/etsy-listing-automation/pull/104), [#105](https://github.com/eli-jordan/etsy-listing-automation/pull/105), [#106](https://github.com/eli-jordan/etsy-listing-automation/pull/106), [#107](https://github.com/eli-jordan/etsy-listing-automation/pull/107), [#108](https://github.com/eli-jordan/etsy-listing-automation/pull/108), [#109](https://github.com/eli-jordan/etsy-listing-automation/pull/109), TODO(PR 12 link). Design confirmed 2026-09-30. This plan
+Status: shipped. Delivered by [#99](https://github.com/eli-jordan/etsy-listing-automation/pull/99), [#100](https://github.com/eli-jordan/etsy-listing-automation/pull/100), [#101](https://github.com/eli-jordan/etsy-listing-automation/pull/101), [#102](https://github.com/eli-jordan/etsy-listing-automation/pull/102), [#103](https://github.com/eli-jordan/etsy-listing-automation/pull/103), [#104](https://github.com/eli-jordan/etsy-listing-automation/pull/104), [#105](https://github.com/eli-jordan/etsy-listing-automation/pull/105), [#106](https://github.com/eli-jordan/etsy-listing-automation/pull/106), [#107](https://github.com/eli-jordan/etsy-listing-automation/pull/107), [#108](https://github.com/eli-jordan/etsy-listing-automation/pull/108), [#109](https://github.com/eli-jordan/etsy-listing-automation/pull/109), [#110](https://github.com/eli-jordan/etsy-listing-automation/pull/110). Design confirmed 2026-09-30. This plan
 records the implementation sequence; the [specification](spec.md) and
 [architecture](../../architecture.md) describe the current requirements and tree.
 
@@ -49,7 +49,7 @@ payloads, introduces new concurrency or fixes unrelated audit findings.
 | 9 | Move AI coordination, readiness and proposal operations into core | 8 | [#107](https://github.com/eli-jordan/etsy-listing-automation/pull/107) |
 | 10 | Separate CLI wizards from reusable setup/auth/new operations | 9 | [#108](https://github.com/eli-jordan/etsy-listing-automation/pull/108) |
 | 11 | Reorganize Python tests and complete interface enforcement | 10 | [#109](https://github.com/eli-jordan/etsy-listing-automation/pull/109) |
-| 12 | Reconcile architecture and prove installed end-to-end wiring | 11 | Pending (TODO: PR 12 link) |
+| 12 | Reconcile architecture and prove installed end-to-end wiring | 11 | [#110](https://github.com/eli-jordan/etsy-listing-automation/pull/110) |
 
 ## PR 1: Record the accepted design before implementation
 
