@@ -1,10 +1,10 @@
 # Module structure and shared application operations
 
-Status: accepted design; implementation pending. Agreed 2026-09-30.
+Status: implemented. Agreed 2026-09-30; delivered by the stack in the [plan](plan.md).
 
-The application will expose transport-independent operations that can be
+The application exposes transport-independent operations that can be
 tested without invoking Typer or constructing an HTTP request. The source tree
-will distinguish core, server, CLI and React responsibilities while retaining
+distinguishes core, server, CLI and React responsibilities while retaining
 one repository and one Python distribution. This improves both navigation and
 the interfaces through which callers exercise application behaviour.
 
@@ -125,14 +125,12 @@ separate distributions and CLI-over-HTTP are outside this work.
 This specification owns the agreed restructure requirements and explicit
 native-host amendment. [ADR-0052](../../adr/0052-separate-core-from-transport-adapters.md)
 records their architectural rationale; the [plan](plan.md) records delivery.
-Where older architecture assigns application logic to `ui` or command
-packages, these agreed ownership decisions govern the migration. Unrelated
-engine, rendering, workspace, credential and currency invariants remain in
-force.
+Where an older document assigns application logic to `ui` or command
+packages, these ownership decisions govern. Unrelated engine, rendering,
+workspace, credential and currency invariants remain in force.
 
-`docs/architecture.md` continues to describe the current checkout while work
-is pending. Implementation PRs update descriptions they make false; the last
-PR reconciles the whole architecture document with the implemented target.
-An inconsistent legacy sentence must be replaced, not retained alongside a
-contradictory new section. Conflicting ADRs, if discovered, must be amended in
-a separate documentation commit before the conflicting implementation.
+[Architecture](../../architecture.md) describes the implemented tree. An
+inconsistent legacy sentence found later must be replaced, not retained
+alongside a contradictory new section. A conflicting ADR, if discovered, must
+be amended in a separate documentation commit before the conflicting
+implementation; the stack found none.
