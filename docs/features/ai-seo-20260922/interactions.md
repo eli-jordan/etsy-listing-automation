@@ -329,8 +329,8 @@ ordinary saved-listing autosave destination from the start.
 
 The authority documents now establish the boundaries this interaction uses.
 Generation is an in-memory **AI run** with its own registry, separate from
-`ui/runs` and never on the plan/apply worker thread. It keeps no durable job
-record, and its only workspace outputs are the guarded `brief` write and the
+the deployment runs (`core/application/deploy`) and never on the plan/apply
+worker thread. It keeps no durable job record, and its only workspace outputs are the guarded `brief` write and the
 gitignored `.cache/market/` (ADR-0044), plus the listing's cached proposal in
 `.cache/proposals/` (ADR-0047). The application appends delimited JSON context and a response
 schema to plain seller-editable `prompts/seo.md`; it does not support prompt

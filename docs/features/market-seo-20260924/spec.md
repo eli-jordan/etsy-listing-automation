@@ -266,8 +266,9 @@ cancelled and fails with a timeout message.
 ## AI runs
 
 A proposal is no longer one synchronous request. The chain is one server-side
-**AI run** per listing, modelled on the plan/apply runs (`ui/runs/`) but with
-**its own in-memory registry, and a thread per run**. It never uses the
+**AI run** per listing, modelled on the plan/apply runs
+(`core/application/deploy/`) but with **its own in-memory registry, and a
+thread per run**. It never uses the
 plan/apply worker thread, so AI work and deploys don't block each other.
 
 ```

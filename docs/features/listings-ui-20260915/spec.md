@@ -151,7 +151,7 @@ Two facts feed it, and the interesting part is where each comes from.
 - **Live on Etsy.** Nothing local can answer this, because nothing this tool
   does causes it. `EtsyListingClient.listing_states` (new —
   `getListingsByListingIds`, unscoped, 100 ids a request) answers for the
-  whole table in one round trip, and `ui/api/etsystate.py` memoises the answer
+  whole table in one round trip, and `server/api/etsystate.py` memoises the answer
   for 30 seconds — `GET /api/listings/{name}` is also what every autosave
   PATCH returns, so without the memo a keystroke burst in the editor would be
   a round trip apiece. A workspace with no Etsy credentials reports nothing
@@ -202,9 +202,8 @@ The four bugs:
   there is no autosave, because there is nothing to autosave *to*.
 
 Also in this pass: `etsy-listings ui` binds `0.0.0.0` rather than loopback, so
-the workspace is reachable from a phone or another machine. `page_url` already
-pointed the native window itself at `127.0.0.1`, so nothing about the desktop
-path changes.
+the workspace is reachable from a phone or another machine. Pass
+`--host 127.0.0.1` to keep it on loopback.
 
 ### Amendment: one editor, an empty draft, and renaming
 
@@ -241,8 +240,9 @@ reading once the profile is no longer chosen before the editor opens.
 `_stub()` used to raise is a block issue instead: no design selected, no
 garment profile selected, no pricing plan and no prices. `_stub()` is gone.
 ADR-0043 finished the thought: none of those three withholds the file either.
-`newcmd.logic.build_listing_stub` stays untouched and un-deduplicated — the CLI
-`new` picker pre-fills because it asked the questions; the editor has not.
+`build_listing_stub` (now `core/application/listing_creation.py`) stays
+un-deduplicated — the CLI `new` picker pre-fills because it asked the
+questions; the editor has not.
 
 **Naming it is what creates it**, as before, but the transition is one request
 rather than a POST and a PATCH that could disagree. `POST /api/listings` takes
@@ -265,7 +265,7 @@ waived: "set `pricing_plan` or `prices`". `Listing.draft()` and
 `Listing.empty_draft()` pass a private context key; `Listing.load()`, `PATCH`
 and `POST /api/listings` all go through plain `model_validate` and cannot.
 `tests/unit/test_draft_context_is_private.py` keeps the key private by grep,
-the technique `tests/unit/test_no_bare_cv2.py` already established.
+the technique `tests/core/unit/test_no_bare_cv2.py` already established.
 
 Rejected: `model_construct`, which skips coercion as well as validation — so
 `_coerce_design` would not run and the object's annotations would lie about
@@ -340,7 +340,7 @@ therefore costs no remote write and produces no drift.
 - **Router**: introduce `react-router` (the only new frontend dependency this
   needs). Nothing today uses a router — `App.tsx` (the calibrator) is
   currently the whole page, mounted directly by `main.tsx`. The backend's SPA
-  fallback in `src/etsy_listings/ui/api/app.py` already serves `index.html`
+  fallback in `src/etsy_listings/server/api/app.py` already serves `index.html`
   for any non-`/api` path, so client-side routing works with zero backend
   change. Routes: `/` (Dashboard stub), `/listings`, `/listings/new`,
   `/listings/:name`, `/templates` (mounts the existing `<App/>` unmodified).
@@ -446,11 +446,11 @@ shop-section-validity — both need a live `plan()`. The issues banner should
 not claim to check these; if useful, a static note can point at
 `etsy-listings plan` for shop-side checks.
 
-Tests: `tests/unit/test_listing_validation.py`, table-driven, no workspace
+Tests: `tests/core/unit/test_listing_validation.py`, table-driven, no workspace
 needed for the pure parts — mirrors the "pure passes" testing philosophy
 already used for `render/`.
 
-### New API endpoints — `src/etsy_listings/ui/api/listings.py`
+### New API endpoints — `src/etsy_listings/server/api/listings.py`
 
 Follows `templates.py`'s conventions exactly: a `target()` dependency for
 existence-checking, reuse `config/listing.py`'s `Listing` model directly for
@@ -519,7 +519,7 @@ PATCH /api/listings/{name} -> partial update; the autosave endpoint
   colour-judgement preview). `preview_template` is null when the garment
   profile does not name one.
 - `GET /api/pricing-plans?garment_profile=X` -> compatible plans, via the
-  same `newcmd/logic.py` pure functions used by creation. The parameter is
+  same `core/application/pricing_plans.py` functions used by creation. The parameter is
   optional: a listing with no garment profile chosen yet has nothing to be
   compatible *with*, and asking with an empty one is more honest than asking
   with a name that cannot match and rendering every plan as "different
@@ -565,8 +565,8 @@ PATCH /api/listings/{name} -> partial update; the autosave endpoint
 
 ### Tests
 
-`tests/behaviour/test_listings_api.py`, same pattern as
-`tests/behaviour/test_calibrator_api.py`: `TestClient(create_app(workspace))`
+`tests/server/behaviour/test_listings_api.py`, same pattern as
+`tests/server/behaviour/test_calibrator_api.py`: `TestClient(create_app(workspace))`
 against a writable copy of the fixture workspace, parametrized tables for
 cross-cutting rules (bad name → 400 everywhere), docstrings on pinned status
 codes.
@@ -677,8 +677,8 @@ hooks/
 
 ## Verification
 
-- `uv run pytest tests/unit/test_listing_validation.py` and
-  `tests/behaviour/test_listings_api.py` for the backend.
+- `uv run pytest tests/core/unit/test_listing_validation.py` and
+  `tests/server/behaviour/test_listings_api.py` for the backend.
 - `npm run test` / `npm run test:coverage` in `src/ui/` for the new
   components.
 - `npm run gen:api` after any endpoint change (`export_openapi.py` →

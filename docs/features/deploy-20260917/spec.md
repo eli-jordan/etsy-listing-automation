@@ -320,13 +320,12 @@ The executor builds each run's `RunContext` through the factory, so
 credentials still resolve lazily (a plan in a workspace without Etsy still
 blocks cleanly), and browser tests pass one wired to the in-memory fakes.
 
-**Shutdown.** The executor thread is not a daemon. On shutdown (the native
-window closing, Ctrl-C on `ui --browser`) a stop flag is set: a queued run is
-cancelled, a plan run stops at its next boundary, and an apply run finishes
-the stage it is in, which records itself (ADR-0037), and starts no other. The
-native window's close handler shows *Finishing Etsy listing…* until the thread
-joins. Runs are in memory only, so a restart forgets them, and history stays
-Phase 6's `runs/` SQLite recorder.
+**Shutdown.** The executor thread is not a daemon. On shutdown (Ctrl-C on the
+foreground `ui` server) a stop flag is set: a queued run is cancelled, a plan
+run stops at its next boundary, and an apply run finishes the stage it is in,
+which records itself (ADR-0037), and starts no other. The ASGI lifespan waits
+for the thread to join before the process exits. Runs are in memory only, so a
+restart forgets them; a persisted run-history recorder does not exist.
 
 **Retention.** A finished run is kept until the next run for any of its
 listings is created. That is enough to reattach after a reload, and to show
@@ -417,22 +416,24 @@ deploys.
 | `workspace/workspace.py` | `preview_file(...)`, `preview_dir(listing)`; `remove_listing` removes previews | ADR-0040 |
 | `cli/render.py` | print drift labels when present | ADR-0038 |
 
-## UI server
+## Run coordination and server
+
+Run coordination is transport-independent core (ADR-0052); the server
+translates it into HTTP and SSE. Paths are relative to `src/etsy_listings/`.
 
 | Module | Holds |
 |---|---|
-| `ui/runs/registry.py` | typed run commands and plan/apply runtime states, event buffer, per-listing locks, retention |
-| `ui/runs/executor.py` | the FIFO worker thread, stop flag, cancellation, `EngineRunEvent` → wire events |
-| `ui/runs/events.py` | the `RunEvent` union and stage-discriminated `StagePlan`/`Plan` serialisation |
-| `ui/api/runs.py` | the six endpoints above |
-| `ui/api/listings.py` | preview file endpoint |
-| `ui/api/app.py` | `context_factory`; executor start and join on lifespan |
-| `ui/desktop.py` | close handler waits for the executor |
+| `core/application/deploy/registry.py` | typed run commands and plan/apply runtime states, event buffer, per-listing locks, retention |
+| `core/application/deploy/executor.py` | the FIFO worker thread, stop flag, cancellation, `EngineRunEvent` → run events |
+| `core/application/deploy/events.py` | the `RunEvent` union and stage-discriminated `StagePlan`/`Plan` serialisation |
+| `core/application/deploy/deployments.py` | the `Deployments` coordinator: submit, cancel, start and stop |
+| `server/api/runs.py` | the six endpoints above, SSE framing and reconnect |
+| `server/api/listings.py` | preview file endpoint |
+| `server/api/app.py` | `context_factory`; coordinator start and stop in the lifespan |
 
-`ui/runs/` is not the top-level `runs/` package the layout reserves for Phase
-6's SQLite recorder. This one holds live runs in memory, and that one will
-record finished runs. When Phase 6 lands, the recorder subscribes to the
-registry rather than replacing it.
+The deployment registry holds live runs in memory only. A persisted
+run-history recorder, if one is ever added, would subscribe to it rather than
+replace it.
 
 ## Frontend
 
