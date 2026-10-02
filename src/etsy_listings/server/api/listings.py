@@ -39,8 +39,7 @@ from fastapi.responses import Response
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.registry import AiRunRegistry
-from etsy_listings.core.application.dependencies import EtsyStates
-from etsy_listings.core.application.deploy.executor import ContextFactory
+from etsy_listings.core.application.dependencies import ContextFactory, EtsyStates
 from etsy_listings.core.application.listing_creation import create_listing as create
 from etsy_listings.core.application.listing_edits import edit_listing
 from etsy_listings.core.application.listing_identity import delete_listing as delete

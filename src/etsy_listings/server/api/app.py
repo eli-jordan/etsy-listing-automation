@@ -20,9 +20,12 @@ from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.ai.readiness import ProviderFactory, default_ai_providers
-from etsy_listings.core.application.ai.runner import MarketClientFactory, default_market_client
+from etsy_listings.core.application.dependencies import (
+    ContextFactory,
+    MarketClientFactory,
+    default_market_client,
+)
 from etsy_listings.core.application.deploy.deployments import Deployments
-from etsy_listings.core.application.deploy.executor import ContextFactory
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace

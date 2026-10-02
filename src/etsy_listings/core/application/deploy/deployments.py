@@ -18,8 +18,9 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
+from etsy_listings.core.application.dependencies import ContextFactory
 from etsy_listings.core.application.deploy.events import RunScope
-from etsy_listings.core.application.deploy.executor import ContextFactory, RunExecutor
+from etsy_listings.core.application.deploy.executor import RunExecutor
 from etsy_listings.core.application.deploy.registry import (
     Conflict,
     Run,

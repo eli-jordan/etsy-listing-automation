@@ -29,8 +29,8 @@ from etsy_listings.core.application.ai.readiness import (
     unready_reason,
 )
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry, Conflict, Deploying
-from etsy_listings.core.application.ai.runner import (
-    AiRunner,
+from etsy_listings.core.application.ai.runner import AiRunner
+from etsy_listings.core.application.dependencies import (
     MarketClientFactory,
     default_market_client,
 )
