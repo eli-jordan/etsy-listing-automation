@@ -29,10 +29,9 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, ValidationInfo, model_validator
 
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 from etsy_listings.core.config.listing import MediaEntry, check_production_fields, resolve_price
 from etsy_listings.core.config.money import Money, PriceField
 from etsy_listings.core.config.pricing_plan import PricingPlan
@@ -108,7 +107,7 @@ class ListingTemplate(BaseModel):
         cycle through the workspace package."""
         if not path.is_file():
             raise ConfigLoadError(path, "listing template file not found")
-        raw = yaml.safe_load(read(path).decode("utf-8")) or {}
+        raw = parse_yaml(path, read(path).decode("utf-8")) or {}
         try:
             return cls.model_validate(raw, context={"currency": currency})
         except ValidationError as exc:

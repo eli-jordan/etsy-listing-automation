@@ -5,10 +5,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 
 
 class MissingDefaultError(ValueError):
@@ -171,7 +170,7 @@ class Defaults(BaseModel):
     def load(cls, path: Path) -> Defaults:
         if not path.is_file():
             raise ConfigLoadError(path, "file not found")
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw = parse_yaml(path, path.read_text(encoding="utf-8")) or {}
         if isinstance(raw, dict):
             _refuse_moved_keys(path, raw)
         try:

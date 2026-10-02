@@ -10,10 +10,9 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Literal
 
-import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, field_validator
 
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 
 
 class PrintArea(BaseModel):
@@ -95,7 +94,7 @@ class GarmentProfile(BaseModel):
     def load(cls, path: Path) -> GarmentProfile:
         if not path.is_file():
             raise ConfigLoadError(path, "garment profile file not found")
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw = parse_yaml(path, path.read_text(encoding="utf-8")) or {}
         try:
             return cls.model_validate(raw)
         except ValidationError as exc:

@@ -14,10 +14,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import yaml
 from pydantic import BaseModel, ConfigDict, ValidationError, ValidationInfo, model_validator
 
-from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error
+from etsy_listings.core.config.errors import ConfigLoadError, format_validation_error, parse_yaml
 from etsy_listings.core.config.money import Money, PriceField, require_currency
 
 
@@ -46,7 +45,7 @@ class PricingPlan(BaseModel):
     def load(cls, path: Path, *, currency: str) -> PricingPlan:
         if not path.is_file():
             raise ConfigLoadError(path, "pricing plan file not found")
-        raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+        raw = parse_yaml(path, path.read_text(encoding="utf-8")) or {}
         try:
             return cls.model_validate(raw, context={"currency": currency})
         except ValidationError as exc:

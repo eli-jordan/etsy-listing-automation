@@ -254,6 +254,19 @@ class TestDraftAndRead:
         assert len(card.template.colors) == 4
         assert card.design_minimum is not None
 
+    def test_the_index_leaves_out_a_template_that_is_not_yaml(self, workspace: Workspace) -> None:
+        # A hand edit can leave a file YAML cannot parse at all, not just one
+        # that fails validation; the index used to answer that with a 500.
+        _create(workspace)
+        (workspace.listing_templates_dir() / "garbled").mkdir()
+        (workspace.listing_templates_dir() / "garbled" / "template.yaml").write_text(
+            "colors: [black\n", "utf-8"
+        )
+
+        cards = list_listing_templates(workspace, batches=BatchStore(workspace))
+
+        assert [card.name for card in cards] == [NAME]
+
 
 class TestEdit:
     def test_an_incomplete_document_is_not_saved_and_the_file_is_untouched(
