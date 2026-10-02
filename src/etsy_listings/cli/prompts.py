@@ -1,10 +1,10 @@
 """How an interactive command asks a question, given the terminal it got.
 
-A package-root leaf like:mod:`etsy_listings.terminal`, and for the same
+The CLI's, beside :mod:`etsy_listings.cli.terminal` and for the same
 reason: it answers a question about the terminal rather than about any one
-command. It lived in ``newcmd/`` while ``new`` was the only thing that
-prompted; ``setup`` is the second, and reaching into another
-package's submodule for it would have been the wrong way to share this.
+wizard, and only the CLI talks to a terminal -- core never prompts
+(ADR-0052). It lived in ``newcmd/`` while ``new`` was the only thing that
+prompted, then at the package root once ``setup`` became the second.
 
 This module exists because of a hard constraint discovered while building the
 garment picker: **questionary cannot prompt at all under cygwin.**

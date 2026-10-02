@@ -2,7 +2,7 @@
 
 Every decision lives in:mod:`etsy_listings.setupcmd.logic`; this module only
 orders the questions and writes files. Questions go through
-:mod:`etsy_listings.prompts` rather than questionary directly, because
+:mod:`etsy_listings.cli.prompts` rather than questionary directly, because
 questionary cannot prompt at all under cygwin (see that module).
 
 Two orderings matter and are not arbitrary:
@@ -26,7 +26,8 @@ from typing import Any
 import typer
 import yaml
 
-from etsy_listings import credentials, prompts
+from etsy_listings import credentials
+from etsy_listings.cli import prompts
 from etsy_listings.core import connections
 from etsy_listings.core.ai.brief import default_brief_prompt_text
 from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text

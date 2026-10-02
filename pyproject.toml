@@ -171,8 +171,6 @@ forbidden_modules = [
     "etsy_listings.setupcmd",
     "etsy_listings.authcmd",
     "etsy_listings.credentials",
-    "etsy_listings.prompts",
-    "etsy_listings.terminal",
     "fastapi",
     "starlette",
     "uvicorn",
@@ -190,8 +188,6 @@ forbidden_modules = [
     "etsy_listings.setupcmd",
     "etsy_listings.authcmd",
     "etsy_listings.credentials",
-    "etsy_listings.prompts",
-    "etsy_listings.terminal",
     "typer",
     "questionary",
 ]
@@ -205,8 +201,6 @@ source_modules = [
     "etsy_listings.setupcmd",
     "etsy_listings.authcmd",
     "etsy_listings.credentials",
-    "etsy_listings.prompts",
-    "etsy_listings.terminal",
 ]
 forbidden_modules = ["etsy_listings.server", "fastapi", "starlette", "uvicorn"]
 ignore_imports = [

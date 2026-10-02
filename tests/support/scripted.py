@@ -12,7 +12,7 @@ name"`` matches the prompt regardless of what precedes it, and a question with
 no scripted answer is an error naming what was asked rather than an
 ``IndexError`` out of a spent queue.
 
-The double replaces :mod:`etsy_listings.prompts`' three entry points, which is
+The double replaces :mod:`etsy_listings.cli.prompts`' three entry points, which is
 the seam both wizards actually use. It does not replace ``input()``: which
 *backend* asks a question is a separate concern with its own tests (a cygwin
 pty cannot run prompt_toolkit, so the plain-input fallback has to keep
@@ -26,7 +26,7 @@ from typing import Any
 
 import pytest
 
-from etsy_listings import prompts
+from etsy_listings.cli import prompts
 
 Answers = dict[str, Any]
 """Question fragment -> the answer. A ``list`` value is *successive* answers to
@@ -114,7 +114,7 @@ class Scripted:
 def install(monkeypatch: pytest.MonkeyPatch, answers: Answers) -> Scripted:
     """Patch the three prompt entry points and hand back the recorder.
 
-    Patched on :mod:`etsy_listings.prompts` itself rather than on each
+    Patched on :mod:`etsy_listings.cli.prompts` itself rather than on each
     command's module: both wizards call it as a module attribute, so there is
     one object to replace and no way for a new caller to miss the double.
     """

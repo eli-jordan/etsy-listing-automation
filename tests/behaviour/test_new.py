@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings import prompts
+from etsy_listings.cli import prompts
 from etsy_listings.core.clients.printify.models import Blueprint
 from etsy_listings.core.workspace.workspace import Workspace
 

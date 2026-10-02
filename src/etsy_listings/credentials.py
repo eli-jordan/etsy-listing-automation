@@ -46,7 +46,7 @@ from typing import NoReturn
 
 import typer
 
-from etsy_listings import prompts
+from etsy_listings.cli import prompts
 from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
     ETSY_KEYSTRING_VAR,

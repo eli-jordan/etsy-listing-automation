@@ -2,7 +2,7 @@
 decision it makes is delegated to:mod:`etsy_listings.newcmd.logic`, which is
 what the behaviour tests exercise through a fake catalog. This module only
 sequences the questions; *how* a question gets asked is
-:mod:`etsy_listings.prompts`, which picks a backend that can actually
+:mod:`etsy_listings.cli.prompts`, which picks a backend that can actually
 drive the terminal it was given (questionary cannot, under cygwin).
 """
 
@@ -12,7 +12,7 @@ from pathlib import Path
 
 import typer
 
-from etsy_listings import prompts, terminal
+from etsy_listings.cli import prompts, terminal
 from etsy_listings.core.application.listing_creation import write_listing
 from etsy_listings.core.application.pricing_plans import load_candidate_pricing_plans
 from etsy_listings.core.application.pricing_plans import pricing_plan_ref as make_pricing_plan_ref

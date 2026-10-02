@@ -17,7 +17,7 @@ import pytest
 import typer
 import yaml
 
-from etsy_listings import prompts
+from etsy_listings.cli import prompts
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyShopClient
 from etsy_listings.core.clients.etsy.models import ReturnPolicy
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop

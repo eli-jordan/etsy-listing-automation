@@ -45,8 +45,6 @@ FORBIDDEN = [
     "etsy_listings.setupcmd",
     "etsy_listings.authcmd",
     "etsy_listings.credentials",
-    "etsy_listings.prompts",
-    "etsy_listings.terminal",
 ]
 
 _PROBE = """

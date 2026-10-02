@@ -29,7 +29,8 @@ from typing import Literal
 
 import typer
 
-from etsy_listings import credentials, prompts
+from etsy_listings import credentials
+from etsy_listings.cli import prompts
 from etsy_listings.authcmd import logic
 from etsy_listings.core import connections
 from etsy_listings.core.clients.etsy import callback as callback_module

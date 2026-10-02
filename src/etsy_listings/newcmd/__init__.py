@@ -8,7 +8,7 @@ CLI command itself is still ``new``.
 Split two ways, and the split is the point. ``logic`` is pure: every decision
 `new` makes is a function of its inputs, testable through the fake catalog
 client with no terminal at all. ``interactive`` only sequences the questions,
-asking each one through:mod:`etsy_listings.prompts` -- which used to live
+asking each one through:mod:`etsy_listings.cli.prompts` -- which used to live
 here, and moved to the package root when ``setup`` became the second command
 that had to prompt.
 

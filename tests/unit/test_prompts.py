@@ -19,7 +19,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from etsy_listings import prompts
+from etsy_listings.cli import prompts
 
 from tests.support.doubles import FakeRun, replies
 

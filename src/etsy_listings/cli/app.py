@@ -16,7 +16,7 @@ from typing import Any
 
 import typer
 
-from etsy_listings import prompts, terminal
+from etsy_listings.cli import prompts, terminal
 from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
 from etsy_listings.authcmd import Part as AuthPart
 from etsy_listings.cli.options import open_workspace, root_option
