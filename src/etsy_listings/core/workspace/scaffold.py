@@ -1,7 +1,7 @@
 """The two files a workspace needs before it is one, and the rules for
 editing them without disturbing what the user put there.
 
-Both were `setupcmd`'s until `auth` needed them too: `auth` writes
+Both were `setup`'s until `auth` needed them too: `auth` writes
 credentials into `.env`, and it runs *before* `setup`, so it is also the
 command that must put the `.gitignore` in place -- a secret written into a
 directory that some enclosing repository is already tracking is not something

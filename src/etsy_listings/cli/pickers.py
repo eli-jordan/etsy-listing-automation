@@ -27,10 +27,7 @@ from etsy_listings.core.config.pricing_plan import PricingPlan
 #
 # Printify offers hundreds of blueprints and `--category tshirt` still leaves
 # dozens, so the rows are columned -- marker, brand, model, title -- and the
-# ones this workspace already has a garment profile for sort to the top. Building them
-# lives here rather than in the prompt so it can be tested without a terminal,
-# the same reason every other decision in `new` does. Filtering, on a terminal
-# that can do it at all, is fzf's job -- see `prompts.py`.
+# ones this workspace already has a garment profile for sort to the top.
 # ----------------------------------------------------------------------
 
 LOCAL_MARKER = "⭐"
@@ -161,6 +158,10 @@ def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Cho
         for path, modified in entries
     ]
 
+
+# ----------------------------------------------------------------------
+# The pricing-plan picker's rows, and the sentinel row that creates a plan.
+# ----------------------------------------------------------------------
 
 CREATE_NEW_PLAN_LABEL = "+ create a new pricing plan"
 

@@ -21,6 +21,7 @@ import pytest
 CORE_MODULES = [
     "etsy_listings.core",
     "etsy_listings.core.ai",
+    "etsy_listings.core.application",
     "etsy_listings.core.batches",
     "etsy_listings.core.clients",
     "etsy_listings.core.config",

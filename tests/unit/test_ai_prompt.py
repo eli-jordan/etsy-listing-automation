@@ -2,7 +2,7 @@
 and delimited-context prompt assembly (AI SEO implementation plan, PR3,
 items 2-4).
 
-`seed_prompt` is the one seam `setupcmd` needs (see
+`seed_prompt` is the one seam `setup` needs (see
 `test_setup_logic.py`'s own AI-prompt tests): create a prompt file when
 absent, warn and leave a seller's file exactly alone otherwise. Everything
 else here is pure string/JSON assembly, so it is tested directly against

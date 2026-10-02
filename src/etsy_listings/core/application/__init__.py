@@ -1,4 +1,5 @@
-"""Application operations: workflows the server and the CLI share.
+"""Application operations: workflows the server and the CLI share, and the
+reusable operations behind the CLI's wizards.
 
 ADR-0052 and the module-structure specification: an operation takes
 application inputs and its dependencies, coordinates domain modules --
@@ -18,13 +19,39 @@ import names the module it depends on. Public interfaces:
 ``listing_edits``
     ``edit_listing``: an editor save's locked read-merge-write.
 ``listing_creation``
-    ``create_listing``, ``write_listing``.
+    ``create_listing``, ``write_listing``; the ``new`` wizard's stub --
+    ``load_template_kind``, ``build_media_entries``, ``build_listing_stub``,
+    ``validate_listing_stub``.
 ``listing_identity``
     ``rename_listing``, ``delete_listing`` -> ``Deletion``: everything keyed
     by a listing's name follows or goes with it.
 ``pricing_plans``
     ``load_candidate_pricing_plans``, ``pricing_plan_options`` /
-    ``PricingPlanOption``, ``pricing_plan_ref``.
+    ``PricingPlanOption``, ``pricing_plan_ref``; a starting plan from live
+    costs -- ``create_starting_pricing_plan`` -> ``StartingPricingPlan``,
+    built from ``compute_starting_prices`` and ``write_pricing_plan``.
+``garment_profiles``
+    ``filter_blueprints_by_category``, ``local_blueprint_keys``,
+    ``ensure_garment_profile`` -> ``SavedGarmentProfile``,
+    ``listing_colours``, ``resolve_colour_slugs``, and the pieces of a
+    profile (``build_garment_profile``, ``garment_profile_slug_for``,
+    ``sort_sizes``, ``write_garment_profile_if_absent``).
+``credentials``
+    ``Credential`` (``PRINTIFY``, ``ETSY_APP_KEY``, ``ANTHROPIC``),
+    ``stored`` / ``stored_values`` (environment over ``.env``), ``store``,
+    ``verify_printify_token``, ``verify_etsy_app_key``,
+    ``credential_status`` -> ``CredentialStatus`` / ``TokenSummary``, and
+    the Etsy grant either side of the browser -- ``begin_etsy_sign_in`` ->
+    ``EtsySignIn``, ``complete_etsy_sign_in`` -> ``SignedIn``.
+``workspace_setup``
+    ``create_directories``, ``sync_packaged_prompts`` -> ``PackagedPrompt``,
+    ``read_shop_document``, ``SetupAnswers`` / ``POD_DEFAULTS``,
+    ``shop_yaml_document``, ``render_shop_yaml``, ``save_setup``.
+``shop_discovery``
+    ``select_shop`` -> ``ShopSelection``; ``etsy_access`` -> ``EtsyAccess``,
+    ``find_etsy_shop`` -> ``FoundShop``, ``lookup_etsy_shop`` ->
+    ``ShopLookup``, ``return_policy_options`` -> ``ReturnPolicyOptions``,
+    ``policy_terms``, ``currency_default``.
 ``mockup_templates``
     The calibrator: ``list_templates`` -> ``TemplateOverview``,
     ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,

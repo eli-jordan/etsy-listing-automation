@@ -10,7 +10,7 @@ it is separate from client construction. Market requests never attach a
 bearer, avoiding unnecessary refresh-token rotation.
 
 This module does not verify anything. Proving a credential works is
-``credentials.py``'s job, and it is a separate one: `setup` and `auth` verify
+``core/application/credentials.py``'s job, and it is a separate one: `setup` and `auth` verify
 a token the user has just typed, before it is stored, against a client built
 here from that token rather than from the file it is not yet in.
 """
