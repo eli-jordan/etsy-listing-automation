@@ -58,6 +58,9 @@ import names the module it depends on. Public interfaces:
     ``template_photo``, ``template_swatch``, and the preview scene --
     ``saved_preview`` / ``unsaved_preview`` -> ``PreviewScene``,
     ``compose_preview``, ``scaled``. Images arrive decoded from the caller.
+``calibration_designs``
+    The calibrator's uploaded test designs: ``save_uploaded_design`` (name
+    and image checks, then the write), ``uploaded_design``.
 ``listing_template_library``
     ``list_listing_templates`` -> ``ListingTemplateCard``,
     ``read_listing_template`` / ``draft_listing_template`` ->
@@ -77,7 +80,8 @@ import names the module it depends on. Public interfaces:
 ``refusals``
     ``ListingMissing``, ``ListingNameTaken``, ``PublishedListingDeletion``,
     ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
-    refusals; ``ListingTemplateMissing``, ``ReservedListingTemplateName``,
+    refusals, ``DesignUploadRefused``, ``CalibrationDesignMissing``;
+    ``ListingTemplateMissing``, ``ReservedListingTemplateName``,
     ``ListingTemplateSourceRefused``; ``StagingMissing``, ``StagedRowMissing``,
     ``BatchMissing``, ``BatchRowMissing``, ``BatchRowUploadMissing``,
     ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``;
