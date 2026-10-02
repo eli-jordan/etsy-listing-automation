@@ -197,3 +197,33 @@ ignore_imports = [
     # indirectly, which the ignore permits; any other route to server breaks.
     "etsy_listings.cli.ui -> etsy_listings.server.hosting",
 ]
+
+# Protected implementation (ADR-0052; module-structure spec, "Application
+# callers cannot bypass protected implementation modules"). core.application
+# is imported module by module, with no core-wide facade; each package
+# __init__.py lists its public modules and names the implementation-only ones
+# below. Only the coordinator a module serves may import it -- not server, not
+# the CLI, not another operation and not a package initializer. Tests are
+# outside this graph; tests/test_protected_test_imports.py reads these
+# contracts and lets only a module's own tests import it.
+
+[[tool.importlinter.contracts]]
+name = "Deployment runs are reached through Deployments, not its worker or review check"
+type = "protected"
+protected_modules = [
+    "etsy_listings.core.application.deploy.executor",
+    "etsy_listings.core.application.deploy.review",
+]
+allowed_importers = ["etsy_listings.core.application.deploy.deployments"]
+as_packages = false
+
+[[tool.importlinter.contracts]]
+name = "AI runs are reached through AiCoordinator, not the thread that runs them"
+type = "protected"
+protected_modules = ["etsy_listings.core.application.ai.runner"]
+allowed_importers = [
+    "etsy_listings.core.application.ai.coordinator",
+    # The queue drafts batch rows through the same runs (ADR-0048).
+    "etsy_listings.core.application.ai.batch_queue",
+]
+as_packages = false

@@ -19,13 +19,21 @@ interfaces:
 ``deployments``
     ``Deployments`` -- the coordinator a host constructs once, starts and
     stops: ``submit``, ``cancel``, ``get``, ``runs``.
-``review``
-    ``check_reviewed_apply`` -- a workspace apply names exactly its review
-    (ADR-0042), or ``refusals.ReviewedPlanRefused``.
-``executor``
-    ``RunExecutor`` -- the one FIFO worker thread; ``ContextFactory``.
 ``events``
     The ``RunEvent`` union, its phases and ``TERMINAL_PHASES``, and the
     ``Plan``/``StagePlan`` DTOs. Transport-independent pydantic models, so the
     same models are the wire payload rather than a second representation.
+
+The context a host injects is ``application.dependencies.ContextFactory``.
+
+Implementation-only, importable by ``deployments`` alone (Import Linter's
+``protected`` contract in ``pyproject.toml``; tests:
+``tests/test_protected_test_imports.py``):
+
+``executor``
+    ``RunExecutor`` -- the one FIFO worker thread ``Deployments`` owns.
+``review``
+    ``check_reviewed_apply`` -- a workspace apply names exactly its review
+    (ADR-0042); callers see it as ``Deployments.submit`` refusing with
+    ``refusals.ReviewedPlanRefused``.
 """

@@ -8,8 +8,13 @@ modules the contracts name, then adds one representative import. The real
 source is never edited to prove a point.
 
 The fixture contains every import edge the contracts deliberately ignore
-(Import Linter reports an ignored import that matches nothing), so the
+(Import Linter reports an ignored import that matches nothing) and every
+protected module imported by each of its allowed importers, so the
 unmodified fixture is the passing control.
+
+Which test files may import a protected module is a separate check over
+``tests/`` (``test_protected_test_imports.py``): these contracts see only
+``etsy_listings``.
 """
 
 from __future__ import annotations
@@ -26,6 +31,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = "etsy_listings"
+APPLICATION = f"{PACKAGE}.core.application"
 
 
 def _contracts() -> list[dict[str, Any]]:
@@ -59,6 +65,12 @@ def _fixture(tmp_path: Path) -> Path:
             importer, imported = (part.strip() for part in edge.split("->"))
             _write_module(tree, imported)
             _write_module(tree, importer, f"import {imported}\n")
+        # A protected module's allowed importers really import it, so the
+        # control proves the contract admits them as well as rejecting others.
+        for protected in contract.get("protected_modules", []):
+            _write_module(tree, protected)
+            for importer in contract["allowed_importers"]:
+                _write_module(tree, importer, f"import {protected}\n")
     # Command registration reaching the launcher is intended (plan, PR 5).
     _write_module(tree, f"{PACKAGE}.cli.app", f"import {PACKAGE}.cli.ui\n")
     return tree
@@ -75,6 +87,13 @@ def _lint(tree: Path) -> subprocess.CompletedProcess[str]:
         text=True,
         check=False,
     )
+
+
+def test_the_only_ignored_import_is_the_ui_launcher_s_startup_edge() -> None:
+    """Temporary exclusions were allowed while code migrated, each naming the
+    PR that removed it; all were gone by PR 11. What remains is permanent."""
+    ignored = [edge for contract in _contracts() for edge in contract.get("ignore_imports", [])]
+    assert ignored == [f"{PACKAGE}.cli.ui -> {PACKAGE}.server.hosting"]
 
 
 def test_the_fixture_mirroring_the_real_layout_passes(tmp_path: Path) -> None:
@@ -114,6 +133,18 @@ VIOLATIONS = {
     "a CLI module reaches server indirectly": {
         f"{PACKAGE}.cli.other": f"import {PACKAGE}.helper\n",
         f"{PACKAGE}.helper": f"import {PACKAGE}.server.api\n",
+    },
+    "server bypasses Deployments to its worker": {
+        f"{PACKAGE}.server.api.leak": f"import {APPLICATION}.deploy.executor\n",
+    },
+    "the CLI bypasses the AI coordinator to its runner": {
+        f"{PACKAGE}.cli.other": f"import {APPLICATION}.ai.runner\n",
+    },
+    "another operation reaches the AI runner": {
+        f"{APPLICATION}.batch_workflow": f"import {APPLICATION}.ai.runner\n",
+    },
+    "a package initializer re-exports the deploy review": {
+        f"{APPLICATION}.deploy": f"import {APPLICATION}.deploy.review\n",
     },
 }
 

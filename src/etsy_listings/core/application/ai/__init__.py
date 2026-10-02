@@ -21,9 +21,6 @@ interfaces:
     ``AiRunRegistry`` -- one active run per listing, deploy holds; ``AiRun``
     -- a run's phase, steps, cancel event and replayable event log, with the
     blocking ``wait_for_events`` an SSE loop polls; ``Conflict``.
-``runner``
-    ``AiRunner`` -- the chain on a thread per run, its watchdog and shutdown;
-    ``MarketClientFactory``, ``default_market_client``.
 ``batch_queue``
     ``BatchQueue`` -- the dispatcher: concurrency, round-robin across
     batches, interrupted-row recovery, the seller's controls, ``blocked``
@@ -38,4 +35,14 @@ interfaces:
     The ``AnyAiRunEvent`` union and ``WorkflowStep``. Transport-independent
     pydantic models, so the same models are the wire payload rather than a
     second representation.
+
+The market client a host injects is ``application.dependencies``'
+``MarketClientFactory`` (default ``default_market_client``).
+
+Implementation-only, importable by ``coordinator`` and ``batch_queue`` alone
+(Import Linter's ``protected`` contract in ``pyproject.toml``; tests:
+``tests/test_protected_test_imports.py``):
+
+``runner``
+    ``AiRunner`` -- the chain on a thread per run, its watchdog and shutdown.
 """

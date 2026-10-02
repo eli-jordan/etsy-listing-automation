@@ -94,6 +94,13 @@ import names the module it depends on. Public interfaces:
     AI runs, the batch AI queue, readiness and proposals -- the coordinator,
     registry, runner and their events; see the subpackage's own initialiser.
 ``dependencies``
-    ``EtsyStates``: what operations take the UI process's Etsy state memo
-    through, which stays in the server.
+    The seams a host fills: ``EtsyStates`` (the UI process's Etsy state memo,
+    which stays in the server), ``ContextFactory`` (a deployment run's
+    engine context) and ``MarketClientFactory`` / ``default_market_client``
+    (the AI runs' Etsy market client).
+
+Every module above is public. The implementation-only modules are inside
+``deploy`` (``executor``, ``review``) and ``ai`` (``runner``), named in
+their initialisers and protected by Import Linter so only their coordinator
+imports them.
 """
