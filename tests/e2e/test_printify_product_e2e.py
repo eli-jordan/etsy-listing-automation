@@ -492,17 +492,27 @@ class TestWhatAnUpdateDoes:
             update({"print_areas": _whole_area(live, design)})
 
     def test_variant_groups_may_carry_different_artwork(
-        self, live: dict[str, Any], printify_api: httpx.Client, update, design: dict[str, Any]
+        self,
+        live: dict[str, Any],
+        printify_api: httpx.Client,
+        update,
+        design: dict[str, Any],
+        variants: VariantSet,
     ) -> None:
         """Several ``print_areas`` entries partitioning the variants, each with
         its own image. This is the API support that on-light/on-dark
         artwork needs, and it was an open question until now."""
         light_ink = _upload(printify_api, "e2e-light-ink.png", _test_design((1100, 1320)))
         assert light_ink["id"] != design["id"]
+        # The colour comes from the catalog's options, as the stage resolves
+        # it -- not from the variant title, whose order Printify changed from
+        # "Black / S" to "S / Black" and which left this group empty.
+        black = {v.id for v in variants.variants if v.options.color == COLOURS[0]}
         every = [v["id"] for v in live["variants"]]
         first_colour = sorted(
-            v["id"] for v in live["variants"] if v["is_enabled"] and v["title"].startswith("Black")
+            v["id"] for v in live["variants"] if v["is_enabled"] and v["id"] in black
         )
+        assert first_colour, f"the product sells no {COLOURS[0]} variant"
         rest = [v for v in every if v not in first_colour]
         after = update(
             {
