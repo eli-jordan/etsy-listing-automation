@@ -468,7 +468,15 @@ def main() -> None:
     # Typer callback because it mutates process-global streams, which a test
     # driving `app` through CliRunner should not have done to it.
     terminal.adopt_declared_encoding()
-    app()
+    try:
+        app()
+    except OSError as exc:
+        # `... | head` closing the pipe early is not a failure worth a
+        # traceback; exit 1 as Click does for its own broken-pipe case.
+        if not terminal.stdout_reader_gone(exc):
+            raise
+        terminal.discard_stdout()
+        sys.exit(1)
 
 
 if __name__ == "__main__":
