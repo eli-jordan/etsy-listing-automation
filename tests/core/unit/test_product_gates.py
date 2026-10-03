@@ -44,9 +44,13 @@ PROFILE = GarmentProfile(
     blueprint=BlueprintRef(brand="Comfort Colors", model="1717"),
     print_provider="Monster Digital",
     placeholder="front",
-    print_area=PrintArea(width=4200, height=4800),
+    print_area=PrintArea(width=420, height=480),
     sizes=["S", "M", "L"],
 )
+"""A tenth of the real 1717 front panel (T05): the rule is a ratio, and a
+full-size RGBA design costs each case a ~80 MB encode. One case below keeps
+the real dimensions."""
+FULL_PROFILE = PROFILE.model_copy(update={"print_area": PrintArea(width=4200, height=4800)})
 
 
 def _design(tmp_path: Path, size: tuple[int, int], mode: str = "RGBA") -> Path:
@@ -65,22 +69,26 @@ def _refusal(blocked: Blocked | None) -> str:
 
 
 def test_a_design_at_the_print_area_passes(tmp_path: Path) -> None:
-    assert check_design_resolution(_design(tmp_path, (4200, 4800)), PROFILE) is None
+    assert check_design_resolution(_design(tmp_path, (420, 480)), PROFILE) is None
 
 
-def test_a_design_within_ten_percent_passes(tmp_path: Path) -> None:
+def test_a_design_exactly_at_the_ninety_percent_floor_passes(tmp_path: Path) -> None:
+    assert check_design_resolution(_design(tmp_path, (378, 432)), PROFILE) is None
+
+
+def test_the_workspace_s_real_design_passes_the_real_print_area(tmp_path: Path) -> None:
     """The workspace's own 4000x4800 file against a 4200x4800 area -- 4.8%
     short, invisible in print. A gate that rejects it is a gate that gets
-    switched off."""
-    assert check_design_resolution(_design(tmp_path, (4000, 4800)), PROFILE) is None
+    switched off. Kept at full size as the representative real-scale case."""
+    assert check_design_resolution(_design(tmp_path, (4000, 4800)), FULL_PROFILE) is None
 
 
 def test_a_design_larger_than_the_print_area_passes(tmp_path: Path) -> None:
     """The rule is a floor, not a target: extra pixels cost nothing."""
-    assert check_design_resolution(_design(tmp_path, (8400, 9600)), PROFILE) is None
+    assert check_design_resolution(_design(tmp_path, (840, 960)), PROFILE) is None
 
 
-@pytest.mark.parametrize("size", [(3779, 4800), (4200, 4319), (120, 140)])
+@pytest.mark.parametrize("size", [(377, 480), (420, 431), (120, 140)])
 def test_a_design_short_on_either_axis_is_refused(tmp_path: Path, size) -> None:
     assert check_design_resolution(_design(tmp_path, size), PROFILE) is not None
 
@@ -90,15 +98,15 @@ def test_the_refusal_names_the_size_it_wanted(tmp_path: Path) -> None:
     them back to their design software, which is where the fix is."""
     message = _refusal(check_design_resolution(_design(tmp_path, (120, 140)), PROFILE))
 
-    assert "120" in message and "140" in message
-    assert "3780" in message and "4320" in message, "the 90% floor, spelled out"
-    assert "4200" in message and "4800" in message, "and the print area it came from"
+    assert "120x140" in message
+    assert "378x432" in message, "the 90% floor, spelled out"
+    assert "420x480" in message, "and the print area it came from"
 
 
 def test_a_design_without_an_alpha_channel_is_refused(tmp_path: Path) -> None:
     """A print file with no transparency prints its background as a rectangle
     of ink on the shirt."""
-    opaque = _design(tmp_path, (4200, 4800), mode="RGB")
+    opaque = _design(tmp_path, (420, 480), mode="RGB")
 
     assert "alpha" in _refusal(check_design_resolution(opaque, PROFILE))
 
@@ -213,7 +221,7 @@ def test_a_gate_agrees_with_the_banner_about_copy(title: str) -> None:
         assert gate.message == banner[0].message
 
 
-@pytest.mark.parametrize("size", [(120, 140), (4200, 4800)])
+@pytest.mark.parametrize("size", [(120, 140), (420, 480)])
 def test_a_gate_agrees_with_the_banner_about_a_design(
     tmp_path: Path, size: tuple[int, int]
 ) -> None:

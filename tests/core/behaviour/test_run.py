@@ -43,9 +43,9 @@ from tests.support.builders import (
     copy_listing,
     set_copy,
     set_shop_id,
-    write_design,
 )
 from tests.support.builders import FIXTURE_LISTING as LISTING
+from tests.support.pipeline import at_print_area
 
 
 def _ctx(root: Path, **overrides: object) -> RunContext:
@@ -166,7 +166,7 @@ def _configured(root: Path) -> Path:
     catalog is reached rather than blocked in front of."""
     set_shop_id(root, 28819281)
     set_copy(root, title="Take a Hike", description="A shirt for walking.")
-    write_design(root, (4500, 5400))
+    at_print_area(root)
     return root
 
 
