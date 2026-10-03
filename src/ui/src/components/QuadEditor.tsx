@@ -1,8 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import type { BoundingBox, Point } from "../types";
-
-const NUDGE_PX = 1;
-const NUDGE_PX_FAST = 8;
+import { cornerDragged, labelAnchor, menuPlacement, moved, nudged } from "./quadGeometry";
 
 interface Props {
   imageUrl: string;
@@ -106,63 +104,9 @@ type Drag =
   | { kind: "corner"; pointIndex: number; start: BoundingBox }
   | { kind: "box"; boxIndex: number; origin: Point; start: BoundingBox };
 
-/** How far a box may be shrunk in one gesture. Not zero: at zero the box
- * collapses to a point, and a point has no corners left to drag it back
- * out by. */
-const MIN_SCALE = 0.05;
-
-function centre(box: BoundingBox): Point {
-  return {
-    x: box.reduce((sum, p) => sum + p.x, 0) / box.length,
-    y: box.reduce((sum, p) => sum + p.y, 0) / box.length,
-  };
-}
-
-/**
- * `start`, scaled about `anchor` so that its `pointIndex` corner sits as close
- * to `pointer` as a shape-preserving scale allows.
- *
- * The factor is the pointer's projection onto the anchor-to-corner vector, so
- * dragging along that diagonal tracks the cursor exactly and dragging across
- * it does nothing -- which is what "same shape, bigger or smaller" means. Every
- * corner is then moved by the same factor, so all four angles, and therefore
- * any perspective skew the box already had, are preserved exactly.
- */
-function scaledAbout(
-  start: BoundingBox,
-  pointIndex: number,
-  anchor: Point,
-  pointer: Point,
-): BoundingBox {
-  const corner = start[pointIndex];
-  if (!corner) return start;
-  const vx = corner.x - anchor.x;
-  const vy = corner.y - anchor.y;
-  const lengthSquared = vx * vx + vy * vy;
-  // A corner sitting on its own anchor has no direction to scale along --
-  // only reachable from a degenerate box, but dividing by it would produce
-  // NaN coordinates and a box that vanishes.
-  if (lengthSquared === 0) return start;
-  const factor = Math.max(
-    MIN_SCALE,
-    ((pointer.x - anchor.x) * vx + (pointer.y - anchor.y) * vy) / lengthSquared,
-  );
-  return start.map((p) => ({
-    x: anchor.x + (p.x - anchor.x) * factor,
-    y: anchor.y + (p.y - anchor.y) * factor,
-  })) as BoundingBox;
-}
-
 function menuAnchor(clientX: number, clientY: number, svg: SVGSVGElement | null): Menu {
   const host = svg?.getBoundingClientRect();
   return { x: clientX - (host?.left ?? 0), y: clientY - (host?.top ?? 0) };
-}
-
-/** Where a box's caption hangs: centred under its lowest edge. */
-function labelAnchor(box: BoundingBox): Point {
-  const xs = box.map((p) => p.x);
-  const ys = box.map((p) => p.y);
-  return { x: (Math.min(...xs) + Math.max(...xs)) / 2, y: Math.max(...ys) };
 }
 
 /** The rectangle the menu has to stay inside: the nearest ancestor that clips
@@ -196,9 +140,9 @@ function clipRect(from: HTMLElement): DOMRect {
 function positionMenu(el: HTMLElement, menu: Menu): void {
   Object.assign(el.style, { left: `${menu.x}px`, top: `${menu.y}px` });
   const rect = el.getBoundingClientRect();
-  const clip = clipRect(el);
-  if (rect.right > clip.right) el.style.left = `${Math.max(0, menu.x - rect.width)}px`;
-  if (rect.bottom > clip.bottom) el.style.top = `${Math.max(0, menu.y - rect.height)}px`;
+  const host = { x: rect.left - menu.x, y: rect.top - menu.y };
+  const placed = menuPlacement(menu, host, rect, clipRect(el));
+  Object.assign(el.style, { left: `${placed.x}px`, top: `${placed.y}px` });
 }
 
 export function QuadEditor({
@@ -281,28 +225,19 @@ export function QuadEditor({
     const point = toImageSpace(event.clientX, event.clientY);
     if (!point) return;
     if (drag.kind === "box") {
-      const dx = point.x - drag.origin.x;
-      const dy = point.y - drag.origin.y;
-      onChangeBox(
-        drag.boxIndex,
-        drag.start.map((p) => ({ x: p.x + dx, y: p.y + dy })) as BoundingBox,
-      );
+      onChangeBox(drag.boxIndex, moved(drag.start, drag.origin, point));
       return;
     }
     // The modifier is read per move, not per press, so shift can be taken
     // and released mid-gesture -- reach for a corner, discover you wanted the
     // whole box bigger, hold shift.
-    const { start, pointIndex } = drag;
-    const opposite = start[(pointIndex + 2) % start.length];
-    if (event.shiftKey && opposite) {
-      onChangeBox(selectedIndex, scaledAbout(start, pointIndex, opposite, point));
-      return;
-    }
-    if (event.altKey) {
-      onChangeBox(selectedIndex, scaledAbout(start, pointIndex, centre(start), point));
-      return;
-    }
-    onChangeBox(selectedIndex, start.map((p, i) => (i === pointIndex ? point : p)) as BoundingBox);
+    onChangeBox(
+      selectedIndex,
+      cornerDragged(drag.start, drag.pointIndex, point, {
+        shift: event.shiftKey,
+        alt: event.altKey,
+      }),
+    );
   }
 
   function handlePointerUp() {
@@ -320,16 +255,9 @@ export function QuadEditor({
     }
     const box = boxes[selectedIndex];
     if (!box) return;
-    const step = event.shiftKey ? NUDGE_PX_FAST : NUDGE_PX;
-    let dx = 0;
-    let dy = 0;
-    if (event.key === "ArrowLeft") dx = -step;
-    else if (event.key === "ArrowRight") dx = step;
-    else if (event.key === "ArrowUp") dy = -step;
-    else if (event.key === "ArrowDown") dy = step;
-    else return;
+    const next = nudged(box, event.key, event.shiftKey);
+    if (!next) return;
     event.preventDefault();
-    const next = box.map((p) => ({ x: p.x + dx, y: p.y + dy })) as BoundingBox;
     onChangeBox(selectedIndex, next);
   }
 
