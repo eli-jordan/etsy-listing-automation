@@ -68,6 +68,13 @@ Each PR adds one row for every case it changed, moved or removed, and names the 
 | 2 | `test_ai_providers.py::test_fake_provider_satisfies_the_provider_protocol` | Removed (T10): duplicate typed assignment/readiness type | `test_fake_provider_is_ready_by_default` (exact default, now annotated `AiProvider` for mypy) | FIFO, exhaustion, task-recording cases |
 | 2 | `test_etsy_market_fake.py::test_the_fake_satisfies_the_protocol` | Removed (T10): repeated empty search | `test_an_unseeded_query_finds_nothing` (now annotated `EtsyMarketClient`) | Search/limit/stats/review/log fidelity cases |
 | 2 | `test_lock.py::test_a_clean_lockfile_writes_byte_identical_json_to_before_the_marker_existed` | Removed (T10): absence check duplicate; ADR-0037 requires omission, not historic bytes | `test_write_omits_incomplete_when_unset` | Merge/decode/immutability/unknown-field and hash cases |
+| 3 | `test_wheel_frontend.py::test_wheel_rebuilds_stale_assets_from_current_source` | Refactored (T05, F01): reads the module-scoped `stale_project_wheel` instead of building its own | Same case | Shared fixture: stale `dist/`, project deleted after build, wheel read-only and hash-checked at teardown |
+| 3 | `test_wheel_frontend.py::test_wheel_ships_built_assets_but_no_npm_project` | Refactored (T05, F01): reads the shared wheel | Same case | As above |
+| 3 | `test_wheel_frontend.py::test_installed_wheel_serves_the_spa_without_node_or_the_checkout` | Refactored (T05, F01): installs the shared wheel into its own target; the fixture, not the test, removes the checkout | Same case | Real `uv pip install`, no Node on `PATH`, subprocess serves index, client route and asset |
+| 3 | `test_wheel_frontend.py::test_wheel_build_fails_when_the_frontend_build_emits_no_index` | Retained (F01): needs its own failing project | Same case | — |
+| 3 | `test_wheel_frontend.py::test_sdist_carries_what_a_wheel_build_needs` | Retained (F01): needs its own sdist and the wheel built from it | Same case | — |
+
+**PR 3 timing and reuse (T05, F01).** Measured on macOS with sibling agents running suites, before and after alternated back to back, `uv run pytest tests/test_wheel_frontend.py` through a `PATH` shim logging every `uv build`. Before: 5 wheel + 1 sdist builds, 24.5 s and 23.1 s. After: 3 wheel + 1 sdist builds, 16.8 s and 13.5 s. Sensitivity, each mutant applied to `hatch_build.py` and reverted: reusing stale `dist/` without running npm failed freshness, contents and installed serving; force-including `package.json` failed contents; dropping the asset mapping failed the installed-serving case run alone.
 
 ## PR 2 DTO storage-only review
 
