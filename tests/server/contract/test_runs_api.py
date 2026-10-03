@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import asyncio
 import json
-import threading
 import time
 from collections.abc import Iterator
 from concurrent.futures import ThreadPoolExecutor
@@ -39,6 +38,7 @@ from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import copy_listing
+from tests.support.gates import Gate
 
 
 def _context_factory(workspace: Workspace, on_event: EventSink | None) -> RunContext:
@@ -58,6 +58,41 @@ def client(workspace_root: Path) -> Iterator[TestClient]:
     app = create_app(workspace, context_factory=_context_factory)
     with TestClient(app) as test_client:
         yield test_client
+
+
+class _GatedContexts:
+    """The context factory, with the first run to ask for its context held at
+    a gate: that run is then provably active (planning or applying), and any
+    run created after it provably still queued behind it."""
+
+    def __init__(self) -> None:
+        self.gate = Gate("the first run's context")
+        self._first = True
+
+    def __call__(self, workspace: Workspace, on_event: EventSink | None) -> RunContext:
+        first, self._first = self._first, False
+        if first:
+            self.gate.hold()
+        return _context_factory(workspace, on_event)
+
+
+@pytest.fixture
+def held(workspace_root: Path) -> Iterator[tuple[TestClient, Gate]]:
+    """A client whose first run holds in its active phase until the gate is
+    released; the gate is released, whatever happens, before the lifespan
+    joins the worker."""
+    contexts = _GatedContexts()
+    app = create_app(Workspace.discover(root_override=workspace_root), context_factory=contexts)
+    with TestClient(app) as test_client:
+        try:
+            yield test_client, contexts.gate
+        finally:
+            contexts.gate.release()
+
+
+def _phase(client: TestClient, run_id: str) -> str:
+    phase: str = client.get(f"/api/runs/{run_id}").json()["phase"]
+    return phase
 
 
 def _wait_until_terminal(
@@ -211,8 +246,13 @@ def test_a_workspace_apply_differing_from_its_review_is_409_with_the_refusal(
     assert client.get("/api/runs", params={"scope": "workspace"}).json()[0]["id"] == reviewed["id"]
 
 
-def test_workspace_apply_requires_a_ready_workspace_plan(client: TestClient) -> None:
-    queued = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
+def test_workspace_apply_requires_a_ready_workspace_plan(
+    held: tuple[TestClient, Gate],
+) -> None:
+    client, gate = held
+    planning = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
+    gate.wait_entered()
+    assert _phase(client, planning["id"]) == "planning"
 
     response = client.post(
         "/api/runs",
@@ -221,13 +261,15 @@ def test_workspace_apply_requires_a_ready_workspace_plan(client: TestClient) -> 
             "scope": "workspace",
             "listings": [],
             "expect": {},
-            "reviewed_run_id": queued["id"],
+            "reviewed_run_id": planning["id"],
         },
     )
 
     assert response.status_code == 409
     assert "not ready" in response.text
-    _wait_until_terminal(client, queued["id"])
+    assert _phase(client, planning["id"]) == "planning"
+    gate.release()
+    assert _wait_until_terminal(client, planning["id"])["phase"] == "ready"
 
 
 def test_workspace_apply_rejects_a_missing_review_source(client: TestClient) -> None:
@@ -246,10 +288,15 @@ def test_workspace_apply_rejects_a_missing_review_source(client: TestClient) -> 
     assert "not a workspace plan" in response.text
 
 
-def test_create_is_refused_409_when_the_listing_is_already_active(client: TestClient) -> None:
+def test_create_is_refused_409_when_the_listing_is_already_active(
+    held: tuple[TestClient, Gate],
+) -> None:
+    client, gate = held
     first = client.post(
         "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
     ).json()
+    gate.wait_entered()
+    assert _phase(client, first["id"]) == "planning"
 
     second = client.post(
         "/api/runs",
@@ -258,8 +305,9 @@ def test_create_is_refused_409_when_the_listing_is_already_active(client: TestCl
 
     assert second.status_code == 409
     assert second.json() == {"active_run": first["id"]}
-
-    _wait_until_terminal(client, first["id"])
+    assert _phase(client, first["id"]) == "planning"
+    gate.release()
+    assert _wait_until_terminal(client, first["id"])["phase"] == "ready"
 
 
 # ---------------------------------------------------------------------- list
@@ -308,36 +356,47 @@ def test_get_run_carries_its_events(client: TestClient) -> None:
 # -------------------------------------------------------------------- cancel
 
 
-def test_cancel_an_apply_run_is_409(client: TestClient) -> None:
+def test_cancel_an_apply_run_is_409(held: tuple[TestClient, Gate]) -> None:
+    client, gate = held
     created = client.post(
         "/api/runs",
         json={"kind": "apply", "scope": "listings", "listings": [LISTING], "expect": {}},
     ).json()
+    gate.wait_entered()
+    assert _phase(client, created["id"]) == "applying"
 
     response = client.delete(f"/api/runs/{created['id']}")
 
     assert response.status_code == 409
-    _wait_until_terminal(client, created["id"])
+    assert _phase(client, created["id"]) == "applying"
+    gate.release()
+    assert _wait_until_terminal(client, created["id"])["phase"] == "applied"
 
 
 def test_cancel_an_unknown_run_is_404(client: TestClient) -> None:
     assert client.delete("/api/runs/nope").status_code == 404
 
 
-def test_cancel_a_queued_plan_run(workspace_root: Path, client: TestClient) -> None:
+def test_cancel_a_queued_plan_run(workspace_root: Path, held: tuple[TestClient, Gate]) -> None:
+    client, gate = held
     copy_listing(workspace_root, "second")
     first = client.post(
         "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
     ).json()
+    gate.wait_entered()
     second = client.post(
         "/api/runs", json={"kind": "plan", "scope": "listings", "listings": ["second"]}
     ).json()
+    assert _phase(client, second["id"]) == "queued"
 
     response = client.delete(f"/api/runs/{second['id']}")
 
     assert response.status_code == 200
     assert response.json()["phase"] == "cancelled"
-    _wait_until_terminal(client, first["id"])
+    assert _phase(client, first["id"]) == "planning"
+    gate.release()
+    assert _wait_until_terminal(client, first["id"])["phase"] == "ready"
+    assert _phase(client, second["id"]) == "cancelled"
 
 
 # ---------------------------------------------------------------------- seen
@@ -463,47 +522,43 @@ def test_the_stream_is_an_unbuffered_event_stream(client: TestClient) -> None:
 def test_closing_the_stream_does_not_cancel_the_run(workspace_root: Path) -> None:
     """The browser leaving is the stream's generator seeing a disconnect;
     the run goes on, and a later connection can replay it."""
-    planning = threading.Event()
-    release = threading.Event()
-
-    def gated(workspace: Workspace, on_event: EventSink | None) -> RunContext:
-        planning.set()
-        assert release.wait(timeout=15)
-        return _context_factory(workspace, on_event)
-
-    app = create_app(Workspace.discover(root_override=workspace_root), context_factory=gated)
+    contexts = _GatedContexts()
+    app = create_app(Workspace.discover(root_override=workspace_root), context_factory=contexts)
     with TestClient(app) as client:
-        created = client.post(
-            "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
-        ).json()
-        assert planning.wait(timeout=15)
-        run = app.state.deployments.get(created["id"])
+        try:
+            created = client.post(
+                "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+            ).json()
+            contexts.gate.wait_entered()
+            run = app.state.deployments.get(created["id"])
 
-        class Leaving:
-            """Connected for the first poll, gone from the second."""
+            class Leaving:
+                """Connected for the first poll, gone from the second."""
 
-            polls = 0
+                polls = 0
 
-            async def is_disconnected(self) -> bool:
-                self.polls += 1
-                return self.polls > 1
+                async def is_disconnected(self) -> bool:
+                    self.polls += 1
+                    return self.polls > 1
 
-        async def read_until_gone() -> list[bytes]:
-            return [frame async for frame in runs_api._sse_events(Leaving(), run, 0)]  # type: ignore[arg-type]
+            async def read_until_gone() -> list[bytes]:
+                return [frame async for frame in runs_api._sse_events(Leaving(), run, 0)]  # type: ignore[arg-type]
 
-        # Its own thread: another test layer (Playwright) may leave this
-        # thread with a running event loop, and asyncio.run refuses that.
-        with ThreadPoolExecutor(1) as pool:
-            frames = pool.submit(asyncio.run, read_until_gone()).result(timeout=15)
+            # Its own thread: another test layer (Playwright) may leave this
+            # thread with a running event loop, and asyncio.run refuses that.
+            with ThreadPoolExecutor(1) as pool:
+                frames = pool.submit(asyncio.run, read_until_gone()).result(timeout=15)
 
-        assert frames[0].startswith(b"id: 1\nevent: phase\n")
-        assert run.phase == "planning"
-        assert not run.cancel_requested
-        release.set()
+            assert frames[0].startswith(b"id: 1\nevent: phase\n")
+            assert run.phase == "planning"
+            assert not run.cancel_requested
+            contexts.gate.release()
 
-        assert _wait_until_terminal(client, created["id"])["phase"] == "ready"
-        replayed = _parse_sse(client.get(f"/api/runs/{created['id']}/events").text)
-        assert replayed[-1]["data"]["phase"] == "ready"
+            assert _wait_until_terminal(client, created["id"])["phase"] == "ready"
+            replayed = _parse_sse(client.get(f"/api/runs/{created['id']}/events").text)
+            assert replayed[-1]["data"]["phase"] == "ready"
+        finally:
+            contexts.gate.release()
 
 
 # --------------------------------------------------------------------- openapi
