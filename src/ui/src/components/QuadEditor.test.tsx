@@ -1,4 +1,5 @@
 import { fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { must } from "../test/helpers";
 import type { BoundingBox } from "../types";
@@ -596,15 +597,42 @@ describe("resizing a box from a corner", () => {
 
   it("scales from the box as it was when the gesture started, not compounding", () => {
     const onChangeBox = vi.fn();
-    const container = renderResizable(onChangeBox);
+    // A parent that applies each change, as the calibrator does, so the
+    // second move sees the already-doubled box in props.
+    function Controlled() {
+      const [box, setBox] = useState(BOX_A);
+      return (
+        <QuadEditor
+          imageUrl="preview.png"
+          space={SPACE}
+          boxes={[box]}
+          selectedIndex={0}
+          onSelect={vi.fn()}
+          onChangeBox={(index, next) => {
+            onChangeBox(index, next);
+            setBox(next);
+          }}
+        />
+      );
+    }
+    const { container } = render(<Controlled />);
+    loadImage();
     grabBottomRight(container);
     fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
     fireEvent.pointerMove(overlay(container), { clientX: 200, clientY: 200, shiftKey: true });
 
-    // Same pointer position twice means the same box twice. Derived from the
-    // live box instead, the second move would have doubled the doubling.
-    const calls = onChangeBox.mock.calls;
-    expect(calls.at(-1)).toEqual(calls.at(-2));
+    // Same pointer position twice means the same doubled box twice. Derived
+    // from the live box instead, the second move would double the doubling.
+    const doubled = [
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+      { x: 200, y: 200 },
+      { x: 0, y: 200 },
+    ];
+    expect(onChangeBox.mock.calls).toEqual([
+      [0, doubled],
+      [0, doubled],
+    ]);
   });
 
   it("puts nothing over the photograph to explain itself", () => {

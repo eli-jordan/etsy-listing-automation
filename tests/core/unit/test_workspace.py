@@ -36,7 +36,12 @@ def test_prune_previews_keeps_current_scenes_and_removes_stale_templates(
     assert not removed.parent.exists()
 
 
-def test_discover_finds_root_from_nested_cwd(workspace_root: Path) -> None:
+def test_discover_finds_root_from_nested_cwd(
+    workspace_root: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Arranged, not inherited: a contributor's shell may export a workspace
+    # root, which discovery deliberately prefers over walking up (T03).
+    monkeypatch.delenv("ETSY_LISTINGS_ROOT", raising=False)
     nested = workspace_root / "listings" / "take-a-hike"
     ws = Workspace.discover(start=nested)
     assert ws.root == workspace_root.resolve()
@@ -55,7 +60,8 @@ def test_discover_env_var(
     assert ws.root == workspace_root.resolve()
 
 
-def test_discover_raises_when_not_found(tmp_path: Path) -> None:
+def test_discover_raises_when_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delenv("ETSY_LISTINGS_ROOT", raising=False)
     with pytest.raises(WorkspaceNotFoundError):
         Workspace.discover(start=tmp_path)
 

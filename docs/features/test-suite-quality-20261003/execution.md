@@ -46,3 +46,10 @@ Each PR adds one row for every case it changed, moved or removed, and names the 
 
 | PR | Original case | Action | Lower oracle | Retained witness |
 |---|---|---|---|---|
+| 1 | `test_workspace.py::test_discover_finds_root_from_nested_cwd` | Strengthened (T03): unsets `ETSY_LISTINGS_ROOT` via `monkeypatch` | Same case, now independent of the shell | `test_discover_env_var`, `test_discover_root_override_wins` keep the deliberate override |
+| 1 | `test_workspace.py::test_discover_raises_when_not_found` | Strengthened (T03): unsets `ETSY_LISTINGS_ROOT` via `monkeypatch` | Same case | As above |
+| 1 | `useAiSeoMode.test.ts` "asks the readiness endpoint once…" | Strengthened (F02): asserts the listing argument and a cleared reason | Same case | — |
+| 1 | `useAiSeoMode.test.ts` "stays unavailable when the readiness endpoint says not ready" | Strengthened (F02): deferred response, checking → settled refusal reason | Same case, renamed "…, and says why" | — |
+| 1 | `useAiSeoMode.test.ts` "stays unavailable when the readiness check itself fails" | Strengthened (F02): deferred rejection, checking → "Could not check AI setup." | Same case, renamed "…, and says so" | — |
+| 1 | `DetailsTab.test.tsx` "keeps AI Mode disabled when the readiness endpoint says no" | Strengthened (F02): waits for the refusal reason in the hover card before checking disabled | Same case | `AiSeoControl.test.tsx` hover-card reason case |
+| 1 | `QuadEditor.test.tsx` "scales from the box as it was when the gesture started, not compounding" | Strengthened (F03): controlled parent applies changes; requires exactly two `[0, doubled box]` calls | Same case | Shift-drag single-move case |

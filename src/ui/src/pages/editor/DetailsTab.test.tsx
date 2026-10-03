@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as listingsApi from "../../api/listings";
@@ -15,8 +15,9 @@ import {
   queriesEvent,
   stepEvent,
 } from "../../test/aiRuns";
+import { deferred } from "../../test/helpers";
 import { MARKET_QUERIES, marketSnapshot } from "../../test/market";
-import type { ListingDetail, ListingProposal } from "../../types";
+import type { ListingDetail, ListingProposal, SeoReadinessResponse } from "../../types";
 import { DetailsTab as DetailsTabView } from "./DetailsTab";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
 
@@ -695,14 +696,25 @@ describe("DetailsTab AI Mode", () => {
   });
 
   it("keeps AI Mode disabled when the readiness endpoint says no", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockResolvedValue({
-      ready: false,
-      batch_pending: false,
-      deploying: false,
-    });
+    const answer = deferred<SeoReadinessResponse>();
+    vi.spyOn(seoApi, "getSeoReadiness").mockReturnValue(answer.promise);
     render(<DetailsTab detail={readyDetail()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
+    expect(screen.getByRole("tooltip")).toHaveTextContent("Checking AI setup...");
 
-    await waitFor(() => expect(seoApi.getSeoReadiness).toHaveBeenCalled());
+    // Disabled while checking proves nothing; the refusal must have landed.
+    await act(async () => {
+      answer.resolve({
+        ready: false,
+        reason: "No AI provider is ready.",
+        batch_pending: false,
+        deploying: false,
+      });
+      await answer.promise;
+    });
+
+    await waitFor(() =>
+      expect(screen.getByRole("tooltip")).toHaveTextContent("No AI provider is ready."),
+    );
     expect(screen.getByRole("button", { name: /AI Mode/i })).toBeDisabled();
   });
 

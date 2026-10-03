@@ -11,6 +11,25 @@ export function must<T>(value: T | undefined | null): T {
   return value;
 }
 
+export interface Deferred<T> {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: unknown) => void;
+}
+
+/** A promise the test settles by hand, so it can observe the state before a
+ * response arrives and then the state after it, rather than racing an
+ * already-resolved mock. */
+export function deferred<T>(): Deferred<T> {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
 type StageName = StagePlanDTO["stage"];
 type StagePlanFor<Name extends StageName> = Extract<StagePlanDTO, { stage: Name }>;
 type WorkOutcome = Extract<StagePlanDTO["outcome"], { type: "work" }>;

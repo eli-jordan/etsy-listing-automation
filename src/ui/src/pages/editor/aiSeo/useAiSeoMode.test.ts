@@ -10,6 +10,7 @@ import {
   phaseEvent,
   proposalEvent,
 } from "../../../test/aiRuns";
+import { deferred } from "../../../test/helpers";
 import type { ListingDetail, ListingProposal, SeoReadinessResponse } from "../../../types";
 import { BATCH_POLL_MS, useAiSeoMode } from "./useAiSeoMode";
 
@@ -118,32 +119,59 @@ describe("useAiSeoMode availability", () => {
   });
 
   it("asks the readiness endpoint once name/design/brief are present, and reflects its answer", async () => {
-    mockReadiness({ ready: true, batch_pending: false, deploying: false });
+    const readiness = vi
+      .spyOn(seoApi, "getSeoReadiness")
+      .mockResolvedValue({ ready: true, batch_pending: false, deploying: false });
 
     const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
 
     await waitFor(() => expect(result.current.available).toBe(true));
+    expect(readiness).toHaveBeenCalledWith("take-a-hike");
+    expect(result.current.reason).toBeNull();
   });
 
-  it("stays unavailable when the readiness endpoint says not ready", async () => {
-    mockReadiness({
-      ready: false,
-      reason: "no AI provider is ready",
-      batch_pending: false,
-      deploying: false,
+  /** Holds the readiness answer back, so a case sees "checking" before it settles. */
+  function pendingReadiness() {
+    const answer = deferred<SeoReadinessResponse>();
+    const readiness = vi.spyOn(seoApi, "getSeoReadiness").mockReturnValue(answer.promise);
+    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    expect(result.current.available).toBe(false);
+    expect(result.current.reason).toBe("Checking AI setup...");
+    expect(readiness).toHaveBeenCalledWith("take-a-hike");
+    return { answer, result };
+  }
+
+  it("stays unavailable when the readiness endpoint says not ready, and says why", async () => {
+    const { answer, result } = pendingReadiness();
+
+    await act(async () => {
+      answer.resolve({
+        ready: false,
+        reason: "no AI provider is ready",
+        batch_pending: false,
+        deploying: false,
+      });
+      await answer.promise;
     });
 
-    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
-
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() => expect(result.current.reason).toBe("no AI provider is ready"));
+    expect(result.current.available).toBe(false);
+    expect(result.current.requirements.at(-1)).toEqual({
+      label: "SEO prompt and AI provider ready",
+      ready: false,
+    });
   });
 
-  it("stays unavailable when the readiness check itself fails", async () => {
-    vi.spyOn(seoApi, "getSeoReadiness").mockRejectedValue(new Error("network down"));
+  it("stays unavailable when the readiness check itself fails, and says so", async () => {
+    const { answer, result } = pendingReadiness();
 
-    const { result } = renderHook(() => useAiSeoMode(detail(), vi.fn(), vi.fn()));
+    await act(async () => {
+      answer.reject(new Error("network down"));
+      await answer.promise.catch(() => undefined);
+    });
 
-    await waitFor(() => expect(result.current.available).toBe(false));
+    await waitFor(() => expect(result.current.reason).toBe("Could not check AI setup."));
+    expect(result.current.available).toBe(false);
   });
 });
 
