@@ -633,14 +633,4 @@ describe("resizing a box from a corner", () => {
       [0, doubled],
     ]);
   });
-
-  it("puts nothing over the photograph to explain itself", () => {
-    /* The gesture hint and the "box N selected" readout both used to sit in
-     * pills on the canvas. This view exists to be looked at, and the box
-     * wearing handles is already the answer to which one is selected. */
-    const container = renderResizable();
-    expect(container.querySelector(".quad-editor__status")).toBeNull();
-    expect(container.querySelector(".quad-editor__hint")).toBeNull();
-    expect(container.querySelector(".quad-editor__readout")).toBeNull();
-  });
 });

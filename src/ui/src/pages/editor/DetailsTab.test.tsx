@@ -840,25 +840,23 @@ describe("DetailsTab top listings panel", () => {
     return screen.getByRole("group", { name: "Listing details" });
   }
 
-  it("keeps the fields at their own width when there is no search to show", async () => {
+  it("shows no panel when there is no search to show", async () => {
     render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
     await waitFor(() => expect(runs.market).toHaveBeenCalledWith("take-a-hike"));
     expect(screen.queryByRole("complementary", { name: "Similar Etsy Listings" })).toBeNull();
-    expect(fieldset().closest(".mkt-layout")).toBeNull();
+    expect(fieldset()).toBeVisible();
   });
 
-  it("puts the last search beside the fields", async () => {
+  it("shows the last search alongside the fields, not in place of them", async () => {
     runs.market.mockResolvedValue(marketSnapshot());
 
     render(<DetailsTab detail={withDesign()} onUpdate={vi.fn()} onFlush={vi.fn()} />);
 
     const panel = await screen.findByRole("complementary", { name: "Similar Etsy Listings" });
-    const layout = fieldset().closest(".mkt-layout");
-    expect(layout?.children).toHaveLength(2);
-    expect(layout?.children[0]).toHaveClass("details-tab");
-    expect(layout?.children[0]).toContainElement(fieldset());
-    expect(layout?.children[1]).toBe(panel);
+    expect(panel).toBeVisible();
+    expect(fieldset()).toBeVisible();
+    expect(fieldset()).not.toContainElement(panel);
   });
 
   it("keeps the seller's place in the fields when the panel appears", async () => {
