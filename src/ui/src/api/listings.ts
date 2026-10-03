@@ -48,7 +48,7 @@ export async function tryGetListing(name: string): Promise<ListingDetail | null>
 }
 
 /** A partial `listing.yaml` document -- merged server-side, one level deep on
- * `etsy:` (see `server/api/listings.py`'s `_merge`). Always resolves: an invalid
+ * `etsy:` (see `core/application/listing_edits.py`'s `_merge`). Always resolves: an invalid
  * candidate comes back as a 200 with `field_errors` populated and nothing
  * written, so the caller never has to branch on the HTTP status to render
  * inline validation. */

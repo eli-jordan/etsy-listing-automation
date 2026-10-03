@@ -20,6 +20,7 @@ src/etsy_listings/
     market/ market-informed SEO research
     listing_templates/ template conversion, validation and frozen content capture
     batches/ staging, naming, archive inspection and ordinary listing creation
+    application/ operations shared by server and CLI: listing reads, edits, creation, rename/delete, pricing plans
     connections.py errors.py client wiring, UserFacingError
   cli/ Typer app, one module per command; ui.py is the only module that may import server (server.hosting)
   server/ FastAPI api/, hosting.py startup, run workers (until PRs 8-9); release wheels carry the built SPA in server/static/

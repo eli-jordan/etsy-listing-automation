@@ -714,8 +714,7 @@ export interface paths {
     /**
      * List Listings
      * @description Every listing, with its status resolved in **one** Etsy round trip for
-     *     the whole table rather than one per row -- which is why the live fact is
-     *     gathered here and handed down rather than looked up per listing.
+     *     the whole table rather than one per row.
      */
     get: operations["list_listings_api_listings_get"];
     put?: never;
@@ -725,15 +724,9 @@ export interface paths {
      *
      *     Mirrors PATCH exactly, one level up: a document that fails
      *     ``Listing.model_validate`` is a **200** carrying ``field_errors`` with
-     *     nothing written, so the editor never has to branch on a status code to show
-     *     inline validation. The two things a *name* can be wrong about keep their
-     *     status codes instead -- not a single path segment is the 400 `_segment`
-     *     raises through `listing_file`, and already taken is a 409.
-     *
-     *     That 409 tests the **directory**, not ``listing.yaml``: a `listings/{name}/`
-     *     left behind with a `state.lock.json` and no document would otherwise be
-     *     written into, and the new listing would inherit another one's
-     *     ``etsy_listing_id``.
+     *     nothing written. The two things a *name* can be wrong about keep their
+     *     status codes instead -- not a single path segment is the 400, and
+     *     already taken (the directory, not just ``listing.yaml``) is a 409.
      */
     post: operations["create_listing_api_listings_post"];
     delete?: never;
@@ -814,21 +807,20 @@ export interface paths {
      * Delete Listing
      * @description Delete from the listings table.
      *
-     *     No remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the
-     *     row pending. Published: 409 -- retire it instead. Confirm is the UI's.
-     *
-     *     Either way the market snapshot and the cached AI proposal go now
-     *     (features/market-seo-20260924/spec.md, *Cache*; rename and delete hooks): a listing pending
-     *     deletion is one the
-     *     seller is done researching, and otherwise only the wipe after the remote
-     *     deletion would remove them. An AI run still going is asked to stop
-     *     first, so it does not write a proposal for a listing being deleted, and
-     *     the listing's batch rows are marked deleted and leave the queue.
+     *     No remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering
+     *     with the row left pending. Published: 409 -- retire it instead. Confirm
+     *     is the UI's. What goes with the listing either way is
+     *     :func:`~etsy_listings.core.application.listing_identity.delete_listing`'s.
      */
     delete: operations["delete_listing_api_listings__name__delete"];
     options?: never;
     head?: never;
-    /** Patch Listing */
+    /**
+     * Patch Listing
+     * @description Merge the editor's slice into ``listing.yaml``. A merged document
+     *     that will not validate writes nothing and answers 200 with
+     *     ``field_errors`` beside the listing as it still is.
+     */
     patch: operations["patch_listing_api_listings__name__patch"];
     trace?: never;
   };
@@ -1007,21 +999,8 @@ export interface paths {
     put?: never;
     /**
      * Rename Listing
-     * @description Move a listing, whole, to a new name.
-     *
-     *     A listing's identity is its directory name, so the rename is a
-     *     directory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's
-     *     generated copy travel together, and `.cache/renders/{name}/` moves with them
-     *     because the render cache is keyed by listing name too -- left behind it
-     *     would orphan a tree nothing deletes and cost a full re-render. The market
-     *     snapshot and the cached AI proposal move for the same reason, and
-     *     every batch row naming the listing follows it, so the batch
-     *     summary opens the new name.
-     *
-     *     The lockfile's ``outputs`` keys still spell the old path afterwards, and are
-     *     left that way deliberately: nothing reads them, they become true again at
-     *     the next apply, and rewriting them here would breach "only the lockfile
-     *     merges a lockfile".
+     * @description Move a listing, whole, to a new name -- with everything keyed by it
+     *     (:func:`~etsy_listings.core.application.listing_identity.rename_listing`).
      *
      *     POST rather than PUT: the body is neither the listing nor its new
      *     representation, and a second call 404s. `POST /api/templates/{name}/kind` is

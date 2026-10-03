@@ -3,7 +3,8 @@
 
 `config/listing_validation.check_listing_template` is pure, as
 `check_listing` is; somebody has to resolve its description ref and probe its
-videos first. For a listing that is `server/api/listings.py`'s ``_business_issues``;
+videos first. For a listing that is `core/application/listing_reads.py`'s
+``_business_issues``;
 for a listing template it is this, and the one thing that varies is where a
 ref points -- beneath the template's directory once it is saved, at the
 files it will copy while it is still a draft.

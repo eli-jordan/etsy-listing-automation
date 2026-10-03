@@ -108,6 +108,7 @@ and what it deliberately withholds.
 | `listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to the UI server |
+| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices | Owns locking around read/merge/write and the records that follow a listing; answers with results or typed refusals, never status codes; takes server-held locks, AI runs and Etsy states through small interfaces (ADR-0052) |
 
 `core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
 bearers resolve at request time, but the Etsy app key pair is read during

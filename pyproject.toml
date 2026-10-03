@@ -195,11 +195,6 @@ forbidden_modules = [
     "typer",
     "questionary",
 ]
-ignore_imports = [
-    # Temporary: listing creation's pricing and persistence helpers still live
-    # in newcmd.logic. Removed by PR 6, which moves them behind core interfaces.
-    "etsy_listings.server.api.listings -> etsy_listings.newcmd.logic",
-]
 
 [[tool.importlinter.contracts]]
 name = "Only the CLI ui launcher reaches the server, through its startup interface"

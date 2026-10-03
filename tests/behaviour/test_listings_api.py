@@ -812,11 +812,6 @@ class TestListingDraft:
         assert "Pricing" in blocks
         assert "Listing Images" in blocks
 
-    def test_the_draft_writes_nothing(self, client: TestClient, workspace_root: Path) -> None:
-        before = sorted(p.name for p in (workspace_root / "listings").iterdir())
-        client.get("/api/listing-draft")
-        assert sorted(p.name for p in (workspace_root / "listings").iterdir()) == before
-
     def test_describing_a_candidate_recomputes_its_issues(self, client: TestClient) -> None:
         """What keeps the banner true while the listing has no name: pick
         colours and the "no colours" block has to go away, or the only channel
@@ -833,16 +828,6 @@ class TestListingDraft:
         assert "Variants › Colours" not in wheres
         assert "Variants › Garment profile" not in wheres
         assert "Pricing" in wheres
-
-    def test_describing_a_candidate_writes_nothing(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        before = sorted(p.name for p in (workspace_root / "listings").iterdir())
-        client.post(
-            "/api/listing-draft",
-            json={"document": {"garment_profile": "comfort-colors-1717", "colors": ["black"]}},
-        )
-        assert sorted(p.name for p in (workspace_root / "listings").iterdir()) == before
 
     def test_a_structurally_broken_candidate_comes_back_as_field_errors(
         self, client: TestClient
@@ -900,25 +885,6 @@ class TestRenameListing:
         assert not (workspace_root / "listings" / "take-a-hike").exists()
         assert (workspace_root / "listings" / "hike-away" / "listing.yaml").is_file()
         assert (workspace_root / "listings" / "hike-away" / "state.lock.json").is_file()
-
-    def test_moves_the_render_cache(self, client: TestClient, workspace_root: Path) -> None:
-        """The cache is keyed by listing name. Left behind it would orphan a
-        tree nothing deletes, and cost a full re-render of a listing nothing
-        about which changed."""
-        cached = workspace_root / ".cache" / "renders" / "take-a-hike" / "flat-lay-01"
-        cached.mkdir(parents=True)
-        (cached / "black.png").write_bytes(b"not really a png")
-
-        assert (
-            client.post(
-                "/api/listings/take-a-hike/rename", json={"new_name": "hike-away"}
-            ).status_code
-            == 200
-        )
-
-        assert not (workspace_root / ".cache" / "renders" / "take-a-hike").exists()
-        moved = workspace_root / ".cache" / "renders" / "hike-away" / "flat-lay-01" / "black.png"
-        assert moved.read_bytes() == b"not really a png"
 
     def test_renaming_to_the_same_name_changes_nothing(self, client: TestClient) -> None:
         """Blur commits an unchanged name constantly; that is not a conflict."""

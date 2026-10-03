@@ -310,10 +310,11 @@ class PricingPlanSummary(BaseModel):
     garment_profile: str
     compatible: bool
     """Whether this plan declares the exact garment profile asked for --
-    mirrors `newcmd.logic.build_pricing_plan_choices`'s marker."""
+    `core/application/pricing_plans.pricing_plan_options`' rule, which the `new`
+    wizard's picker marks too."""
     ref: str
     """Workspace-rooted, ready to PATCH straight into `pricing_plan:`
-    unchanged -- `newcmd.logic.pricing_plan_ref`'s write-side form, the same
+    unchanged -- `core/application/pricing_plans.pricing_plan_ref`'s write-side form, the same
     rule `MediaFileSummary.ref` follows for a shared image."""
 
 
