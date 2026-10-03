@@ -116,23 +116,11 @@ def test_placeholders_are_read_from_inside_each_variant() -> None:
     assert "placeholders" not in VARIANTS_PAYLOAD  # the key it used to look for
     assert sorted(variant_set.positions()) == ["back", "front"]
     assert [(v.id, len(v.placeholders)) for v in variant_set.variants] == [(1, 2), (2, 2)]
-
-
-def test_the_largest_print_area_wins_when_sizes_differ() -> None:
-    """Print areas differ per garment size and a profile carries exactly one,
-    so `new` records the largest: art sized for the 3XL panel still covers the
-    S panel, and the reverse prints soft where it matters most."""
-    variant_set = _client(lambda request: httpx.Response(200, json=VARIANTS_PAYLOAD)).variants(
-        6, 29
-    )
-
-    front = variant_set.placeholder("front")
-    assert front is not None
-    assert (front.width, front.height) == (4200, 4800)
-    assert [(p.width, p.height) for p in variant_set.placeholder_sizes("front")] == [
-        (4200, 4800),
-        (3461, 3955),
-    ]
+    fronts = {
+        v.id: [(p.width, p.height) for p in v.placeholders if p.position == "front"]
+        for v in variant_set.variants
+    }
+    assert fronts == {1: [(3461, 3955)], 2: [(4200, 4800)]}, "which wins is test_catalog.py's"
 
 
 def test_fields_printify_adds_later_are_ignored_not_fatal() -> None:
