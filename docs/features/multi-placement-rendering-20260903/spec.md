@@ -102,8 +102,8 @@ file *is* one of the three shapes).
 
 **GarmentProfile** carries `colors`, human-classified by hand-editing the
 generated garment profile file (not auto-seeded from Printify hex — this
-codebase's `catalog/models.py` carries no hex field, and whether Printify's
-real API exposes one at all is unverified). `new` never asks about it:
+codebase's `core/clients/printify/models.py` carries no hex field, and whether
+Printify's real API exposes one at all is unverified). `new` never asks about it:
 
 ```yaml
 colors:

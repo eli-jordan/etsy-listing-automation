@@ -1,6 +1,6 @@
 # ADR-0052: Separate core from transport adapters
 
-Status: accepted; implementation pending.
+Status: accepted; implemented by the [module-structure plan](../features/module-structure-20260930/plan.md).
 
 Keep one Python distribution with `core`, `server` and `cli` under
 `src/etsy_listings`, and move the React/npm project to `src/ui`. Core exposes

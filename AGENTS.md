@@ -16,19 +16,22 @@ src/etsy_listings/
     engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
     render/ pure render passes, frozen RenderConfig, pipeline
     clients/ printify/ and etsy/ — transport, models, fakes
-    ai/ SEO/brief providers (Codex/Claude), prompts, proposals
+    ai/ SEO/brief providers (Codex/Claude/Grok), prompts, proposals
     market/ market-informed SEO research
     listing_templates/ template conversion, validation and frozen content capture
     batches/ staging, naming, archive inspection and ordinary listing creation
-    application/ operations shared by server and CLI: listing reads, edits, creation, rename/delete, pricing plans,
-      and the wizards' credentials, workspace_setup, shop_discovery, garment_profiles
+    application/ operations shared by server and CLI, one module per workflow, no re-exports: listing reads, edits,
+      creation, rename/delete, pricing plans; calibrator (mockup_templates), listing-template library, batch staging
+      and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles; workspace_locks;
+      deploy/ (Deployments) and ai/ (AiCoordinator) run coordinators; dependencies.py host seams; refusals.py
     connections.py errors.py client wiring, UserFacingError
   cli/ Typer app; auth.py setup.py new.py sequence the wizards, credentials.py pickers.py their terminal side,
     prompts.py terminal.py the prompt backend and encoding guard; ui.py is the only module that may import server (server.hosting)
-  server/ FastAPI api/, hosting.py startup, run workers (until PRs 8-9); release wheels carry the built SPA in server/static/
+  server/ FastAPI api/ (routes, schemas, SSE, request caches), hosting.py startup; release wheels carry the built SPA in server/static/
 src/ui/ React/npm project (see src/ui/AGENTS.md)
 tests/ core/ server/ cli/ by owner, then layer (unit, golden, behaviour, contract); shared browser/ e2e/ fixtures/,
-  doubles in tests/support/; project-wide build/CI tests (packaging, CI selection, import contracts) directly in tests/
+  doubles in tests/support/; project-wide build/CI tests (packaging, CI selection, OpenAPI export, import contracts,
+  protected test imports) directly in tests/
 docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
 scripts/ check.sh, sloc.py, generate_test_assets.py
 ```
@@ -42,7 +45,7 @@ The tool lives here; user data (`shop.yaml`, `designs/`, `listings/`, `mockup-te
 Run all of these in cygwin zsh from the repo root (see Environment).
 
 ```
-uv sync # install deps + create.venv
+uv sync # install deps + create .venv
 ./scripts/check.sh # format + lint + typecheck + test + coverage gate, Python and frontend
 uv run pytest # full suite (excludes -m e2e by default)
 uv run pytest tests/core/unit/test_money.py # one file
@@ -57,7 +60,7 @@ uv run playwright install chromium # one-off, enables the browser layer
 uv run pytest --update-goldens # regenerate render goldens
 uv run mypy src # strict type check
 uv run lint-imports # Import Linter contracts in pyproject.toml (ADR-0052)
-uv run ruff check. / ruff format. # lint / format
+uv run ruff check . / ruff format . # lint / format
 uv run python scripts/sloc.py --summary # code size, prose excluded
 ```
 
@@ -75,7 +78,7 @@ new [<design>] interactive design/garment/provider picker; writes garment profil
 plan <listing|--all> three-way diff against live state
 apply <listing|--all> execute every stage the plan identified
 unlock <listing> clear a Printify product stuck publishing
-ui dashboard, calibrator, listings, run runner
+ui [--host --port] serve the dashboard, calibrator, listings and runs over HTTP in the foreground; no native window
 render / generate force a single local stage [not built]
 catalog refresh force-refresh the cached Printify catalog [not built]
 status [<listing>] run history [not built]
@@ -155,7 +158,7 @@ Run it locally before merging rather than iterating through CI. `gh workflow run
 
 <important if="you are changing CI workflows or scripts/check.sh">
 
-[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run format-check, ruff, mypy and `pytest -m "not browser and not e2e"` under the coverage floor on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI mirrors `check.sh` rather than calling it — change one, change the other.
+[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run format-check, ruff, mypy, `lint-imports` and `pytest -m "not browser and not e2e"` under the coverage floor on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI mirrors `check.sh` rather than calling it — change one, change the other.
 </important>
 
 <important if="you are measuring or reducing code size">

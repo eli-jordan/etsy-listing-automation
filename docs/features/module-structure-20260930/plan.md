@@ -1,6 +1,8 @@
 # Module structure implementation plan
 
-Status: planned; no implementation PRs created. Design confirmed 2026-09-30.
+Status: shipped. Delivered by [#99](https://github.com/eli-jordan/etsy-listing-automation/pull/99), [#100](https://github.com/eli-jordan/etsy-listing-automation/pull/100), [#101](https://github.com/eli-jordan/etsy-listing-automation/pull/101), [#102](https://github.com/eli-jordan/etsy-listing-automation/pull/102), [#103](https://github.com/eli-jordan/etsy-listing-automation/pull/103), [#104](https://github.com/eli-jordan/etsy-listing-automation/pull/104), [#105](https://github.com/eli-jordan/etsy-listing-automation/pull/105), [#106](https://github.com/eli-jordan/etsy-listing-automation/pull/106), [#107](https://github.com/eli-jordan/etsy-listing-automation/pull/107), [#108](https://github.com/eli-jordan/etsy-listing-automation/pull/108), [#109](https://github.com/eli-jordan/etsy-listing-automation/pull/109), [#110](https://github.com/eli-jordan/etsy-listing-automation/pull/110). Design confirmed 2026-09-30. This plan
+records the implementation sequence; the [specification](spec.md) and
+[architecture](../../architecture.md) describe the current requirements and tree.
 
 The [specification](spec.md) owns the accepted requirements. This plan delivers
 them as a linear stack of reviewable PRs. [ADR-0052](../../adr/0052-separate-core-from-transport-adapters.md)
@@ -36,18 +38,18 @@ payloads, introduces new concurrency or fixes unrelated audit findings.
 
 | PR | Scope | Depends on | Delivery |
 |---|---|---|---|
-| 1 | Accepted requirements, ADR and documentation authority | — | Pending |
-| 2 | Remove the native host; make `ui` HTTP-only | 1 | Pending |
-| 3 | Move React/npm to `src/ui` and preserve asset packaging | 2 | Pending |
-| 4 | Move foundational backend modules into core | 3 | Pending |
-| 5 | Move the HTTP host into server; establish import checks | 4 | Pending |
-| 6 | Extract shared listing operations and creation logic | 5 | Pending |
-| 7 | Extract template, calibration and batch operations | 6 | Pending |
-| 8 | Move deployment coordination into core | 7 | Pending |
-| 9 | Move AI coordination, readiness and proposal operations into core | 8 | Pending |
-| 10 | Separate CLI wizards from reusable setup/auth/new operations | 9 | Pending |
-| 11 | Reorganize Python tests and complete interface enforcement | 10 | Pending |
-| 12 | Reconcile architecture and prove installed end-to-end wiring | 11 | Pending |
+| 1 | Accepted requirements, ADR and documentation authority | — | [#99](https://github.com/eli-jordan/etsy-listing-automation/pull/99) |
+| 2 | Remove the native host; make `ui` HTTP-only | 1 | [#100](https://github.com/eli-jordan/etsy-listing-automation/pull/100) |
+| 3 | Move React/npm to `src/ui` and preserve asset packaging | 2 | [#101](https://github.com/eli-jordan/etsy-listing-automation/pull/101) |
+| 4 | Move foundational backend modules into core | 3 | [#102](https://github.com/eli-jordan/etsy-listing-automation/pull/102) |
+| 5 | Move the HTTP host into server; establish import checks | 4 | [#103](https://github.com/eli-jordan/etsy-listing-automation/pull/103) |
+| 6 | Extract shared listing operations and creation logic | 5 | [#104](https://github.com/eli-jordan/etsy-listing-automation/pull/104) |
+| 7 | Extract template, calibration and batch operations | 6 | [#105](https://github.com/eli-jordan/etsy-listing-automation/pull/105) |
+| 8 | Move deployment coordination into core | 7 | [#106](https://github.com/eli-jordan/etsy-listing-automation/pull/106) |
+| 9 | Move AI coordination, readiness and proposal operations into core | 8 | [#107](https://github.com/eli-jordan/etsy-listing-automation/pull/107) |
+| 10 | Separate CLI wizards from reusable setup/auth/new operations | 9 | [#108](https://github.com/eli-jordan/etsy-listing-automation/pull/108) |
+| 11 | Reorganize Python tests and complete interface enforcement | 10 | [#109](https://github.com/eli-jordan/etsy-listing-automation/pull/109) |
+| 12 | Reconcile architecture and prove installed end-to-end wiring | 11 | [#110](https://github.com/eli-jordan/etsy-listing-automation/pull/110) |
 
 ## PR 1: Record the accepted design before implementation
 

@@ -28,7 +28,8 @@ uv run ruff check .
 echo "== mypy =="
 uv run mypy src
 
-# Core/server/CLI dependency direction (ADR-0052); contracts in pyproject.toml.
+# Core/server/CLI dependency direction and protected application modules
+# (ADR-0052); contracts in pyproject.toml.
 echo "== import-linter =="
 uv run lint-imports
 
