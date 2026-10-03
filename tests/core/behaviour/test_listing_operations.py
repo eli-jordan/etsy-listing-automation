@@ -15,6 +15,7 @@ so the interleaving is not left to chance.
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -449,14 +450,19 @@ def slow_writes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture
-def slow_renames(monkeypatch: pytest.MonkeyPatch) -> None:
+def slow_renames(monkeypatch: pytest.MonkeyPatch) -> threading.Event:
+    """Slows a rename's move. The event is set once a move has begun, which
+    is to say once the rename holds the listing's lock."""
     real = Path.replace
+    moving = threading.Event()
 
     def slow(self: Path, target: Any) -> Path:  # noqa: ANN401
+        moving.set()
         time.sleep(0.3)
         return real(self, target)
 
     monkeypatch.setattr(Path, "replace", slow)
+    return moving
 
 
 def _together(*calls: Callable[[], object]) -> list[object]:
@@ -490,21 +496,24 @@ class TestCompetingWrites:
         assert written["etsy"]["title"] == "Take A Hike Tee"
 
     def test_an_edit_queued_behind_a_rename_finds_the_listing_gone(
-        self, workspace: Workspace, slow_renames: None
+        self, workspace: Workspace, slow_renames: threading.Event
     ) -> None:
-        """It must not write a fresh ``listing.yaml`` under the old name."""
-        rename, edit = _together(
-            lambda: _rename(workspace, "hike-away"),
-            lambda: _edit(workspace, {"brief": "Too late."}),
-        )
+        """It must not write a fresh ``listing.yaml`` under the old name. The
+        edit starts only once the rename holds the lock, so the order is the
+        one under test rather than whichever thread a busy runner ran first."""
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            renaming = pool.submit(_rename, workspace, "hike-away")
+            assert slow_renames.wait(timeout=10), "the rename never began its move"
+            with pytest.raises(ListingMissing):
+                _edit(workspace, {"brief": "Too late."})
+            renaming.result()
 
-        assert rename is None
-        assert isinstance(edit, ListingMissing)
+        assert not workspace.listing_dir(NAME).exists()
         assert not workspace.listing_dir(NAME).exists()
         assert _document(workspace, "hike-away").get("brief") != "Too late."
 
     def test_a_create_and_a_rename_to_the_same_name_do_not_both_win(
-        self, workspace: Workspace, slow_renames: None
+        self, workspace: Workspace, slow_renames: threading.Event
     ) -> None:
         document = _document(workspace)
 
