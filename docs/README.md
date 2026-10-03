@@ -35,6 +35,7 @@ identify the start of the work, not its release date.
 | Listing videos | — | — | [Plan](features/listing-videos-20260925/plan.md) |
 | Listing templates and batch creation | [Spec](features/batch-creation-20260927/spec.md) | [Interactions](features/batch-creation-20260927/interactions.md) | [Plan](features/batch-creation-20260927/plan.md) |
 | Module structure and shared operations | [Spec](features/module-structure-20260930/spec.md) | — | [Plan](features/module-structure-20260930/plan.md) |
+| Test suite quality | [Spec](features/test-suite-quality-20261003/spec.md) | [Preserved interactions](features/test-suite-quality-20261003/interactions.md) | [Plan](features/test-suite-quality-20261003/plan.md) |
 
 The AI SEO interactions are amended by market-informed SEO and durable batch
 proposals; the video requirements also live in the Etsy integration spec.
@@ -49,6 +50,7 @@ does not imply a missing implementation.
 | [Printify–Etsy integration](research/printify-etsy-integration.md) | Native integration, field ownership and API constraints |
 | [API findings](research/api-findings.md) | Measured requests, responses and integration surprises |
 | [Architecture audit, 2026-09-30](research/architecture-audit-20260930.html) | Current module/dependency inventory, invariant violations, reproductions and proposed repairs |
+| [Test suite audit, 2026-10-03](../reports/test-suite-audit.html) | Prioritized test-quality findings, measured costs, deletion decisions and retained validation |
 
 Research records evidence from the investigation date. Consult the current
 feature requirements and client code for application behaviour; a measurement
