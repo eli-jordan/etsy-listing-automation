@@ -7,10 +7,10 @@ from datetime import UTC, datetime
 import httpx
 import pytest
 
-from etsy_listings import connections
-from etsy_listings.clients.etsy.transport import BASE_URL
-from etsy_listings.market import research
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core import connections
+from etsy_listings.core.clients.etsy.transport import BASE_URL
+from etsy_listings.core.market import research
+from etsy_listings.core.workspace.workspace import Workspace
 
 pytestmark = pytest.mark.e2e
 

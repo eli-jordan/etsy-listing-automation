@@ -1,0 +1,348 @@
+"""Confirming a staging session: the batch record, then one listing per row
+(spec *Confirming a batch*; name allocation, idempotent row creation, staging expiry).
+
+The record is written first, with every row's allocated name and
+``creation: pending``, and before any file. Each row then:
+
+1. writes ``designs/<design>.png``, or reuses the file already there when its
+   bytes are the row's;
+2. copies the frozen listing template's owned files into ``listings/<name>/``;
+3. writes ``listing.yaml`` atomically;
+4. records ``creation: created``.
+
+Every step can be repeated, so Retry, a second confirm, or a confirm after a
+crash re-enters at whatever the disk and the record say is done. A directory
+already at the row's name is the row's own when its ``listing.yaml`` names the
+row's design, or when it has none and the record says the row claimed it;
+anything else there belongs to somebody else, and the row takes a fresh
+suffix instead. A failure is recorded on its row with the sentence and
+the next row carries on.
+
+The staging session goes once every row is materialised -- created, or failed
+with its upload copied beside the batch for Retry.
+"""
+
+from __future__ import annotations
+
+import hashlib
+from collections.abc import Callable
+from contextlib import suppress
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
+
+from pydantic import ValidationError
+
+from etsy_listings.core.batches.naming import allocate
+from etsy_listings.core.batches.records import Batch, BatchRow, BatchStore, StagingStore
+from etsy_listings.core.batches.staging import review, taken_for, workspace_names
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.listing_templates import FrozenListingTemplate
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.atomic import write_bytes_atomic
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
+from etsy_listings.core.workspace.workspace import Workspace
+
+
+class ConfirmRefused(UserFacingError, ValueError):
+    """The session cannot become a batch yet, and nothing was written."""
+
+
+def _revalidate(frozen: FrozenListingTemplate, name: str) -> None:
+    """Current shared refs may have changed since staging began."""
+    issues = frozen.issues(facts=WorkspaceFacts.gather(frozen.workspace))
+    blocking = [issue.message for issue in issues if issue.severity == "block"]
+    if blocking:
+        raise ConfirmRefused(f"{name} as staged can no longer make listings: {' '.join(blocking)}")
+
+
+def confirm(
+    workspace: Workspace,
+    staging: StagingStore,
+    batches: BatchStore,
+    session_id: str,
+    *,
+    now: datetime | None = None,
+) -> Batch:
+    """Create the batch for ``session_id`` and its listings, or finish the
+    one a previous confirm began. Raises :class:`KeyError` for a session that
+    does not exist and :class:`ConfirmRefused` for one that cannot be
+    confirmed yet."""
+    with staging.lock(session_id), batches.lock(session_id):
+        batch = batches.load(session_id)
+        if batch is None:
+            batch = _start(workspace, staging, batches, session_id, now or datetime.now(UTC))
+    return create_rows(workspace, staging, batches, session_id)
+
+
+def _start(
+    workspace: Workspace,
+    staging: StagingStore,
+    batches: BatchStore,
+    session_id: str,
+    now: datetime,
+) -> Batch:
+    session = staging.load(session_id)
+    if session is None:
+        raise KeyError(session_id)
+    reviewed = review(workspace, session)
+    if reviewed.name_problems:
+        count = reviewed.name_problems
+        raise ConfirmRefused(
+            f"Fix {count} {'name' if count == 1 else 'names'} to create the listings."
+        )
+    if not reviewed.creatable:
+        raise ConfirmRefused("There is no design here that can become a listing.")
+    frozen = FrozenListingTemplate.restore(
+        workspace,
+        session.template,
+        workspace.staging_template_dir(session_id),
+        session.template_saved_at,
+    )
+    _revalidate(frozen, session.listing_template)
+    # Kept for Retry after the staging session has gone.
+    frozen.copy_to(workspace.batch_template_dir(session_id))
+    by_id = {row.id: row for row in session.rows}
+    others = {row.name.casefold() for row in reviewed.creatable}
+    allocated: set[str] = set()
+    rows: list[BatchRow] = []
+    for row in reviewed.creatable:
+        # the preview may be stale; the name is checked again under the
+        # listing's lock and recorded before any file is written.
+        with ListingDocuments(workspace).lock(row.name):
+            taken = taken_for(workspace_names(workspace), row.reuse)
+            name = allocate(row.name, taken | allocated | (others - {row.name.casefold()}))
+        allocated.add(name.casefold())
+        staged = by_id[row.id]
+        rows.append(
+            BatchRow(
+                id=row.id,
+                sha256=staged.sha256,
+                sources=staged.sources,
+                base=row.name,
+                name=name,
+                # Spec, *Content deduplication*: identical bytes already in
+                # designs/ are named, not written again.
+                design=row.reuse or name,
+            )
+        )
+    batch = Batch(
+        id=session_id,
+        listing_template=session.listing_template,
+        template=session.template,
+        template_saved_at=session.template_saved_at,
+        label=session.label,
+        created_at=now,
+        rows=rows,
+    )
+    batches.save(batch)
+    return batch
+
+
+def retry_row(
+    workspace: Workspace,
+    staging: StagingStore,
+    batches: BatchStore,
+    batch_id: str,
+    row_id: str,
+) -> Batch:
+    """Retry creating one row (UI doc §7). A created row is left alone.
+    Raises :class:`KeyError` for a batch or row that does not exist."""
+    batch = batches.load(batch_id)
+    if batch is None or all(row.id != row_id for row in batch.rows):
+        raise KeyError(row_id)
+    return create_rows(workspace, staging, batches, batch_id, only={row_id})
+
+
+def create_rows(
+    workspace: Workspace,
+    staging: StagingStore,
+    batches: BatchStore,
+    batch_id: str,
+    *,
+    only: set[str] | None = None,
+) -> Batch:
+    """Create every row still to create, recording each outcome as it
+    lands, then drop the staging session if nothing needs it any more."""
+    with batches.lock(batch_id):
+        batch = batches.load(batch_id)
+        if batch is None:
+            raise KeyError(batch_id)
+        frozen = FrozenListingTemplate.restore(
+            workspace,
+            batch.template,
+            workspace.batch_template_dir(batch.id),
+            batch.template_saved_at,
+        )
+        for index, row in enumerate(batch.rows):
+            if row.creation == "created" or (only is not None and row.id not in only):
+                continue
+            try:
+                row = _create(workspace, batches, batch, index, frozen)
+            except (OSError, ConfigLoadError, ValidationError, UserFacingError) as exc:
+                row = batch.rows[index].model_copy(
+                    update={"creation": "failed", "error": _failure(row, exc)}
+                )
+                _keep_input(workspace, batch, row)
+            batch.rows[index] = row
+            batches.save(batch)
+    if all(_materialised(workspace, batch, row) for row in batch.rows):
+        with staging.lock(batch_id):
+            staging.remove(batch_id)
+    return batch
+
+
+def _failure(row: BatchRow, exc: Exception) -> str:
+    if isinstance(exc, OSError):
+        detail = exc.strerror or str(exc)
+        where = exc.filename or f"{layout.LISTINGS_DIR}/{row.name}/"
+        return f"Couldn't write {where}: {detail}. Fix that, then Retry."
+    return f"Couldn't create {row.name}: {exc}"
+
+
+def row_upload(workspace: Workspace, batch: Batch, row_id: str) -> Path:
+    """The upload a row was made from, wherever it is kept now: beside the
+    batch once its creation failed, else still in staging. What a row
+    that was never created shows as its thumbnail on the summary, since it
+    has no listing design to show. :class:`KeyError` for a row the batch
+    does not have; the path may not exist once the staging session has
+    gone."""
+    row = next((r for r in batch.rows if r.id == row_id), None)
+    if row is None:
+        raise KeyError(row_id)
+    return _input(workspace, batch, row)
+
+
+def _input(workspace: Workspace, batch: Batch, row: BatchRow) -> Path:
+    kept = workspace.batch_upload_file(batch.id, row.sha256)
+    return kept if kept.is_file() else workspace.staging_upload_file(batch.id, row.sha256)
+
+
+def _keep_input(workspace: Workspace, batch: Batch, row: BatchRow) -> None:
+    """A failed row's upload moves beside the batch, so Retry still has it
+    once the staging session is gone. If even that fails, the staging
+    session stays."""
+    source = workspace.staging_upload_file(batch.id, row.sha256)
+    target = workspace.batch_upload_file(batch.id, row.sha256)
+    if source.is_file() and not target.is_file():
+        with suppress(OSError):
+            write_bytes_atomic(target, source.read_bytes())
+
+
+def _materialised(workspace: Workspace, batch: Batch, row: BatchRow) -> bool:
+    return row.creation == "created" or workspace.batch_upload_file(batch.id, row.sha256).is_file()
+
+
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _holds(workspace: Workspace, design: str, sha256: str) -> bool:
+    path = workspace.design_file(design)
+    return path.is_file() and _sha256(path) == sha256
+
+
+def _is_ours(workspace: Workspace, row: BatchRow) -> bool:
+    """May this row write at its recorded name?"""
+    design = workspace.design_file(row.design)
+    if design.is_file() and _sha256(design) != row.sha256:
+        return False
+    documents = ListingDocuments(workspace)
+    if documents.is_free(row.name):
+        return True
+    if not documents.exists(row.name):
+        return row.claimed and not workspace.lock_file(row.name).exists()
+    ref = documents.read(row.name).get("design")
+    if isinstance(ref, dict):
+        ref = ref.get("default") if len(ref) == 1 else None
+    return bool(ref == workspace.design_ref(row.design))
+
+
+def _create(
+    workspace: Workspace,
+    batches: BatchStore,
+    batch: Batch,
+    index: int,
+    frozen: FrozenListingTemplate,
+) -> BatchRow:
+    row = batch.rows[index]
+    while True:
+        with ListingDocuments(workspace).lock(row.name):
+            if _is_ours(workspace, row):
+                if not row.claimed:
+                    row = row.model_copy(update={"claimed": True})
+                    batch.rows[index] = row
+                    batches.save(batch)
+                _write(workspace, batch, row, frozen)
+                # Created is queued (spec, *Confirming a batch*), in the same
+                # save, so a crash cannot leave a listing the queue never sees.
+                return row.model_copy(update={"creation": "created", "error": None, "ai": "queued"})
+        others = {r.name.casefold() for i, r in enumerate(batch.rows) if i != index}
+        # A design that already holds the row's bytes -- one it reuses, or
+        # one it wrote itself before its name was taken -- is kept.
+        design = row.design if _holds(workspace, row.design, row.sha256) else None
+        taken = taken_for(workspace_names(workspace), design)
+        name = allocate(row.base, taken | others)
+        row = row.model_copy(update={"name": name, "design": design or name, "claimed": False})
+        batch.rows[index] = row
+        batches.save(batch)
+
+
+def _put(workspace: Workspace, target: Path, write: Callable[[], object]) -> None:
+    """One atomic write, whose failure names the file the seller would look
+    for -- ``designs/x.png`` -- rather than the temporary beside it."""
+    try:
+        write()
+    except OSError as exc:
+        where = target.relative_to(workspace.root).as_posix()
+        raise OSError(exc.errno, exc.strerror or str(exc), where) from exc
+
+
+def _copy(workspace: Workspace, target: Path, data: bytes) -> None:
+    _put(workspace, target, lambda: write_bytes_atomic(target, data))
+
+
+def _write(
+    workspace: Workspace, batch: Batch, row: BatchRow, frozen: FrozenListingTemplate
+) -> None:
+    listing_dir = workspace.listing_dir(row.name)
+    listing_dir.mkdir(parents=True, exist_ok=True)
+    design = workspace.design_file(row.design)
+    if not design.is_file():
+        _copy(workspace, design, _input(workspace, batch, row).read_bytes())
+    for asset in frozen.assets():
+        _copy(
+            workspace,
+            workspace.resolve_ref(asset.ref, listing_dir=listing_dir),
+            asset.source.read_bytes(),
+        )
+    document = _listing_document(workspace, frozen.template, row.design)
+    _put(
+        workspace,
+        workspace.listing_file(row.name),
+        lambda: ListingDocuments(workspace).write(row.name, document),
+    )
+
+
+def _listing_document(
+    workspace: Workspace, template: ListingTemplate, design: str
+) -> dict[str, Any]:
+    """The frozen template as an ordinary listing (spec, *Confirming a
+    batch*): the single-file design ref, an empty brief, and blank title,
+    tags and lead for the seller to accept suggestions into. ``./`` refs are
+    kept as they are; the files they name were just copied beside it."""
+    body = template.model_dump(mode="json", exclude_defaults=True)
+    etsy = body.pop("etsy", {})
+    description = etsy.pop("description", {})
+    return {
+        "garment_profile": body.pop("garment_profile"),
+        "design": {"default": workspace.design_ref(design)},
+        "colors": body.pop("colors"),
+        "brief": "",
+        **{key: value for key, value in body.items() if key != "media"},
+        "etsy": {"title": "", "description": {"lead": "", **description}, "tags": [], **etsy},
+        "media": body["media"],
+    }

@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "name": "batch-create",
+  "auto": false,
+  "order": 4,
+  "title": "Batch Listing Creation",
+  "description": "Hi-fi (round 4) from the app's real components: template editor, templates and batches, staging, batch summary, listing from a batch.",
+  "layout": {
+    "rows": [
+      [
+        "batch-create-specs"
+      ],
+      {
+        "space": 2
+      },
+      [
+        "batch-create-lofi"
+      ]
+    ],
+    "scenes": {
+      "batch-create-lofi": {
+        "rows": [
+          [
+            "template-new",
+            "template-variants",
+            "template-unsaved",
+            "template-pricing",
+            "template-images",
+            "template-details",
+            {
+              "space": 2
+            },
+            "templates",
+            "new-batch",
+            "staging-refused",
+            "staging",
+            "staging-blocked",
+            {
+              "space": 2
+            },
+            "batch-summary",
+            "listing-from-batch"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "frame": "batch-create-specs/flow"
+    },
+    {
+      "frame": "batch-create-lofi/template-new"
+    },
+    {
+      "frame": "batch-create-lofi/template-variants"
+    },
+    {
+      "frame": "batch-create-lofi/template-unsaved"
+    },
+    {
+      "frame": "batch-create-lofi/template-pricing"
+    },
+    {
+      "frame": "batch-create-lofi/template-images"
+    },
+    {
+      "frame": "batch-create-lofi/template-details"
+    },
+    {
+      "frame": "batch-create-lofi/templates"
+    },
+    {
+      "frame": "batch-create-lofi/new-batch"
+    },
+    {
+      "frame": "batch-create-lofi/staging-refused"
+    },
+    {
+      "frame": "batch-create-lofi/staging"
+    },
+    {
+      "frame": "batch-create-lofi/staging-blocked"
+    },
+    {
+      "frame": "batch-create-lofi/batch-summary"
+    },
+    {
+      "frame": "batch-create-lofi/listing-from-batch"
+    }
+  ]
+}

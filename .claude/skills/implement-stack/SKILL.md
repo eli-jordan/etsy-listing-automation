@@ -38,7 +38,7 @@ block** you will paste into every brief.
   conditions, the shared gates (`G1`…), and the stack base (the commit the
   plan was committed on).
 - The toolchain works here: `uv sync`, `npm install` in
-  `src/etsy_listings/ui/frontend`, and any workaround needed to make them work.
+  `src/ui`, and any workaround needed to make them work.
 - A **baseline**: the full non-browser pytest and vitest on the stack base.
   Every failure there is pre-existing; record each by test id.
 - GitHub reachable: `gh auth status`, and a push dry-run.
@@ -46,7 +46,7 @@ block** you will paste into every brief.
   (`npx marver dev`) both serve, and a headless browser can capture a frame.
   Record the exact recipe that worked.
 
-Any item that fails: fix it or stop and tell the user. 
+Any item that fails: fix it or stop and tell the user.
 
 ## 2. Launch PR n's builder
 

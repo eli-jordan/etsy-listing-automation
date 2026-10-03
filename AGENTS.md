@@ -1,664 +1,174 @@
+# AGENTS.md
 
-Guidance for working in this repository.
+Automation that takes a print-on-demand t-shirt design from a file to a reviewable Etsy draft: renders mockups locally, configures the product in Printify, patches the Etsy listing. Idempotent — re-running against unchanged inputs makes no remote changes. Python 3.12+ (uv, hatchling, Typer, pydantic v2, httpx, OpenCV + Pillow, ruff, mypy, pytest) with a React + TypeScript + Vite frontend.
 
-## What this repo is
+Check the tree or [docs/architecture.md](docs/architecture.md) before assuming a
+module, command or test exists. [docs/README.md](docs/README.md) indexes current
+requirements, guides, research and decisions.
 
-Automation that takes a print-on-demand t-shirt design from a file to a
-reviewable Etsy draft: renders custom mockups locally, configures the product in
-Printify, and patches the resulting Etsy listing. Idempotent by design — re-running
-against unchanged inputs must make no remote changes.
-
-**Phases 0, 1 and 2 are implemented**; Phases 3-6 are not. "Code layout" below
-shows what exists today, marked per module. "Commands" still describes the
-PRD's full CLI surface — `setup`, `plan`, `apply`, `new` and `ui` are real; the
-rest is the agreed design for later phases. Check the tree, or
-[docs/architecture.md](docs/architecture.md), before assuming a module,
-command or test exists.
-
-## The two documents, and which wins
-
-| Document | Authority |
-|---|---|
-| [docs/prd.md](docs/prd.md) | *What* the tool does. 72 numbered product decisions in its appendix. |
-| [docs/implementation-plan.md](docs/implementation-plan.md) | *How* it is built. 28 architecture decisions, `A1`–`A28`. |
-
-Four subsidiary documents carry detail those two point at rather than repeat:
-[docs/multi-placement-rendering.md](docs/multi-placement-rendering.md) (PRD 28),
-[docs/phase-3-etsy.md](docs/phase-3-etsy.md) (PRD 52–59, A24–A28),
-[docs/listing-lifecycle.md](docs/listing-lifecycle.md) (PRD 61–67), and
-[docs/deploy-changes.md](docs/deploy-changes.md) (PRD 20's runner, A29–A33). They are
-not a third authority — where any disagrees with the PRD, the PRD wins.
-
-When the two disagree, **the PRD wins** and the plan is wrong — fix the plan.
-
-Both documents are settled by deliberate decision, not by drafting momentum. Do
-not quietly revisit a numbered decision while implementing something adjacent to
-it. If a decision turns out to be unworkable, say so and change the document
-first, in its own commit.
-
-Cite decisions by number in commit messages and in code comments where a choice
-looks arbitrary without context — `# A2: lockfile stores the verbatim
-last-applied doc` saves the next reader a trip through 700 lines of PRD.
-
-## Environment
-
-**Run everything in zsh under cygwin.** Commands, test runs, linters, the type
-checker, `npm`, and tool installs all belong in that shell — it is the
-environment this project is developed and verified in, and the only one its
-paths, PATH setup and scripts are known to work in. Do not reach for
-PowerShell, `cmd`, or Git Bash for those: Git Bash in particular *looks* like
-it works and then bites. It mangles POSIX arguments (`/home/Admin` becomes
-`C:/Program Files/Git/home/Admin`), and it puts its own `bash` ahead of
-cygwin's, which breaks the `npm` launcher script. Git and `gh` are the
-exception — they work from PowerShell and Git Bash; `~/.gitconfig` routes
-GitHub HTTPS auth through `gh.exe` with a Windows path, so they do not need
-cygwin. If a command is worth running, run it in cygwin zsh; if it fails
-there, that is a real failure, not an artefact.
-
-### The cygwin pty is not a Windows console
-
-Two consequences, both verified under a real pty (`script -q -c ... /dev/null`),
-not merely inferred from a redirect:
-
-- **prompt_toolkit cannot prompt at all.** On `sys.platform == "win32"` it
-  only ever builds a Win32/Windows-10-VT100/ConEmu output, and a cygwin pty is
-  a named pipe with no console screen buffer, so `create_output()` raises
-  `NoConsoleScreenBufferError` before a key is read. Anything interactive
-  (questionary, `rich.prompt`) therefore needs a fallback that goes through
-  plain `input()` — `newcmd/prompts.py` is the one that exists, and any new
-  prompt belongs behind it rather than calling questionary directly.
-- **`sys.stdout.isatty()` is False**, and the encoding is cp1252 — Python
-  reads the *console codepage*, and there is no console, so the answer
-  describes nothing about the terminal on the other end. mintty is UTF-8 and
-  says so in `LANG`, which is why `main()` calls
-  `terminal.adopt_declared_encoding()`: it believes the shell's declared locale
-  over the codepage, so ⭐ and the `apply` swatches print as themselves.
-  `PYTHONIOENCODING` still wins if set. `etsy_listings/terminal.py` remains
-  the guard for streams that genuinely cannot print a decoration, and
-  `FORCE_COLOR` opts colour back in past the `isatty()` check.
-- **A cygwin-only binary is invisible to `shutil.which`.** cygwin's `fzf` is
-  `/usr/bin/fzf`, a shebang script with no `.exe`; native-Windows Python can
-  neither find nor exec it. `newcmd/prompts.py` falls back to asking cygwin's
-  `sh.exe` (located beside `cygpath.exe`, the trick `workspace/userpath.py`
-  already uses) and runs the tool through it. Any future dependency on an
-  external command needs the same two-step lookup.
-
-The repo lives at `/home/Admin/code/etsy-listing-automation` from inside
-cygwin, and at `C:\cygwin64\home\Admin\code\etsy-listing-automation` from
-Windows tools. Use POSIX paths and shell syntax.
-- The toolchain is **Windows-native, driven from cygwin**: `uv` (and the Python
-  it manages) and `node` are Windows binaries on cygwin's PATH via
-  `~/.zshenv`. Cygwin translates the *working directory* for them, so running
-  `uv run pytest` or `npm run build` from inside the repo just works. Paths
-  passed as *arguments* do not translate — `C:\...` is what those binaries see.
-- `--root` and `ETSY_LISTINGS_ROOT` therefore accept cygwin paths and translate
-  them (`workspace/userpath.py`): `/home/Admin/ws`, `/cygdrive/c/ws` and
-  `C:\ws` all work. This is why `--root` is declared `str`, not `Path` — on
-  Windows `str(Path("/home/Admin"))` is already `\home\Admin`, and a mangled
-  path can't be distinguished from a root-relative one. Any *new* CLI option
-  taking a user-supplied path needs the same treatment.
-- `core.fileMode` is set to **false** in this repo's local config. The Windows
-  filesystem cannot hold the exec bit, so without it every checkout shows phantom
-  `100755 → 100644` modifications on files that were committed from elsewhere.
-  Leave it off; do not commit mode-only changes.
-- Line endings: git warns about `LF → CRLF` on write. Content is stored LF. The
-  warnings are noise, not a problem to fix.
-- **A directory can arrive read-only, and Windows then refuses to delete it.**
-  Anything syncing a workspace — Google Drive is the one that found this — sets
-  `FILE_ATTRIBUTE_READONLY` on every directory, and `os.rmdir` answers a bare
-  `WinError 5` while the files inside delete fine. `workspace.remove_tree` is
-  the `shutil.rmtree` that clears the flag and retries; use it rather than
-  `shutil.rmtree` for any tree this tool owns.
-
-## Toolchain
-
-uv + `pyproject.toml`, Python 3.12+, `src/` layout, hatchling, Typer, pydantic v2,
-httpx, OpenCV + Pillow, ruff, pytest. Frontend is React + TypeScript built with
-Vite, living under `src/etsy_listings/ui/frontend/`.
-
-OpenCV and Pillow are **pinned to exact versions**, deliberately. Renders are
-hashed and compared against goldens; a minor bump that shifts output bytes causes
-every listing's images to re-upload. Do not loosen those pins casually.
-
-`click` is pinned to `<8.2` alongside typer `0.12.x` — a newer click breaks
-typer's `TyperArgument.make_metavar()` call signature. Bump both together if
-you ever upgrade typer.
-
-Node is only needed for frontend development, not for installing the package
-(see "Frontend build hook" in the README) — any current LTS works. On a
-machine without admin rights (`winget install` needing elevation fails), the
-official Windows x64 zip from nodejs.org extracts and runs fine from a
-user-writable directory with no installer.
-
-## Code layout
-
-Per `A1`–`A23`. Full detail in the plan; the shape:
+## Project map
 
 ```
 src/etsy_listings/
-  cli/          Typer app, one module per command  [setup/plan/apply/new/ui done]
-  workspace/    root discovery (walk up for shop.yaml), path resolution  [done]
-                facts.py — the garment profiles and template configs a listing
-                  check reads, gathered once per request instead of re-parsed
-                  inside every check of every row
-                video.py — `probe_video`, the one reader of a clip's facts (PRD
-                  71), through PyAV; answers a `ProbeFailure`, never raises
-                common_copy.py — `common-copy/*.md` front-matter parsing, pure;
-                  `Workspace.load_common_copy`/`compose_description` are the
-                  I/O and the one shared resolver around it (AI SEO plan PR2)
-  config/       pydantic models, Money type, slugification     [done]
-                description.py — `etsy.description`'s lead/text/ref model and
-                  the pure `compose_description(lead, text)` join rule every
-                  deployment reader shares (AI SEO plan PR2)
-                media.py — what a `media:` entry is: image or video by
-                  extension, the gallery's caps, and the video facts the gate
-                  checks (PRD 72)
-                listing_validation.py — every reason a listing cannot run, as
-                  far as its own files can tell. One module, two readers: the
-                  editor's issues banner and (through `engine/stages/gates.py`)
-                  every stage
-  engine/       Stage protocol, Change vocabulary, lockfile, plan, apply, run,
-                  lifecycle (PRD 61–67), preview (A32), stages/
-                   [done; STAGES = [Render(), PrintifyProduct(), Publish(),
-                   EtsyListing(), EtsyMedia(), EtsyVideos()], Generate() in
-                   Phase 4]
-                stages/ splits the product stage three ways: the stage itself
-                  (needs a context), product_document (the two documents and
-                  the garment gate) and product_diff (the comparison — pure,
-                  and unit-tested without a workspace or a fake)
-                stages/ also holds what belongs to no single stage: gates (the
-                  stage's adapter over `config/listing_validation.py` — same
-                  three names, a `Blocked` instead of an `Issue`), etsy_target (which
-                  listing on which shop — the id key, the shop gate, one
-                  not-minted error, shared by all three Etsy stages) and
-                  colour_property (Etsy's inventory property matched onto this
-                  listing's colours — pure, same reasoning as product_diff)
-                  and variation_links (the swatch links and manifest refs both
-                  Etsy media stages set — `etsy_videos` cuts `image_ids` to
-                  place a video, which deletes swatches, decision 9)
-  render/       pure passes, frozen RenderConfig, derived maps, pipeline    [done]
-  newcmd/       `new` picker: pure logic + a thin prompt wrapper              [done]
-  setupcmd/     `setup`: workspace init, token verification, shop discovery  [done]
-  authcmd/      `auth`: the credential command, per part (PRD 14, 49, 50)    [done]
-  clients/      printify/ — one package for everything said to Printify (A22):
-                  transport (token/retry/errors), two protocols (CatalogClient
-                  reads, PrintifyClient writes), models, catalog, products,
-                  cache, resolve, fakes                                      [done]
-                etsy/ — the same shape for Etsy: auth, transport (retry plus
-                  header pacing, `RateGate`), shops, listings, and market
-                  (the read-only search market-informed SEO reads; built
-                  from the key pair alone, never a bearer). retry.py done
-  ai/           request/task/proposal contracts, the three packaged default
-                prompts (seo.md, brief.md, market-queries.md), delimited-context assembly, hard validation, the
-                Codex/Claude adapters and the chain over them  [done]
-                A provider takes a `ProviderTask` -- assembled prompt text, a
-                  response schema, one image -- and knows nothing about which
-                  feature asked, so SEO generation and brief drafting (PRD 68)
-                  share one fallback order, one repair rule and one deadline
-                brief.py -- everything drafting-specific in one small module:
-                  request, schema, packaged prompt, validation
-                market_queries.py -- the same shape for market-informed SEO's
-                  query extraction (three unique, non-empty buyer searches);
-                  `SeoRequest.market_block` carries market/'s block into the
-                  proposal prompt
-  market/       market-informed SEO's research, in memory: `research()` turns
-                three queries into at most 20 scored listings (percentiles,
-                top-20 review rationing, 5 calls in flight), the ranked
-                phrase list, and `market_block()`, the delimited data the
-                proposal prompt gets (market-seo.md). The maths is in
-                memory; two modules touch disk, imported by their own
-                names (not from `market`, which `config` imports):
-                cache.py -- `CachedEtsyMarketClient`, the 7-day search and
-                  per-listing stats caches under `.cache/market/`
-                snapshot.py -- `MarketSnapshot`, `save`/`load` of the latest
-                  research per listing (moved on rename, removed on delete
-                  by the listings API)                                 [done]
-                `settings.yaml` (config/settings.py, `Workspace.load_settings`)
-                  holds the scoring weights; absent means the defaults
-  runs/         SQLite recorder                                           [Phase 6]
-  ui/           FastAPI api/ (calibrator + listings endpoints) + React     [done]
-                workspace_locks.py -- the per-listing write lock
-                  (`app.state.workspace_locks.listing(name)`). Every
-                  read-merge-write of `listing.yaml` in the UI process holds
-                  it: PATCH, DELETE, create, rename, and AI runs' brief write
-                airuns/ -- AI runs (market-seo.md, *AI runs*): brief, market
-                  research and proposal as one run per listing, each on its
-                  own daemon thread (never the plan/apply executor), streamed
-                  by api/airuns.py at /api/ai/runs. Tests inject
-                  `seo_provider_factory` and `market_client_factory` into
-                  `create_app` (tests/support/ai_runs.py has the doubles)
-                frontend/ -- AppShell/DashboardPage/ListingsPage/
-                ListingEditorPage (design strip + Variants/Pricing/Images/Details
-                tabs, and the create form too: it mounts at /listings/new on
-                an empty draft, where naming it is what writes it) done;
-                setup wizard and run runner remain, Phase 5
-                frontend/src/media.ts — what `media:` holds and what it looks
-                  like: every picture URL and every ref→name derivation, for
-                  both halves of the app
-                frontend/src/pages/editor/aiSeo/useAiRun.ts — the editor's
-                  side of an AI run: start, follow (the SSE reader is
-                  src/api/sse.ts, shared with plan/apply runs), reattach on
-                  mount, cancel, and PRD 68's auto chain (armed by a design
-                  pick, fired by the next save that can run it). Its
-                  `steps`/`queries`/`market` are rebuilt from the events, so a
-                  reload shows the same run again
-                frontend/src/pages/editor/ — the Images tab is four modules:
-                  MediaLocator (browse and add), MediaReel (order, by drag),
-                  focus (what the preview points at) and mediaEdits (what a
-                  click *changes* — pure, PRD 56's swatch gate included)
-  prompts.py    which prompt backend can drive this terminal at all, and the
-                cancel-raising wrappers the wizards ask through              [done]
-  credentials.py  one credential step — where it already lives, the blurb, the
-                ask, the caller's verification, the refusal. Shared by `setup`
-                and `auth`; capturing stays separate from storing             [done]
-  connections.py  what a workspace can talk to: the transports, the token
-                store, the clients and the RunContext, with every credential
-                resolved lazily. Verifying one is `credentials.py`'s          [done]
-  terminal.py   stdlib-only leaf: can this stream print that character?     [done]
+  core/ transport-independent backend; no FastAPI, Typer or terminal/prompt imports
+    workspace/ root discovery, path resolution, the only code that knows the directory layout;
+      listing_documents.py is the only way to read/edit/write listing.yaml, and owns each listing's lock
+    config/ pydantic models, Money, slugs, listing_validation.py (every local refusal)
+    engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
+    render/ pure render passes, frozen RenderConfig, pipeline
+    clients/ printify/ and etsy/ — transport, models, fakes
+    ai/ SEO/brief providers (Codex/Claude/Grok), prompts, proposals
+    market/ market-informed SEO research
+    listing_templates/ template conversion, validation and frozen content capture
+    batches/ staging, naming, archive inspection and ordinary listing creation
+    application/ operations shared by server and CLI, one module per workflow, no re-exports: listing reads, edits,
+      creation, rename/delete, pricing plans; calibrator (mockup_templates), listing-template library, batch staging
+      and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles; workspace_locks (templates);
+      deploy/ (Deployments) and ai/ (AiCoordinator) run coordinators; dependencies.py host seams; refusals.py
+    listing_artifacts.py moves/removes everything keyed by a listing name (dir, renders, previews, snapshot, proposal)
+    connections.py errors.py client wiring, UserFacingError
+  cli/ Typer app; auth.py setup.py new.py sequence the wizards, credentials.py pickers.py their terminal side,
+    prompts.py terminal.py the prompt backend and encoding guard; ui.py is the only module that may import server (server.hosting)
+  server/ FastAPI api/ (routes, schemas, SSE, request caches), hosting.py startup; release wheels carry the built SPA in server/static/
+src/ui/ React/npm project (see src/ui/AGENTS.md)
+tests/ core/ server/ cli/ by owner, then layer (unit, golden, behaviour, contract); shared browser/ e2e/ fixtures/,
+  doubles in tests/support/; project-wide build/CI tests (packaging, CI selection, OpenAPI export, import contracts,
+  protected test imports) directly in tests/
+docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
+scripts/ check.sh, sloc.py, generate_test_assets.py
 ```
 
-Every package's `__init__.py` states its interface — what it exports and what
-it deliberately withholds. Read that before reaching into a submodule; if what
-you need isn't exported, that is usually the docstring telling you why.
+Every package's `__init__.py` states what it exports and deliberately withholds. Read that before reaching into a submodule.
 
-## Invariants
+The tool lives here; user data (`shop.yaml`, `designs/`, `listings/`, `mockup-templates/`, `.cache/`) lives in a separate workspace directory found by walking up from cwd for `shop.yaml` (`ADR-0013`). Never write user data into this repo or assume cwd is the workspace.
 
-These are the things that are easy to break by accident and expensive to notice
-later. Each traces to a decision.
+<important if="you need to run commands to build, test, lint, or generate code">
 
-- **Only `engine` computes a diff.** The CLI renderer and the UI serialiser both
-  consume `Plan` / `StagePlan` / `Change` objects. Neither may compare states
-  itself — that is what makes the CLI and UI enforce identical rules (`A2`, PRD 20).
-- **Only `engine` runs a run.** The same rule, one level up: reading a
-  listing's lockfile, planning it, executing it, writing the lockfile back and
-  carrying on past a failure (PRD 16) all live in `engine/run.py`, behind
-  `plan_listings` / `apply_listings`. An entry point supplies the listings and
-  formats the resulting `RunReport`; it never opens a lockfile itself.
-- **Only the lockfile merges a lockfile.** `Lockfile.fold()` owns the
-  replace-versus-merge rules for all four axes, `applied_for()` owns the
-  per-stage lookup and `parse_applied_for()` owns the decode. A stage returns
-  a `StageApplyResult` and never touches the file; `execute` decides only
-  which stages run, in what order.
-- **A stage's applied document is a type, not a dict — and the stage does not
-  decode it.** The lockfile stores it as JSON; `build_plan` hands `plan()` the
-  model the stage declared in `applied_model` (`RenderApplied`,
-  `AppliedProduct`). A stage that reads its own document with
-  `applied.get("title")` ends up spelling the key names again in every
-  function that touches them — that is where a `("?", "?")` fallback for a
-  lookup that cannot miss came from. Decoding answers `None` for both "never
-  applied" and "will not decode", because a document we cannot read is one we
-  cannot prove the live state matches. **Every question a stage is asked gets
-  it**, `apply()` included — the one that did not have it went and decoded its
-  own subtree, which is a second implementation of a rule that exists to have
-  one. (It took the place of a `stage_plan` parameter no stage read: three
-  `del`'d it and the protocol had already drifted, one stage typing it
-  `object` while the rest said `StagePlan`.) That rule is the lockfile's precisely
-  because it was two stages' and they disagreed: one caught `ValidationError`
-  and answered `None`, the other indexed the dict and raised `KeyError`, which
-  is not a `UserFacingError` and so ended a whole `--all` batch.
-- **A refusal is `Blocked`, whichever question produced it.** One vocabulary for
-  "this cannot run", reaching the plan two ways because a refusal has two
-  moments. A **pre-flight** refusal — no shop configured, copy still a
-  sentinel, a design too small — is `desired()` returning `Blocked`, before a
-  document exists for a run that was never going to happen. A refusal only the
-  live state can prove — a retail price below Printify's cost, which needs
-  `variants[].cost` and therefore cannot be known before `read_live` (PRD 40's
-  amendment) — is `plan()` returning `Verdict.refused(...)`, which the engine
-  turns into the same `StagePlan.blocked`. Neither may raise, and a stage still
-  never names itself. What is forbidden is the third shape: a stage that will
-  not run reporting a `reason` instead. That is what shipped first, and
-  `format_plan` prints a reason only for stages that *do* run — so a listing
-  priced under cost skipped `publish` in silence, under a plan reading "No
-  changes." The vocabulary exists to make exactly that impossible.
-- **One rule behind that vocabulary, not one per reader.** `config/listing_validation.py`
-  owns every local refusal about a listing — predicate, message and all — and
-  `engine/stages/gates.py` is the adapter that turns one into a `Blocked` for a
-  stage, exactly as `Issue`'s tab and severity turn one into a line in the
-  editor's banner. One vocabulary with two implementations behind it is not one
-  vocabulary: these were two modules, and the garment-profile rule had already
-  diverged — `.strip()` on the engine's side, a bare truth test on the editor's,
-  so a `garment_profile: " "` passed `plan` and failed the banner about the same
-  file. A new local refusal is a check function there and nothing else.
-- **A check reads the workspace through `WorkspaceFacts`, gathered once.**
-  `check_listing` is pure and takes no workspace, so somebody has to open the
-  files it checks against — and when that was each caller's own business,
-  `_describe` parsed one garment profile twice and every listings-table row
-  re-parsed the entire template catalogue. Build one where a request begins and
-  hand it down; never load a profile or a template config beside a check.
-- **`will_run` is derived from a reason, never computed beside one.** They were
-  two expressions of one rule — `was is None or bool(changes) or live is None`
-  standing next to a three-branch string — and two expressions of one rule are
-  how a stage comes to run while reporting nothing to do.
-- **A client is built through `connections.py`.** Which credential is resolved
-  when, what a missing one means, and where the Etsy token file lives are one
-  set of answers, not four. `cli`, `setup`, `auth` and the e2e layer each wrote
-  out the same five-step Etsy assembly — read the `.env`, decide whether there
-  is a key pair, open the token store with a refresh that can find the
-  keystring again, hang a transport off it, wrap it in a client — and the e2e
-  copy was the one nobody would remember to update, since it only runs where
-  there are real credentials. The rule the module exists to hold: **a
-  credential is resolved when it is used, never when a client is built**, so a
-  workspace that has only ever rendered mockups can still `plan`.
-- **A credential is captured, verified and stored through `credentials.py`.**
-  Where it already lives (environment, then the workspace `.env`), what to say
-  before asking, how to ask, how to prove it, and what to say when it fails.
-  `setup` and `auth` each wrote that out longhand and the copies had already
-  drifted: the same blurb byte-for-byte, and a refusal differing by one word.
-  Capturing stays separate from storing because the two commands genuinely
-  disagree about *when* — `auth` writes per credential as it goes, `setup`
-  writes once every question is answered.
-- **A hashed document must not depend on the order its inputs happened to
-  arrive in.** Sort anything that lands in one. Variant ids reached
-  `print_areas[].variant_ids` in the order a listing wrote `colors:`, so
-  reordering that list changed `input_hash` and re-applied a product nothing
-  about which had changed.
-- **Nothing volatile enters a hash.** No timestamps, no absolute paths, no model
-  output, no `tool_version`. Only the lockfile's `applied` subtree is hashed, via
-  the single `canonical_hash()` helper. Violating this makes every run show a
-  spurious diff.
-- **Paths inside hashed content are workspace-relative and forward-slashed.**
-  Non-negotiable on Windows, where the same content would otherwise hash
-  differently than on Linux.
-- **Render passes are pure.** No I/O, no globals, no clock. Inputs are ndarrays
-  and frozen config. This is what makes both the hash and the goldens meaningful
-  (`A7`).
-- **Every `cv2` call passes explicit `interpolation` and `borderMode`.** Relying
-  on defaults makes output depend on the library version.
-- **Only `workspace` knows the directory layout — including how to *list* one.**
-  Everything else asks for `workspace.lock_file(name)` rather than joining
-  `listings/<name>/state.lock.json`, and for `workspace.template_photos(name)`
-  rather than globbing `mockup-templates/<name>/*.png`. Two rules enforce it:
-  `resolve()` rejects paths escaping the root (`A8`), and the layout accessors
-  reject any name that is not a single path segment. Together they are what
-  keeps the UI's endpoints safe — template names arrive from URLs — so this is
-  a security boundary, not a tidiness rule. A new path-taking CLI option or
-  endpoint goes through them, and so does a new `glob`: the calibrator grew
-  four private helpers that each globbed a template directory a different way,
-  which is exactly the drift this rule exists to prevent.
-- **A cancelled prompt raises; it is never a `None` a caller might miss.**
-  `prompts.choose`/`text`/`confirm` answer `None` because that is the honest
-  shape for a backend, but no wizard uses them directly — `pick`, `ask_choice`,
-  `ask_text` and `ask_confirm` raise `prompts.Cancelled`, caught once in
-  `cli/app.py`. A rule applied at every call site is one that will eventually
-  be missed at a call site, and a missed one here writes a `None` to a file.
-- **Two hash axes, not one.** `input_hash` decides whether to re-render;
-  `outputs` (per-file) decides whether to re-upload. Collapsing them breaks the
-  library-upgrade case the PRD calls out.
-- **Every price carries an explicit currency.** Bare numbers are rejected at
-  validation. Revenue is NOK, Printify's costs are USD; a bare number is a bug
-  waiting to be a refund (PRD 24).
-- **`colour-matrix`-kind mockup filename = slugified Printify colour name.**
-  Convention, not a mapping table. A sparse `exceptions.yaml` handles what
-  will not slugify (PRD 7a). When nothing matches exactly, `template_base_image`
-  falls back to a filename ending in the slug's hyphen segments — but only if
-  exactly one photo in the directory qualifies; two candidates is refused, not
-  guessed at. That fallback is lookup-only: `template_colours` still reports
-  a non-matching filename as its own name, since deriving a colour from an
-  unknown shared prefix (the enumeration direction) isn't the same question as
-  matching a known slug against one (the lookup direction). `multiple`- and `single`-kind templates use a
-  fixed `scene.png` instead — no per-colour photo to name (PRD 28).
-  **The browser is never told this rule**; it is served the answer.
-  `TemplateSummary.photos` carries each scene's real workspace-relative path,
-  resolved through `Workspace.scene_photo`, because the editor's caption used
-  to compose one from the convention and so named a missing file for exactly
-  the pack `template_base_image`'s fallback exists for.
-- **A template is exactly one of three kinds — never a mix.** `kind:
-  colour-matrix | multiple | single`, a discriminated union (`A11`). **No
-  garment-profile-level registry of listing templates** — a template lives
-  purely in `mockup-templates/{name}/`, and any listing may reference any of
-  them. A listing's `media:` always names `{template, colour?}` explicitly —
-  there is no default template and no bare-colour shorthand (`A13`, PRD 29).
-  `GarmentProfile.preview_template` is the one exception: a single
-  `colour-matrix` template the editor uses to judge colours, not a `media:`
-  default.
-- **Rendering is driven purely by `media`.** A scene renders only if some
-  `media` entry references it — `listing.colors` drives which Printify
-  variants sell (Phase 2), not which photos get rendered (PRD 31).
-- **`apply` is strictly sequential; only `plan`'s read-only live fetches fan out**
-  over a thread pool (`A3`). Never parallelise writes.
-- **Secrets never enter the repo.** Tokens in `.auth/`, keys in `.env`, both
-  gitignored, and both in the *workspace*, not here. `config/secrets.py` is the
-  only reader; a missing credential is reported by name and file, never as a
-  raw `401` traceback. Resolve tokens lazily — `plan` builds a catalog client
-  it never calls, and demanding a token there breaks every workspace that
-  hasn't needed one yet.
-- **`plan` checks two things, not one: would the output differ, and is the
-  output still there.** The render cache is gitignored and fully derivable, so
-  it is a directory users delete. A stage's `read_live()` is called even when
-  `local` is true — `local` means "no *remote* state", so no drift reporting
-  and no thread-pool fan-out, not "reads nothing" (`A1`).
+Run all of these in cygwin zsh from the repo root (see Environment).
 
-## Workspace vs repo
+```
+uv sync # install deps + create .venv
+./scripts/check.sh # format + lint + typecheck + test + coverage gate, Python and frontend
+uv run pytest # full suite (excludes -m e2e by default)
+uv run pytest tests/core/unit/test_money.py # one file
+uv run pytest tests/core/unit/test_money.py::test_parses_amount_and_currency # one test
+uv run pytest -k "currency" # by keyword
+uv run pytest --cov # coverage, enforcing the 85% branch floor
+uv run pytest --cov --cov-report=html # then open htmlcov/index.html
+uv run pytest -m e2e # env-gated e2e layer (real shop, see Testing)
+uv run pytest -m browser # playwright browser tests
+uv run pytest -m "not browser and not e2e" # hermetic layers (e.g. no chromium installed)
+uv run playwright install chromium # one-off, enables the browser layer
+uv run pytest --update-goldens # regenerate render goldens
+uv run mypy src # strict type check
+uv run lint-imports # Import Linter contracts in pyproject.toml (ADR-0052)
+uv run ruff check . / ruff format . # lint / format
+uv run python scripts/sloc.py --summary # code size, prose excluded
+```
 
-This repository is the **tool**. The data — `shop.yaml`, `designs/`,
-`listings/`, `mockup-templates/`, `.cache/` — lives in a separate directory the
-user owns, found by walking up from cwd for `shop.yaml` (`A8`). Never write
-user data into this repo, and never assume cwd is the workspace root.
+Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|gen:api`. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
 
-## Testing
+Human-facing setup, calibrator usage and contributor docs live in [README.md](README.md); this file holds only what an agent needs to act correctly. Keep the two commands lists in step.
 
-Six pytest layers, each with a job (`A4`, plus `browser` added in Phase 1),
-plus a separate frontend unit layer:
+CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and `ui` are registered in `cli/app.py` (`ui` lives in `cli/ui.py`); `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
 
-| Layer | Job |
-|---|---|
-| Unit | slugification, `Money`, hash canonicalisation, path resolution, limiter maths, which prompt backend runs, what a terminal can print |
-| Golden | per-pass renders on a grid target; end-to-end composites per template |
-| Behaviour | in-memory fake clients: idempotency, drift, resume, polling, batch |
-| Browser | `-m browser`, playwright over the built SPA served by FastAPI: one full drag → render → save loop per template kind, plus a listings create → edit → autosave loop |
-| Contract | cassette replay through real httpx: payload shape, auth, error decoding |
-| E2E | `-m e2e`, skipped by default, env-gated at a throwaway shop |
-| Frontend unit (Vitest) | `ui/frontend/`, not part of `pytest` — component tests for the calibrator's editors, panels and API client; `npm run test` / `test:coverage` |
+```
+setup initialise a workspace: skeleton, shop.yaml, ids
+                   --replace-prompts: reset prompts/ to packaged defaults, keeping <name>.md.bak (ADR-0044)
+auth every credential: Printify, Etsy key pair + OAuth, Anthropic (auth printify|etsy|anthropic)
+new [<design>] interactive design/garment/provider picker; writes garment profile + listing
+plan <listing|--all> three-way diff against live state
+apply <listing|--all> execute every stage the plan identified
+unlock <listing> clear a Printify product stuck publishing
+ui [--host --port] serve the dashboard, calibrator, listings and runs over HTTP in the foreground; no native window
+render / generate force a single local stage [not built]
+catalog refresh force-refresh the cached Printify catalog [not built]
+status [<listing>] run history [not built]
+```
+</important>
 
-The browser layer runs as part of a normal `pytest` (unlike `e2e`) but skips
-itself cleanly when playwright, its chromium build, or `ui/frontend/dist` is
-missing. It exists for the one thing no other layer covers: that the React app,
-the FastAPI endpoints and the real renderer work *together*. Assertions go
-through observable effects — a PNG the browser actually decoded at the
-template's true pixel size, and the `template.yaml` that Save wrote to disk —
-not through internal state.
+<important if="you are changing requirements, architecture decisions or documentation, or citing a decision">
 
-Reach for a **fake** to test behaviour and a **cassette** to test payload shape.
-Asking either to do the other's job is the mistake this split exists to prevent.
+[Feature specifications](docs/README.md#features) own current requirements;
+[architecture](docs/architecture.md) owns current mechanism and invariants;
+[ADRs](docs/adr/README.md) record decision rationale and constraints. Later
+feature amendments override earlier requirements. Batch-creation interactions
+override that feature's spec where they differ. The frozen documents under
+`docs/history/` are context, not current authority.
 
-**A test file has one subject.** `tests/behaviour/test_new_prompts.py` had
-three — prompt-backend selection, terminal encoding, and an end-to-end `new`
-run — so a cygwin-encoding regression and a wizard regression arrived from the
-same place, and two thirds of a 543-line "behaviour" file needed neither a
-workspace nor a fake. It is now `tests/unit/test_prompts.py`,
-`tests/unit/test_terminal.py` and `tests/behaviour/test_new.py`, with the
-row-building tests folded into `test_new_picker.py` beside the rest of
-`newcmd.logic`.
+Change an unworkable ADR explicitly, in its own documentation commit before
+implementation. Cite `ADR-NNNN` when a choice needs its rationale; keep a
+self-contained comment when it already explains the rule. New feature folders
+use the date their first document was created; shipped plans stay beside the
+feature with delivery PR links. See the [documentation authority rules](docs/README.md#documentation-authority).
+</important>
 
-`tests/support/` holds what more than one file needs: `builders` (a lockfile,
-a run context, an edited fixture workspace), `scripted` (the prompt double
-that answers a wizard by the *text* of the question, not its position),
-`doubles` (a `subprocess.run` and an `input()` stand-in — one level below
-`scripted`: that replaces the prompt, these replace what the prompt calls) and
-`http` (a `Transport` over an httpx mock handler, sleep always stubbed). Reach
-there before writing a fourth `fake_run` closure.
+<important if="you are running commands, installing tools, or touching paths, encodings or prompts on this Windows/cygwin machine">
 
-Golden failures should name the guilty render pass — that is why per-pass goldens
-exist alongside end-to-end ones. Regenerate with `--update-goldens` only after
-looking at the diff.
+**Run commands, tests, linters, mypy, `npm` and installs in cygwin zsh** — not PowerShell, `cmd` or Git Bash. Git Bash mangles POSIX arguments (`/home/Admin` → `C:/Program Files/Git/home/Admin`) and puts its own `bash` ahead of cygwin's, breaking the `npm` launcher. `git` and `gh` are the exception and work from any shell. If a command fails in cygwin zsh, that is a real failure.
 
-No real design files or garment photography live in this repo (or a fresh
-checkout) — `scripts/generate_test_assets.py` procedurally generates a
-grid/ruler test design and a tiny synthetic mockup template set, deterministically
-(fixed seed, no clock input), committed as ordinary test fixtures.
+The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\home\Admin\code\etsy-listing-automation` from Windows. `uv`, Python and `node` are Windows binaries on cygwin's PATH: the working directory translates, path *arguments* do not.
 
-The E2E layer talks to the real Printify and Etsy APIs. It is never part of a
-default run (`addopts = "-m 'not e2e'"`). Printify tests need
-`PRINTIFY_API_TOKEN`, or `ETSY_LISTINGS_ROOT` pointing at a workspace whose
-`.env` carries it; market research tests need that workspace's Etsy app key.
-Tests skip cleanly before making network calls when their prerequisite is absent.
+- `--root` / `ETSY_LISTINGS_ROOT` accept cygwin paths and translate them (`core/workspace/userpath.py`), so `--root` is declared `str`, not `Path`. Any new CLI option taking a user path needs the same treatment.
+- The cygwin pty is not a Windows console. prompt_toolkit cannot prompt (`NoConsoleScreenBufferError`), so all interactive prompts go through `cli/prompts.py`'s plain-`input()` fallback — never call questionary directly. `isatty()` is False and the encoding is cp1252; `terminal.adopt_declared_encoding()` trusts `LANG`, `FORCE_COLOR` opts colour back in.
+- A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `cli/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup.
+- `core.fileMode` is false in this repo. Leave it; do not commit mode-only changes. `LF → CRLF` warnings are noise.
+- Synced workspaces (Google Drive) mark directories read-only and Windows then refuses `os.rmdir`. Use `workspace.remove_tree`, not `shutil.rmtree`, for any tree this tool owns.
+</important>
 
-That clean skip is right on a contributor's machine and wrong in CI, where a
-layer that runs nothing still reports green.
-`ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1` turns every such skip — this layer's
-missing token, the browser layer's missing chromium or unbuilt SPA — into a
-failure naming the prerequisite. Both `main`-tier workflows set it.
+<important if="you are changing dependencies or versions in pyproject.toml">
+
+- OpenCV and Pillow are **pinned to exact versions**: renders are hashed and compared to goldens, and a bump that shifts output bytes re-uploads every listing's images. Do not loosen the pins.
+- Check Typer and Click compatibility together when changing either. Current
+  constraints and resolved versions live in `pyproject.toml` and `uv.lock`.
+- Node (any current LTS) is only needed for frontend work, not for installing the package.
+</important>
+
+<important if="you are adding or changing engine stages, hashing, rendering, workspace paths, credentials or clients, or prompts">
+
+Read the **Invariants** section of [docs/architecture.md](docs/architecture.md) first: who may compute a diff or merge a lockfile, what may enter a hash, how a stage refuses, render purity, template kinds, path safety, credential resolution, and currency.
+</important>
+
+<important if="you are writing or modifying tests, or investigating test failures">
+
+Layers (`ADR-0010`): unit, golden (per-pass and end-to-end renders), behaviour (in-memory fake clients), browser (`-m browser`, playwright over the built SPA), contract (cassette replay through real httpx), e2e (`-m e2e`), plus Vitest for the frontend.
+
+- Use a **fake** to test behaviour and a **cassette** to test payload shape; do not ask either to do the other's job.
+- A test file has one subject. Shared doubles live in `tests/support/` (`builders`, `scripted`, `doubles`, `http`) — look there before writing another `fake_run` closure.
+- Golden failures should name the guilty render pass. Regenerate with `--update-goldens` only after looking at the diff.
+- No real design files or photography in the repo; `scripts/generate_test_assets.py` generates deterministic synthetic assets.
+- The browser layer runs in a normal `pytest` but skips if playwright, chromium or `src/ui/dist` is missing. Assert through observable effects (decoded PNG size, the `template.yaml` Save wrote), not internal state.
+- `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1` turns those clean skips into failures; the browser and e2e jobs set it.
+</important>
+
+<important if="you are running or modifying the e2e tests, or the e2e workflow">
+
+E2E hits the real Printify and Etsy APIs and is excluded by default (`addopts = "-m 'not e2e'"`). Printify tests need `PRINTIFY_API_TOKEN` or `ETSY_LISTINGS_ROOT` pointing at a workspace whose `.env` has it; market research tests need that workspace's Etsy app key. Tests skip before any network call when a prerequisite is missing.
 
 ```
 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
+E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py # full market AI, signed-in local providers
 ```
 
-Run the full market AI e2e with signed-in local providers using
-`E2E_REAL_AI=1 ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e tests/e2e/test_ai_run_e2e.py`.
+Run it locally before merging rather than iterating through CI. `gh workflow run e2e --ref <branch>` re-runs just that workflow. If CI's Etsy sign-in goes stale (refresh tokens rotate on use), run `etsy-listings auth etsy` locally and update the `ETSY_TOKENS_JSON` secret.
+</important>
 
-Phase 1's e2e tests are **read-only** catalog GETs, so they cost no state and
-can be re-run freely. Their job is that the contract layer's transcripts are
-photographs nobody re-takes: if Printify moves a field, every offline test
-stays green and the failure surfaces as a user's `new` run falling over
-instead. The e2e layer asks the live API the questions the offline suite
-answers from memory. The write-side tests that genuinely do cost state arrive
-with Phase 2, against a throwaway shop.
+<important if="you are adding code that changes test coverage, or a coverage gate fails">
 
-### Coverage: 85% is a floor, not a target
+`./scripts/check.sh` fails under 85% **branch** coverage (`fail_under` in `pyproject.toml`); the frontend has the same floor via `npm run test:coverage`. Write the test — never lower the threshold or add `# pragma: no cover` (only genuinely unreachable code like `__main__` guards, already configured). `check.sh` runs `npm run format` (writes); CI runs `format:check`. `check.sh` skips the frontend gate when `npm` is absent.
+</important>
 
-`./scripts/check.sh` measures **branch** coverage over the whole suite and
-**fails under 85%** (`fail_under` in `pyproject.toml`). Line coverage is not
-enough: a half-tested `if` is the shape most regressions hide in.
+<important if="you are changing CI workflows or scripts/check.sh">
 
-It currently sits at ~93%, so there is real headroom. If a change drops it
-below the floor, that change shipped untested logic — write the test. Do not
-lower the threshold, and do not add `# pragma: no cover` to make a number go
-up. The one legitimate use of an exclusion is code that genuinely cannot be
-exercised in-process (a `__main__` guard, a `TYPE_CHECKING` block), and those
-are already configured centrally.
+[ci.yml](.github/workflows/ci.yml): PRs, pushes to `main` and manual runs run format-check, ruff, mypy, `lint-imports` and `pytest -m "not browser and not e2e"` under the coverage floor on ubuntu and windows, plus the frontend gate. A separate `pytest -m browser` job runs after those gates on all three triggers. These jobs use no real shop APIs. [e2e.yml](.github/workflows/e2e.yml): `pytest -m e2e`, on push to `main` or manually. Windows is in the matrix because goldens were generated there; ubuntu proves the OpenCV/Pillow pins produce the same bytes. CI mirrors `check.sh` rather than calling it — change one, change the other.
+</important>
 
-Coverage is deliberately **not** in `addopts`, so running one file
-(`uv run pytest tests/unit/test_money.py`) doesn't fail a gate it was never
-going to meet. The gate lives in the check script, which is what runs before a
-commit.
+<important if="you are measuring or reducing code size">
 
-Prettier is wired in the same way ruff is: `check.sh` runs `npm run format`,
-which writes, and CI runs `npm run format:check`, which reports. `gen:api`
-formats its own output, so regenerating the typed client cannot fail the gate.
+Use `scripts/sloc.py`, not physical line count: it strips blanks, comments and docstrings, because this codebase is deliberately heavy on rationale. Extracting a shared abstraction is usually LOC-neutral (the props type or protocol costs what the duplication did); judge by whether there is now one place to change the thing.
+</important>
 
-**The frontend carries a matching gate** — Vitest + the v8 coverage provider,
-same 85%-branch floor, same "not in the default `npm run test`" reasoning
-(`npm run test:coverage` is the enforced one). `./scripts/check.sh` runs both
-gates and skips the frontend one cleanly (not a failure) when `npm` isn't on
-`PATH`, so a Python-only contributor's `check.sh` run isn't blocked by a
-toolchain they don't have.
+<important if="you are editing docs/history/prd.md, docs/history/implementation-plan.md or other docs">
 
-### Running the suite
-
-All of these run in cygwin zsh (see Environment).
-
-```
-uv sync                              # install deps + create .venv
-./scripts/check.sh                   # format + lint + typecheck + test + coverage gate, Python and frontend
-uv run pytest --cov                  # coverage on demand, enforcing the 85% floor
-uv run pytest --cov --cov-report=html  # then open htmlcov/index.html
-uv run pytest                        # full suite (excludes -m e2e by default)
-uv run pytest tests/unit/test_money.py                     # one file
-uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency  # one test
-uv run pytest -k "currency"          # by keyword
-uv run pytest -m e2e                 # only the env-gated e2e layer
-uv run pytest -m browser             # only the calibrator browser tests
-uv run pytest -m "not browser"       # skip them (e.g. no chromium installed)
-uv run playwright install chromium   # one-off, enables the browser layer
-uv run pytest --update-goldens       # regenerate render goldens
-uv run mypy src                      # strict type check
-uv run ruff check . / ruff format .  # lint / format
-uv run python scripts/sloc.py --summary   # code size, prose excluded
-```
-
-`scripts/sloc.py` exists because physical line count is the wrong measure
-here. This codebase is deliberately heavy on rationale — the writing rules
-below ask for it — so a "make it smaller" pass measured in physical lines
-scores its biggest wins by deleting the most valuable text. The script strips
-blank lines, comments and docstrings and counts what is left, split four ways
-(`src`, `tests`, `frontend`, `frontend tests`), so a refactoring registers only
-when logic actually disappears.
-
-It is a measuring tool, not a gate, and it is worth knowing what it will not
-tell you: extracting a shared abstraction is usually **LOC-neutral**, because
-the interface it needs — a props type, a protocol, a dataclass, a fixture
-signature — costs about what the duplicated bodies did. Three copies of forty
-lines of JSX cost 120; one shell with a typed props interface costs 125. Judge
-those on whether there is now one place to change the thing, not on the
-number.
-
-Frontend (`src/etsy_listings/ui/frontend/`):
-`npm run dev|build|typecheck|lint|format|test|test:coverage`. See the
-README's "The calibrator" section for the full loop, including regenerating
-the typed API client after an endpoint change.
-
-### CI
-
-**Two workflows.** [`.github/workflows/ci.yml`](.github/workflows/ci.yml) runs
-the same gates as `check.sh`, split by what a layer needs from the outside
-world; [`.github/workflows/e2e.yml`](.github/workflows/e2e.yml) is the e2e
-layer alone.
-
-| Workflow | Trigger | What runs |
-|---|---|---|
-| CI | Pull request | `ruff format --check`, `ruff check`, `mypy`, `pytest -m "not browser"` under the 85% floor, on **ubuntu and windows**; plus the frontend's prettier/eslint/tsc/vitest gate |
-| CI | Push to `main` | all of the above, then `pytest -m browser` |
-| CI | Manual (`workflow_dispatch`) | the same as a push to `main`, against whichever ref you pick |
-| e2e | Push to `main`, or manual | `pytest -m e2e` against the real Printify and Etsy shops |
-
-The PR tier is deliberately hermetic — unit, golden, behaviour and contract
-touch no network and no browser, so a PR cannot go red on somebody else's
-infrastructure. The `browser` and `e2e` layers need chromium and real
-credentials respectively, so they run on `main`, where the secrets live
-(`PRINTIFY_API_TOKEN`, `ETSY_KEYSTRING`, `ETSY_SHARED_SECRET`,
-`ETSY_TOKENS_JSON`).
-
-`e2e` is a separate workflow because it is the one layer worth running on its
-own: `gh workflow run e2e --ref <branch>` re-runs it without re-running lint,
-both test matrices and the browser layer. That matters because its Etsy
-sign-in expires — Etsy rotates the refresh token on every use and the CI
-workspace is thrown away, so `ETSY_TOKENS_JSON` eventually goes stale and is
-fixed by running `etsy-listings auth etsy` locally, updating the secret, and
-re-running just this. The cost of the split is that it no longer sits behind
-the lint and offline-suite gate; that is accepted, since a gate blocking the
-manual re-run would be worse.
-
-Run it locally before merging rather than iterating through CI — it is far
-faster, and it costs the same real shop state either way:
-
-```
-ETSY_LISTINGS_ROOT=/path/to/workspace uv run pytest -m e2e
-```
-
-Windows is in the matrix because it is where development happens and where the
-render goldens were generated; ubuntu is there to prove the exact OpenCV and
-Pillow pins really do produce the same bytes on both, rather than assuming it.
-
-CI mirrors `scripts/check.sh` rather than calling it — that script is bash and
-reformats in place. Change one, change the other.
-
-## Commands
-
-`plan`, `apply`, `new` and `ui` are implemented. The rest of this table is the
-PRD's agreed CLI surface for reference when building later phases — do not
-assume a command exists because it is listed here.
-
-```
-setup              initialise a workspace: skeleton, shop.yaml, ids   [done; its token
-                   capture moves to `auth` in Phase 3 — PRD 49]
-                   --replace-prompts: reset prompts/ to the packaged
-                   defaults, keeping each old file as <name>.md.bak (PRD 71)
-new [<design>]     interactive design/garment/provider picker; writes garment profile + listing  [done]
-plan <listing|--all>   three-way diff against live state                          [done]
-apply <listing|--all>  execute every stage the plan identified   [done; render + printify]
-render / generate      force a single local stage                    [render: via apply; generate: Phase 4]
-ui                     setup wizard, dashboard, calibrator, listings, run runner
-                       [calibrator + dashboard + listings list/editor done;
-                       setup wizard and run runner remain, Phase 5]
-auth                   every credential: Printify, Etsy key pair + OAuth, Anthropic [Phase 3]
-catalog refresh        force-refresh the cached Printify catalog                  [Phase 6]
-unlock <listing>       clear a Printify product stuck publishing                  [Phase 2]
-status [<listing>]                                                                [Phase 6]
-```
-
-## Writing style for the docs
-
-Both documents are prose with tables, not bullet soup. They state a decision, then
-the reason it beat the alternative. Rationale is the valuable part — it is what
-stops a decision being silently reversed six months later. Match that register
-when editing them: no filler, no hedging, no restating the obvious.
+Docs are prose with tables, not bullet soup. State a decision, then the reason it beat the alternative — rationale is what stops a decision being silently reversed. No filler, no hedging, no restating the obvious.
+</important>
