@@ -131,6 +131,47 @@ def test_variant_set_placeholder_lookup() -> None:
     assert variant_set.placeholder("back") is None
 
 
+def _sized(variant_id: int, *placeholders: tuple[str, int, int]) -> Variant:
+    return Variant(
+        id=variant_id,
+        title=f"Black / {variant_id}",
+        options=VariantOptions(color="Black", size=str(variant_id)),
+        placeholders=tuple(
+            PrintAreaPlaceholder(position=p, width=w, height=h) for p, w, h in placeholders
+        ),
+    )
+
+
+SMALL_FRONT = ("front", 3461, 3955)
+LARGE_FRONT = ("front", 4200, 4800)
+LARGER_BACK = ("back", 5000, 6000)
+
+
+@pytest.mark.parametrize(
+    "small_first", [True, False], ids=["small-sizes-first", "large-sizes-first"]
+)
+def test_the_largest_print_area_wins_when_sizes_differ(small_first: bool) -> None:
+    """Print areas differ per garment size and a profile carries exactly one,
+    so `new` records the largest: art sized for the 3XL panel still covers the
+    S panel, and the reverse prints soft where it matters most. Real 1717 /
+    Monster Digital sizes; a larger panel at another position does not count."""
+    variants = [
+        _sized(1, SMALL_FRONT, LARGER_BACK),
+        _sized(2, SMALL_FRONT),
+        _sized(3, LARGE_FRONT),
+    ]
+    variant_set = VariantSet(variants=tuple(variants if small_first else reversed(variants)))
+
+    front = variant_set.placeholder("front")
+
+    assert front is not None
+    assert (front.width, front.height) == (4200, 4800)
+    assert [(p.width, p.height) for p in variant_set.placeholder_sizes("front")] == [
+        (4200, 4800),
+        (3461, 3955),
+    ], "distinct sizes, largest first"
+
+
 def test_fake_catalog_client_satisfies_protocol() -> None:
     fake = make_fake()
     assert fake.blueprints() == BLUEPRINTS

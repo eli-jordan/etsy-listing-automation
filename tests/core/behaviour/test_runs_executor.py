@@ -239,11 +239,12 @@ def test_a_defect_ends_the_run_failed_with_the_generic_message(
     this points printify at a shop id and lets the product stage's `desired()`
     reach the catalog and blow up with something that is not a
     `UserFacingError` -- exactly the shape decision 5 exists for."""
-    from tests.support.builders import set_copy, set_shop_id, write_design
+    from tests.support.builders import set_copy, set_shop_id
+    from tests.support.pipeline import at_print_area
 
     set_shop_id(workspace_root, 28819281)
     set_copy(workspace_root, title="Take a Hike", description="A shirt for walking.")
-    write_design(workspace_root, (4500, 5400))
+    at_print_area(workspace_root)
     workspace = Workspace.discover(root_override=workspace_root)
 
     def factory(ws: Workspace, on_event: EventSink | None) -> RunContext:
