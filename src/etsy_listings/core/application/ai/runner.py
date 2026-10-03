@@ -34,13 +34,14 @@ from __future__ import annotations
 import logging
 import threading
 import time
-from collections.abc import Callable, Sequence
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
 import yaml
 
+from etsy_listings.core import connections
 from etsy_listings.core.ai.brief import BriefRequest
 from etsy_listings.core.ai.errors import ProviderCancelledError, SeoGenerationError
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs, PreparedSeo
@@ -51,7 +52,15 @@ from etsy_listings.core.ai.orchestrator import (
     generate_proposal,
 )
 from etsy_listings.core.ai.proposals import ProposalChoices, ProposalStore
-from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.application.ai.events import (
+    STEP_IDS,
+    AiBriefEvent,
+    AiMarketEvent,
+    AiProposalEvent,
+    AiQueriesEvent,
+)
+from etsy_listings.core.application.ai.readiness import ProviderFactory
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
@@ -60,14 +69,6 @@ from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.cache import CachedEtsyMarketClient
 from etsy_listings.core.workspace.atomic import write_yaml_atomic
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.events import (
-    STEP_IDS,
-    AiBriefEvent,
-    AiMarketEvent,
-    AiProposalEvent,
-    AiQueriesEvent,
-)
-from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -83,10 +84,17 @@ NOT_STARTED = "Not started"
 CANCELLED = "Cancelled"
 NO_ETSY_KEY = "no Etsy API key is configured; run `etsy-listings setup`"
 
-ProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
 MarketClientFactory = Callable[[Workspace], EtsyMarketClient | None]
 """The uncached market client, or ``None`` when the workspace has no Etsy
 key. The runner wraps it in the workspace's caches itself."""
+
+
+def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
+    """The real, read-only Etsy market client (the app key only), or
+    ``None`` when the workspace has none."""
+    if connections.etsy_app_key(workspace.root) is None:
+        return None
+    return connections.etsy_market_client(workspace.root)
 
 
 class _Stopped(Exception):

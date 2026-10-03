@@ -1,42 +1,53 @@
 """Deploying takes precedence over AI (ADR-0050; spec, *Deployment interaction*;
-UI doc §8).
+UI doc §8), with core's two coordinators called directly -- no TestClient
+(module-structure plan, PR 9).
 
-A UI plan or apply for a listing first cancels that listing's AI work --
+A plan or apply for a listing first cancels that listing's AI work --
 queued batch rows and any running run, batch or manual -- and waits for the
 run to finish before planning reads the listing. While the deploy holds the
-listing, a new AI run is refused with ``deploying``. The cancelled rows are
+listing, a new AI run is refused. The cancelled rows are
 ``cancelled_by_deploy``: **Resume** leaves them alone, and only a per-row
 Retry queues them again, so no proposal lands on a listing after its deploy
 unless the seller asks for one.
 
-Everything goes through the app the seller drives, with the batch queue and
-the runs executor both running, because what these pin is how the two meet.
-The deploy's context factory is the seam that shows when planning starts:
-it is called once the executor has taken the listing, just before the plan
-reads it. The fixture workspace has no shop, so a deploy renders and blocks
-every other stage -- enough to be a deploy, and nothing here is about what
-it deploys.
+Both coordinators run, as the UI server runs them -- deployments started
+before AI work, AI work stopped first -- because what these pin is how the
+two meet. The deploy's context factory is the seam that shows when planning
+starts: it is called once the executor has taken the listing, just before
+the plan reads it. The fixture workspace has no shop, so a deploy renders
+and blocks every other stage -- enough to be a deploy, and nothing here is
+about what it deploys. The HTTP mapping of the ``deploying`` refusal is
+``tests/contract/test_ai_runs_api.py``'s.
 """
 
 from __future__ import annotations
 
 import threading
+import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Literal
+from typing import Literal
 
 import pytest
-from fastapi.testclient import TestClient
 
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application import batch_staging, batch_workflow
+from etsy_listings.core.application.ai.coordinator import AiCoordinator
+from etsy_listings.core.application.ai.registry import AiRun
+from etsy_listings.core.application.deploy.deployments import Deployments
+from etsy_listings.core.application.deploy.events import TERMINAL_PHASES
+from etsy_listings.core.application.deploy.registry import ListingApply, ListingPlan, Run
+from etsy_listings.core.application.refusals import ListingDeploying
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
+from etsy_listings.core.batches import BatchStore, StagingStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.api.app import create_app
-from etsy_listings.server.batchqueue import BatchQueue
 
 from tests.support.ai_runs import ChainProvider, has_proposal, seed_prompts, seeded_market, wait_for
-from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png
+from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads
+from tests.support.builders import FIXTURE_LISTING
 
 
 @dataclass
@@ -45,7 +56,6 @@ class Deploys:
     about to read its listings -- and, when ``hold`` is set, holding it
     there until the test lets it go."""
 
-    workspace: Workspace
     on_start: Callable[[], None] | None = None
     hold: threading.Event | None = None
     started: threading.Event = field(default_factory=threading.Event)
@@ -60,12 +70,65 @@ class Deploys:
         return RunContext(workspace=workspace, catalog=FakeCatalogClient([], {}, {}), **sink)
 
 
-@pytest.fixture
-def workspace(workspace_root: Path) -> Workspace:
-    seed_prompts(workspace_root)
-    workspace = Workspace.discover(root_override=workspace_root)
-    a_listing_template(workspace)
-    return workspace
+class Host:
+    """What the UI server holds for one workspace: one of each store and
+    lock, and the two coordinators."""
+
+    def __init__(self, workspace: Workspace, provider: ChainProvider, deploys: Deploys) -> None:
+        self.workspace = workspace
+        self.locks = WorkspaceLocks()
+        self.staging = StagingStore(workspace)
+        self.batches = BatchStore(workspace)
+        market = seeded_market()
+        self.ai = AiCoordinator(
+            workspace,
+            locks=self.locks,
+            proposals=ProposalStore(workspace),
+            batches=self.batches,
+            providers=lambda _workspace: [provider],
+            market_client=lambda _workspace: market,
+        )
+        self.deployments = Deployments(workspace, deploys, ai=self.ai)
+
+    def batch(self, *names: str) -> str:
+        files = [(f"{name}.png", png(i + 1)) for i, name in enumerate(names)]
+        session = batch_staging.stage_upload(
+            self.workspace, self.staging, LISTING_TEMPLATE, uploads(*files), locks=self.locks
+        )
+        batch = batch_workflow.confirm_batch(
+            self.workspace,
+            self.staging,
+            self.batches,
+            session.id,
+            locks=self.locks,
+            queue=self.ai.queue,
+        )
+        return batch.id
+
+    def states(self, batch_id: str) -> list[str | None]:
+        batch = batch_workflow.read_batch(self.workspace, self.batches, batch_id)
+        return [row.ai for row in batch.rows]
+
+    def deploy(self, kind: Literal["plan", "apply"], listing: str) -> Run:
+        command = ListingApply((listing,), {}) if kind == "apply" else ListingPlan((listing,))
+        run = self.deployments.submit(command)
+        assert isinstance(run, Run), run
+        return run
+
+    def resume(self, batch_id: str) -> None:
+        batch_workflow.resume_batch(self.workspace, self.batches, batch_id, queue=self.ai.queue)
+
+    def idle(self) -> None:
+        assert self.ai.queue.wait_idle(timeout=15)
+
+
+def _finished(run: Run, *, timeout: float = 20.0) -> str:
+    deadline = time.monotonic() + timeout
+    while run.phase not in TERMINAL_PHASES:
+        if time.monotonic() > deadline:
+            pytest.fail(f"run {run.id} never finished (stuck at {run.phase!r})")
+        time.sleep(0.02)
+    return run.phase
 
 
 @pytest.fixture
@@ -74,129 +137,81 @@ def provider() -> ChainProvider:
 
 
 @pytest.fixture
-def deploys(workspace: Workspace) -> Deploys:
-    return Deploys(workspace)
+def deploys() -> Deploys:
+    return Deploys()
 
 
 @pytest.fixture
-def client(workspace: Workspace, provider: ChainProvider, deploys: Deploys) -> Iterator[TestClient]:
-    market = seeded_market()
-    app = create_app(
-        workspace,
-        context_factory=deploys,
-        seo_provider_factory=lambda _workspace: [provider],
-        market_client_factory=lambda _workspace: market,
-    )
-    with TestClient(app) as client:
-        yield client
-
-
-def _batch(client: TestClient, *names: str) -> str:
-    staged = client.post(
-        "/api/staging",
-        data={"listing_template": LISTING_TEMPLATE},
-        files=[("files", (f"{n}.png", png(i + 1), "image/png")) for i, n in enumerate(names)],
-    )
-    assert staged.status_code == 200, staged.text
-    confirmed = client.post(f"/api/staging/{staged.json()['id']}/confirm")
-    assert confirmed.status_code == 200, confirmed.text
-    batch_id: str = confirmed.json()["id"]
-    return batch_id
-
-
-def _rows(client: TestClient, batch_id: str) -> list[dict[str, Any]]:
-    response = client.get(f"/api/batches/{batch_id}")
-    assert response.status_code == 200, response.text
-    rows: list[dict[str, Any]] = response.json()["rows"]
-    return rows
-
-
-def _states(client: TestClient, batch_id: str) -> list[str | None]:
-    return [row["ai"] for row in _rows(client, batch_id)]
-
-
-def _deploy(client: TestClient, kind: str, listing: str) -> str:
-    body: dict[str, Any] = {"kind": kind, "scope": "listings", "listings": [listing]}
-    if kind == "apply":
-        body["expect"] = {}
-    response = client.post("/api/runs", json=body)
-    assert response.status_code == 202, response.text
-    run_id: str = response.json()["id"]
-    return run_id
-
-
-def _finished(client: TestClient, run_id: str) -> str:
-    terminal = {"ready", "applied", "failed", "stale", "cancelled"}
-    wait_for(lambda: client.get(f"/api/runs/{run_id}").json()["phase"] in terminal)
-    phase: str = client.get(f"/api/runs/{run_id}").json()["phase"]
-    return phase
-
-
-def _queue(client: TestClient) -> BatchQueue:
-    queue: BatchQueue = client.app.state.batch_queue  # type: ignore[attr-defined]
-    return queue
-
-
-def _idle(client: TestClient) -> None:
-    assert _queue(client).wait_idle(timeout=15)
+def host(workspace_root: Path, provider: ChainProvider, deploys: Deploys) -> Iterator[Host]:
+    seed_prompts(workspace_root)
+    workspace = Workspace.discover(root_override=workspace_root)
+    a_listing_template(workspace)
+    host = Host(workspace, provider, deploys)
+    host.deployments.start()
+    host.ai.start()
+    try:
+        yield host
+    finally:
+        host.ai.stop()
+        host.deployments.stop()
 
 
 def test_an_apply_waits_for_the_running_row_to_stop_and_resume_leaves_it(
-    client: TestClient, provider: ChainProvider, deploys: Deploys
+    host: Host, provider: ChainProvider, deploys: Deploys
 ) -> None:
     gate = provider.gate("brief")
-    batch_id = _batch(client, "night-hike-club")
+    batch_id = host.batch("night-hike-club")
     wait_for(lambda: provider.started["brief"].is_set())
-    run = client.app.state.ai_run_registry.latest("night-hike-club")  # type: ignore[attr-defined]
+    run = host.ai.registry.latest("night-hike-club")
+    assert run is not None
     seen: list[str] = []
     deploys.on_start = lambda: seen.append(run.phase)
 
-    assert _finished(client, _deploy(client, "apply", "night-hike-club")) == "applied"
+    assert _finished(host.deploy("apply", "night-hike-club")) == "applied"
 
     assert seen == ["cancelled"], "planning read the listing before the AI run had stopped"
     assert provider.cancelled == ["brief"]
-    assert _states(client, batch_id) == ["cancelled_by_deploy"]
+    assert host.states(batch_id) == ["cancelled_by_deploy"]
 
     gate.set()
-    client.post(f"/api/batches/{batch_id}/resume")
-    _idle(client)
+    host.resume(batch_id)
+    host.idle()
 
-    assert _states(client, batch_id) == ["cancelled_by_deploy"]
+    assert host.states(batch_id) == ["cancelled_by_deploy"]
     assert provider.count("brief") == 1
 
 
 def test_an_apply_cancels_a_queued_row_and_no_proposal_follows_the_deploy(
-    client: TestClient, provider: ChainProvider
+    host: Host, provider: ChainProvider
 ) -> None:
     gate = provider.gate("brief")
-    batch_id = _batch(client, "night-hike-club", "cedar-trail")
+    batch_id = host.batch("night-hike-club", "cedar-trail")
     wait_for(lambda: provider.started["brief"].is_set())
-    assert _states(client, batch_id) == ["running", "queued"]
+    assert host.states(batch_id) == ["running", "queued"]
 
-    assert _finished(client, _deploy(client, "apply", "cedar-trail")) == "applied"
-    assert _states(client, batch_id) == ["running", "cancelled_by_deploy"]
+    assert _finished(host.deploy("apply", "cedar-trail")) == "applied"
+    assert host.states(batch_id) == ["running", "cancelled_by_deploy"]
 
     gate.set()
-    wait_for(lambda: _states(client, batch_id)[0] == "done")
-    _idle(client)
+    wait_for(lambda: host.states(batch_id)[0] == "done")
+    host.idle()
 
-    assert _states(client, batch_id) == ["done", "cancelled_by_deploy"]
-    assert not has_proposal(client.app.state.workspace.root, "cedar-trail")  # type: ignore[attr-defined]
+    assert host.states(batch_id) == ["done", "cancelled_by_deploy"]
+    assert not has_proposal(host.workspace.root, "cedar-trail")
 
 
 @pytest.mark.parametrize("prior_reason", ["cancelled", "timeout"])
 def test_deploy_ownership_wins_when_stop_already_requested(
-    client: TestClient,
+    host: Host,
     provider: ChainProvider,
     prior_reason: Literal["cancelled", "timeout"],
 ) -> None:
     """ADR-0050 is about who owns the listing, not which stop request won a race:
     Resume must not requeue active work once deploy has claimed it."""
     provider.gate("brief")
-    batch_id = _batch(client, "night-hike-club")
+    batch_id = host.batch("night-hike-club")
     wait_for(lambda: provider.started["brief"].is_set())
-    registry = client.app.state.ai_run_registry  # type: ignore[attr-defined]
-    run = registry.latest("night-hike-club")
+    run = host.ai.registry.latest("night-hike-club")
     assert run is not None
 
     # Keep the runner from finishing between the seller's cancel request and
@@ -204,55 +219,57 @@ def test_deploy_ownership_wins_when_stop_already_requested(
     # request_stop itself remains callable while this thread owns it.
     with run.condition:
         assert run.request_stop(prior_reason)
-        deploy_id = _deploy(client, "apply", "night-hike-club")
-        wait_for(lambda: registry.deploying("night-hike-club"))
+        deploy = host.deploy("apply", "night-hike-club")
+        wait_for(lambda: host.ai.registry.deploying("night-hike-club"))
         assert run.stop_reason == prior_reason
 
-    assert _finished(client, deploy_id) == "applied"
-    assert _states(client, batch_id) == ["cancelled_by_deploy"]
+    assert _finished(deploy) == "applied"
+    assert host.states(batch_id) == ["cancelled_by_deploy"]
 
-    client.post(f"/api/batches/{batch_id}/resume")
-    _idle(client)
-    assert _states(client, batch_id) == ["cancelled_by_deploy"]
+    host.resume(batch_id)
+    host.idle()
+    assert host.states(batch_id) == ["cancelled_by_deploy"]
 
 
-def test_retry_queues_a_row_the_deploy_cancelled(
-    client: TestClient, provider: ChainProvider
-) -> None:
+def test_retry_queues_a_row_the_deploy_cancelled(host: Host, provider: ChainProvider) -> None:
     gate = provider.gate("brief")
-    batch_id = _batch(client, "night-hike-club", "cedar-trail")
+    batch_id = host.batch("night-hike-club", "cedar-trail")
     wait_for(lambda: provider.started["brief"].is_set())
-    _finished(client, _deploy(client, "plan", "cedar-trail"))
+    _finished(host.deploy("plan", "cedar-trail"))
     gate.set()
-    cedar = _rows(client, batch_id)[1]
+    cedar = batch_workflow.read_batch(host.workspace, host.batches, batch_id).rows[1]
 
-    retried = client.post(f"/api/batches/{batch_id}/rows/{cedar['id']}/retry")
+    batch_workflow.retry_batch_row(
+        host.workspace,
+        host.staging,
+        host.batches,
+        batch_id,
+        cedar.id,
+        locks=host.locks,
+        queue=host.ai.queue,
+    )
 
-    assert retried.status_code == 200, retried.text
-    wait_for(lambda: _states(client, batch_id) == ["done", "done"])
-    assert has_proposal(client.app.state.workspace.root, "cedar-trail")  # type: ignore[attr-defined]
+    wait_for(lambda: host.states(batch_id) == ["done", "done"])
+    assert has_proposal(host.workspace.root, "cedar-trail")
 
 
 def test_a_manual_run_is_stopped_and_a_new_one_refused_while_the_deploy_holds_the_listing(
-    client: TestClient, provider: ChainProvider, deploys: Deploys
+    host: Host, provider: ChainProvider, deploys: Deploys
 ) -> None:
     provider.gate("queries")
-    started = client.post("/api/ai/runs", json={"listing": "take-a-hike", "draft_brief": False})
-    assert started.status_code == 202, started.text
+    started = host.ai.start_run(FIXTURE_LISTING, draft_brief=False)
+    assert isinstance(started, AiRun)
     wait_for(lambda: provider.started["queries"].is_set())
     deploys.hold = threading.Event()
 
-    run_id = _deploy(client, "plan", "take-a-hike")
+    deploy = host.deploy("plan", FIXTURE_LISTING)
     assert deploys.started.wait(15)
-    refused = client.post("/api/ai/runs", json={"listing": "take-a-hike", "draft_brief": False})
-    readiness = client.get("/api/listings/take-a-hike/ai-seo/readiness").json()
+    with pytest.raises(ListingDeploying):
+        host.ai.start_run(FIXTURE_LISTING, draft_brief=False)
+    blocked = host.ai.blocked(FIXTURE_LISTING)
     deploys.hold.set()
 
-    assert refused.status_code == 409
-    assert refused.json()["reason"] == "deploying"
-    assert readiness["ready"] is False
-    assert readiness["deploying"] is True
-    assert provider.cancelled == ["queries"]
-    assert _finished(client, run_id) == "ready"
-    again = client.post("/api/ai/runs", json={"listing": "take-a-hike", "draft_brief": False})
-    assert again.status_code == 202, again.text
+    assert isinstance(blocked, ListingDeploying)
+    assert (started.phase, provider.cancelled) == ("cancelled", ["queries"])
+    assert _finished(deploy) == "ready"
+    assert isinstance(host.ai.start_run(FIXTURE_LISTING, draft_brief=False), AiRun)

@@ -2,7 +2,7 @@
 *Failures* and *AI runs*; implementation plan, PR 5): brief, query
 extraction and market search, then the proposal.
 
-Every test drives :class:`~etsy_listings.server.airuns.runner.AiRunner` against
+Every test drives :class:`~etsy_listings.core.application.ai.runner.AiRunner` against
 the fixture workspace, a :class:`~tests.support.ai_runs.ChainProvider` and
 the in-memory Etsy market, and reads the run back through its events and
 steps -- the same things the SSE stream and the indicator read. The step
@@ -23,15 +23,15 @@ import yaml
 
 from etsy_listings.core.ai.errors import SeoTryAgainError
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.ai.events import AiStepEvent, StepId
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
+from etsy_listings.core.application.ai.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, server_error
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.block import MARKET_BEGIN
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.events import AiStepEvent, StepId
-from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
-from etsy_listings.server.airuns.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
 
 from tests.support.ai_runs import (
     DRAFTED_BRIEF,

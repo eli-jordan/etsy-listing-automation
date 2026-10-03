@@ -2,8 +2,8 @@
 created row drafts its brief, researches the market and gets a proposal, a
 limited number at a time across every batch, round-robin between batches.
 
-Every test drives a real :class:`~etsy_listings.server.batchqueue.BatchQueue`
-over a real :class:`~etsy_listings.server.airuns.runner.AiRunner`, the fixture
+Every test drives a real :class:`~etsy_listings.core.application.ai.batch_queue.BatchQueue`
+over a real :class:`~etsy_listings.core.application.ai.runner.AiRunner`, the fixture
 workspace, a :class:`~tests.support.ai_runs.ChainProvider` and the
 in-memory Etsy market. What the tests read back is what the batch summary
 reads: the batch record's rows, the listing files and the cached proposal.
@@ -21,6 +21,9 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.ai.batch_queue import BatchQueue
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
+from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
@@ -32,10 +35,7 @@ from etsy_listings.core.batches import (
 )
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
-from etsy_listings.server.airuns.runner import AiRunner
 from etsy_listings.server.api.app import create_app
-from etsy_listings.server.batchqueue import BatchQueue
 
 from tests.support.ai_runs import TODAY, ChainProvider, Task, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads

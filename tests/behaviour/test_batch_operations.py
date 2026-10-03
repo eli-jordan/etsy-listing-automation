@@ -6,9 +6,11 @@ The upload validation, archive safety, name allocation and idempotent row
 creation these operations coordinate are ``batches``' and tested beside it
 (``test_batch_staging``, ``test_batch_archive``, ``test_batch_creation``);
 here, that the operations around them refuse, lock, wake and steer the queue
-as the batch pages expect. The queue is a recording double -- what it then
-dispatches is ``test_batch_queue``'s -- and AI readiness is a fact handed in.
-What each outcome becomes on the wire is the batches API tests' business.
+as the batch pages expect. The queue is core's own, never started: what a
+started one then dispatches is ``test_batch_queue``'s, so these read the rows
+it would dispatch and whether it has a wake to answer. Whether AI could run
+is the queue's answer from its providers, prompts and market access. What
+each outcome becomes on the wire is the batches API tests' business.
 """
 
 from __future__ import annotations
@@ -26,6 +28,8 @@ import yaml
 
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.ai.batch_queue import BatchQueue
+from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.batch_staging import (
     cancel_staging,
     edit_staging,
@@ -73,10 +77,15 @@ from etsy_listings.core.batches import staging as staging_module
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
-from tests.support.ai_runs import seed_proposal
+from tests.support.ai_runs import (
+    ChainProvider,
+    seed_prompts,
+    seed_proposal,
+    seeded_market,
+    wait_for,
+)
 from tests.support.batches import (
     LISTING_TEMPLATE,
-    RecordingQueue,
     a_listing_template,
     png,
     uploads,
@@ -87,9 +96,35 @@ NOW = datetime(2026, 9, 27, 11, 42, tzinfo=UTC)
 
 @pytest.fixture
 def workspace(workspace_root: Path) -> Workspace:
+    seed_prompts(workspace_root)
     workspace = Workspace.discover(root_override=workspace_root)
     a_listing_template(workspace)
     return workspace
+
+
+def _queue(workspace: Workspace, batches: BatchStore) -> BatchQueue:
+    """A batch queue that could draft -- prompts, a ready provider and
+    market access -- and is never started."""
+    market = seeded_market()
+    return AiCoordinator(
+        workspace,
+        locks=WorkspaceLocks(),
+        proposals=ProposalStore(workspace),
+        batches=batches,
+        providers=lambda _workspace: [ChainProvider()],
+        market_client=lambda _workspace: market,
+    ).queue
+
+
+def _woken(queue: BatchQueue) -> bool:
+    """The queue has been asked to look again since it last answered."""
+    return not queue.wait_idle(timeout=0)
+
+
+def _ai(batches: BatchStore, batch: Batch) -> list[str | None]:
+    loaded = batches.load(batch.id)
+    assert loaded is not None
+    return [row.ai for row in loaded.rows]
 
 
 @pytest.fixture
@@ -108,8 +143,9 @@ def locks() -> WorkspaceLocks:
 
 
 @pytest.fixture
-def queue() -> RecordingQueue:
-    return RecordingQueue()
+def queue(workspace: Workspace, batches: BatchStore) -> BatchQueue:
+    """The queue under test, unwoken until the operation under test."""
+    return _queue(workspace, batches)
 
 
 def _stage(
@@ -120,38 +156,31 @@ def _stage(
     )
 
 
-def _ready() -> None:
-    return None
-
-
 def _confirm(
     workspace: Workspace,
     staging: StagingStore,
     batches: BatchStore,
     session_id: str,
-    queue: RecordingQueue,
-    *,
-    ai_blocked=_ready,  # noqa: ANN001
+    queue: BatchQueue | None = None,
 ) -> Batch:
+    """Confirm through ``queue``, or through a queue of its own when the
+    test is about what happens next."""
     return confirm_batch(
         workspace,
         staging,
         batches,
         session_id,
         locks=WorkspaceLocks(),
-        queue=queue,
-        ai_blocked=ai_blocked,
+        queue=queue or _queue(workspace, batches),
     )
 
 
-def _failed_batch(
-    workspace: Workspace, staging: StagingStore, batches: BatchStore, queue: RecordingQueue
-) -> Batch:
+def _failed_batch(workspace: Workspace, staging: StagingStore, batches: BatchStore) -> Batch:
     """One row whose creation failed: its design path was a directory."""
     session = _stage(workspace, staging, ("a.png", png(1)))
     blocker = workspace.design_file("a")
     blocker.mkdir(parents=True)
-    batch = _confirm(workspace, staging, batches, session.id, queue)
+    batch = _confirm(workspace, staging, batches, session.id)
     blocker.rmdir()
     assert batch.rows[0].creation == "failed"
     return batch
@@ -308,7 +337,7 @@ class TestConfirm:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         session = _stage(
             workspace, staging, ("Night Hike Club.png", png(1)), ("lake_loop.png", png(2))
@@ -320,7 +349,8 @@ class TestConfirm:
             ("night-hike-club", "created", "queued"),
             ("lake-loop", "created", "queued"),
         ]
-        assert queue.calls == [("wake",)]
+        assert _woken(queue)
+        assert queue.order() == [(batch.id, row.id) for row in batch.rows]
         assert read_batch(workspace, batches, session.id) == batch
 
     def test_a_blocked_ai_refuses_a_new_batch_and_writes_nothing(
@@ -328,62 +358,46 @@ class TestConfirm:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
+        workspace.brief_prompt_file().unlink()
 
         with pytest.raises(AiDraftingBlocked) as refused:
-            _confirm(
-                workspace,
-                staging,
-                batches,
-                session.id,
-                queue,
-                ai_blocked=lambda: "prompts/brief.md is missing.",
-            )
+            _confirm(workspace, staging, batches, session.id, queue)
 
         assert str(refused.value) == "AI drafting can't run yet. prompts/brief.md is missing."
         assert isinstance(refused.value, ConfirmRefused)
         assert workspace.batch_ids() == [] and workspace.listing_names() == ["take-a-hike"]
         assert read_staging(workspace, staging, session.id) == session
-        assert queue.calls == []
+        assert not _woken(queue)
 
     def test_a_confirm_finishing_a_batch_is_not_asked_about_ai_again(
         self,
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         """Its listings are half made; a repeat (double click, a dropped
         response) finishes the same batch rather than making a second."""
         session = _stage(workspace, staging, ("a.png", png(1)))
-        first = _confirm(workspace, staging, batches, session.id, queue)
+        first = _confirm(workspace, staging, batches, session.id)
+        workspace.brief_prompt_file().unlink()
 
-        def asked() -> str:
-            raise AssertionError("asked about AI for a batch that exists")
-
-        again = _confirm(workspace, staging, batches, session.id, queue, ai_blocked=asked)
+        again = _confirm(workspace, staging, batches, session.id, queue)
 
         assert again.rows == first.rows
         assert workspace.listing_names() == ["a", "take-a-hike"]
 
     def test_two_confirms_at_once_make_one_batch_and_each_listing_once(
-        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore, queue: BatchQueue
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)), ("b.png", png(2)))
         locks = WorkspaceLocks()
 
         def confirm() -> Batch:
-            return confirm_batch(
-                workspace,
-                staging,
-                batches,
-                session.id,
-                locks=locks,
-                queue=RecordingQueue(),
-                ai_blocked=_ready,
-            )
+            return confirm_batch(workspace, staging, batches, session.id, locks=locks, queue=queue)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             one, two = (f.result() for f in [pool.submit(confirm), pool.submit(confirm)])
@@ -397,19 +411,19 @@ class TestConfirm:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         session = _stage(workspace, staging, ("★★★.png", png(1)))
         with pytest.raises(ConfirmRefused, match="Fix 1 name to create the listings."):
             _confirm(workspace, staging, batches, session.id, queue)
-        assert workspace.listing_names() == ["take-a-hike"] and queue.calls == []
+        assert workspace.listing_names() == ["take-a-hike"] and not _woken(queue)
 
     def test_an_unknown_session_is_refused(
         self,
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         with pytest.raises(StagingMissing):
             _confirm(workspace, staging, batches, "0123abcd", queue)
@@ -424,18 +438,17 @@ class TestRetry:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
         locks: WorkspaceLocks,
     ) -> None:
-        batch = _failed_batch(workspace, staging, batches, queue)
-        queue.calls.clear()
+        batch = _failed_batch(workspace, staging, batches)
 
         retried = retry_batch_row(
             workspace, staging, batches, batch.id, batch.rows[0].id, locks=locks, queue=queue
         )
 
         assert (retried.rows[0].creation, retried.rows[0].ai) == ("created", "queued")
-        assert queue.calls == [("wake",)]
+        assert _woken(queue)
 
     @pytest.mark.parametrize("ai", ["failed", "stopped", "cancelled", "cancelled_by_deploy"])
     def test_a_created_row_s_ai_is_requeued(
@@ -443,20 +456,22 @@ class TestRetry:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
         locks: WorkspaceLocks,
         ai: str,
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
-        batch = _confirm(workspace, staging, batches, session.id, queue)
+        batch = _confirm(workspace, staging, batches, session.id)
         row = batch.rows[0]
-        batch.rows[0] = row.model_copy(update={"ai": ai})
+        batch.rows[0] = row.model_copy(update={"ai": ai, "ai_error": "it broke"})
         batches.save(batch)
-        queue.calls.clear()
 
-        retry_batch_row(workspace, staging, batches, batch.id, row.id, locks=locks, queue=queue)
+        retried = retry_batch_row(
+            workspace, staging, batches, batch.id, row.id, locks=locks, queue=queue
+        )
 
-        assert queue.calls == [("retry", batch.id, row.id)]
+        assert (retried.rows[0].ai, retried.rows[0].ai_error) == ("queued", None)
+        assert _woken(queue)
 
     @pytest.mark.parametrize(
         ("ai", "deleted"), [("queued", False), ("done", False), ("failed", True)]
@@ -466,32 +481,31 @@ class TestRetry:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
         locks: WorkspaceLocks,
         ai: str,
         deleted: bool,
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
-        batch = _confirm(workspace, staging, batches, session.id, queue)
+        batch = _confirm(workspace, staging, batches, session.id)
         batch.rows[0] = batch.rows[0].model_copy(update={"ai": ai, "deleted": deleted})
         batches.save(batch)
-        queue.calls.clear()
 
         with pytest.raises(NothingToRetry, match="a has nothing to retry"):
             retry_batch_row(
                 workspace, staging, batches, batch.id, batch.rows[0].id, locks=locks, queue=queue
             )
-        assert queue.calls == []
+        assert _ai(batches, batch) == [ai] and not _woken(queue)
 
     def test_unknown_batches_and_rows_are_refused(
         self,
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
         locks: WorkspaceLocks,
     ) -> None:
-        batch = _failed_batch(workspace, staging, batches, queue)
+        batch = _failed_batch(workspace, staging, batches)
         with pytest.raises(BatchRowMissing, match="no batch row 'nope'"):
             retry_batch_row(workspace, staging, batches, batch.id, "nope", locks=locks, queue=queue)
         with pytest.raises(BatchMissing, match="no batch '0123abcd'"):
@@ -502,38 +516,46 @@ class TestRetry:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
         locks: WorkspaceLocks,
     ) -> None:
-        batch = _failed_batch(workspace, staging, batches, queue)
-        queue.calls.clear()
+        session = _stage(workspace, staging, ("a.png", png(1)), ("b.png", png(2)))
+        workspace.design_file("a").mkdir(parents=True)
+        batch = _confirm(workspace, staging, batches, session.id)
+        workspace.design_file("a").rmdir()
+        batch.rows[1] = batch.rows[1].model_copy(update={"ai": "failed"})
+        batches.save(batch)
 
         retried = retry_batch(workspace, staging, batches, batch.id, locks=locks, queue=queue)
 
-        assert [(r.creation, r.ai) for r in retried.rows] == [("created", "queued")]
-        assert queue.calls == [("wake",), ("retry", batch.id)]
+        assert [(r.creation, r.ai) for r in retried.rows] == [
+            ("created", "queued"),
+            ("created", "queued"),
+        ]
+        assert _woken(queue)
 
 
 # ------------------------------------------------- steering and the record
 
 
 class TestSteerAndKeep:
-    def test_cancel_and_resume_ask_the_queue(
+    def test_cancel_stops_the_queued_rows_and_resume_queues_them_again(
         self,
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         batch = _confirm(
-            workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id, queue
+            workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id
         )
-        queue.calls.clear()
 
-        cancel_batch(workspace, batches, batch.id, queue=queue)
-        resume_batch(workspace, batches, batch.id, queue=queue)
+        cancelled = cancel_batch(workspace, batches, batch.id, queue=queue)
+        assert [row.ai for row in cancelled.rows] == ["stopped"]
+        resumed = resume_batch(workspace, batches, batch.id, queue=queue)
 
-        assert queue.calls == [("cancel", batch.id), ("resume", batch.id)]
+        assert [row.ai for row in resumed.rows] == ["queued"]
+        assert _woken(queue)
         with pytest.raises(BatchMissing):
             cancel_batch(workspace, batches, "0123abcd", queue=queue)
 
@@ -542,30 +564,66 @@ class TestSteerAndKeep:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         batch = _confirm(
-            workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id, queue
+            workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id
         )
-        queue.calls.clear()
 
         delete_batch(workspace, batches, batch.id, queue=queue)
 
-        assert queue.calls == [("cancel", batch.id), ("wake",)]
-        assert workspace.batch_ids() == []
+        assert workspace.batch_ids() == [] and queue.order() == []
+        assert _woken(queue)
         assert workspace.listing_file("a").is_file() and workspace.design_file("a").is_file()
         with pytest.raises(BatchMissing):
             delete_batch(workspace, batches, batch.id, queue=queue)
+
+    def test_delete_stops_a_row_still_drafting(
+        self, workspace: Workspace, staging: StagingStore, batches: BatchStore
+    ) -> None:
+        """The record goes, but the work it started must not carry on: a
+        running row's run is asked to stop, which kills its provider call."""
+        provider = ChainProvider()
+        provider.gate("brief")
+        market = seeded_market()
+        ai = AiCoordinator(
+            workspace,
+            locks=WorkspaceLocks(),
+            proposals=ProposalStore(workspace),
+            batches=batches,
+            providers=lambda _workspace: [provider],
+            market_client=lambda _workspace: market,
+        )
+        ai.start()
+        try:
+            batch = _confirm(
+                workspace,
+                staging,
+                batches,
+                _stage(workspace, staging, ("a.png", png(1))).id,
+                ai.queue,
+            )
+            wait_for(lambda: provider.started["brief"].is_set())
+            run = ai.registry.latest("a")
+            assert run is not None
+
+            delete_batch(workspace, batches, batch.id, queue=ai.queue)
+
+            wait_for(lambda: run.finished)
+            assert (run.stop_reason, run.phase) == ("cancelled", "cancelled")
+            assert provider.cancelled == ["brief"]
+            assert workspace.batch_ids() == []
+        finally:
+            ai.stop()
 
     def test_rename_changes_the_label_only_and_a_blank_keeps_it(
         self,
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
     ) -> None:
         batch = _confirm(
-            workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id, queue
+            workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id
         )
 
         renamed = rename_batch(workspace, batches, batch.id, " Autumn drop ")
@@ -581,10 +639,9 @@ class TestSteerAndKeep:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
     ) -> None:
         batch = _confirm(
-            workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id, queue
+            workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id
         )
         row = batch.rows[0].id
 
@@ -604,9 +661,8 @@ class TestSteerAndKeep:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
     ) -> None:
-        batch = _failed_batch(workspace, staging, batches, queue)
+        batch = _failed_batch(workspace, staging, batches)
         row = batch.rows[0]
         assert workspace.staging_ids() == []
 
@@ -627,7 +683,7 @@ class TestReads:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         confirmed = _confirm(
             workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id, queue
@@ -657,7 +713,7 @@ class TestReads:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)), ("b.png", png(2)))
         workspace.design_file("a").mkdir(parents=True)
@@ -673,7 +729,7 @@ class TestReads:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         batch = _confirm(
             workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id, queue
@@ -694,7 +750,7 @@ class TestReads:
         workspace: Workspace,
         staging: StagingStore,
         batches: BatchStore,
-        queue: RecordingQueue,
+        queue: BatchQueue,
     ) -> None:
         batch = _confirm(
             workspace, staging, batches, _stage(workspace, staging, ("a.png", png(1))).id, queue

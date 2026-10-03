@@ -18,14 +18,14 @@ from starlette.responses import FileResponse, JSONResponse, Response
 
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.ai.coordinator import AiCoordinator
+from etsy_listings.core.application.ai.readiness import ProviderFactory, default_ai_providers
+from etsy_listings.core.application.ai.runner import MarketClientFactory, default_market_client
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.deploy.executor import ContextFactory
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore, StagingStore
-from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
-from etsy_listings.server.airuns.registry import AiRunRegistry
-from etsy_listings.server.airuns.runner import AiRunner, MarketClientFactory
 from etsy_listings.server.api.airuns import router as ai_runs_router
 from etsy_listings.server.api.batches import router as batches_router
 from etsy_listings.server.api.designs import router as designs_router
@@ -34,10 +34,8 @@ from etsy_listings.server.api.listings import router as listings_router
 from etsy_listings.server.api.listings import support_router as listings_support_router
 from etsy_listings.server.api.media_files import router as media_files_router
 from etsy_listings.server.api.runs import router as runs_router
-from etsy_listings.server.api.seo import AiProviderFactory, default_ai_providers
 from etsy_listings.server.api.seo import router as seo_router
 from etsy_listings.server.api.templates import router as templates_router
-from etsy_listings.server.batchqueue import BatchQueue
 
 
 def _frontend_dist() -> Path:
@@ -51,42 +49,30 @@ def _frontend_dist() -> Path:
 FRONTEND_DIST = _frontend_dist()
 
 
-def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
-    """The real, read-only Etsy market client (the app key only), or `None`
-    when the workspace has none."""
-    if connections.etsy_app_key(workspace.root) is None:
-        return None
-    return connections.etsy_market_client(workspace.root)
-
-
 def create_app(
     workspace: Workspace,
     *,
     context_factory: ContextFactory = connections.run_context,
-    seo_provider_factory: AiProviderFactory = default_ai_providers,
+    seo_provider_factory: ProviderFactory = default_ai_providers,
     market_client_factory: MarketClientFactory = default_market_client,
 ) -> FastAPI:
+    # One of each per process, so their locks mean something: the write
+    # locks every read-merge-write holds, and the cache records' stores.
     locks = WorkspaceLocks()
-    ai_registry = AiRunRegistry()
     proposal_store = ProposalStore(workspace)
-    ai_runner = AiRunner(
-        workspace=workspace,
-        registry=ai_registry,
-        locks=locks,
-        providers=seo_provider_factory,
-        market_client=market_client_factory,
-        proposals=proposal_store,
-    )
     staging_store = StagingStore(workspace)
     batch_store = BatchStore(workspace)
-    batch_queue = BatchQueue(
-        workspace=workspace, batches=batch_store, registry=ai_registry, runner=ai_runner
+    # Constructing the coordinators starts nothing; the lifespan below does.
+    # Deploying takes precedence over AI work (ADR-0050).
+    ai = AiCoordinator(
+        workspace,
+        locks=locks,
+        proposals=proposal_store,
+        batches=batch_store,
+        providers=seo_provider_factory,
+        market_client=market_client_factory,
     )
-    # Constructing it starts nothing; the lifespan below does. Deploying
-    # takes precedence over AI work through the batch queue (ADR-0050).
-    deployments = Deployments(
-        workspace, context_factory, yield_to_deploy=batch_queue.yield_to_deploy
-    )
+    deployments = Deployments(workspace, context_factory, ai=ai)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -96,22 +82,21 @@ def create_app(
         (uvicorn's own shutdown when ``ui`` is interrupted, and
         ``TestClient``'s ``with`` block).
 
-        AI runs are cancelled first: each is on its own daemon thread, and
-        cancelling kills its provider subprocess tree, so a server stopping
-        never waits out a model.
+        AI work stops first: its batch queue starts nothing more, then every
+        AI run is cancelled -- each on its own daemon thread, its provider
+        subprocess tree killed -- so a server stopping never waits out a
+        model, and a deploy yielding to a run is not left waiting on it.
 
-        Expired staging sessions are swept on the way in. The batch
-        queue starts with the app, returning rows a previous server left
-        running to the queue, and stops before the AI runs are cancelled, so
-        it starts nothing into a runner that is shutting down."""
+        Expired staging sessions are swept on the way in. The batch queue
+        starts with the app, returning rows a previous server left running
+        to the queue."""
         staging_store.sweep(now=datetime.now(UTC))
         deployments.start()
-        batch_queue.start()
+        ai.start()
         try:
             yield
         finally:
-            batch_queue.stop()
-            ai_runner.shutdown()
+            ai.stop()
             deployments.stop()
 
     app = FastAPI(title="etsy-listings", version="0.1.0", lifespan=lifespan)
@@ -122,26 +107,15 @@ def create_app(
     # nothing to do with running a run -- reaching through `deployments` for
     # it would couple that endpoint to deployment's own shape for no reason.
     app.state.context_factory = context_factory
-    # The AI providers' injection seam, read per request by AI Mode's
-    # readiness check (`seo.py`) and per run by `ai_runner`.
-    app.state.seo_provider_factory = seo_provider_factory
     # Held around every read-merge-write of a listing (`listings.py`, and
     # PR 5's brief write) -- `core/application/workspace_locks.py` says why.
     app.state.workspace_locks = locks
-    # AI runs (features/market-seo-20260924/spec.md, *AI runs*): their own registry and a thread per
-    # run, never `deployments`. `market_client_factory` is the test seam for
-    # Etsy market search, as `seo_provider_factory` is for the providers.
-    app.state.ai_run_registry = ai_registry
-    app.state.ai_runner = ai_runner
-    # Batch creation's cache records: one store of each per process, so
-    # their per-record locks mean something.
+    # AI runs (features/market-seo-20260924/spec.md, *AI runs*) and the
+    # batch AI queue (ADR-0048): a thread per run, never `deployments`.
+    app.state.ai = ai
     app.state.staging_store = staging_store
     app.state.batch_store = batch_store
-    # ADR-0048: the batch AI queue, dispatching batch rows onto `ai_runner`.
-    # `market_client_factory` is also what staging's AI readiness asks.
-    app.state.batch_queue = batch_queue
-    app.state.market_client_factory = market_client_factory
-    # ADR-0049: the cached proposals, written by `ai_runner` and read and resolved
+    # ADR-0049: the cached proposals, written by AI runs and read and resolved
     # through `seo.py`. One store, for the same reason.
     app.state.proposal_store = proposal_store
 

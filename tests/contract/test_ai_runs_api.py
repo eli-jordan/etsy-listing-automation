@@ -24,12 +24,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from etsy_listings.core.ai.models import ProviderReadiness
+from etsy_listings.core.application.ai.registry import AiRun
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.layout import MARKET_QUERIES_PROMPT_FILE, PROMPTS_DIR
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.registry import AiRun
 from etsy_listings.server.api import airuns as airuns_api
 from etsy_listings.server.api.app import create_app
 
@@ -153,6 +153,25 @@ def test_a_finished_run_is_replaced_by_the_next(client: TestClient) -> None:
     assert client.get("/api/ai/runs", params={"listing": LISTING}).json()["id"] == second["id"]
     assert client.get(f"/api/ai/runs/{first['id']}").status_code == 404
     _finished(client, second["id"])
+
+
+def test_a_listing_a_deploy_holds_is_409_deploying_and_not_ready(client: TestClient) -> None:
+    """ADR-0050's refusal on the wire: the reason is a code the editor words
+    itself, and readiness carries the flag and the hint."""
+    ai = client.app.state.ai  # type: ignore[attr-defined]
+
+    with ai.yield_to_deploy([LISTING]):
+        refused = client.post("/api/ai/runs", json={"listing": LISTING, "draft_brief": False})
+        readiness = client.get(f"/api/listings/{LISTING}/ai-seo/readiness").json()
+
+    assert refused.status_code == 409
+    assert refused.json() == {"active_run": None, "reason": "deploying"}
+    assert readiness == {
+        "ready": False,
+        "reason": "This listing is deploying. AI Mode is back once the deploy finishes.",
+        "batch_pending": False,
+        "deploying": True,
+    }
 
 
 def test_post_for_an_unknown_listing_is_404(client: TestClient) -> None:
@@ -362,7 +381,7 @@ def test_closing_the_stream_does_not_cancel_the_run(
     gate = provider.gate("seo")
     with _client(workspace_root, provider) as client:
         run_id = _start(client)["id"]
-        run = client.app.state.ai_run_registry.get(run_id)  # type: ignore[attr-defined]
+        run = client.app.state.ai.registry.get(run_id)  # type: ignore[attr-defined]
         assert isinstance(run, AiRun)
 
         wait_for(lambda: provider.started["seo"].is_set())
@@ -452,7 +471,7 @@ def test_leaving_the_app_cancels_active_runs(workspace_root: Path, provider: Cha
     with _client(workspace_root, provider) as client:
         run_id = _start(client)["id"]
         wait_for(lambda: provider.started["queries"].is_set())
-        run = client.app.state.ai_run_registry.get(run_id)  # type: ignore[attr-defined]
+        run = client.app.state.ai.registry.get(run_id)  # type: ignore[attr-defined]
 
     assert run.phase == "cancelled"
     assert provider.cancelled == ["queries"]

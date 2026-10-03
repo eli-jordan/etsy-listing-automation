@@ -2,20 +2,20 @@
 coordinators (module-structure plan, PR 6).
 
 The write locks are the real ``WorkspaceLocks`` -- competing writes are only
-proved against the lock that serialises them. The AI run registry and the
-Etsy state memo are replaced: an operation asks them two questions each, and
-a test cares only about what it asked.
+proved against the lock that serialises them -- and so is the AI run
+registry, core's own since PR 9. The Etsy state memo is replaced: only Etsy
+knows a listing's state.
 """
 
 from __future__ import annotations
 
 import os
 from collections.abc import Mapping, Sequence
-from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.dependencies import EtsyStates
 from etsy_listings.core.batches import Batch, BatchRow, BatchStore
 from etsy_listings.core.workspace.workspace import Workspace
@@ -25,33 +25,15 @@ from tests.support.builders import FIXTURE_LISTING, a_lock
 CREATED = datetime(2026, 9, 27, 11, 42, tzinfo=UTC)
 
 
-@dataclass
-class RecordingRun:
-    """An AI run that only remembers being asked to stop."""
-
-    stops: list[str] = field(default_factory=list)
-
-    def request_stop(self, reason: str) -> bool:
-        self.stops.append(reason)
-        return True
-
-
-@dataclass
-class RecordingAiRuns:
-    """The AI run registry as a listing operation sees it."""
-
-    runs: dict[str, RecordingRun] = field(default_factory=dict)
-    forgotten: list[str] = field(default_factory=list)
-
-    @classmethod
-    def running(cls, *listings: str) -> RecordingAiRuns:
-        return cls(runs={listing: RecordingRun() for listing in listings})
-
-    def latest(self, listing: str) -> RecordingRun | None:
-        return self.runs.get(listing)
-
-    def forget(self, listing: str) -> None:
-        self.forgotten.append(listing)
+def ai_run(listing: str, *, finished: bool = False) -> tuple[AiRunRegistry, AiRun]:
+    """A registry holding one run for ``listing``, never started on a
+    thread: still running, or finished ``done``."""
+    registry = AiRunRegistry()
+    run = registry.create(listing, draft_brief=False)
+    assert isinstance(run, AiRun)
+    if finished:
+        run.finish("done")
+    return registry, run
 
 
 def etsy_reports(states: Mapping[int, str] | None = None) -> EtsyStates:

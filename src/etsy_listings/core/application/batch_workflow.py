@@ -7,11 +7,10 @@ Creating listings is ``batches``' -- ``confirm`` and ``retry_row`` allocate
 each name under that listing's write lock and are idempotent, so a repeat
 finishes the same batch rather than making a second. This module decides
 around them: a new batch is not created into a queue that cannot run
-(:data:`~etsy_listings.core.application.dependencies.AiBlocked`), Retry
-recreates a failed row or requeues its AI or refuses, and every change that
-queues work wakes the queue. The queue itself is the server's until PR 9
-moves it; operations steer it through
-:class:`~etsy_listings.core.application.dependencies.BatchQueueControl`.
+(``BatchQueue.blocked``), Retry recreates a failed row or requeues its AI or
+refuses, and every change that queues work wakes the queue. The queue is
+:class:`~etsy_listings.core.application.ai.batch_queue.BatchQueue`, the one
+the application runtime's AI coordinator dispatches from (ADR-0048).
 """
 
 from __future__ import annotations
@@ -26,10 +25,7 @@ from pydantic import ValidationError
 
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs
 from etsy_listings.core.ai.proposals import ProposalStore
-from etsy_listings.core.application.dependencies import (
-    AiBlocked,
-    BatchQueueControl,
-)
+from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.refusals import (
     AiDraftingBlocked,
     BatchMissing,
@@ -71,24 +67,23 @@ def confirm_batch(
     session_id: str,
     *,
     locks: WorkspaceLocks,
-    queue: BatchQueueControl,
-    ai_blocked: AiBlocked,
+    queue: BatchQueue,
 ) -> Batch:
     """Create one listing per creatable row of staging session
     ``session_id`` -- or finish the batch a previous confirm began -- and
     wake the queue for the rows now queued.
 
-    Only a *new* batch asks ``ai_blocked``: one that exists already has
-    listings half made, and is finished whatever AI's state. Refusals, with
-    nothing created: :class:`AiDraftingBlocked`, ``batches.ConfirmRefused``
-    (names to fix, nothing creatable, a shared ref broken since staging),
-    :class:`StagingMissing`, ``InvalidNameError``.
+    Only a *new* batch asks whether the queue could draft: one that exists
+    already has listings half made, and is finished whatever AI's state.
+    Refusals, with nothing created: :class:`AiDraftingBlocked`,
+    ``batches.ConfirmRefused`` (names to fix, nothing creatable, a shared ref
+    broken since staging), :class:`StagingMissing`, ``InvalidNameError``.
     """
     workspace.staging_dir(session_id)
     if batches.load(session_id) is None:
-        reason = ai_blocked()
-        if reason is not None:
-            raise AiDraftingBlocked(reason)
+        blocked = queue.blocked()
+        if blocked is not None:
+            raise AiDraftingBlocked(blocked.message)
     try:
         batch = confirm(workspace, staging, batches, session_id, lock=locks.listing)
     except KeyError as exc:
@@ -108,7 +103,7 @@ def retry_batch_row(
     row_id: str,
     *,
     locks: WorkspaceLocks,
-    queue: BatchQueueControl,
+    queue: BatchQueue,
 ) -> Batch:
     """Retry one row (UI doc §7): its creation, if that failed -- which
     queues it once it exists -- else its AI, keeping the saved brief.
@@ -132,7 +127,7 @@ def retry_batch(
     batch_id: str,
     *,
     locks: WorkspaceLocks,
-    queue: BatchQueueControl,
+    queue: BatchQueue,
 ) -> Batch:
     """**Retry N failed**: every row whose creation failed is created, then
     every row whose AI failed is queued again."""
@@ -151,7 +146,7 @@ def _recreate(
     rows: Iterable[str],
     *,
     locks: WorkspaceLocks,
-    queue: BatchQueueControl,
+    queue: BatchQueue,
 ) -> None:
     for row in rows:
         retry_row(workspace, staging, batches, batch_id, row, lock=locks.listing)
@@ -162,7 +157,7 @@ def _recreate(
 
 
 def cancel_batch(
-    workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueueControl
+    workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueue
 ) -> Batch:
     """**Cancel batch** (spec, *Cancellation and deletion*): queued rows are
     stopped and running ones asked to stop. Everything written stays."""
@@ -172,7 +167,7 @@ def cancel_batch(
 
 
 def resume_batch(
-    workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueueControl
+    workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueue
 ) -> Batch:
     """**Resume**: stopped and cancelled rows join the queue again."""
     read_batch(workspace, batches, batch_id)
@@ -181,7 +176,7 @@ def resume_batch(
 
 
 def delete_batch(
-    workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueueControl
+    workspace: Workspace, batches: BatchStore, batch_id: str, *, queue: BatchQueue
 ) -> None:
     """Delete the batch record (spec, *Cancellation and deletion*): its
     queued and running work is cancelled first, then only the record goes --

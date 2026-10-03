@@ -22,7 +22,7 @@ import { type AiRunHandlers, useAiRun } from "./useAiRun";
  * a design pick arms and the first successful save fires.
  *
  * The server is `test/aiRuns.ts`'s stand-in at `api/aiRuns.ts`'s seam; a
- * test pushes the events `server/airuns/runner.py` would write.
+ * test pushes the events `core/application/ai/runner.py` would write.
  */
 
 let runs: FakeAiRuns;

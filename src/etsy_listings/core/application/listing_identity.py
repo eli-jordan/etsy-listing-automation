@@ -16,7 +16,8 @@ from dataclasses import dataclass
 import yaml
 
 from etsy_listings.core.ai.proposals import ProposalStore
-from etsy_listings.core.application.dependencies import EtsyStates, ListingAiRuns
+from etsy_listings.core.application.ai.registry import AiRunRegistry
+from etsy_listings.core.application.dependencies import EtsyStates
 from etsy_listings.core.application.refusals import (
     ListingMissing,
     ListingNameTaken,
@@ -48,7 +49,7 @@ def rename_listing(
     locks: WorkspaceLocks,
     batches: BatchStore,
     proposals: ProposalStore,
-    ai_runs: ListingAiRuns,
+    ai_runs: AiRunRegistry,
 ) -> None:
     """Move listing ``old``, whole, to ``new``.
 
@@ -94,7 +95,7 @@ def delete_listing(
     locks: WorkspaceLocks,
     batches: BatchStore,
     proposals: ProposalStore,
-    ai_runs: ListingAiRuns,
+    ai_runs: AiRunRegistry,
     etsy_states: EtsyStates,
 ) -> Deletion:
     """Delete listing ``name`` (ADR-0035).

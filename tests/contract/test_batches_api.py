@@ -2,7 +2,7 @@
 ADR-0048, ADR-0051, staging expiry): status codes, payload shape, and what is on disk after
 each answer.
 
-The staging, creation and queue rules are `batches`' and `server.batchqueue`'s
+The staging, creation and queue rules are `batches`' and `core.application.ai.batch_queue`'s
 and have their own behaviour tests; these pin what the browser is told, and
 that a reload finds the same session again. The app is given a
 :class:`~tests.support.ai_runs.ChainProvider` and the in-memory Etsy market,

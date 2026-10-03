@@ -28,8 +28,7 @@ taken is 409. Deleting a published listing is a 409 too (ADR-0035).
 from __future__ import annotations
 
 import dataclasses
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Annotated, Any
@@ -39,7 +38,8 @@ from fastapi.responses import Response
 
 from etsy_listings.core import connections
 from etsy_listings.core.ai.proposals import ProposalStore
-from etsy_listings.core.application.dependencies import EtsyStates, ListingAiRuns
+from etsy_listings.core.application.ai.registry import AiRunRegistry
+from etsy_listings.core.application.dependencies import EtsyStates
 from etsy_listings.core.application.deploy.executor import ContextFactory
 from etsy_listings.core.application.listing_creation import create_listing as create
 from etsy_listings.core.application.listing_edits import edit_listing
@@ -126,8 +126,8 @@ def _batch_store(request: Request) -> BatchStore:
     return store
 
 
-def _ai_runs(request: Request) -> ListingAiRuns:
-    runs: ListingAiRuns = request.app.state.ai_run_registry
+def _ai_runs(request: Request) -> AiRunRegistry:
+    runs: AiRunRegistry = request.app.state.ai.registry
     return runs
 
 
@@ -145,17 +145,6 @@ def _etsy_states(workspace: Workspace) -> EtsyStates:
 class Target:
     workspace: Workspace
     name: str
-    locks: WorkspaceLocks
-
-    @contextmanager
-    def writing(self) -> Iterator[None]:
-        """Hold this listing's write lock, and 404 if it went while this
-        request waited for it. For ``seo.py``'s proposal resolution, which
-        PR 9 of the module-structure plan moves into core; the listing
-        operations below take the lock themselves."""
-        with self.locks.listing(self.name):
-            _require_listing(self.workspace, self.name)
-            yield
 
 
 def _require_listing(workspace: Workspace, name: str) -> None:
@@ -168,7 +157,7 @@ def target(request: Request, name: str) -> Target:
     operations re-check under the listing's lock once they hold it."""
     workspace = _workspace(request)
     _require_listing(workspace, name)
-    return Target(workspace=workspace, name=name, locks=_locks(request))
+    return Target(workspace=workspace, name=name)
 
 
 Existing = Annotated[Target, Depends(target)]

@@ -1,6 +1,6 @@
 """The batch AI queue (spec, *Batch AI queue*; ADR-0048): every created batch row
 drafts its brief, researches the market and gets a proposal, through the
-same :class:`~etsy_listings.server.airuns.runner.AiRunner` a manual run uses.
+same :class:`~etsy_listings.core.application.ai.runner.AiRunner` a manual run uses.
 
 **One dispatcher thread**, woken by a condition whenever a row, a batch or a
 run changes. Each wake reads ``batch_ai.concurrency`` afresh, counts the
@@ -20,9 +20,9 @@ run does not survive its server, and its listing already exists, so the
 rerun creates nothing twice. A run stopped by the server shutting down is
 left ``running`` for that reason.
 
-Only inside the ``ui`` server: there is no guard against two servers on one
-workspace, and the in-process locks are enough (batch plan, *Where the queue
-runs*).
+Run only by the ``ui`` server, through its AI coordinator: there is no guard
+against two servers on one workspace, and the in-process locks are enough
+(batch plan, *Where the queue runs*). CLI apply never touches it (ADR-0050).
 """
 
 from __future__ import annotations
@@ -32,12 +32,13 @@ import threading
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
 
+from etsy_listings.core.application.ai.events import AiPhaseEvent
+from etsy_listings.core.application.ai.readiness import AiReadinessBlock, batch_blocked
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
+from etsy_listings.core.application.ai.runner import AiRunner
 from etsy_listings.core.batches import RETRYABLE, AiState, AiStep, Batch, BatchRow, BatchStore
 from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.events import AiPhaseEvent
-from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
-from etsy_listings.server.airuns.runner import AiRunner
 
 logger = logging.getLogger(__name__)
 
@@ -327,6 +328,19 @@ class BatchQueue:
 
     def concurrency(self) -> int:
         return self._limit()
+
+    def blocked(self) -> AiReadinessBlock | None:
+        """Why a batch created now could not draft -- a prompt, a ready
+        provider or Etsy market access missing -- or ``None`` while it could
+        (spec, *Design validation*). Asks the providers and market client
+        this queue's runs would use, so a batch is not knowingly created
+        into a queue that cannot run."""
+        workspace = self._workspace
+        return batch_blocked(
+            workspace,
+            self._runner.providers(workspace),
+            has_market=self._runner.market_client(workspace) is not None,
+        )
 
     # -------------------------------------------------------------- helpers
 

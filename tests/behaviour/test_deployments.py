@@ -11,12 +11,12 @@ from __future__ import annotations
 
 import threading
 import time
-from collections.abc import Iterator, Sequence
-from contextlib import contextmanager
 from pathlib import Path
 
 import pytest
 
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.ai.coordinator import AiCoordinator
 from etsy_listings.core.application.deploy.deployments import Deployments
 from etsy_listings.core.application.deploy.events import (
     TERMINAL_PHASES,
@@ -33,6 +33,8 @@ from etsy_listings.core.application.deploy.registry import (
     WorkspacePlan,
 )
 from etsy_listings.core.application.refusals import ReviewedPlanRefused
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
+from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
@@ -256,15 +258,23 @@ def test_runs_execute_one_at_a_time_in_the_order_queued_after_yielding_ai_work(
     its listings from AI work before reading them and holds them until it
     ends."""
     copy_listing(workspace_root, "second")
-    held: list[tuple[str, tuple[str, ...]]] = []
+    ai = AiCoordinator(
+        workspace,
+        locks=WorkspaceLocks(),
+        proposals=ProposalStore(workspace),
+        batches=BatchStore(workspace),
+        providers=lambda _workspace: [],
+        market_client=lambda _workspace: None,
+    )
+    held: list[tuple[bool, bool]] = []
 
-    @contextmanager
-    def yield_to_deploy(listings: Sequence[str]) -> Iterator[None]:
-        held.append(("take", tuple(listings)))
-        yield
-        held.append(("release", tuple(listings)))
+    def context(workspace: Workspace, on_event: EventSink | None = None) -> RunContext:
+        """Called as a run is about to read its listings: which of the two
+        does AI work have to leave alone right now?"""
+        held.append((ai.registry.deploying(LISTING), ai.registry.deploying("second")))
+        return _context(workspace, on_event)
 
-    deployments = Deployments(workspace, _context, yield_to_deploy=yield_to_deploy)
+    deployments = Deployments(workspace, context, ai=ai)
     first = _run(deployments.submit(ListingApply((LISTING,), {})))
     second = _run(deployments.submit(ListingPlan(("second",))))
     deployments.start()
@@ -274,12 +284,8 @@ def test_runs_execute_one_at_a_time_in_the_order_queued_after_yielding_ai_work(
     finally:
         deployments.stop()
 
-    assert held == [
-        ("take", (LISTING,)),
-        ("release", (LISTING,)),
-        ("take", ("second",)),
-        ("release", ("second",)),
-    ]
+    assert held == [(True, False), (False, True)]
+    assert not ai.registry.deploying(LISTING) and not ai.registry.deploying("second")
     assert (first.phase, second.phase) == ("applied", "ready")
 
 

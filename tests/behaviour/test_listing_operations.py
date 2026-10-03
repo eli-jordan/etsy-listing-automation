@@ -25,6 +25,7 @@ import pytest
 import yaml
 
 from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.listing_creation import create_listing
 from etsy_listings.core.application.listing_edits import edit_listing
 from etsy_listings.core.application.listing_identity import delete_listing, rename_listing
@@ -48,7 +49,7 @@ from tests.support.ai_runs import has_proposal, seed_proposal, seed_snapshot
 from tests.support.builders import FIXTURE_LISTING
 from tests.support.builders import edit_listing as edit_listing_file
 from tests.support.listings import (
-    RecordingAiRuns,
+    ai_run,
     applied,
     batch_naming,
     batch_rows,
@@ -93,7 +94,7 @@ def _rename(workspace: Workspace, new: str, **kwargs: Any) -> None:  # noqa: ANN
         locks=kwargs.pop("locks", WorkspaceLocks()),
         batches=BatchStore(workspace),
         proposals=ProposalStore(workspace),
-        ai_runs=kwargs.pop("ai_runs", RecordingAiRuns()),
+        ai_runs=kwargs.pop("ai_runs", AiRunRegistry()),
     )
 
 
@@ -104,7 +105,7 @@ def _delete(workspace: Workspace, **kwargs: Any):  # noqa: ANN202, ANN401
         locks=kwargs.pop("locks", WorkspaceLocks()),
         batches=BatchStore(workspace),
         proposals=ProposalStore(workspace),
-        ai_runs=kwargs.pop("ai_runs", RecordingAiRuns()),
+        ai_runs=kwargs.pop("ai_runs", AiRunRegistry()),
         etsy_states=kwargs.pop("etsy_states", etsy_reports()),
     )
 
@@ -315,21 +316,21 @@ class TestRenameListing:
 
     def test_forgets_the_old_names_ai_run(self, workspace: Workspace) -> None:
         """A new listing given the old name must not reattach to it."""
-        runs = RecordingAiRuns.running(NAME)
+        runs, run = ai_run(NAME, finished=True)
 
         _rename(workspace, "hike-away", ai_runs=runs)
 
-        assert runs.forgotten == [NAME]
-        assert runs.runs[NAME].stops == []
+        assert runs.latest(NAME) is None
+        assert run.stop_reason is None
 
     def test_the_same_name_changes_nothing(self, workspace: Workspace) -> None:
         """Blur commits an unchanged name constantly."""
-        runs = RecordingAiRuns()
+        runs, run = ai_run(NAME, finished=True)
 
         _rename(workspace, NAME, ai_runs=runs)
 
         assert workspace.listing_file(NAME).is_file()
-        assert runs.forgotten == []
+        assert runs.latest(NAME) is run
 
     def test_refuses_a_name_already_in_use(self, workspace: Workspace) -> None:
         workspace.listing_dir("taken").mkdir(parents=True)
@@ -386,7 +387,7 @@ class TestDeleteListing:
         applied(workspace, etsy_listing_id=555)
         seed_proposal(workspace.root, NAME)
         store = batch_naming(workspace, "b1", NAME)
-        runs = RecordingAiRuns.running(NAME)
+        runs, run = ai_run(NAME)
         before = workspace.listing_file(NAME).read_bytes()
 
         with pytest.raises(PublishedListingDeletion) as refused:
@@ -396,7 +397,7 @@ class TestDeleteListing:
         assert workspace.listing_file(NAME).read_bytes() == before
         assert has_proposal(workspace.root, NAME)
         assert not batch_rows(store, "b1")[0].deleted
-        assert (runs.runs[NAME].stops, runs.forgotten) == ([], [])
+        assert (run.stop_reason, runs.latest(NAME)) == (None, run)
 
     def test_a_draft_etsy_listing_may_be_deleted(self, workspace: Workspace) -> None:
         applied(workspace, etsy_listing_id=555)
@@ -409,28 +410,35 @@ class TestDeleteListing:
         self, workspace: Workspace
     ) -> None:
         store = batch_naming(workspace, "b1", NAME, "someone-else")
-        runs = RecordingAiRuns.running(NAME)
+        runs, run = ai_run(NAME)
 
         _delete(workspace, ai_runs=runs)
 
-        assert runs.runs[NAME].stops == ["cancelled"]
-        assert runs.forgotten == [NAME]
+        assert run.stop_reason == "cancelled" and run.cancel_event.is_set()
         assert [(row.name, row.deleted) for row in batch_rows(store, "b1")] == [
             (NAME, True),
             ("someone-else", False),
         ]
 
+    def test_forgets_the_listings_finished_ai_run(self, workspace: Workspace) -> None:
+        """A new listing given the name must not reattach to it."""
+        runs, _run = ai_run(NAME, finished=True)
+
+        _delete(workspace, ai_runs=runs)
+
+        assert runs.latest(NAME) is None
+
     def test_a_missing_listing_is_refused_and_touches_no_batch_row(
         self, workspace: Workspace
     ) -> None:
         store = batch_naming(workspace, "b1", "gone")
-        runs = RecordingAiRuns.running("gone")
+        runs, run = ai_run("gone", finished=True)
 
         with pytest.raises(ListingMissing):
             _delete(workspace, name="gone", ai_runs=runs)
 
         assert not batch_rows(store, "b1")[0].deleted
-        assert runs.forgotten == []
+        assert runs.latest("gone") is run
 
 
 # ------------------------------------------------------- competing writes

@@ -823,12 +823,8 @@ export interface paths {
      * @description Whether the **AI Mode** button may start a run for this saved listing
      *     right now -- the call the frontend makes to decide whether to enable the
      *     always visible control. The button drafts a brief when the saved one is
-     *     empty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``: an
-     *     empty brief is allowed, and then ``prompts/brief.md`` is required. A
-     *     filled brief skips drafting. A lit button is one the server will not
-     *     refuse. Read-only: every check here, including each provider's own
-     *     `readiness()`, is a local probe (a file's existence, a fast
-     *     `--help`/`login status` subprocess) that changes nothing.
+     *     empty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``. A lit
+     *     button is one the server will not refuse. Read-only.
      */
     get: operations["get_seo_readiness_api_listings__name__ai_seo_readiness_get"];
     put?: never;
@@ -1539,7 +1535,8 @@ export interface components {
      * AiReadinessBlock
      * @description Why a batch could not draft if it were created now (spec, *Design
      *     validation*; ``staging.note.md``): the sentence after *AI drafting can't
-     *     run yet.*, and what to do about it.
+     *     run yet.*, and what to do about it. Transport-independent, so it is the
+     *     staging detail's ``ai_blocked`` as it stands.
      */
     AiReadinessBlock: {
       /** Message */

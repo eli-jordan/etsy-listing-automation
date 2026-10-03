@@ -1,6 +1,11 @@
-"""The AI run's wire shapes: its events, and the summary and detail the
-endpoints return (features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's *Run
-contract*).
+"""An AI run's events and the indicator nodes they move
+(features/market-seo-20260924/spec.md, *AI runs*; the implementation plan's
+*Run contract*).
+
+Transport-independent models, so the same models are the SSE payload rather
+than a second representation (module-structure spec, *Responsibility and
+dependency rules*). The request, refusal and summaries only the HTTP
+endpoints use are the server's (``server/api/schemas.py``).
 
 Every event carries ``type``, the SSE ``event:`` name a client switches on,
 and ``seq``, the SSE ``id:`` a reconnect sends back as ``Last-Event-ID``. The
@@ -12,16 +17,25 @@ latest one per node straight into its indicator.
 
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Annotated, Literal
 
 from pydantic import BaseModel, Field
 
 from etsy_listings.core.ai.proposals import ListingProposal
 from etsy_listings.core.market.snapshot import MarketSnapshot
-from etsy_listings.server.api.schemas import StepId as StepId
-from etsy_listings.server.api.schemas import StepState as StepState
-from etsy_listings.server.api.schemas import WorkflowStep as WorkflowStep
+
+StepId = Literal["brief", "market", "seo"]
+StepState = Literal["pending", "active", "done", "skipped", "warning", "failed"]
+
+
+class WorkflowStep(BaseModel):
+    """One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s
+    ``WorkflowStep``): an AI run's, or a batch row's."""
+
+    id: StepId
+    state: StepState
+    detail: str | None = None
+
 
 TerminalPhase = Literal["done", "failed", "cancelled"]
 AiRunPhase = Literal["running", "done", "failed", "cancelled"]
@@ -85,34 +99,3 @@ AnyAiRunEvent = (
     AiStepEvent | AiBriefEvent | AiQueriesEvent | AiMarketEvent | AiProposalEvent | AiPhaseEvent
 )
 AiRunEvent = Annotated[AnyAiRunEvent, Field(discriminator="type")]
-
-
-class CreateAiRunRequest(BaseModel):
-    listing: str
-    draft_brief: bool = False
-    """Draft the brief first. Only honoured while the saved brief is empty;
-    a run whose listing already has one skips the Brief node."""
-
-
-class AiRunRefusal(BaseModel):
-    """A ``409`` from ``POST /api/ai/runs``: exactly one of the two is set.
-    ``active_run`` names the run to reattach to; ``reason`` says which
-    readiness rule failed."""
-
-    active_run: str | None = None
-    reason: str | None = None
-
-
-class AiRunSummary(BaseModel):
-    id: str
-    listing: str
-    draft_brief: bool
-    origin: Literal["manual", "batch"]
-    phase: AiRunPhase
-    steps: list[WorkflowStep]
-    created_at: datetime
-    finished_at: datetime | None
-
-
-class AiRunDetail(AiRunSummary):
-    events: list[AiRunEvent]

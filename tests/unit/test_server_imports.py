@@ -2,9 +2,9 @@
 
 The server package initializers re-export nothing (one import path per
 interface, ADR-0052), so no initializer pre-loads the app in an order that
-happens to dodge a cycle. The worker modules still import
-``server.api.schemas`` until PR 9 separates their events from wire schemas;
-importing one of them first must still work.
+happens to dodge a cycle. The AI workers moved to core in PR 9, taking
+their events out of the wire schemas; whichever server module is imported
+first must still work.
 """
 
 from __future__ import annotations
@@ -37,5 +37,5 @@ def test_each_server_module_imports_first() -> None:
     )
     assert result.returncode == 0, result.stderr
     report = json.loads(result.stdout.strip().splitlines()[-1])
-    assert report["checked"] > 20
+    assert report["checked"] > 12
     assert report["failures"] == {}

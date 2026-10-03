@@ -12,10 +12,11 @@ GET /api/ai/runs/{id}/events text/event-stream; replays after Last-Event-ID
 DELETE /api/ai/runs/{id} cancel; 409 if already finished
 ```
 
-``POST`` re-checks readiness here, whatever the browser last saw
-(``seo.readiness`` with the run's rules). The chain itself is
-``server/airuns/runner.py``'s, on its own thread; this module only starts,
-reads and cancels runs.
+``POST`` asks core's AI coordinator (``core/application/ai/coordinator.py``)
+to start the run, which re-checks readiness whatever the browser last saw;
+this module maps its refusals to the codes above. The chain itself is
+``core/application/ai/runner.py``'s, on its own thread; this module only
+starts, reads and cancels runs.
 
 **The SSE bridge** is ``server/api/runs.py``'s: a blocking wait on the run's
 condition, awaited through ``run_in_executor`` with a short timeout so the
@@ -32,19 +33,22 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
-from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.airuns.events import (
+from etsy_listings.core.application.ai.coordinator import AiCoordinator
+from etsy_listings.core.application.ai.events import AnyAiRunEvent
+from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry, Conflict
+from etsy_listings.core.application.refusals import (
+    AiNotReady,
+    ListingDeploying,
+    ListingDraftingInBatch,
+    ListingMissing,
+)
+from etsy_listings.server.api.runs import last_event_id
+from etsy_listings.server.api.schemas import (
     AiRunDetail,
     AiRunRefusal,
     AiRunSummary,
-    AnyAiRunEvent,
     CreateAiRunRequest,
 )
-from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
-from etsy_listings.server.airuns.runner import AiRunner
-from etsy_listings.server.api.runs import last_event_id
-from etsy_listings.server.api.seo import readiness
-from etsy_listings.server.batchqueue import BatchQueue
 
 router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
 
@@ -60,9 +64,13 @@ _EVENT_WAIT_TIMEOUT = 1.0
 """One SSE poll's longest block, as in ``server/api/runs.py``."""
 
 
+def _ai(request: Request) -> AiCoordinator:
+    ai: AiCoordinator = request.app.state.ai
+    return ai
+
+
 def _registry(request: Request) -> AiRunRegistry:
-    registry: AiRunRegistry = request.app.state.ai_run_registry
-    return registry
+    return _ai(request).registry
 
 
 def _run(request: Request, run_id: str) -> AiRun:
@@ -101,37 +109,18 @@ def _refused(refusal: AiRunRefusal) -> JSONResponse:
 def create_ai_run(request: Request, body: CreateAiRunRequest) -> AiRunSummary | JSONResponse:
     """Start a run for a saved listing. A ``409`` either names the active run
     to reattach to, or gives the readiness rule that failed."""
-    registry = _registry(request)
-    workspace: Workspace = request.app.state.workspace
-    if not workspace.listing_file(body.listing).is_file():
-        raise HTTPException(status_code=404, detail=f"no listing {body.listing!r}")
-    # ADR-0050: a deploy holding the listing wins over everything below. The
-    # registry refuses again at `create`, which is what closes the race.
-    if registry.deploying(body.listing):
+    try:
+        run = _ai(request).start_run(body.listing, draft_brief=body.draft_brief)
+    except ListingMissing as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    except ListingDeploying:
         return _refused(AiRunRefusal(reason=DEPLOYING))
-    # ADR-0048: a queued or running batch row owns the listing's AI, even while
-    # no run holds it yet -- two runs must never own one listing.
-    queue: BatchQueue = request.app.state.batch_queue
-    if queue.pending(body.listing):
+    except ListingDraftingInBatch:
         return _refused(AiRunRefusal(reason=BATCH_PENDING))
-
-    active = registry.latest(body.listing)
-    if active is not None and not active.finished:
-        return _refused(AiRunRefusal(active_run=active.id))
-    providers = request.app.state.seo_provider_factory(workspace)
-    ready = readiness(
-        workspace, workspace.load_listing(body.listing), providers, draft_brief=body.draft_brief
-    )
-    if not ready.ready:
-        return _refused(AiRunRefusal(reason=ready.reason))
-
-    run = registry.create(body.listing, draft_brief=body.draft_brief)
+    except AiNotReady as exc:
+        return _refused(AiRunRefusal(reason=exc.reason))
     if isinstance(run, Conflict):
         return _refused(AiRunRefusal(active_run=run.active_run))
-    if isinstance(run, Deploying):
-        return _refused(AiRunRefusal(reason=DEPLOYING))
-    runner: AiRunner = request.app.state.ai_runner
-    runner.start(run)
     return _summary(run)
 
 
