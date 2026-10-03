@@ -16,14 +16,13 @@ from typing import Any
 import pytest
 import yaml
 
-from etsy_listings.core.application.listing_creation import create_listing, write_listing
+from etsy_listings.core.application.listing_creation import create_listing
 from etsy_listings.core.application.pricing_plans import (
     load_candidate_pricing_plans,
     pricing_plan_options,
     pricing_plan_ref,
 )
 from etsy_listings.core.application.refusals import InvalidListing, ListingNameTaken
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
@@ -51,7 +50,7 @@ def a_document(**over: Any) -> dict[str, Any]:  # noqa: ANN401
 
 class TestCreateListing:
     def test_writes_the_document_it_was_given(self, workspace: Workspace) -> None:
-        outcome = create_listing(workspace, "my-new-shirt", a_document(), locks=WorkspaceLocks())
+        outcome = create_listing(workspace, "my-new-shirt", a_document())
 
         assert outcome is None
         written = yaml.safe_load(workspace.listing_file("my-new-shirt").read_text(encoding="utf-8"))
@@ -64,7 +63,6 @@ class TestCreateListing:
             workspace,
             "half-done",
             a_document(prices={}, pricing_plan=None, colors=[]),
-            locks=WorkspaceLocks(),
         )
 
         assert outcome is None
@@ -74,9 +72,7 @@ class TestCreateListing:
         self, workspace: Workspace
     ) -> None:
         """The other side of ADR-0043's line: a bare number is not a price."""
-        outcome = create_listing(
-            workspace, "bad-money", a_document(prices={"S": 349}), locks=WorkspaceLocks()
-        )
+        outcome = create_listing(workspace, "bad-money", a_document(prices={"S": 349}))
 
         assert isinstance(outcome, InvalidListing)
         assert any(key.startswith("prices") for key in outcome.field_errors)
@@ -86,7 +82,7 @@ class TestCreateListing:
         before = workspace.listing_file(FIXTURE_LISTING).read_bytes()
 
         with pytest.raises(ListingNameTaken) as refused:
-            create_listing(workspace, FIXTURE_LISTING, a_document(), locks=WorkspaceLocks())
+            create_listing(workspace, FIXTURE_LISTING, a_document())
 
         assert refused.value.name == FIXTURE_LISTING
         assert workspace.listing_file(FIXTURE_LISTING).read_bytes() == before
@@ -98,44 +94,18 @@ class TestCreateListing:
         (leftover / "state.lock.json").write_text("{}", encoding="utf-8")
 
         with pytest.raises(ListingNameTaken):
-            create_listing(workspace, "half-deleted", a_document(), locks=WorkspaceLocks())
+            create_listing(workspace, "half-deleted", a_document())
 
         assert not workspace.listing_file("half-deleted").exists()
 
     def test_a_name_taken_is_checked_before_the_document(self, workspace: Workspace) -> None:
         """A taken name is the refusal, whatever the document says."""
         with pytest.raises(ListingNameTaken):
-            create_listing(
-                workspace, FIXTURE_LISTING, a_document(prices={"S": 349}), locks=WorkspaceLocks()
-            )
+            create_listing(workspace, FIXTURE_LISTING, a_document(prices={"S": 349}))
 
     def test_refuses_a_name_that_is_not_a_path_segment(self, workspace: Workspace) -> None:
         with pytest.raises(InvalidNameError):
-            create_listing(workspace, "../escape", a_document(), locks=WorkspaceLocks())
-
-    def test_holds_the_new_names_write_lock(self, workspace: Workspace) -> None:
-        held: list[tuple[str, ...]] = []
-
-        class Recording(WorkspaceLocks):
-            def listing(self, name: str, *more: str):  # type: ignore[override]  # noqa: ANN202
-                held.append((name, *more))
-                return super().listing(name, *more)
-
-        create_listing(workspace, "my-new-shirt", a_document(), locks=Recording())
-
-        assert held == [("my-new-shirt",)]
-
-
-class TestWriteListing:
-    def test_refuses_to_overwrite_an_existing_listing(self, workspace: Workspace) -> None:
-        with pytest.raises(FileExistsError):
-            write_listing(workspace, FIXTURE_LISTING, a_document())
-
-    def test_creates_the_listing_directory(self, workspace: Workspace) -> None:
-        path = write_listing(workspace, "fresh", a_document())
-
-        assert path == workspace.listing_file("fresh")
-        assert yaml.safe_load(path.read_text(encoding="utf-8"))["colors"] == ["black"]
+            create_listing(workspace, "../escape", a_document())
 
 
 def _plan(garment_profile: str) -> PricingPlan:

@@ -23,6 +23,7 @@ from etsy_listings.core.ai.proposals import (
     ProposalStore,
     SeoProposalSnapshot,
 )
+from etsy_listings.core.listing_artifacts import remove_listing
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.refusals import refuse_reads
@@ -253,7 +254,7 @@ def test_removing_a_listing_removes_its_proposal(
 ) -> None:
     _put(store)
 
-    workspace.remove_listing("take-a-hike")
+    remove_listing(workspace, "take-a-hike")
 
     assert store.load("take-a-hike") is None
 
@@ -277,7 +278,7 @@ def test_listings_differing_only_in_case_keep_their_own_proposals(
     _put(store, "take-a-hike")
     _put(store, "Take-A-Hike", choices=_choices("The Other Listing"))
 
-    workspace.remove_listing("take-a-hike")
+    remove_listing(workspace, "take-a-hike")
     store.move("Take-A-Hike", "Take-A-Hike-2")
 
     assert store.load("take-a-hike") is None
@@ -290,8 +291,8 @@ def test_a_resolution_cannot_bring_back_a_proposal_another_store_removed(
     workspace: Workspace, store: ProposalStore, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """The engine removes a fully applied listing's proposal through its own
-    store while the UI's store may be recording a resolution. Their
-    per-record locks are one set, so the remove waits for the resolution's
+    store while the UI's store may be recording a resolution. Both take
+    the listing's one lock, so the remove waits for the resolution's
     read-modify-write instead of landing inside it and being overwritten.
 
     The hook fires just before the resolution writes and starts the remove

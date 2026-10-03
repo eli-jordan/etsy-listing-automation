@@ -6,11 +6,12 @@ listing operations' and is tested directly in ``test_listing_operations.py``.
 What is left here is the adapter's half: that the routes hand every request
 the process's one set of locks, and that a refusal reached under the lock
 becomes the same status code as one reached before it. The overlap is
-forced by slowing ``Path.rename`` so it is not left to chance.
+forced by slowing ``Path.replace`` so it is not left to chance.
 """
 
 from __future__ import annotations
 
+import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -46,16 +47,21 @@ def _listing(workspace: Workspace, name: str = NAME) -> dict[str, Any]:
 
 
 @pytest.fixture
-def slow_renames(monkeypatch: pytest.MonkeyPatch) -> None:
+def slow_renames(monkeypatch: pytest.MonkeyPatch) -> threading.Event:
     """A rename checks the new name is free, then moves the directory; a
-    pause before the move holds that window open."""
-    real = Path.rename
+    pause before the move holds that window open. The event is set once a
+    move has begun, which is to say once the rename holds the listing's
+    lock."""
+    real = Path.replace
+    moving = threading.Event()
 
     def slow(self: Path, target: Any) -> Path:  # noqa: ANN401
+        moving.set()
         time.sleep(0.3)
         return real(self, target)
 
-    monkeypatch.setattr(Path, "rename", slow)
+    monkeypatch.setattr(Path, "replace", slow)
+    return moving
 
 
 def _together(*requests: Callable[[], httpx.Response]) -> list[httpx.Response]:
@@ -72,12 +78,18 @@ def _together(*requests: Callable[[], httpx.Response]) -> list[httpx.Response]:
 @pytest.mark.usefixtures("slow_renames")
 class TestCompetingWrites:
     def test_a_patch_queued_behind_a_rename_is_a_404(
-        self, client: TestClient, workspace: Workspace
+        self, client: TestClient, workspace: Workspace, slow_renames: threading.Event
     ) -> None:
-        rename, edit = _together(
-            lambda: client.post(f"/api/listings/{NAME}/rename", json={"new_name": "hike-away"}),
-            lambda: client.patch(f"/api/listings/{NAME}", json={"brief": "Too late."}),
-        )
+        """The PATCH is sent only once the rename holds the lock, so the
+        order is the one under test rather than whichever request a busy
+        runner happened to reach first."""
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            renaming = pool.submit(
+                client.post, f"/api/listings/{NAME}/rename", json={"new_name": "hike-away"}
+            )
+            assert slow_renames.wait(timeout=10), "the rename never began its move"
+            edit = client.patch(f"/api/listings/{NAME}", json={"brief": "Too late."})
+            rename = renaming.result()
 
         assert rename.status_code == 200
         assert edit.status_code == 404

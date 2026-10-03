@@ -408,23 +408,6 @@ class Workspace:
             return []
         return sorted(path.name for path in listings.iterdir() if path.is_dir())
 
-    def remove_listing(self, listing: str) -> None:
-        """Wipe ``listings/{name}/``, ``.cache/renders/{name}/``,
-        ``.cache/previews/{name}/``, the market snapshot
-        (features/market-seo-20260924/spec.md, *Cache*) and the cached AI proposal.
-
-        Designs, garment profiles and pricing plans stay -- they are reusable.
-        """
-        for path in (
-            self.listing_dir(listing),
-            self.renders_dir(listing),
-            self.preview_dir(listing),
-        ):
-            if path.is_dir():
-                remove_tree(path)
-        self.market_snapshot_file(listing).unlink(missing_ok=True)
-        self.proposal_file(listing).unlink(missing_ok=True)
-
     def listing_dir(self, listing: str) -> Path:
         return self.root / layout.LISTINGS_DIR / _segment(listing)
 
@@ -1015,8 +998,8 @@ class Workspace:
 
     def market_snapshot_file(self, listing: str) -> Path:
         """The listing's latest market research (features/market-seo-20260924/spec.md, *Cache*).
-        Keyed by listing name, like :meth:`renders_dir`, so a rename moves it
-        and :meth:`remove_listing` removes it."""
+        Keyed by listing name, like :meth:`renders_dir`, so it moves and goes
+        with the listing (``core/listing_artifacts.py``)."""
         return self.cache(
             layout.MARKET_DIR, layout.MARKET_SNAPSHOTS_DIR, f"{_segment(listing)}.json"
         )
@@ -1031,7 +1014,7 @@ class Workspace:
         template -- the same split :meth:`renders_dir` uses, since a preview
         is the same pixels :meth:`render_file` would produce, just rendered
         ahead of ``apply``. Sibling to the render cache, not nested in
-        it, so :meth:`remove_listing` can wipe one independently of the other."""
+        it, so either can be wiped independently of the other."""
         return self.cache(layout.PREVIEWS_DIR, _segment(listing))
 
     def relative_path(self, path: Path) -> str:
@@ -1083,7 +1066,11 @@ class Workspace:
     # ------------------------------------------------------------------
 
     def load_listing(self, listing: str) -> Listing:
-        return Listing.load(self.listing_file(listing), currency=self.defaults.etsy.currency)
+        return Listing.load(
+            self.listing_file(listing),
+            currency=self.defaults.etsy.currency,
+            read=read_bytes_retrying,
+        )
 
     def load_garment_profile(self, garment_profile: str) -> GarmentProfile:
         return GarmentProfile.load(self.garment_profile_file(garment_profile))

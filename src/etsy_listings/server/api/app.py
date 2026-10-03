@@ -59,8 +59,9 @@ def create_app(
     seo_provider_factory: ProviderFactory = default_ai_providers,
     market_client_factory: MarketClientFactory = default_market_client,
 ) -> FastAPI:
-    # One of each per process, so their locks mean something: the write
-    # locks every read-merge-write holds, and the cache records' stores.
+    # One of each per process, so their locks mean something: the listing
+    # template write locks, and the cache records' stores. Listing locks
+    # need no instance; every `ListingDocuments` over one workspace shares them.
     locks = WorkspaceLocks()
     proposal_store = ProposalStore(workspace)
     staging_store = StagingStore(workspace)
@@ -69,7 +70,6 @@ def create_app(
     # Deploying takes precedence over AI work (ADR-0050).
     ai = AiCoordinator(
         workspace,
-        locks=locks,
         proposals=proposal_store,
         batches=batch_store,
         providers=seo_provider_factory,
@@ -110,8 +110,8 @@ def create_app(
     # nothing to do with running a run -- reaching through `deployments` for
     # it would couple that endpoint to deployment's own shape for no reason.
     app.state.context_factory = context_factory
-    # Held around every read-merge-write of a listing (`listings.py`, and
-    # PR 5's brief write) -- `core/application/workspace_locks.py` says why.
+    # Held around every check-then-write of a listing template
+    # (`listing_templates.py`, batch staging); `workspace_locks.py` says why.
     app.state.workspace_locks = locks
     # AI runs (features/market-seo-20260924/spec.md, *AI runs*) and the
     # batch AI queue (ADR-0048): a thread per run, never `deployments`.

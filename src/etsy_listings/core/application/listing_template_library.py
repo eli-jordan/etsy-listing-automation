@@ -55,6 +55,7 @@ from etsy_listings.core.listing_templates import (
     template_issues,
 )
 from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 RESERVED_NAME = "draft"
@@ -332,7 +333,7 @@ def _draft(
         raise ListingTemplateSourceRefused("give exactly one of from_listing, from_template")
     try:
         if listing is not None:
-            if not workspace.listing_file(listing).is_file():
+            if not ListingDocuments(workspace).exists(listing):
                 raise ListingMissing(listing)
             return TemplateSource("listing", listing), conversion.from_listing(workspace, listing)
         assert template is not None  # noqa: S101 - exactly one, checked above

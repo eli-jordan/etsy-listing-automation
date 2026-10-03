@@ -35,7 +35,6 @@ from etsy_listings.core.application.refusals import (
     NothingToRetry,
     StagingMissing,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     RETRYABLE,
     Batch,
@@ -66,7 +65,6 @@ def confirm_batch(
     batches: BatchStore,
     session_id: str,
     *,
-    locks: WorkspaceLocks,
     queue: BatchQueue,
 ) -> Batch:
     """Create one listing per creatable row of staging session
@@ -85,7 +83,7 @@ def confirm_batch(
         if blocked is not None:
             raise AiDraftingBlocked(blocked.message)
     try:
-        batch = confirm(workspace, staging, batches, session_id, lock=locks.listing)
+        batch = confirm(workspace, staging, batches, session_id)
     except KeyError as exc:
         raise StagingMissing(session_id) from exc
     queue.wake()
@@ -102,7 +100,6 @@ def retry_batch_row(
     batch_id: str,
     row_id: str,
     *,
-    locks: WorkspaceLocks,
     queue: BatchQueue,
 ) -> Batch:
     """Retry one row (UI doc §7): its creation, if that failed -- which
@@ -112,7 +109,7 @@ def retry_batch_row(
     batch = read_batch(workspace, batches, batch_id)
     target = _row(batch, row_id)
     if target.creation == "failed":
-        _recreate(workspace, staging, batches, batch_id, {row_id}, locks=locks, queue=queue)
+        _recreate(workspace, staging, batches, batch_id, {row_id}, queue=queue)
     elif target.ai in RETRYABLE and not target.deleted:
         queue.retry(batch_id, row_id)
     else:
@@ -126,14 +123,13 @@ def retry_batch(
     batches: BatchStore,
     batch_id: str,
     *,
-    locks: WorkspaceLocks,
     queue: BatchQueue,
 ) -> Batch:
     """**Retry N failed**: every row whose creation failed is created, then
     every row whose AI failed is queued again."""
     batch = read_batch(workspace, batches, batch_id)
     failed = {row.id for row in batch.rows if row.creation == "failed"}
-    _recreate(workspace, staging, batches, batch_id, failed, locks=locks, queue=queue)
+    _recreate(workspace, staging, batches, batch_id, failed, queue=queue)
     queue.retry(batch_id)
     return read_batch(workspace, batches, batch_id)
 
@@ -145,11 +141,10 @@ def _recreate(
     batch_id: str,
     rows: Iterable[str],
     *,
-    locks: WorkspaceLocks,
     queue: BatchQueue,
 ) -> None:
     for row in rows:
-        retry_row(workspace, staging, batches, batch_id, row, lock=locks.listing)
+        retry_row(workspace, staging, batches, batch_id, row)
     queue.wake()
 
 

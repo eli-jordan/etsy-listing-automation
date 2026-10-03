@@ -11,7 +11,8 @@ requirements, guides, research and decisions.
 ```
 src/etsy_listings/
   core/ transport-independent backend; no FastAPI, Typer or terminal/prompt imports
-    workspace/ root discovery, path resolution, the only code that knows the directory layout
+    workspace/ root discovery, path resolution, the only code that knows the directory layout;
+      listing_documents.py is the only way to read/edit/write listing.yaml, and owns each listing's lock
     config/ pydantic models, Money, slugs, listing_validation.py (every local refusal)
     engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
     render/ pure render passes, frozen RenderConfig, pipeline
@@ -22,8 +23,9 @@ src/etsy_listings/
     batches/ staging, naming, archive inspection and ordinary listing creation
     application/ operations shared by server and CLI, one module per workflow, no re-exports: listing reads, edits,
       creation, rename/delete, pricing plans; calibrator (mockup_templates), listing-template library, batch staging
-      and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles; workspace_locks;
+      and workflow; the wizards' credentials, workspace_setup, shop_discovery, garment_profiles; workspace_locks (templates);
       deploy/ (Deployments) and ai/ (AiCoordinator) run coordinators; dependencies.py host seams; refusals.py
+    listing_artifacts.py moves/removes everything keyed by a listing name (dir, renders, previews, snapshot, proposal)
     connections.py errors.py client wiring, UserFacingError
   cli/ Typer app; auth.py setup.py new.py sequence the wizards, credentials.py pickers.py their terminal side,
     prompts.py terminal.py the prompt backend and encoding guard; ui.py is the only module that may import server (server.hosting)

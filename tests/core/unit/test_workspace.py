@@ -727,43 +727,6 @@ def test_remove_tree_still_raises_a_refusal_it_cannot_widen(tmp_path: Path) -> N
         remove_tree(tmp_path / "never-existed")
 
 
-def test_remove_listing_survives_a_read_only_listing_directory(workspace_root: Path) -> None:
-    """The bug as a seller met it: Delete wiped `listing.yaml` and then failed
-    on the directory, leaving an empty husk the listings table still showed."""
-    ws = Workspace.discover(root_override=workspace_root)
-    listing_dir = ws.listing_dir("take-a-hike")
-    listing_dir.chmod(stat.S_IREAD | stat.S_IEXEC)
-
-    ws.remove_listing("take-a-hike")
-
-    assert not listing_dir.exists()
-
-
-def test_remove_listing_wipes_its_previews_too(workspace_root: Path) -> None:
-    ws = Workspace.discover(root_override=workspace_root)
-    preview = ws.preview_file("take-a-hike", "flat-lay-01", "black", "deadbeef")
-    preview.parent.mkdir(parents=True)
-    preview.write_bytes(b"png")
-
-    ws.remove_listing("take-a-hike")
-
-    assert not ws.preview_dir("take-a-hike").exists()
-
-
-def test_remove_listing_removes_its_market_snapshot_and_no_other(workspace_root: Path) -> None:
-    ws = Workspace.discover(root_override=workspace_root)
-    mine = ws.market_snapshot_file("take-a-hike")
-    other = ws.market_snapshot_file("another-listing")
-    mine.parent.mkdir(parents=True)
-    mine.write_text("{}", encoding="utf-8")
-    other.write_text("{}", encoding="utf-8")
-
-    ws.remove_listing("take-a-hike")
-
-    assert not mine.exists()
-    assert other.exists()
-
-
 def test_market_caches_live_under_the_cache_directory(workspace_root: Path) -> None:
     ws = Workspace.discover(root_override=workspace_root)
     market = ws.root / ".cache" / "market"

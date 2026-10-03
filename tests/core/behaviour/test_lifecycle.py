@@ -6,6 +6,7 @@ Wrong verb is `Blocked`. Delete is retract-only. Retire still syncs copy.
 from __future__ import annotations
 
 import itertools
+import threading
 import time
 from pathlib import Path
 
@@ -21,6 +22,8 @@ from etsy_listings.core.engine.run import apply_listings, plan_listings
 from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.engine.stages.etsy_listing import EtsyListingStage
 from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (
@@ -307,6 +310,36 @@ class TestEtsyStateWrites:
         assert etsy.updated[-1]["state"] == "active"
         written = yaml.safe_load(listing_file(root).read_text(encoding="utf-8"))
         assert "lifecycle" not in written
+
+    def test_consuming_renew_waits_for_an_edit_and_keeps_it(self, workspace_root: Path) -> None:
+        """A UI deploy consumes ``renew`` while the editor may be autosaving.
+        The apply takes the listing's lock, so it waits for the save and
+        then removes only the key, keeping what the save wrote."""
+        root = _ready(workspace_root)
+        edit_listing(root, lifecycle="renew")
+        etsy = _etsy()
+        etsy.seed_listing(ETSY_LISTING_ID, shop_id=ETSY_SHOP_ID, state="expired")
+        _write_lock(root, _lock(etsy_listing_id=ETSY_LISTING_ID))
+        documents = ListingDocuments(Workspace.discover(root_override=root))
+        applying = threading.Thread(
+            target=apply_listings,
+            args=(
+                a_context(root, etsy=etsy, printify=FakePrintifyClient()),
+                [LISTING],
+                [EtsyListingStage()],
+            ),
+        )
+
+        with documents.lock(LISTING):
+            applying.start()
+            applying.join(timeout=1.0)
+            assert applying.is_alive(), "the apply did not wait for the listing's lock"
+            documents.edit(LISTING, lambda raw: {**raw, "brief": "Saved mid-apply."})
+        applying.join(timeout=10)
+
+        written = yaml.safe_load(listing_file(root).read_text(encoding="utf-8"))
+        assert "lifecycle" not in written
+        assert written["brief"] == "Saved mid-apply."
 
     def test_a_remote_pause_does_not_send_active(self, workspace_root: Path) -> None:
         root = _ready(workspace_root)

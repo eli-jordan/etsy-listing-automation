@@ -22,10 +22,9 @@ exist is not a fact.
 from __future__ import annotations
 
 from collections.abc import Sequence
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
-
-import yaml
 
 from etsy_listings.core.engine.context import RunContext
 from etsy_listings.core.engine.lock import Lockfile
@@ -34,6 +33,12 @@ from etsy_listings.core.engine.stages.etsy_target import etsy_listing_id
 from etsy_listings.core.engine.stages.gates import check_lifecycle_verb, check_listing_yaml_present
 from etsy_listings.core.engine.stages.retract import RetractStage
 from etsy_listings.core.engine.status import is_live_etsy_state
+from etsy_listings.core.listing_artifacts import remove_listing
+from etsy_listings.core.workspace.listing_documents import (
+    Document,
+    ListingDocuments,
+    ListingMissing,
+)
 
 if TYPE_CHECKING:
     from etsy_listings.core.engine.plan import PlannedRun
@@ -88,7 +93,7 @@ def walk(
     """Missing yaml, wrong verb, or retract-only -- listing-level, so they
     wrap the walk rather than living in any one stage."""
     pipeline = list(stages)
-    present = ctx.workspace.listing_file(listing).is_file()
+    present = ListingDocuments(ctx.workspace).exists(listing)
     if not present:
         # yaml gone, lockfile still there -- the row appears, Blocked.
         # No directory at all is not that: it is an unknown listing, and
@@ -116,7 +121,7 @@ def after_apply(ctx: RunContext, listing: str, planned: PlannedRun) -> None:
     """The listing-level half of a successful apply: wipe after retract, or
     consume ``lifecycle: renew``. ``plan`` never writes the yaml."""
     if _retract_succeeded(planned):
-        ctx.workspace.remove_listing(listing)
+        remove_listing(ctx.workspace, listing)
         return
     _omit_consumed_renew(ctx, listing, planned)
 
@@ -136,11 +141,11 @@ def _omit_consumed_renew(ctx: RunContext, listing: str, planned: PlannedRun) -> 
     )
     if etsy_plan is None or etsy_plan.blocked is not None:
         return
-    path = ctx.workspace.listing_file(listing)
-    if not path.is_file():
-        return
-    raw = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+    with suppress(ListingMissing):
+        ListingDocuments(ctx.workspace).edit(listing, _without_renew)
+
+
+def _without_renew(raw: Document) -> Document | None:
     if raw.get("lifecycle") != "renew":
-        return
-    del raw["lifecycle"]
-    path.write_text(yaml.safe_dump(raw, sort_keys=False), encoding="utf-8")
+        return None
+    return {key: value for key, value in raw.items() if key != "lifecycle"}

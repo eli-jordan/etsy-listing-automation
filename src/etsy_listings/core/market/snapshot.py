@@ -5,9 +5,8 @@ show a listing's comparables after a reload. It is written only by a run
 whose research **succeeded** -- a failed run leaves the previous one in place,
 while a search that found nothing comparable replaces it, because that *is*
 the latest answer. It moves with the listing on rename and goes when the
-listing is deleted, as ``.cache/renders/{name}/`` does; both are the
-listings API's (and :meth:`Workspace.remove_listing`'s) job, not this
-module's.
+listing is deleted, as ``.cache/renders/{name}/`` does. Both are
+``core/listing_artifacts.py``'s job, not this module's.
 
 Read-only to the seller in this version: nothing edits a snapshot but the
 next research.

@@ -25,7 +25,6 @@ AI.
 
 from etsy_listings.core.batches.creation import (
     ConfirmRefused,
-    NameLock,
     confirm,
     retry_row,
     row_upload,
@@ -81,7 +80,6 @@ __all__ = [
     "retry_row",
     "row_upload",
     "ConfirmRefused",
-    "NameLock",
     # Where a batch stands (UI doc §2), and who may be reviewed (§7).
     "standing",
     "Standing",

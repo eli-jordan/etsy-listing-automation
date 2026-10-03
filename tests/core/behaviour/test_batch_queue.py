@@ -24,7 +24,6 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.batch_queue import BatchQueue
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import AiRunner
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
     BatchRow,
@@ -61,12 +60,10 @@ class Queue:
         self.market = market
         self.clock = Clock()
         self.registry = AiRunRegistry()
-        self.locks = WorkspaceLocks()
         self.proposals = ProposalStore(self.workspace)
         self.runner = AiRunner(
             workspace=self.workspace,
             registry=self.registry,
-            locks=self.locks,
             providers=lambda _workspace: [provider],
             market_client=lambda _workspace: market,
             proposals=self.proposals,
@@ -87,9 +84,7 @@ class Queue:
         session = stage_pngs(
             self.workspace, self.staging, LISTING_TEMPLATE, uploads(*designs), now=at
         )
-        batch = confirm(
-            self.workspace, self.staging, self.batches, session.id, lock=self.locks.listing, now=at
-        )
+        batch = confirm(self.workspace, self.staging, self.batches, session.id, now=at)
         self.queue.wake()
         return batch
 

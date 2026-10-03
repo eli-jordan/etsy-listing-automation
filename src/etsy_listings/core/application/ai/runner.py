@@ -39,8 +39,6 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
 
-import yaml
-
 from etsy_listings.core.ai.brief import BriefRequest
 from etsy_listings.core.ai.errors import ProviderCancelledError, SeoGenerationError
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs, PreparedSeo
@@ -61,12 +59,15 @@ from etsy_listings.core.application.ai.events import (
 from etsy_listings.core.application.ai.readiness import ProviderFactory
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.dependencies import MarketClientFactory
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 from etsy_listings.core.market import MarketResearchError, ResearchCancelled, research
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.cache import CachedEtsyMarketClient
-from etsy_listings.core.workspace.atomic import write_yaml_atomic
+from etsy_listings.core.workspace.listing_documents import (
+    Document,
+    ListingDocuments,
+    ListingMissing,
+)
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
@@ -101,7 +102,6 @@ def _read_prompt(path: Path) -> str:
 class AiRunner:
     workspace: Workspace
     registry: AiRunRegistry
-    locks: WorkspaceLocks
     providers: ProviderFactory
     market_client: MarketClientFactory
     proposals: ProposalStore
@@ -202,6 +202,7 @@ class AiRunner:
         # batch landing just after the queue claimed the row, ADR-0048).
         self._check(run)
         workspace = self.workspace
+        documents = ListingDocuments(workspace)
         inputs = self._load(run)
         providers = self.providers(workspace)
         design = inputs.request.design_image
@@ -261,8 +262,8 @@ class AiRunner:
         )
         self._check(run)
         snapshot = market_snapshot.MarketSnapshot.of(result, searched_at=self.now())
-        with self.locks.listing(run.listing):
-            if workspace.listing_file(run.listing).is_file():
+        with documents.lock(run.listing):
+            if documents.exists(run.listing):
                 market_snapshot.save(workspace, run.listing, snapshot)
         run.emit(lambda seq: AiMarketEvent(seq=seq, snapshot=snapshot))
         if result.empty:
@@ -291,9 +292,9 @@ class AiRunner:
         # read it back -- and so it outlives this run and this server.
         # A delete asks the run to stop before it takes the lock, so a stop
         # seen here is one the delete's own cleanup will not come back for.
-        with self.locks.listing(run.listing):
+        with documents.lock(run.listing):
             self._check(run)
-            if not workspace.listing_file(run.listing).is_file():
+            if not documents.exists(run.listing):
                 raise UserFacingError(f"the listing {run.listing!r} no longer exists")
             record = self.proposals.put(
                 run.listing,
@@ -315,16 +316,16 @@ class AiRunner:
     def _write_brief(self, name: str, text: str) -> bool:
         """Write ``text`` as the listing's brief if the saved one is still
         empty, under the lock PATCH autosave and rename take."""
-        with self.locks.listing(name):
-            path = self.workspace.listing_file(name)
-            if not path.is_file():
-                return False
-            document = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+
+        def fill(document: Document) -> Document | None:
             if str(document.get("brief") or "").strip():
-                return False
-            document["brief"] = text
-            write_yaml_atomic(path, document)
-            return True
+                return None
+            return {**document, "brief": text}
+
+        try:
+            return ListingDocuments(self.workspace).edit(name, fill) is not None
+        except ListingMissing:
+            return False
 
 
 def _is_pending(run: AiRun, step: str) -> bool:

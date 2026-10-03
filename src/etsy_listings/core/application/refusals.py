@@ -25,24 +25,10 @@ from etsy_listings.core.batches import ConfirmRefused
 from etsy_listings.core.config.listing_validation import DELETED_ON_PUBLISHED
 from etsy_listings.core.errors import UserFacingError
 
-
-class ListingMissing(UserFacingError, LookupError):
-    """There is no ``listing.yaml`` by this name -- never was, or a rename
-    or delete holding the listing's lock moved it first."""
-
-    def __init__(self, name: str) -> None:
-        super().__init__(f"no listing {name!r}")
-        self.name = name
-
-
-class ListingNameTaken(UserFacingError, ValueError):
-    """A create or rename named a listing directory that already exists --
-    with or without a ``listing.yaml`` in it, since a lockfile left behind
-    would hand its remote ids to the newcomer."""
-
-    def __init__(self, name: str) -> None:
-        super().__init__(f"a listing already exists named {name!r}")
-        self.name = name
+# The listing document module raises these two itself, and the listing operations
+# let them through, so they are defined there and listed here with the rest.
+from etsy_listings.core.workspace.listing_documents import ListingMissing as ListingMissing
+from etsy_listings.core.workspace.listing_documents import ListingNameTaken as ListingNameTaken
 
 
 class PublishedListingDeletion(UserFacingError, ValueError):

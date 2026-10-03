@@ -48,6 +48,7 @@ from etsy_listings.core.engine.status import (
     workspace_listing_status,
 )
 from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import InvalidRefError, Workspace
 
 
@@ -118,8 +119,7 @@ class ListingRow:
 def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) -> ListingView:
     """Listing ``name`` as the editor reads it. Raises :class:`ListingMissing`
     when it has no ``listing.yaml``."""
-    path = workspace.listing_file(name)
-    if not path.is_file():
+    if not ListingDocuments(workspace).exists(name):
         raise ListingMissing(name)
     listing = workspace.load_listing(name)
     etsy_listing_id, printify_product_id = remote_ids(workspace, name)
@@ -140,7 +140,7 @@ def read_listing(workspace: Workspace, name: str, *, etsy_states: EtsyStates) ->
         gestures=listing_gestures(
             lifecycle=listing.lifecycle, etsy_state=etsy_state, published=published
         ),
-        modified_at=datetime.fromtimestamp(path.stat().st_mtime, tz=UTC),
+        modified_at=datetime.fromtimestamp(workspace.listing_file(name).stat().st_mtime, tz=UTC),
         etsy_listing_id=etsy_listing_id,
         printify_product_id=printify_product_id,
     )
@@ -204,7 +204,7 @@ def listing_row(
     facts = facts if facts is not None else WorkspaceFacts.gather(workspace)
     etsy_listing_id, printify_product_id = remote_ids(workspace, name)
     published = is_live_etsy_state(etsy_state)
-    if not workspace.listing_file(name).is_file():
+    if not ListingDocuments(workspace).exists(name):
         return ListingRow(
             name=name,
             listing=None,

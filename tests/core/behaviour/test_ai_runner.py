@@ -26,11 +26,12 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.events import AiStepEvent, StepId
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
 from etsy_listings.core.application.ai.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, server_error
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
+from etsy_listings.core.listing_artifacts import remove_listing
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.block import MARKET_BEGIN
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.ai_runs import (
@@ -68,7 +69,7 @@ class Chain:
     ) -> None:
         self.workspace = Workspace.discover(root_override=root)
         self.registry = AiRunRegistry()
-        self.locks = WorkspaceLocks()
+        self.documents = ListingDocuments(self.workspace)
         self.provider = provider
         self.market = market
         self.clock = Clock()
@@ -76,7 +77,6 @@ class Chain:
         self.runner = AiRunner(
             workspace=self.workspace,
             registry=self.registry,
-            locks=self.locks,
             providers=lambda _workspace: [provider],
             market_client=lambda _workspace: market,
             proposals=self.proposals,
@@ -210,7 +210,7 @@ def test_a_failed_proposal_keeps_the_last_cached_one(workspace_root: Path) -> No
 
 
 def test_a_listing_deleted_while_its_proposal_is_written_caches_nothing(chain: Chain) -> None:
-    chain.provider.during["seo"] = lambda: chain.workspace.remove_listing(LISTING)
+    chain.provider.during["seo"] = lambda: remove_listing(chain.workspace, LISTING)
 
     wait_until_finished(chain.start(draft_brief=False))
 
@@ -226,7 +226,7 @@ def test_a_stop_while_the_proposal_waits_for_the_lock_caches_nothing(chain: Chai
     run = chain.start(draft_brief=False)
     wait_for(lambda: chain.provider.started["seo"].is_set())
 
-    with chain.locks.listing(LISTING):
+    with chain.documents.lock(LISTING):
         gate.set()
         wait_for(lambda: chain.provider.count("seo") == 1)
         threading.Event().wait(0.2)  # the chain reaches the lock and waits
@@ -433,7 +433,7 @@ def test_a_brief_filled_in_mid_draft_is_kept_and_not_overwritten(chain: Chain) -
 
 def test_the_brief_write_waits_for_a_patch_holding_the_lock(chain: Chain) -> None:
     edit_listing(chain.workspace.root, brief="")
-    lock = chain.locks.listing(LISTING)
+    lock = chain.documents.lock(LISTING)
     lock.__enter__()
     try:
         run = chain.start(draft_brief=True)

@@ -82,7 +82,6 @@ class Host:
         market = seeded_market()
         self.ai = AiCoordinator(
             workspace,
-            locks=self.locks,
             proposals=ProposalStore(workspace),
             batches=self.batches,
             providers=lambda _workspace: [provider],
@@ -100,7 +99,6 @@ class Host:
             self.staging,
             self.batches,
             session.id,
-            locks=self.locks,
             queue=self.ai.queue,
         )
         return batch.id
@@ -245,7 +243,6 @@ def test_retry_queues_a_row_the_deploy_cancelled(host: Host, provider: ChainProv
         host.batches,
         batch_id,
         cedar.id,
-        locks=host.locks,
         queue=host.ai.queue,
     )
 

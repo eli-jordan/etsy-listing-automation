@@ -26,34 +26,25 @@ from __future__ import annotations
 
 import hashlib
 from collections.abc import Callable
-from contextlib import AbstractContextManager, nullcontext, suppress
+from contextlib import suppress
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
-import yaml
 from pydantic import ValidationError
 
 from etsy_listings.core.batches.naming import allocate
 from etsy_listings.core.batches.records import Batch, BatchRow, BatchStore, StagingStore
 from etsy_listings.core.batches.staging import review, taken_for, workspace_names
 from etsy_listings.core.config.errors import ConfigLoadError
-from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.config.listing_template import ListingTemplate
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.listing_templates import FrozenListingTemplate
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.atomic import write_bytes_atomic
 from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
-
-NameLock = Callable[[str], AbstractContextManager[object]]
-"""A listing name's write lock -- the UI's ``WorkspaceLocks.listing`` -- held
-while a row's name is checked and its files are written."""
-
-
-def _no_lock(_: str) -> AbstractContextManager[object]:
-    return nullcontext()
 
 
 class ConfirmRefused(UserFacingError, ValueError):
@@ -74,7 +65,6 @@ def confirm(
     batches: BatchStore,
     session_id: str,
     *,
-    lock: NameLock = _no_lock,
     now: datetime | None = None,
 ) -> Batch:
     """Create the batch for ``session_id`` and its listings, or finish the
@@ -84,8 +74,8 @@ def confirm(
     with staging.lock(session_id), batches.lock(session_id):
         batch = batches.load(session_id)
         if batch is None:
-            batch = _start(workspace, staging, batches, session_id, lock, now or datetime.now(UTC))
-    return create_rows(workspace, staging, batches, session_id, lock=lock)
+            batch = _start(workspace, staging, batches, session_id, now or datetime.now(UTC))
+    return create_rows(workspace, staging, batches, session_id)
 
 
 def _start(
@@ -93,7 +83,6 @@ def _start(
     staging: StagingStore,
     batches: BatchStore,
     session_id: str,
-    lock: NameLock,
     now: datetime,
 ) -> Batch:
     session = staging.load(session_id)
@@ -123,7 +112,7 @@ def _start(
     for row in reviewed.creatable:
         # the preview may be stale; the name is checked again under the
         # listing's lock and recorded before any file is written.
-        with lock(row.name):
+        with ListingDocuments(workspace).lock(row.name):
             taken = taken_for(workspace_names(workspace), row.reuse)
             name = allocate(row.name, taken | allocated | (others - {row.name.casefold()}))
         allocated.add(name.casefold())
@@ -159,15 +148,13 @@ def retry_row(
     batches: BatchStore,
     batch_id: str,
     row_id: str,
-    *,
-    lock: NameLock = _no_lock,
 ) -> Batch:
     """Retry creating one row (UI doc §7). A created row is left alone.
     Raises :class:`KeyError` for a batch or row that does not exist."""
     batch = batches.load(batch_id)
     if batch is None or all(row.id != row_id for row in batch.rows):
         raise KeyError(row_id)
-    return create_rows(workspace, staging, batches, batch_id, lock=lock, only={row_id})
+    return create_rows(workspace, staging, batches, batch_id, only={row_id})
 
 
 def create_rows(
@@ -176,7 +163,6 @@ def create_rows(
     batches: BatchStore,
     batch_id: str,
     *,
-    lock: NameLock = _no_lock,
     only: set[str] | None = None,
 ) -> Batch:
     """Create every row still to create, recording each outcome as it
@@ -195,7 +181,7 @@ def create_rows(
             if row.creation == "created" or (only is not None and row.id not in only):
                 continue
             try:
-                row = _create(workspace, batches, batch, index, frozen, lock)
+                row = _create(workspace, batches, batch, index, frozen)
             except (OSError, ConfigLoadError, ValidationError, UserFacingError) as exc:
                 row = batch.rows[index].model_copy(
                     update={"creation": "failed", "error": _failure(row, exc)}
@@ -264,14 +250,12 @@ def _is_ours(workspace: Workspace, row: BatchRow) -> bool:
     design = workspace.design_file(row.design)
     if design.is_file() and _sha256(design) != row.sha256:
         return False
-    directory = workspace.listing_dir(row.name)
-    if not directory.exists():
+    documents = ListingDocuments(workspace)
+    if documents.is_free(row.name):
         return True
-    listing = directory / layout.LISTING_FILE
-    if not listing.is_file():
+    if not documents.exists(row.name):
         return row.claimed and not workspace.lock_file(row.name).exists()
-    raw = yaml.safe_load(listing.read_text(encoding="utf-8")) or {}
-    ref = raw.get("design") if isinstance(raw, dict) else None
+    ref = documents.read(row.name).get("design")
     if isinstance(ref, dict):
         ref = ref.get("default") if len(ref) == 1 else None
     return bool(ref == workspace.design_ref(row.design))
@@ -283,11 +267,10 @@ def _create(
     batch: Batch,
     index: int,
     frozen: FrozenListingTemplate,
-    lock: NameLock,
 ) -> BatchRow:
     row = batch.rows[index]
     while True:
-        with lock(row.name):
+        with ListingDocuments(workspace).lock(row.name):
             if _is_ours(workspace, row):
                 if not row.claimed:
                     row = row.model_copy(update={"claimed": True})
@@ -308,14 +291,18 @@ def _create(
         batches.save(batch)
 
 
-def _put(workspace: Workspace, target: Path, data: bytes) -> None:
+def _put(workspace: Workspace, target: Path, write: Callable[[], object]) -> None:
     """One atomic write, whose failure names the file the seller would look
     for -- ``designs/x.png`` -- rather than the temporary beside it."""
     try:
-        write_bytes_atomic(target, data)
+        write()
     except OSError as exc:
         where = target.relative_to(workspace.root).as_posix()
         raise OSError(exc.errno, exc.strerror or str(exc), where) from exc
+
+
+def _copy(workspace: Workspace, target: Path, data: bytes) -> None:
+    _put(workspace, target, lambda: write_bytes_atomic(target, data))
 
 
 def _write(
@@ -325,19 +312,18 @@ def _write(
     listing_dir.mkdir(parents=True, exist_ok=True)
     design = workspace.design_file(row.design)
     if not design.is_file():
-        _put(workspace, design, _input(workspace, batch, row).read_bytes())
+        _copy(workspace, design, _input(workspace, batch, row).read_bytes())
     for asset in frozen.assets():
-        _put(
+        _copy(
             workspace,
             workspace.resolve_ref(asset.ref, listing_dir=listing_dir),
             asset.source.read_bytes(),
         )
     document = _listing_document(workspace, frozen.template, row.design)
-    Listing.model_validate(document, context={"currency": workspace.defaults.etsy.currency})
     _put(
         workspace,
         workspace.listing_file(row.name),
-        yaml.safe_dump(document, sort_keys=False, allow_unicode=True).encode("utf-8"),
+        lambda: ListingDocuments(workspace).write(row.name, document),
     )
 
 
