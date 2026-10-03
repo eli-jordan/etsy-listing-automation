@@ -21,6 +21,7 @@ from dataclasses import dataclass
 
 from pydantic import ValidationError
 
+from etsy_listings.core.batches import ConfirmRefused
 from etsy_listings.core.config.listing_validation import DELETED_ON_PUBLISHED
 from etsy_listings.core.errors import UserFacingError
 
@@ -73,3 +74,158 @@ def field_errors_of(exc: ValidationError) -> dict[str, str]:
         loc = ".".join(str(part) for part in error["loc"]) or "__root__"
         result[loc] = error["msg"]
     return result
+
+
+# ---------------------------------------------------------- mockup templates
+#
+# The calibrator's (module-structure plan, PR 7). A mockup template is a
+# folder of photos the seller put in the workspace; nothing creates one, so
+# every operation names one that must already exist.
+
+
+class TemplateMissing(UserFacingError, LookupError):
+    """No ``mockup-templates/{name}/`` directory."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"no template {name!r}")
+        self.name = name
+
+
+class TemplateConfigMissing(UserFacingError, LookupError):
+    """The template has no ``template.yaml`` -- the normal state of a folder
+    nobody has given a kind yet: absent, not broken."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"no template.yaml for {name!r}")
+        self.name = name
+
+
+class TemplateAlreadyCalibrated(UserFacingError, ValueError):
+    """Kind decides the whole ``template.yaml`` shape, so assigning another
+    would silently discard the calibration done in the old one's fields."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name!r} already has a template.yaml; delete it to change kind")
+        self.name = name
+
+
+class TemplateKindRefused(UserFacingError, ValueError):
+    """The folder's photos cannot be the kind asked for: none at all, or a
+    set where a fixed scene takes exactly one."""
+
+
+class TemplatePreviewKindMismatch(UserFacingError, ValueError):
+    """Unsaved preview geometry shaped for another kind than the template
+    is -- a well-formed request that is wrong for this template."""
+
+    def __init__(self, kind: str) -> None:
+        super().__init__(f"expected a {kind} preview body")
+        self.kind = kind
+
+
+class TemplatePhotoMissing(UserFacingError, LookupError):
+    """There is no one photo to show, sample or composite over: none for the
+    colour asked about, an ambiguous colour suffix, or a template kind that
+    has no per-colour photos at all. The message names what was asked for."""
+
+
+# --------------------------------------------------------- listing templates
+#
+# ADR-0047, template completeness. A name already taken is the domain's own
+# ``listing_templates.ListingTemplateExistsError``, for a create and a rename
+# alike; a refused *document* is not raised but answered (``TemplateSave``).
+
+
+class ListingTemplateMissing(UserFacingError, LookupError):
+    """No ``listing-templates/{name}/template.yaml`` -- never was, or a rename
+    or delete holding the template's lock moved it first."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"no listing template {name!r}")
+        self.name = name
+
+
+class ReservedListingTemplateName(UserFacingError, ValueError):
+    """``draft`` names the *name it* page's unsaved template, so a listing
+    template called that could be created and never opened."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name!r} is reserved; pick another name")
+        self.name = name
+
+
+class ListingTemplateSourceRefused(UserFacingError, ValueError):
+    """What a new listing template is made from cannot become one: not
+    exactly one source, a ``./`` file that cannot be read, a source document
+    that will not load, or an edit naming a ``./`` file the template does
+    not copy."""
+
+
+# ------------------------------------------------------- staging and batches
+#
+# Batch creation's own refusals stay the domain's: ``batches.StagingRefused``
+# for an upload refused before staging (ADR-0051's limits and archive
+# safety), ``batches.ConfirmRefused`` for a session that cannot be confirmed
+# yet. These are the ones the operations around them add.
+
+
+class StagingMissing(UserFacingError, LookupError):
+    """No staging session by this id: never staged, cancelled, confirmed and
+    materialised, or swept seven days after its last edit."""
+
+    def __init__(self, session_id: str) -> None:
+        super().__init__(f"no staging session {session_id!r}")
+        self.session_id = session_id
+
+
+class StagedRowMissing(UserFacingError, LookupError):
+    def __init__(self, row: str) -> None:
+        super().__init__(f"no staged row {row!r}")
+        self.row = row
+
+
+class BatchMissing(UserFacingError, LookupError):
+    def __init__(self, batch_id: str) -> None:
+        super().__init__(f"no batch {batch_id!r}")
+        self.batch_id = batch_id
+
+
+class BatchRowMissing(UserFacingError, LookupError):
+    def __init__(self, row: str) -> None:
+        super().__init__(f"no batch row {row!r}")
+        self.row = row
+
+
+class BatchRowUploadMissing(UserFacingError, LookupError):
+    """A never-created row whose upload is no longer kept anywhere."""
+
+    def __init__(self, row: str) -> None:
+        super().__init__(f"batch row {row!r} has no upload kept")
+        self.row = row
+
+
+class NothingToRetry(UserFacingError, ValueError):
+    """The row was created and its AI is neither failed nor stopped -- or
+    its listing was deleted, leaving nothing to draft."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name} has nothing to retry")
+        self.name = name
+
+
+class BatchRowNotReviewable(UserFacingError, ValueError):
+    """Mark reviewed on a row still queued or drafting, deleted, or never
+    created (spec, *Review workflow*)."""
+
+    def __init__(self, name: str) -> None:
+        super().__init__(f"{name} has no listing to review yet")
+        self.name = name
+
+
+class AiDraftingBlocked(ConfirmRefused):
+    """Spec, *Design validation*: a batch is not knowingly created into a
+    queue that cannot run. Nothing is created and the staging stays."""
+
+    def __init__(self, reason: str) -> None:
+        super().__init__(f"AI drafting can't run yet. {reason}")
+        self.reason = reason

@@ -50,3 +50,35 @@ class ListingLocks(Protocol):
     """
 
     def listing(self, name: str, *more: str) -> AbstractContextManager[None]: ...
+
+
+class ListingTemplateLocks(Protocol):
+    """Per-listing-template write locks: ``WorkspaceLocks`` again, in a key
+    space of their own (plan, PR 7). Held around a template's name check and
+    write, a ``PUT``'s re-check and write, a rename's move and a delete --
+    and around staging's capture of a template's frozen content, so a batch
+    never freezes a half-written template (ADR-0047)."""
+
+    def listing_template(self, name: str, *more: str) -> AbstractContextManager[None]: ...
+
+
+AiBlocked = Callable[[], str | None]
+"""Why a batch created now could not draft -- a prompt, a ready provider or
+Etsy market access missing -- or ``None`` while it could. AI readiness is
+the server's until PR 9 of the module-structure plan moves it; confirming a
+batch only needs the answer, asked once per new batch."""
+
+
+class BatchQueueControl(Protocol):
+    """The UI process's batch queue (``server/batchqueue.py``, until PR 9),
+    as the seller's batch controls steer it. A confirm or a creation retry
+    wakes it for the rows just queued; the rest change which rows it will
+    start (ADR-0048). Reading its order is the server's projection."""
+
+    def wake(self) -> None: ...
+
+    def retry(self, batch_id: str, row_id: str | None = None) -> object: ...
+
+    def cancel(self, batch_id: str) -> object: ...
+
+    def resume(self, batch_id: str) -> object: ...

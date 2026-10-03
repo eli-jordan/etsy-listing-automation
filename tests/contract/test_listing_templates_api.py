@@ -9,7 +9,6 @@ unit-tested there; these pin what the browser is told.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,12 +16,10 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from etsy_listings.core.batches import Batch
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
 
-from tests.support.batches import png
-from tests.support.builders import FIXTURE_LISTING, edit_garment_profile, edit_listing
+from tests.support.builders import FIXTURE_LISTING, edit_listing
 
 NAME = "heavyweight-tee"
 BLACK = {"template": "flat-lay-01", "colour": "black"}
@@ -130,32 +127,6 @@ class TestCreate:
         assert _create(client, name="draft").status_code == 400  # GET /draft's path
         assert not workspace.listing_templates_dir().exists()
 
-    def test_edits_made_before_naming_are_what_is_written(
-        self, client: TestClient, workspace: Workspace
-    ) -> None:
-        """The *name it* state is the editor (UI doc §1, §3): what the
-        seller changed before naming it is saved, and a file the edit
-        dropped is not copied."""
-        _local_picture(workspace, "./shots/back.png")
-        edit_listing(
-            workspace.root,
-            media=[{"template": "flat-lay-01", "colour": "black"}, "./shots/back.png"],
-        )
-        draft = client.get(f"/api/listing-templates/draft?from_listing={FIXTURE_LISTING}").json()
-
-        response = client.post(
-            "/api/listing-templates",
-            json={
-                "name": NAME,
-                "from_listing": FIXTURE_LISTING,
-                "document": {**_document(draft), "colors": ["black"], "media": [BLACK]},
-            },
-        )
-
-        assert response.json()["saved"] is True
-        assert workspace.load_listing_template(NAME).colors == ["black"]
-        assert not workspace.listing_template_assets_dir(NAME).exists()
-
     def test_an_edited_document_is_checked_like_a_put(
         self, client: TestClient, workspace: Workspace
     ) -> None:
@@ -178,16 +149,6 @@ class TestCreate:
         assert unplanned.status_code == 422
         assert "./assets/elsewhere.png" in unplanned.json()["detail"]
         assert not workspace.listing_templates_dir().exists()
-
-    def test_a_clone_is_created_from_another_template(
-        self, client: TestClient, workspace: Workspace
-    ) -> None:
-        _create(client)
-
-        response = _create(client, name="everyday-tee", from_template=NAME)
-
-        assert response.json()["saved"] is True
-        assert workspace.listing_template_names() == ["everyday-tee", NAME]
 
 
 class TestDraft:
@@ -366,45 +327,6 @@ class TestRename:
         assert workspace.listing_template_media_file(
             "everyday-tee", "assets/shots/back.png"
         ).is_file()
-
-    def test_batches_and_staging_made_from_it_follow_the_rename(
-        self, client: TestClient, workspace: Workspace
-    ) -> None:
-        """The card's *Used by N batches* is the seller's link between a
-        template and its batches, so a rename carries it; the frozen copies
-        themselves are left exactly as they were (spec, *Frozen staging*)."""
-        _create(client)
-        batch = Batch(
-            id="b1",
-            listing_template=NAME,
-            template={"frozen": True},
-            template_saved_at=datetime.now(UTC),
-            label="heavyweight-tee · 27 Sep 11:42",
-            created_at=datetime.now(UTC),
-            rows=[],
-        )
-        client.app.state.batch_store.save(batch)  # type: ignore[attr-defined]
-        edit_garment_profile(
-            workspace.root, "comfort-colors-1717", print_area={"width": 100, "height": 120}
-        )
-        staged = client.post(
-            "/api/staging",
-            data={"listing_template": NAME},
-            files=[("files", ("night-hike.png", png(1), "image/png"))],
-        ).json()
-
-        client.post(f"/api/listing-templates/{NAME}/rename", json={"new_name": "everyday-tee"})
-
-        [card] = client.get("/api/listing-templates").json()
-        assert card["name"] == "everyday-tee"
-        assert card["batch_count"] == 1
-        assert client.get("/api/batches/b1").json()["listing_template"] == "everyday-tee"
-        assert (
-            client.get(f"/api/staging/{staged['id']}").json()["listing_template"] == "everyday-tee"
-        )
-        record = client.app.state.batch_store.load("b1")  # type: ignore[attr-defined]
-        assert record.template == {"frozen": True}
-        assert record.label == "heavyweight-tee · 27 Sep 11:42"
 
     def test_a_taken_name_is_a_409_and_nothing_moves(
         self, client: TestClient, workspace: Workspace

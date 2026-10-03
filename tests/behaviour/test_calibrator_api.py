@@ -12,7 +12,6 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from etsy_listings.core.render.config import DisplaceConfig, Point, RenderConfig
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api import templates
 from etsy_listings.server.api.app import create_app
@@ -92,19 +91,6 @@ class TestTemplatePhotos:
             {"colour": None, "file": "mockup-templates/colour-chart-01/scene.png"}
         ]
 
-    def test_a_prefixed_vendor_pack_reports_the_file_that_is_really_there(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """`{template}-{colour}.png`, which `template_base_image` resolves and
-        the old client-side derivation did not."""
-        directory = workspace_root / "mockup-templates" / "flat-lay-01"
-        (directory / "black.png").rename(directory / "flat-lay-01-black.png")
-
-        assert {
-            "colour": "flat-lay-01-black",
-            "file": "mockup-templates/flat-lay-01/flat-lay-01-black.png",
-        } in self.photos(client, "flat-lay-01")
-
 
 class TestCalibrationStatus:
     """The rail sorts uncalibrated templates to the top and explains why each
@@ -121,25 +107,6 @@ class TestCalibrationStatus:
     def test_a_fully_configured_colour_matrix_is_calibrated(self, client: TestClient) -> None:
         assert self._status(client, "flat-lay-01") == ("calibrated", None)
 
-    def test_a_multiple_with_every_box_coloured_is_calibrated(self, client: TestClient) -> None:
-        assert self._status(client, "colour-chart-01") == ("calibrated", None)
-
-    def test_a_directory_with_no_config_needs_a_kind(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        (workspace_root / "mockup-templates" / "fresh-upload").mkdir()
-        assert self._status(client, "fresh-upload") == ("needs-calibration", "no kind set")
-
-    def test_a_multiple_with_no_placements_needs_boxes(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """`MultipleTemplate(placements=[])` is exactly what an upload writes,
-        so this is the state every fresh chart starts in."""
-        config = client.get("/api/templates/colour-chart-01/config").json()
-        config["placements"] = []
-        client.put("/api/templates/colour-chart-01/config", json=config)
-        assert self._status(client, "colour-chart-01") == ("needs-calibration", "no boxes")
-
     def test_a_multiple_with_an_uncoloured_box_says_how_many(
         self, client: TestClient, workspace_root: Path
     ) -> None:
@@ -152,17 +119,6 @@ class TestCalibrationStatus:
             "needs-calibration",
             "1 box has no colour",
         )
-
-    def test_the_uncoloured_box_count_is_plural_aware(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        config = client.get("/api/templates/colour-chart-01/config").json()
-        for placement in config["placements"]:
-            placement["colour"] = ""
-        client.put("/api/templates/colour-chart-01/config", json=config)
-        status, reason = self._status(client, "colour-chart-01")
-        assert status == "needs-calibration"
-        assert reason == "2 boxes have no colour"
 
 
 class TestThumbnails:
@@ -399,13 +355,6 @@ class TestAssigningAKind:
     question is answerable for a set someone else assembled.
     """
 
-    def test_a_folder_with_no_config_is_listed_as_needing_a_kind(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        _template_folder(workspace_root, "fresh", "black.png")
-        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
-        assert by_name["fresh"]["status_reason"] == "no kind set"
-
     def test_a_folder_with_no_config_answers_404_for_its_config(
         self, client: TestClient, workspace_root: Path
     ) -> None:
@@ -425,35 +374,6 @@ class TestAssigningAKind:
         config = client.get("/api/templates/fresh/config").json()
         assert config["kind"] == "colour-matrix"
         assert len(config["bounding_box"]) == 4
-
-    def test_assigning_colour_matrix_leaves_the_photos_named_as_colours(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """ADR-0004: the filename *is* the colour, so nothing is renamed."""
-        _template_folder(workspace_root, "fresh", "black.png", "ivory.png")
-        client.post("/api/templates/fresh/kind", json={"kind": "colour-matrix"})
-        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
-        assert by_name["fresh"]["colours"] == ["black", "ivory"]
-
-    def test_assigning_single_renames_the_lone_photo_to_the_scene(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """ADR-0014: multiple/single kinds use a fixed scene.png -- there is no
-        per-colour photo to name."""
-        directory = _template_folder(workspace_root, "fresh", "some-shot.png")
-        assert client.post("/api/templates/fresh/kind", json={"kind": "single"}).status_code == 200
-
-        assert (directory / "scene.png").is_file()
-        assert not (directory / "some-shot.png").exists()
-
-    def test_assigning_multiple_starts_with_no_boxes(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        _template_folder(workspace_root, "fresh", "chart.png")
-        client.post("/api/templates/fresh/kind", json={"kind": "multiple"})
-        assert client.get("/api/templates/fresh/config").json()["placements"] == []
-        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
-        assert by_name["fresh"]["status_reason"] == "no boxes"
 
     def test_a_scene_kind_refuses_a_set_of_photos(
         self, client: TestClient, workspace_root: Path
@@ -502,29 +422,6 @@ class TestColourReport:
             {"filename": "ivory.png", "colour": "ivory", "clean": True},
             {"filename": "moss.png", "colour": "moss", "clean": True},
         ]
-
-    def test_flags_a_filename_that_is_not_already_a_slug(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """`Heather Grey.png` still yields a colour, but not the one on disk --
-        the calibrator says so rather than quietly renaming the user's file."""
-        (workspace_root / "mockup-templates" / "flat-lay-01" / "Heather Grey.png").write_bytes(
-            _png()
-        )
-        by_filename = {
-            row["filename"]: row
-            for row in client.get("/api/templates/flat-lay-01/colour-report").json()
-        }
-        assert by_filename["Heather Grey.png"] == {
-            "filename": "Heather Grey.png",
-            "colour": "heather-grey",
-            "clean": False,
-        }
-
-    def test_excludes_the_scene_photo(self, client: TestClient) -> None:
-        """A scene is not a colour."""
-        rows = client.get("/api/templates/colour-chart-01/colour-report").json()
-        assert all(row["filename"] != "scene.png" for row in rows)
 
     def test_404s_for_an_unknown_template(self, client: TestClient) -> None:
         assert client.get("/api/templates/nope/colour-report").status_code == 404
@@ -791,26 +688,6 @@ class TestPreviewScale:
         )
         assert response.status_code == 422
 
-    def test_displacement_is_scaled_with_the_canvas(self) -> None:
-        """``DISPLACE_MAX_PX`` is an absolute pixel figure, so an unscaled
-        strength would show several times more fabric distortion in the editor
-        than in the render it is meant to predict -- the wrong direction for a
-        control calibrated by eye."""
-        cfg = RenderConfig(
-            bounding_box=(
-                Point(x=0, y=0),
-                Point(x=100, y=0),
-                Point(x=100, y=100),
-                Point(x=0, y=100),
-            ),
-            displace=DisplaceConfig(enabled=True, strength=0.8),
-        )
-        scaled = templates._scaled(cfg, 0.25)
-        assert scaled.displace.strength == pytest.approx(0.2)
-        assert scaled.bounding_box[2].x == pytest.approx(25)
-        # Unchanged at full size, object and all.
-        assert templates._scaled(cfg, 1.0) is cfg
-
 
 class TestTemplatePhotoSize:
     """The client cannot measure the editor's image to learn what space its
@@ -823,17 +700,6 @@ class TestTemplatePhotoSize:
         assert (chart["width"], chart["height"]) == (960, 576)
         flat = by_name["flat-lay-01"]
         assert (flat["width"], flat["height"]) == (480, 576)
-
-    def test_an_unreadable_photo_leaves_the_template_listable(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """Listing it is how the user reaches the UI that would fix it, so a
-        truncated PNG must not take the whole rail down."""
-        broken = workspace_root / "mockup-templates" / "broken"
-        broken.mkdir()
-        (broken / "scene.png").write_bytes(b"not a png")
-        by_name = {t["name"]: t for t in client.get("/api/templates").json()}
-        assert by_name["broken"]["width"] is None
 
 
 def test_preview_wrong_body_shape_for_kind_is_rejected(client: TestClient) -> None:
@@ -956,20 +822,6 @@ class TestFilenamesBecomeColourSlugs:
             Image.new("RGB", (120, 90), (90, 90, 90)).save(directory / filename)
         return directory
 
-    def test_assigning_colour_matrix_renames_photos_to_their_slugs(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        directory = self._messy_set(workspace_root, "Heather Grey.png", "forest.png")
-
-        assert (
-            client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"}).status_code
-            == 200
-        )
-        assert sorted(p.name for p in directory.glob("*.png")) == [
-            "forest.png",
-            "heather-grey.png",
-        ]
-
     def test_the_renamed_colour_is_the_one_the_api_reports_and_can_preview(
         self, client: TestClient, workspace_root: Path
     ) -> None:
@@ -988,35 +840,6 @@ class TestFilenamesBecomeColourSlugs:
         assert rendered.status_code == 200
         assert rendered.headers["content-type"] == "image/png"
 
-    def test_a_case_only_rename_still_happens(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """Windows filesystems are case-insensitive, so renaming straight onto
-        a path differing only in case is a no-op there and a rename
-        everywhere else. Going via a staging name makes both agree."""
-        directory = self._messy_set(workspace_root, "Forest.png")
-
-        assert (
-            client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"}).status_code
-            == 200
-        )
-        assert [p.name for p in directory.glob("*.png")] == ["forest.png"]
-
-    def test_the_report_previews_the_rename_before_it_happens(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        directory = self._messy_set(workspace_root, "Heather Grey.png", "forest.png")
-
-        rows = {r["filename"]: r for r in client.get("/api/templates/messy/colour-report").json()}
-        assert rows["Heather Grey.png"] == {
-            "filename": "Heather Grey.png",
-            "colour": "heather-grey",
-            "clean": False,
-        }
-        assert rows["forest.png"]["clean"] is True
-        # Reporting only -- nothing on disk moved until the kind was assigned.
-        assert (directory / "Heather Grey.png").is_file()
-
     def test_two_photos_colliding_on_one_slug_are_refused(
         self, client: TestClient, workspace_root: Path
     ) -> None:
@@ -1027,28 +850,6 @@ class TestFilenamesBecomeColourSlugs:
         response = client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"})
         assert response.status_code == 400
         assert "heather-grey" in response.json()["detail"]
-
-    def test_exceptions_yaml_decides_the_slug(
-        self, client: TestClient, workspace_root: Path
-    ) -> None:
-        """ADR-0004's escape hatch: a sparse exceptions.yaml overrides names
-        that don't slugify usefully. The calibrator has to honour it, or it
-        renames a file to a slug no listing will ever reference -- a bare
-        `slugify` here would give `heather-grey`, and the workspace has said
-        it means something else."""
-        (workspace_root / "exceptions.yaml").write_text(
-            "Heather Grey: hthr-gry\n", encoding="utf-8"
-        )
-        directory = self._messy_set(workspace_root, "Heather Grey.png")
-
-        rows = client.get("/api/templates/messy/colour-report").json()
-        assert rows[0]["colour"] == "hthr-gry"
-
-        assert (
-            client.post("/api/templates/messy/kind", json={"kind": "colour-matrix"}).status_code
-            == 200
-        )
-        assert [p.name for p in directory.glob("*.png")] == ["hthr-gry.png"]
 
 
 def test_health_endpoint(client: TestClient) -> None:

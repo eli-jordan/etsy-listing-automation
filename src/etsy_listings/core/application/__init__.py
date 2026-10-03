@@ -25,11 +25,39 @@ import names the module it depends on. Public interfaces:
 ``pricing_plans``
     ``load_candidate_pricing_plans``, ``pricing_plan_options`` /
     ``PricingPlanOption``, ``pricing_plan_ref``.
+``mockup_templates``
+    The calibrator: ``list_templates`` -> ``TemplateOverview``,
+    ``colour_report``, ``assign_kind``, ``read_config`` / ``save_config``,
+    ``template_photo``, ``template_swatch``, and the preview scene --
+    ``saved_preview`` / ``unsaved_preview`` -> ``PreviewScene``,
+    ``compose_preview``, ``scaled``. Images arrive decoded from the caller.
+``listing_template_library``
+    ``list_listing_templates`` -> ``ListingTemplateCard``,
+    ``read_listing_template`` / ``draft_listing_template`` ->
+    ``ListingTemplateView``, ``create_listing_template`` /
+    ``edit_listing_template`` -> ``TemplateSave``,
+    ``rename_listing_template``, ``delete_listing_template``.
+``batch_staging``
+    ``stage_upload``, ``read_staging``, ``edit_staging``, ``cancel_staging``,
+    ``staged_upload``: an upload's bytes and filenames arrive as
+    ``batches.Upload`` streams; limits and archive safety stay ``batches``'.
+``batch_workflow``
+    ``confirm_batch``, ``retry_batch_row``, ``retry_batch``,
+    ``cancel_batch``, ``resume_batch``, ``delete_batch``, ``rename_batch``,
+    ``mark_reviewed``, ``read_batch``, ``batch_row_upload``,
+    ``listing_batch`` -> ``ListingMembership``, ``recent_batches`` ->
+    ``RecentBatch``, ``row_proposal``.
 ``refusals``
     ``ListingMissing``, ``ListingNameTaken``, ``PublishedListingDeletion``,
-    ``InvalidListing``, ``field_errors_of``.
+    ``InvalidListing``, ``field_errors_of``; the calibrator's ``Template*``
+    refusals; ``ListingTemplateMissing``, ``ReservedListingTemplateName``,
+    ``ListingTemplateSourceRefused``; ``StagingMissing``, ``StagedRowMissing``,
+    ``BatchMissing``, ``BatchRowMissing``, ``BatchRowUploadMissing``,
+    ``NothingToRetry``, ``BatchRowNotReviewable``, ``AiDraftingBlocked``.
 ``dependencies``
-    ``ListingLocks``, ``ListingAiRuns`` / ``StoppableRun``, ``EtsyStates``:
-    what operations take the UI process's write locks, AI run registry and
-    Etsy state memo through while those live in the server.
+    ``ListingLocks``, ``ListingTemplateLocks``, ``ListingAiRuns`` /
+    ``StoppableRun``, ``EtsyStates``, ``BatchQueueControl``, ``AiBlocked``:
+    what operations take the UI process's write locks, AI run registry,
+    Etsy state memo, batch queue and AI readiness through while those live
+    in the server.
 """

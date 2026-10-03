@@ -6280,7 +6280,7 @@
     },
     "/api/batches": {
       "get": {
-        "description": "Recent batches (UI doc \u00a72): every batch, and every staging session\nnot confirmed yet, newest first, each with its derived status. Listing\nthem sweeps expired staging first, so a row never offers a\nsession that has gone.",
+        "description": "Recent batches (UI doc \u00a72): every batch, and every staging session\nnot confirmed yet, newest first, each with its derived status.",
         "operationId": "list_batches_api_batches_get",
         "responses": {
           "200": {
@@ -6306,7 +6306,7 @@
     },
     "/api/batches/{batch_id}": {
       "delete": {
-        "description": "Delete batch record (spec, *Cancellation and deletion*): its queued\nand running work is cancelled first, then only the record goes -- its\nrows, review flags and queue state, and the frozen template beside it.\nDesigns, listings, briefs and proposals are the workspace's and stay.",
+        "description": "Delete batch record (spec, *Cancellation and deletion*): its queued\nand running work is cancelled first, then only the record goes.",
         "operationId": "delete_batch_api_batches__batch_id__delete",
         "parameters": [
           {
@@ -7207,7 +7207,7 @@
     },
     "/api/listing-templates": {
       "get": {
-        "description": "Every listing template, as its card on the Listing templates page shows\nit (UI doc \u00a72). A template whose file will not load is left out rather\nthan failing the page; it can only get that way by a hand edit.",
+        "description": "Every listing template, as its card on the Listing templates page shows\nit (UI doc \u00a72).",
         "operationId": "list_listing_templates_api_listing_templates_get",
         "responses": {
           "200": {
@@ -7413,7 +7413,7 @@
         ]
       },
       "put": {
-        "description": "template completeness: write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\n(PR 6) keeps the unsaved values on its side.",
+        "description": "template completeness: write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\nkeeps the unsaved values on its side.",
         "operationId": "put_listing_template_api_listing_templates__name__put",
         "parameters": [
           {
@@ -7468,7 +7468,7 @@
     },
     "/api/listing-templates/{name}/rename": {
       "post": {
-        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). Its name is its directory,\nso the rename is a directory move and its ``./`` refs, which name that\ndirectory, need no rewrite. A taken name is a 409 and never suffixed\n(spec, *Storage and identity*).\n\nStaging sessions and batch records made from it follow it by name --\nthe name, not the frozen copy they each keep, which is untouched.\nThat name is the card's *Used by N batches* and the staging page's\n*Using X*, the seller's link between a template and its batches. It\nis rewritten after the move, under each record's lock; a crash between\nthe two leaves records naming a template that is gone, which is what a\ndelete leaves too, and harms nothing a batch needs.",
+        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). A taken name is a 409 and never\nsuffixed (spec, *Storage and identity*); the staging sessions and\nbatches made from it follow it by name\n(:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`).",
         "operationId": "rename_listing_template_api_listing_templates__name__rename_post",
         "parameters": [
           {
@@ -8055,7 +8055,7 @@
     },
     "/api/listings/{name}/batch": {
       "get": {
-        "description": "The batch that made ``name``, for the editor's row above the head\n(UI doc \u00a78), or ``null``. A row names its listing exactly, as the rename\nand delete hooks match it; a deleted row is not the listing's.\nShould two batches both claim it, the newer wins.",
+        "description": "The batch that made ``name``, for the editor's row above the head\n(UI doc \u00a78), or ``null``.",
         "operationId": "listing_batch_api_listings__name__batch_get",
         "parameters": [
           {
@@ -8835,7 +8835,7 @@
     },
     "/api/staging": {
       "post": {
-        "description": "Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has\nalready spooled the parts to temporary files; `stage_pngs` streams each\none on -- a PNG to its content-addressed upload, a ZIP to disk and then\nentry by entry out of it -- with a running count.",
+        "description": "Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has\nalready spooled the parts to temporary files; each is handed on as a\nstream, which staging reads a PNG or a ZIP's entries out of with a\nrunning count.",
         "operationId": "create_staging_api_staging_post",
         "requestBody": {
           "content": {
@@ -9125,7 +9125,7 @@
     },
     "/api/templates/{name}/colour-report": {
       "get": {
-        "description": "What each photo will be taken as if this becomes a colour-matrix set.\n\nShown in the kind picker before committing, so a badly named file is seen\nwhile it is still cheap to think about. A row with ``clean: false`` is one\n``assign_kind`` will rename on disk (ADR-0004: the filename *is* the\nslugified colour, and a directory whose filenames disagree with the\ncolours they mean is the state that rule exists to prevent).",
+        "description": "What each photo will be taken as if this becomes a colour-matrix set,\nshown in the kind picker before committing. ``clean: false`` is a file\nassigning the kind will rename (ADR-0004).",
         "operationId": "colour_report_api_templates__name__colour_report_get",
         "parameters": [
           {
@@ -9416,7 +9416,7 @@
     },
     "/api/templates/{name}/kind": {
       "post": {
-        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.\n\nRefuses a template that already has a config. Kind decides the whole file\nshape, so changing it would discard whatever calibration was done in\nthe old shape's fields -- and doing that silently, from a picker, is the\nkind of data loss nobody would think to look for.",
+        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape. Refused for a template that\nalready has one -- changing kind would discard its calibration.",
         "operationId": "assign_kind_api_templates__name__kind_post",
         "parameters": [
           {
@@ -9488,7 +9488,7 @@
     },
     "/api/templates/{name}/photo": {
       "get": {
-        "description": "The template's own photo, at its own resolution -- the bare-scene\ncounterpart of ``GET.../design-preview`` for a listing that has not\npicked a design yet.\n\nSame photo :func:`thumbnail` serves, same resolution rule\n( :func:`_thumbnail_source`), just not downscaled to list size: the\nlisting editor's Variants and Listing Images previews are a large hero\nstage, not a row of tiles, and serving them the 160px list thumbnail is\nwhy that stage used to look tiny for a listing with no design picked yet.",
+        "description": "The same photo at its own resolution, for the listing editors' large\npreview stage when no design is picked yet.",
         "operationId": "photo_api_templates__name__photo_get",
         "parameters": [
           {
@@ -9545,6 +9545,7 @@
     },
     "/api/templates/{name}/preview": {
       "post": {
+        "description": "The calibrator's preview of the geometry under the cursor, against a\ndesign from its own test-design library.",
         "operationId": "preview_api_templates__name__preview_post",
         "parameters": [
           {
@@ -9620,7 +9621,7 @@
     },
     "/api/templates/{name}/swatch": {
       "get": {
-        "description": "This colour's real garment shade, for a quick-glance dot next to its\nname -- the median pixel (`sample_swatch`) inside the saved bounding box\nof the colour's own scene photo, not an invented hex value. Only a\n``colour-matrix`` template has one photo per colour to sample; any other\nkind 404s the same way a photo-less colour does.",
+        "description": "This colour's real garment shade, for a quick-glance dot next to its\nname -- sampled off the colour's own photo, decoded through the preview\nmemo. Any kind but colour-matrix 404s, as a photo-less colour does.",
         "operationId": "swatch_api_templates__name__swatch_get",
         "parameters": [
           {
@@ -9672,7 +9673,7 @@
     },
     "/api/templates/{name}/thumbnail": {
       "get": {
-        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo is shown is\n:meth:`~etsy_listings.core.workspace.workspace.Workspace.template_preview_photo`'s\nquestion, not this endpoint's.\n\n``colour`` narrows that to one photo of a ``colour-matrix`` set, for\ncallers that are showing a *particular* variant rather than standing in\nfor the template: the listings editor's reel draws one tile per\n``media`` entry, and without this every colour of a set drew the same\npicture, since ``template_preview_photo`` deliberately answers \"any one\nof them\". Resolution goes through\n:meth:`~etsy_listings.core.workspace.workspace.Workspace.template_base_image`,\nwhich owns ADR-0004's filename convention and its trailing-segment\nfallback -- this endpoint must not glob for ``{colour}.png`` itself.\n\nHow it is downscaled and served is:mod:`etsy_listings.server.api.thumbnails`'\nquestion -- the listings table asks the same one of a design.",
+        "description": "The template's own photo, downscaled, for the rail -- not a render,\nwhich once per row would make opening the calibrator cost as much as\ncalibrating. ``colour`` narrows it to one photo of a colour-matrix set,\nfor the listings editor's reel. Which photo is\n:func:`~etsy_listings.core.application.mockup_templates.template_photo`'s\nquestion; how it is downscaled is :mod:`.thumbnails`'.",
         "operationId": "thumbnail_api_templates__name__thumbnail_get",
         "parameters": [
           {

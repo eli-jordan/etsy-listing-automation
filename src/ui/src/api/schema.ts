@@ -80,9 +80,7 @@ export interface paths {
     /**
      * List Batches
      * @description Recent batches (UI doc §2): every batch, and every staging session
-     *     not confirmed yet, newest first, each with its derived status. Listing
-     *     them sweeps expired staging first, so a row never offers a
-     *     session that has gone.
+     *     not confirmed yet, newest first, each with its derived status.
      */
     get: operations["list_batches_api_batches_get"];
     put?: never;
@@ -107,9 +105,7 @@ export interface paths {
     /**
      * Delete Batch
      * @description Delete batch record (spec, *Cancellation and deletion*): its queued
-     *     and running work is cancelled first, then only the record goes -- its
-     *     rows, review flags and queue state, and the frozen template beside it.
-     *     Designs, listings, briefs and proposals are the workspace's and stay.
+     *     and running work is cancelled first, then only the record goes.
      */
     delete: operations["delete_batch_api_batches__batch_id__delete"];
     options?: never;
@@ -543,8 +539,7 @@ export interface paths {
     /**
      * List Listing Templates
      * @description Every listing template, as its card on the Listing templates page shows
-     *     it (UI doc §2). A template whose file will not load is left out rather
-     *     than failing the page; it can only get that way by a hand edit.
+     *     it (UI doc §2).
      */
     get: operations["list_listing_templates_api_listing_templates_get"];
     put?: never;
@@ -596,7 +591,7 @@ export interface paths {
      * @description template completeness: write the whole document only if it is complete. A malformed or
      *     incomplete one leaves ``template.yaml`` byte-for-byte as it was, so the
      *     server always holds the last complete version; the listing-template editor
-     *     (PR 6) keeps the unsaved values on its side.
+     *     keeps the unsaved values on its side.
      */
     put: operations["put_listing_template_api_listing_templates__name__put"];
     post?: never;
@@ -623,18 +618,10 @@ export interface paths {
     /**
      * Rename Listing Template
      * @description Move a listing template, whole, to a new name -- double-click the
-     *     name, exactly as a listing (UI doc §3). Its name is its directory,
-     *     so the rename is a directory move and its ``./`` refs, which name that
-     *     directory, need no rewrite. A taken name is a 409 and never suffixed
-     *     (spec, *Storage and identity*).
-     *
-     *     Staging sessions and batch records made from it follow it by name --
-     *     the name, not the frozen copy they each keep, which is untouched.
-     *     That name is the card's *Used by N batches* and the staging page's
-     *     *Using X*, the seller's link between a template and its batches. It
-     *     is rewritten after the move, under each record's lock; a crash between
-     *     the two leaves records naming a template that is gone, which is what a
-     *     delete leaves too, and harms nothing a batch needs.
+     *     name, exactly as a listing (UI doc §3). A taken name is a 409 and never
+     *     suffixed (spec, *Storage and identity*); the staging sessions and
+     *     batches made from it follow it by name
+     *     (:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`).
      */
     post: operations["rename_listing_template_api_listing_templates__name__rename_post"];
     delete?: never;
@@ -862,9 +849,7 @@ export interface paths {
     /**
      * Listing Batch
      * @description The batch that made ``name``, for the editor's row above the head
-     *     (UI doc §8), or ``null``. A row names its listing exactly, as the rename
-     *     and delete hooks match it; a deleted row is not the listing's.
-     *     Should two batches both claim it, the newer wins.
+     *     (UI doc §8), or ``null``.
      */
     get: operations["listing_batch_api_listings__name__batch_get"];
     put?: never;
@@ -1140,9 +1125,9 @@ export interface paths {
     /**
      * Create Staging
      * @description Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has
-     *     already spooled the parts to temporary files; `stage_pngs` streams each
-     *     one on -- a PNG to its content-addressed upload, a ZIP to disk and then
-     *     entry by entry out of it -- with a running count.
+     *     already spooled the parts to temporary files; each is handed on as a
+     *     stream, which staging reads a PNG or a ZIP's entries out of with a
+     *     running count.
      */
     post: operations["create_staging_api_staging_post"];
     delete?: never;
@@ -1246,13 +1231,9 @@ export interface paths {
     };
     /**
      * Colour Report
-     * @description What each photo will be taken as if this becomes a colour-matrix set.
-     *
-     *     Shown in the kind picker before committing, so a badly named file is seen
-     *     while it is still cheap to think about. A row with ``clean: false`` is one
-     *     ``assign_kind`` will rename on disk (ADR-0004: the filename *is* the
-     *     slugified colour, and a directory whose filenames disagree with the
-     *     colours they mean is the state that rule exists to prevent).
+     * @description What each photo will be taken as if this becomes a colour-matrix set,
+     *     shown in the kind picker before committing. ``clean: false`` is a file
+     *     assigning the kind will rename (ADR-0004).
      */
     get: operations["colour_report_api_templates__name__colour_report_get"];
     put?: never;
@@ -1326,12 +1307,8 @@ export interface paths {
     /**
      * Assign Kind
      * @description The first calibration step: say what this template is, and get the
-     *     starting ``template.yaml`` for that shape.
-     *
-     *     Refuses a template that already has a config. Kind decides the whole file
-     *     shape, so changing it would discard whatever calibration was done in
-     *     the old shape's fields -- and doing that silently, from a picker, is the
-     *     kind of data loss nobody would think to look for.
+     *     starting ``template.yaml`` for that shape. Refused for a template that
+     *     already has one -- changing kind would discard its calibration.
      */
     post: operations["assign_kind_api_templates__name__kind_post"];
     delete?: never;
@@ -1349,15 +1326,8 @@ export interface paths {
     };
     /**
      * Photo
-     * @description The template's own photo, at its own resolution -- the bare-scene
-     *     counterpart of ``GET.../design-preview`` for a listing that has not
-     *     picked a design yet.
-     *
-     *     Same photo :func:`thumbnail` serves, same resolution rule
-     *     ( :func:`_thumbnail_source`), just not downscaled to list size: the
-     *     listing editor's Variants and Listing Images previews are a large hero
-     *     stage, not a row of tiles, and serving them the 160px list thumbnail is
-     *     why that stage used to look tiny for a listing with no design picked yet.
+     * @description The same photo at its own resolution, for the listing editors' large
+     *     preview stage when no design is picked yet.
      */
     get: operations["photo_api_templates__name__photo_get"];
     put?: never;
@@ -1377,7 +1347,11 @@ export interface paths {
     };
     get?: never;
     put?: never;
-    /** Preview */
+    /**
+     * Preview
+     * @description The calibrator's preview of the geometry under the cursor, against a
+     *     design from its own test-design library.
+     */
     post: operations["preview_api_templates__name__preview_post"];
     delete?: never;
     options?: never;
@@ -1395,10 +1369,8 @@ export interface paths {
     /**
      * Swatch
      * @description This colour's real garment shade, for a quick-glance dot next to its
-     *     name -- the median pixel (`sample_swatch`) inside the saved bounding box
-     *     of the colour's own scene photo, not an invented hex value. Only a
-     *     ``colour-matrix`` template has one photo per colour to sample; any other
-     *     kind 404s the same way a photo-less colour does.
+     *     name -- sampled off the colour's own photo, decoded through the preview
+     *     memo. Any kind but colour-matrix 404s, as a photo-less colour does.
      */
     get: operations["swatch_api_templates__name__swatch_get"];
     put?: never;
@@ -1418,26 +1390,12 @@ export interface paths {
     };
     /**
      * Thumbnail
-     * @description The template's own photo, downscaled, for the rail.
-     *
-     *     Not a render: the rail shows every template in the workspace at once, and
-     *     running the real pipeline once per row would make opening the calibrator
-     *     cost as much as calibrating. Which photo is shown is
-     *     :meth:`~etsy_listings.core.workspace.workspace.Workspace.template_preview_photo`'s
-     *     question, not this endpoint's.
-     *
-     *     ``colour`` narrows that to one photo of a ``colour-matrix`` set, for
-     *     callers that are showing a *particular* variant rather than standing in
-     *     for the template: the listings editor's reel draws one tile per
-     *     ``media`` entry, and without this every colour of a set drew the same
-     *     picture, since ``template_preview_photo`` deliberately answers "any one
-     *     of them". Resolution goes through
-     *     :meth:`~etsy_listings.core.workspace.workspace.Workspace.template_base_image`,
-     *     which owns ADR-0004's filename convention and its trailing-segment
-     *     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
-     *
-     *     How it is downscaled and served is:mod:`etsy_listings.server.api.thumbnails`'
-     *     question -- the listings table asks the same one of a design.
+     * @description The template's own photo, downscaled, for the rail -- not a render,
+     *     which once per row would make opening the calibrator cost as much as
+     *     calibrating. ``colour`` narrows it to one photo of a colour-matrix set,
+     *     for the listings editor's reel. Which photo is
+     *     :func:`~etsy_listings.core.application.mockup_templates.template_photo`'s
+     *     question; how it is downscaled is :mod:`.thumbnails`'.
      */
     get: operations["thumbnail_api_templates__name__thumbnail_get"];
     put?: never;
