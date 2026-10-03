@@ -124,7 +124,15 @@ describe("scaledAbout", () => {
 
 describe("labelAnchor", () => {
   it("hangs under the lowest edge, centred on the horizontal extent", () => {
-    expect(labelAnchor(SKEWED)).toEqual({ x: 60, y: 140 });
+    // Mid-extent x is 50; a corner mean (55) would drift towards the side
+    // with more corners.
+    const box: BoundingBox = [
+      { x: 0, y: 10 },
+      { x: 100, y: 0 },
+      { x: 100, y: 90 },
+      { x: 20, y: 70 },
+    ];
+    expect(labelAnchor(box)).toEqual({ x: 50, y: 90 });
   });
 });
 
