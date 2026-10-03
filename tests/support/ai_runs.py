@@ -1,10 +1,11 @@
 """What an AI-run test needs: a provider that answers all three tasks of the
 chain, a seeded Etsy market, the three prompt files, and a wait.
 
-:class:`ChainProvider` tells the tasks apart by their response schema --
-the one thing about a :class:`~etsy_listings.core.ai.models.ProviderTask` that
-says which feature asked. A task can be made to fail, or to block on a gate
-until the test opens it or the run's cancel event is set, which is how a
+:class:`ChainProvider` tells the tasks apart by their response schema's
+content (an unknown schema is refused) -- the one thing about a
+:class:`~etsy_listings.core.ai.models.ProviderTask` that says which feature
+asked. A task can be made to fail, or to block on a gate until the test
+opens it or the run's cancel event is set, which is how a
 test holds a run at one step. A blocked call that sees the cancel event
 raises :class:`~etsy_listings.core.ai.errors.ProviderCancelledError`, as the real
 adapters do once ``run_managed`` has killed the process tree.
@@ -16,7 +17,7 @@ import json
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -32,6 +33,7 @@ from etsy_listings.core.ai.models import (
     RawProviderResult,
     RepairContext,
 )
+from etsy_listings.core.ai.prompt import RESPONSE_SCHEMA as SEO_RESPONSE_SCHEMA
 from etsy_listings.core.ai.proposals import (
     ProposalChoices,
     ProposalRecord,
@@ -81,12 +83,21 @@ def proposal_payload() -> str:
     )
 
 
+_KNOWN_SCHEMAS: tuple[tuple[Mapping[str, object], Task], ...] = (
+    (BRIEF_RESPONSE_SCHEMA, "brief"),
+    (MARKET_QUERIES_RESPONSE_SCHEMA, "queries"),
+    (SEO_RESPONSE_SCHEMA, "seo"),
+)
+
+
 def _task_kind(task: ProviderTask) -> Task:
-    if task.response_schema is BRIEF_RESPONSE_SCHEMA:
-        return "brief"
-    if task.response_schema is MARKET_QUERIES_RESPONSE_SCHEMA:
-        return "queries"
-    return "seo"
+    """Which task this is, by what its schema says rather than which object
+    it is: a copied or re-parsed schema is the same task, and one the chain
+    does not ask for is a test mistake, not the SEO task."""
+    for schema, kind in _KNOWN_SCHEMAS:
+        if task.response_schema == schema:
+            return kind
+    raise AssertionError(f"unknown response schema: {dict(task.response_schema)!r}")
 
 
 @dataclass
