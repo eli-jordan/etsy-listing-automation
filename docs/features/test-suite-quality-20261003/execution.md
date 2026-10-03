@@ -53,3 +53,34 @@ Each PR adds one row for every case it changed, moved or removed, and names the 
 | 1 | `useAiSeoMode.test.ts` "stays unavailable when the readiness check itself fails" | Strengthened (F02): deferred rejection, checking → "Could not check AI setup." | Same case, renamed "…, and says so" | — |
 | 1 | `DetailsTab.test.tsx` "keeps AI Mode disabled when the readiness endpoint says no" | Strengthened (F02): waits for the refusal reason in the hover card before checking disabled | Same case | `AiSeoControl.test.tsx` hover-card reason case |
 | 1 | `QuadEditor.test.tsx` "scales from the box as it was when the gesture started, not compounding" | Strengthened (F03): controlled parent applies changes; requires exactly two `[0, doubled box]` calls | Same case | Shift-drag single-move case |
+| 2 | `test_render_maps.py::test_height_map_is_smoother_than_luminance` | Replaced (F07): impulse input; neighbour equals OpenCV's documented Gaussian ratio for k=11, luminance stays sharp | `test_height_map_spreads_an_impulse_by_the_gaussian_it_names` | Render goldens unchanged |
+| 2 | `test_render_maps.py::test_height_map_accepts_even_ksize_by_rounding_up` | Replaced (F07): k=12 equals k=13 output and its ratio, differs from k=11 | `test_height_map_rounds_an_even_kernel_up_to_the_next_odd_one` | — |
+| 2 | `test_render_maps.py::test_derived_map_cache_writes_and_reuses` | Replaced (F07): plants distinguishable valid data in the stored file; the second call returns it and leaves it unwritten | `test_derived_map_cache_loads_what_it_stored_instead_of_recomputing` | `test_preview_imagecache.py` derived-map memo case |
+| 2 | `test_render_maps.py::test_derived_map_cache_invalidates_on_source_change` | Strengthened (F07): second source returns its own values, not only a second file | Same case | — |
+| 2 | (new) `test_render_maps.py::test_derived_map_cache_invalidates_on_kernel_change` | Added (F07): parameter invalidation returns the wider kernel's values | Same case | — |
+| 2 | `test_preview_imagecache.py::TestBudget::test_the_least_recently_used_entry_goes_first` | Strengthened (F08): three keys, two slots, touch A, load C; A kept by identity, B reloaded, budget held | Same case | Read-only, accounting, oversize, concurrency cases unchanged |
+| 2 | `test_preview_imagecache.py::TestMemo::test_editing_the_photo_invalidates_it` | Strengthened (F08): asserts the original was non-black and the edited array is the written black pixels | Same case | `test_the_second_ask_does_not_decode_again` keeps documented identity |
+| 2 | `test_ai_brief.py::test_the_packaged_prompt_is_read_fresh_each_call` | Strengthened (F16): resource boundary returns two distinct texts; reader returns both and reads `brief.md` twice | Same case | Packaged-prompt prose cases read the real resource |
+| 2 | `test_ai_models.py::test_deadline_starting_now_has_the_full_budget_remaining` | Strengthened (F16): controlled monotonic clock, exact 60.0, no epsilon | Same case | — |
+| 2 | `test_ai_models.py::test_deadline_reports_expired_once_its_budget_has_passed` | Replaced (F16): real sleep removed; before (0.5 s left) and at the cutoff (0.0, expired) | `test_deadline_counts_down_on_the_monotonic_clock`, `test_deadline_expires_exactly_at_its_cutoff` | — |
+| 2 | `test_ai_models.py::test_deadline_remaining_seconds_never_goes_negative` | Strengthened (F16): after the cutoff on the controlled clock, plus negative budget | Same case | — |
+| 2 | `test_ai_models.py::test_seo_proposal_holds_exactly_the_agreed_shape` | Removed (T10): asserted the fixture's own counts; dataclass does not validate them | `test_ai_validation.py` parsed-shape and count-rejection cases | `test_ai_models.py` frozen/default cases |
+| 2 | `test_ai_providers.py::test_fake_provider_satisfies_the_provider_protocol` | Removed (T10): duplicate typed assignment/readiness type | `test_fake_provider_is_ready_by_default` (exact default, now annotated `AiProvider` for mypy) | FIFO, exhaustion, task-recording cases |
+| 2 | `test_etsy_market_fake.py::test_the_fake_satisfies_the_protocol` | Removed (T10): repeated empty search | `test_an_unseeded_query_finds_nothing` (now annotated `EtsyMarketClient`) | Search/limit/stats/review/log fidelity cases |
+| 2 | `test_lock.py::test_a_clean_lockfile_writes_byte_identical_json_to_before_the_marker_existed` | Removed (T10): absence check duplicate; ADR-0037 requires omission, not historic bytes | `test_write_omits_incomplete_when_unset` | Merge/decode/immutability/unknown-field and hash cases |
+
+## PR 2 DTO storage-only review
+
+Each remaining `test_ai_models.py` case was assessed on its own (T10); none was deleted beyond the fixture-count case above.
+
+| Case | Decision | Reason |
+|---|---|---|
+| `test_seo_request_carries_the_listing_context_the_prompt_needs` | Keep | The only unit construction of `SeoRequest` with a `GarmentContext`; cheap, and names the fields the prompt consumes |
+| `test_seo_request_is_frozen` | Keep | Frozen semantics |
+| `test_proposal_warning_defaults_to_general_kind` | Keep | Real default |
+| `test_proposal_warning_can_be_a_trademark_kind` | Keep | Storage-only, but the one witness of the second kind value at this layer |
+| `test_provider_readiness_ready_carries_no_reason_by_default` | Keep | Real default |
+| `test_provider_readiness_not_ready_names_why` | Keep | Storage-only; consolidating with the default case would mix a default and a value claim |
+| `test_raw_provider_result_carries_the_provider_name_and_its_raw_output` | Keep | Storage-only; low cost, no stronger unit witness to fold into |
+
+The `startedAt` alias candidate in the coverage map lives in frontend tests and is left to PR 10.
