@@ -90,10 +90,7 @@ function streamStub() {
   return handles;
 }
 
-afterEach(() => {
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-});
+afterEach(() => vi.restoreAllMocks());
 
 describe("BatchDeployPage", () => {
   beforeEach(() => {

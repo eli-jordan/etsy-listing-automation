@@ -9,6 +9,8 @@ import { briefEvent, type FakeAiRuns, fakeAiRuns, stepEvent } from "../test/aiRu
 import type { ListingDetail } from "../types";
 import { ListingEditorPage } from "./ListingEditorPage";
 import { listingDetail } from "../test/listings";
+import { AUTOSAVE_DEBOUNCE_MS } from "../hooks/useAutosave";
+import { controlledClock } from "../test/clock";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
   return listingDetail(over);
@@ -419,6 +421,7 @@ describe("ListingEditorPage", () => {
   });
 
   it("saves a newly picked design", async () => {
+    const clock = controlledClock();
     vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
       { name: "take-a-hike", file: "designs/take-a-hike.png" },
       { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
@@ -428,17 +431,17 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("designs/take-a-hike.png");
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.user.click(screen.getByRole("button", { name: /Change design/ }));
+    await clock.user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() =>
-      expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
-        design: "designs/cosmic-cat.png",
-      }),
-    );
+    expect(patchSpy).toHaveBeenCalledWith("take-a-hike", {
+      design: "designs/cosmic-cat.png",
+    });
   });
 
   it("runs the AI chain once the picked design is saved, and fills in the brief it drafts", async () => {
+    const clock = controlledClock();
     /* ADR-0003: a pick on a listing whose brief is empty arms the chain; the
        save that follows fires it. The server writes the drafted brief, so
        the field fills in without another save. */
@@ -453,12 +456,11 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("designs/take-a-hike.png");
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.user.click(screen.getByRole("button", { name: /Change design/ }));
+    await clock.user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() =>
-      expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true }),
-    );
+    expect(runs.start).toHaveBeenCalledWith("take-a-hike", { draftBrief: true });
     await waitFor(() => expect(runs.streams).toHaveLength(1));
     runs.emit(stepEvent("brief", "active", "Reading cosmic-cat.png"));
     expect(screen.getByText("Drafting brief…")).toBeInTheDocument();
@@ -487,6 +489,7 @@ describe("ListingEditorPage", () => {
   });
 
   it("does not rename a listing that already has a name when its design changes", async () => {
+    const clock = controlledClock();
     /* A listing called something is called that on purpose. Only a draft
        with no name at all takes one from its artwork. */
     vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
@@ -499,10 +502,11 @@ describe("ListingEditorPage", () => {
     renderAt("/listings/take-a-hike");
     await screen.findByText("designs/take-a-hike.png");
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.user.click(screen.getByRole("button", { name: /Change design/ }));
+    await clock.user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() => expect(listingsApi.patchListing).toHaveBeenCalled());
+    expect(listingsApi.patchListing).toHaveBeenCalled();
     expect(rename).not.toHaveBeenCalled();
     expect(screen.getByRole("heading", { name: "take-a-hike" })).toBeInTheDocument();
   });
@@ -693,6 +697,7 @@ describe("ListingEditorPage at /listings/new", () => {
   });
 
   it("leaves a name the seller is part-way through typing alone", async () => {
+    const clock = controlledClock();
     /* An uncommitted name is not the listing's name -- `detail.name` is still
        empty -- so the pick has to be told about the field's own text or it
        would overwrite what they were in the middle of writing. */
@@ -707,12 +712,15 @@ describe("ListingEditorPage at /listings/new", () => {
     renderAt("/listings/new");
 
     const input = await screen.findByLabelText("Listing name");
-    fireEvent.change(input, { target: { value: "my-shi" } });
+    await clock.user.type(input, "my-shi");
 
+    // Dispatched, not clicked: a real click elsewhere blurs the field, and
+    // blur commits the name -- the field would no longer be part-way typed.
     fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
     fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() => expect(describe).toHaveBeenCalled());
+    expect(describe).toHaveBeenCalled();
     expect(create).not.toHaveBeenCalled();
     expect(screen.getByLabelText("Listing name")).toHaveValue("my-shi");
 
@@ -724,6 +732,7 @@ describe("ListingEditorPage at /listings/new", () => {
   });
 
   it("keeps a name the seller already typed, even if the design is picked after", async () => {
+    const clock = controlledClock();
     vi.spyOn(listingsApi, "getListingDraft").mockResolvedValue(draft());
     vi.spyOn(listingsApi, "listListingDesigns").mockResolvedValue([
       { name: "cosmic-cat", file: "designs/cosmic-cat.png" },
@@ -735,16 +744,16 @@ describe("ListingEditorPage at /listings/new", () => {
     renderAt("/listings/new");
 
     const input = await screen.findByLabelText("Listing name");
-    fireEvent.change(input, { target: { value: "my-shirt" } });
-    fireEvent.keyDown(input, { key: "Enter" });
+    await clock.user.type(input, "my-shirt{Enter}");
     await waitFor(() =>
       expect(screen.getByRole("heading", { name: "my-shirt" })).toBeInTheDocument(),
     );
 
-    fireEvent.click(screen.getByRole("button", { name: /Change design/ }));
-    fireEvent.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.user.click(screen.getByRole("button", { name: /Change design/ }));
+    await clock.user.click(await screen.findByRole("button", { name: /cosmic-cat/ }));
+    await clock.advance(AUTOSAVE_DEBOUNCE_MS);
 
-    await waitFor(() => expect(listingsApi.patchListing).toHaveBeenCalled());
+    expect(listingsApi.patchListing).toHaveBeenCalled();
     expect(create).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("heading", { name: "my-shirt" })).toBeInTheDocument();
   });

@@ -113,10 +113,7 @@ beforeEach(() => {
   vi.spyOn(listingsApi, "tryGetListing").mockResolvedValue(detail());
 });
 
-afterEach(() => {
-  vi.useRealTimers();
-  vi.restoreAllMocks();
-});
+afterEach(() => vi.restoreAllMocks());
 
 describe("DeployPage: starting fresh", () => {
   it("saves nothing pending (already the route's own job), plans, and enables Apply once ready", async () => {

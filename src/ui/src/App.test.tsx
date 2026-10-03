@@ -57,7 +57,6 @@ function header() {
 }
 
 afterEach(() => {
-  vi.useRealTimers();
   vi.restoreAllMocks();
 });
 
