@@ -11,7 +11,7 @@ export type { StageRuntimeStatus } from "./listingRunState";
  * Pure reducer: `RunEvent[] -> phase, per-stage runtime, plan, previews`
  * (docs/features/deploy-20260917/spec.md, Frontend module table).
  *
- * One rule ties every branch below to the event union `server/runs/events.py`
+ * One rule ties every branch below to the event union `core/application/deploy/events.py`
  * defines: this module never decides *whether* something changed or *why* a
  * stage will run -- `stage_planned`/`listing_planned` already carry a
  * `StagePlanDTO`/`PlanDTO` the engine computed, and this only stores the

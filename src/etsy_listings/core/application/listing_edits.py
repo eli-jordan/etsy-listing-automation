@@ -15,8 +15,8 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.core.application.dependencies import ListingLocks
 from etsy_listings.core.application.refusals import InvalidListing, ListingMissing
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.workspace.atomic import write_yaml_atomic
@@ -28,7 +28,7 @@ def edit_listing(
     name: str,
     patch: Mapping[str, Any],
     *,
-    locks: ListingLocks,
+    locks: WorkspaceLocks,
     batches: BatchStore,
 ) -> InvalidListing | None:
     """Merge ``patch`` into listing ``name`` and write it; ``None`` once

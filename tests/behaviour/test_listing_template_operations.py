@@ -39,10 +39,10 @@ from etsy_listings.core.application.refusals import (
     ListingTemplateSourceRefused,
     ReservedListingTemplateName,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import Batch, BatchStore, StagingStore, stage_pngs
 from etsy_listings.core.listing_templates import ListingTemplateExistsError
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 from tests.support.batches import png, small_print_area, uploads
 from tests.support.builders import FIXTURE_LISTING, edit_listing

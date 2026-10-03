@@ -14,14 +14,14 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.core.application.dependencies import ListingLocks
 from etsy_listings.core.application.refusals import InvalidListing, ListingNameTaken
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.config.listing import Listing
 from etsy_listings.core.workspace.workspace import Workspace
 
 
 def create_listing(
-    workspace: Workspace, name: str, document: Mapping[str, Any], *, locks: ListingLocks
+    workspace: Workspace, name: str, document: Mapping[str, Any], *, locks: WorkspaceLocks
 ) -> InvalidListing | None:
     """Write ``document`` as listing ``name``; ``None`` once written.
 

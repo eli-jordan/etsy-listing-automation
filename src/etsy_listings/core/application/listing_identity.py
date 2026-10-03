@@ -16,12 +16,13 @@ from dataclasses import dataclass
 import yaml
 
 from etsy_listings.core.ai.proposals import ProposalStore
-from etsy_listings.core.application.dependencies import EtsyStates, ListingAiRuns, ListingLocks
+from etsy_listings.core.application.dependencies import EtsyStates, ListingAiRuns
 from etsy_listings.core.application.refusals import (
     ListingMissing,
     ListingNameTaken,
     PublishedListingDeletion,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.engine.status import is_live_etsy_state, remote_ids
 from etsy_listings.core.workspace.atomic import write_yaml_atomic
@@ -44,7 +45,7 @@ def rename_listing(
     old: str,
     new: str,
     *,
-    locks: ListingLocks,
+    locks: WorkspaceLocks,
     batches: BatchStore,
     proposals: ProposalStore,
     ai_runs: ListingAiRuns,
@@ -90,7 +91,7 @@ def delete_listing(
     workspace: Workspace,
     name: str,
     *,
-    locks: ListingLocks,
+    locks: WorkspaceLocks,
     batches: BatchStore,
     proposals: ProposalStore,
     ai_runs: ListingAiRuns,

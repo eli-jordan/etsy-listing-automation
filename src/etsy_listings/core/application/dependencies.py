@@ -1,13 +1,17 @@
 """The small interfaces listing operations take their coordination through.
 
 Each exists because the object behind it lives outside core for now and core
-must never import the server (ADR-0052): the UI process's write locks
-(``server/workspace_locks.py``, until PR 8 of the module-structure plan),
-its AI run registry (``server/airuns``, until PR 9) and its memo of Etsy
-listing states (``server/api/etsystate.py``, request-serving read
-infrastructure that may stay there; plan, PR 7). They describe only what an
-operation calls, so the existing objects satisfy them structurally and are
-passed in unchanged; there is no adapter class to keep in step.
+must never import the server (ADR-0052): the UI process's AI run registry
+(``server/airuns``, until PR 9 of the module-structure plan), its batch queue
+and AI readiness (likewise PR 9) and its memo of Etsy listing states
+(``server/api/etsystate.py``, request-serving read infrastructure that may
+stay there; plan, PR 7). They describe only what an operation calls, so the
+existing objects satisfy them structurally and are passed in unchanged; there
+is no adapter class to keep in step.
+
+The write locks are core's own (``workspace_locks.WorkspaceLocks``, since
+PR 8), so operations take that class directly: one implementation and no
+second one in sight, which left an interface for it nothing to vary.
 """
 
 from __future__ import annotations
@@ -39,27 +43,12 @@ class ListingAiRuns(Protocol):
     def forget(self, listing: str) -> None: ...
 
 
-class ListingLocks(Protocol):
-    """Per-listing write locks: ``WorkspaceLocks`` in the UI process.
-
-    Held around a whole read-merge-write or name check and move. Several
-    names -- a rename's old and new -- are taken together, in one order, so
-    two callers naming the same pair cannot deadlock. An operation re-checks
-    the listing still exists once it holds the lock: a rename or delete that
-    held it first may have moved it.
-    """
-
-    def listing(self, name: str, *more: str) -> AbstractContextManager[None]: ...
-
-
-class ListingTemplateLocks(Protocol):
-    """Per-listing-template write locks: ``WorkspaceLocks`` again, in a key
-    space of their own (plan, PR 7). Held around a template's name check and
-    write, a ``PUT``'s re-check and write, a rename's move and a delete --
-    and around staging's capture of a template's frozen content, so a batch
-    never freezes a half-written template (ADR-0047)."""
-
-    def listing_template(self, name: str, *more: str) -> AbstractContextManager[None]: ...
+YieldToDeploy = Callable[[Sequence[str]], AbstractContextManager[None]]
+"""The deploy-to-AI handoff (ADR-0050: deploying takes precedence over AI
+work): how a deployment run takes its listings from AI work before it reads
+them. ``BatchQueue.yield_to_deploy`` in the UI process, the server's until
+PR 9 of the module-structure plan moves AI coordination. It returns once the
+listings' AI work has stopped, and holds them until the ``with`` ends."""
 
 
 AiBlocked = Callable[[], str | None]

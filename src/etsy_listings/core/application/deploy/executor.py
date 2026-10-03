@@ -28,6 +28,22 @@ from collections.abc import Callable, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
+from etsy_listings.core.application.dependencies import YieldToDeploy
+from etsy_listings.core.application.deploy.events import (
+    TERMINAL_PHASES,
+    ListingFailedEvent,
+    ListingPlannedEvent,
+    PreviewRenderedEvent,
+    ProgressEvent,
+    StageAppliedEvent,
+    StageApplyingEvent,
+    StageCheckingEvent,
+    StageFailedEvent,
+    StagePlannedEvent,
+    plan_dto,
+    stage_plan_dto,
+)
+from etsy_listings.core.application.deploy.registry import Run, RunRegistry
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.engine.events import (
     EngineListingFailed,
@@ -53,21 +69,6 @@ from etsy_listings.core.engine.stage import AnyStage
 from etsy_listings.core.engine.stages import STAGES
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.server.runs.events import (
-    TERMINAL_PHASES,
-    ListingFailedEvent,
-    ListingPlannedEvent,
-    PreviewRenderedEvent,
-    ProgressEvent,
-    StageAppliedEvent,
-    StageApplyingEvent,
-    StageCheckingEvent,
-    StageFailedEvent,
-    StagePlannedEvent,
-    plan_dto,
-    stage_plan_dto,
-)
-from etsy_listings.server.runs.registry import Run, RunRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -78,11 +79,6 @@ default every real server uses; a test wires one to in-memory fakes instead,
 by swapping this one callable -- nothing else here knows how a client is
 assembled."""
 
-YieldToDeploy = Callable[[Sequence[str]], AbstractContextManager[None]]
-"""How a run takes its listings from AI work before it reads them:
-``BatchQueue.yield_to_deploy`` in every real server. It returns once the
-listings' AI work has stopped, and holds them until the ``with`` ends."""
-
 
 def _nothing_to_yield(listings: Sequence[str]) -> AbstractContextManager[None]:
     return nullcontext()
@@ -90,8 +86,8 @@ def _nothing_to_yield(listings: Sequence[str]) -> AbstractContextManager[None]:
 
 @dataclass
 class RunExecutor:
-    """Owns the worker thread. One instance per running server
-    (``server/api/app.py``'s lifespan starts and joins it)."""
+    """Owns the worker thread. One per ``deployments.Deployments``, whose
+    ``start``/``stop`` the host calls (the UI server's lifespan)."""
 
     workspace: Workspace
     context_factory: ContextFactory

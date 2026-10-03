@@ -29,7 +29,6 @@ from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.dependencies import (
     AiBlocked,
     BatchQueueControl,
-    ListingLocks,
 )
 from etsy_listings.core.application.refusals import (
     AiDraftingBlocked,
@@ -40,6 +39,7 @@ from etsy_listings.core.application.refusals import (
     NothingToRetry,
     StagingMissing,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     RETRYABLE,
     Batch,
@@ -70,7 +70,7 @@ def confirm_batch(
     batches: BatchStore,
     session_id: str,
     *,
-    locks: ListingLocks,
+    locks: WorkspaceLocks,
     queue: BatchQueueControl,
     ai_blocked: AiBlocked,
 ) -> Batch:
@@ -107,7 +107,7 @@ def retry_batch_row(
     batch_id: str,
     row_id: str,
     *,
-    locks: ListingLocks,
+    locks: WorkspaceLocks,
     queue: BatchQueueControl,
 ) -> Batch:
     """Retry one row (UI doc §7): its creation, if that failed -- which
@@ -131,7 +131,7 @@ def retry_batch(
     batches: BatchStore,
     batch_id: str,
     *,
-    locks: ListingLocks,
+    locks: WorkspaceLocks,
     queue: BatchQueueControl,
 ) -> Batch:
     """**Retry N failed**: every row whose creation failed is created, then
@@ -150,7 +150,7 @@ def _recreate(
     batch_id: str,
     rows: Iterable[str],
     *,
-    locks: ListingLocks,
+    locks: WorkspaceLocks,
     queue: BatchQueueControl,
 ) -> None:
     for row in rows:

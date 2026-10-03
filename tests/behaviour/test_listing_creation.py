@@ -23,10 +23,10 @@ from etsy_listings.core.application.pricing_plans import (
     pricing_plan_ref,
 )
 from etsy_listings.core.application.refusals import InvalidListing, ListingNameTaken
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.config.money import Money
 from etsy_listings.core.config.pricing_plan import PricingPlan
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 from tests.support.builders import FIXTURE_LISTING
 

@@ -52,6 +52,7 @@ from etsy_listings.core.ai.orchestrator import (
 )
 from etsy_listings.core.ai.proposals import ProposalChoices, ProposalStore
 from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 from etsy_listings.core.market import MarketResearchError, ResearchCancelled, research
@@ -67,7 +68,6 @@ from etsy_listings.server.airuns.events import (
     AiQueriesEvent,
 )
 from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 logger = logging.getLogger(__name__)
 

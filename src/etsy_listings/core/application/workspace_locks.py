@@ -65,7 +65,9 @@ class WorkspaceLocks:
         it still exists. Its own key space -- a ``/`` can never be in a name
         -- so a template and a listing that share a name never wait on each
         other. Several names, a rename's two, are taken in :meth:`listing`'s
-        sorted order for the same reason."""
+        sorted order for the same reason. Batch staging holds it too, around
+        capturing a template's frozen content, so a batch never freezes a
+        half-written template (ADR-0047)."""
         keys = sorted({f"listing-templates/{key.casefold()}" for key in (name, *more)})
         with ExitStack() as stack:
             for key in keys:

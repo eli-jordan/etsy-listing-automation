@@ -9,23 +9,27 @@ DELETE /api/runs/{id} cancel a queued or running plan; 409 for apply
 POST /api/runs/{id}/seen the result of a finished run has been looked at
 ```
 
-Every write here is a call into:mod:`etsy_listings.server.runs.registry` -- this
-module never decides whether a run may start, only how that decision is
-carried over HTTP. Nothing here computes a diff or runs a run either
-(CLAUDE.md's invariants): the FIFO worker thread in ``server/runs/executor.py``
-does both, on its own time, and these endpoints only ever read or nudge the
-:class:`~etsy_listings.server.runs.registry.Run` it is working on.
+Every write here is a call into
+:class:`~etsy_listings.core.application.deploy.deployments.Deployments` --
+this module never decides whether a run may start, only how a request
+becomes a run command and how the answer is carried over HTTP: a conflict
+and a refused review are ``409``s, a run nobody remembers a ``404``. Nothing
+here computes a diff or runs a run either (AGENTS.md's invariants): the FIFO
+worker thread in ``core/application/deploy/executor.py`` does both, on its
+own time, and these endpoints only ever read or nudge the
+:class:`~etsy_listings.core.application.deploy.registry.Run` it is working on.
 
-**The SSE bridge.** :func:`_wait_for_events` is a plain, blocking method on
-:class:`~etsy_listings.server.runs.registry.Run` -- it has to be, since the
-executor thread that appends events is a plain thread, not a coroutine. The
-route awaits it through ``loop.run_in_executor``, which is the stdlib's own
-way to run a blocking call without stalling the event loop, so no new
-dependency (``sse-starlette`` or similar) is needed: a short, bounded
-``timeout`` on each wait is what turns "block until notified" into something
-an ``async def`` generator can yield control back from periodically, both to
+**The SSE bridge.** :meth:`~etsy_listings.core.application.deploy.registry.Run.wait_for_events`
+is a plain, blocking method -- it has to be, since the executor thread that
+appends events is a plain thread, not a coroutine. The route awaits it
+through ``loop.run_in_executor``, which is the stdlib's own way to run a
+blocking call without stalling the event loop, so no new dependency
+(``sse-starlette`` or similar) is needed: a short, bounded ``timeout`` on
+each wait is what turns "block until notified" into something an
+``async def`` generator can yield control back from periodically, both to
 check the client is still there and to let the surrounding ASGI server keep
-serving other requests meanwhile.
+serving other requests meanwhile. A client going away ends only its stream;
+the run carries on and a later connection replays it from ``Last-Event-ID``.
 """
 
 from __future__ import annotations
@@ -38,6 +42,18 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from etsy_listings.core.application.deploy.deployments import Deployments
+from etsy_listings.core.application.deploy.events import AnyRunEvent, RunScope
+from etsy_listings.core.application.deploy.registry import (
+    Conflict,
+    ListingApply,
+    ListingPlan,
+    Run,
+    RunCommand,
+    WorkspaceApply,
+    WorkspacePlan,
+)
+from etsy_listings.core.application.refusals import ReviewedPlanRefused
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.schemas import (
     ApplyRunDetail,
@@ -52,17 +68,6 @@ from etsy_listings.server.api.schemas import (
     WorkspaceApplyRequest,
     WorkspacePlanRequest,
 )
-from etsy_listings.server.runs.events import AnyRunEvent, ListingPlannedEvent, RunScope
-from etsy_listings.server.runs.registry import (
-    Conflict,
-    ListingApply,
-    ListingPlan,
-    Run,
-    RunCommand,
-    RunRegistry,
-    WorkspaceApply,
-    WorkspacePlan,
-)
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 
@@ -73,54 +78,26 @@ or the surrounding server shutting down, is noticed promptly; long enough that
 an idle stream is not a busy loop."""
 
 
-def _registry(request: Request) -> RunRegistry:
-    registry: RunRegistry = request.app.state.run_registry
-    return registry
+def _deployments(request: Request) -> Deployments:
+    deployments: Deployments = request.app.state.deployments
+    return deployments
 
 
 @dataclass(frozen=True)
 class Target:
-    registry: RunRegistry
+    deployments: Deployments
     run: Run
 
 
 def target(request: Request, run_id: str) -> Target:
-    registry = _registry(request)
-    run = registry.get(run_id)
+    deployments = _deployments(request)
+    run = deployments.get(run_id)
     if run is None:
         raise HTTPException(status_code=404, detail=f"no run {run_id!r}")
-    return Target(registry=registry, run=run)
+    return Target(deployments=deployments, run=run)
 
 
 Existing = Annotated[Target, Depends(target)]
-
-
-def _validate_reviewed_apply(
-    registry: RunRegistry,
-    reviewed_run_id: str,
-    listings: list[str],
-    expect: dict[str, str],
-) -> None:
-    """Reject an apply unless it names exactly the plans the seller reviewed."""
-    reviewed = registry.get(reviewed_run_id)
-    if reviewed is None or reviewed.scope != "workspace" or reviewed.kind != "plan":
-        raise HTTPException(status_code=409, detail="reviewed_run_id is not a workspace plan")
-    if reviewed.phase != "ready":
-        raise HTTPException(status_code=409, detail="reviewed workspace plan is not ready")
-
-    planned = [event for event in reviewed.events if isinstance(event, ListingPlannedEvent)]
-    expected_listings = [event.listing for event in planned]
-    expected_fingerprints = {event.listing: event.fingerprint for event in planned}
-    if listings != expected_listings:
-        raise HTTPException(
-            status_code=409,
-            detail="apply listings must exactly match the reviewed workspace plan",
-        )
-    if expect != expected_fingerprints:
-        raise HTTPException(
-            status_code=409,
-            detail="apply fingerprints must exactly match the reviewed workspace plan",
-        )
 
 
 def _summary(run: Run) -> RunSummary:
@@ -157,8 +134,8 @@ def _detail(run: Run) -> RunDetail:
 def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONResponse:
     """A ``409`` names the run already holding one of these listings, so the
     caller can reattach to it (``GET /api/runs/{active_run}``) instead of
-    retrying into the same refusal."""
-    registry = _registry(request)
+    retrying into the same refusal. A workspace apply that is not exactly
+    its review is a ``409`` too, carrying the refusal's message."""
     workspace: Workspace = request.app.state.workspace
     command: RunCommand
     if isinstance(body, ListingPlanRequest):
@@ -169,10 +146,12 @@ def create_run(request: Request, body: CreateRunRequest) -> RunSummary | JSONRes
         command = ListingApply(tuple(body.listings), body.expect)
     else:
         assert isinstance(body, WorkspaceApplyRequest)  # noqa: S101 - closed request union
-        _validate_reviewed_apply(registry, body.reviewed_run_id, body.listings, body.expect)
         command = WorkspaceApply(tuple(body.listings), body.expect, body.reviewed_run_id)
 
-    result = registry.create(command)
+    try:
+        result = _deployments(request).submit(command)
+    except ReviewedPlanRefused as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if isinstance(result, Conflict):
         return JSONResponse(status_code=409, content={"active_run": result.active_run})
     return _summary(result)
@@ -185,13 +164,7 @@ def list_runs(
     """``listing`` narrows to that listing's current run (active, or finished
     and not yet superseded -- decision 7's retention). Omitted, every run this
     process still remembers, for a future workspace-wide view."""
-    registry = _registry(request)
-    if scope == "workspace":
-        runs = registry.for_workspace()
-    elif scope == "listings":
-        runs = registry.for_scope("listings")
-    else:
-        runs = registry.for_listing(listing) if listing is not None else registry.all_runs()
+    runs = _deployments(request).runs(listing=listing, scope=scope)
     return [_summary(run) for run in runs]
 
 
@@ -205,7 +178,7 @@ def cancel_run(target: Existing) -> RunSummary:
     """Cancel a queued or running **plan**. An ``apply`` is refused
     unconditionally (decision 8: Back leaves, it never cancels one), and so is
     a run that has already finished."""
-    result = target.registry.cancel(target.run.id)
+    result = target.deployments.cancel(target.run.id)
     if result is False:
         raise HTTPException(status_code=409, detail="this run cannot be cancelled")
     return _summary(target.run)

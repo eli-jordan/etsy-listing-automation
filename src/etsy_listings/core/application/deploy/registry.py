@@ -36,7 +36,7 @@ from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
-from etsy_listings.server.runs.events import (
+from etsy_listings.core.application.deploy.events import (
     TERMINAL_PHASES,
     AnyRunEvent,
     ApplyRunPhase,
@@ -94,7 +94,7 @@ class Run:
 
     The :class:`threading.Condition` is what bridges the worker thread (which
     appends events) and the SSE route's async generator (which waits for
-    them) without a new dependency -- see ``api/runs.py``'s own docstring for
+    them) without a new dependency -- see ``server/api/runs.py``'s own docstring for
     the bridge itself; this class only owns the lock and the notifying.
     """
 
@@ -112,7 +112,7 @@ class Run:
         a client that opens the SSE stream from event 0 sees the same phase
         history whether it connected before or after the worker thread ever
         looked at this run."""
-        from etsy_listings.server.runs.events import PhaseEvent
+        from etsy_listings.core.application.deploy.events import PhaseEvent
 
         self._state = (
             PlanRunState()
@@ -181,7 +181,7 @@ class Run:
     def transition_plan(self, phase: PlanRunPhase) -> None:
         if not isinstance(self._state, PlanRunState):
             raise TypeError("an apply run cannot enter a plan phase")
-        from etsy_listings.server.runs.events import PhaseEvent
+        from etsy_listings.core.application.deploy.events import PhaseEvent
 
         with self.condition:
             event = PhaseEvent(id=self._next_event_id, phase=phase)
@@ -193,7 +193,7 @@ class Run:
     def transition_apply(self, phase: ApplyRunPhase) -> None:
         if not isinstance(self._state, ApplyRunState):
             raise TypeError("a plan run cannot enter an apply phase")
-        from etsy_listings.server.runs.events import PhaseEvent
+        from etsy_listings.core.application.deploy.events import PhaseEvent
 
         with self.condition:
             event = PhaseEvent(id=self._next_event_id, phase=phase)
@@ -218,7 +218,7 @@ class Run:
         reached a terminal phase *and* every event up to that phase has
         already been returned -- so a caller that loops on this until ``done``
         is guaranteed to see every event exactly once, in order, with nothing
-        dropped between one call and the next (``api/runs.py``'s SSE loop is
+        dropped between one call and the next (``server/api/runs.py``'s SSE loop is
         that caller). A short ``timeout`` rather than an unbounded wait is
         what lets that same loop notice the surrounding server is shutting
         down without this class knowing anything about shutdown.
@@ -242,7 +242,7 @@ class Conflict:
 
 @dataclass
 class RunRegistry:
-    """Every run this server process has seen and its current scope holder.
+    """Every run this process has seen and its current scope holder.
 
     Listing-scoped runs use ``_holder``. Workspace runs use the separate
     ``_workspace_holder`` because a terminal workspace plan remains the

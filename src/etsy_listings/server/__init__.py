@@ -4,9 +4,9 @@ and run runner (ADR-0052).
 FastAPI serves the React SPA and the workspace-scoped HTTP API. Server owns
 routing, wire schemas, HTTP status mapping, SSE framing, HTTP-oriented caches,
 static serving and app startup/shutdown. The background workers that
-coordinate deployment runs and batch AI drafting (``runs``, ``airuns``,
-``batchqueue``, ``workspace_locks``) live here only until the module-structure
-plan moves their application rules into core (PRs 8 and 9).
+coordinate AI runs and batch AI drafting (``airuns``, ``batchqueue``) live
+here only until the module-structure plan moves their application rules into
+core (PR 9); deployment runs and write locks are core's already (PR 8).
 
 It is deliberately **not** a second execution path. The preview endpoint runs
 the same renderer ``apply`` runs, over the same photo and derived maps that

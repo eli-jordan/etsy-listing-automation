@@ -41,6 +41,7 @@ from etsy_listings.core.application.refusals import (
     StagedRowMissing,
     StagingMissing,
 )
+from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import (
     Batch,
     BatchRow,
@@ -75,7 +76,6 @@ from etsy_listings.server.api.schemas import (
 from etsy_listings.server.api.seo import batch_readiness
 from etsy_listings.server.api.thumbnails import thumbnail_response
 from etsy_listings.server.batchqueue import BatchQueue
-from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 router = APIRouter(tags=["batches"])
 

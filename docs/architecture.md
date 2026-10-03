@@ -98,7 +98,7 @@ and what it deliberately withholds.
 |---|---|---|
 | `cli` | Typer commands and terminal presentation | Uses engine reports rather than computing a second diff; only the `ui` launcher (`cli/ui.py`) imports the server, and only `server.hosting` |
 | `newcmd`, `setupcmd`, `authcmd` | Picker and workspace/credential workflows | Prompt sequencing is separate from their testable logic |
-| `server` | HTTP contracts, hosting/startup, static assets, deployment/AI resources and batch dispatch | Adapts engine events; a FIFO deployment worker, per-run AI threads and a batch dispatcher remain separate |
+| `server` | HTTP contracts, hosting/startup, static assets, SSE framing, AI resources and batch dispatch | Starts and stops core's deployment coordinator; per-run AI threads and a batch dispatcher remain separate |
 | `engine` | Stage protocol, comparison, lockfile, lifecycle and runs | Stages return values; the engine decides execution and records progress |
 | `workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, video probes and request facts | Owns workspace layout and containment; callers may do I/O on paths it supplies |
 | `render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
@@ -108,7 +108,7 @@ and what it deliberately withholds.
 | `listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to the UI server |
-| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices; mockup-template calibration and preview scenes; listing-template create/edit/rename/delete; batch staging, confirm, retry, review and reads | Owns locking around read/merge/write and the records that follow a listing or listing template; answers with results or typed refusals, never status codes; takes server-held locks, AI runs, Etsy states, the batch queue and AI readiness through small interfaces (ADR-0052); takes decoded images and upload streams, never request objects or caches |
+| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices; mockup-template calibration and preview scenes; listing-template create/edit/rename/delete; batch staging, confirm, retry, review and reads; per-listing write locks; deployment runs (`deploy`: coordinator, registry, FIFO executor, reviewed-apply check and run events) | Owns locking around read/merge/write and the records that follow a listing or listing template; answers with results or typed refusals, never status codes; takes AI runs, Etsy states, the batch queue, AI readiness and the deploy-to-AI handoff through small interfaces (ADR-0052); constructing the deployment coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 
 `core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
 bearers resolve at request time, but the Etsy app key pair is read during
@@ -313,7 +313,7 @@ Two consequences worth knowing:
 
 ## UI resources, AI and batch creation
 
-`server/api/app.py` assembles one workspace, deployment registry/executor, AI
+`server/api/app.py` assembles one workspace, deployment coordinator (`core/application/deploy`), AI
 registry/runner, proposal store, staging/batch stores, write-lock collection
 and batch queue per server process. FastAPI serves the generated-contract
 routes and built SPA. React Router provides the dashboard, listings and editor,
@@ -321,7 +321,7 @@ individual/workspace deployment, listing-template editor, batch upload/staging/
 summary and mockup calibrator routes (`src/ui/src/main.tsx`). Setup and
 authentication remain terminal workflows, not a web setup wizard.
 
-Deployment uses one FIFO worker for the workspace. The registry reserves
+Deployment uses one FIFO worker for the workspace, started and stopped by the server lifespan. The registry reserves
 listing names when a run is queued; reviewed applies carry fingerprints and
 the exact reviewed listing set (ADR-0039, ADR-0042). Engine events become SSE
 events retained in memory, so a browser can reconnect while the server lives.
