@@ -663,6 +663,69 @@ class TestMovingABox:
         # Two single-pixel steps right, one fast step down.
         assert deltas == {(2, 8)}
 
+    def test_a_drag_on_a_downscaled_canvas_moves_the_box_in_photo_pixels(  # noqa: ANN001
+        self, page, workspace_root: Path
+    ) -> None:
+        """The non-identity witness for the screen-to-image projection. The
+        chart is drawn smaller than its 960px photo, so a pointer travel of
+        (60, 40) screen px must land as that travel times the overlay's scale
+        -- read off the real SVG -- and not as 60 and 40 photo pixels."""
+        original = _template_config(workspace_root, MULTIPLE_TEMPLATE)["placements"][0]
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(HANDLE)
+        overlay = page.locator(".quad-editor__overlay").bounding_box()
+        assert overlay is not None
+        scale = max(CHART_SIZE[0] / overlay["width"], CHART_SIZE[1] / overlay["height"])
+        assert scale > 1.2  # genuinely not the identity
+
+        area = page.locator(".quad-editor__polygon").first.bounding_box()
+        assert area is not None
+        # Whole screen pixels: Chromium delivers pointer coordinates rounded,
+        # so a fractional start would shift the travel by up to a pixel.
+        centre = (round(area["x"] + area["width"] / 2), round(area["y"] + area["height"] / 2))
+        page.mouse.move(*centre)
+        page.mouse.down()
+        page.mouse.move(centre[0] + 60, centre[1] + 40, steps=10)
+        page.mouse.up()
+
+        save_log = TrafficLog(page, "/config")
+        save_log.wait_for(lambda r: _method(r) == "PUT" and r.status == 200)
+        page.wait_for_selector("text=Saved")
+
+        saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)["placements"][0]
+        # One screen pixel of rounding is `scale` photo pixels.
+        for before, after in zip(original["bounding_box"], saved["bounding_box"], strict=True):
+            assert after["x"] - before["x"] == pytest.approx(60 * scale, abs=scale)
+            assert after["y"] - before["y"] == pytest.approx(40 * scale, abs=scale)
+
+    def test_the_box_menu_stays_inside_the_clipping_pane(self, page) -> None:  # noqa: ANN001
+        """Real layout, not a patched rectangle: opened on the bottom-right
+        corner of the rightmost box, the menu would overflow the clipping
+        preview pane, so it must be pulled back inside it."""
+        _select_template(page, MULTIPLE_TEMPLATE)
+        page.wait_for_selector(".quad-editor__box")
+        polygon = page.locator(".quad-editor__polygon").nth(1)
+        box = polygon.bounding_box()
+        assert box is not None
+        polygon.click(button="right", position={"x": box["width"] * 0.9, "y": box["height"] * 0.9})
+        page.wait_for_selector(".quad-editor__menu")
+        inside = page.evaluate(
+            """() => {
+              const menu = document.querySelector('.quad-editor__menu');
+              let clip = null;
+              for (let el = menu.parentElement; el && el !== document.body; el = el.parentElement) {
+                const s = getComputedStyle(el);
+                if (s.overflowX !== 'visible' || s.overflowY !== 'visible') { clip = el; break; }
+              }
+              const c = clip ? clip.getBoundingClientRect()
+                             : { right: innerWidth, bottom: innerHeight };
+              const m = menu.getBoundingClientRect();
+              return { fits: m.right <= c.right && m.bottom <= c.bottom, m: [m.right, m.bottom],
+                       c: [c.right, c.bottom] };
+            }"""
+        )
+        assert inside["fits"], inside
+
 
 # --- giving a folder of photos a kind ------------------------------------
 
