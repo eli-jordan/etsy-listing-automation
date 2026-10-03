@@ -8,40 +8,10 @@ import * as seoApi from "../api/seo";
 import { briefEvent, type FakeAiRuns, fakeAiRuns, stepEvent } from "../test/aiRuns";
 import type { ListingDetail } from "../types";
 import { ListingEditorPage } from "./ListingEditorPage";
+import { listingDetail } from "../test/listings";
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: { default: "designs/take-a-hike.png" },
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
-    ...over,
-  };
+  return listingDetail(over);
 }
 
 function NewTemplateProbe() {

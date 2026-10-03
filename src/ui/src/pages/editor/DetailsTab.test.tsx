@@ -20,6 +20,7 @@ import { MARKET_QUERIES, marketSnapshot } from "../../test/market";
 import type { ListingDetail, ListingProposal, SeoReadinessResponse } from "../../types";
 import { DetailsTab as DetailsTabView } from "./DetailsTab";
 import { useAiSeoMode } from "./aiSeo/useAiSeoMode";
+import { listingDetail, listingEtsy } from "../../test/listings";
 
 let runs: FakeAiRuns;
 
@@ -65,38 +66,13 @@ function DetailsTab(props: {
 }
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
+  return listingDetail({
     design: {},
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: ["Botanical", "Gift"],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
+    etsy: listingEtsy({ tags: ["Botanical", "Gift"] }),
     pricing_plan_name: "tee-basic",
     resolved_prices: [{ size: "S", amount: "349 NOK" }],
-    gestures: [],
-    description_composed: "",
     ...over,
-  };
+  });
 }
 
 describe("DetailsTab for a listing template", () => {

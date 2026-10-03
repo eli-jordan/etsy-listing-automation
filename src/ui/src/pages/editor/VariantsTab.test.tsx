@@ -4,6 +4,7 @@ import * as calibrator from "../../api/calibrator";
 import * as listingsApi from "../../api/listings";
 import type { GarmentProfileSummary, ListingDetail, TemplateSummary } from "../../types";
 import { VariantsTab } from "./VariantsTab";
+import { listingDetail } from "../../test/listings";
 
 function template(over: Partial<TemplateSummary> & { name: string }): TemplateSummary {
   return {
@@ -20,38 +21,7 @@ function template(over: Partial<TemplateSummary> & { name: string }): TemplateSu
 }
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: {},
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
-    ...over,
-  };
+  return listingDetail({ design: {}, ...over });
 }
 
 beforeEach(() => {

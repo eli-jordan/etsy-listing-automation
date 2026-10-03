@@ -14,6 +14,7 @@ import {
 } from "../../../test/aiRuns";
 import type { ListingDetail, MarketSnapshot } from "../../../types";
 import { type AiRunHandlers, useAiRun } from "./useAiRun";
+import { listingDetail } from "../../../test/listings";
 
 /**
  * The editor's side of an AI run (features/market-seo-20260924/spec.md, *AI runs*): starting one,
@@ -36,38 +37,11 @@ afterEach(() => {
 });
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: { default: "designs/take-a-hike.png" },
-    colors: ["black"],
+  return listingDetail({
     brief: "A relaxed hiking tee.",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
     modified_at: "2026-09-25T10:00:00Z",
-    status: "draft",
-    issues: [],
-    field_errors: {},
-    etsy_listing_id: null,
-    printify_product_id: null,
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
     ...over,
-  };
+  });
 }
 
 const proposal = () => listingProposal({ generated_at: "2026-09-25T10:00:30Z" });

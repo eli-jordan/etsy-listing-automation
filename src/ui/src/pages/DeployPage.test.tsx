@@ -21,6 +21,7 @@ import {
   type RunSummaryOverrides,
   type StagePlanOverrides,
 } from "../test/helpers";
+import { listingDetail } from "../test/listings";
 
 /**
  * The route: reattach or start, composing the reducer/comparison/presentation
@@ -32,38 +33,12 @@ import {
  */
 
 function detail(over: Partial<ListingDetail> = {}): ListingDetail {
-  return {
-    garment_profile: "comfort-colors-1717",
-    design: { default: "designs/take-a-hike.png" },
-    colors: ["black"],
-    brief: "",
-    prices: {},
-    price_overrides: {},
-    artwork: {},
-    pricing_plan: null,
-    etsy: {
-      title: "",
-      description: { lead: "", text: null, ref: null },
-      tags: [],
-      variation_images: null,
-      renewal: null,
-      section: null,
-      shipping_profile: null,
-    },
-    media: [],
-    name: "take-a-hike",
-    modified_at: "2026-09-17T10:00:00Z",
+  return listingDetail({
     status: "dirty",
-    issues: [],
-    field_errors: {},
     etsy_listing_id: 1698234512,
     printify_product_id: "abc123",
-    pricing_plan_name: null,
-    resolved_prices: [],
-    gestures: [],
-    description_composed: "",
     ...over,
-  };
+  });
 }
 
 function stage<Name extends StagePlanDTO["stage"]>(
