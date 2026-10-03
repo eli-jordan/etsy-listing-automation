@@ -36,7 +36,7 @@ You are implementing **PR <n>** of a stacked PR series in an isolated git worktr
 ## Targeted checks, before returning
 Run and make pass:
 - the Python test files you added or touched, and the whole unit layer
-  (`uv run pytest tests/unit`);
+  (`uv run pytest tests/core/unit tests/server/unit tests/cli/unit`);
 - the vitest files you added or touched;
 - `ruff format . && ruff check .`, `mypy src`, and in the frontend
   `npx prettier --check .`, `npx eslint .`, `npx tsc -b --noEmit`.

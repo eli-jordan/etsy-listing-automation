@@ -10,7 +10,7 @@ up: raising the worker count later would be the whole of parallelising,
 because the lock model already exists.
 
 **Contexts are injected, never assembled here (`connections.py`'s own
-rule).** :data:`ContextFactory` is `connections.run_context`'s shape --
+rule).** ``dependencies.ContextFactory`` is `connections.run_context`'s shape --
 ``(workspace, on_event)`` -- so this module never decides which credential to
 resolve or when; it only decides *when to call the factory* and *what to do
 with the ``RunContext`` it hands back*.
@@ -24,11 +24,12 @@ from __future__ import annotations
 
 import logging
 import threading
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 
 from etsy_listings.core.application.ai.coordinator import AiCoordinator
+from etsy_listings.core.application.dependencies import ContextFactory
 from etsy_listings.core.application.deploy.events import (
     TERMINAL_PHASES,
     ListingFailedEvent,
@@ -44,7 +45,6 @@ from etsy_listings.core.application.deploy.events import (
     stage_plan_dto,
 )
 from etsy_listings.core.application.deploy.registry import Run, RunRegistry
-from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.engine.events import (
     EngineListingFailed,
     EngineListingPlanned,
@@ -71,13 +71,6 @@ from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
 from etsy_listings.core.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
-
-ContextFactory = Callable[[Workspace, EventSink | None], RunContext]
-"""How the executor builds a run's :class:`~etsy_listings.core.engine.context.RunContext`
-(decision 7's "contexts are injected"). ``connections.run_context`` is the
-default every real server uses; a test wires one to in-memory fakes instead,
-by swapping this one callable -- nothing else here knows how a client is
-assembled."""
 
 
 @dataclass

@@ -27,7 +27,8 @@ src/etsy_listings/
     prompts.py terminal.py the prompt backend and encoding guard; ui.py is the only module that may import server (server.hosting)
   server/ FastAPI api/, hosting.py startup, run workers (until PRs 8-9); release wheels carry the built SPA in server/static/
 src/ui/ React/npm project (see src/ui/AGENTS.md)
-tests/ unit, golden, behaviour, browser, contract, e2e; shared doubles in tests/support/
+tests/ core/ server/ cli/ by owner, then layer (unit, golden, behaviour, contract); shared browser/ e2e/ fixtures/,
+  doubles in tests/support/; project-wide build/CI tests (packaging, CI selection, import contracts) directly in tests/
 docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
 scripts/ check.sh, sloc.py, generate_test_assets.py
 ```
@@ -44,8 +45,8 @@ Run all of these in cygwin zsh from the repo root (see Environment).
 uv sync # install deps + create.venv
 ./scripts/check.sh # format + lint + typecheck + test + coverage gate, Python and frontend
 uv run pytest # full suite (excludes -m e2e by default)
-uv run pytest tests/unit/test_money.py # one file
-uv run pytest tests/unit/test_money.py::test_parses_amount_and_currency # one test
+uv run pytest tests/core/unit/test_money.py # one file
+uv run pytest tests/core/unit/test_money.py::test_parses_amount_and_currency # one test
 uv run pytest -k "currency" # by keyword
 uv run pytest --cov # coverage, enforcing the 85% branch floor
 uv run pytest --cov --cov-report=html # then open htmlcov/index.html

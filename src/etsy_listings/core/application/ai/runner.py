@@ -41,7 +41,6 @@ from pathlib import Path
 
 import yaml
 
-from etsy_listings.core import connections
 from etsy_listings.core.ai.brief import BriefRequest
 from etsy_listings.core.ai.errors import ProviderCancelledError, SeoGenerationError
 from etsy_listings.core.ai.listing_inputs import ListingAiInputs, PreparedSeo
@@ -61,8 +60,8 @@ from etsy_listings.core.application.ai.events import (
 )
 from etsy_listings.core.application.ai.readiness import ProviderFactory
 from etsy_listings.core.application.ai.registry import AiRun, AiRunRegistry
+from etsy_listings.core.application.dependencies import MarketClientFactory
 from etsy_listings.core.application.workspace_locks import WorkspaceLocks
-from etsy_listings.core.clients.etsy.market import EtsyMarketClient
 from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
 from etsy_listings.core.market import MarketResearchError, ResearchCancelled, research
 from etsy_listings.core.market import snapshot as market_snapshot
@@ -83,18 +82,6 @@ NO_COMPARABLES = "No comparable listings found, even with filters relaxed"
 NOT_STARTED = "Not started"
 CANCELLED = "Cancelled"
 NO_ETSY_KEY = "no Etsy API key is configured; run `etsy-listings setup`"
-
-MarketClientFactory = Callable[[Workspace], EtsyMarketClient | None]
-"""The uncached market client, or ``None`` when the workspace has no Etsy
-key. The runner wraps it in the workspace's caches itself."""
-
-
-def default_market_client(workspace: Workspace) -> EtsyMarketClient | None:
-    """The real, read-only Etsy market client (the app key only), or
-    ``None`` when the workspace has none."""
-    if connections.etsy_app_key(workspace.root) is None:
-        return None
-    return connections.etsy_market_client(workspace.root)
 
 
 class _Stopped(Exception):

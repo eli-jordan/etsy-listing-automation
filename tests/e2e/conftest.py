@@ -133,9 +133,9 @@ def contract_fixtures() -> dict[str, object]:
     point of comparing them here is that there is exactly one copy: if
     Printify's real response stops matching, the file the *offline* tests
     trust is the file this layer names. (``pythonpath = ["."]`` in
-    pyproject.toml is what makes ``tests.contract`` importable from here.)
+    pyproject.toml is what makes ``tests.core.contract`` importable from here.)
     """
-    from tests.contract import test_catalog_http as contract
+    from tests.core.contract import test_catalog_http as contract
 
     return {
         "blueprints": contract.BLUEPRINTS_PAYLOAD,
