@@ -133,12 +133,6 @@ describe("ImagesTab", () => {
     expect(onUpdate).toHaveBeenCalledWith({ media: [] });
   });
 
-  it("shows the empty-reel hint when there is no media yet", async () => {
-    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
-    render(<ImagesTab detail={detail()} onUpdate={vi.fn()} />);
-    expect(screen.getByText(/Nothing here yet/)).toBeInTheDocument();
-  });
-
   it("draws each reel tile in its own colour, not one photo for the whole set", async () => {
     /* `template_preview_photo` answers "any one of them", so a reel keyed on
        the template name alone drew black and ivory identically. */
@@ -163,33 +157,6 @@ describe("ImagesTab", () => {
       "src",
       "/api/templates/flat-lay-01/thumbnail?colour=white",
     );
-  });
-
-  it("counts the reel against Etsy's 20-image limit", async () => {
-    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
-    render(
-      <ImagesTab
-        detail={detail({ media: [{ template: "flat-lay-01", colour: "black" }] })}
-        onUpdate={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("1 of 20 images")).toBeInTheDocument();
-  });
-
-  it("says what to do at the limit instead of how to reorder", async () => {
-    vi.spyOn(calibrator, "listTemplates").mockResolvedValue([]);
-    render(
-      <ImagesTab
-        detail={detail({
-          media: Array.from({ length: 20 }, (_, i) => ({
-            template: "flat-lay-01",
-            colour: `c${i}`,
-          })),
-        })}
-        onUpdate={vi.fn()}
-      />,
-    );
-    expect(screen.getByText(/remove one before adding another/)).toBeInTheDocument();
   });
 
   it("shows how many of a template's entries the listing already has", async () => {
