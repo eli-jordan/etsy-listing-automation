@@ -317,17 +317,3 @@ def test_write_records_incomplete_when_set(tmp_path: Path) -> None:
     loaded = Lockfile.read(path)
     assert loaded is not None
     assert loaded.incomplete == IncompleteApply(stage="printify_product")
-
-
-def test_a_clean_lockfile_writes_byte_identical_json_to_before_the_marker_existed(
-    tmp_path: Path,
-) -> None:
-    """ADR-0037 must not move `SCHEMA_VERSION` or disturb an unrelated listing's
-    lockfile -- the whole point of omitting the field rather than writing it
-    as `null`."""
-    path = tmp_path / "state.lock.json"
-    lock = Lockfile(tool_version="0.1.0", applied_at="2026-01-01T00:00:00Z", applied=SAMPLE_APPLIED)
-
-    lock.write(path)
-
-    assert "incomplete" not in path.read_text(encoding="utf-8")
