@@ -12,7 +12,8 @@
     "format:check": "prettier --check .",
     "typecheck": "tsc -b --noEmit",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage",
+    "test:coverage": "vitest run --coverage --project node --project dom",
+    "test:design": "vitest run --project design",
     "gen:api": "openapi-typescript ../../docs/openapi.json -o src/api/schema.ts && prettier --write src/api/schema.ts"
   },
   "dependencies": {
