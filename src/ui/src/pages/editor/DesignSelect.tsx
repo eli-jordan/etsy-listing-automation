@@ -49,13 +49,7 @@ export function DesignSelect(props: Props) {
   return <ArtworkSelect design={props.design} onPick={props.onPick} />;
 }
 
-function ArtworkSelect({
-  design,
-  onPick,
-}: {
-  design: DesignMap;
-  onPick: (ref: string) => void;
-}) {
+function ArtworkSelect({ design, onPick }: { design: DesignMap; onPick: (ref: string) => void }) {
   const [designs, setDesigns] = useState<ListingDesignSummary[]>([]);
   const [picking, setPicking] = useState(false);
   const [searching, setSearching] = useState(false);
