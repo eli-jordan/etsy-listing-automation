@@ -25,6 +25,7 @@ from typing import Literal
 
 from etsy_listings.core.ai.brief import BRIEF_RESPONSE_SCHEMA
 from etsy_listings.core.ai.errors import ProviderCancelledError
+from etsy_listings.core.ai.listing_inputs import ListingAiInputs
 from etsy_listings.core.ai.market_queries import MARKET_QUERIES_RESPONSE_SCHEMA
 from etsy_listings.core.ai.models import (
     Deadline,
@@ -36,6 +37,7 @@ from etsy_listings.core.ai.models import (
 from etsy_listings.core.ai.prompt import RESPONSE_SCHEMA as SEO_RESPONSE_SCHEMA
 from etsy_listings.core.ai.proposals import (
     ProposalChoices,
+    ProposalOrigin,
     ProposalRecord,
     ProposalStore,
     SeoProposalSnapshot,
@@ -241,8 +243,32 @@ def scored_listing(listing_id: int, **over: object) -> ScoredListing:
     return ScoredListing.model_validate(fields)
 
 
+def save_proposal(
+    workspace: Workspace,
+    listing: str,
+    *,
+    generated_at: datetime = TODAY,
+    origin: ProposalOrigin = "manual",
+    choices: ProposalChoices | None = None,
+) -> ProposalRecord:
+    """Caches a valid proposal for ``listing`` as a run would have: snapshotted
+    from the listing as saved, so it reads current until the listing changes.
+
+    Unlike :func:`seed_proposal` this needs the listing to exist; use it
+    wherever staleness, origin or the record's HTTP mapping is the subject."""
+    return ProposalStore(workspace).put(
+        listing,
+        choices or ProposalChoices.model_validate_json(proposal_payload()),
+        ListingAiInputs.read(workspace, listing).prepare().snapshot,
+        generated_at=generated_at,
+        origin=origin,
+    )
+
+
 def seed_proposal(root: Path, listing: str = "take-a-hike") -> ProposalRecord:
-    """Caches a proposal for ``listing`` as a finished run would have."""
+    """Caches a batch proposal for ``listing`` with an empty input snapshot --
+    for cases where only its presence matters (cleanup, rename, delete); it
+    reads stale against any real listing. See :func:`save_proposal`."""
     return ProposalStore(Workspace.discover(root_override=root)).put(
         listing,
         ProposalChoices.model_validate_json(proposal_payload()),
