@@ -20,12 +20,12 @@ src/etsy_listings/
     market/ market-informed SEO research
     listing_templates/ template conversion, validation and frozen content capture
     batches/ staging, naming, archive inspection and ordinary listing creation
-    application/ operations shared by server and CLI: listing reads, edits, creation, rename/delete, pricing plans
+    application/ operations shared by server and CLI: listing reads, edits, creation, rename/delete, pricing plans,
+      and the wizards' credentials, workspace_setup, shop_discovery, garment_profiles
     connections.py errors.py client wiring, UserFacingError
-  cli/ Typer app, one module per command; ui.py is the only module that may import server (server.hosting)
+  cli/ Typer app; auth.py setup.py new.py sequence the wizards, credentials.py pickers.py their terminal side,
+    prompts.py terminal.py the prompt backend and encoding guard; ui.py is the only module that may import server (server.hosting)
   server/ FastAPI api/, hosting.py startup, run workers (until PRs 8-9); release wheels carry the built SPA in server/static/
-  newcmd/ setupcmd/ authcmd/ the `new`, `setup` and `auth` wizards
-  credentials.py prompts.py terminal.py credential steps, prompt backend, encoding guard
 src/ui/ React/npm project (see src/ui/AGENTS.md)
 tests/ unit, golden, behaviour, browser, contract, e2e; shared doubles in tests/support/
 docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
@@ -104,8 +104,8 @@ feature with delivery PR links. See the [documentation authority rules](docs/REA
 The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\home\Admin\code\etsy-listing-automation` from Windows. `uv`, Python and `node` are Windows binaries on cygwin's PATH: the working directory translates, path *arguments* do not.
 
 - `--root` / `ETSY_LISTINGS_ROOT` accept cygwin paths and translate them (`core/workspace/userpath.py`), so `--root` is declared `str`, not `Path`. Any new CLI option taking a user path needs the same treatment.
-- The cygwin pty is not a Windows console. prompt_toolkit cannot prompt (`NoConsoleScreenBufferError`), so all interactive prompts go through `prompts.py`'s plain-`input()` fallback — never call questionary directly. `isatty()` is False and the encoding is cp1252; `terminal.adopt_declared_encoding()` trusts `LANG`, `FORCE_COLOR` opts colour back in.
-- A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `newcmd/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup.
+- The cygwin pty is not a Windows console. prompt_toolkit cannot prompt (`NoConsoleScreenBufferError`), so all interactive prompts go through `cli/prompts.py`'s plain-`input()` fallback — never call questionary directly. `isatty()` is False and the encoding is cp1252; `terminal.adopt_declared_encoding()` trusts `LANG`, `FORCE_COLOR` opts colour back in.
+- A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `cli/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup.
 - `core.fileMode` is false in this repo. Leave it; do not commit mode-only changes. `LF → CRLF` warnings are noise.
 - Synced workspaces (Google Drive) mark directories read-only and Windows then refuses `os.rmdir`. Use `workspace.remove_tree`, not `shutil.rmtree`, for any tree this tool owns.
 </important>

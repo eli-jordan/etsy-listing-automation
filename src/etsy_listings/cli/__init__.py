@@ -8,7 +8,7 @@ a file: an output is shown as missing because the stage observed it missing.
 
 :func:`main` is the ``etsy-listings`` console script. It does one thing before
 handing over to Typer: re-encode stdout for the terminal it was actually given
-(see:mod:`etsy_listings.terminal`), which is why tests drive the Typer
+(see:mod:`etsy_listings.cli.terminal`), which is why tests drive the Typer
 application directly through ``CliRunner`` instead -- a test must not have its
 captured streams reconfigured underneath it.
 

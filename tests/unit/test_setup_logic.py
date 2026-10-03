@@ -1,7 +1,7 @@
 """The decisions `setup` makes, with no terminal and no network in sight.
 
 Everything here is a pure function of its inputs or a small, checkable file
-operation -- the same split `newcmd` uses, and for the same reason: the
+operation, kept out of the wizard for one reason: the
 sequencing of questions is the part that cannot be tested cheaply, so as
 little as possible should live there.
 """
@@ -12,11 +12,12 @@ from pathlib import Path
 
 import yaml
 
+from etsy_listings.core.application import shop_discovery
+from etsy_listings.core.application import workspace_setup as logic
 from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
 from etsy_listings.core.clients.printify.models import Shop
 from etsy_listings.core.config.defaults import Defaults
 from etsy_listings.core.workspace import layout
-from etsy_listings.setupcmd import logic
 
 # ------------------------------------------------------------- the skeleton
 
@@ -80,7 +81,7 @@ def _shop(id: int, title: str = "s") -> Shop:
 
 
 def test_a_single_shop_needs_no_question() -> None:
-    selection = logic.select_shop([_shop(28819281)])
+    selection = shop_discovery.select_shop([_shop(28819281)])
 
     assert selection.shop is not None
     assert selection.shop.id == 28819281
@@ -90,14 +91,14 @@ def test_a_single_shop_needs_no_question() -> None:
 def test_several_shops_are_a_question_rather_than_a_guess() -> None:
     """Writing a product into the wrong shop is not a mistake worth risking
     to save one prompt."""
-    selection = logic.select_shop([_shop(1, "a"), _shop(2, "b")])
+    selection = shop_discovery.select_shop([_shop(1, "a"), _shop(2, "b")])
 
     assert selection.shop is None
     assert selection.needs_choice is True
 
 
 def test_no_shops_at_all_is_an_error_naming_what_to_do() -> None:
-    selection = logic.select_shop([])
+    selection = shop_discovery.select_shop([])
 
     assert selection.shop is None
     assert selection.needs_choice is False
@@ -314,7 +315,7 @@ def _etsy_shop(name: str, shop_id: int) -> EtsyShop:
 
 
 def test_one_exact_match_is_the_answer() -> None:
-    found = logic.exact_shop_match(
+    found = shop_discovery.exact_shop_match(
         [_etsy_shop("TakeAHike", 1), _etsy_shop("TakeAHikeVintage", 2)], "takeahike"
     )
 
@@ -326,8 +327,8 @@ def test_a_near_match_is_not_taken_as_the_answer() -> None:
     """Etsy's shop search is built for buyers browsing, not for resolving an
     identifier. Taking the first row would point a workspace at a stranger's
     shop."""
-    assert logic.exact_shop_match([_etsy_shop("TakeAHikeVintage", 2)], "TakeAHike") is None
+    assert shop_discovery.exact_shop_match([_etsy_shop("TakeAHikeVintage", 2)], "TakeAHike") is None
 
 
 def test_no_candidates_is_no_answer() -> None:
-    assert logic.exact_shop_match([], "TakeAHike") is None
+    assert shop_discovery.exact_shop_match([], "TakeAHike") is None

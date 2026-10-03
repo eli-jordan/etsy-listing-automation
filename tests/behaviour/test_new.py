@@ -13,7 +13,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings import prompts
+from etsy_listings.cli import prompts
 from etsy_listings.core.clients.printify.models import Blueprint
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -81,7 +81,8 @@ def _no_network_pricing_plan_generation(monkeypatch) -> None:
     endpoint and a live FX API -- neither may run in a test. Both are
     fail-soft by design, so stubbing them to "no data" still produces a
     usable (all-zero-price) plan, matching the flow's own guarantees."""
-    from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
+    from etsy_listings.core.clients import fx_rate
+    from etsy_listings.core.clients.printify import unofficial_variant_costs
 
     monkeypatch.setattr(unofficial_variant_costs, "fetch_variant_costs", lambda *a, **k: {})
     monkeypatch.setattr(fx_rate, "fetch_usd_to", lambda *a, **k: None)
@@ -133,7 +134,7 @@ def test_new_runs_end_to_end_through_the_plain_input_backend(
     fallback exists at all. Answers are positions here because positions are
     genuinely that backend's interface.
     """
-    from etsy_listings.newcmd.interactive import run_new
+    from etsy_listings.cli.new import run_new
 
     monkeypatch.setattr(prompts, "fzf_command", lambda: None)
     monkeypatch.setattr(prompts, "prompt_toolkit_works", lambda: False)
@@ -168,8 +169,8 @@ def test_new_writes_a_listing_that_validates_against_a_single_kind_template(
     """A `single`-kind template has one output and no colour to name.
     `new` used to write one `{template, colour}` entry per colour regardless of
     kind, which is not a listing the renderer accepts."""
+    from etsy_listings.cli.new import run_new
     from etsy_listings.core.config.listing import Listing
-    from etsy_listings.newcmd.interactive import run_new
 
     _no_network_pricing_plan_generation(monkeypatch)
     _write_single_kind_template(workspace_root / "mockup-templates" / "lifestyle-01")
@@ -202,11 +203,12 @@ def test_new_can_generate_a_pricing_plan_from_fabricated_cost_data(
     from datetime import UTC, datetime
     from decimal import Decimal
 
+    from etsy_listings.cli.new import run_new
+    from etsy_listings.core.clients import fx_rate
+    from etsy_listings.core.clients.fx_rate import FxRate
+    from etsy_listings.core.clients.printify import unofficial_variant_costs
     from etsy_listings.core.config.listing import Listing
     from etsy_listings.core.config.money import Money
-    from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
-    from etsy_listings.newcmd.fx_rate import FxRate
-    from etsy_listings.newcmd.interactive import run_new
 
     monkeypatch.setattr(
         unofficial_variant_costs, "fetch_variant_costs", lambda *a, **k: {1: 1000, 2: 1000}
@@ -237,8 +239,8 @@ def test_new_offers_an_existing_compatible_pricing_plan(
 ) -> None:
     """A plan already on disk for this garment profile is picked straight
     from the list -- the wizard only needs to create one when none exist."""
+    from etsy_listings.cli.new import run_new
     from etsy_listings.core.config.listing import Listing
-    from etsy_listings.newcmd.interactive import run_new
 
     _no_network_pricing_plan_generation(monkeypatch)
 
@@ -267,7 +269,7 @@ def test_new_offers_an_existing_compatible_pricing_plan(
 def test_cancelling_the_pricing_plan_picker_stops_new(
     workspace_root: Path, monkeypatch, scripted
 ) -> None:
-    from etsy_listings.newcmd.interactive import run_new
+    from etsy_listings.cli.new import run_new
 
     scripted({**NEW_WIZARD, "Pricing plan": None})
 
@@ -296,8 +298,8 @@ def _write_single_kind_template(directory: Path) -> None:
 
 
 def test_cancelling_the_garment_picker_stops_new(workspace_root: Path, scripted) -> None:
+    from etsy_listings.cli.new import run_new
     from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
-    from etsy_listings.newcmd.interactive import run_new
 
     scripted({**NEW_WIZARD, "Garment": None})
 

@@ -18,11 +18,11 @@ shape `default_prompt_text()`'s packaged prompt asks a provider to produce:
   text, where the draft asked for one of each (except tags and rationale).
 - **Seeding** ( :func:`seed_prompt`) creates the seller's copy only when one
   does not exist yet, and never touches an existing file -- `setup` fills
-  gaps, it does not correct answers (see `setupcmd/__init__.py`'s own
-  statement of that rule, which this is the AI feature's instance of). It
+  gaps, it does not correct answers (see `core/application/workspace_setup.py`'s
+  own statement of that rule, which this is the AI feature's instance of). It
   takes the target path and the text directly rather than a `Workspace` or a
   choice of feature, matching every other pure operation in this module: the
-  caller (`setupcmd`) already knows how to reach `Workspace.seo_prompt_file()`
+  caller (`workspace_setup`) already knows how to reach `Workspace.seo_prompt_file()`
   and `Workspace.brief_prompt_file()`, or its own pre-workspace paths when
   `setup` is still creating the directory tree.
 - **Prompt assembly** ( :func:`build_prompt`) is the one place a seller's
@@ -120,7 +120,7 @@ def default_seo_prompt_text() -> str:
 @dataclass(frozen=True)
 class SeedResult:
     """What :func:`seed_default_prompt` did, for its caller to report --
-    `setupcmd`'s echo line, the same shape `logic.create_directories`'
+    `setup`'s echo line, the same shape `workspace_setup.create_directories`'
     caller already reports "created N directories" from."""
 
     created: bool

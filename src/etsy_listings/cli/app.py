@@ -16,9 +16,9 @@ from typing import Any
 
 import typer
 
-from etsy_listings import prompts, terminal
-from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
-from etsy_listings.authcmd import Part as AuthPart
+from etsy_listings.cli import prompts, terminal
+from etsy_listings.cli.auth import ALL_PARTS as ALL_AUTH_PARTS
+from etsy_listings.cli.auth import Part as AuthPart
 from etsy_listings.cli.options import open_workspace, root_option
 from etsy_listings.cli.render import format_blocked, format_plan
 from etsy_listings.cli.ui import ui
@@ -231,7 +231,7 @@ def setup(
 
     Stops before Etsy sign-in, which arrives with `auth` in Phase 3.
     """
-    from etsy_listings.setupcmd import run_setup
+    from etsy_listings.cli.setup import run_setup
 
     target = to_native_path(root) if root else Path.cwd()
     with _wizard():
@@ -276,7 +276,7 @@ def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at t
 
 
 def _run_auth(root: str | None, check: bool, parts: Sequence[AuthPart]) -> None:
-    from etsy_listings.authcmd import run_auth
+    from etsy_listings.cli.auth import run_auth
 
     target = to_native_path(root) if root else Path.cwd()
     with _wizard():
@@ -446,7 +446,7 @@ def new(
     Reads Printify's catalog, so it needs PRINTIFY_API_TOKEN with the
     `catalog.read` scope (see the environment variables below).
     """
-    from etsy_listings.newcmd.interactive import run_new
+    from etsy_listings.cli.new import run_new
 
     workspace = open_workspace(root)
     try:

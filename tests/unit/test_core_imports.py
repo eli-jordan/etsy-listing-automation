@@ -21,6 +21,7 @@ import pytest
 CORE_MODULES = [
     "etsy_listings.core",
     "etsy_listings.core.ai",
+    "etsy_listings.core.application",
     "etsy_listings.core.batches",
     "etsy_listings.core.clients",
     "etsy_listings.core.config",
@@ -41,12 +42,6 @@ FORBIDDEN = [
     "questionary",
     "etsy_listings.server",
     "etsy_listings.cli",
-    "etsy_listings.newcmd",
-    "etsy_listings.setupcmd",
-    "etsy_listings.authcmd",
-    "etsy_listings.credentials",
-    "etsy_listings.prompts",
-    "etsy_listings.terminal",
 ]
 
 _PROBE = """

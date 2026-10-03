@@ -4,7 +4,7 @@ implementation plan, PR4, items 1-4).
 Nothing here launches a real `codex` process. Readiness tests replace
 `etsy_listings.core.ai.codex.subprocess.run` (the same double-and-monkeypatch
 pattern `tests/support/doubles.py.FakeRun` already established for
-`prompts.py`'s fzf lookup); generate/argv tests replace
+`cli/prompts.py`'s fzf lookup); generate/argv tests replace
 `etsy_listings.core.ai.codex.run_managed` so they can assert on exactly what argv,
 cwd, and stdin the adapter builds without exercising `ai/process.py`'s own
 (separately tested) subprocess machinery.

@@ -1,44 +1,31 @@
-"""Capturing one credential: where it already is, how to ask, how to prove it.
+"""Capturing one credential at the terminal: what to say, how to ask, and how
+to refuse.
 
 ``setup`` and ``auth`` both need a Printify token before they can do anything,
 and both used to write the step out longhand -- the same four lines of blurb,
 the same URL, the same ``prompts.ask_text`` label, the same ``.shops()``
 verification, and a refusal differing from the other by one word. The Etsy key
-pair and the Anthropic key are the same shape again, and Phase 4's generation
-step will want the third of them.
+pair and the Anthropic key are the same shape again.
 
-A credential step is six things, and this module is all six of them:
+Where a credential already lives, how it is proved and how it is stored are
+core's (:mod:`etsy_listings.core.application.credentials`). What remains here
+is the terminal half of a step:
 
-1. **Where it already lives.** Environment first, then the workspace's
-   ``.env`` -- the same precedence :class:`~etsy_listings.core.config.secrets.Secrets`
-   uses, so a wizard cannot disagree with the rest of the tool about which
-   credential is in play. A wizard that stores a token the next command then
-   ignores is worse than one that never ran.
-2. **What to say before asking.** Where to get one, and what it needs to be
+1. **What to say before asking.** Where to get one, and what it needs to be
    able to do.
-3. **How to ask.** One prompt per variable; a key *pair* is two prompts and
-   one step, because both halves ride on one header and a verification cannot
-   say which of them was wrong.
-4. **How to prove it.** Supplied by the caller, because the call that proves a
-   credential is the call that wants it: ``setup`` verifies the Printify token
-   by asking which shops it reaches, and then *needs that shop list* -- so
-   verification hands back what it learned rather than a boolean.
-5. **What to say when it works.** The proof, in one line.
-6. **What to do when it does not.** Refuse, naming the command to re-run, and
+2. **How to ask.** One prompt per variable; a key *pair* is two prompts and
+   one step.
+3. **What to say when it works.** The proof, in one line.
+4. **What to do when it does not.** Refuse, naming the command to re-run, and
    write nothing.
 
-**Capturing is not storing**, and they are separate on purpose. ``auth``
-writes each credential as it goes, because its parts are independent and a
-working Printify token should survive abandoning the Etsy sign-in. ``setup``
-writes at the very end, after every question is answered, because a token left
-behind by a cancelled run is a workspace that looks configured and is not.
-One order is right for each, and neither is right for both -- so this module
-does not choose.
+**Capturing is not storing** -- see core's module for why ``auth`` stores as
+it goes and ``setup`` only at the end. :func:`capture` never writes;
+:func:`store` is the separate call each wizard makes when it is right to.
 """
 
 from __future__ import annotations
 
-import os
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from pathlib import Path
@@ -46,26 +33,21 @@ from typing import NoReturn
 
 import typer
 
-from etsy_listings import prompts
-from etsy_listings.core.config.secrets import (
-    ANTHROPIC_KEY_VAR,
-    ETSY_KEYSTRING_VAR,
-    ETSY_SHARED_SECRET_VAR,
-    PRINTIFY_TOKEN_VAR,
-    Secrets,
-)
-from etsy_listings.core.workspace import layout, scaffold
+from etsy_listings.cli import prompts
+from etsy_listings.core.application import credentials
+from etsy_listings.core.workspace import scaffold
 
 __all__ = [
     "ANTHROPIC",
     "ETSY_APP_KEY",
     "PRINTIFY",
     "Capture",
-    "Credential",
+    "CredentialPrompt",
     "MissingProofError",
+    "announce_gitignore",
     "capture",
+    "nothing_to_prove",
     "refuse",
-    "stored",
     "store",
 ]
 
@@ -85,23 +67,24 @@ class MissingProofError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class Credential:
-    """One credential a wizard can capture.
+class CredentialPrompt:
+    """How a wizard asks for one core credential.
 
-    ``variables`` and ``asks`` are parallel and the same length: one prompt
-    per environment variable, in the order they are asked and written.
+    ``asks`` is parallel to the credential's ``variables``: one prompt per
+    environment variable, in the order they are asked and written.
     """
 
-    variables: tuple[str, ...]
+    credential: credentials.Credential
     asks: tuple[str, ...]
     blurb: tuple[str, ...]
-    allow_blank: bool = False
-    """Whether an empty answer is a complete step rather than a skipped one.
-    True only for a credential nothing needs yet."""
+
+    @property
+    def variables(self) -> tuple[str, ...]:
+        return self.credential.variables
 
 
-PRINTIFY = Credential(
-    variables=(PRINTIFY_TOKEN_VAR,),
+PRINTIFY = CredentialPrompt(
+    credential=credentials.PRINTIFY,
     asks=("Printify API token:",),
     blurb=(
         "A Printify personal access token is needed to read the catalog",
@@ -111,8 +94,8 @@ PRINTIFY = Credential(
     ),
 )
 
-ETSY_APP_KEY = Credential(
-    variables=(ETSY_KEYSTRING_VAR, ETSY_SHARED_SECRET_VAR),
+ETSY_APP_KEY = CredentialPrompt(
+    credential=credentials.ETSY_APP_KEY,
     asks=("Etsy keystring:", "Etsy shared secret:"),
     blurb=(
         "Etsy identifies this application by a key *pair*, both on:",
@@ -124,14 +107,13 @@ ETSY_APP_KEY = Credential(
 say which was wrong, and asking for them separately with a verification
 between would promise a precision Etsy does not offer."""
 
-ANTHROPIC = Credential(
-    variables=(ANTHROPIC_KEY_VAR,),
+ANTHROPIC = CredentialPrompt(
+    credential=credentials.ANTHROPIC,
     asks=("Anthropic API key (blank to skip):",),
     blurb=(
         "An Anthropic API key generates listing copy (Phase 4; not needed yet).",
         "  https://console.anthropic.com/settings/keys",
     ),
-    allow_blank=True,
 )
 
 
@@ -172,35 +154,17 @@ class Capture[T]:
         return self.proof
 
 
-def stored(root: Path, variable: str) -> str | None:
-    """A credential this machine already has, environment first.
-
-    :class:`~etsy_listings.core.config.secrets.Secrets`' own precedence, read
-    through the one accessor that knows the layout -- both wizards used to
-    join ``root / layout.ENV_FILE`` for themselves.
-    """
-    from_env = os.environ.get(variable)
-    if from_env:
-        return from_env
-    secrets = Secrets.load(root / layout.ENV_FILE)
-    return {
-        PRINTIFY_TOKEN_VAR: secrets.printify_api_token,
-        ETSY_KEYSTRING_VAR: secrets.etsy_keystring,
-        ETSY_SHARED_SECRET_VAR: secrets.etsy_shared_secret,
-        ANTHROPIC_KEY_VAR: secrets.anthropic_api_key,
-    }[variable]
-
-
 def capture[T](
     root: Path,
-    credential: Credential,
+    prompt: CredentialPrompt,
     *,
     verify: Callable[[tuple[str, ...]], tuple[T, str]],
     command: str,
     verify_reused: bool = True,
     reuse_message: str | None = None,
 ) -> Capture[T]:
-    """Ask for ``credential`` unless this machine already has it, and prove it.
+    """Ask for ``prompt``'s credential unless this machine already has it, and
+    prove it.
 
     ``verify`` receives the values and answers ``(proof, detail)``: whatever
     the caller wants back, and one line saying what was proved. It is the
@@ -217,26 +181,26 @@ def capture[T](
     A verification that raises is a refusal: ``command`` names what to re-run,
     and nothing is written by this function in any case -- see :func:`store`.
     """
-    existing = tuple(stored(root, variable) for variable in credential.variables)
+    existing = credentials.stored_values(root, prompt.credential)
     if all(existing):
         values = tuple(value for value in existing if value is not None)
-        typer.echo(reuse_message or _default_reuse_message(credential))
+        typer.echo(reuse_message or _default_reuse_message(prompt))
         proof = verify(values)[0] if verify_reused else None
         return Capture(values=values, proof=proof, reused=True)
 
     typer.echo("")
-    for line in credential.blurb:
+    for line in prompt.blurb:
         typer.echo(line)
 
+    allow_blank = prompt.credential.optional
     answers: list[str] = []
-    for variable, ask, already in zip(credential.variables, credential.asks, existing, strict=True):
+    for ask, already in zip(prompt.asks, existing, strict=True):
         # A half-present pair keeps the half it has and asks only for the
         # rest, which is what makes re-running after one bad paste cheap.
-        del variable
-        answers.append(already or prompts.ask_text(ask, allow_blank=credential.allow_blank))
+        answers.append(already or prompts.ask_text(ask, allow_blank=allow_blank))
 
     values = tuple(answer.strip() for answer in answers)
-    if credential.allow_blank and not any(values):
+    if allow_blank and not any(values):
         typer.echo("  skipped.")
         return Capture(values=values, proof=None, reused=False)
 
@@ -245,17 +209,16 @@ def capture[T](
     return Capture(values=values, proof=proof, reused=False)
 
 
-def store[T](root: Path, credential: Credential, capture: Capture[T]) -> None:
+def store[T](root: Path, prompt: CredentialPrompt, capture: Capture[T]) -> None:
     """Write what was captured into the workspace's ``.env``.
 
     Separate from :func:`capture` because the two commands disagree about
-    *when*, for reasons each is right about -- see this module's docstring.
-    Reused and skipped captures write nothing: there is nothing new to write.
+    *when*. Reused and skipped captures write nothing: there is nothing new to
+    write.
     """
     if capture.reused or capture.skipped:
         return
-    for variable, value in zip(credential.variables, capture.values, strict=True):
-        scaffold.write_env_value(root, variable, value)
+    credentials.store(root, prompt.credential, capture.values)
 
 
 def refuse(message: str, *, command: str) -> NoReturn:
@@ -281,8 +244,8 @@ def announce_gitignore(root: Path) -> None:
         typer.echo("  wrote .gitignore (.env, .auth/ and .cache/ stay out of git)")
 
 
-def _default_reuse_message(credential: Credential) -> str:
-    named = " and ".join(credential.variables)
+def _default_reuse_message(prompt: CredentialPrompt) -> str:
+    named = " and ".join(prompt.variables)
     return f"{named} already set -- leaving it alone."
 
 

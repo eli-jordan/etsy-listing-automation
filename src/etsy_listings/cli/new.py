@@ -1,9 +1,17 @@
-"""The ``new`` picker's interactive shell. Thin by design -- every
-decision it makes is delegated to:mod:`etsy_listings.newcmd.logic`, which is
-what the behaviour tests exercise through a fake catalog. This module only
-sequences the questions; *how* a question gets asked is
-:mod:`etsy_listings.prompts`, which picks a backend that can actually
-drive the terminal it was given (questionary cannot, under cygwin).
+"""The ``new`` wizard: a design, garment, provider, template and pricing
+plan picked in turn, and a listing stub written from the answers.
+
+Thin by design. This module only sequences the questions and says what
+happened; *how* a question gets asked is :mod:`etsy_listings.cli.prompts`,
+which picks a backend that can actually drive the terminal it was given
+(questionary cannot, under cygwin), and the rows each picker offers are
+:mod:`etsy_listings.cli.pickers`'. Every decision and write is core's --
+:mod:`~etsy_listings.core.application.garment_profiles`,
+:mod:`~etsy_listings.core.application.pricing_plans` and
+:mod:`~etsy_listings.core.application.listing_creation` -- which the
+behaviour tests also drive through a fake catalog without prompting.
+
+:func:`run_new` is the interface.
 """
 
 from __future__ import annotations
@@ -12,38 +20,40 @@ from pathlib import Path
 
 import typer
 
-from etsy_listings import prompts, terminal
-from etsy_listings.core.application.listing_creation import write_listing
-from etsy_listings.core.application.pricing_plans import load_candidate_pricing_plans
+from etsy_listings.cli import prompts, terminal
+from etsy_listings.cli.pickers import (
+    CREATE_NEW_PLAN_LABEL,
+    LOCAL_MARKER,
+    LOCAL_MARKER_FALLBACK,
+    build_blueprint_choices,
+    build_design_choices,
+    build_pricing_plan_choices,
+)
+from etsy_listings.core.application.garment_profiles import (
+    DEFAULT_PLACEHOLDER,
+    ensure_garment_profile,
+    filter_blueprints_by_category,
+    listing_colours,
+    local_blueprint_keys,
+    resolve_colour_slugs,
+)
+from etsy_listings.core.application.listing_creation import (
+    build_listing_stub,
+    build_media_entries,
+    load_template_kind,
+    validate_listing_stub,
+    write_listing,
+)
+from etsy_listings.core.application.pricing_plans import (
+    create_starting_pricing_plan,
+    load_candidate_pricing_plans,
+)
 from etsy_listings.core.application.pricing_plans import pricing_plan_ref as make_pricing_plan_ref
 from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
 from etsy_listings.core.clients.printify.protocol import CatalogClient
 from etsy_listings.core.config.media import MAX_IMAGES
 from etsy_listings.core.config.slug import SlugCollisionError
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
-from etsy_listings.newcmd.logic import (
-    CREATE_NEW_PLAN_LABEL,
-    LOCAL_MARKER,
-    LOCAL_MARKER_FALLBACK,
-    build_blueprint_choices,
-    build_design_choices,
-    build_garment_profile,
-    build_listing_stub,
-    build_media_entries,
-    build_pricing_plan_choices,
-    compute_starting_prices,
-    filter_blueprints_by_category,
-    garment_profile_slug_for,
-    load_template_kind,
-    local_blueprint_keys,
-    resolve_colour_slugs,
-    validate_listing_stub,
-    write_garment_profile_if_absent,
-    write_pricing_plan,
-)
-
-DEFAULT_PLACEHOLDER = "front"
 
 
 def _pick_blueprint(workspace: Workspace, blueprints: list[Blueprint]) -> Blueprint:
@@ -201,25 +211,23 @@ def _pick_or_create_pricing_plan(
 
     if answer == CREATE_NEW_PLAN_LABEL:
         name = prompts.ask_text("Pricing plan name:")
-        costs = unofficial_variant_costs.fetch_variant_costs(blueprint.id, provider.id)
-        shipping = catalog.shipping(blueprint.id, provider.id)
-        rate = fx_rate.fetch_usd_to(workspace.defaults.etsy.currency)
-        prices, notes = compute_starting_prices(
-            sizes=sizes,
+        created = create_starting_pricing_plan(
+            workspace,
+            catalog,
+            name=name,
+            garment_profile_slug=garment_profile_slug,
+            blueprint=blueprint,
+            provider=provider,
             variant_set=variant_set,
-            variant_costs=costs,
-            shipping=shipping,
-            fx_rate=rate,
-            target_currency=workspace.defaults.etsy.currency,
+            sizes=sizes,
         )
-        path = write_pricing_plan(workspace, name, garment_profile_slug, prices, notes)
-        typer.echo(f"wrote {path}")
-        if not costs or rate is None:
+        typer.echo(f"wrote {created.path}")
+        if not created.complete:
             typer.echo(
                 "  note: some prices could not be computed from live Printify/FX data "
                 "-- see the comment at the top of the file for what fell back to 0."
             )
-        return path
+        return created.path
 
     return by_label[answer].value
 
@@ -268,30 +276,16 @@ def run_new(
     mockup_template = _pick_template(workspace)
     template_kind = load_template_kind(workspace, mockup_template)
 
-    garment_profile = build_garment_profile(
-        blueprint=blueprint,
-        provider_title=provider.title,
-        placeholder=DEFAULT_PLACEHOLDER,
-        variant_set=variant_set,
-    )
-    slug = garment_profile_slug_for(blueprint)
-    written = write_garment_profile_if_absent(workspace, slug, garment_profile)
-    typer.echo(f"{'wrote' if written else 'reusing existing'} garment-profiles/{slug}.yaml")
-    if not written:
-        garment_profile = workspace.load_garment_profile(slug)
+    saved = ensure_garment_profile(workspace, blueprint, provider, variant_set)
+    slug = saved.slug
+    typer.echo(f"{'wrote' if saved.written else 'reusing existing'} garment-profiles/{slug}.yaml")
 
     plan_path = _pick_or_create_pricing_plan(
-        workspace, catalog, slug, blueprint, provider, variant_set, garment_profile.sizes
+        workspace, catalog, slug, blueprint, provider, variant_set, saved.profile.sizes
     )
     plan_ref = make_pricing_plan_ref(plan_path, root=workspace.root)
 
-    # A new listing enables whatever colours the garment profile already
-    # lists -- reflecting any hand-editing since it was written -- falling
-    # back to every catalog colour the first time this garment is used.
-    if garment_profile.colors:
-        colours = sorted(garment_profile.colors)
-    else:
-        colours = sorted(colour_slugs.values())
+    colours = listing_colours(saved.profile, colour_slugs)
     media = build_media_entries(template=mockup_template, kind=template_kind, colours=colours)
     _report_media_choice(mockup_template, template_kind, colours, media)
     listing_data = build_listing_stub(

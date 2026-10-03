@@ -35,7 +35,7 @@ not the latest vendor releases.
 
 | Area | Dependencies and current role |
 |---|---|
-| CLI and documents | Typer (locked 0.27.2, Click 8.5.0 transitively), pydantic v2 (2.13.5), pydantic-settings and PyYAML; questionary is used through `prompts.py` with a plain-input fallback |
+| CLI and documents | Typer (locked 0.27.2, Click 8.5.0 transitively), pydantic v2 (2.13.5), pydantic-settings and PyYAML; questionary is used through `cli/prompts.py` with a plain-input fallback |
 | HTTP clients | httpx (0.28.1); vendor protocols and shared retry policy, without vendor SDKs |
 | Images | `opencv-python-headless==4.10.0.84`, `pillow==10.4.0`, and NumPy (locked 2.5.2, currently supplied transitively by OpenCV); pure numerical passes plus explicit I/O/cache adapters |
 | Videos | PyAV (`av>=15`, locked 18.1.0) probes streams, dimensions and duration; the tool uploads original video bytes rather than encoding them |
@@ -96,8 +96,7 @@ and what it deliberately withholds.
 
 | Module | Owns | Boundary |
 |---|---|---|
-| `cli` | Typer commands and terminal presentation | Uses engine reports rather than computing a second diff; only the `ui` launcher (`cli/ui.py`) imports the server, and only `server.hosting` |
-| `newcmd`, `setupcmd`, `authcmd` | Picker and workspace/credential workflows | Prompt sequencing is separate from their testable logic |
+| `cli` | Typer commands, terminal presentation, prompts and the `auth`/`setup`/`new` wizards' question order (`cli/auth.py`, `cli/setup.py`, `cli/new.py`, with `cli/credentials.py` and `cli/pickers.py`) | Uses engine reports rather than computing a second diff; wizards call core operations for every decision and write; only the `ui` launcher (`cli/ui.py`) imports the server, and only `server.hosting` |
 | `server` | HTTP contracts, hosting/startup, static assets, SSE framing and status mapping for deployment and AI resources | Constructs one of each core coordinator, store and lock set per process, and starts and stops the deployment and AI coordinators in the lifespan |
 | `engine` | Stage protocol, comparison, lockfile, lifecycle and runs | Stages return values; the engine decides execution and records progress |
 | `workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, video probes and request facts | Owns workspace layout and containment; callers may do I/O on paths it supplies |
@@ -108,14 +107,15 @@ and what it deliberately withholds.
 | `listing_templates` | Template conversion and frozen document/assets/timestamp capture | Capture occurs under the template write lock before upload; shared references are revalidated at confirm and retry |
 | `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to `application/ai`, run only by the UI server |
-| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices; mockup-template calibration and preview scenes; listing-template create/edit/rename/delete; batch staging, confirm, retry, review and reads; per-listing write locks; deployment runs (`deploy`: coordinator, registry, FIFO executor, reviewed-apply check and run events); AI work (`ai`: coordinator, run registry, runner, batch queue, readiness, proposal read/resolve and run events) | Owns locking around read/merge/write and the records that follow a listing or listing template; answers with results or typed refusals, never status codes; takes only the Etsy state memo through an interface (ADR-0052); constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
+| `application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing-plan choices; the wizards' reusable operations -- credentials (find, verify with an injected client, store, status, the Etsy grant either side of the browser), workspace setup (directories, packaged prompts, `shop.yaml`), shop discovery, garment profiles and starting pricing plans; mockup-template calibration and preview scenes; listing-template create/edit/rename/delete; batch staging, confirm, retry, review and reads; per-listing write locks; deployment runs (`deploy`: coordinator, registry, FIFO executor, reviewed-apply check and run events); AI work (`ai`: coordinator, run registry, runner, batch queue, readiness, proposal read/resolve and run events) | Owns locking around read/merge/write and the records that follow a listing or listing template; answers with results or typed refusals, never status codes; takes only the Etsy state memo through an interface (ADR-0052); constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 
 `core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
 bearers resolve at request time, but the Etsy app key pair is read during
-construction to decide whether an optional client exists. `credentials.py`
-owns credential capture, verification and storage. `prompts.py` chooses the
-terminal backend and handles cancellation;
-`terminal.py` is a standard-library leaf for encoding and presentation.
+construction to decide whether an optional client exists.
+`core/application/credentials.py` owns finding, verifying and storing a
+credential; `cli/credentials.py` owns asking for one and saying what happened.
+`cli/prompts.py` chooses the terminal backend and handles cancellation;
+`cli/terminal.py` is a standard-library leaf for encoding and presentation.
 
 Three boundaries carry most of the weight. Only `workspace` knows the data
 tree, including how to enumerate it. Only `engine` computes deployment changes
@@ -559,11 +559,13 @@ later. Each traces to a decision.
   credential is resolved when it is used, never when a client is built**, so a
   workspace that has only ever rendered mockups can still `plan`. Etsy app keys,
   bearers and Printify tokens are lazy sources; the explicit `etsy_app_key`
-  availability query is reserved for readiness/setup operations. Setup still assembles an Etsy
-  shop client outside this module (F06).
-- **A credential is captured, verified and stored through `credentials.py`.**
-  Where it already lives (environment, then the workspace `.env`), what to say
-  before asking, how to ask, how to prove it, and what to say when it fails.
+  availability query is reserved for readiness/setup operations.
+  `shop_discovery.etsy_access` still assembles setup's Etsy shop client outside
+  this module (F06).
+- **A credential is found, verified and stored through `core/application/credentials.py`,
+  and captured through `cli/credentials.py`.** Where it already lives
+  (environment, then the workspace `.env`) and how to prove it are core's;
+  what to say before asking, how to ask, and what to say when it fails are the CLI's.
   Capturing stays separate from storing because `auth` writes per credential as
   it goes while `setup` writes once every question is answered.
 - **Secrets never enter the repo.** Tokens in `.auth/`, keys in `.env`, both

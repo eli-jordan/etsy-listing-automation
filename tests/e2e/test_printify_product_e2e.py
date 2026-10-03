@@ -342,7 +342,7 @@ class TestCreatingTheProduct:
         self, live: dict[str, Any], wanted_variant_ids: list[int]
     ) -> None:
         """A *documented* per-variant cost, in cents. Not a replacement for
-        ``newcmd/unofficial_variant_costs.py`` -- ``new`` needs the cost
+        ``core/clients/printify/unofficial_variant_costs.py`` -- ``new`` needs the cost
         before a product exists -- but it is a cross-check for one, and the
         margin display's proper source once a product does exist."""
         for variant in live["variants"]:

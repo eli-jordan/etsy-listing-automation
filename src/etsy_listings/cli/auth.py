@@ -1,4 +1,12 @@
-"""Sequencing the questions ``auth`` asks, and doing the I/O it decides on.
+"""The ``auth`` wizard: every credential this tool needs, each verified
+against its own API before it is stored.
+
+The division of labour with ``setup`` is ADR-0025: **credentials here, ids
+there**, and this command runs first because every id ``setup`` discovers
+needs a credential to discover it with. This module sequences the questions
+and says what happened; finding, proving and storing a credential, the
+workspace's credential status and the Etsy grant itself are core's
+(:mod:`etsy_listings.core.application.credentials`).
 
 Three orderings matter here and none of them is arbitrary:
 
@@ -9,13 +17,15 @@ Three orderings matter here and none of them is arbitrary:
 - **Every credential is verified before it is stored**, against its own API:
   Printify's shop list, Etsy's ping, and for the bearer, the token exchange
   itself. Storing an unverified credential produces a workspace that looks
-  configured and is not.
+  configured and is not. Each is stored as soon as it is proved, so a working
+  Printify token survives abandoning the Etsy sign-in.
 - **The browser is opened after the app key pair is known good.** A keystring
   typo surfaces as an Etsy error page mid-consent otherwise, which is a long
   way from the question that caused it.
 
 Every external effect arrives through :class:`Backends`, so the whole flow --
 browser included -- runs in a test without a socket or a network.
+:func:`run_auth` is the interface.
 """
 
 from __future__ import annotations
@@ -29,9 +39,10 @@ from typing import Literal
 
 import typer
 
-from etsy_listings import credentials, prompts
-from etsy_listings.authcmd import logic
+from etsy_listings.cli import credentials, prompts
 from etsy_listings.core import connections
+from etsy_listings.core.application import credentials as core_credentials
+from etsy_listings.core.application.credentials import TokenSummary
 from etsy_listings.core.clients.etsy import callback as callback_module
 from etsy_listings.core.clients.etsy import oauth
 from etsy_listings.core.clients.etsy.tokens import TokenStore, utcnow
@@ -43,9 +54,7 @@ from etsy_listings.core.config.secrets import (
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     EtsyAppKey,
-    Secrets,
 )
-from etsy_listings.core.workspace import layout
 
 
 @dataclass(frozen=True)
@@ -109,7 +118,7 @@ def run_auth(
         # without signing in would leave the half-configured state the whole
         # command exists to avoid.
         app_key = _etsy_app_key(root, back)
-        _etsy_sign_in(root, app_key, store, back)
+        _etsy_sign_in(app_key, store, back)
     if "anthropic" in parts:
         _anthropic_key(root)
 
@@ -126,7 +135,9 @@ def run_auth(
 def _printify_token(root: Path, back: Backends) -> None:
     def verify(values: tuple[str, ...]) -> tuple[list[Shop], str]:
         try:
-            shops = back.printify_client(values[0]).shops()
+            shops = core_credentials.verify_printify_token(
+                values[0], client_for=back.printify_client
+            )
         except PrintifyAuthError as exc:
             credentials.refuse(str(exc), command="auth")
         return shops, f"verified -- the token can reach {len(shops)} shop(s)."
@@ -142,7 +153,9 @@ def _etsy_app_key(root: Path, back: Backends) -> EtsyAppKey:
 
     def verify(values: tuple[str, ...]) -> tuple[EtsyAppKey, str]:
         app_key = EtsyAppKey(values[0], values[1])
-        application_id = back.etsy_transport(app_key).ping()
+        application_id = core_credentials.verify_etsy_app_key(
+            app_key, transport_for=back.etsy_transport
+        )
         return app_key, f"verified -- Etsy application {application_id}."
 
     captured = credentials.capture(
@@ -159,7 +172,7 @@ def _etsy_app_key(root: Path, back: Backends) -> EtsyAppKey:
     return EtsyAppKey(captured.values[0], captured.values[1])
 
 
-def _etsy_sign_in(root: Path, app_key: EtsyAppKey, store: TokenStore, back: Backends) -> None:
+def _etsy_sign_in(app_key: EtsyAppKey, store: TokenStore, back: Backends) -> None:
     """The browser round trip, or a reason not to make it.
 
     An existing consent is left alone by default. Re-authorising is harmless
@@ -167,36 +180,33 @@ def _etsy_sign_in(root: Path, app_key: EtsyAppKey, store: TokenStore, back: Back
     -- and a wizard that spends those on a re-run teaches people not to re-run
     it.
     """
-    summary = logic.summarise(store.load(), now=back.now())
+    summary = core_credentials.summarise(store.load(), now=back.now())
     if summary.present:
         typer.echo("")
-        typer.echo(f"  {summary.line()}")
+        typer.echo(f"  {summary_line(summary)}")
         if not prompts.ask_confirm("Sign in to Etsy again?", default=False):
             return
 
-    pkce = oauth.Pkce.generate()
-    state = oauth.new_state()
-    url = oauth.authorize_url(keystring=app_key.keystring, pkce=pkce, state=state)
+    sign_in = core_credentials.begin_etsy_sign_in(app_key)
 
+    # Presenting the human step is the CLI's; the grant on either side of it
+    # is core's (ADR-0026, ADR-0027).
     typer.echo("")
     typer.echo("Opening Etsy's consent page in your browser. If it does not open,")
     typer.echo("paste this URL yourself:")
-    typer.echo(f"  {url}")
-    back.open_browser(url)
+    typer.echo(f"  {sign_in.url}")
+    back.open_browser(sign_in.url)
 
     typer.echo(f"Waiting for the redirect to {oauth.REDIRECT_URI} ...")
-    redirect = back.wait_for_redirect()
-    oauth.check_state(sent=state, received=redirect.state)
-
-    response = back.oauth_client(app_key.keystring).exchange(
-        code=redirect.code, verifier=pkce.verifier
+    signed_in = core_credentials.complete_etsy_sign_in(
+        sign_in,
+        back.wait_for_redirect(),
+        oauth_client=back.oauth_client(app_key.keystring),
+        tokens=store,
     )
-    tokens = store.record(response)
+    tokens = signed_in.tokens
     typer.echo(f"  signed in as Etsy user {tokens.user_id}; tokens written to {store.path}")
-    if tokens.scope != " ".join(oauth.SCOPES):
-        # Etsy grants a subset silently when an app's registration allows
-        # less than it asked for, and the shortfall only shows up later as a
-        # 403 on one endpoint. Cheaper to read it here.
+    if not signed_in.granted_every_scope:
         typer.echo(f"  note: Etsy granted the scopes `{tokens.scope}`")
 
 
@@ -220,20 +230,39 @@ def _anthropic_key(root: Path) -> None:
 # -------------------------------------------------------------------- report
 
 
-def _report(root: Path, store: TokenStore, back: Backends) -> None:
-    secrets = Secrets.load(root / layout.ENV_FILE)
-    summary = logic.summarise(store.load(), now=back.now())
+def summary_line(summary: TokenSummary) -> str:
+    """The stored Etsy consent as the one line ``auth`` prints about it."""
+    if not summary.present:
+        return "Etsy sign-in: none stored"
+    access = "valid" if summary.access_valid else "expired (refreshed on next use)"
+    return (
+        f"Etsy sign-in: user {summary.user_id}, access token {access}, "
+        f"consent good for {summary.refresh_days} more days"
+    )
 
-    typer.echo(summary.line())
-    missing = logic.missing_credentials(secrets)
-    if missing:
-        typer.echo(f"Missing: {', '.join(missing)}")
+
+def renewal_warning(summary: TokenSummary) -> str | None:
+    """The line to print when the 90-day clock is nearly up, or ``None``."""
+    if not summary.renewal_due:
+        return None
+    return (
+        f"Etsy consent expires in {summary.refresh_days} days. "
+        f"Run `etsy-listings auth` before then to renew it without interrupting a run."
+    )
+
+
+def _report(root: Path, store: TokenStore, back: Backends) -> None:
+    status = core_credentials.credential_status(root, tokens=store, now=back.now())
+
+    typer.echo(summary_line(status.sign_in))
+    if status.missing:
+        typer.echo(f"Missing: {', '.join(status.missing)}")
     else:
-        typer.echo(f"All required credentials present in {secrets.env_file}")
-    for name in logic.optional_credentials(secrets):
+        typer.echo(f"All required credentials present in {status.env_file}")
+    for name in status.optional_missing:
         typer.echo(f"Optional, not set: {name}")
 
-    warning = logic.renewal_warning(summary)
+    warning = renewal_warning(status.sign_in)
     if warning:
         typer.echo(warning)
 

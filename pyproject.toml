@@ -153,26 +153,20 @@ warn_required_dynamic_aliases = true
 # scripts/check.sh and CI; tests/unit/test_import_contracts.py proves these
 # contracts reject representative violations.
 #
-# The wizard packages (newcmd, setupcmd, authcmd) and the root credentials,
-# prompts and terminal modules are CLI-side until PR 10 splits them between
-# cli and core, so they are listed wherever the CLI is.
+# Wizard sequencing, prompts and terminal output are all under etsy_listings.cli
+# (plan, PR 10), so forbidding cli covers them; their reusable operations are
+# in core and bound by core's contract.
 [tool.importlinter]
 root_packages = ["etsy_listings"]
 include_external_packages = true
 
 [[tool.importlinter.contracts]]
-name = "Core is transport-independent: no server, CLI, wizard, prompt/terminal or framework imports"
+name = "Core is transport-independent: no server, CLI (wizards, prompts, terminal) or framework imports"
 type = "forbidden"
 source_modules = ["etsy_listings.core"]
 forbidden_modules = [
     "etsy_listings.server",
     "etsy_listings.cli",
-    "etsy_listings.newcmd",
-    "etsy_listings.setupcmd",
-    "etsy_listings.authcmd",
-    "etsy_listings.credentials",
-    "etsy_listings.prompts",
-    "etsy_listings.terminal",
     "fastapi",
     "starlette",
     "uvicorn",
@@ -181,17 +175,11 @@ forbidden_modules = [
 ]
 
 [[tool.importlinter.contracts]]
-name = "Server does not depend on the CLI, its wizards or terminal adapters"
+name = "Server does not depend on the CLI, including its wizards, prompts and terminal adapters"
 type = "forbidden"
 source_modules = ["etsy_listings.server"]
 forbidden_modules = [
     "etsy_listings.cli",
-    "etsy_listings.newcmd",
-    "etsy_listings.setupcmd",
-    "etsy_listings.authcmd",
-    "etsy_listings.credentials",
-    "etsy_listings.prompts",
-    "etsy_listings.terminal",
     "typer",
     "questionary",
 ]
@@ -199,15 +187,7 @@ forbidden_modules = [
 [[tool.importlinter.contracts]]
 name = "Only the CLI ui launcher reaches the server, through its startup interface"
 type = "forbidden"
-source_modules = [
-    "etsy_listings.cli",
-    "etsy_listings.newcmd",
-    "etsy_listings.setupcmd",
-    "etsy_listings.authcmd",
-    "etsy_listings.credentials",
-    "etsy_listings.prompts",
-    "etsy_listings.terminal",
-]
+source_modules = ["etsy_listings.cli"]
 forbidden_modules = ["etsy_listings.server", "fastapi", "starlette", "uvicorn"]
 ignore_imports = [
     # Permanent and intended: the one CLI-to-server edge (ADR-0052; plan, PR 5).

@@ -7,12 +7,9 @@ raises ``UnicodeEncodeError`` part-way through a run -- which is exactly how
 non-ASCII decoration asks here first, so there is one place that knows the
 rule rather than a `try: encode` at every call site.
 
-A top-level leaf rather than a member of any module: both ``cli`` (the
-``apply`` swatches) and ``newcmd`` (the picker's local-garment-profile marker) print
-decorations, and living in ``cli`` made ``newcmd`` import an entry point --
-the one edge that pointed *up* through the layering, and the reason
-architecture.md's "no cycles" was not quite true. It depends on nothing but
-the standard library, so anything may depend on it.
+A CLI leaf: the ``apply`` swatches and the ``new`` picker's marker are
+both terminal output, which only the CLI produces (ADR-0052). It depends on
+nothing but the standard library, so any CLI module may depend on it.
 """
 
 from __future__ import annotations

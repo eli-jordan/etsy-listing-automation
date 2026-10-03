@@ -1,5 +1,8 @@
 """What `auth` reports, with no terminal and no network.
 
+The status itself is core's (`core/application/credentials.py`); the line
+saying it is the CLI's (`cli/auth.py`), and both are checked here.
+
 All of it is about credentials that already exist: which are missing, how much
 life the Etsy consent has left, and whether that is worth saying out loud.
 """
@@ -9,7 +12,8 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-from etsy_listings.authcmd import logic
+from etsy_listings.cli import auth
+from etsy_listings.core.application import credentials as logic
 from etsy_listings.core.clients.etsy.oauth import TokenResponse
 from etsy_listings.core.clients.etsy.tokens import StoredTokens
 from etsy_listings.core.config.secrets import (
@@ -40,7 +44,7 @@ def test_no_stored_tokens_reads_as_not_signed_in() -> None:
     summary = logic.summarise(None, now=T0)
 
     assert not summary.present
-    assert "none stored" in summary.line()
+    assert "none stored" in auth.summary_line(summary)
 
 
 def test_a_fresh_consent_reports_the_user_and_the_days_left() -> None:
@@ -49,7 +53,7 @@ def test_a_fresh_consent_reports_the_user_and_the_days_left() -> None:
     assert summary.user_id == 12345678
     assert summary.access_valid
     assert summary.refresh_days == 90
-    assert "12345678" in summary.line()
+    assert "12345678" in auth.summary_line(summary)
 
 
 def test_an_expired_access_token_is_not_a_problem_worth_alarming_about() -> None:
@@ -59,7 +63,7 @@ def test_an_expired_access_token_is_not_a_problem_worth_alarming_about() -> None
 
     assert summary.present
     assert not summary.access_valid
-    assert "refreshed on next use" in summary.line()
+    assert "refreshed on next use" in auth.summary_line(summary)
 
 
 def test_an_expired_consent_reports_zero_days_rather_than_a_negative_number() -> None:
@@ -72,17 +76,17 @@ def test_an_expired_consent_reports_zero_days_rather_than_a_negative_number() ->
 
 
 def test_no_warning_while_there_is_plenty_of_time() -> None:
-    assert logic.renewal_warning(logic.summarise(TOKENS, now=T0)) is None
+    assert auth.renewal_warning(logic.summarise(TOKENS, now=T0)) is None
 
 
 def test_no_warning_when_there_is_nothing_stored() -> None:
-    assert logic.renewal_warning(logic.summarise(None, now=T0)) is None
+    assert auth.renewal_warning(logic.summarise(None, now=T0)) is None
 
 
 def test_the_last_fortnight_earns_a_warning_naming_the_command() -> None:
     summary = logic.summarise(TOKENS, now=T0 + timedelta(days=80))
 
-    warning = logic.renewal_warning(summary)
+    warning = auth.renewal_warning(summary)
 
     assert warning is not None
     assert "10 days" in warning

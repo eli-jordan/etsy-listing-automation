@@ -1,6 +1,6 @@
 """What a terminal can print, and what it says about itself.
 
-A stdlib-only leaf's tests, matching the module (``etsy_listings.terminal``):
+A stdlib-only leaf's tests, matching the module (``etsy_listings.cli.terminal``):
 no workspace, no client, no prompt backend. They lived in the ``new`` picker's
 behaviour file because the marker glyph is what the picker prints, which put
 an encoding question in a file about a wizard.
@@ -10,8 +10,8 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings import terminal
-from etsy_listings.newcmd.logic import LOCAL_MARKER, LOCAL_MARKER_FALLBACK
+from etsy_listings.cli import terminal
+from etsy_listings.cli.pickers import LOCAL_MARKER, LOCAL_MARKER_FALLBACK
 
 # --- the marker glyph
 

@@ -8,7 +8,7 @@ from decimal import Decimal
 
 import httpx
 
-from etsy_listings.newcmd.fx_rate import fetch_usd_to
+from etsy_listings.core.clients.fx_rate import fetch_usd_to
 
 FRANKFURTER_PAYLOAD = {"amount": 1.0, "base": "USD", "date": "2026-01-01", "rates": {"NOK": 10.5}}
 

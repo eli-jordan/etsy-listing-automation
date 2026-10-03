@@ -44,7 +44,7 @@ EMPTY_DRAFT: Final[dict[str, Any]] = {
 }
 """A new listing before anything has been chosen: nothing set, nothing invented.
 
-Deliberately *not* ``newcmd.logic.build_listing_stub``, which fills in a design,
+Deliberately *not* ``listing_creation.build_listing_stub``, which fills in a design,
 a garment profile and a pricing plan. The CLI's ``new`` picker can, because it
 asked the questions first; the editor opens before any of them have been asked,
 and inventing an answer there would show the user a value they never picked.
