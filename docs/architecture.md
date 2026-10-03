@@ -18,7 +18,8 @@ requires current descriptions to stay truthful during migration and a complete
 architecture reconciliation at completion. This document still describes the
 current checkout; the specification governs changed ownership, and its one
 user-visible change, removing the native host, is implemented: `ui` serves
-HTTP in the foreground. Unrelated invariants below remain in force.
+HTTP in the foreground. The npm project has also moved to `src/ui`. Unrelated
+invariants below remain in force.
 
 ## Runtime and dependencies
 
@@ -39,10 +40,14 @@ not the latest vendor releases.
 | Development | uv/hatchling, ruff, strict mypy, pytest/pytest-cov, Playwright; frontend ESLint, Prettier, Vitest, Testing Library and V8 coverage; marver is a design dependency |
 | AI processes | Installed, signed-in `codex`, `claude` and `grok` CLIs, invoked behind `AiProvider`; these are external executables, not Python SDK dependencies |
 
-`hatch_build.py` rebuilds release-wheel assets with `npm ci` and `npm run build`;
-Node/npm are required even when `dist/` already exists. Installing the resulting
-wheel needs no Node. Editable installs reuse existing assets and, when npm is
-absent, warn and allow Python-only development without the SPA. CI builds with
+`hatch_build.py` rebuilds release-wheel assets in `src/ui` with `npm ci` and
+`npm run build`; Node/npm are required even when `src/ui/dist/` already exists.
+The hook maps that `dist/` to `etsy_listings/ui/static` inside the wheel, where
+`ui/api/app.py` finds it once installed, so the wheel needs neither Node nor
+the checkout. The sdist carries the npm source, lockfile and hook instead of
+built assets. Editable installs map nothing: the server falls back to the
+checkout's `src/ui/dist`, the hook reuses existing assets and, when npm is
+absent, warns and allows Python-only development without the SPA. CI builds with
 `npm ci` before editable `uv sync --frozen`. NumPy, Starlette,
 prompt_toolkit and pydantic-core are imported directly but currently arrive
 through other declared dependencies; the audit distinguishes that coupling
@@ -305,7 +310,7 @@ registry/runner, proposal store, staging/batch stores, write-lock collection
 and batch queue per server process. FastAPI serves the generated-contract
 routes and built SPA. React Router provides the dashboard, listings and editor,
 individual/workspace deployment, listing-template editor, batch upload/staging/
-summary and mockup calibrator routes (`frontend/src/main.tsx`). Setup and
+summary and mockup calibrator routes (`src/ui/src/main.tsx`). Setup and
 authentication remain terminal workflows, not a web setup wizard.
 
 Deployment uses one FIFO worker for the workspace. The registry reserves

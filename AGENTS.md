@@ -20,7 +20,8 @@ src/etsy_listings/
   market/ market-informed SEO research
   listing_templates/ template conversion, validation and frozen content capture
   batches/ staging, naming, archive inspection and ordinary listing creation
-  ui/ FastAPI api/ + React frontend/ (see frontend/AGENTS.md)
+  ui/ FastAPI api/, run workers and hosting; release wheels carry the built SPA in ui/static/
+src/ui/ React/npm project (see src/ui/AGENTS.md)
   newcmd/ setupcmd/ authcmd/ the `new`, `setup` and `auth` wizards
   connections.py credentials.py prompts.py terminal.py client wiring, credential steps, prompt backend, encoding guard
 tests/ unit, golden, behaviour, browser, contract, e2e; shared doubles in tests/support/
@@ -55,7 +56,7 @@ uv run ruff check. / ruff format. # lint / format
 uv run python scripts/sloc.py --summary # code size, prose excluded
 ```
 
-Frontend (`src/etsy_listings/ui/frontend/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|gen:api`. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
+Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test|test:coverage|gen:api`. After changing a FastAPI endpoint's shape, regenerate the typed client (`ADR-0011`, never hand-written): `uv run python scripts/export_openapi.py`, then `npm run gen:api`.
 
 Human-facing setup, calibrator usage and contributor docs live in [README.md](README.md); this file holds only what an agent needs to act correctly. Keep the two commands lists in step.
 
@@ -126,7 +127,7 @@ Layers (`ADR-0010`): unit, golden (per-pass and end-to-end renders), behaviour (
 - A test file has one subject. Shared doubles live in `tests/support/` (`builders`, `scripted`, `doubles`, `http`) — look there before writing another `fake_run` closure.
 - Golden failures should name the guilty render pass. Regenerate with `--update-goldens` only after looking at the diff.
 - No real design files or photography in the repo; `scripts/generate_test_assets.py` generates deterministic synthetic assets.
-- The browser layer runs in a normal `pytest` but skips if playwright, chromium or `ui/frontend/dist` is missing. Assert through observable effects (decoded PNG size, the `template.yaml` Save wrote), not internal state.
+- The browser layer runs in a normal `pytest` but skips if playwright, chromium or `src/ui/dist` is missing. Assert through observable effects (decoded PNG size, the `template.yaml` Save wrote), not internal state.
 - `ETSY_LISTINGS_REQUIRE_EVERY_LAYER=1` turns those clean skips into failures; the browser and e2e jobs set it.
 </important>
 

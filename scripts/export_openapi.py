@@ -3,7 +3,7 @@ openapi-typescript then turns into the frontend's typed client (ADR-0011: "TS
 client generated from the OpenAPI schema -- never hand-written").
 
 Run with ``uv run python scripts/export_openapi.py`` whenever an endpoint's
-shape changes, then ``npm run gen:api`` in ui/frontend/. CI checks frontend
+shape changes, then ``npm run gen:api`` in src/ui/. CI checks frontend
 types but does not currently regenerate this contract to detect a stale export.
 """
 

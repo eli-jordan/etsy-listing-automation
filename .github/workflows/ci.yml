@@ -49,11 +49,11 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-          cache-dependency-path: src/etsy_listings/ui/frontend/package-lock.json
+          cache-dependency-path: src/ui/package-lock.json
 
       # Editable sync reuses these assets; release wheels always rebuild.
       - name: build the calibrator frontend
-        working-directory: src/etsy_listings/ui/frontend
+        working-directory: src/ui
         run: npm ci && npm run build
 
       # Pinned exactly: setup-uv publishes no moving major tag past v7.
@@ -85,7 +85,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: src/etsy_listings/ui/frontend
+        working-directory: src/ui
     steps:
       - uses: actions/checkout@v7
 
@@ -93,7 +93,7 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-          cache-dependency-path: src/etsy_listings/ui/frontend/package-lock.json
+          cache-dependency-path: src/ui/package-lock.json
 
       - name: install (locked)
         run: npm ci
@@ -122,12 +122,12 @@ jobs:
         with:
           node-version: lts/*
           cache: npm
-          cache-dependency-path: src/etsy_listings/ui/frontend/package-lock.json
+          cache-dependency-path: src/ui/package-lock.json
 
       # The browser layer serves the built SPA, so dist/ is a hard requirement
       # here -- without it `calibrator_server` skips every test in the layer.
       - name: build the calibrator frontend
-        working-directory: src/etsy_listings/ui/frontend
+        working-directory: src/ui
         run: npm ci && npm run build
 
       # Pinned exactly: setup-uv publishes no moving major tag past v7.

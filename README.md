@@ -29,15 +29,17 @@ This installs runtime and dev dependencies into `.venv/` and the
 Frontend development also needs Node.js (any current LTS):
 
 ```bash
-cd src/etsy_listings/ui/frontend
+cd src/ui
 npm ci
 ```
 
-Installing a published wheel needs no Node: it ships the built SPA. Building
-a release wheel with `uv build` requires Node and always runs `npm ci` and
-`npm run build` through `hatch_build.py`, so existing assets cannot hide stale
-source. Editable installs reuse an existing `dist/`; without npm or assets,
-they support Python development and warn that the UI has no frontend.
+Installing a published wheel needs no Node: it ships the built SPA inside the
+package (`etsy_listings/ui/static`). Building a release wheel with `uv build`
+requires Node and always runs `npm ci` and `npm run build` in `src/ui` through
+`hatch_build.py`, so existing assets cannot hide stale source; the sdist
+carries that source and lockfile instead of built assets. Editable installs
+serve `src/ui/dist/` directly and reuse it when present; without npm or
+assets, they support Python development and warn that the UI has no frontend.
 
 ## Workspaces
 
@@ -68,7 +70,7 @@ Templates are calibrated in a browser, against the *real* renderer:
 
 ```bash
 uv run etsy-listings ui --root <workspace> --port 8000   # backend
-cd src/etsy_listings/ui/frontend && npm run dev            # frontend, proxies /api to :8000
+cd src/ui && npm run dev            # frontend, proxies /api to :8000
 ```
 
 Open the Vite dev server's URL (default `http://localhost:5173`). Every quad
@@ -90,7 +92,7 @@ Each editor has two views of the same template:
 
 ### Frontend commands
 
-Run from `src/etsy_listings/ui/frontend/`:
+Run from `src/ui/`:
 
 ```bash
 npm run dev           # Vite dev server
@@ -109,7 +111,7 @@ generated, never hand-written:
 
 ```bash
 uv run python scripts/export_openapi.py   # writes docs/openapi.json
-npm run gen:api                            # from ui/frontend/
+npm run gen:api                            # from src/ui/
 ```
 
 ## Development
@@ -160,7 +162,7 @@ the missing step otherwise:
 
 ```bash
 uv run playwright install chromium
-cd src/etsy_listings/ui/frontend && npm run build
+cd src/ui && npm run build
 ```
 
 The **e2e layer** talks to the real Printify and Etsy shops and is never part of

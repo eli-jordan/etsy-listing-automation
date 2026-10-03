@@ -97,8 +97,7 @@ def calibrator_server(
     so a test can assert on the file the UI actually wrote."""
     if not FRONTEND_DIST.is_dir():
         prerequisite_missing(
-            "ui/frontend/dist is absent -- run `npm run build` in "
-            "src/etsy_listings/ui/frontend to exercise the browser tests"
+            "src/ui/dist is absent -- run `npm run build` in src/ui to exercise the browser tests"
         )
 
     workspace = Workspace.discover(root_override=workspace_root)
