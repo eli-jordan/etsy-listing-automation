@@ -2,9 +2,41 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { must } from "../test/helpers";
 import type { ColourMatrixTemplate } from "../types";
 
-vi.mock("./client", () => ({
-  api: { GET: vi.fn(), PUT: vi.fn() },
-}));
+/** The generated client's requests, answered with real `Response`s. `api`
+ * captures `fetch` and `Request` when it is created, so each test stubs them
+ * and then imports a fresh copy. The base URL is relative (the SPA is served
+ * by the API's own origin); jsdom has no origin for undici's `Request`, so the
+ * stub resolves it against one. */
+const sent: Request[] = [];
+
+function answering(status: number, body: unknown, headers: Record<string, string> = {}) {
+  sent.length = 0;
+  vi.stubGlobal(
+    "Request",
+    class extends Request {
+      constructor(input: RequestInfo | URL, init?: RequestInit) {
+        super(typeof input === "string" ? new URL(input, "http://ui.test") : input, init);
+      }
+    },
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (request: Request) => {
+      sent.push(request);
+      return new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json", ...headers },
+      });
+    }),
+  );
+  vi.resetModules();
+  return import("./calibrator");
+}
+
+function onlyRequest(): Request {
+  expect(sent).toHaveLength(1);
+  return must(sent[0]);
+}
 
 const CONFIG: ColourMatrixTemplate = {
   kind: "colour-matrix",
@@ -18,64 +50,76 @@ const CONFIG: ColourMatrixTemplate = {
   shade: { enabled: true, opacity: 0.6, blend: "soft-light" },
 };
 
+const SAVED_AT = "Wed, 17 Sep 2026 18:30:00 GMT";
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
 describe("listTemplates", () => {
-  it("returns the data on success", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({ data: [{ name: "a" }], error: undefined } as never);
-    const { listTemplates } = await import("./calibrator");
+  it("GETs the template list and returns it", async () => {
+    const { listTemplates } = await answering(200, [{ name: "a" }]);
+
     expect(await listTemplates()).toEqual([{ name: "a" }]);
+    const request = onlyRequest();
+    expect([request.method, new URL(request.url).pathname]).toEqual(["GET", "/api/templates"]);
   });
 
-  it("throws CalibratorApiError on failure", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({ data: undefined, error: "boom" } as never);
-    const { listTemplates, CalibratorApiError } = await import("./calibrator");
+  it("throws CalibratorApiError on a 500", async () => {
+    const { listTemplates, CalibratorApiError } = await answering(500, { detail: "boom" });
+
     await expect(listTemplates()).rejects.toBeInstanceOf(CalibratorApiError);
   });
 });
 
 describe("getTemplateConfig", () => {
-  it("returns null on a 404 (no template.yaml yet)", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({ data: undefined, error: "not found" } as never);
-    const { getTemplateConfig } = await import("./calibrator");
-    expect(await getTemplateConfig("brand-new")).toBeNull();
+  it("GETs the named template's config with its Last-Modified time", async () => {
+    const { getTemplateConfig } = await answering(200, CONFIG, { "Last-Modified": SAVED_AT });
+
+    expect(await getTemplateConfig("flat lay/01")).toEqual({
+      config: CONFIG,
+      modifiedAt: SAVED_AT,
+    });
+    const request = onlyRequest();
+    expect(request.method).toBe("GET");
+    expect(new URL(request.url).pathname).toBe("/api/templates/flat%20lay%2F01/config");
   });
 
-  it("returns the config on success", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.GET).mockResolvedValue({
-      data: CONFIG,
-      error: undefined,
-      response: new Response(null, {
-        headers: { "Last-Modified": "Wed, 17 Sep 2026 18:30:00 GMT" },
-      }),
-    } as never);
-    const { getTemplateConfig } = await import("./calibrator");
-    expect(await getTemplateConfig("flat-lay-01")).toEqual({
-      config: CONFIG,
-      modifiedAt: "Wed, 17 Sep 2026 18:30:00 GMT",
-    });
+  it("refuses a config the server sent without its modification time", async () => {
+    const { getTemplateConfig, CalibratorApiError } = await answering(200, CONFIG);
+
+    await expect(getTemplateConfig("flat-lay-01")).rejects.toBeInstanceOf(CalibratorApiError);
   });
+
+  // Existing contract: every error answer reads as "no template.yaml yet",
+  // not only the 404 the server sends for one -- a 500 is not told apart.
+  it.each([404, 500])(
+    "returns null for a %i, as for a template with no template.yaml",
+    async (status) => {
+      const { getTemplateConfig } = await answering(status, { detail: "no" });
+
+      expect(await getTemplateConfig("brand-new")).toBeNull();
+    },
+  );
 });
 
 describe("saveTemplateConfig", () => {
-  it("returns the saved config on success", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.PUT).mockResolvedValue({ data: CONFIG, error: undefined } as never);
-    const { saveTemplateConfig } = await import("./calibrator");
-    expect(await saveTemplateConfig("flat-lay-01", CONFIG)).toEqual(CONFIG);
+  it("PUTs the config as JSON to the named template and returns the saved one", async () => {
+    const saved = { ...CONFIG, displace: { enabled: true, strength: 4 } };
+    const { saveTemplateConfig } = await answering(200, saved);
+
+    expect(await saveTemplateConfig("flat-lay-01", CONFIG)).toEqual(saved);
+    const request = onlyRequest();
+    expect(request.method).toBe("PUT");
+    expect(new URL(request.url).pathname).toBe("/api/templates/flat-lay-01/config");
+    expect(request.headers.get("Content-Type")).toBe("application/json");
+    expect(await request.json()).toEqual(CONFIG);
   });
 
-  it("throws CalibratorApiError on failure", async () => {
-    const { api } = await import("./client");
-    vi.mocked(api.PUT).mockResolvedValue({ data: undefined, error: "bad" } as never);
-    const { saveTemplateConfig, CalibratorApiError } = await import("./calibrator");
+  it.each([404, 500])("throws CalibratorApiError on a %i", async (status) => {
+    const { saveTemplateConfig, CalibratorApiError } = await answering(status, { detail: "bad" });
+
     await expect(saveTemplateConfig("flat-lay-01", CONFIG)).rejects.toBeInstanceOf(
       CalibratorApiError,
     );

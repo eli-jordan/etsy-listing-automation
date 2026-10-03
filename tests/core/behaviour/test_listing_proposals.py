@@ -19,8 +19,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.core.ai.listing_inputs import ListingAiInputs
-from etsy_listings.core.ai.proposals import ProposalChoices, ProposalRecord, ProposalStore
+from etsy_listings.core.ai.proposals import ProposalRecord, ProposalStore
 from etsy_listings.core.application.ai.listing_proposals import read_proposal, resolve_proposal
 from etsy_listings.core.application.refusals import (
     ListingMissing,
@@ -31,7 +30,7 @@ from etsy_listings.core.listing_artifacts import remove_listing
 from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
-from tests.support.ai_runs import TODAY, proposal_payload
+from tests.support.ai_runs import TODAY, save_proposal
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import edit_listing
 
@@ -48,13 +47,8 @@ def proposals(workspace: Workspace) -> ProposalStore:
 
 def _generated(workspace: Workspace, proposals: ProposalStore) -> ProposalRecord:
     """A proposal as a run caches it: generated from the listing as saved."""
-    return proposals.put(
-        LISTING,
-        ProposalChoices.model_validate_json(proposal_payload()),
-        ListingAiInputs.read(workspace, LISTING).prepare().snapshot,
-        generated_at=TODAY,
-        origin="manual",
-    )
+    del proposals  # the store is the workspace's files; any instance sees it
+    return save_proposal(workspace, LISTING)
 
 
 def _resolve(workspace: Workspace, proposals: ProposalStore, **sections: object):  # noqa: ANN202
