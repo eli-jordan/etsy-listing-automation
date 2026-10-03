@@ -60,9 +60,7 @@ def test_discover_env_var(
     assert ws.root == workspace_root.resolve()
 
 
-def test_discover_raises_when_not_found(
-    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-) -> None:
+def test_discover_raises_when_not_found(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("ETSY_LISTINGS_ROOT", raising=False)
     with pytest.raises(WorkspaceNotFoundError):
         Workspace.discover(start=tmp_path)
