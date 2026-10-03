@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as calibrator from "../api/calibrator";
 import { PreviewPanel, type PreviewJob } from "./PreviewPanel";
@@ -42,10 +42,16 @@ afterEach(() => vi.restoreAllMocks());
 describe("PreviewPanel", () => {
   it("renders nothing while the tab is behind the canvas", async () => {
     const spy = vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:one");
-    setup(colourJobs(), { active: false });
+    const { rerender } = setup(colourJobs(), { active: false });
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // Effects and any responses settle; still nothing was asked for. Then the
+    // same mount brought forward does ask, so the silence was the inactive tab.
+    await act(async () => {});
     expect(spy).not.toHaveBeenCalled();
+    rerender(
+      <PreviewPanel templateName="flat-lay-01" jobs={colourJobs()} design="bundled-grid" active />,
+    );
+    await waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
   });
 
   it("renders the set the first time the tab comes forward", async () => {
@@ -62,7 +68,7 @@ describe("PreviewPanel", () => {
   it("does not start the set again when the tab is left and returned to", async () => {
     const spy = vi.spyOn(calibrator, "renderPreview").mockResolvedValue("blob:one");
     const { rerender } = setup();
-    await waitFor(() => expect(spy).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(screen.getByText("3 / 3")).toBeInTheDocument());
 
     const show = (active: boolean) =>
       rerender(
@@ -76,7 +82,9 @@ describe("PreviewPanel", () => {
     show(false);
     show(true);
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
+    // The set had finished, and any restart would have issued its first
+    // request in the effect this flush completes.
+    await act(async () => {});
     // Three renders, not six: the panel stays mounted behind the canvas, so
     // flicking between tabs shows what was rendered rather than spending the
     // set again.
