@@ -2,6 +2,7 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as seoApi from "../../../api/seo";
 import {
+  AI_RUN_CREATED_AT,
   aiRunSummary,
   briefEvent,
   type FakeAiRuns,
@@ -174,8 +175,8 @@ describe("useAiSeoMode generation", () => {
     act(() => result.current.generate());
 
     await waitFor(() => expect(result.current.run.steps).toHaveLength(3));
-    expect(result.current.startedAt).toBe(result.current.run.startedAt);
-    expect(result.current.startedAt).not.toBeNull();
+    // The server's start, which the elapsed-time readout counts from.
+    expect(result.current.startedAt).toBe(Date.parse(AI_RUN_CREATED_AT));
   });
 
   it("moves to a failed phase, says why, and stores nothing when the run fails", async () => {
