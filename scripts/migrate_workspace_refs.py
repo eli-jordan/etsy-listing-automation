@@ -1,10 +1,10 @@
-"""Rewrite a workspace's listing refs into PRD 73's two-root form.
+"""Rewrite a workspace's listing refs into ADR-0046's two-root form.
 
-    uv run python scripts/migrate_workspace_refs.py <workspace>           # dry run
-    uv run python scripts/migrate_workspace_refs.py <workspace> --write   # apply
+    uv run python scripts/migrate_workspace_refs.py <workspace> # dry run
+    uv run python scripts/migrate_workspace_refs.py <workspace> --write # apply
 
 Every `listings/*/listing.yaml` used to write its paths relative to its own
-directory, so a shared file read `../../designs/x.png`. PRD 73 gives a ref two
+directory, so a shared file read `../../designs/x.png`. ADR-0046 gives a ref two
 roots instead: no prefix is the workspace root, `./` is the listing's own
 directory, and `..` is refused. This script is the one pass between the two.
 
@@ -21,8 +21,7 @@ did. Only then is it written, atomically (`os.replace`).
 
 Idempotent: a ref that does not start with `../` is already in the new form
 and is left alone. Lockfiles are not touched -- the media stage keys Etsy ids
-by ref, so shared images upload once more on the next `apply`, which is PRD
-72's accepted cost.
+by ref, so shared images upload once more on the next `apply`, which is ADR-0045's accepted cost.
 
 A dry run is the default and prints every rewrite; nothing is written without
 `--write`. A file that cannot be migrated is reported and left as it was; the
@@ -44,10 +43,10 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.config.defaults import Defaults
-from etsy_listings.config.listing import Listing
-from etsy_listings.workspace import layout, to_native_path
-from etsy_listings.workspace.workspace import (
+from etsy_listings.core.config.defaults import Defaults
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.workspace import layout, to_native_path
+from etsy_listings.core.workspace.workspace import (
     InvalidRefError,
     PathEscapesWorkspaceError,
     Workspace,

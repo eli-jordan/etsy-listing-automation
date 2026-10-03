@@ -1,4 +1,4 @@
-"""Browser test for videos in the listing gallery (PRD 72, 73): that the
+"""Browser test for videos in the listing gallery: that the
 React reel, the media-files endpoints and the real `listing.yaml` agree about
 where a video sits, and that the browser really decodes the file the API
 serves.
@@ -39,10 +39,17 @@ def _listing_on_disk(workspace_root: Path) -> dict[str, object]:
 
 def _wait_for_media(page, workspace_root: Path, expected: list[object]) -> None:  # noqa: ANN001
     """Poll the file, not the page: "Autosaved" already reads true during the
-    debounce before the save is sent (see `test_listings_browser.py`)."""
+    debounce before the save is sent (see `test_listings_browser.py`).
+
+    On Windows a read that lands while autosave's atomic replace swaps the
+    file in is refused with PermissionError; that is "not saved yet", so the
+    poll tries again rather than failing."""
     for _ in range(100):
-        if _listing_on_disk(workspace_root)["media"] == expected:
-            return
+        try:
+            if _listing_on_disk(workspace_root)["media"] == expected:
+                return
+        except PermissionError:
+            pass
         page.wait_for_timeout(100)
     raise AssertionError(
         f"media: never reached {expected}: {_listing_on_disk(workspace_root)['media']}"
@@ -67,7 +74,7 @@ def test_add_two_videos_drag_the_second_and_autosave_the_gallery(
     black, blue_jean, ivory, moss = (_image(c) for c in ("black", "blue-jean", "ivory", "moss"))
     _wait_for_media(page, workspace_root, [black, SHARED, blue_jean, ivory, moss])
 
-    # The second goes on the end, from the listing's own directory (PRD 73).
+    # The second goes on the end, from the listing's own directory.
     page.get_by_role("button", name="how-it-fits.mp4").click()
     _wait_for_media(page, workspace_root, [black, SHARED, blue_jean, ivory, moss, OWN])
 

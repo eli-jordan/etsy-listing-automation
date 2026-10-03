@@ -15,7 +15,7 @@ dist/
 
 # Node / frontend
 node_modules/
-src/etsy_listings/ui/frontend/dist/
+src/ui/dist/
 
 # Workspace-local secrets (never present in this repo, guarded anyway)
 .env

@@ -1,0 +1,811 @@
+"""The listings UI's local-only health check (phase 5): does a listing's own
+configuration make sense, without asking Etsy or Printify anything.
+
+Table-driven, and pure -- no workspace, no fake client. Everything that needs
+a real file on disk (design resolution) uses `tmp_path` the same way
+`test_product_gates.py` does; everything else is built from in-memory
+`Listing`/`GarmentProfile` objects.
+"""
+
+from __future__ import annotations
+
+from dataclasses import replace
+from pathlib import Path
+
+from PIL import Image
+
+from etsy_listings.core.config.description import DescriptionConfig
+from etsy_listings.core.config.garment_profile import BlueprintRef, GarmentProfile, PrintArea
+from etsy_listings.core.config.listing import EtsyListingConfig, Listing, TemplateMediaEntry
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.listing_validation import (
+    Issue,
+    TemplateInfo,
+    check_lifecycle_verb,
+    check_listing,
+    check_listing_template,
+    check_listing_yaml_present,
+    check_videos,
+)
+from etsy_listings.core.config.media import ProbeFailure, VideoFacts
+
+PROFILE = GarmentProfile(
+    blueprint=BlueprintRef(brand="Comfort Colors", model="1717"),
+    print_provider="Monster Digital",
+    placeholder="front",
+    print_area=PrintArea(width=100, height=100),
+    sizes=["S", "M", "L"],
+    colors={"black": "dark", "white": "light"},
+)
+
+FLAT_LAY = TemplateInfo(kind="colour-matrix", colours=frozenset({"black", "white"}))
+CHART = TemplateInfo(kind="multiple", colours=frozenset())
+SIZING = TemplateInfo(kind="single", colours=frozenset())
+
+
+def _design(tmp_path: Path, size: tuple[int, int] = (100, 100)) -> Path:
+    path = tmp_path / "design.png"
+    Image.new("RGBA", size, (0, 0, 0, 0)).save(path)
+    return path
+
+
+def _listing(
+    *,
+    garment_profile: str = "comfort-colors-1717",
+    colors: list[str] | None = None,
+    media: list[TemplateMediaEntry | str] | None = None,
+    title: str = "Take A Hike Tee",
+    description: str = "A retro sunset scene.",
+    tags: list[str] | None = None,
+    variation_images: str | None = None,
+    lifecycle: str | None = None,
+) -> Listing:
+    return Listing(
+        garment_profile=garment_profile,
+        design="designs/take-a-hike.png",
+        colors=colors if colors is not None else ["black", "white"],
+        brief="A retro sunset mountain scene.",
+        prices={"S": "349 NOK"},
+        media=media
+        if media is not None
+        else [TemplateMediaEntry(template="flat-lay-01", colour="black")],
+        etsy=EtsyListingConfig(
+            title=title,
+            description=DescriptionConfig(lead=description),
+            tags=tags if tags is not None else ["hiking"],
+            variation_images=variation_images,
+        ),
+        **({"lifecycle": lifecycle} if lifecycle is not None else {}),
+    )
+
+
+def _check(
+    listing: Listing,
+    *,
+    garment_profile: GarmentProfile | None = PROFILE,
+    garment_profile_names: list[str] | None = None,
+    design_paths: dict[str, Path] | None = None,
+    templates: dict[str, TemplateInfo] | None = None,
+    published: bool | None = None,
+    description_ref_error: str | None = None,
+    videos: dict[str, VideoFacts | ProbeFailure] | None = None,
+) -> list[Issue]:
+    return check_listing(
+        listing,
+        garment_profile=garment_profile,
+        garment_profile_names=(
+            garment_profile_names if garment_profile_names is not None else ["comfort-colors-1717"]
+        ),
+        design_paths=design_paths if design_paths is not None else {},
+        templates=templates if templates is not None else {"flat-lay-01": FLAT_LAY},
+        published=published,
+        description_ref_error=description_ref_error,
+        videos=videos if videos is not None else {},
+    )
+
+
+def _where(issues: list[Issue], tab: str) -> list[Issue]:
+    return [i for i in issues if i.tab == tab]
+
+
+class TestCopyIsConcrete:
+    def test_an_empty_title_blocks_and_names_the_title(self) -> None:
+        issues = _check(_listing(title=""))
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "details"]
+        assert len(blocking) == 1
+        assert blocking[0].where == "Listing Details › Title"
+
+    def test_an_empty_lead_blocks_and_names_the_description_not_the_title(
+        self,
+    ) -> None:
+        """A real regression: the description's own failure used to be
+        reported under the Title field, so fixing the title never cleared an
+        issue that was actually about the description."""
+        issues = _check(_listing(description=""))
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "details"]
+        assert len(blocking) == 1
+        assert blocking[0].where == "Listing Details › Description"
+
+    def test_both_empty_blocks_on_both_independently(self) -> None:
+        issues = _check(_listing(title="", description=""))
+        wheres = {i.where for i in issues if i.severity == "block" and i.tab == "details"}
+        assert wheres == {"Listing Details › Title", "Listing Details › Description"}
+
+    def test_real_copy_raises_no_issue(self) -> None:
+        assert _check(_listing()) == []
+
+    def test_a_non_empty_body_does_not_excuse_an_empty_lead(self) -> None:
+        """The lead is required regardless of the body  -- a listing-specific `text` filled in must
+        not quiet the
+        lead's own block."""
+        listing = _listing()
+        etsy = listing.etsy.model_copy(
+            update={"description": DescriptionConfig(lead="", text="Printed to order.")}
+        )
+        issues = _check(listing.model_copy(update={"etsy": etsy}))
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "details"]
+        assert any(i.where == "Listing Details › Description" for i in blocking)
+
+
+class TestDescriptionRef:
+    def _with_ref(self, ref: str) -> Listing:
+        listing = _listing()
+        etsy = listing.etsy.model_copy(
+            update={"description": DescriptionConfig(lead="A retro sunset scene.", ref=ref)}
+        )
+        return listing.model_copy(update={"etsy": etsy})
+
+    def test_a_ref_error_blocks_and_names_the_description(self) -> None:
+        listing = self._with_ref("common-copy/missing.md")
+        issues = _check(listing, description_ref_error="'common-copy/missing.md': file not found")
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "details"]
+        assert any(
+            i.where == "Listing Details › Description" and "file not found" in i.message
+            for i in blocking
+        )
+
+    def test_no_ref_error_raises_no_issue(self) -> None:
+        listing = self._with_ref("common-copy/comfort-colors.md")
+        issues = _check(listing, description_ref_error=None)
+        assert not any("file not found" in i.message for i in issues)
+
+    def test_a_ref_error_is_ignored_when_the_listing_has_no_ref(self) -> None:
+        """The caller only attempts the load when a ref is actually set; this
+        guards the shape even if it ever passed one anyway."""
+        issues = _check(_listing(), description_ref_error="should never be used")
+        assert not any("should never be used" in i.message for i in issues)
+
+
+class TestDesignResolution:
+    def test_a_design_too_small_blocks_and_names_the_key(self, tmp_path: Path) -> None:
+        path = _design(tmp_path, (10, 10))
+        issues = _check(_listing(), design_paths={"default": path})
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "variants"]
+        assert len(blocking) == 1
+        assert "10" in blocking[0].message
+
+    def test_a_resolvable_design_raises_no_issue(self, tmp_path: Path) -> None:
+        path = _design(tmp_path)
+        assert _check(_listing(), design_paths={"default": path}) == []
+
+    def test_no_garment_profile_skips_the_design_check_entirely(self, tmp_path: Path) -> None:
+        """Design resolution needs a print area to check against -- with no
+        profile resolved there is nothing to check it against, and the
+        missing-profile block below is the one issue that matters."""
+        path = _design(tmp_path, (1, 1))
+        issues = _check(_listing(), garment_profile=None, design_paths={"default": path})
+        assert not any(i.tab == "variants" and "design" in i.message.lower() for i in issues)
+
+
+class TestMediaPresence:
+    def test_no_media_blocks(self) -> None:
+        issues = _check(_listing(media=[]))
+        assert any(i.severity == "block" and i.tab == "images" for i in issues)
+
+    def test_some_media_raises_no_media_issue(self) -> None:
+        issues = _check(_listing())
+        assert not any("no listing images" in i.message.lower() for i in issues)
+
+
+class TestColoursEnabled:
+    def test_no_colours_blocks(self) -> None:
+        issues = _check(_listing(colors=[], media=["common-media/size-guide.png"]))
+        assert any(i.severity == "block" and i.tab == "variants" for i in issues)
+
+    def test_some_colours_raises_no_issue_here(self) -> None:
+        issues = _check(_listing())
+        assert not any("no colours" in i.message.lower() for i in issues)
+
+
+class TestGarmentProfileExists:
+    def test_an_unknown_garment_profile_blocks(self) -> None:
+        issues = _check(_listing(garment_profile="does-not-exist"), garment_profile_names=[])
+        assert any(
+            i.severity == "block" and i.tab == "variants" and "does-not-exist" in i.message
+            for i in issues
+        )
+
+    def test_a_known_garment_profile_raises_no_issue(self) -> None:
+        issues = _check(_listing())
+        assert not any("garment profile" in i.message.lower() for i in issues)
+
+
+class TestTemplateKindColourMismatch:
+    def test_a_colour_matrix_entry_with_no_colour_blocks(self) -> None:
+        issues = _check(
+            _listing(media=[TemplateMediaEntry(template="flat-lay-01", colour=None)]),
+        )
+        assert any(i.severity == "block" and i.tab == "images" for i in issues)
+
+    def test_a_multiple_entry_naming_a_colour_blocks(self) -> None:
+        issues = _check(
+            _listing(media=[TemplateMediaEntry(template="colour-chart-01", colour="black")]),
+            templates={"colour-chart-01": CHART},
+        )
+        assert any(i.severity == "block" and i.tab == "images" for i in issues)
+
+    def test_a_single_entry_naming_a_colour_blocks(self) -> None:
+        issues = _check(
+            _listing(media=[TemplateMediaEntry(template="sizing-chart", colour="black")]),
+            templates={"sizing-chart": SIZING},
+        )
+        assert any(i.severity == "block" and i.tab == "images" for i in issues)
+
+    def test_a_correctly_shaped_entry_raises_no_issue(self) -> None:
+        issues = _check(
+            _listing(media=[TemplateMediaEntry(template="sizing-chart", colour=None)]),
+            templates={"sizing-chart": SIZING},
+        )
+        assert issues == []
+
+    def test_a_bare_image_path_entry_is_never_a_kind_mismatch(self) -> None:
+        issues = _check(_listing(media=["common-media/size-guide.png"]), templates={})
+        assert not any(i.tab == "images" and "kind" in i.message.lower() for i in issues)
+
+
+class TestVariationImages:
+    def test_unset_raises_no_issue(self) -> None:
+        assert _check(_listing(variation_images=None)) == []
+
+    def test_a_template_not_in_media_blocks(self) -> None:
+        issues = _check(
+            _listing(variation_images="flat-lay-01", media=["common-media/size-guide.png"])
+        )
+        assert any(
+            i.severity == "block" and i.tab == "images" and "flat-lay-01" in i.message
+            for i in issues
+        )
+
+    def test_full_colour_coverage_raises_no_warning(self) -> None:
+        issues = _check(
+            _listing(
+                colors=["black", "white"],
+                media=[
+                    TemplateMediaEntry(template="flat-lay-01", colour="black"),
+                    TemplateMediaEntry(template="flat-lay-01", colour="white"),
+                ],
+                variation_images="flat-lay-01",
+            ),
+        )
+        assert not any(i.severity == "warn" and i.tab == "images" for i in issues)
+
+    def test_a_colour_missing_from_the_swatch_template_warns_with_its_name(self) -> None:
+        issues = _check(
+            _listing(
+                colors=["black", "white"],
+                media=[TemplateMediaEntry(template="flat-lay-01", colour="black")],
+                variation_images="flat-lay-01",
+            ),
+        )
+        warnings = [i for i in issues if i.severity == "warn" and i.tab == "images"]
+        assert len(warnings) == 1
+        assert "white" in warnings[0].message
+
+
+class TestTags:
+    def test_no_tags_warns(self) -> None:
+        issues = _check(_listing(tags=[]))
+        assert any(i.severity == "warn" and i.tab == "details" for i in issues)
+
+    def test_some_tags_raises_no_issue(self) -> None:
+        assert not any("no tags" in i.message.lower() for i in _check(_listing()))
+
+
+class TestColourInGarmentProfile:
+    """Tone classification is mandatory shared garment data (spec: *Artwork
+    resolution*): an enabled colour the profile does not classify blocks
+    deploying, in either base mode, and names the file to fix. It replaced a
+    warning that Printify "may not offer" the colour."""
+
+    def test_an_unclassified_colour_blocks_naming_the_profile_file(self) -> None:
+        issues = _check(_listing(colors=["black", "forest"]))
+        blocking = [i for i in issues if i.severity == "block" and i.tab == "variants"]
+        assert blocking == [
+            Issue(
+                "block",
+                "variants",
+                "Fix it in garment-profiles/comfort-colors-1717.yaml",
+                "Forest isn't marked light or dark in the comfort-colors-1717 garment profile",
+            )
+        ]
+
+    def test_several_unclassified_colours_are_one_issue(self) -> None:
+        issues = _check(_listing(colors=["forest", "black", "heather"]))
+        [blocking] = [i for i in issues if i.severity == "block" and i.tab == "variants"]
+        assert blocking.message == (
+            "Forest and Heather aren't marked light or dark in the comfort-colors-1717 "
+            "garment profile"
+        )
+
+    def test_every_colour_classified_raises_no_issue(self) -> None:
+        issues = _check(_listing(colors=["black", "white"]))
+        assert not any(i.tab == "variants" for i in issues)
+
+    def test_no_garment_profile_skips_this_check(self) -> None:
+        issues = _check(
+            _listing(colors=["not-a-real-colour"], media=["common-media/size-guide.png"]),
+            garment_profile=None,
+        )
+        assert not any("marked light or dark" in i.message for i in issues)
+
+
+def _with_design(listing: Listing, design: dict[str, str | None]) -> Listing:
+    return listing.model_copy(update={"design": design})
+
+
+LIGHT_INK = "designs/light-ink.png"
+DARK_INK = "designs/dark-ink.png"
+LINK_WHERE = "Artwork · Link the two designs if one is all this listing needs"
+
+
+class TestArtwork:
+    """The blockers and the warning of docs/features/multi-artwork-20260928/interactions.md
+    Part 1 §10, with Part 2 §9's `where` text. Everything resolves through
+    `config/artwork.py`, so what blocks here is what the stages refuse."""
+
+    def test_no_design_blocks(self) -> None:
+        issues = _check(_with_design(_listing(), {}))
+        assert [i for i in issues if i.where == "Artwork"] == [
+            Issue("block", "variants", "Artwork", "No design is chosen for this listing yet")
+        ]
+
+    def test_an_empty_pair_is_no_design_and_nothing_else(self) -> None:
+        """Both slots empty says one thing, not one blocker per tone."""
+        issues = _check(_with_design(_listing(), {"on-light": None, "on-dark": None}))
+        assert issues == [
+            Issue("block", "variants", "Artwork", "No design is chosen for this listing yet")
+        ]
+
+    def test_a_design_that_is_set_does_not_block(self) -> None:
+        assert not [i for i in _check(_listing()) if i.where.startswith("Artwork")]
+
+    def test_a_needed_slot_left_empty_blocks_naming_its_colours(self) -> None:
+        listing = _with_design(_listing(colors=["black", "white"]), {"on-dark": LIGHT_INK})
+        blocking = [i for i in _check(listing) if i.severity == "block"]
+        assert blocking == [
+            Issue(
+                "block",
+                "variants",
+                "Artwork · For light shirts",
+                "White is a light shirt, but no design for light shirts is chosen",
+            )
+        ]
+
+    def test_several_colours_needing_a_slot_are_named_together(self) -> None:
+        profile = PROFILE.model_copy(
+            update={"colors": {"black": "dark", "white": "light", "ivory": "light"}}
+        )
+        listing = _with_design(_listing(colors=["white", "black", "ivory"]), {"on-light": DARK_INK})
+        [blocking] = [i for i in _check(listing, garment_profile=profile) if i.severity == "block"]
+        assert blocking.where == "Artwork · For dark shirts"
+        assert blocking.message == "Black is a dark shirt, but no design for dark shirts is chosen"
+        listing = _with_design(listing, {"on-dark": LIGHT_INK})
+        [blocking] = [i for i in _check(listing, garment_profile=profile) if i.severity == "block"]
+        assert blocking.message == (
+            "White and Ivory are light shirts, but no design for light shirts is chosen"
+        )
+
+    def test_one_slot_in_use_warns_and_deploys(self) -> None:
+        """Spec acceptance 7: a partial pair whose automatic colours are all
+        dark deploys, with a warning pointing at the unneeded configuration."""
+        listing = _with_design(_listing(colors=["black"]), {"on-light": None, "on-dark": LIGHT_INK})
+        issues = _check(listing)
+        assert issues == [
+            Issue(
+                "warn",
+                "variants",
+                LINK_WHERE,
+                "Only the design for dark shirts is in use — no light shirt you sell needs "
+                "the design for light shirts",
+            )
+        ]
+
+    def test_a_colour_exception_leaves_the_slot_calculation(self) -> None:
+        """A direct exception is considered before deciding which base slots
+        are needed (spec: *A partial light/dark pair*)."""
+        listing = _with_design(
+            _listing(colors=["black", "white"]),
+            {"on-dark": LIGHT_INK, "white": "designs/white-special.png"},
+        )
+        issues = _check(listing)
+        assert [i.severity for i in issues] == ["warn"]
+        assert issues[0].where == LINK_WHERE
+
+    def test_both_slots_in_use_is_quiet(self) -> None:
+        listing = _with_design(
+            _listing(colors=["black", "white"]), {"on-light": DARK_INK, "on-dark": LIGHT_INK}
+        )
+        assert _check(listing) == []
+
+    def test_a_depicted_colour_needs_its_slot_too(self) -> None:
+        """A `multiple` scene shows colours the listing may not sell, and each
+        layer prints what its colour resolves to (spec: *Artwork resolution*)."""
+        chart = TemplateInfo(kind="multiple", colours=frozenset({"black", "white"}))
+        listing = _with_design(
+            _listing(colors=["black"], media=[TemplateMediaEntry(template="chart")]),
+            {"on-dark": LIGHT_INK},
+        )
+        blocking = [i for i in _check(listing, templates={"chart": chart}) if i.severity == "block"]
+        assert [(i.where, i.message) for i in blocking] == [
+            (
+                "Artwork · For light shirts",
+                "White is a light shirt, but no design for light shirts is chosen",
+            )
+        ]
+
+    def test_an_unclassified_depicted_colour_blocks_in_light_dark_mode(self) -> None:
+        chart = TemplateInfo(kind="multiple", colours=frozenset({"black", "heather"}))
+        listing = _listing(colors=["black"], media=[TemplateMediaEntry(template="chart")])
+        paired = _with_design(listing, {"on-light": DARK_INK, "on-dark": LIGHT_INK})
+
+        [blocking] = [
+            i for i in _check(paired, templates={"chart": chart}) if i.severity == "block"
+        ]
+        assert blocking.message == (
+            "Heather isn't marked light or dark in the comfort-colors-1717 garment profile"
+        )
+        # One design for every shirt needs no tone for a colour it only depicts.
+        assert not [i for i in _check(listing, templates={"chart": chart}) if i.severity == "block"]
+
+    def test_a_colourless_single_scene_blocks_in_light_dark_mode(self) -> None:
+        """The tool does not guess which base file a photograph shows."""
+        listing = _listing(
+            colors=["black", "white"],
+            media=[
+                TemplateMediaEntry(template="flat-lay-01", colour="black"),
+                TemplateMediaEntry(template="sizing"),
+            ],
+        )
+        templates = {"flat-lay-01": FLAT_LAY, "sizing": SIZING}
+        paired = _with_design(listing, {"on-light": DARK_INK, "on-dark": LIGHT_INK})
+
+        assert _check(paired, templates=templates) == [
+            Issue(
+                "block",
+                "images",
+                "Listing Images › sizing",
+                "'sizing' doesn't say which shirt colour it shows, so it can't choose between "
+                "the designs for light and dark shirts. Name its colour in the calibrator, or "
+                "remove it from this listing.",
+            )
+        ]
+        assert _check(listing, templates=templates) == []
+
+    def test_a_single_scene_that_names_its_colour_resolves(self) -> None:
+        coloured = TemplateInfo(kind="single", colours=frozenset({"white"}))
+        listing = _with_design(
+            _listing(colors=["black", "white"], media=[TemplateMediaEntry(template="sizing")]),
+            {"on-light": DARK_INK, "on-dark": LIGHT_INK},
+        )
+        assert _check(listing, templates={"sizing": coloured}) == []
+
+
+class TestIndependentChecks:
+    def test_a_clean_listing_has_no_issues(self) -> None:
+        assert _check(_listing()) == []
+
+    def test_multiple_problems_all_surface_together(self) -> None:
+        issues = _check(
+            _listing(colors=[], media=[], tags=[], title=""),
+            garment_profile_names=[],
+        )
+        tabs = {i.tab for i in issues}
+        assert tabs == {"variants", "images", "details"}
+
+
+class TestNothingChosenYet:
+    """The state a listing starts in, now that the editor *is* the create form.
+    Each of these is a block, because each is something that has to be picked
+    before the listing can mean anything -- and the banner is where an unsaved
+    listing is told so."""
+
+    def test_no_garment_profile_says_so_rather_than_quoting_an_empty_name(self) -> None:
+        issues = _check(_listing(garment_profile=""))
+        blocking = [i for i in issues if i.severity == "block" and i.where.endswith("profile")]
+        assert len(blocking) == 1
+        assert "no garment_profile set" in blocking[0].message
+
+    def test_a_whitespace_only_garment_profile_is_unchosen_not_missing(self) -> None:
+        """The divergence that put the two rule modules back together: a name of
+        one space passed the engine's pre-flight (`.strip()`) and failed the
+        banner's (`not listing.garment_profile`), so `apply` and the editor
+        disagreed about one file on disk."""
+        issues = _check(_listing(garment_profile=" "))
+        blocking = [i for i in issues if i.severity == "block" and i.where.endswith("profile")]
+        assert len(blocking) == 1
+        assert "no garment_profile set" in blocking[0].message
+        assert "' '" not in blocking[0].message
+
+    def test_a_named_profile_that_does_not_exist_still_quotes_it(self) -> None:
+        """A different mistake with a different remedy: one is unfinished, the
+        other is wrong, and saying "not selected" about a typo would send the
+        user looking in the wrong place."""
+        issues = _check(_listing(garment_profile="no-such"), garment_profile_names=["other"])
+        blocking = [i for i in issues if i.severity == "block" and i.where.endswith("profile")]
+        assert len(blocking) == 1
+        assert "'no-such'" in blocking[0].message
+
+    def test_no_price_source_blocks_on_the_pricing_tab(self) -> None:
+        """The one rule shared with `Listing` itself, which refuses to *write*
+        a listing in this state and waives it only for an unsaved draft. This
+        is the sentence that explains the refusal."""
+        listing = _listing().model_copy(update={"prices": {}, "pricing_plan": None})
+        blocking = [i for i in _check(listing) if i.severity == "block" and i.tab == "pricing"]
+        assert [i for i in blocking if i.where == "Pricing"]
+
+    def test_a_pricing_plan_alone_satisfies_it(self) -> None:
+        listing = _listing().model_copy(
+            update={"prices": {}, "pricing_plan": "pricing-plans/tee.yaml"}
+        )
+        assert not [i for i in _check(listing) if "Pricing" in i.where]
+
+
+class TestLifecycleVerb:
+    """lifecycle intent: wrong verb is Blocked, never rewritten as the right one."""
+
+    def test_deleted_on_a_published_listing_blocks_and_says_to_retire(self) -> None:
+        issues = check_lifecycle_verb("deleted", published=True)
+        assert len(issues) == 1
+        first, *rest = issues[0].message.splitlines()
+        assert first == (
+            "this listing has been published; retracting it would discard its history."
+        )
+        assert any("retire" in line.lower() for line in rest)
+        assert issues[0].severity == "block"
+
+    def test_retired_on_a_never_live_listing_blocks_and_says_there_is_nothing_to_pause(
+        self,
+    ) -> None:
+        issues = check_lifecycle_verb("retired", published=False)
+        assert len(issues) == 1
+        first, *rest = issues[0].message.splitlines()
+        assert "never been for sale" in first
+        assert "nothing to pause" in first
+        assert issues[0].severity == "block"
+
+    def test_deleted_on_a_never_live_listing_is_the_right_verb(self) -> None:
+        assert check_lifecycle_verb("deleted", published=False) == []
+
+    def test_retired_on_a_published_listing_is_the_right_verb(self) -> None:
+        assert check_lifecycle_verb("retired", published=True) == []
+
+    def test_omitted_lifecycle_is_never_the_wrong_verb(self) -> None:
+        assert check_lifecycle_verb(None, published=True) == []
+        assert check_lifecycle_verb(None, published=False) == []
+
+    def test_check_listing_surfaces_the_wrong_verb_when_it_knows_published(self) -> None:
+        issues = _check(_listing(lifecycle="deleted"), published=True)
+        blocking = [i for i in issues if i.severity == "block" and i.where == "lifecycle"]
+        assert blocking
+
+
+class TestPrintifyVariantLimit:
+    def test_more_than_100_configured_variants_warns_on_the_variants_tab(self) -> None:
+        colours = ["black", *(f"colour-{number}" for number in range(2, 19))]
+        profile = PROFILE.model_copy(
+            update={
+                "sizes": ["S", "M", "L", "XL", "2XL", "3XL"],
+                "colors": dict.fromkeys(colours, "dark"),
+            }
+        )
+
+        issues = _check(_listing(colors=colours), garment_profile=profile)
+
+        [warning] = [issue for issue in issues if "108 variants" in issue.message]
+        assert warning == Issue(
+            "warn",
+            "variants",
+            "Variants › Colours",
+            "18 colours × 6 sizes configures 108 variants; Printify allows at most 100 "
+            "per product. Disable at least 2 colours or reduce the garment profile's sizes.",
+        )
+
+    def test_exactly_100_configured_variants_does_not_warn(self) -> None:
+        colours = ["black", *(f"colour-{number}" for number in range(2, 21))]
+        profile = PROFILE.model_copy(
+            update={
+                "sizes": ["S", "M", "L", "XL", "2XL"],
+                "colors": dict.fromkeys(colours, "dark"),
+            }
+        )
+
+        issues = _check(_listing(colors=colours), garment_profile=profile)
+
+        assert not [issue for issue in issues if "Printify allows at most" in issue.message]
+
+
+class TestMissingListingYaml:
+    def test_a_missing_file_is_not_consent(self) -> None:
+        issues = check_listing_yaml_present(present=False)
+        assert len(issues) == 1
+        assert "listing.yaml" in issues[0].message
+        assert "not consent" in issues[0].message
+        assert issues[0].severity == "block"
+
+    def test_a_present_file_is_silent(self) -> None:
+        assert check_listing_yaml_present(present=True) == []
+
+
+GOOD_VIDEO = VideoFacts(
+    size_bytes=8_366_289, duration_seconds=5.73, width=1440, height=1440, has_audio=False
+)
+CLIP = "common-media/size-guide.mp4"
+
+
+def _video_issues(facts: VideoFacts | ProbeFailure, ref: str = CLIP) -> list[Issue]:
+    return check_videos({ref: facts})
+
+
+def _blocks(issues: list[Issue]) -> list[Issue]:
+    return [i for i in issues if i.severity == "block"]
+
+
+class TestVideos:
+    """Etsy's help page is the gate: the API itself took a 20 s
+    clip, so nothing past this point would catch one."""
+
+    def test_a_clip_inside_every_limit_has_no_issue(self) -> None:
+        assert _video_issues(GOOD_VIDEO) == []
+
+    def test_a_clip_at_the_edges_of_every_limit_has_no_issue(self) -> None:
+        edge = VideoFacts(
+            size_bytes=100_000_000, duration_seconds=3.0, width=500, height=900, has_audio=False
+        )
+        assert _video_issues(edge) == []
+
+    def test_over_100_mb_blocks_naming_the_file_and_the_limit(self) -> None:
+        [issue] = _video_issues(replace(GOOD_VIDEO, size_bytes=100_000_001))
+        assert issue.severity == "block"
+        assert CLIP in issue.message and "100 MB" in issue.message
+
+    def test_under_3_seconds_blocks_naming_the_file_and_the_limit(self) -> None:
+        [issue] = _video_issues(replace(GOOD_VIDEO, duration_seconds=2.0))
+        assert issue.severity == "block"
+        assert CLIP in issue.message and "2.0 s" in issue.message and "3–15" in issue.message
+
+    def test_over_15_seconds_blocks_naming_the_file_and_the_limit(self) -> None:
+        [issue] = _video_issues(replace(GOOD_VIDEO, duration_seconds=20.0))
+        assert CLIP in issue.message and "20.0 s" in issue.message and "3–15" in issue.message
+
+    def test_a_short_side_under_500_px_blocks_naming_the_file_and_the_limit(self) -> None:
+        """The shorter side, whichever it is: a 1920x400 banner is refused as
+        surely as a 400x400 square."""
+        [issue] = _video_issues(replace(GOOD_VIDEO, width=1920, height=400))
+        assert issue.severity == "block"
+        assert CLIP in issue.message and "1920x400" in issue.message and "500" in issue.message
+
+    def test_no_aspect_rule_applies(self) -> None:
+        assert _video_issues(replace(GOOD_VIDEO, width=2000, height=500)) == []
+
+    def test_every_broken_limit_is_its_own_block(self) -> None:
+        bad = VideoFacts(
+            size_bytes=200_000_000, duration_seconds=1.0, width=320, height=240, has_audio=False
+        )
+        assert len(_blocks(_video_issues(bad))) == 3
+
+    def test_an_unreadable_file_blocks_with_the_probe_s_reason(self) -> None:
+        [issue] = _video_issues(ProbeFailure("has no video stream"))
+        assert issue.severity == "block"
+        assert f"{CLIP} has no video stream" in issue.message
+
+    def test_audio_is_an_info_note_not_a_block(self) -> None:
+        [issue] = _video_issues(replace(GOOD_VIDEO, has_audio=True))
+        assert issue.severity == "info"
+        assert CLIP in issue.message and "sound" in issue.message
+
+    def test_issues_point_at_the_images_tab_and_the_file(self) -> None:
+        [issue] = _video_issues(ProbeFailure("was not found"), ref="./close-up.mov")
+        assert (issue.tab, issue.where) == ("images", "Listing Images › ./close-up.mov")
+
+    def test_check_listing_reports_the_videos_it_is_handed(self) -> None:
+        listing = _listing(media=[TemplateMediaEntry(template="flat-lay-01", colour="black"), CLIP])
+        issues = _check(listing, videos={CLIP: replace(GOOD_VIDEO, duration_seconds=2.0)})
+        assert any(CLIP in i.message for i in _blocks(issues))
+
+
+class TestListingTemplateCompleteness:
+    """template completeness: a listing template is checked with the listing's own production
+    checks, and none about a design, a brief or copy -- those are absent on
+    purpose, not missing."""
+
+    @staticmethod
+    def _template(**overrides: object) -> ListingTemplate:
+        document: dict[str, object] = {
+            "garment_profile": "comfort-colors-1717",
+            "colors": ["black", "white"],
+            "prices": {"S": "349 NOK"},
+            "media": [{"template": "flat-lay-01", "colour": "black"}],
+            **overrides,
+        }
+        return ListingTemplate.model_validate(document)
+
+    @staticmethod
+    def _check(
+        template: ListingTemplate,
+        *,
+        garment_profile: GarmentProfile | None = PROFILE,
+        garment_profile_names: tuple[str, ...] = ("comfort-colors-1717",),
+        description_ref_error: str | None = None,
+        videos: dict[str, VideoFacts | ProbeFailure] | None = None,
+    ) -> list[Issue]:
+        return check_listing_template(
+            template,
+            garment_profile=garment_profile,
+            garment_profile_names=garment_profile_names,
+            templates={"flat-lay-01": FLAT_LAY, "colour-chart-01": CHART},
+            description_ref_error=description_ref_error,
+            videos=videos,
+        )
+
+    def test_a_complete_template_has_no_issues(self) -> None:
+        assert self._check(self._template()) == []
+
+    def test_no_design_brief_title_tags_or_lead_is_ever_an_issue(self) -> None:
+        wheres = {issue.where for issue in self._check(self._template(colors=[], media=[]))}
+        assert wheres.isdisjoint(
+            {
+                "Design",
+                "Listing Details › Title",
+                "Listing Details › Tags",
+                "Listing Details › Description",
+            }
+        )
+
+    def test_no_colours_enabled_blocks(self) -> None:
+        issues = self._check(self._template(colors=[], media=["common-media/chart.png"]))
+        assert [(i.severity, i.where) for i in issues] == [("block", "Variants › Colours")]
+
+    def test_an_unknown_garment_profile_blocks(self) -> None:
+        issues = self._check(self._template(), garment_profile=None, garment_profile_names=())
+        assert [(i.severity, i.where) for i in issues] == [("block", "Variants › Garment profile")]
+
+    def test_no_price_source_blocks(self) -> None:
+        issues = self._check(self._template(prices={}))
+        assert [(i.severity, i.tab) for i in issues] == [("block", "pricing")]
+
+    def test_an_empty_gallery_blocks(self) -> None:
+        issues = self._check(self._template(media=[]))
+        assert [(i.severity, i.tab) for i in issues] == [("block", "images")]
+
+    def test_a_template_kind_mismatch_blocks(self) -> None:
+        issues = self._check(self._template(media=[{"template": "flat-lay-01"}]))
+        assert [(i.severity, i.where) for i in issues] == [
+            ("block", "Listing Images › flat-lay-01")
+        ]
+
+    def test_variation_images_are_checked_as_a_listing_s_are(self) -> None:
+        issues = self._check(self._template(etsy={"variation_images": "colour-chart-01"}))
+        assert [i.severity for i in issues] == ["block"]
+
+    def test_an_unresolvable_description_ref_blocks(self) -> None:
+        template = self._template(etsy={"description": {"ref": "common-copy/gone.md"}})
+        issues = self._check(template, description_ref_error="'common-copy/gone.md': not found")
+        assert [(i.severity, i.where) for i in issues] == [
+            ("block", "Listing Details › Description")
+        ]
+
+    def test_a_video_etsy_would_refuse_blocks(self) -> None:
+        clip = "./assets/clip.mp4"
+        template = self._template(media=[{"template": "flat-lay-01", "colour": "black"}, clip])
+        issues = self._check(template, videos={clip: ProbeFailure("is missing")})
+        assert [(i.severity, i.where) for i in issues] == [("block", f"Listing Images › {clip}")]

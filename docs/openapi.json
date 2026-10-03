@@ -134,35 +134,26 @@
         "type": "object"
       },
       "AiProposalEvent": {
-        "description": "The validated proposal: :class:`SeoProposalResponse` unchanged, plus\n``type`` and ``seq``.",
+        "description": "The validated proposal, once it is cached: what ``GET\n/api/listings/{name}/proposal`` answers at that moment, plus ``type``\nand ``seq``.",
         "properties": {
-          "description_leads": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Description Leads",
-            "type": "array"
-          },
-          "expires_at": {
-            "format": "date-time",
-            "title": "Expires At",
-            "type": "string"
-          },
           "generated_at": {
             "format": "date-time",
             "title": "Generated At",
             "type": "string"
           },
-          "observed_text": {
-            "title": "Observed Text",
+          "origin": {
+            "enum": [
+              "manual",
+              "batch"
+            ],
+            "title": "Origin",
             "type": "string"
           },
-          "rationale": {
-            "items": {
-              "$ref": "#/components/schemas/SeoRationaleEntry"
-            },
-            "title": "Rationale",
-            "type": "array"
+          "proposal": {
+            "$ref": "#/components/schemas/ProposalChoices"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/ProposalResolution"
           },
           "seq": {
             "title": "Seq",
@@ -171,44 +162,23 @@
           "snapshot": {
             "$ref": "#/components/schemas/SeoProposalSnapshot"
           },
-          "tags": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Tags",
-            "type": "array"
-          },
-          "titles": {
-            "items": {
-              "type": "string"
-            },
-            "title": "Titles",
-            "type": "array"
+          "stale": {
+            "$ref": "#/components/schemas/ProposalStaleness"
           },
           "type": {
             "const": "proposal",
             "default": "proposal",
             "title": "Type",
             "type": "string"
-          },
-          "warnings": {
-            "items": {
-              "$ref": "#/components/schemas/SeoWarningEntry"
-            },
-            "title": "Warnings",
-            "type": "array"
           }
         },
         "required": [
-          "titles",
-          "tags",
-          "description_leads",
-          "rationale",
-          "warnings",
-          "observed_text",
+          "proposal",
           "snapshot",
           "generated_at",
-          "expires_at",
+          "origin",
+          "resolution",
+          "stale",
           "seq"
         ],
         "title": "AiProposalEvent",
@@ -242,6 +212,25 @@
           "queries"
         ],
         "title": "AiQueriesEvent",
+        "type": "object"
+      },
+      "AiReadinessBlock": {
+        "description": "Why a batch could not draft if it were created now (spec, *Design\nvalidation*; ``staging.note.md``): the sentence after *AI drafting can't\nrun yet.*, and what to do about it. Transport-independent, so it is the\nstaging detail's ``ai_blocked`` as it stands.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "remedy": {
+            "title": "Remedy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "remedy"
+        ],
+        "title": "AiReadinessBlock",
         "type": "object"
       },
       "AiRunDetail": {
@@ -312,6 +301,14 @@
             "title": "Listing",
             "type": "string"
           },
+          "origin": {
+            "enum": [
+              "manual",
+              "batch"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
           "phase": {
             "enum": [
               "running",
@@ -334,6 +331,7 @@
           "id",
           "listing",
           "draft_brief",
+          "origin",
           "phase",
           "steps",
           "created_at",
@@ -403,6 +401,14 @@
             "title": "Listing",
             "type": "string"
           },
+          "origin": {
+            "enum": [
+              "manual",
+              "batch"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
           "phase": {
             "enum": [
               "running",
@@ -425,6 +431,7 @@
           "id",
           "listing",
           "draft_brief",
+          "origin",
           "phase",
           "steps",
           "created_at",
@@ -701,8 +708,311 @@
         "title": "AssignKindRequest",
         "type": "object"
       },
+      "BatchDetail": {
+        "properties": {
+          "concurrency": {
+            "default": 1,
+            "title": "Concurrency",
+            "type": "integer"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "listing_template": {
+            "title": "Listing Template",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/BatchRowDetail"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "status": {
+            "default": "drafting",
+            "enum": [
+              "staging",
+              "drafting",
+              "in_review",
+              "complete",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "listing_template",
+          "created_at",
+          "rows"
+        ],
+        "title": "BatchDetail",
+        "type": "object"
+      },
+      "BatchIndexEntry": {
+        "description": "One row of Recent batches (UI doc \u00a72): a confirmed batch, or a staging\nsession not confirmed yet, which reopens staging instead.",
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "designs": {
+            "title": "Designs",
+            "type": "integer"
+          },
+          "drafted": {
+            "default": 0,
+            "title": "Drafted",
+            "type": "integer"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "failures": {
+            "default": 0,
+            "title": "Failures",
+            "type": "integer"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "staging",
+              "batch"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "listing_template": {
+            "title": "Listing Template",
+            "type": "string"
+          },
+          "listings": {
+            "default": 0,
+            "title": "Listings",
+            "type": "integer"
+          },
+          "reviewed": {
+            "default": 0,
+            "title": "Reviewed",
+            "type": "integer"
+          },
+          "status": {
+            "enum": [
+              "staging",
+              "drafting",
+              "in_review",
+              "complete",
+              "stopped"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "undrafted": {
+            "default": 0,
+            "title": "Undrafted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "id",
+          "label",
+          "listing_template",
+          "created_at",
+          "status",
+          "designs"
+        ],
+        "title": "BatchIndexEntry",
+        "type": "object"
+      },
+      "BatchPatch": {
+        "description": "Rename the batch (UI doc \u00a77): its label only, never its identity.",
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "label"
+        ],
+        "title": "BatchPatch",
+        "type": "object"
+      },
+      "BatchRowDetail": {
+        "properties": {
+          "ai": {
+            "anyOf": [
+              {
+                "enum": [
+                  "queued",
+                  "running",
+                  "done",
+                  "failed",
+                  "stopped",
+                  "cancelled",
+                  "cancelled_by_deploy"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai"
+          },
+          "ai_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Error"
+          },
+          "ai_steps": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/WorkflowStep"
+            },
+            "title": "Ai Steps",
+            "type": "array"
+          },
+          "creation": {
+            "enum": [
+              "pending",
+              "created",
+              "failed"
+            ],
+            "title": "Creation",
+            "type": "string"
+          },
+          "deleted": {
+            "default": false,
+            "title": "Deleted",
+            "type": "boolean"
+          },
+          "design": {
+            "title": "Design",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "proposal": {
+            "anyOf": [
+              {
+                "enum": [
+                  "ready",
+                  "stale",
+                  "resolved"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Proposal"
+          },
+          "queue_position": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Queue Position"
+          },
+          "reviewable": {
+            "default": false,
+            "title": "Reviewable",
+            "type": "boolean"
+          },
+          "reviewed": {
+            "default": false,
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "stale_reasons": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Stale Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "id",
+          "sources",
+          "name",
+          "design",
+          "creation",
+          "error"
+        ],
+        "title": "BatchRowDetail",
+        "type": "object"
+      },
       "BelowCostRow": {
-        "description": "One variant priced under what Printify charges to make it -- the\nrow `plan()` already refuses over (:func:`_below_cost`), named for the\nbefore/after review (A30) rather than left as a bare variant id.",
+        "description": "One variant priced under what Printify charges to make it -- the\nrow `plan()` already refuses over ( :func:`_below_cost`), named for the\nbefore/after review rather than left as a bare variant id.",
         "properties": {
           "colour": {
             "title": "Colour",
@@ -756,6 +1066,34 @@
         "title": "BlockedOutcomeDTO",
         "type": "object"
       },
+      "Body_create_staging_api_staging_post": {
+        "properties": {
+          "files": {
+            "anyOf": [
+              {
+                "items": {
+                  "contentMediaType": "application/octet-stream",
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Files"
+          },
+          "listing_template": {
+            "title": "Listing Template",
+            "type": "string"
+          }
+        },
+        "required": [
+          "listing_template"
+        ],
+        "title": "Body_create_staging_api_staging_post",
+        "type": "object"
+      },
       "Body_upload_design_api_designs_post": {
         "properties": {
           "file": {
@@ -771,7 +1109,7 @@
         "type": "object"
       },
       "ColourMatrixPreviewRequest": {
-        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET .../config`` response (which includes ``kind``) into the body.",
+        "description": "Disambiguated from the other two preview shapes by required fields\nalone (``colour`` here, ``placements`` on ``MultiplePreviewRequest``,\nneither on ``SinglePreviewRequest``) -- extra fields are ignored rather\nthan forbidden, since a natural client pattern is spreading a whole\n``GET.../config`` response (which includes ``kind``) into the body.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -826,7 +1164,7 @@
         "type": "object"
       },
       "ColourMatrixTemplate": {
-        "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour (PRD 7a) -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
+        "description": "One photo per colour, same design position in all of them. Scene\nimages are ``{colour-slug}.png`` per colour -- there is no\n``colours:`` list in the YAML, since the filenames present in the\ndirectory *are* the colour set.",
         "properties": {
           "bounding_box": {
             "maxItems": 4,
@@ -877,7 +1215,7 @@
         "type": "object"
       },
       "ColourReportRow": {
-        "description": "What one photo in a candidate ``colour-matrix`` set will be taken as.\n\nReporting only: PRD 7a makes the filename the source of truth, so there is\nno manual mapping to offer and nothing here changes a name.",
+        "description": "What one photo in a candidate ``colour-matrix`` set will be taken as.\n\nReporting only: ADR-0004 makes the filename the source of truth, so there is\nno manual mapping to offer and nothing here changes a name.",
         "properties": {
           "clean": {
             "title": "Clean",
@@ -901,7 +1239,7 @@
         "type": "object"
       },
       "CommonCopySummary": {
-        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). A common-copy ref is\nworkspace-relative, like every other ref (PRD 73), so it is exactly what\n`description.ref` stores, already usable as-is.",
+        "description": "One `common-copy/*.md` file, for the Description tab's body-source\nselector (AI SEO implementation plan, PR6). A common-copy ref is\nworkspace-relative, like every other ref, so it is exactly what\n`description.ref` stores, already usable as-is.",
         "properties": {
           "ref": {
             "title": "Ref",
@@ -983,6 +1321,54 @@
         "title": "CreateListingRequest",
         "type": "object"
       },
+      "CreateListingTemplateRequest": {
+        "description": "Save as listing template (``from_listing``) or Clone\n(``from_template``) -- exactly one. There is no blank creation (spec).",
+        "properties": {
+          "document": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Document"
+          },
+          "from_listing": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Listing"
+          },
+          "from_template": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "From Template"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "title": "CreateListingTemplateRequest",
+        "type": "object"
+      },
       "DescriptionConfig": {
         "additionalProperties": false,
         "properties": {
@@ -1018,7 +1404,7 @@
         "type": "object"
       },
       "DesignSummary": {
-        "description": "One entry in the calibrator's test-design library (A19).\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
+        "description": "One entry in the calibrator's test-design library.\n\n``bundled-grid``: the grid/ruler target, for spotting warp/displacement\nerrors. ``bundled-on-light``/``bundled-on-dark``: deterministic\nink-coloured targets, so a mis-resolved artwork is visually obvious in the\ncalibrator, not just described in a diff. ``upload``: a PNG the user added,\nfor judging a real ink weight on a real garment -- the question the grid\ncannot answer.",
         "properties": {
           "id": {
             "title": "Id",
@@ -1046,7 +1432,7 @@
         "type": "object"
       },
       "DesiredImageSnapshot": {
-        "description": "One manifest entry, as this run wants to send it (A30).",
+        "description": "One manifest entry, as this run wants to send it.",
         "properties": {
           "file": {
             "title": "File",
@@ -1070,7 +1456,7 @@
         "type": "object"
       },
       "DesiredVideoSnapshot": {
-        "description": "One video as this run wants to place it (A30).",
+        "description": "One video as this run wants to place it.",
         "properties": {
           "after_images": {
             "anyOf": [
@@ -1100,7 +1486,7 @@
         "type": "object"
       },
       "DisplaceConfig": {
-        "description": "PRD: implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
+        "description": "Implemented but off by default -- over-strong displacement looks\nmelted, so it's tuned per template in the calibrator's live preview.",
         "properties": {
           "enabled": {
             "default": false,
@@ -1246,7 +1632,7 @@
         "type": "object"
       },
       "EtsyListingFacts": {
-        "description": "One side of the review (A30): the fields the mock shows unchanged\ncontext for, named rather than left as an id.",
+        "description": "One side of the review: the fields the mock shows unchanged\ncontext for, named rather than left as an id.",
         "properties": {
           "description": {
             "anyOf": [
@@ -1404,7 +1790,7 @@
         "type": "object"
       },
       "EtsyMediaSnapshot": {
-        "description": "Domain facts for the review (A30): both manifests in full, so the\nfrontend can lay out thumbnails and compute *New* / moved / *Removed*\nbadges from ``ref`` identity, guided by the per-rank ``MediaChange``s\n``plan()`` already emits.",
+        "description": "Domain facts for the review: both manifests in full, so the\nfrontend can lay out thumbnails and compute *New* / moved / *Removed*\nbadges from ``ref`` identity, guided by the per-rank ``MediaChange``s\n``plan()`` already emits.",
         "properties": {
           "desired": {
             "items": {
@@ -1537,7 +1923,7 @@
         "type": "object"
       },
       "EtsyVideosSnapshot": {
-        "description": "Both sides for the deploy review (A30). The live side comes in Etsy's\nresponse order, which says nothing about the gallery (decision 9).",
+        "description": "Both sides for the deploy review. The live side comes in Etsy's\nresponse order, which says nothing about the gallery (decision 9).",
         "properties": {
           "desired": {
             "items": {
@@ -1870,6 +2256,40 @@
         "title": "ListingApplyRequest",
         "type": "object"
       },
+      "ListingBatch": {
+        "description": "The batch a listing was made by, for the editor's row above the head\n(UI doc \u00a78): Back to batch and Mark reviewed.",
+        "properties": {
+          "batch_id": {
+            "title": "Batch Id",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "reviewable": {
+            "title": "Reviewable",
+            "type": "boolean"
+          },
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "boolean"
+          },
+          "row_id": {
+            "title": "Row Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch_id",
+          "label",
+          "row_id",
+          "reviewed",
+          "reviewable"
+        ],
+        "title": "ListingBatch",
+        "type": "object"
+      },
       "ListingDesignSummary": {
         "properties": {
           "file": {
@@ -2013,6 +2433,21 @@
           "garment_profile": {
             "title": "Garment Profile",
             "type": "string"
+          },
+          "gestures": {
+            "default": [],
+            "items": {
+              "enum": [
+                "delete",
+                "retire",
+                "un-retire",
+                "cancel",
+                "renew"
+              ],
+              "type": "string"
+            },
+            "title": "Gestures",
+            "type": "array"
           },
           "issues": {
             "items": {
@@ -2162,7 +2597,7 @@
         "type": "object"
       },
       "ListingFailedEvent": {
-        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.engine.run.StalePlanError`.",
+        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.core.engine.run.StalePlanError`.",
         "properties": {
           "id": {
             "title": "Id",
@@ -2264,6 +2699,46 @@
         "title": "ListingPlannedEvent",
         "type": "object"
       },
+      "ListingProposal": {
+        "description": "A listing's cached proposal as the editor and the batch summary read\nit: the record, and whether it still describes the saved listing.\n``stale`` is computed from the saved listing on every read, never\nstored.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "origin": {
+            "enum": [
+              "manual",
+              "batch"
+            ],
+            "title": "Origin",
+            "type": "string"
+          },
+          "proposal": {
+            "$ref": "#/components/schemas/ProposalChoices"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/ProposalResolution"
+          },
+          "snapshot": {
+            "$ref": "#/components/schemas/SeoProposalSnapshot"
+          },
+          "stale": {
+            "$ref": "#/components/schemas/ProposalStaleness"
+          }
+        },
+        "required": [
+          "proposal",
+          "snapshot",
+          "generated_at",
+          "origin",
+          "resolution",
+          "stale"
+        ],
+        "title": "ListingProposal",
+        "type": "object"
+      },
       "ListingSummary": {
         "properties": {
           "colour_count": {
@@ -2355,8 +2830,361 @@
         "title": "ListingSummary",
         "type": "object"
       },
+      "ListingTemplateAsset": {
+        "description": "A file the draft will copy: the ``./`` ref the template will name it\nby, and the ref it has in its source -- which is where the *name it*\npage's thumbnail has to come from, since the copy does not exist yet.",
+        "properties": {
+          "ref": {
+            "title": "Ref",
+            "type": "string"
+          },
+          "source_ref": {
+            "title": "Source Ref",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ref",
+          "source_ref"
+        ],
+        "title": "ListingTemplateAsset",
+        "type": "object"
+      },
+      "ListingTemplateDetail": {
+        "additionalProperties": false,
+        "description": "A listing template as its pages read it, saved or not -- one shape for\nboth, as `ListingDetail` is one shape for a listing and the unnamed draft.\n\nA draft (``GET /draft``: Save as listing template or Clone, written\nnowhere, UI doc \u00a71) has ``name`` ``\"\"``, no ``modified_at``, and says\nwhere it came from in ``source`` and ``assets``.",
+        "properties": {
+          "assets": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ListingTemplateAsset"
+            },
+            "title": "Assets",
+            "type": "array"
+          },
+          "colors": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Colors",
+            "type": "array"
+          },
+          "description_composed": {
+            "default": "",
+            "title": "Description Composed",
+            "type": "string"
+          },
+          "etsy": {
+            "$ref": "#/components/schemas/TemplateEtsyConfig",
+            "default": {
+              "description": {}
+            }
+          },
+          "garment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment"
+          },
+          "garment_brand": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Brand"
+          },
+          "garment_materials": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Materials"
+          },
+          "garment_model": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Model"
+          },
+          "garment_product_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Garment Product Type"
+          },
+          "garment_profile": {
+            "title": "Garment Profile",
+            "type": "string"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "media": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TemplateMediaEntry"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Media",
+            "type": "array"
+          },
+          "modified_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Modified At"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "price_overrides": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "examples": [
+                  "349 NOK"
+                ],
+                "type": "string"
+              },
+              "type": "object"
+            },
+            "default": {},
+            "title": "Price Overrides",
+            "type": "object"
+          },
+          "prices": {
+            "additionalProperties": {
+              "examples": [
+                "349 NOK"
+              ],
+              "type": "string"
+            },
+            "default": {},
+            "title": "Prices",
+            "type": "object"
+          },
+          "pricing_plan": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Plan"
+          },
+          "pricing_plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Plan Name"
+          },
+          "resolved_prices": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/ResolvedPrice"
+            },
+            "title": "Resolved Prices",
+            "type": "array"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListingTemplateSource"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "garment_profile",
+          "colors",
+          "media",
+          "name",
+          "modified_at",
+          "issues"
+        ],
+        "title": "ListingTemplateDetail",
+        "type": "object"
+      },
+      "ListingTemplateSaveResult": {
+        "description": "What a create or ``PUT`` did. Refusing an incomplete document is\na 200 with ``saved: false``, as a listing's malformed PATCH is, because the\neditor shows the issues and keeps going; nothing was written.",
+        "properties": {
+          "field_errors": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Field Errors",
+            "type": "object"
+          },
+          "issues": {
+            "items": {
+              "$ref": "#/components/schemas/Issue"
+            },
+            "title": "Issues",
+            "type": "array"
+          },
+          "saved": {
+            "title": "Saved",
+            "type": "boolean"
+          },
+          "template": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListingTemplateDetail"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "saved",
+          "issues"
+        ],
+        "title": "ListingTemplateSaveResult",
+        "type": "object"
+      },
+      "ListingTemplateSource": {
+        "properties": {
+          "kind": {
+            "enum": [
+              "listing",
+              "listing-template"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "name"
+        ],
+        "title": "ListingTemplateSource",
+        "type": "object"
+      },
+      "ListingTemplateSummary": {
+        "description": "One card on the Listing templates page (UI doc \u00a72).",
+        "properties": {
+          "batch_count": {
+            "default": 0,
+            "title": "Batch Count",
+            "type": "integer"
+          },
+          "colour_count": {
+            "title": "Colour Count",
+            "type": "integer"
+          },
+          "design_minimum": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PixelSize"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "garment": {
+            "title": "Garment",
+            "type": "string"
+          },
+          "media": {
+            "items": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/TemplateMediaEntry"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            },
+            "title": "Media",
+            "type": "array"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "pricing_plan_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pricing Plan Name"
+          }
+        },
+        "required": [
+          "name",
+          "garment",
+          "colour_count",
+          "pricing_plan_name",
+          "media"
+        ],
+        "title": "ListingTemplateSummary",
+        "type": "object"
+      },
       "LiveImageSnapshot": {
-        "description": "One image Etsy actually has, projected back to a ref where possible\n(A30) -- ``ref`` is ``None`` for an image this tool never uploaded.",
+        "description": "One image Etsy actually has, projected back to a ref where possible\n-- ``ref`` is ``None`` for an image this tool never uploaded.",
         "properties": {
           "image_id": {
             "title": "Image Id",
@@ -2404,7 +3232,7 @@
         "type": "object"
       },
       "LiveVideoSnapshot": {
-        "description": "One video Etsy has on the listing (A30); ``ref`` is ``None`` for one\nthis tool never uploaded.",
+        "description": "One video Etsy has on the listing; ``ref`` is ``None`` for one\nthis tool never uploaded.",
         "properties": {
           "ref": {
             "anyOf": [
@@ -2451,7 +3279,7 @@
         "type": "object"
       },
       "MarketSnapshot": {
-        "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (market-seo.md, *What the\nproposal sees*).",
+        "description": "One research, as the panel reads it back: the result's fields, when\nthe search ran, and the exact block the proposal was given. Holds each\nlisting's lead, never its full description (features/market-seo-20260924/spec.md, *What the\nproposal sees*).",
         "properties": {
           "block": {
             "title": "Block",
@@ -2558,7 +3386,7 @@
         "type": "object"
       },
       "MediaFileSummary": {
-        "description": "One file a listing can put in `media:` as a file ref (PRD 72, 73): a\nshared one under ``common-media/``, or one of the listing's own. A bare\nfile uploaded as-is, rather than a rendered mockup.",
+        "description": "One file a listing can put in `media:` as a file ref: a\nshared one under ``common-media/``, or one of the listing's own. A bare\nfile uploaded as-is, rather than a rendered mockup.",
         "properties": {
           "file": {
             "title": "File",
@@ -2674,7 +3502,7 @@
         "type": "object"
       },
       "PhaseEvent": {
-        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be (A33, decision 7).",
+        "description": "The run (or one of the two run kinds) moved to a new phase. Always the\nfirst event of a run and always its last, whichever phase that turns out\nto be (ADR-0041, decision 7).",
         "properties": {
           "id": {
             "title": "Id",
@@ -2748,6 +3576,24 @@
           "score"
         ],
         "title": "PhraseScore",
+        "type": "object"
+      },
+      "PixelSize": {
+        "properties": {
+          "height": {
+            "title": "Height",
+            "type": "integer"
+          },
+          "width": {
+            "title": "Width",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "width",
+          "height"
+        ],
+        "title": "PixelSize",
         "type": "object"
       },
       "Placement": {
@@ -3169,7 +4015,7 @@
         "type": "object"
       },
       "ProductSnapshot": {
-        "description": "Domain facts for the before/after review (A30): every variant on each\nside, unchanged ones included -- a ``Plan`` carries only what changed, and\nthe comparison needs the whole matrix to draw a price table from.",
+        "description": "Domain facts for the before/after review: every variant on each\nside, unchanged ones included -- a ``Plan`` carries only what changed, and\nthe comparison needs the whole matrix to draw a price table from.",
         "properties": {
           "desired": {
             "items": {
@@ -3261,7 +4107,7 @@
         "type": "object"
       },
       "ProductVariantSnapshot": {
-        "description": "One cell of the variant matrix, named rather than left as an id (A30).",
+        "description": "One cell of the variant matrix, named rather than left as an id.",
         "properties": {
           "colour": {
             "title": "Colour",
@@ -3343,8 +4189,183 @@
         "title": "ProgressEvent",
         "type": "object"
       },
+      "ProposalChoices": {
+        "description": "What the seller chooses from: the validated `ai/models.py.SeoProposal`,\nfield for field, as JSON can carry it.",
+        "properties": {
+          "description_leads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Description Leads",
+            "type": "array"
+          },
+          "observed_text": {
+            "title": "Observed Text",
+            "type": "string"
+          },
+          "rationale": {
+            "items": {
+              "$ref": "#/components/schemas/SeoRationaleEntry"
+            },
+            "title": "Rationale",
+            "type": "array"
+          },
+          "tags": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Tags",
+            "type": "array"
+          },
+          "titles": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Titles",
+            "type": "array"
+          },
+          "warnings": {
+            "items": {
+              "$ref": "#/components/schemas/SeoWarningEntry"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "titles",
+          "tags",
+          "description_leads",
+          "rationale",
+          "warnings",
+          "observed_text"
+        ],
+        "title": "ProposalChoices",
+        "type": "object"
+      },
+      "ProposalResolution": {
+        "description": "Each section's state (spec, *Durable AI proposals*): a section the\nseller accepted or dismissed stays resolved after a reload, so its drawer\ndoes not present itself as new again. ``pending`` is still open.",
+        "properties": {
+          "lead": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Lead",
+            "type": "string"
+          },
+          "tags": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Tags",
+            "type": "string"
+          },
+          "title": {
+            "default": "pending",
+            "enum": [
+              "pending",
+              "accepted",
+              "dismissed"
+            ],
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "title": "ProposalResolution",
+        "type": "object"
+      },
+      "ProposalResolutionPatch": {
+        "description": "``PATCH /api/listings/{name}/proposal/resolution``: the sections to\nrecord, on the proposal generated at ``generated_at`` -- a regeneration\nthat landed meanwhile is a different proposal, and is a 409. ``pending``\nreopens a section.",
+        "properties": {
+          "generated_at": {
+            "format": "date-time",
+            "title": "Generated At",
+            "type": "string"
+          },
+          "lead": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "accepted",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lead"
+          },
+          "tags": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "accepted",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tags"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "enum": [
+                  "pending",
+                  "accepted",
+                  "dismissed"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Title"
+          }
+        },
+        "required": [
+          "generated_at"
+        ],
+        "title": "ProposalResolutionPatch",
+        "type": "object"
+      },
+      "ProposalStaleness": {
+        "properties": {
+          "is_stale": {
+            "title": "Is Stale",
+            "type": "boolean"
+          },
+          "reasons": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Reasons",
+            "type": "array"
+          }
+        },
+        "required": [
+          "is_stale",
+          "reasons"
+        ],
+        "title": "ProposalStaleness",
+        "type": "object"
+      },
       "PublishSnapshot": {
-        "description": "Domain facts for the review (A30): only the rows the stage's own\n``plan()`` would refuse over, so the price table's red marker is never a\nsecond copy of the below-cost rule.",
+        "description": "Domain facts for the review: only the rows the stage's own\n``plan()`` would refuse over, so the price table's red marker is never a\nsecond copy of the below-cost rule.",
         "properties": {
           "below_cost": {
             "default": [],
@@ -3439,7 +4460,7 @@
         "type": "object"
       },
       "RenderSceneSnapshot": {
-        "description": "One scene's domain facts for the before/after review (A30, A32).\n\n``state`` answers \"would this scene's rendered output change, and is it\neven there\" -- ``cached`` when neither is true, ``stale`` when the scene's\nown hash has moved since the last apply, ``missing`` when the file itself\nis absent (which wins over a hash comparison: a hash proves nothing about\na file that was deleted). ``preview`` answers a different question --\nwhether a full-size preview is already sitting in the cache for the\n*current* state, which is what tells a caller whether ``preview()`` has\nanything left to do for this scene.",
+        "description": "One scene's domain facts for the before/after review.\n\n``state`` answers \"would this scene's rendered output change, and is it\neven there\" -- ``cached`` when neither is true, ``stale`` when the scene's\nown hash has moved since the last apply, ``missing`` when the file itself\nis absent (which wins over a hash comparison: a hash proves nothing about\na file that was deleted). ``preview`` answers a different question --\nwhether a full-size preview is already sitting in the cache for the\n*current* state, which is what tells a caller whether ``preview()`` has\nanything left to do for this scene.",
         "properties": {
           "colour": {
             "anyOf": [
@@ -3485,7 +4506,7 @@
         "type": "object"
       },
       "RenderSnapshot": {
-        "description": "Every referenced scene, in media order -- what the before/after review\nneeds and a ``Plan`` (changes only) cannot supply (A30).",
+        "description": "Every referenced scene, in media order -- what the before/after review\nneeds and a ``Plan`` (changes only) cannot supply.",
         "properties": {
           "scenes": {
             "items": {
@@ -3647,8 +4668,21 @@
         "title": "RetractStagePlanDTO",
         "type": "object"
       },
+      "ReviewedRequest": {
+        "properties": {
+          "reviewed": {
+            "title": "Reviewed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "reviewed"
+        ],
+        "title": "ReviewedRequest",
+        "type": "object"
+      },
       "ScoredListing": {
-        "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (ui-market-seo-interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (market-seo.md, *What the proposal\nsees*).",
+        "description": "One of the (at most) twenty listings scored, with everything the top\nlistings panel shows (features/market-seo-20260924/interactions.md, *Where the data\ncomes from*) -- and deliberately not the full description, which neither\nthe panel nor the model is given (features/market-seo-20260924/spec.md, *What the proposal\nsees*).",
         "properties": {
           "favourites_per_day": {
             "anyOf": [
@@ -3785,7 +4819,7 @@
         "type": "object"
       },
       "SeoProposalSnapshot": {
-        "description": "The submitted generation inputs, echoed back beside the proposal\n(implementation plan, PR5 item 4: \"input snapshot data\").\n\nThis is what a future frontend (PR7) compares its own current editor\nstate against to decide a pending proposal has gone stale\n(`docs/ui-listing-seo-interactions.md` section 7) -- everything\n`ai/models.py.SeoRequest` sent to the provider except the design image\nitself. Design identity and content are captured before generation, rather\nthan inferred from whichever editor state exists when the response arrives.",
+        "description": "The generation inputs, frozen before the provider starts: everything\n`ai/models.py.SeoRequest` sent except the design image itself, plus the\ndesign's identity and content hash. :func:`proposal_staleness` compares\none of these against the same inputs read from the listing now.",
         "properties": {
           "brief": {
             "title": "Brief",
@@ -3911,6 +4945,16 @@
       "SeoReadinessResponse": {
         "description": "Whether AI Mode can be enabled for one saved listing right now\n(implementation plan, \"Entry point\"). The frontend leaves the control\nvisible and disabled when ``ready`` is false; ``reason`` explains why\nto a developer or support reader.",
         "properties": {
+          "batch_pending": {
+            "default": false,
+            "title": "Batch Pending",
+            "type": "boolean"
+          },
+          "deploying": {
+            "default": false,
+            "title": "Deploying",
+            "type": "boolean"
+          },
           "ready": {
             "title": "Ready",
             "type": "boolean"
@@ -4293,6 +5337,210 @@
         "title": "StagePlannedEvent",
         "type": "object"
       },
+      "StagingDetail": {
+        "properties": {
+          "ai_blocked": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AiReadinessBlock"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expires_at": {
+            "format": "date-time",
+            "title": "Expires At",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "ignored": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ignored",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "listing_template": {
+            "title": "Listing Template",
+            "type": "string"
+          },
+          "rows": {
+            "items": {
+              "$ref": "#/components/schemas/StagingRowDetail"
+            },
+            "title": "Rows",
+            "type": "array"
+          },
+          "template_saved_at": {
+            "format": "date-time",
+            "title": "Template Saved At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "listing_template",
+          "label",
+          "template_saved_at",
+          "expires_at",
+          "rows",
+          "ignored"
+        ],
+        "title": "StagingDetail",
+        "type": "object"
+      },
+      "StagingPatch": {
+        "description": "Every staging edit, applied in order: label, names, removals.",
+        "properties": {
+          "label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "names": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "default": {},
+            "title": "Names",
+            "type": "object"
+          },
+          "remove": {
+            "default": [],
+            "items": {
+              "type": "string"
+            },
+            "title": "Remove",
+            "type": "array"
+          }
+        },
+        "title": "StagingPatch",
+        "type": "object"
+      },
+      "StagingRefusal": {
+        "description": "A ``422``'s ``detail`` for an upload refused before staging.",
+        "properties": {
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "remedy": {
+            "title": "Remedy",
+            "type": "string"
+          }
+        },
+        "required": [
+          "message",
+          "remedy"
+        ],
+        "title": "StagingRefusal",
+        "type": "object"
+      },
+      "StagingRowDetail": {
+        "description": "One unique design on the staging page (UI doc \u00a75).",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "message": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "reuse": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reuse"
+          },
+          "sources": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Sources",
+            "type": "array"
+          },
+          "state": {
+            "enum": [
+              "ready",
+              "name",
+              "invalid"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "suggestion": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggestion"
+          },
+          "typed": {
+            "title": "Typed",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "sources",
+          "name",
+          "typed",
+          "state",
+          "message",
+          "note",
+          "suggestion",
+          "reuse"
+        ],
+        "title": "StagingRowDetail",
+        "type": "object"
+      },
       "SwatchResponse": {
         "description": "A colour-matrix colour's real garment shade, sampled off its own scene\nphoto (`render/swatch.py`'s `sample_swatch`) rather than an invented or\nhand-typed hex value -- nothing in the domain model stores one.",
         "properties": {
@@ -4305,6 +5553,96 @@
           "hex"
         ],
         "title": "SwatchResponse",
+        "type": "object"
+      },
+      "TemplateDescriptionConfig": {
+        "additionalProperties": false,
+        "description": "A description *body*: inline ``text`` or a common-copy ``ref``, and no\n``lead``. The lead is the opening a shopper reads about one design, so\nevery listing made from the template gets its own (spec, copy table).",
+        "properties": {
+          "ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ref"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "title": "TemplateDescriptionConfig",
+        "type": "object"
+      },
+      "TemplateEtsyConfig": {
+        "additionalProperties": false,
+        "description": "`EtsyListingConfig` without the copy an instance writes for itself.\nThe four settings keep the meanings `EtsyListingConfig` documents.",
+        "properties": {
+          "description": {
+            "$ref": "#/components/schemas/TemplateDescriptionConfig",
+            "default": {}
+          },
+          "renewal": {
+            "anyOf": [
+              {
+                "enum": [
+                  "manual",
+                  "auto"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Renewal"
+          },
+          "section": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Section"
+          },
+          "shipping_profile": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Shipping Profile"
+          },
+          "variation_images": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Variation Images"
+          }
+        },
+        "title": "TemplateEtsyConfig",
         "type": "object"
       },
       "TemplateMediaEntry": {
@@ -4334,7 +5672,7 @@
         "type": "object"
       },
       "TemplatePhoto": {
-        "description": "One scene photo in a template's directory: which colour it is, and where\nit actually is.\n\n``file`` is workspace-relative and forward-slashed, resolved through\n``Workspace.scene_photo`` -- the same rule the renderer uses, including the\ntrailing-segment fallback for a vendor pack delivered as\n``{template}-{colour}.png``. The listings editor shows it under its preview\nso the user knows which file to go and edit, and it used to *derive* that\ncaption from PRD 7a's convention in TypeScript, which named a file that was\nnot there for exactly the pack the fallback exists for.\n\n``colour`` is ``None`` for a ``multiple``/``single`` template's fixed\n``scene.png``: there is no per-colour name to derive one from (PRD 28).",
+        "description": "One scene photo in a template's directory: which colour it is, and where\nit actually is.\n\n``file`` is workspace-relative and forward-slashed, resolved through\n``Workspace.scene_photo`` -- the same rule the renderer uses, including the\ntrailing-segment fallback for a vendor pack delivered as\n``{template}-{colour}.png``. The listings editor shows it under its preview\nso the user knows which file to go and edit, and it used to *derive* that\ncaption from ADR-0004's convention in TypeScript, which named a file that was\nnot there for exactly the pack the fallback exists for.\n\n``colour`` is ``None`` for a ``multiple``/``single`` template's fixed\n``scene.png``: there is no per-colour name to derive one from.",
         "properties": {
           "colour": {
             "anyOf": [
@@ -4551,7 +5889,7 @@
         "type": "object"
       },
       "WorkflowStep": {
-        "description": "One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s\n``WorkflowStep``).",
+        "description": "One node of the three-node indicator (``AiWorkflowIndicator.tsx``'s\n``WorkflowStep``): an AI run's, or a batch row's.",
         "properties": {
           "detail": {
             "anyOf": [
@@ -4924,6 +6262,458 @@
         ]
       }
     },
+    "/api/batches": {
+      "get": {
+        "description": "Recent batches (UI doc \u00a72): every batch, and every staging session\nnot confirmed yet, newest first, each with its derived status.",
+        "operationId": "list_batches_api_batches_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/BatchIndexEntry"
+                  },
+                  "title": "Response List Batches Api Batches Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Batches",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}": {
+      "delete": {
+        "description": "Delete batch record (spec, *Cancellation and deletion*): its queued\nand running work is cancelled first, then only the record goes.",
+        "operationId": "delete_batch_api_batches__batch_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Batch",
+        "tags": [
+          "batches"
+        ]
+      },
+      "get": {
+        "operationId": "get_batch_api_batches__batch_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Batch",
+        "tags": [
+          "batches"
+        ]
+      },
+      "patch": {
+        "description": "Rename the batch (UI doc \u00a77): the label only, so its id -- and every\nlink to it -- stays. A blank label keeps the one it had, as staging's\ndoes.",
+        "operationId": "rename_batch_api_batches__batch_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BatchPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/cancel": {
+      "post": {
+        "description": "**Cancel batch** (spec, *Cancellation and deletion*): queued rows are\nstopped and running ones asked to stop. Everything written stays.",
+        "operationId": "cancel_batch_api_batches__batch_id__cancel_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/resume": {
+      "post": {
+        "description": "**Resume**: stopped and cancelled rows join the queue again.",
+        "operationId": "resume_batch_api_batches__batch_id__resume_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resume Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/retry": {
+      "post": {
+        "description": "**Retry N failed**: every row whose creation or AI failed.",
+        "operationId": "retry_batch_api_batches__batch_id__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/rows/{row}/retry": {
+      "post": {
+        "description": "Retry one row (UI doc \u00a77): its creation, if that failed -- which\nqueues it once it exists -- else its AI, keeping the saved brief.",
+        "operationId": "retry_batch_row_api_batches__batch_id__rows__row__retry_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "title": "Row",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "The row has nothing to retry"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Retry Batch Row",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/rows/{row}/reviewed": {
+      "put": {
+        "description": "Mark reviewed / Mark needs review (spec, *Review workflow*). Refused\nfor a row still queued or drafting, deleted, or never created.",
+        "operationId": "set_reviewed_api_batches__batch_id__rows__row__reviewed_put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "title": "Row",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReviewedRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "The row has no listing to review yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Set Reviewed",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/batches/{batch_id}/rows/{row}/thumbnail": {
+      "get": {
+        "description": "A row that was never created has no listing design to show, so the\nsummary shows the upload it was made from, kept beside the batch for\nRetry.",
+        "operationId": "batch_row_thumbnail_api_batches__batch_id__rows__row__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "batch_id",
+            "required": true,
+            "schema": {
+              "title": "Batch Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "title": "Row",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Batch Row Thumbnail",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
     "/api/common-copy": {
       "get": {
         "description": "The Description tab's common-copy selector (AI SEO implementation\nplan, PR6): every reusable description body, with the title and summary\nits front matter carries, so the picker can show something readable\nrather than a bare filename.\n\nA file whose front matter will not parse is left out -- read-only, so\nthere is nowhere here to report the problem, and offering it would only\nproduce a pick that immediately fails to resolve. (A *stored* ref that\nfails to resolve still surfaces as a details-tab issue -- see\n`Workspace.resolve_description` -- this is only the list of things one\ncould newly pick.)",
@@ -5116,6 +6906,47 @@
           }
         },
         "summary": "Upload Design",
+        "tags": [
+          "designs"
+        ]
+      }
+    },
+    "/api/designs/{design}/thumbnail": {
+      "get": {
+        "description": "A test design, small: what the listing-template editor's\npreview-design row shows beside *Preview design: \u2026* (UI doc \u00a73).",
+        "operationId": "design_thumbnail_api_designs__design__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "design",
+            "required": true,
+            "schema": {
+              "title": "Design",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Design Thumbnail",
         "tags": [
           "designs"
         ]
@@ -5358,9 +7189,469 @@
         ]
       }
     },
+    "/api/listing-templates": {
+      "get": {
+        "description": "Every listing template, as its card on the Listing templates page shows\nit (UI doc \u00a72).",
+        "operationId": "list_listing_templates_api_listing_templates_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/ListingTemplateSummary"
+                  },
+                  "title": "Response List Listing Templates Api Listing Templates Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "List Listing Templates",
+        "tags": [
+          "listing-templates"
+        ]
+      },
+      "post": {
+        "description": "Naming the draft is what writes it (UI doc \u00a71). The name is checked\nfirst, so a bad one is a 400 before any source is read.",
+        "operationId": "create_listing_template_api_listing_templates_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateListingTemplateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateSaveResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Create Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/draft": {
+      "get": {
+        "description": "The template Save as listing template or Clone would write, written\nnowhere: what the *name it* page shows before the seller commits a name\n(UI doc \u00a71).",
+        "operationId": "listing_template_draft_api_listing_templates_draft_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "from_listing",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Listing"
+            }
+          },
+          {
+            "in": "query",
+            "name": "from_template",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From Template"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Template Draft",
+        "tags": [
+          "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/{name}": {
+      "delete": {
+        "description": "Allowed whatever was made from it: batches keep their own frozen copy,\nand a listing never had a link to it (spec, *Completeness and editing*).",
+        "operationId": "delete_listing_template_api_listing_templates__name__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Delete Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      },
+      "get": {
+        "operationId": "get_listing_template_api_listing_templates__name__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      },
+      "put": {
+        "description": "template completeness: write the whole document only if it is complete. A malformed or\nincomplete one leaves ``template.yaml`` byte-for-byte as it was, so the\nserver always holds the last complete version; the listing-template editor\nkeeps the unsaved values on its side.",
+        "operationId": "put_listing_template_api_listing_templates__name__put",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": true,
+                "title": "Body",
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateSaveResult"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Put Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/{name}/rename": {
+      "post": {
+        "description": "Move a listing template, whole, to a new name -- double-click the\nname, exactly as a listing (UI doc \u00a73). A taken name is a 409 and never\nsuffixed (spec, *Storage and identity*); the staging sessions and\nbatches made from it follow it by name\n(:func:`~etsy_listings.core.application.listing_template_library.rename_listing_template`).",
+        "operationId": "rename_listing_template_api_listing_templates__name__rename_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RenameListingRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingTemplateDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Rename Listing Template",
+        "tags": [
+          "listing-templates"
+        ]
+      }
+    },
+    "/api/listing-templates/{template}/media-files": {
+      "get": {
+        "description": "The *This template* group (UI doc, *Existing components the template\neditor needs*): the listing template's own files, each with the ``./``\nref that names it from ``template.yaml``. Scoped to ``assets/``.",
+        "operationId": "list_listing_template_media_files_api_listing_templates__template__media_files_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MediaFileSummary"
+                  },
+                  "title": "Response List Listing Template Media Files Api Listing Templates  Template  Media Files Get",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "List Listing Template Media Files",
+        "tags": [
+          "media-files"
+        ]
+      }
+    },
+    "/api/listing-templates/{template}/media-files/{path}/file": {
+      "get": {
+        "operationId": "listing_template_media_file_api_listing_templates__template__media_files__path__file_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Template Media File",
+        "tags": [
+          "media-files"
+        ]
+      }
+    },
+    "/api/listing-templates/{template}/media-files/{path}/thumbnail": {
+      "get": {
+        "description": "A listing template's own file (its ``./`` root, ADR-0047) -- the pictures on\nits card. The same boundary as a listing's: the directory also holds\n``template.yaml``.",
+        "operationId": "listing_template_media_thumbnail_api_listing_templates__template__media_files__path__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "template",
+            "required": true,
+            "schema": {
+              "title": "Template",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "path",
+            "required": true,
+            "schema": {
+              "title": "Path",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Template Media Thumbnail",
+        "tags": [
+          "media-files"
+        ]
+      }
+    },
     "/api/listings": {
       "get": {
-        "description": "Every listing, with its status resolved in **one** Etsy round trip for\nthe whole table rather than one per row -- which is why the live fact is\ngathered here and handed down rather than looked up per listing.",
+        "description": "Every listing, with its status resolved in **one** Etsy round trip for\nthe whole table rather than one per row.",
         "operationId": "list_listings_api_listings_get",
         "responses": {
           "200": {
@@ -5384,7 +7675,7 @@
         ]
       },
       "post": {
-        "description": "Naming a listing is what creates it.\n\nMirrors PATCH exactly, one level up: a document that fails\n``Listing.model_validate`` is a **200** carrying ``field_errors`` with\nnothing written, so the editor never has to branch on a status code to show\ninline validation. The two things a *name* can be wrong about keep their\nstatus codes instead -- not a single path segment is the 400 `_segment`\nraises through `listing_file`, and already taken is a 409.\n\nThat 409 tests the **directory**, not ``listing.yaml``: a `listings/{name}/`\nleft behind with a `state.lock.json` and no document would otherwise be\nwritten into, and the new listing would inherit another one's\n``etsy_listing_id``.",
+        "description": "Naming a listing is what creates it.\n\nMirrors PATCH exactly, one level up: a document that fails\n``Listing.model_validate`` is a **200** carrying ``field_errors`` with\nnothing written. The two things a *name* can be wrong about keep their\nstatus codes instead -- not a single path segment is the 400, and\nalready taken (the directory, not just ``listing.yaml``) is a 409.",
         "operationId": "create_listing_api_listings_post",
         "requestBody": {
           "content": {
@@ -5426,7 +7717,7 @@
     },
     "/api/listings/{listing}/media-files": {
       "get": {
-        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it (PRD 73). A ``404`` for a listing that does not\nexist, rather than an empty group that would look like one with nothing\nin it.",
+        "description": "The *This listing* group: the listing's own files, each with the\n``./`` ref that names it. A ``404`` for a listing that does not\nexist, rather than an empty group that would look like one with nothing\nin it.",
         "operationId": "list_listing_media_files_api_listings__listing__media_files_get",
         "parameters": [
           {
@@ -5571,7 +7862,7 @@
     },
     "/api/listings/{name}": {
       "delete": {
-        "description": "Delete from the listings table (PRD 63, 66).\n\nNo remotes: wipe now. Remotes: write ``lifecycle: deleted`` and leave the\nrow pending. Published: 409 -- retire it instead. Confirm is the UI's.\n\nEither way the market snapshot goes now (market-seo.md, *Cache*): a\nlisting pending deletion is one the seller is done researching, and\notherwise only the wipe after the remote deletion would remove it.",
+        "description": "Delete from the listings table.\n\nNo remotes: wiped, 204. Remotes: marked ``lifecycle: deleted``, answering\nwith the row left pending. Published: 409 -- retire it instead. Confirm\nis the UI's. What goes with the listing either way is\n:func:`~etsy_listings.core.application.listing_identity.delete_listing`'s.",
         "operationId": "delete_listing_api_listings__name__delete",
         "parameters": [
           {
@@ -5650,6 +7941,7 @@
         ]
       },
       "patch": {
+        "description": "Merge the editor's slice into ``listing.yaml``. A merged document\nthat will not validate writes nothing and answers 200 with\n``field_errors`` beside the listing as it still is.",
         "operationId": "patch_listing_api_listings__name__patch",
         "parameters": [
           {
@@ -5704,7 +7996,7 @@
     },
     "/api/listings/{name}/ai-seo/readiness": {
       "get": {
-        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button drafts a brief when the saved one is\nempty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``: an\nempty brief is allowed, and then ``prompts/brief.md`` is required. A\nfilled brief skips drafting. A lit button is one the server will not\nrefuse. Read-only: every check here, including each provider's own\n`readiness()`, is a local probe (a file's existence, a fast\n`--help`/`login status` subprocess) that changes nothing.",
+        "description": "Whether the **AI Mode** button may start a run for this saved listing\nright now -- the call the frontend makes to decide whether to enable the\nalways visible control. The button drafts a brief when the saved one is\nempty, so this is ``POST /api/ai/runs`` with ``draft_brief=true``. A lit\nbutton is one the server will not refuse. Read-only.",
         "operationId": "get_seo_readiness_api_listings__name__ai_seo_readiness_get",
         "parameters": [
           {
@@ -5745,9 +8037,60 @@
         ]
       }
     },
+    "/api/listings/{name}/batch": {
+      "get": {
+        "description": "The batch that made ``name``, for the editor's row above the head\n(UI doc \u00a78), or ``null``.",
+        "operationId": "listing_batch_api_listings__name__batch_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ListingBatch"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Listing Batch Api Listings  Name  Batch Get"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Listing Batch",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
     "/api/listings/{name}/market": {
       "get": {
-        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload (market-seo.md, *UI*). Written only by an AI run whose\nsearch succeeded, so a failed run leaves the previous one here. 404 until\nthe first search -- the panel is not rendered then -- and for a snapshot\nthat no longer reads as one, which the next run replaces.",
+        "description": "The listing's latest market research, as the top listings panel shows\nit after a reload (features/market-seo-20260924/spec.md, *UI*). Written only by an AI run whose\nsearch succeeded, so a failed run leaves the previous one here. 404 until\nthe first search -- the panel is not rendered then -- and for a snapshot\nthat no longer reads as one, which the next run replaces.",
         "operationId": "get_market_snapshot_api_listings__name__market_get",
         "parameters": [
           {
@@ -5793,7 +8136,7 @@
     },
     "/api/listings/{name}/previews/{template}": {
       "get": {
-        "description": "A ``multiple``/``single``-kind scene: no per-colour photo, so no\ncolour segment (PRD 28's rule, mirrored from ``render_file``).",
+        "description": "A ``multiple``/``single``-kind scene: no per-colour photo, so no\ncolour segment (ADR-0014's rule, mirrored from ``render_file``).",
         "operationId": "listing_preview_api_listings__name__previews__template__get",
         "parameters": [
           {
@@ -5900,9 +8243,114 @@
         ]
       }
     },
+    "/api/listings/{name}/proposal": {
+      "get": {
+        "description": "The listing's latest AI SEO proposal (ADR-0049; spec, *Durable AI\nproposals*), with which sections were resolved and whether it has gone\nstale. Written by every AI run before it announces the proposal, so a\nreload, a server restart or a batch run all find it here.",
+        "operationId": "get_listing_proposal_api_listings__name__proposal_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such listing, or no proposal cached for it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Listing Proposal",
+        "tags": [
+          "ai-seo"
+        ]
+      }
+    },
+    "/api/listings/{name}/proposal/resolution": {
+      "patch": {
+        "description": "Record accepted or dismissed sections (spec, *Durable AI proposals*),\nso a resolved drawer does not reopen as new after a reload. The chosen\nvalue itself reaches ``listing.yaml`` through ordinary autosave; this\nrecords only that the section was dealt with. Under the listing's write\nlock, so a delete or rename cannot land between the read and the write\nand leave a record behind for a listing that is gone.",
+        "operationId": "resolve_listing_proposal_api_listings__name__proposal_resolution_patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "name",
+            "required": true,
+            "schema": {
+              "title": "Name",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ProposalResolutionPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ListingProposal"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "No such listing, or no proposal cached for it"
+          },
+          "409": {
+            "description": "The proposal was regenerated since the page read it"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Resolve Listing Proposal",
+        "tags": [
+          "ai-seo"
+        ]
+      }
+    },
     "/api/listings/{name}/rename": {
       "post": {
-        "description": "Move a listing, whole, to a new name.\n\nA listing's identity is its directory name (PRD 60), so the rename is a\ndirectory move: ``listing.yaml``, ``state.lock.json`` and Phase 4's\ngenerated copy travel together, and `.cache/renders/{name}/` moves with them\nbecause the render cache is keyed by listing name too -- left behind it\nwould orphan a tree nothing deletes and cost a full re-render.\n\nThe lockfile's ``outputs`` keys still spell the old path afterwards, and are\nleft that way deliberately: nothing reads them, they become true again at\nthe next apply, and rewriting them here would breach \"only the lockfile\nmerges a lockfile\".\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
+        "description": "Move a listing, whole, to a new name -- with everything keyed by it\n(:func:`~etsy_listings.core.application.listing_identity.rename_listing`).\n\nPOST rather than PUT: the body is neither the listing nor its new\nrepresentation, and a second call 404s. `POST /api/templates/{name}/kind` is\nthe same shape.",
         "operationId": "rename_listing_api_listings__name__rename_post",
         "parameters": [
           {
@@ -6089,7 +8537,7 @@
         ]
       },
       "post": {
-        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal.",
+        "description": "A ``409`` names the run already holding one of these listings, so the\ncaller can reattach to it (``GET /api/runs/{active_run}``) instead of\nretrying into the same refusal. A workspace apply that is not exactly\nits review is a ``409`` too, carrying the refusal's message.",
         "operationId": "create_run_api_runs_post",
         "requestBody": {
           "content": {
@@ -6369,6 +8817,271 @@
         ]
       }
     },
+    "/api/staging": {
+      "post": {
+        "description": "Stage one ZIP or loose PNGs (spec, *Accepted input*). Starlette has\nalready spooled the parts to temporary files; each is handed on as a\nstream, which staging reads a PNG or a ZIP's entries out of with a\nrunning count.",
+        "operationId": "create_staging_api_staging_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_create_staging_api_staging_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagingRefusal"
+                }
+              }
+            },
+            "description": "Unprocessable Entity"
+          }
+        },
+        "summary": "Create Staging",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/staging/{session_id}": {
+      "delete": {
+        "description": "Cancel staging: the uploads go at once. The seller's own files\nwere never touched.",
+        "operationId": "cancel_staging_api_staging__session_id__delete",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Cancel Staging",
+        "tags": [
+          "batches"
+        ]
+      },
+      "get": {
+        "description": "A reload reattaches here (spec, *Frozen staging*).",
+        "operationId": "get_staging_api_staging__session_id__get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Get Staging",
+        "tags": [
+          "batches"
+        ]
+      },
+      "patch": {
+        "description": "Edit the label, type names, remove rows. Every edit moves the\nsession's expiry to seven days from now.",
+        "operationId": "patch_staging_api_staging__session_id__patch",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StagingPatch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StagingDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Patch Staging",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/staging/{session_id}/confirm": {
+      "post": {
+        "description": "Create N listings (UI doc \u00a76). Repeating it -- a double click, a retry\nafter a dropped response -- finishes the same batch rather than making a\nsecond one.",
+        "operationId": "confirm_staging_api_staging__session_id__confirm_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BatchDetail"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "409": {
+            "description": "The session cannot be confirmed yet"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Confirm Staging",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
+    "/api/staging/{session_id}/rows/{row}/thumbnail": {
+      "get": {
+        "operationId": "staging_row_thumbnail_api_staging__session_id__rows__row__thumbnail_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "session_id",
+            "required": true,
+            "schema": {
+              "title": "Session Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "row",
+            "required": true,
+            "schema": {
+              "title": "Row",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Staging Row Thumbnail",
+        "tags": [
+          "batches"
+        ]
+      }
+    },
     "/api/templates": {
       "get": {
         "operationId": "list_templates_api_templates_get",
@@ -6396,7 +9109,7 @@
     },
     "/api/templates/{name}/colour-report": {
       "get": {
-        "description": "What each photo will be taken as if this becomes a colour-matrix set.\n\nShown in the kind picker before committing, so a badly named file is seen\nwhile it is still cheap to think about. A row with ``clean: false`` is one\n``assign_kind`` will rename on disk (PRD 7a: the filename *is* the\nslugified colour, and a directory whose filenames disagree with the\ncolours they mean is the state that rule exists to prevent).",
+        "description": "What each photo will be taken as if this becomes a colour-matrix set,\nshown in the kind picker before committing. ``clean: false`` is a file\nassigning the kind will rename (ADR-0004).",
         "operationId": "colour_report_api_templates__name__colour_report_get",
         "parameters": [
           {
@@ -6584,7 +9297,7 @@
     },
     "/api/templates/{name}/design-preview": {
       "get": {
-        "description": "A listing's *real* artwork, composited onto this template's saved\ngeometry -- what the listing editor's Variants/Listing Images tabs show\nso a colour can be judged against the actual design, not a bare photo.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file`` -- deliberately not :func:`resolve_design`,\nwhich is the calibrator's own test-design library and never sees a\nlisting's real artwork.",
+        "description": "A listing's *real* artwork, composited onto this template's saved\ngeometry -- what the listing editor's Variants/Listing Images tabs show\nso a colour can be judged against the actual design, not a bare photo.\n\n``design`` is a name from ``GET /api/listing-designs``, resolved through\n``Workspace.design_file`` -- deliberately not :func:`resolve_design`,\nwhich is the calibrator's own test-design library and never sees a\nlisting's real artwork.\n\n``test_design`` is that library's id instead, for the listing-template\neditor (UI doc \u00a73): a listing template has no artwork, so it is viewed\nthrough a calibrator test design, bundled grid by default. Exactly one of\nthe two -- they name files in different places, and guessing which one a\nbare name meant is how a test target would end up judged as artwork.",
         "operationId": "design_preview_api_templates__name__design_preview_get",
         "parameters": [
           {
@@ -6599,10 +9312,33 @@
           {
             "in": "query",
             "name": "design",
-            "required": true,
+            "required": false,
             "schema": {
-              "title": "Design",
-              "type": "string"
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Design"
+            }
+          },
+          {
+            "in": "query",
+            "name": "test_design",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Test Design"
             }
           },
           {
@@ -6664,7 +9400,7 @@
     },
     "/api/templates/{name}/kind": {
       "post": {
-        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape.\n\nRefuses a template that already has a config. Kind decides the whole file\nshape (A11), so changing it would discard whatever calibration was done in\nthe old shape's fields -- and doing that silently, from a picker, is the\nkind of data loss nobody would think to look for.",
+        "description": "The first calibration step: say what this template is, and get the\nstarting ``template.yaml`` for that shape. Refused for a template that\nalready has one -- changing kind would discard its calibration.",
         "operationId": "assign_kind_api_templates__name__kind_post",
         "parameters": [
           {
@@ -6736,7 +9472,7 @@
     },
     "/api/templates/{name}/photo": {
       "get": {
-        "description": "The template's own photo, at its own resolution -- the bare-scene\ncounterpart of ``GET .../design-preview`` for a listing that has not\npicked a design yet.\n\nSame photo :func:`thumbnail` serves, same resolution rule\n(:func:`_thumbnail_source`), just not downscaled to list size: the\nlisting editor's Variants and Listing Images previews are a large hero\nstage, not a row of tiles, and serving them the 160px list thumbnail is\nwhy that stage used to look tiny for a listing with no design picked yet.",
+        "description": "The same photo at its own resolution, for the listing editors' large\npreview stage when no design is picked yet.",
         "operationId": "photo_api_templates__name__photo_get",
         "parameters": [
           {
@@ -6793,6 +9529,7 @@
     },
     "/api/templates/{name}/preview": {
       "post": {
+        "description": "The calibrator's preview of the geometry under the cursor, against a\ndesign from its own test-design library.",
         "operationId": "preview_api_templates__name__preview_post",
         "parameters": [
           {
@@ -6868,7 +9605,7 @@
     },
     "/api/templates/{name}/swatch": {
       "get": {
-        "description": "This colour's real garment shade, for a quick-glance dot next to its\nname -- the median pixel (`sample_swatch`) inside the saved bounding box\nof the colour's own scene photo, not an invented hex value. Only a\n``colour-matrix`` template has one photo per colour to sample; any other\nkind 404s the same way a photo-less colour does.",
+        "description": "This colour's real garment shade, for a quick-glance dot next to its\nname -- sampled off the colour's own photo, decoded through the preview\nmemo. Any kind but colour-matrix 404s, as a photo-less colour does.",
         "operationId": "swatch_api_templates__name__swatch_get",
         "parameters": [
           {
@@ -6920,7 +9657,7 @@
     },
     "/api/templates/{name}/thumbnail": {
       "get": {
-        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo is shown is\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s\nquestion, not this endpoint's.\n\n``colour`` narrows that to one photo of a ``colour-matrix`` set, for\ncallers that are showing a *particular* variant rather than standing in\nfor the template: the listings editor's reel draws one tile per\n``media`` entry, and without this every colour of a set drew the same\npicture, since ``template_preview_photo`` deliberately answers \"any one\nof them\". Resolution goes through\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,\nwhich owns PRD 7a's filename convention and its trailing-segment\nfallback -- this endpoint must not glob for ``{colour}.png`` itself.\n\nHow it is downscaled and served is :mod:`etsy_listings.ui.api.thumbnails`'\nquestion -- the listings table asks the same one of a design.",
+        "description": "The template's own photo, downscaled, for the rail -- not a render,\nwhich once per row would make opening the calibrator cost as much as\ncalibrating. ``colour`` narrows it to one photo of a colour-matrix set,\nfor the listings editor's reel. Which photo is\n:func:`~etsy_listings.core.application.mockup_templates.template_photo`'s\nquestion; how it is downscaled is :mod:`.thumbnails`'.",
         "operationId": "thumbnail_api_templates__name__thumbnail_get",
         "parameters": [
           {
@@ -6994,43 +9731,6 @@
         "tags": [
           "listings-support"
         ]
-      }
-    },
-    "/{full_path}": {
-      "get": {
-        "operationId": "spa_fallback__full_path__get",
-        "parameters": [
-          {
-            "in": "path",
-            "name": "full_path",
-            "required": true,
-            "schema": {
-              "title": "Full Path",
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            },
-            "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
-          }
-        },
-        "summary": "Spa Fallback"
       }
     }
   }

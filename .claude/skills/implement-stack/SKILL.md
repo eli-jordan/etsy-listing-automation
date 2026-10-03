@@ -1,8 +1,19 @@
 ---
 name: implement-stack
-description: Implement a docs/*-implementation-plan.md as a stacked PR pipeline -- one background agent per PR, the next PR building while the previous one is finished.
+description: Implement an implementation plan as a stacked PR pipeline - one background agent per PR.
 disable-model-invocation: true
 ---
+
+# Preconditions
+
+If any of the below preconditions are not met, ask the user to supply them.
+If not supplied abort.
+
+* An implementation plan with multiple PRs called out, each with specific exit conditions.
+* A product specification linked from the implementation plan
+* If UI is involved:
+  - A UI mockup
+  - A UI interactions companion document
 
 # Implement a stacked plan
 
@@ -15,8 +26,7 @@ PR n:    build ──► report ──► finish (full gates, PR, CI, e2e) ─�
 PR n+1:                   └─► build ──► report ──► finish ...
 ```
 
-At most two implementers are live: one **building** PR n+1, one **finishing**
-PR n. The builder works from targeted checks only; the finisher owns every
+The builder works from targeted checks only; the finisher owns every
 exit condition.
 
 ## 1. Preflight
@@ -28,7 +38,7 @@ block** you will paste into every brief.
   conditions, the shared gates (`G1`…), and the stack base (the commit the
   plan was committed on).
 - The toolchain works here: `uv sync`, `npm install` in
-  `src/etsy_listings/ui/frontend`, and any workaround needed to make them work.
+  `src/ui`, and any workaround needed to make them work.
 - A **baseline**: the full non-browser pytest and vitest on the stack base.
   Every failure there is pre-existing; record each by test id.
 - GitHub reachable: `gh auth status`, and a push dry-run.
@@ -36,14 +46,11 @@ block** you will paste into every brief.
   (`npx marver dev`) both serve, and a headless browser can capture a frame.
   Record the exact recipe that worked.
 
-Any item that fails: fix it or stop and tell the user. An implementer cannot
-fix the environment from inside a brief.
+Any item that fails: fix it or stop and tell the user.
 
 ## 2. Launch PR n's builder
 
-Start a background agent in an isolated worktree (Claude Code: the Agent tool
-with `isolation: "worktree"` and `run_in_background: true`; elsewhere,
-`git worktree add` then a subagent pointed at it). Its prompt is
+Start a background agent in an isolated worktree . Its prompt is
 [BUILD-BRIEF.md](BUILD-BRIEF.md), filled in for this PR, branching from the
 **tip** of PR n-1 (the stack base for PR 1).
 
@@ -71,8 +78,7 @@ Done when the PR is open, linked, and every check is green on its final
 commit.
 
 1. Verify, don't trust: `gh pr checks <n>` and the e2e run URL.
-2. Link it (`t3-code_link_pull_request`) if the t3-code tools exist.
-3. If the finish added commits, tell PR n+1's agent: fetch, then
+2. If the finish added commits, tell PR n+1's agent: fetch, then
    `git rebase --onto <new tip> <old base>`, at a convenient point. PR n+1's
    branch is not frozen until its own build report.
 
@@ -99,6 +105,5 @@ time -- say so in its brief when two could overlap.
 
 ## Done
 
-Every PR in the plan is open, linked and green; `t3-code_list_thread_pull_requests`
-shows them all. Report the PR list with URLs, and every deviation from the plan
-the implementers recorded.
+Every PR in the plan is open, linked and CI is green.
+Report the PR list with URLs, and every deviation from the plan the implementers recorded.

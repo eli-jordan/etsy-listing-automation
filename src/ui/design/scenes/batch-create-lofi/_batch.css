@@ -1,0 +1,175 @@
+/* Batch-creation wireframe pieces. Tokens only - every value the app's
+   stylesheet already names comes from it. Rules the app now uses have moved
+   to src/index.css ("Listing templates"), which design/theme.css imports, so
+   the frames and the app draw them from one place. */
+
+.bc-lede {
+  margin: 0 0 var(--space-4);
+  max-width: 72ch;
+  font-size: 14px;
+  color: color-mix(in srgb, var(--color-text) 70%, transparent);
+}
+/* — shared data table (staging + batch summary) — */
+table.bc-table .bc-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+/* — callouts reuse .dv-callout; this adds an action slot — */
+.bc-callout-actions {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-1);
+  align-self: center;
+}
+
+/* — Save-as-template dialog — */
+.bc-modal {
+  width: 760px !important;
+  max-height: none !important;
+}
+.bc-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.bc-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 7px;
+}
+.bc-list li {
+  display: flex;
+  gap: var(--space-2);
+  font-size: 13px;
+  line-height: 1.4;
+}
+.bc-list li .bc-icon {
+  margin-top: 1px;
+}
+.bc-list--keep .bc-icon {
+  color: var(--color-accent-2-700);
+}
+.bc-list--reset .bc-icon {
+  color: color-mix(in srgb, var(--color-text) 45%, transparent);
+}
+.bc-quote {
+  margin: 4px 0 0;
+  padding: 6px 9px;
+  border-radius: var(--radius-sm);
+  background: var(--color-surface);
+  font-size: 12px;
+  line-height: 1.45;
+  color: color-mix(in srgb, var(--color-text) 75%, transparent);
+}
+.bc-dialog-foot {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--color-divider);
+}
+
+/* — filter chip on Listings — */
+.bc-filter-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 36px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--color-accent-300);
+  border-radius: var(--radius-sm);
+  background: var(--color-accent-100);
+  color: var(--color-accent-800);
+  font-size: 13px;
+}
+.bc-filter-chip__x {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.bc-filter-chip__x:hover {
+  background: color-mix(in srgb, var(--color-accent) 16%, transparent);
+}
+
+.bc-disclosure > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.bc-disclosure > summary::-webkit-details-marker {
+  display: none;
+}
+.bc-disclosure > summary:hover {
+  color: var(--color-accent-700);
+}
+
+/* The app's global button padding is wider than these 24-28px icon buttons
+   and squeezes their SVG to zero width. */
+.modal-dialog__close,
+.bc-filter-chip__x {
+  padding: 0;
+}
+.modal-dialog__close svg,
+.bc-filter-chip__x svg {
+  flex: none;
+}
+
+/* — listing-template editor — */
+.bc-tpl-name {
+  width: 300px;
+  font-family: var(--font-heading) !important;
+  font-size: 20px !important;
+}
+.bc-tpl-images {
+  display: grid;
+  grid-template-columns: minmax(0, 360px) minmax(0, 1fr);
+  gap: var(--space-6);
+  align-items: start;
+  margin-top: var(--space-4);
+}
+.bc-tpl-gallery {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-2);
+}
+.bc-tpl-tile {
+  margin: 0;
+  padding: 4px;
+  border: 1.5px solid var(--color-divider);
+  border-radius: var(--radius-sm);
+  background: var(--color-neutral-100);
+  cursor: pointer;
+}
+.bc-tpl-tile:hover {
+  border-color: color-mix(in srgb, var(--color-text) 40%, transparent);
+}
+.bc-tpl-tile--on {
+  border-color: var(--color-accent);
+}
+.bc-tpl-tile img {
+  display: block;
+  width: 100%;
+  height: 96px;
+  object-fit: cover;
+  border-radius: calc(var(--radius-sm) - 3px);
+}
+.bc-tpl-tile figcaption {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 2px 0;
+  font-size: 11.5px;
+}
+
+
+/* The editor's AI step indicator, left-aligned in a table cell. */
+

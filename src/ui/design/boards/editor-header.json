@@ -1,0 +1,97 @@
+{
+  "version": 1,
+  "name": "editor-header",
+  "auto": false,
+  "layout": {
+    "rows": [
+      [
+        "editor-header"
+      ]
+    ],
+    "scenes": {
+      "editor-header": {
+        "rows": [
+          [
+            "current",
+            "header",
+            "header-open-in",
+            "header-file-card",
+            "header-delete-confirm",
+            "header-marked"
+          ],
+          {
+            "space": 3
+          },
+          [
+            "batch",
+            "batch-reviewed"
+          ]
+        ]
+      }
+    }
+  },
+  "nodes": [
+    {
+      "key": "n_1ykcd77ibgx0x",
+      "frame": "editor-header/current",
+      "x": 284,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1wlrhwd16wb3cv",
+      "frame": "editor-header/header",
+      "x": 1718,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_q9id92wo3f5g",
+      "frame": "editor-header/header-open-in",
+      "x": 4585,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1qz2d071wanc8l",
+      "frame": "editor-header/header-file-card",
+      "x": 6018,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_99a5am1wxxsq4",
+      "frame": "editor-header/header-delete-confirm",
+      "x": 7452,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_1keov6k11uib3y",
+      "frame": "editor-header/header-marked",
+      "x": 8886,
+      "y": 0,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "key": "n_5gdscucue90s",
+      "frame": "editor-header/batch",
+      "x": 0,
+      "y": 1225,
+      "w": 1280,
+      "h": 800
+    },
+    {
+      "frame": "editor-header/batch-reviewed"
+    }
+  ],
+  "order": 5,
+  "title": "Listing editor header",
+  "description": "Chosen listing-editor head (round 4): identity row with auto-save chip over an icon + label action row, its states, and the batch context."
+}
