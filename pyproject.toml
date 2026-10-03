@@ -44,7 +44,7 @@ packages = ["src/etsy_listings"]
 [tool.hatch.build.targets.wheel.hooks.custom]
 path = "hatch_build.py"
 frontend-dir = "src/ui"
-assets-dir = "etsy_listings/ui/static"
+assets-dir = "etsy_listings/server/static"
 
 [dependency-groups]
 dev = [
@@ -54,6 +54,7 @@ dev = [
     "ruff>=0.14,<1",
     "types-pyyaml",
     "playwright>=1.49,<2",
+    "import-linter>=2.15,<3",
 ]
 
 [tool.pytest.ini_options]
@@ -142,3 +143,82 @@ ignore_missing_imports = true
 init_forbid_extra = true
 init_typed = true
 warn_required_dynamic_aliases = true
+
+# Dependency direction between core, server and CLI (ADR-0052; the
+# module-structure spec's Import Linter table). Forbidden contracts are checked
+# transitively, and an ignored import that no longer exists is reported, so a
+# temporary exclusion cannot outlive the code it excuses. Every temporary
+# exclusion names the PR of docs/features/module-structure-20260930/plan.md
+# that removes it; none may survive PR 11. `uv run lint-imports` runs in
+# scripts/check.sh and CI; tests/unit/test_import_contracts.py proves these
+# contracts reject representative violations.
+#
+# The wizard packages (newcmd, setupcmd, authcmd) and the root credentials,
+# prompts and terminal modules are CLI-side until PR 10 splits them between
+# cli and core, so they are listed wherever the CLI is.
+[tool.importlinter]
+root_packages = ["etsy_listings"]
+include_external_packages = true
+
+[[tool.importlinter.contracts]]
+name = "Core is transport-independent: no server, CLI, wizard, prompt/terminal or framework imports"
+type = "forbidden"
+source_modules = ["etsy_listings.core"]
+forbidden_modules = [
+    "etsy_listings.server",
+    "etsy_listings.cli",
+    "etsy_listings.newcmd",
+    "etsy_listings.setupcmd",
+    "etsy_listings.authcmd",
+    "etsy_listings.credentials",
+    "etsy_listings.prompts",
+    "etsy_listings.terminal",
+    "fastapi",
+    "starlette",
+    "uvicorn",
+    "typer",
+    "questionary",
+]
+
+[[tool.importlinter.contracts]]
+name = "Server does not depend on the CLI, its wizards or terminal adapters"
+type = "forbidden"
+source_modules = ["etsy_listings.server"]
+forbidden_modules = [
+    "etsy_listings.cli",
+    "etsy_listings.newcmd",
+    "etsy_listings.setupcmd",
+    "etsy_listings.authcmd",
+    "etsy_listings.credentials",
+    "etsy_listings.prompts",
+    "etsy_listings.terminal",
+    "typer",
+    "questionary",
+]
+ignore_imports = [
+    # Temporary: listing creation's pricing and persistence helpers still live
+    # in newcmd.logic. Removed by PR 6, which moves them behind core interfaces.
+    "etsy_listings.server.api.listings -> etsy_listings.newcmd.logic",
+]
+
+[[tool.importlinter.contracts]]
+name = "Only the CLI ui launcher reaches the server, through its startup interface"
+type = "forbidden"
+source_modules = [
+    "etsy_listings.cli",
+    "etsy_listings.newcmd",
+    "etsy_listings.setupcmd",
+    "etsy_listings.authcmd",
+    "etsy_listings.credentials",
+    "etsy_listings.prompts",
+    "etsy_listings.terminal",
+]
+forbidden_modules = ["etsy_listings.server", "fastapi", "starlette", "uvicorn"]
+ignore_imports = [
+    # Permanent and intended: the one CLI-to-server edge (ADR-0052; plan, PR 5).
+    # A single edge rather than an exemption for the cli package, and a
+    # forbidden contract rather than CLI/server independence, which would
+    # reject this intentional path. cli.app registering the command reaches it
+    # indirectly, which the ignore permits; any other route to server breaks.
+    "etsy_listings.cli.ui -> etsy_listings.server.hosting",
+]

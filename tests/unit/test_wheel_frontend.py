@@ -20,7 +20,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 
 # Where the wheel carries the built SPA, relative to its root.
-WHEEL_ASSETS = "etsy_listings/ui/static"
+WHEEL_ASSETS = "etsy_listings/server/static"
 
 BUILD_SCRIPT = """const fs = require("fs");
 const source = fs.readFileSync("source.txt", "utf8");
@@ -144,7 +144,7 @@ SERVE_SCRIPT = textwrap.dedent(
 
     import etsy_listings
     from fastapi.testclient import TestClient
-    from etsy_listings.ui.api.app import create_app
+    from etsy_listings.server.api.app import create_app
     from etsy_listings.core.workspace.workspace import Workspace
 
     install, workspace = Path(sys.argv[1]), Path(sys.argv[2])

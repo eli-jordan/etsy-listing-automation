@@ -18,7 +18,7 @@ import type {
  * remembered, a start is accepted, a cancel succeeds, and every event
  * stream opened is kept so a test can push events down it. What a test
  * pushes is what the editor sees -- the same `step`/`brief`/`proposal`/
- * `phase` sequence `ui/airuns/runner.py` writes.
+ * `phase` sequence `server/airuns/runner.py` writes.
  *
  * It also stands in for the listing's cached proposal at `api/seo.ts`:
  * a `proposal` event pushed down a stream is cached first, exactly as the

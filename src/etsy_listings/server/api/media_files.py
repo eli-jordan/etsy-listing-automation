@@ -24,8 +24,8 @@ from fastapi.responses import FileResponse, Response
 
 from etsy_listings.core.config.media import media_kind
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.schemas import MediaFileSummary
-from etsy_listings.ui.api.thumbnails import thumbnail_response
+from etsy_listings.server.api.schemas import MediaFileSummary
+from etsy_listings.server.api.thumbnails import thumbnail_response
 
 router = APIRouter(tags=["media-files"])
 

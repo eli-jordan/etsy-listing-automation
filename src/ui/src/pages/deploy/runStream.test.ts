@@ -3,7 +3,7 @@ import { openRunStream } from "./runStream";
 
 /**
  * `GET /api/runs/{id}/events` through a plain `fetch` reader, framed exactly
- * as `ui/api/runs.py`'s `_sse_frame` writes: `id: <n>\nevent: <type>\ndata:
+ * as `server/api/runs.py`'s `_sse_frame` writes: `id: <n>\nevent: <type>\ndata:
  * <json>\n\n`. `fetch` is stubbed with a real `ReadableStream` so the parser
  * is exercised against actual chunk boundaries, not a fake that hands back
  * whole frames for free.

@@ -48,7 +48,7 @@ export async function tryGetListing(name: string): Promise<ListingDetail | null>
 }
 
 /** A partial `listing.yaml` document -- merged server-side, one level deep on
- * `etsy:` (see `ui/api/listings.py`'s `_merge`). Always resolves: an invalid
+ * `etsy:` (see `server/api/listings.py`'s `_merge`). Always resolves: an invalid
  * candidate comes back as a 200 with `field_errors` populated and nothing
  * written, so the caller never has to branch on the HTTP status to render
  * inline validation. */
@@ -67,7 +67,7 @@ export async function patchListing(
 /** The empty document `+ New listing` opens the editor on: nothing chosen, an
  * empty `name`, and a block issue for each thing still to pick. Built
  * server-side so the starting shape of a listing is not also invented here.
- * See `ui/api/listings.py`'s `listing_draft`. */
+ * See `server/api/listings.py`'s `listing_draft`. */
 export async function getListingDraft(): Promise<ListingDetail> {
   const { data, error } = await api.GET("/api/listing-draft");
   if (error || !data) throw new ListingsApiError("could not start a new listing");

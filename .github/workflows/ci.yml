@@ -73,6 +73,10 @@ jobs:
       - name: mypy
         run: uv run mypy src
 
+      # Core/server/CLI dependency direction (ADR-0052), contracts in pyproject.toml.
+      - name: import-linter
+        run: uv run lint-imports
+
       # An explicit -m replaces addopts: exclude both browser and e2e here.
       # This leaves unit, golden, behaviour and contract. The 85% branch floor comes from
       # `fail_under` in pyproject.toml, so this gate and a local `check.sh` can

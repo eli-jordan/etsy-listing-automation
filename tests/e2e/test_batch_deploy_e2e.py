@@ -46,7 +46,7 @@ from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
 from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 from tests.conftest import FIXTURE_WORKSPACE
 from tests.e2e.conftest import PrerequisiteMissing, point_at_throwaway_shops

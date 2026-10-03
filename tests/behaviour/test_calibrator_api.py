@@ -14,8 +14,8 @@ from PIL import Image
 
 from etsy_listings.core.render.config import DisplaceConfig, Point, RenderConfig
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api import templates
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api import templates
+from etsy_listings.server.api.app import create_app
 
 
 @pytest.fixture(autouse=True)

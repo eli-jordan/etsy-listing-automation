@@ -23,8 +23,8 @@ from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEts
 from etsy_listings.core.clients.etsy.models import ShopSection
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api import etsystate
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api import etsystate
+from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import (
     copy_listing,

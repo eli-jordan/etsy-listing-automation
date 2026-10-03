@@ -1457,7 +1457,7 @@ export interface paths {
      *     which owns ADR-0004's filename convention and its trailing-segment
      *     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
      *
-     *     How it is downscaled and served is:mod:`etsy_listings.ui.api.thumbnails`'
+     *     How it is downscaled and served is:mod:`etsy_listings.server.api.thumbnails`'
      *     question -- the listings table asks the same one of a design.
      */
     get: operations["thumbnail_api_templates__name__thumbnail_get"];

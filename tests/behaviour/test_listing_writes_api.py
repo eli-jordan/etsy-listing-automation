@@ -30,7 +30,7 @@ from fastapi.testclient import TestClient
 
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 NAME = "take-a-hike"
 

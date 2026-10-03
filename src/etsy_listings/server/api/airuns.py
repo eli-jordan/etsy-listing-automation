@@ -14,10 +14,10 @@ DELETE /api/ai/runs/{id} cancel; 409 if already finished
 
 ``POST`` re-checks readiness here, whatever the browser last saw
 (``seo.readiness`` with the run's rules). The chain itself is
-``ui/airuns/runner.py``'s, on its own thread; this module only starts,
+``server/airuns/runner.py``'s, on its own thread; this module only starts,
 reads and cancels runs.
 
-**The SSE bridge** is ``ui/api/runs.py``'s: a blocking wait on the run's
+**The SSE bridge** is ``server/api/runs.py``'s: a blocking wait on the run's
 condition, awaited through ``run_in_executor`` with a short timeout so the
 generator notices a client leaving. A client leaving ends the stream and
 nothing else -- only ``DELETE`` cancels.
@@ -33,18 +33,18 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.airuns.events import (
+from etsy_listings.server.airuns.events import (
     AiRunDetail,
     AiRunRefusal,
     AiRunSummary,
     AnyAiRunEvent,
     CreateAiRunRequest,
 )
-from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
-from etsy_listings.ui.airuns.runner import AiRunner
-from etsy_listings.ui.api.runs import last_event_id
-from etsy_listings.ui.api.seo import readiness
-from etsy_listings.ui.batchqueue import BatchQueue
+from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry, Conflict, Deploying
+from etsy_listings.server.airuns.runner import AiRunner
+from etsy_listings.server.api.runs import last_event_id
+from etsy_listings.server.api.seo import readiness
+from etsy_listings.server.batchqueue import BatchQueue
 
 router = APIRouter(prefix="/api/ai/runs", tags=["ai-runs"])
 
@@ -57,7 +57,7 @@ DEPLOYING = "deploying"
 : deploying takes precedence over AI."""
 
 _EVENT_WAIT_TIMEOUT = 1.0
-"""One SSE poll's longest block, as in ``ui/api/runs.py``."""
+"""One SSE poll's longest block, as in ``server/api/runs.py``."""
 
 
 def _registry(request: Request) -> AiRunRegistry:

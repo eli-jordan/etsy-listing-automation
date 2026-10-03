@@ -59,15 +59,15 @@ from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.cache import CachedEtsyMarketClient
 from etsy_listings.core.workspace.atomic import write_yaml_atomic
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.airuns.events import (
+from etsy_listings.server.airuns.events import (
     STEP_IDS,
     AiBriefEvent,
     AiMarketEvent,
     AiProposalEvent,
     AiQueriesEvent,
 )
-from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry
-from etsy_listings.ui.workspace_locks import WorkspaceLocks
+from etsy_listings.server.airuns.registry import AiRun, AiRunRegistry
+from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 logger = logging.getLogger(__name__)
 

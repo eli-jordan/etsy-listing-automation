@@ -19,7 +19,7 @@ from fastapi.testclient import TestClient
 from PIL import Image
 
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
 CLIP = VIDEOS / "valid-3s-512.mp4"

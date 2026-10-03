@@ -49,8 +49,8 @@ from etsy_listings.core.listing_templates import (
 )
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.listings import field_errors_of, pricing_summary
-from etsy_listings.ui.api.schemas import (
+from etsy_listings.server.api.listings import field_errors_of, pricing_summary
+from etsy_listings.server.api.schemas import (
     CreateListingTemplateRequest,
     Issue,
     ListingTemplateAsset,
@@ -61,7 +61,7 @@ from etsy_listings.ui.api.schemas import (
     PixelSize,
     RenameListingRequest,
 )
-from etsy_listings.ui.workspace_locks import WorkspaceLocks
+from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 router = APIRouter(prefix="/api/listing-templates", tags=["listing-templates"])
 

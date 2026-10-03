@@ -9,15 +9,15 @@ DELETE /api/runs/{id} cancel a queued or running plan; 409 for apply
 POST /api/runs/{id}/seen the result of a finished run has been looked at
 ```
 
-Every write here is a call into:mod:`etsy_listings.ui.runs.registry` -- this
+Every write here is a call into:mod:`etsy_listings.server.runs.registry` -- this
 module never decides whether a run may start, only how that decision is
 carried over HTTP. Nothing here computes a diff or runs a run either
-(CLAUDE.md's invariants): the FIFO worker thread in ``ui/runs/executor.py``
+(CLAUDE.md's invariants): the FIFO worker thread in ``server/runs/executor.py``
 does both, on its own time, and these endpoints only ever read or nudge the
-:class:`~etsy_listings.ui.runs.registry.Run` it is working on.
+:class:`~etsy_listings.server.runs.registry.Run` it is working on.
 
 **The SSE bridge.** :func:`_wait_for_events` is a plain, blocking method on
-:class:`~etsy_listings.ui.runs.registry.Run` -- it has to be, since the
+:class:`~etsy_listings.server.runs.registry.Run` -- it has to be, since the
 executor thread that appends events is a plain thread, not a coroutine. The
 route awaits it through ``loop.run_in_executor``, which is the stdlib's own
 way to run a blocking call without stalling the event loop, so no new
@@ -39,7 +39,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.schemas import (
+from etsy_listings.server.api.schemas import (
     ApplyRunDetail,
     ApplyRunSummary,
     CreateRunRequest,
@@ -52,8 +52,8 @@ from etsy_listings.ui.api.schemas import (
     WorkspaceApplyRequest,
     WorkspacePlanRequest,
 )
-from etsy_listings.ui.runs.events import AnyRunEvent, ListingPlannedEvent, RunScope
-from etsy_listings.ui.runs.registry import (
+from etsy_listings.server.runs.events import AnyRunEvent, ListingPlannedEvent, RunScope
+from etsy_listings.server.runs.registry import (
     Conflict,
     ListingApply,
     ListingPlan,

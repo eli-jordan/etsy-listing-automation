@@ -5,7 +5,7 @@ Two routers need it -- ``templates.py`` for the calibrator's rail and
 design strip -- and it is one decision, not two: how wide, and rendered per
 request rather than cached on disk.
 
-Deliberately not in :mod:`etsy_listings.ui.api.imagecache`, which answers the
+Deliberately not in :mod:`etsy_listings.server.api.imagecache`, which answers the
 different question of what the *preview loop* needs held in memory between
 frames. Nothing here is cached in-process at all; see :func:`thumbnail_response`
 for why.

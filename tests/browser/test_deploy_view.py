@@ -32,7 +32,7 @@ import uvicorn
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
+from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
 from tests.support.server import stop_server
 

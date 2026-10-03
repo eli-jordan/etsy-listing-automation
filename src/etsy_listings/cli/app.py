@@ -19,7 +19,9 @@ import typer
 from etsy_listings import prompts, terminal
 from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
 from etsy_listings.authcmd import Part as AuthPart
+from etsy_listings.cli.options import open_workspace, root_option
 from etsy_listings.cli.render import format_blocked, format_plan
+from etsy_listings.cli.ui import ui
 from etsy_listings.core import connections
 from etsy_listings.core.clients.printify import (
     PrintifyAuthError,
@@ -44,7 +46,7 @@ from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.userpath import to_native_path
-from etsy_listings.core.workspace.workspace import Workspace, WorkspaceNotFoundError
+from etsy_listings.core.workspace.workspace import Workspace
 
 EPILOG = f"""
 [bold]Environment variables[/bold]
@@ -61,30 +63,7 @@ Secrets live in the [bold]workspace[/bold] .env (gitignored), never in this repo
 the process environment overrides that file. See docs/guides/setup.md.
 """
 
-ROOT_HELP = (
-    "Workspace root: the directory holding shop.yaml. "
-    "Defaults to walking up from the current directory."
-)
-
 app = typer.Typer(no_args_is_help=True, epilog=EPILOG)
-
-
-def _root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
-    """One definition of ``--root``, shared by every command that takes a path.
-
-    Declared ``str``, never ``Path``: on Windows ``str(Path("/home/Admin"))``
-    is already ``\\home\\Admin``, and a mangled path cannot be told apart from
-    a root-relative one. Any new CLI option taking a user-supplied path needs
-    the same treatment (see ``workspace/userpath.py``).
-    """
-    return typer.Option(
-        None,
-        "--root",
-        help=ROOT_HELP,
-        envvar=layout.ROOT_ENV_VAR,
-        show_envvar=True,
-        metavar="PATH",
-    )
 
 
 @app.callback(epilog=EPILOG)
@@ -99,14 +78,6 @@ def _root_callback() -> None:
     # plan...`) -- Typer otherwise collapses a single-command app so its
     # command name is invisible, which would silently change the CLI surface
     # the moment a second command is added.
-
-
-def _open_workspace(root: str | None) -> Workspace:
-    try:
-        return Workspace.discover(root_override=to_native_path(root) if root else None)
-    except WorkspaceNotFoundError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
 
 
 # How a client is built is `connections`', not this module's. Which credential
@@ -364,7 +335,7 @@ def auth_anthropic(
 def plan(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
     all: bool = typer.Option(False, "--all", help="Plan every listing in the workspace"),
-    root: str | None = _root_option(),
+    root: str | None = root_option(),
 ) -> None:
     """Three-way diff against live state; decides which stages need to run.
 
@@ -372,7 +343,7 @@ def plan(
     the files it writes. Reads only -- nothing is created, uploaded or
     published.
     """
-    workspace = _open_workspace(root)
+    workspace = open_workspace(root)
 
     def show(event: EngineRunEvent) -> None:
         if isinstance(event, EngineListingPlanned):
@@ -395,13 +366,13 @@ def plan(
 def apply(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
     all: bool = typer.Option(False, "--all", help="Apply every listing in the workspace"),
-    root: str | None = _root_option(),
+    root: str | None = root_option(),
 ) -> None:
     """Execute every stage the plan identified: render, create or update the
     Printify product, publish it, and patch the resulting Etsy listing's
     copy and media. A stage a workspace has not configured (no Printify or
     Etsy shop id) reports itself blocked rather than running."""
-    workspace = _open_workspace(root)
+    workspace = open_workspace(root)
 
     def announce(event: EngineRunEvent) -> None:
         """The header and the refusals, before the work they frame.
@@ -429,7 +400,7 @@ def apply(
 @app.command(epilog=EPILOG)
 def unlock(
     listing: str = typer.Argument(help="Listing name, e.g. take-a-hike"),
-    root: str | None = _root_option(),
+    root: str | None = root_option(),
 ) -> None:
     """Clear a Printify product stuck publishing (`is_locked: true`).
 
@@ -440,7 +411,7 @@ def unlock(
     unverified rather than withheld. Re-run `apply` afterwards; this command
     only asks Printify to clear the lock, it does not touch the lockfile.
     """
-    workspace = _open_workspace(root)
+    workspace = open_workspace(root)
     lock = Lockfile.read(workspace.lock_file(listing))
     product_id = lock.remote.get(PRODUCT_ID_KEY) if lock is not None else None
     if not product_id:
@@ -468,7 +439,7 @@ def new(
     category: str = typer.Option(
         "tshirt", "--category", help="Blueprint category filter, matched against title/brand/model"
     ),
-    root: str | None = _root_option(),
+    root: str | None = root_option(),
 ) -> None:
     """Interactive design/garment/provider picker; writes garment profile (if absent) + listing.
 
@@ -477,7 +448,7 @@ def new(
     """
     from etsy_listings.newcmd.interactive import run_new
 
-    workspace = _open_workspace(root)
+    workspace = open_workspace(root)
     try:
         with _wizard():
             run_new(workspace, connections.catalog_client(workspace), design, category)
@@ -486,26 +457,9 @@ def new(
         raise typer.Exit(code=1) from exc
 
 
-@app.command(epilog=EPILOG)
-def ui(
-    root: str | None = _root_option(),
-    host: str = typer.Option(
-        "0.0.0.0",  # noqa: S104 -- see the option help
-        "--host",
-        help="Interface to bind the server to. The default reaches the workspace "
-        "from another machine on the LAN; pass 127.0.0.1 for loopback only.",
-    ),
-    port: int = typer.Option(8000, "--port", help="Port to serve on"),
-) -> None:
-    """Serve the UI over HTTP in the foreground; open the printed URL in a browser.
-
-    The UI includes the dashboard, calibrator, listing editor and run runner.
-    Ctrl-C stops the server once any in-flight apply finishes its current stage.
-    """
-    # Imported here so registering commands does not load FastAPI/uvicorn.
-    from etsy_listings.ui.hosting import serve
-
-    serve(_open_workspace(root), host=host, port=port)
+# The HTTP launcher lives in `cli/ui.py`, the one CLI module that may import
+# the server (ADR-0052); registering it here loads no server code.
+app.command(epilog=EPILOG)(ui)
 
 
 def main() -> None:

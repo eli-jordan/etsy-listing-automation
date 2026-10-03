@@ -29,7 +29,7 @@ from etsy_listings.core.engine.plan import PlannedRun, build_plan
 from etsy_listings.core.engine.run import apply_listings
 from etsy_listings.core.engine.stages.etsy_media import EtsyMediaStage
 from etsy_listings.core.engine.stages.etsy_videos import EtsyVideosStage
-from etsy_listings.ui.runs.events import stage_plan_dto
+from etsy_listings.server.runs.events import stage_plan_dto
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, edit_listing, set_etsy_shop_id

@@ -44,13 +44,13 @@ from etsy_listings.core.render.io import encode_png
 from etsy_listings.core.render.pipeline import Layer, render_scene
 from etsy_listings.core.render.swatch import sample_swatch
 from etsy_listings.core.workspace.workspace import AmbiguousColourSuffixError, Workspace
-from etsy_listings.ui.api.designs import resolve_design
-from etsy_listings.ui.api.imagecache import (
+from etsy_listings.server.api.designs import resolve_design
+from etsy_listings.server.api.imagecache import (
     EDITOR_MAX_EDGE,
     PREVIEW_IMAGES,
     ScaledBase,
 )
-from etsy_listings.ui.api.schemas import (
+from etsy_listings.server.api.schemas import (
     AssignKindRequest,
     ColourMatrixPreviewRequest,
     ColourReportRow,
@@ -62,7 +62,7 @@ from etsy_listings.ui.api.schemas import (
     TemplatePhoto,
     TemplateSummary,
 )
-from etsy_listings.ui.api.thumbnails import thumbnail_response
+from etsy_listings.server.api.thumbnails import thumbnail_response
 
 router = APIRouter(prefix="/api/templates", tags=["templates"])
 
@@ -386,7 +386,7 @@ def thumbnail(template: Existing, colour: str | None = None) -> Response:
     which owns ADR-0004's filename convention and its trailing-segment
     fallback -- this endpoint must not glob for ``{colour}.png`` itself.
 
-    How it is downscaled and served is:mod:`etsy_listings.ui.api.thumbnails`'
+    How it is downscaled and served is:mod:`etsy_listings.server.api.thumbnails`'
     question -- the listings table asks the same one of a design.
     """
     source = _thumbnail_source(template, colour)
@@ -470,7 +470,7 @@ Two named sizes, not a pixel count from the client. ``full`` is the photo's
 own resolution -- what ``apply`` will write, and what the Preview tab shows
 when you have stopped adjusting and started judging. ``editor`` is the
 downscale the canvas drags against, capped at
-:data:`~etsy_listings.ui.api.imagecache.EDITOR_MAX_EDGE`.
+:data:`~etsy_listings.server.api.imagecache.EDITOR_MAX_EDGE`.
 
 Naming the sizes rather than accepting an ``?max_edge=`` keeps the number the
 server's business: each distinct base size grows its own pair of cached

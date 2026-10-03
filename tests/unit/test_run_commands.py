@@ -7,8 +7,8 @@ from datetime import UTC, datetime
 import pytest
 from pydantic import TypeAdapter, ValidationError
 
-from etsy_listings.ui.api.schemas import RunSummary
-from etsy_listings.ui.runs.registry import (
+from etsy_listings.server.api.schemas import RunSummary
+from etsy_listings.server.runs.registry import (
     ListingApply,
     ListingPlan,
     Run,

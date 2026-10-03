@@ -79,8 +79,8 @@ from etsy_listings.newcmd.logic import (
     pricing_plan_ref,
     write_listing,
 )
-from etsy_listings.ui.api.etsystate import etsy_states
-from etsy_listings.ui.api.schemas import (
+from etsy_listings.server.api.etsystate import etsy_states
+from etsy_listings.server.api.schemas import (
     CommonCopySummary,
     CreateEtsySectionRequest,
     CreateListingRequest,
@@ -98,9 +98,9 @@ from etsy_listings.ui.api.schemas import (
     ResolvedPrice,
     WorkspaceSummary,
 )
-from etsy_listings.ui.api.thumbnails import thumbnail_response
-from etsy_listings.ui.runs.executor import ContextFactory
-from etsy_listings.ui.workspace_locks import WorkspaceLocks
+from etsy_listings.server.api.thumbnails import thumbnail_response
+from etsy_listings.server.runs.executor import ContextFactory
+from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
 

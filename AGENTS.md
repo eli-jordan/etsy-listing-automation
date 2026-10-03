@@ -21,8 +21,8 @@ src/etsy_listings/
     listing_templates/ template conversion, validation and frozen content capture
     batches/ staging, naming, archive inspection and ordinary listing creation
     connections.py errors.py client wiring, UserFacingError
-  cli/ Typer app, one module per command
-  ui/ FastAPI api/, run workers and hosting; release wheels carry the built SPA in ui/static/
+  cli/ Typer app, one module per command; ui.py is the only module that may import server (server.hosting)
+  server/ FastAPI api/, hosting.py startup, run workers (until PRs 8-9); release wheels carry the built SPA in server/static/
   newcmd/ setupcmd/ authcmd/ the `new`, `setup` and `auth` wizards
   credentials.py prompts.py terminal.py credential steps, prompt backend, encoding guard
 src/ui/ React/npm project (see src/ui/AGENTS.md)
@@ -54,6 +54,7 @@ uv run pytest -m "not browser and not e2e" # hermetic layers (e.g. no chromium i
 uv run playwright install chromium # one-off, enables the browser layer
 uv run pytest --update-goldens # regenerate render goldens
 uv run mypy src # strict type check
+uv run lint-imports # Import Linter contracts in pyproject.toml (ADR-0052)
 uv run ruff check. / ruff format. # lint / format
 uv run python scripts/sloc.py --summary # code size, prose excluded
 ```
@@ -62,7 +63,7 @@ Frontend (`src/ui/`): `npm run dev|build|typecheck|lint|format|format:check|test
 
 Human-facing setup, calibrator usage and contributor docs live in [README.md](README.md); this file holds only what an agent needs to act correctly. Keep the two commands lists in step.
 
-CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and `ui` exist in `cli/app.py`; `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
+CLI surface (`etsy-listings`). `setup`, `auth`, `new`, `plan`, `apply`, `unlock` and `ui` are registered in `cli/app.py` (`ui` lives in `cli/ui.py`); `render`, `generate`, `catalog refresh` and `status` remain unbuilt — do not assume a command exists because a historical plan lists it.
 
 ```
 setup initialise a workspace: skeleton, shop.yaml, ids

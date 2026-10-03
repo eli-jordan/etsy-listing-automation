@@ -1,4 +1,4 @@
-"""`ui/api/etsystate`'s memo: how often the listings UI is allowed to ask Etsy
+"""`server/api/etsystate`'s memo: how often the listings UI is allowed to ask Etsy
 which of its listings are published.
 
 The memo is the reason the status badge can be resolved on every read.
@@ -15,7 +15,7 @@ import pytest
 
 from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
-from etsy_listings.ui.api import etsystate
+from etsy_listings.server.api import etsystate
 
 
 class Counting(FakeEtsyListingClient):

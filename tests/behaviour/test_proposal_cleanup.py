@@ -26,7 +26,7 @@ from etsy_listings.core.engine.events import EngineRunEvent, EngineStageApplying
 from etsy_listings.core.engine.lock import Lockfile
 from etsy_listings.core.engine.run import apply_listings, fully_applied, plan_listings
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 from tests.support.ai_runs import has_proposal, seed_proposal
 from tests.support.builders import FIXTURE_LISTING as LISTING

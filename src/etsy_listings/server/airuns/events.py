@@ -19,9 +19,9 @@ from pydantic import BaseModel, Field
 
 from etsy_listings.core.ai.proposals import ListingProposal
 from etsy_listings.core.market.snapshot import MarketSnapshot
-from etsy_listings.ui.api.schemas import StepId as StepId
-from etsy_listings.ui.api.schemas import StepState as StepState
-from etsy_listings.ui.api.schemas import WorkflowStep as WorkflowStep
+from etsy_listings.server.api.schemas import StepId as StepId
+from etsy_listings.server.api.schemas import StepState as StepState
+from etsy_listings.server.api.schemas import WorkflowStep as WorkflowStep
 
 TerminalPhase = Literal["done", "failed", "cancelled"]
 AiRunPhase = Literal["running", "done", "failed", "cancelled"]

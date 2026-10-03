@@ -53,8 +53,8 @@ from etsy_listings.core.config.errors import ConfigLoadError
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.airuns.registry import AiRunRegistry
-from etsy_listings.ui.api.schemas import (
+from etsy_listings.server.airuns.registry import AiRunRegistry
+from etsy_listings.server.api.schemas import (
     AiReadinessBlock,
     BatchDetail,
     BatchIndexEntry,
@@ -68,10 +68,10 @@ from etsy_listings.ui.api.schemas import (
     StagingRowDetail,
     WorkflowStep,
 )
-from etsy_listings.ui.api.seo import batch_readiness
-from etsy_listings.ui.api.thumbnails import thumbnail_response
-from etsy_listings.ui.batchqueue import RETRYABLE, BatchQueue
-from etsy_listings.ui.workspace_locks import WorkspaceLocks
+from etsy_listings.server.api.seo import batch_readiness
+from etsy_listings.server.api.thumbnails import thumbnail_response
+from etsy_listings.server.batchqueue import RETRYABLE, BatchQueue
+from etsy_listings.server.workspace_locks import WorkspaceLocks
 
 router = APIRouter(tags=["batches"])
 

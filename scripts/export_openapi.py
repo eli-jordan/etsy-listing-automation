@@ -11,22 +11,26 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+from typing import Any
 
 from etsy_listings.core.config.defaults import Defaults, EtsyDefaults
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 REPO_ROOT = Path(__file__).parent.parent
 
 
-def main() -> None:
+def build_schema() -> dict[str, Any]:
+    """The app's OpenAPI document, as committed to docs/openapi.json."""
     # The schema only reflects route/model shapes, not runtime data, so a
     # placeholder workspace (never opened against real files) is enough.
     dummy_defaults = Defaults(etsy=EtsyDefaults(currency="NOK"))
     workspace = Workspace(root=REPO_ROOT, defaults=dummy_defaults)
-    app = create_app(workspace)
+    return create_app(workspace).openapi()
 
-    schema = app.openapi()
+
+def main() -> None:
+    schema = build_schema()
     out_path = REPO_ROOT / "docs" / "openapi.json"
     out_path.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     print(f"wrote {out_path}")

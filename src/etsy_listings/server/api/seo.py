@@ -9,8 +9,8 @@ GET /api/listings/{name}/proposal -> ListingProposal | 404
 PATCH /api/listings/{name}/proposal/resolution -> ListingProposal | 404 | 409
 ```
 
-Generation itself is an AI run (``ui/airuns/``, served by
-``ui/api/airuns.py``): the brief, market research and the proposal as one
+Generation itself is an AI run (``server/airuns/``, served by
+``server/api/airuns.py``): the brief, market research and the proposal as one
 run per listing, on its own thread, reattachable and cancellable. The two
 request-scoped generation endpoints that used to live here -- one for a
 proposal, one for a drafted brief, each racing a blocking call against the
@@ -48,8 +48,8 @@ from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.snapshot import MarketSnapshot
 from etsy_listings.core.workspace.facts import WorkspaceFacts
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.listings import Existing
-from etsy_listings.ui.api.schemas import (
+from etsy_listings.server.api.listings import Existing
+from etsy_listings.server.api.schemas import (
     AiReadinessBlock,
     ListingProposal,
     ProposalResolutionPatch,
@@ -60,7 +60,7 @@ router = APIRouter(prefix="/api/listings", tags=["ai-seo"])
 
 AiProviderFactory = Callable[[Workspace], Sequence[AiProvider]]
 """`create_app`'s injection seam for this module, the same shape
-`ui/runs/executor.py.ContextFactory` already is for the runs executor: a
+`server/runs/executor.py.ContextFactory` already is for the runs executor: a
 real server passes none and gets :func:`default_ai_providers`, a test
 passes a factory that returns `FakeAiProvider` doubles instead. Per-request,
 not per-app -- called fresh on every readiness check and every AI run,

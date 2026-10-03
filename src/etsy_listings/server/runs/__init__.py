@@ -3,7 +3,7 @@
 Distinct from the top-level ``runs/`` package the code layout reserves for
 Phase 6's SQLite recorder of *finished* runs -- this one holds runs that are
 in flight or recently finished, forgotten on restart. When Phase 6 lands, the
-recorder subscribes to :class:`~etsy_listings.ui.runs.registry.RunRegistry`
+recorder subscribes to :class:`~etsy_listings.server.runs.registry.RunRegistry`
 rather than replacing it.
 
 ``registry`` owns identity, locking and retention; ``executor`` owns the one
@@ -14,8 +14,8 @@ package is the part that turns one already-built ``RunReport`` into a
 sequence of HTTP-visible events.
 """
 
-from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
-from etsy_listings.ui.runs.registry import (
+from etsy_listings.server.runs.executor import ContextFactory, RunExecutor
+from etsy_listings.server.runs.registry import (
     Conflict,
     ListingApply,
     ListingPlan,

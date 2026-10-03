@@ -16,8 +16,8 @@ from etsy_listings.core.ai.prompt import default_seo_prompt_text
 from etsy_listings.core.ai.providers import AiProvider
 from etsy_listings.core.market.snapshot import load as load_market_snapshot
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
-from etsy_listings.ui.api.schemas import ListingProposal
+from etsy_listings.server.api.app import create_app
+from etsy_listings.server.api.schemas import ListingProposal
 
 from tests.support.builders import FIXTURE_LISTING, edit_listing
 

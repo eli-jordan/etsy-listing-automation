@@ -17,7 +17,7 @@ from etsy_listings.core.engine.plan import build_plan
 from etsy_listings.core.engine.run import preview_listing
 from etsy_listings.core.engine.stages.render import RenderStage
 from etsy_listings.core.workspace.workspace import Workspace
-from etsy_listings.ui.api.app import create_app
+from etsy_listings.server.api.app import create_app
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_lock, edit_listing, write_design

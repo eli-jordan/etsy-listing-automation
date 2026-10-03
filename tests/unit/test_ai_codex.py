@@ -72,7 +72,7 @@ def _provider(tmp_path: Path, *, binary: str = "codex") -> codex.CodexProvider:
 
 
 def _task(tmp_path: Path) -> ProviderTask:
-    """An ordinary SEO task, assembled the way `ui/api/seo.py` assembles one.
+    """An ordinary SEO task, assembled the way `server/api/seo.py` assembles one.
 
     The adapter no longer reads a prompt file, so the seller prose
     is a plain string here rather than something a fixture has to write to
@@ -214,7 +214,7 @@ def test_readiness_says_nothing_about_a_prompt_file(
     codex. Which prompt a request uses -- and whether that file
     exists -- is the request's business; answering it here said "codex is
     not ready" about a file that has nothing to do with codex, and said it
-    twice, since `ui/api/seo.py` checked the same thing itself."""
+    twice, since `server/api/seo.py` checked the same thing itself."""
     monkeypatch.setattr(codex.shutil, "which", lambda name: "/usr/bin/codex")
     fake = _FakeRun({("login", "status"): _ok(), ("exec", "--help"): _ok(stdout=_EXEC_HELP)})
     monkeypatch.setattr(codex.subprocess, "run", fake)

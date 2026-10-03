@@ -30,7 +30,7 @@ from etsy_listings.core.config.media import MediaEntry, MediaKind
 # the same principle `TemplateSummary.status` states below.
 from etsy_listings.core.engine.status import ListingGesture, ListingStatus
 from etsy_listings.core.render.config import BoundingBox, DisplaceConfig, Placement, ShadeConfig
-from etsy_listings.ui.runs.events import ApplyRunPhase, PlanRunPhase, RunEvent, RunScope
+from etsy_listings.server.runs.events import ApplyRunPhase, PlanRunPhase, RunEvent, RunScope
 
 TemplateKind = Literal["colour-matrix", "multiple", "single"]
 
@@ -714,7 +714,7 @@ class ListingBatch(BaseModel):
 
 # ──────────────────────────────────────────────────────────────────────────
 # Runs. ``RunEvent`` itself, and the ``Plan``/``StagePlan`` DTOs it
-# carries, live in ``ui/runs/events.py`` beside the engine types they mirror --
+# carries, live in ``server/runs/events.py`` beside the engine types they mirror --
 # only the request/response envelope belongs here, next to every other
 # endpoint's shapes.
 # ──────────────────────────────────────────────────────────────────────────
@@ -798,7 +798,7 @@ RunDetail = Annotated[PlanRunDetail | ApplyRunDetail, Field(discriminator="kind"
 # ──────────────────────────────────────────────────────────────────────────
 # AI SEO (AI SEO implementation plan, PR5; ADR-0049). A proposal is cached on the
 # server (`ai/proposals.py`) and reaches the browser two ways: as an AI
-# run's `proposal` event (`ui/airuns/events.py`) the moment it is written,
+# run's `proposal` event (`server/airuns/events.py`) the moment it is written,
 # and from `GET /api/listings/{name}/proposal` after that. Both are
 # :class:`ListingProposal`. The choices' field shapes mirror
 # `ai/models.py.SeoProposal` field for field, the same "wire shape *is* the
