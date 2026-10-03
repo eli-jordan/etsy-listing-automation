@@ -485,37 +485,22 @@ def new(
 def ui(
     root: str | None = _root_option(),
     host: str = typer.Option(
-        "0.0.0.0",  # noqa: S104 -- see the option help; the window still opens on loopback
+        "0.0.0.0",  # noqa: S104 -- see the option help
         "--host",
         help="Interface to bind the server to. The default reaches the workspace "
         "from another machine on the LAN; pass 127.0.0.1 for loopback only.",
     ),
     port: int = typer.Option(8000, "--port", help="Port to serve on"),
-    browser: bool = typer.Option(
-        False,
-        "--browser",
-        help="Serve HTTP only and leave the calibrator in a regular browser, "
-        "instead of opening a native window.",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        help="Open the native window with the web inspector. Ignored with --browser.",
-    ),
 ) -> None:
-    """Open the calibrator in a native window (Phase 1).
+    """Serve the UI over HTTP in the foreground; open the printed URL in a browser.
 
     The UI includes the dashboard, calibrator, listing editor and run runner.
-    Pass ``--browser`` to serve HTTP only rather than opening the desktop shell.
+    Ctrl-C stops the server once any in-flight apply finishes its current stage.
     """
-    from etsy_listings.ui.desktop import run_calibrator
+    # Imported here so registering commands does not load FastAPI/uvicorn.
+    from etsy_listings.ui.hosting import serve
 
-    workspace = _open_workspace(root)
-    try:
-        run_calibrator(workspace, host=host, port=port, browser=browser, debug=debug)
-    except UserFacingError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
+    serve(_open_workspace(root), host=host, port=port)
 
 
 def main() -> None:

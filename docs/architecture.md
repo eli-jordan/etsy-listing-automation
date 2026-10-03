@@ -16,8 +16,9 @@ core, server and CLI modules with React source at `src/ui`. Its
 [stacked implementation plan](features/module-structure-20260930/plan.md)
 requires current descriptions to stay truthful during migration and a complete
 architecture reconciliation at completion. This document still describes the
-current checkout; the specification governs changed ownership and removal of
-the native host, while unrelated invariants below remain in force.
+current checkout; the specification governs changed ownership, and its one
+user-visible change, removing the native host, is implemented: `ui` serves
+HTTP in the foreground. Unrelated invariants below remain in force.
 
 ## Runtime and dependencies
 
@@ -33,7 +34,7 @@ not the latest vendor releases.
 | HTTP clients | httpx (0.28.1); vendor protocols and shared retry policy, without vendor SDKs |
 | Images | `opencv-python-headless==4.10.0.84`, `pillow==10.4.0`, and NumPy (locked 2.5.2, currently supplied transitively by OpenCV); pure numerical passes plus explicit I/O/cache adapters |
 | Videos | PyAV (`av>=15`, locked 18.1.0) probes streams, dimensions and duration; the tool uploads original video bytes rather than encoding them |
-| Web and desktop | FastAPI (0.141.1), python-multipart and uvicorn; pywebview (6.2.1) is imported for the native window, while `ui --browser` serves the same application |
+| Web server | FastAPI (0.141.1), python-multipart and uvicorn; `ui` runs the application under uvicorn in the foreground and the user opens it in a browser |
 | Frontend | React/React DOM 19, React Router 7, Phosphor icons and openapi-fetch; TypeScript 5 and Vite 8 build the SPA; openapi-typescript generates `src/api/schema.ts` from `docs/openapi.json` (ADR-0011) |
 | Development | uv/hatchling, ruff, strict mypy, pytest/pytest-cov, Playwright; frontend ESLint, Prettier, Vitest, Testing Library and V8 coverage; marver is a design dependency |
 | AI processes | Installed, signed-in `codex`, `claude` and `grok` CLIs, invoked behind `AiProvider`; these are external executables, not Python SDK dependencies |
@@ -88,7 +89,7 @@ and what it deliberately withholds.
 |---|---|---|
 | `cli` | Typer commands and terminal presentation | Uses engine reports rather than computing a second diff |
 | `newcmd`, `setupcmd`, `authcmd` | Picker and workspace/credential workflows | Prompt sequencing is separate from their testable logic |
-| `ui` | HTTP contracts, React presentation, deployment/AI resources, batch dispatch and native window | Adapts engine events; a FIFO deployment worker, per-run AI threads and a batch dispatcher remain separate |
+| `ui` | HTTP contracts and hosting, React presentation, deployment/AI resources and batch dispatch | Adapts engine events; a FIFO deployment worker, per-run AI threads and a batch dispatcher remain separate |
 | `engine` | Stage protocol, comparison, lockfile, lifecycle and runs | Stages return values; the engine decides execution and records progress |
 | `workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, video probes and request facts | Owns workspace layout and containment; callers may do I/O on paths it supplies |
 | `render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |

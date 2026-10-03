@@ -291,14 +291,6 @@ class RunRegistry:
         with self._lock:
             return self._runs.get(run_id)
 
-    def has_active_run(self) -> bool:
-        """Whether any run this process knows about is still in a
-        non-terminal phase -- what ``ui/desktop.py``'s close handler checks
-        before deciding whether shutdown is instant or worth a message
-        (decision 7)."""
-        with self._lock:
-            return any(run.phase not in TERMINAL_PHASES for run in self._runs.values())
-
     def all_runs(self) -> list[Run]:
         """Every run this process still remembers, for ``GET /api/runs`` with
         no ``listing`` filter -- a workspace-wide view a future batch runner
