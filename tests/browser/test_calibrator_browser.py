@@ -680,7 +680,9 @@ class TestMovingABox:
 
         area = page.locator(".quad-editor__polygon").first.bounding_box()
         assert area is not None
-        centre = (area["x"] + area["width"] / 2, area["y"] + area["height"] / 2)
+        # Whole screen pixels: Chromium delivers pointer coordinates rounded,
+        # so a fractional start would shift the travel by up to a pixel.
+        centre = (round(area["x"] + area["width"] / 2), round(area["y"] + area["height"] / 2))
         page.mouse.move(*centre)
         page.mouse.down()
         page.mouse.move(centre[0] + 60, centre[1] + 40, steps=10)
@@ -691,9 +693,10 @@ class TestMovingABox:
         page.wait_for_selector("text=Saved")
 
         saved = _template_config(workspace_root, MULTIPLE_TEMPLATE)["placements"][0]
+        # One screen pixel of rounding is `scale` photo pixels.
         for before, after in zip(original["bounding_box"], saved["bounding_box"], strict=True):
-            assert after["x"] - before["x"] == pytest.approx(60 * scale, abs=1.5)
-            assert after["y"] - before["y"] == pytest.approx(40 * scale, abs=1.5)
+            assert after["x"] - before["x"] == pytest.approx(60 * scale, abs=scale)
+            assert after["y"] - before["y"] == pytest.approx(40 * scale, abs=scale)
 
     def test_the_box_menu_stays_inside_the_clipping_pane(self, page) -> None:  # noqa: ANN001
         """Real layout, not a patched rectangle: opened on the bottom-right
