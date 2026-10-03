@@ -1,7 +1,7 @@
 """Typer CLI. One module per command; this module wires them into one app.
 
 ``plan``, ``apply``, ``new``, ``ui``, ``setup``, ``auth`` and ``unlock`` are
-built, per A10's strict phase order. ``catalog refresh`` and ``status``
+built, per strict phase order. ``catalog refresh`` and ``status``
 remain for Phase 6.
 """
 
@@ -16,30 +16,37 @@ from typing import Any
 
 import typer
 
-from etsy_listings import connections, prompts, terminal
-from etsy_listings.authcmd import ALL_PARTS as ALL_AUTH_PARTS
-from etsy_listings.authcmd import Part as AuthPart
+from etsy_listings.cli import prompts, terminal
+from etsy_listings.cli.auth import ALL_PARTS as ALL_AUTH_PARTS
+from etsy_listings.cli.auth import Part as AuthPart
+from etsy_listings.cli.options import open_workspace, root_option
 from etsy_listings.cli.render import format_blocked, format_plan
-from etsy_listings.clients.printify import (
+from etsy_listings.cli.ui import ui
+from etsy_listings.core import connections
+from etsy_listings.core.clients.printify import (
     PrintifyAuthError,
 )
-from etsy_listings.config.defaults import MissingDefaultError
-from etsy_listings.config.secrets import (
+from etsy_listings.core.config.defaults import MissingDefaultError
+from etsy_listings.core.config.secrets import (
     ANTHROPIC_KEY_VAR,
     PRINTIFY_TOKEN_VAR,
     MissingCredentialError,
 )
-from etsy_listings.engine.change import Plan
-from etsy_listings.engine.context import Event
-from etsy_listings.engine.events import EngineListingFailed, EngineListingPlanned, EngineRunEvent
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.run import RunReport, apply_listings, plan_listings
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.errors import UserFacingError
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.userpath import to_native_path
-from etsy_listings.workspace.workspace import Workspace, WorkspaceNotFoundError
+from etsy_listings.core.engine.change import Plan
+from etsy_listings.core.engine.context import Event
+from etsy_listings.core.engine.events import (
+    EngineListingFailed,
+    EngineListingPlanned,
+    EngineRunEvent,
+)
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.run import RunReport, apply_listings, plan_listings
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.userpath import to_native_path
+from etsy_listings.core.workspace.workspace import Workspace
 
 EPILOG = f"""
 [bold]Environment variables[/bold]
@@ -53,33 +60,10 @@ EPILOG = f"""
 
 Root paths accept cygwin, /cygdrive and native Windows forms.
 Secrets live in the [bold]workspace[/bold] .env (gitignored), never in this repo;
-the process environment overrides that file. See docs/setup.md section 4.
+the process environment overrides that file. See docs/guides/setup.md.
 """
 
-ROOT_HELP = (
-    "Workspace root: the directory holding shop.yaml. "
-    "Defaults to walking up from the current directory."
-)
-
 app = typer.Typer(no_args_is_help=True, epilog=EPILOG)
-
-
-def _root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at this boundary
-    """One definition of ``--root``, shared by every command that takes a path.
-
-    Declared ``str``, never ``Path``: on Windows ``str(Path("/home/Admin"))``
-    is already ``\\home\\Admin``, and a mangled path cannot be told apart from
-    a root-relative one. Any new CLI option taking a user-supplied path needs
-    the same treatment (see ``workspace/userpath.py``).
-    """
-    return typer.Option(
-        None,
-        "--root",
-        help=ROOT_HELP,
-        envvar=layout.ROOT_ENV_VAR,
-        show_envvar=True,
-        metavar="PATH",
-    )
 
 
 @app.callback(epilog=EPILOG)
@@ -91,17 +75,9 @@ def _root_callback() -> None:
     re-running against unchanged inputs makes no remote changes.
     """
     # A no-op callback keeps `plan` addressed as a subcommand (`etsy-listings
-    # plan ...`) -- Typer otherwise collapses a single-command app so its
+    # plan...`) -- Typer otherwise collapses a single-command app so its
     # command name is invisible, which would silently change the CLI surface
     # the moment a second command is added.
-
-
-def _open_workspace(root: str | None) -> Workspace:
-    try:
-        return Workspace.discover(root_override=to_native_path(root) if root else None)
-    except WorkspaceNotFoundError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
 
 
 # How a client is built is `connections`', not this module's. Which credential
@@ -181,7 +157,7 @@ def _echo_failure(listing: str, error: UserFacingError) -> None:
 
     Every refusal the user can act on -- a config error, a design too small, a
     colour that does not exist, copy still carrying a sentinel -- reaches here
-    instead of ending the run: PRD 16 is why one bad listing cannot halt fifty
+    instead of ending the run: continue-on-error is why one bad listing cannot halt fifty
     good ones. The engine decides that; this only says it out loud.
     """
     typer.echo(f"{listing}: {error}", err=True)
@@ -255,7 +231,7 @@ def setup(
 
     Stops before Etsy sign-in, which arrives with `auth` in Phase 3.
     """
-    from etsy_listings.setupcmd import run_setup
+    from etsy_listings.cli.setup import run_setup
 
     target = to_native_path(root) if root else Path.cwd()
     with _wizard():
@@ -283,7 +259,7 @@ def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at t
 
     `auth` and `setup` are the two commands that run *before* a workspace
     exists, so neither can discover one by walking up for its marker file --
-    they take the directory they are given (PRD 49).
+    they take the directory they are given.
     """
     return typer.Option(
         None,
@@ -300,7 +276,7 @@ def _auth_root_option() -> Any:  # noqa: ANN401 - typer.Option is typed Any at t
 
 
 def _run_auth(root: str | None, check: bool, parts: Sequence[AuthPart]) -> None:
-    from etsy_listings.authcmd import run_auth
+    from etsy_listings.cli.auth import run_auth
 
     target = to_native_path(root) if root else Path.cwd()
     with _wizard():
@@ -359,7 +335,7 @@ def auth_anthropic(
 def plan(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
     all: bool = typer.Option(False, "--all", help="Plan every listing in the workspace"),
-    root: str | None = _root_option(),
+    root: str | None = root_option(),
 ) -> None:
     """Three-way diff against live state; decides which stages need to run.
 
@@ -367,7 +343,7 @@ def plan(
     the files it writes. Reads only -- nothing is created, uploaded or
     published.
     """
-    workspace = _open_workspace(root)
+    workspace = open_workspace(root)
 
     def show(event: EngineRunEvent) -> None:
         if isinstance(event, EngineListingPlanned):
@@ -390,13 +366,13 @@ def plan(
 def apply(
     listing: str | None = typer.Argument(None, help="Listing name, e.g. take-a-hike"),
     all: bool = typer.Option(False, "--all", help="Apply every listing in the workspace"),
-    root: str | None = _root_option(),
+    root: str | None = root_option(),
 ) -> None:
     """Execute every stage the plan identified: render, create or update the
     Printify product, publish it, and patch the resulting Etsy listing's
     copy and media. A stage a workspace has not configured (no Printify or
     Etsy shop id) reports itself blocked rather than running."""
-    workspace = _open_workspace(root)
+    workspace = open_workspace(root)
 
     def announce(event: EngineRunEvent) -> None:
         """The header and the refusals, before the work they frame.
@@ -424,7 +400,7 @@ def apply(
 @app.command(epilog=EPILOG)
 def unlock(
     listing: str = typer.Argument(help="Listing name, e.g. take-a-hike"),
-    root: str | None = _root_option(),
+    root: str | None = root_option(),
 ) -> None:
     """Clear a Printify product stuck publishing (`is_locked: true`).
 
@@ -435,7 +411,7 @@ def unlock(
     unverified rather than withheld. Re-run `apply` afterwards; this command
     only asks Printify to clear the lock, it does not touch the lockfile.
     """
-    workspace = _open_workspace(root)
+    workspace = open_workspace(root)
     lock = Lockfile.read(workspace.lock_file(listing))
     product_id = lock.remote.get(PRODUCT_ID_KEY) if lock is not None else None
     if not product_id:
@@ -463,16 +439,16 @@ def new(
     category: str = typer.Option(
         "tshirt", "--category", help="Blueprint category filter, matched against title/brand/model"
     ),
-    root: str | None = _root_option(),
+    root: str | None = root_option(),
 ) -> None:
     """Interactive design/garment/provider picker; writes garment profile (if absent) + listing.
 
     Reads Printify's catalog, so it needs PRINTIFY_API_TOKEN with the
     `catalog.read` scope (see the environment variables below).
     """
-    from etsy_listings.newcmd.interactive import run_new
+    from etsy_listings.cli.new import run_new
 
-    workspace = _open_workspace(root)
+    workspace = open_workspace(root)
     try:
         with _wizard():
             run_new(workspace, connections.catalog_client(workspace), design, category)
@@ -481,42 +457,9 @@ def new(
         raise typer.Exit(code=1) from exc
 
 
-@app.command(epilog=EPILOG)
-def ui(
-    root: str | None = _root_option(),
-    host: str = typer.Option(
-        "0.0.0.0",  # noqa: S104 -- see the option help; the window still opens on loopback
-        "--host",
-        help="Interface to bind the server to. The default reaches the workspace "
-        "from another machine on the LAN; pass 127.0.0.1 for loopback only.",
-    ),
-    port: int = typer.Option(8000, "--port", help="Port to serve on"),
-    browser: bool = typer.Option(
-        False,
-        "--browser",
-        help="Serve HTTP only and leave the calibrator in a regular browser, "
-        "instead of opening a native window.",
-    ),
-    debug: bool = typer.Option(
-        False,
-        "--debug",
-        help="Open the native window with the web inspector. Ignored with --browser.",
-    ),
-) -> None:
-    """Open the calibrator in a native window (Phase 1).
-
-    The dashboard/setup wizard/run runner described in the PRD's ``## UI``
-    section land in Phase 5. Pass ``--browser`` to serve HTTP only, as this
-    command did before the pywebview experiment.
-    """
-    from etsy_listings.ui.desktop import run_calibrator
-
-    workspace = _open_workspace(root)
-    try:
-        run_calibrator(workspace, host=host, port=port, browser=browser, debug=debug)
-    except UserFacingError as exc:
-        typer.echo(str(exc), err=True)
-        raise typer.Exit(code=1) from exc
+# The HTTP launcher lives in `cli/ui.py`, the one CLI module that may import
+# the server (ADR-0052); registering it here loads no server code.
+app.command(epilog=EPILOG)(ui)
 
 
 def main() -> None:
@@ -525,7 +468,15 @@ def main() -> None:
     # Typer callback because it mutates process-global streams, which a test
     # driving `app` through CliRunner should not have done to it.
     terminal.adopt_declared_encoding()
-    app()
+    try:
+        app()
+    except OSError as exc:
+        # `... | head` closing the pipe early is not a failure worth a
+        # traceback; exit 1 as Click does for its own broken-pipe case.
+        if not terminal.stdout_reader_gone(exc):
+            raise
+        terminal.discard_stdout()
+        sys.exit(1)
 
 
 if __name__ == "__main__":

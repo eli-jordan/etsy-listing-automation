@@ -1,7 +1,7 @@
 """The Printify catalog, against the real API. ``-m e2e``, skipped by default.
 
 Everything below this layer talks to an ``httpx.MockTransport`` fed by payloads
-typed into ``tests/contract/test_catalog_http.py``. Transcripts beat invented
+typed into ``tests/core/contract/test_catalog_http.py``. Transcripts beat invented
 fixtures -- that file records what an invented one cost: ``placeholders`` was
 put at the top level, which Printify does not do, and every layer agreed with
 the fiction while none agreed with the API, so a profile shipped with no print
@@ -24,9 +24,9 @@ from typing import Any
 import httpx
 import pytest
 
-from etsy_listings.clients.printify import BASE_URL, HttpCatalogClient
-from etsy_listings.clients.printify.models import Blueprint, PrintProvider
-from etsy_listings.clients.printify.resolve import CatalogResolutionError, resolve_blueprint
+from etsy_listings.core.clients.printify import BASE_URL, HttpCatalogClient
+from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider
+from etsy_listings.core.clients.printify.resolve import CatalogResolutionError, resolve_blueprint
 
 pytestmark = pytest.mark.e2e
 
@@ -98,7 +98,7 @@ class TestTheCatalogAnswers:
 class TestWhatTheCatalogActuallyRequires:
     """What the catalog checks, measured rather than assumed.
 
-    ``clients/printify/catalog.py`` and docs/setup.md say every ``/v1/catalog/*.json`` call
+    ``clients/printify/catalog.py`` and docs/guides/setup.md say every ``/v1/catalog/*.json`` call
     needs a personal access token with the ``catalog.read`` scope. Two of them
     plainly do not: ``blueprints`` and ``print_providers`` are served with no
     ``Authorization`` header at all. That matters for how hard ``new`` should
@@ -231,14 +231,14 @@ class TestTheOfflineTranscriptsStillMatchReality:
 
 
 class TestTheDocumentedExampleProfileResolves:
-    """Every blueprint this repo puts in front of a user -- the PRD's example
+    """Every blueprint this repo puts in front of a user -- the example
     profile, the getting-started guide, the fixture workspace -- has to be one
     Printify actually returns.
 
     This is where that gets checked against the catalog rather than against a
     fixture agreeing with itself. It is what caught the previous value: a bare
     ``blueprint: Comfort Colors 1717``, a title Printify has never used, which
-    made every profile written by following the guide unresolvable (PRD 23,
+    made every profile written by following the guide unresolvable (ADR-0005,
     since revised to brand + model).
     """
 

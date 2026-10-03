@@ -9,15 +9,15 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings import connections
-from etsy_listings.ai.brief import default_brief_prompt_text
-from etsy_listings.ai.market_queries import default_market_queries_prompt_text
-from etsy_listings.ai.prompt import default_seo_prompt_text
-from etsy_listings.ai.providers import AiProvider
-from etsy_listings.market.snapshot import load as load_market_snapshot
-from etsy_listings.ui.api.app import create_app
-from etsy_listings.ui.api.schemas import ListingProposal
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core import connections
+from etsy_listings.core.ai.brief import default_brief_prompt_text
+from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
+from etsy_listings.core.ai.prompt import default_seo_prompt_text
+from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.market.snapshot import load as load_market_snapshot
+from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api.app import create_app
+from etsy_listings.server.api.schemas import ListingProposal
 
 from tests.support.builders import FIXTURE_LISTING, edit_listing
 

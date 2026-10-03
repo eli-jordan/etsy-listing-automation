@@ -30,6 +30,5 @@ def stop_server(server: uvicorn.Server, thread: threading.Thread) -> None:
         thread.join(timeout=GRACEFUL_SECONDS)
     if server.force_exit:
         state = server.config.app.state
-        state.batch_queue.stop()
-        state.ai_runner.shutdown()
-        state.run_executor.stop()
+        state.ai.stop()
+        state.deployments.stop()

@@ -21,14 +21,14 @@ from typing import Any, NoReturn
 import httpx
 import pytest
 
-from etsy_listings import connections
-from etsy_listings.ai.providers import AiProvider, FakeAiProvider
-from etsy_listings.clients.etsy import EtsyAuthError, HttpEtsyListingClient
-from etsy_listings.clients.printify import HttpCatalogClient, PrintifyClient, Transport
-from etsy_listings.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError, Secrets
-from etsy_listings.ui.api.seo import default_ai_providers
-from etsy_listings.workspace.userpath import to_native_path
-from etsy_listings.workspace.workspace import Workspace, layout
+from etsy_listings.core import connections
+from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
+from etsy_listings.core.application.ai.readiness import default_ai_providers
+from etsy_listings.core.clients.etsy import EtsyAuthError, HttpEtsyListingClient
+from etsy_listings.core.clients.printify import HttpCatalogClient, PrintifyClient, Transport
+from etsy_listings.core.config.secrets import PRINTIFY_TOKEN_VAR, MissingCredentialError, Secrets
+from etsy_listings.core.workspace.userpath import to_native_path
+from etsy_listings.core.workspace.workspace import Workspace, layout
 
 from tests.support.ai_runs import DRAFTED_BRIEF, QUERIES, proposal_payload
 from tests.support.builders import (
@@ -133,9 +133,9 @@ def contract_fixtures() -> dict[str, object]:
     point of comparing them here is that there is exactly one copy: if
     Printify's real response stops matching, the file the *offline* tests
     trust is the file this layer names. (``pythonpath = ["."]`` in
-    pyproject.toml is what makes ``tests.contract`` importable from here.)
+    pyproject.toml is what makes ``tests.core.contract`` importable from here.)
     """
-    from tests.contract import test_catalog_http as contract
+    from tests.core.contract import test_catalog_http as contract
 
     return {
         "blueprints": contract.BLUEPRINTS_PAYLOAD,
@@ -275,13 +275,13 @@ def point_at_throwaway_shops(
     # leaving it unset is what kept that stage out of every run of the
     # Phase 3 test. Resolved from the shop rather than hard-coded, so this
     # configures itself against whichever throwaway shop it is pointed at --
-    # and by name, which is also what exercises A25's name -> id resolution
+    # and by name, which is also what exercises ADR-0033's name -> id resolution
     # against the real API.
     profiles = [p for p in etsy_client.shipping_profiles(etsy_shop_id) if not p.is_deleted]
     if not profiles:
         prerequisite_missing(
             f"Etsy shop {etsy_shop_id} has no shipping profile -- create one in Shop Manager; "
-            f"`etsy_listing` cannot patch a listing without one (PRD 58)"
+            f"`etsy_listing` cannot patch a listing without one (ADR-0032)"
         )
     set_etsy_listing_defaults(root, who_made="i_did", shipping_profile=profiles[0].title)
     # `i_did`, not the real `someone_else` default: this throwaway shop is not

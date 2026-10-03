@@ -1,0 +1,534 @@
+"""The runs resource's HTTP surface: payload shape, status codes, SSE
+framing and ``openapi.json`` -- through a real ``TestClient``, never a fake
+transport, because the thing under test *is* the wire format.
+
+Every test opens the client as ``with TestClient(app) as client:`` rather than
+constructing one bare -- that is what runs the FastAPI lifespan (startup
+starts the deployment worker thread; shutdown joins it), and a run
+created against a client that never entered its ``with`` block would sit
+`queued` forever with nothing to dequeue it.
+
+The root "done when" for this whole PR lives here:
+``test_a_plan_run_streams_its_full_event_sequence`` and
+``test_an_apply_run_streams_its_full_event_sequence`` are what prove a plan
+run and an apply run each stream their complete event sequence through
+``TestClient`` -- everything else in this file is one contract-shaped slice
+of that same surface.
+"""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import threading
+import time
+from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+import pytest
+from fastapi.testclient import TestClient
+
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api import runs as runs_api
+from etsy_listings.server.api.app import create_app
+
+from tests.support.builders import FIXTURE_LISTING as LISTING
+from tests.support.builders import copy_listing
+
+
+def _context_factory(workspace: Workspace, on_event: EventSink | None) -> RunContext:
+    kwargs = {"on_event": on_event} if on_event is not None else {}
+    return RunContext(
+        workspace=workspace,
+        catalog=FakeCatalogClient([], {}, {}),
+        printify=None,
+        etsy=None,
+        **kwargs,
+    )
+
+
+@pytest.fixture
+def client(workspace_root: Path) -> Iterator[TestClient]:
+    workspace = Workspace.discover(root_override=workspace_root)
+    app = create_app(workspace, context_factory=_context_factory)
+    with TestClient(app) as test_client:
+        yield test_client
+
+
+def _wait_until_terminal(
+    client: TestClient, run_id: str, *, timeout: float = 15.0
+) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        detail: dict[str, Any] = client.get(f"/api/runs/{run_id}").json()
+        if detail["phase"] in {"ready", "applied", "failed", "stale", "cancelled"}:
+            return detail
+        time.sleep(0.05)
+    pytest.fail(f"run {run_id} never reached a terminal phase")
+
+
+def _parse_sse(raw: str) -> list[dict[str, Any]]:
+    """One dict per frame -- ``id``/``event`` from their own lines, ``data``
+    decoded as JSON. Blank-line-separated, per the SSE wire format."""
+    events = []
+    for block in raw.strip("\n").split("\n\n"):
+        if not block.strip():
+            continue
+        frame: dict[str, Any] = {}
+        for line in block.splitlines():
+            key, _, value = line.partition(": ")
+            if key == "data":
+                frame["data"] = json.loads(value)
+            elif key in ("id", "event"):
+                frame[key] = value
+        events.append(frame)
+    return events
+
+
+# --------------------------------------------------------------------- create
+
+
+def test_create_a_plan_run_returns_202_and_a_summary(client: TestClient) -> None:
+    response = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    )
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["kind"] == "plan"
+    assert body["listings"] == [LISTING]
+    assert body["phase"] == "queued"
+    assert body["seen"] is False
+    assert body["scope"] == "listings"
+    assert body["reviewed_run_id"] is None
+    datetime.fromisoformat(body["created_at"])
+    assert "id" in body
+
+    _wait_until_terminal(client, body["id"])
+
+
+def test_a_workspace_plan_resolves_sorted_names_on_the_server(
+    workspace_root: Path, client: TestClient
+) -> None:
+    copy_listing(workspace_root, "second")
+
+    response = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"})
+
+    assert response.status_code == 202
+    body = response.json()
+    assert body["scope"] == "workspace"
+    assert body["listings"] == ["second", LISTING]
+    assert body["reviewed_run_id"] is None
+
+    _wait_until_terminal(client, body["id"])
+
+
+@pytest.mark.parametrize(
+    ("payload", "message"),
+    [
+        ({}, "kind"),
+        ({"kind": "plan"}, "scope"),
+        ({"scope": "workspace"}, "kind"),
+        ({"kind": "plan", "scope": "workspace", "listings": []}, "listings"),
+        ({"kind": "plan", "scope": "workspace", "expect": {}}, "expect"),
+        (
+            {"kind": "apply", "scope": "workspace", "listings": [LISTING], "expect": {}},
+            "reviewed_run_id",
+        ),
+    ],
+)
+def test_workspace_request_shapes_are_validated(
+    client: TestClient, payload: dict[str, object], message: str
+) -> None:
+    response = client.post("/api/runs", json=payload)
+
+    assert response.status_code == 422
+    assert message in response.text
+
+
+def test_workspace_apply_reuses_exact_reviewed_targets_and_retains_the_plan(
+    client: TestClient,
+) -> None:
+    reviewed = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
+    reviewed_detail = _wait_until_terminal(client, reviewed["id"])
+    planned = [event for event in reviewed_detail["events"] if event["type"] == "listing_planned"]
+    listings = [event["listing"] for event in planned]
+    expect = {event["listing"]: event["fingerprint"] for event in planned}
+
+    applied = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "workspace",
+            "listings": listings,
+            "expect": expect,
+            "reviewed_run_id": reviewed["id"],
+        },
+    )
+
+    assert applied.status_code == 202
+    body = applied.json()
+    assert body["scope"] == "workspace"
+    assert body["reviewed_run_id"] == reviewed["id"]
+    assert client.get("/api/runs", params={"scope": "workspace"}).json()[0]["id"] == body["id"]
+    assert client.get(f"/api/runs/{reviewed['id']}").json()["phase"] == "ready"
+
+    _wait_until_terminal(client, body["id"])
+
+
+def test_a_workspace_apply_differing_from_its_review_is_409_with_the_refusal(
+    client: TestClient,
+) -> None:
+    """Which differences are refused is ``tests/core/behaviour/test_deployments.py``'s;
+    this is how one reaches the wire."""
+    reviewed = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
+    detail = _wait_until_terminal(client, reviewed["id"])
+    planned = [event for event in detail["events"] if event["type"] == "listing_planned"]
+    listings = [event["listing"] for event in planned]
+    expect = {event["listing"]: event["fingerprint"] for event in planned}
+    expect[listings[0]] = "sha256:" + "0" * 64
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "workspace",
+            "listings": listings,
+            "expect": expect,
+            "reviewed_run_id": reviewed["id"],
+        },
+    )
+
+    assert response.status_code == 409
+    assert response.json() == {
+        "detail": "apply fingerprints must exactly match the reviewed workspace plan"
+    }
+    assert client.get("/api/runs", params={"scope": "workspace"}).json()[0]["id"] == reviewed["id"]
+
+
+def test_workspace_apply_requires_a_ready_workspace_plan(client: TestClient) -> None:
+    queued = client.post("/api/runs", json={"kind": "plan", "scope": "workspace"}).json()
+
+    response = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "workspace",
+            "listings": [],
+            "expect": {},
+            "reviewed_run_id": queued["id"],
+        },
+    )
+
+    assert response.status_code == 409
+    assert "not ready" in response.text
+    _wait_until_terminal(client, queued["id"])
+
+
+def test_workspace_apply_rejects_a_missing_review_source(client: TestClient) -> None:
+    response = client.post(
+        "/api/runs",
+        json={
+            "kind": "apply",
+            "scope": "workspace",
+            "listings": [],
+            "expect": {},
+            "reviewed_run_id": "missing-review",
+        },
+    )
+
+    assert response.status_code == 409
+    assert "not a workspace plan" in response.text
+
+
+def test_create_is_refused_409_when_the_listing_is_already_active(client: TestClient) -> None:
+    first = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+
+    second = client.post(
+        "/api/runs",
+        json={"kind": "apply", "scope": "listings", "listings": [LISTING], "expect": {}},
+    )
+
+    assert second.status_code == 409
+    assert second.json() == {"active_run": first["id"]}
+
+    _wait_until_terminal(client, first["id"])
+
+
+# ---------------------------------------------------------------------- list
+
+
+def test_list_runs_filters_by_listing(workspace_root: Path, client: TestClient) -> None:
+    copy_listing(workspace_root, "second")
+    a = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    b = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": ["second"]}
+    ).json()
+
+    rows = client.get("/api/runs", params={"listing": "second"}).json()
+
+    assert [row["id"] for row in rows] == [b["id"]]
+    _wait_until_terminal(client, a["id"])
+    _wait_until_terminal(client, b["id"])
+
+
+def test_list_runs_for_an_untouched_listing_is_empty(client: TestClient) -> None:
+    assert client.get("/api/runs", params={"listing": "never-touched"}).json() == []
+
+
+# ----------------------------------------------------------------------- get
+
+
+def test_get_an_unknown_run_is_404(client: TestClient) -> None:
+    assert client.get("/api/runs/nope").status_code == 404
+
+
+def test_get_run_carries_its_events(client: TestClient) -> None:
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+
+    detail = _wait_until_terminal(client, created["id"])
+
+    assert detail["events"][0]["type"] == "phase"
+    assert detail["events"][0]["phase"] == "queued"
+    assert all("occurred_at" in event for event in detail["events"] if event["type"] == "phase")
+    assert any(e["type"] == "listing_planned" for e in detail["events"])
+
+
+# -------------------------------------------------------------------- cancel
+
+
+def test_cancel_an_apply_run_is_409(client: TestClient) -> None:
+    created = client.post(
+        "/api/runs",
+        json={"kind": "apply", "scope": "listings", "listings": [LISTING], "expect": {}},
+    ).json()
+
+    response = client.delete(f"/api/runs/{created['id']}")
+
+    assert response.status_code == 409
+    _wait_until_terminal(client, created["id"])
+
+
+def test_cancel_an_unknown_run_is_404(client: TestClient) -> None:
+    assert client.delete("/api/runs/nope").status_code == 404
+
+
+def test_cancel_a_queued_plan_run(workspace_root: Path, client: TestClient) -> None:
+    copy_listing(workspace_root, "second")
+    first = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    second = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": ["second"]}
+    ).json()
+
+    response = client.delete(f"/api/runs/{second['id']}")
+
+    assert response.status_code == 200
+    assert response.json()["phase"] == "cancelled"
+    _wait_until_terminal(client, first["id"])
+
+
+# ---------------------------------------------------------------------- seen
+
+
+def test_mark_seen(client: TestClient) -> None:
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    _wait_until_terminal(client, created["id"])
+
+    response = client.post(f"/api/runs/{created['id']}/seen")
+
+    assert response.status_code == 200
+    assert response.json()["seen"] is True
+
+
+def test_seen_on_an_unknown_run_is_404(client: TestClient) -> None:
+    assert client.post("/api/runs/nope/seen").status_code == 404
+
+
+# ------------------------------------------------------------------------ SSE
+
+
+def test_a_plan_run_streams_its_full_event_sequence(client: TestClient) -> None:
+    """The root "done when" for this PR, half of it: every event a plan run
+    produces, in order, through the real SSE route."""
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+
+    response = client.get(f"/api/runs/{created['id']}/events")
+
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/event-stream")
+    events = _parse_sse(response.text)
+
+    ids = [int(e["id"]) for e in events]
+    assert ids == sorted(ids)
+    assert ids == list(range(1, len(events) + 1))
+
+    types = [e["event"] for e in events]
+    assert types[0] == "phase"
+    assert events[0]["data"]["phase"] == "queued"
+    assert types[-1] == "phase"
+    assert events[-1]["data"]["phase"] == "ready"
+    assert "stage_checking" in types
+    assert "stage_planned" in types
+    assert "listing_planned" in types
+    assert "preview_rendered" in types
+
+
+def test_an_apply_run_streams_its_full_event_sequence(client: TestClient) -> None:
+    """The root "done when", the other half: an apply run's full sequence."""
+    created = client.post(
+        "/api/runs",
+        json={"kind": "apply", "scope": "listings", "listings": [LISTING], "expect": {}},
+    ).json()
+
+    response = client.get(f"/api/runs/{created['id']}/events")
+
+    events = _parse_sse(response.text)
+    types = [e["event"] for e in events]
+
+    assert types[0] == "phase"
+    assert events[0]["data"]["phase"] == "queued"
+    assert types[-1] == "phase"
+    assert events[-1]["data"]["phase"] == "applied"
+    assert "stage_applying" in types
+    assert "stage_applied" in types
+    assert "progress" in types
+
+
+def test_last_event_id_replays_only_what_came_after(client: TestClient) -> None:
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    _wait_until_terminal(client, created["id"])
+
+    full = _parse_sse(client.get(f"/api/runs/{created['id']}/events").text)
+    assert len(full) > 3
+    cutoff = int(full[2]["id"])
+
+    replayed = _parse_sse(
+        client.get(f"/api/runs/{created['id']}/events", headers={"Last-Event-ID": str(cutoff)}).text
+    )
+
+    assert [int(e["id"]) for e in replayed] == [int(e["id"]) for e in full if int(e["id"]) > cutoff]
+
+
+def test_an_invalid_last_event_id_replays_everything(client: TestClient) -> None:
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    _wait_until_terminal(client, created["id"])
+
+    replayed = _parse_sse(
+        client.get(
+            f"/api/runs/{created['id']}/events", headers={"Last-Event-ID": "not-a-number"}
+        ).text
+    )
+
+    assert replayed[0]["data"]["phase"] == "queued"
+
+
+def test_streaming_an_unknown_run_is_404(client: TestClient) -> None:
+    assert client.get("/api/runs/nope/events").status_code == 404
+
+
+def test_the_stream_is_an_unbuffered_event_stream(client: TestClient) -> None:
+    created = client.post(
+        "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+    ).json()
+    _wait_until_terminal(client, created["id"])
+
+    response = client.get(f"/api/runs/{created['id']}/events")
+
+    assert response.headers["content-type"].startswith("text/event-stream")
+    assert response.headers["cache-control"] == "no-cache"
+    assert response.headers["x-accel-buffering"] == "no"
+
+
+def test_closing_the_stream_does_not_cancel_the_run(workspace_root: Path) -> None:
+    """The browser leaving is the stream's generator seeing a disconnect;
+    the run goes on, and a later connection can replay it."""
+    planning = threading.Event()
+    release = threading.Event()
+
+    def gated(workspace: Workspace, on_event: EventSink | None) -> RunContext:
+        planning.set()
+        assert release.wait(timeout=15)
+        return _context_factory(workspace, on_event)
+
+    app = create_app(Workspace.discover(root_override=workspace_root), context_factory=gated)
+    with TestClient(app) as client:
+        created = client.post(
+            "/api/runs", json={"kind": "plan", "scope": "listings", "listings": [LISTING]}
+        ).json()
+        assert planning.wait(timeout=15)
+        run = app.state.deployments.get(created["id"])
+
+        class Leaving:
+            """Connected for the first poll, gone from the second."""
+
+            polls = 0
+
+            async def is_disconnected(self) -> bool:
+                self.polls += 1
+                return self.polls > 1
+
+        async def read_until_gone() -> list[bytes]:
+            return [frame async for frame in runs_api._sse_events(Leaving(), run, 0)]  # type: ignore[arg-type]
+
+        # Its own thread: another test layer (Playwright) may leave this
+        # thread with a running event loop, and asyncio.run refuses that.
+        with ThreadPoolExecutor(1) as pool:
+            frames = pool.submit(asyncio.run, read_until_gone()).result(timeout=15)
+
+        assert frames[0].startswith(b"id: 1\nevent: phase\n")
+        assert run.phase == "planning"
+        assert not run.cancel_requested
+        release.set()
+
+        assert _wait_until_terminal(client, created["id"])["phase"] == "ready"
+        replayed = _parse_sse(client.get(f"/api/runs/{created['id']}/events").text)
+        assert replayed[-1]["data"]["phase"] == "ready"
+
+
+# --------------------------------------------------------------------- openapi
+
+
+def test_run_event_appears_in_openapi_with_every_variant(client: TestClient) -> None:
+    schema = client.get("/openapi.json").json()
+    definitions = schema["components"]["schemas"]
+
+    expected = {
+        "PhaseEvent",
+        "StageCheckingEvent",
+        "StagePlannedEvent",
+        "ListingPlannedEvent",
+        "PreviewRenderedEvent",
+        "StageApplyingEvent",
+        "ProgressEvent",
+        "StageAppliedEvent",
+        "StageFailedEvent",
+        "ListingFailedEvent",
+    }
+    assert expected <= definitions.keys()
+
+    for detail_name in ("PlanRunDetail", "ApplyRunDetail"):
+        events_schema = definitions[detail_name]["properties"]["events"]
+        # A list of the discriminated union, however the schema nests it --
+        # openapi's `$ref`s point at `RunEvent` or straight at its `oneOf`.
+        assert "items" in events_schema

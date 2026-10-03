@@ -1,5 +1,5 @@
 """A batch-created listing, deployed against the real Printify and Etsy APIs
-(batch plan PR 8; spec, *Deployment interaction*; A43, A44). ``-m e2e``,
+(batch plan PR 8; spec, *Deployment interaction*; ADR-0050). ``-m e2e``,
 skipped by default.
 
 The Phase 3 test deploys the fixture listing; this one deploys a listing
@@ -15,7 +15,7 @@ between the batch and the deploy.
 What it adds over the offline suite is that a listing the batch path wrote
 is one the real pipeline accepts: every stage runs, nothing is blocked, and
 the Etsy draft carries the accepted title. And that the UI apply's full
-success removes the proposal (A44), against a real deploy.
+success removes the proposal, against a real deploy.
 
 **Costs state** exactly as the Phase 3 test does: one Printify product,
 published as an Etsy draft, deleted in teardown (which removes the draft
@@ -34,19 +34,19 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings import connections
-from etsy_listings.ai.brief import default_brief_prompt_text
-from etsy_listings.ai.market_queries import default_market_queries_prompt_text
-from etsy_listings.ai.prompt import default_seo_prompt_text
-from etsy_listings.ai.providers import AiProvider
-from etsy_listings.clients.etsy import HttpEtsyListingClient
-from etsy_listings.clients.printify import PrintifyClient
-from etsy_listings.engine.context import EventSink, RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
-from etsy_listings.engine.stages.printify_product import PRODUCT_ID_KEY
-from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core import connections
+from etsy_listings.core.ai.brief import default_brief_prompt_text
+from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
+from etsy_listings.core.ai.prompt import default_seo_prompt_text
+from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.clients.etsy import HttpEtsyListingClient
+from etsy_listings.core.clients.printify import PrintifyClient
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.stages.etsy_target import ETSY_LISTING_ID_KEY
+from etsy_listings.core.engine.stages.printify_product import PRODUCT_ID_KEY
+from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api.app import create_app
 
 from tests.conftest import FIXTURE_WORKSPACE
 from tests.e2e.conftest import PrerequisiteMissing, point_at_throwaway_shops
@@ -58,10 +58,10 @@ pytestmark = pytest.mark.e2e
 
 LISTING_TEMPLATE = "e2e-batch-tee"
 DESIGN = "e2e-batch-trail"
-"""The staged file's stem, and so the listing's name (A38)."""
+"""The staged file's stem, and so the listing's name."""
 PRINT_AREA = (4500, 5400)
 """The fixture garment profile's print area: a design any smaller is
-blocked before the product stage creates anything (PRD 38)."""
+blocked before the product stage creates anything."""
 AI_SECONDS = 240.0
 """The runner's own limit is 180 s; the rest is the queue's turn."""
 
@@ -230,7 +230,7 @@ def test_a_batch_created_listing_deploys_and_its_proposal_goes(
     assert live.title == title
     assert live.state == "draft"
 
-    # A44: the UI apply's full success removed the proposal. The batch
+    # ADR-0050: the UI apply's full success removed the proposal. The batch
     # record and its row stay, and deploying never marks a row reviewed.
     assert client.get(f"/api/listings/{DESIGN}/proposal").status_code == 404
     row = _row(client, batch_id)

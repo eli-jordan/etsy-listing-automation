@@ -1,21 +1,12 @@
 """Automation that takes a print-on-demand t-shirt design to a reviewable Etsy draft.
 
-Eight modules, dependencies pointing strictly downward (docs/architecture.md):
-
-===============  ============================================================
-``cli``          Typer commands; turning a ``Plan`` into terminal text.
-``ui``           The calibrator's FastAPI API and its React front end.
-``engine``       Stage pipeline, the three-way diff, the lockfile. The *only*
-                 module that computes a diff (A2).
-``newcmd``       The ``new`` picker: a catalog choice to a garment profile + listing.
-``workspace``    Where every file lives, path safety, loading config (A8).
-``render``       Pure passes and frozen config; ``template.yaml``'s models (A7).
-``catalog``      Printify reference data: protocol, TTL cache, fake.
-``config``       ``shop.yaml`` / garment profile / listing / pricing models, ``Money``.
-===============  ============================================================
-
-Plus :mod:`etsy_listings.terminal`, a standard-library-only leaf that answers
-"can this stream print that character?" for anything that decorates output.
+The current module map and invariants live in docs/architecture.md. The
+``server`` and ``cli`` adapters compose the transport-independent
+``core`` packages: engine, workspace, config, clients, rendering, AI, market
+research, listing templates and batches. Only core.engine computes deployment
+diffs and merges stage results into lockfiles; core.workspace owns the
+user-data layout. Dependencies form a graph, not a strict layered tree.
+Catalog protocols and caches live under core/clients/printify.
 
 Each package's ``__init__`` states its own interface and what it deliberately
 does not do. Nothing is re-exported here: importing the root would otherwise

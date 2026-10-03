@@ -9,10 +9,10 @@ from pathlib import Path
 
 from PIL import Image
 
-from etsy_listings.batches import Upload
-from etsy_listings.listing_templates import from_listing, save
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.batches import Upload
+from etsy_listings.core.listing_templates import from_listing, save
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING, edit_garment_profile, edit_listing
 
@@ -23,7 +23,7 @@ LOCAL_PICTURE = "./shots/size-chart.png"
 asset to carry into every listing (spec, *Creation and cloning*)."""
 DESIGN_SIZE = (90, 108)
 """90% of :func:`small_print_area`'s 100x120 on each axis -- the smallest
-design that passes (PRD 38)."""
+design that passes."""
 
 
 def small_print_area(root: Path) -> None:

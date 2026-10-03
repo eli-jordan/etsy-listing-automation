@@ -4,7 +4,7 @@
     {
       "name": "calibrator",
       "runtimeExecutable": "npm",
-      "runtimeArgs": ["--prefix", "src/etsy_listings/ui/frontend", "run", "dev", "--", "--port", "5173"],
+      "runtimeArgs": ["--prefix", "src/ui", "run", "dev", "--", "--port", "5173"],
       "port": 5173
     }
   ]

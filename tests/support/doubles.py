@@ -6,7 +6,7 @@ dict, and half a dozen ``input()`` replacements over a list of answers. The
 variation was never the point of any of those tests.
 
 Distinct from :mod:`tests.support.scripted`, which replaces
-:mod:`etsy_listings.prompts`' three entry points to drive a *wizard*. These
+:mod:`etsy_listings.cli.prompts`' three entry points to drive a *wizard*. These
 replace what those entry points call, to test the prompts themselves -- which
 backend runs, and how it behaves when the backend misbehaves.
 """

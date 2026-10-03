@@ -7,7 +7,7 @@ browser.
   three rows, and each opens an editor whose design is the dropped file,
   asserted on the ``listing.yaml`` and ``designs/*.png`` the UI wrote.
 * Create a batch of two -> both rows reach *done* on the summary -> the
-  editor has the batch run's suggestions waiting (A40, A41).
+  editor has the batch run's suggestions waiting.
 * The summary -> a listing's name -> Mark reviewed in the editor -> Back to batch ->
   the summary shows the row reviewed, and the batch's record says so
   (batch plan PR 5; UI doc §7, §8).
@@ -31,8 +31,8 @@ import pytest
 import yaml
 from playwright.sync_api import expect
 
-from etsy_listings.batches import BatchStore
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.batches import BatchStore
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_prompts, seeded_market
 from tests.support.batches import a_listing_template, png

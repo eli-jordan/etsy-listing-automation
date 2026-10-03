@@ -1,6 +1,6 @@
 """Browser tests for the listing-template editor (batch plan PR 6; UI doc §2,
 §3): the listing editor's shell over a listing template, the valid-only
-``PUT`` (A36), the rename and create endpoints and the files they write,
+``PUT``, the rename and create endpoints and the files they write,
 together in a real browser.
 
 * Switch every colour off -> *Not saved* and the tab badge, with
@@ -12,13 +12,14 @@ together in a real browser.
 from __future__ import annotations
 
 import re
+import time
 from pathlib import Path
 
 import pytest
 import yaml
 from playwright.sync_api import expect
 
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import GARMENT_PROFILE, LISTING_TEMPLATE, a_listing_template
 from tests.support.builders import edit_garment_profile
@@ -68,6 +69,19 @@ def _switch_every_colour_off(page) -> None:  # noqa: ANN001
         expect(switch).to_have_attribute("aria-checked", "false")
 
 
+def _wait_for_colours(root: Path, colours: list[str], timeout: float = 10.0) -> None:
+    """Wait until ``template.yaml`` holds exactly ``colours``.
+
+    Autosave debounces and merges the edits made while a save is in flight,
+    so clicks in quick succession can reach the server as one document. A
+    test that means "this complete version was written" waits for it.
+    """
+    deadline = time.monotonic() + timeout
+    while _colours(root) != colours:
+        assert time.monotonic() < deadline, f"{_colours(root)} never became {colours}"
+        time.sleep(0.05)
+
+
 def test_an_incomplete_listing_template_is_kept_off_disk_until_it_is_complete(  # noqa: ANN001
     page, workspace_root: Path
 ) -> None:
@@ -76,13 +90,20 @@ def test_an_incomplete_listing_template_is_kept_off_disk_until_it_is_complete(  
     # The preview row is the listing editor's design row, reworded (UI doc §3).
     assert page.get_by_text("Preview design: Grid / ruler target").is_visible()
 
-    _switch_every_colour_off(page)
+    # Each switch before the last leaves a complete template; wait for each
+    # to be written, so the version on disk at the end is known.
+    for done, colour in enumerate(COLOURS[:-1], start=1):
+        switch = page.get_by_role("switch", name=colour)
+        switch.click()
+        expect(switch).to_have_attribute("aria-checked", "false")
+        _wait_for_colours(workspace_root, COLOURS[done:])
+    page.get_by_role("switch", name=COLOURS[-1]).click()
 
     page.get_by_text("Not saved — fix the highlighted field and it will be written").wait_for()
     assert page.get_by_text("Last complete version is kept until then").is_visible()
     assert page.locator(".seg-opt", has_text="Variants").locator(".tab-badge").is_visible()
-    # Each switch before the last left a complete template, and was written;
-    # the last one did not, so the file is the last complete version (A36).
+    # The last switch left no colour at all, which is not written: the file
+    # is still the last complete version.
     assert _colours(workspace_root) == ["moss"]
 
     page.get_by_role("switch", name="black").click()

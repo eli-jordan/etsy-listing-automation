@@ -1,10 +1,10 @@
-"""Browser test for the deploy view (docs/deploy-changes.md, PR (5)'s "done
+"""Browser test for the deploy view (docs/features/deploy-20260917/spec.md, PR (5)'s "done
 when"): the one thing no other layer covers -- that the React app, the
 FastAPI runs endpoints and the real engine agree about a whole plan -> apply
 loop, streamed over SSE.
 
 Runs against ``create_app(context_factory=fakes)``, following the same fake
-`tests/contract/test_runs_api.py` and `tests/behaviour/test_runs_executor.py`
+`tests/server/contract/test_runs_api.py` and `tests/core/behaviour/test_runs_executor.py`
 already established: the fixture workspace has no shop configured, so
 `printify_product`/`publish`/`etsy_listing`/`etsy_media` all report
 themselves blocked and only `render` actually does anything -- real local
@@ -29,10 +29,10 @@ from pathlib import Path
 import pytest
 import uvicorn
 
-from etsy_listings.clients.printify.fakes import FakeCatalogClient
-from etsy_listings.engine.context import EventSink, RunContext
-from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
+from etsy_listings.core.engine.context import EventSink, RunContext
+from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.server.api.app import FRONTEND_DIST, create_app
 
 from tests.support.server import stop_server
 
@@ -65,8 +65,7 @@ def deploy_server(workspace_root: Path, prerequisite_missing) -> Iterator[str]: 
     check them afterward."""
     if not FRONTEND_DIST.is_dir():
         prerequisite_missing(
-            "ui/frontend/dist is absent -- run `npm run build` in "
-            "src/etsy_listings/ui/frontend to exercise the browser tests"
+            "src/ui/dist is absent -- run `npm run build` in src/ui to exercise the browser tests"
         )
 
     workspace = Workspace.discover(root_override=workspace_root)
@@ -196,7 +195,7 @@ def test_batch_apply_leaves_reattaches_and_continues_after_stale_listing(
     """The workspace route preserves review while one listing goes stale.
 
     This deliberately changes one listing after its review and before Apply.
-    That exercises the public A31 fingerprint guard and the sequential
+    That exercises the public ADR-0039 fingerprint guard and the sequential
     continue-on-error contract through the browser, rather than mocking either
     the API response or the React event stream.
     """

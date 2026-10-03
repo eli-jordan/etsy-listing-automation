@@ -29,5 +29,5 @@ def refuse_reads(monkeypatch: pytest.MonkeyPatch, times: int) -> list[float]:
 
     sleeps: list[float] = []
     monkeypatch.setattr(Path, "open", busy)
-    monkeypatch.setattr("etsy_listings.workspace.atomic.time.sleep", sleeps.append)
+    monkeypatch.setattr("etsy_listings.core.workspace.atomic.time.sleep", sleeps.append)
     return sleeps
