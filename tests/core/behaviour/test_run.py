@@ -120,6 +120,45 @@ def test_a_clean_batch_reports_no_failure(workspace_root: Path) -> None:
     assert report.outcomes[0].planned is not None
 
 
+def _blocked(report) -> dict[str, str]:  # noqa: ANN001
+    planned = report.outcomes[0].planned
+    assert planned is not None
+    return {sp.stage: sp.blocked for sp in planned.plan.stage_plans if sp.blocked}
+
+
+def test_an_unconfigured_workspace_blocks_every_shop_stage_and_still_renders(
+    workspace_root: Path,
+) -> None:
+    """The fixture has no shop ids. Every stage that needs a shop blocks --
+    and says what is lost and how to fix it -- rather than going unreported;
+    the local render stage still has work. Moved down from the `plan`
+    command's output tests (test-suite quality plan, PR 9)."""
+    report = plan_listings(_ctx(workspace_root), [LISTING], STAGES)
+
+    blocked = _blocked(report)
+    assert set(blocked) == {"printify_product", "publish", "etsy_listing", "etsy_media"}
+    consequence, remedy = blocked["printify_product"].splitlines()
+    assert consequence.startswith("this listing will not be uploaded to Printify")
+    assert remedy == "Run `etsy-listings setup` to point it at one."
+    assert report.outcomes[0].planned is not None
+    assert report.outcomes[0].planned.plan.stage_plans[0].will_run
+
+
+def test_a_configured_shop_with_blank_copy_blocks_on_the_copy_not_the_shop(
+    workspace_root: Path,
+) -> None:
+    """Once a Printify shop is set, the product stage stops reporting the
+    missing shop and refuses on the blank title instead; the Etsy stages
+    still block on the Etsy shop this test never configures."""
+    set_shop_id(workspace_root, 28819281)
+
+    blocked = _blocked(plan_listings(_ctx(workspace_root), [LISTING], STAGES))
+
+    assert set(blocked) == {"printify_product", "publish", "etsy_listing", "etsy_media"}
+    assert blocked["printify_product"].startswith("etsy.title is empty")
+    assert "Printify shop" not in blocked["printify_product"]
+
+
 def test_a_failure_carries_the_message_not_a_stack(workspace_root: Path) -> None:
     """The error is the whole useful output -- that is what `UserFacingError`
     means, and the run module catches nothing else."""
