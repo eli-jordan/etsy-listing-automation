@@ -9,8 +9,13 @@ from __future__ import annotations
 from dataclasses import replace
 from pathlib import Path
 
-from etsy_listings.engine.stages.render import RenderDesired, ResolvedLayer, SceneWork, scene_hash
-from etsy_listings.render.config import Point, RenderConfig
+from etsy_listings.core.engine.stages.render import (
+    RenderDesired,
+    ResolvedLayer,
+    SceneWork,
+    scene_hash,
+)
+from etsy_listings.core.render.config import Point, RenderConfig
 
 SQUARE_BOX = (
     Point(x=0.0, y=0.0),

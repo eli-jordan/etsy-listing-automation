@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.engine.stage import Blocked
-from etsy_listings.engine.stages.etsy_target import (
+from etsy_listings.core.engine.stage import Blocked
+from etsy_listings.core.engine.stages.etsy_target import (
     ETSY_LISTING_ID_KEY,
     EtsyListingNotMintedError,
     check_etsy_shop,

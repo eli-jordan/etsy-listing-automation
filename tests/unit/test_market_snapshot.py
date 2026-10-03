@@ -10,9 +10,15 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.market import MarketResult, PhraseScore, ScoredListing, market_block, snapshot
-from etsy_listings.market.snapshot import MarketSnapshot
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.market import (
+    MarketResult,
+    PhraseScore,
+    ScoredListing,
+    market_block,
+    snapshot,
+)
+from etsy_listings.core.market.snapshot import MarketSnapshot
+from etsy_listings.core.workspace.workspace import Workspace
 
 SEARCHED_AT = datetime(2026, 9, 24, 12, 30, tzinfo=UTC)
 

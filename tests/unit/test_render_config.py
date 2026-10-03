@@ -3,7 +3,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from etsy_listings.render.config import (
+from etsy_listings.core.render.config import (
     ColourMatrixTemplate,
     DisplaceConfig,
     MultipleTemplate,

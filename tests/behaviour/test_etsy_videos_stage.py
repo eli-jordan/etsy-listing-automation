@@ -16,15 +16,19 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.cli.render import format_plan
-from etsy_listings.clients.etsy.fakes import DAY_SECONDS, FakeEtsyListingClient
-from etsy_listings.clients.etsy.models import Inventory, InventoryProduct, InventoryPropertyValue
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun, build_plan
-from etsy_listings.engine.run import apply_listings
-from etsy_listings.engine.stages.etsy_media import EtsyMediaStage
-from etsy_listings.engine.stages.etsy_videos import EtsyVideosStage
+from etsy_listings.core.clients.etsy.fakes import DAY_SECONDS, FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.models import (
+    Inventory,
+    InventoryProduct,
+    InventoryPropertyValue,
+)
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import PlannedRun, build_plan
+from etsy_listings.core.engine.run import apply_listings
+from etsy_listings.core.engine.stages.etsy_media import EtsyMediaStage
+from etsy_listings.core.engine.stages.etsy_videos import EtsyVideosStage
 from etsy_listings.ui.runs.events import stage_plan_dto
 
 from tests.support.builders import FIXTURE_LISTING as LISTING

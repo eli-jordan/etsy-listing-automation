@@ -16,14 +16,14 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.ai import proposals
-from etsy_listings.ai.proposals import (
+from etsy_listings.core.ai import proposals
+from etsy_listings.core.ai.proposals import (
     ProposalChoices,
     ProposalReplacedError,
     ProposalStore,
     SeoProposalSnapshot,
 )
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.refusals import refuse_reads
 

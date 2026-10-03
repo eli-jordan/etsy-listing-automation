@@ -21,16 +21,16 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings.ai.models import ProviderReadiness
-from etsy_listings.ai.providers import AiProvider, FakeAiProvider
-from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.layout import (
+from etsy_listings.core.ai.models import ProviderReadiness
+from etsy_listings.core.ai.providers import AiProvider, FakeAiProvider
+from etsy_listings.core.workspace.layout import (
     BRIEF_PROMPT_FILE,
     MARKET_QUERIES_PROMPT_FILE,
     PROMPTS_DIR,
     SEO_PROMPT_FILE,
 )
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.workspace import Workspace
+from etsy_listings.ui.api.app import create_app
 
 from tests.support.ai_runs import seed_prompts
 from tests.support.builders import FIXTURE_LISTING as LISTING

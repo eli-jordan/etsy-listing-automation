@@ -17,15 +17,15 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import Plan, StagePlan, Verdict
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.events import EngineListingPlanned, EngineRunEvent
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun, StageState
-from etsy_listings.engine.run import apply_listings, plan_listings
-from etsy_listings.engine.stage import StageApplyResult
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.change import Plan, StagePlan, Verdict
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.events import EngineListingPlanned, EngineRunEvent
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import PlannedRun, StageState
+from etsy_listings.core.engine.run import apply_listings, plan_listings
+from etsy_listings.core.engine.stage import StageApplyResult
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock, copy_listing, edit_listing

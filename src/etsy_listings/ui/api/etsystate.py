@@ -19,7 +19,7 @@ Two things make asking cheap enough to do on every read:
 Failure is silence, deliberately. A workspace with no Etsy key pair, no
 sign-in, or a shop the token cannot read is an ordinary state well short of
 Phase 3 -- the listings page must still open, with every listing reported as
-not-live, which is what :func:`~etsy_listings.engine.status.is_live_etsy_state`
+not-live, which is what :func:`~etsy_listings.core.engine.status.is_live_etsy_state`
 already reads a missing state as.
 """
 
@@ -29,11 +29,11 @@ import time
 from collections.abc import Callable, Iterable
 from pathlib import Path
 
-from etsy_listings import connections
-from etsy_listings.clients.etsy.tokens import EtsyAuthError
-from etsy_listings.clients.etsy.transport import EtsyApiError
-from etsy_listings.config.secrets import MissingCredentialError
-from etsy_listings.engine.status import is_live_etsy_state
+from etsy_listings.core import connections
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.config.secrets import MissingCredentialError
+from etsy_listings.core.engine.status import is_live_etsy_state
 
 TTL_SECONDS = 30.0
 """How long a fetched state is reused. See the module docstring."""

@@ -17,12 +17,12 @@ from collections.abc import Callable
 
 import httpx
 
-from etsy_listings.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
-from etsy_listings.clients.etsy.transport import OAuthClient
-from etsy_listings.clients.etsy.transport import Transport as EtsyTransport
-from etsy_listings.clients.printify import BASE_URL, Transport
-from etsy_listings.clients.retry import DEFAULT_POLICY, RetryPolicy
-from etsy_listings.config.secrets import EtsyAppKey
+from etsy_listings.core.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
+from etsy_listings.core.clients.etsy.transport import OAuthClient
+from etsy_listings.core.clients.etsy.transport import Transport as EtsyTransport
+from etsy_listings.core.clients.printify import BASE_URL, Transport
+from etsy_listings.core.clients.retry import DEFAULT_POLICY, RetryPolicy
+from etsy_listings.core.config.secrets import EtsyAppKey
 
 Handler = Callable[[httpx.Request], httpx.Response]
 

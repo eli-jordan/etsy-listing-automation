@@ -31,8 +31,8 @@ import pytest
 import yaml
 from playwright.sync_api import expect
 
-from etsy_listings.batches import BatchStore
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.batches import BatchStore
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.ai_runs import DRAFTED_BRIEF, ChainProvider, seed_prompts, seeded_market
 from tests.support.batches import a_listing_template, png

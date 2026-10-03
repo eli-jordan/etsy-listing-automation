@@ -15,14 +15,14 @@ import base64
 import httpx
 import pytest
 
-from etsy_listings.clients.printify import HttpPrintifyClient
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify import HttpPrintifyClient
+from etsy_listings.core.clients.printify.models import (
     PlacedImage,
     Placeholder,
     PrintAreaSpec,
     ProductSpec,
 )
-from etsy_listings.clients.printify.transport import PrintifyApiError
+from etsy_listings.core.clients.printify.transport import PrintifyApiError
 
 from tests.support.http import INSTANT, transport
 

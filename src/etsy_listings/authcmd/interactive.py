@@ -29,22 +29,23 @@ from typing import Literal
 
 import typer
 
-from etsy_listings import connections, credentials, prompts
+from etsy_listings import credentials, prompts
 from etsy_listings.authcmd import logic
-from etsy_listings.clients.etsy import callback as callback_module
-from etsy_listings.clients.etsy import oauth
-from etsy_listings.clients.etsy.tokens import TokenStore, utcnow
-from etsy_listings.clients.etsy.transport import OAuthClient, Transport
-from etsy_listings.clients.printify import PrintifyAuthError
-from etsy_listings.clients.printify.models import Shop
-from etsy_listings.clients.printify.protocol import PrintifyClient
-from etsy_listings.config.secrets import (
+from etsy_listings.core import connections
+from etsy_listings.core.clients.etsy import callback as callback_module
+from etsy_listings.core.clients.etsy import oauth
+from etsy_listings.core.clients.etsy.tokens import TokenStore, utcnow
+from etsy_listings.core.clients.etsy.transport import OAuthClient, Transport
+from etsy_listings.core.clients.printify import PrintifyAuthError
+from etsy_listings.core.clients.printify.models import Shop
+from etsy_listings.core.clients.printify.protocol import PrintifyClient
+from etsy_listings.core.config.secrets import (
     ETSY_KEYSTRING_VAR,
     ETSY_SHARED_SECRET_VAR,
     EtsyAppKey,
     Secrets,
 )
-from etsy_listings.workspace import layout
+from etsy_listings.core.workspace import layout
 
 
 @dataclass(frozen=True)

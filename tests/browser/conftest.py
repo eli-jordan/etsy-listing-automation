@@ -14,8 +14,8 @@ from typing import Any
 import pytest
 import uvicorn
 
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import FRONTEND_DIST, create_app
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.server import stop_server
 

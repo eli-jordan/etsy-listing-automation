@@ -17,8 +17,8 @@ from __future__ import annotations
 
 import uvicorn
 
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 
 def serve(

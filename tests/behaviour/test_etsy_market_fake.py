@@ -14,7 +14,7 @@ import threading
 import httpx
 import pytest
 
-from etsy_listings.clients.etsy.fakes import (
+from etsy_listings.core.clients.etsy.fakes import (
     FakeEtsyMarketClient,
     MarketCall,
     market_listing,
@@ -22,9 +22,9 @@ from etsy_listings.clients.etsy.fakes import (
     rate_limited,
     server_error,
 )
-from etsy_listings.clients.etsy.market import EtsyMarketClient
-from etsy_listings.clients.etsy.models import MarketCandidate, ShopStats
-from etsy_listings.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient
+from etsy_listings.core.clients.etsy.models import MarketCandidate, ShopStats
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
 
 
 def _seeded() -> FakeEtsyMarketClient:

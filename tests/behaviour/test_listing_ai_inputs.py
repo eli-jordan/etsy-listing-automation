@@ -2,9 +2,9 @@
 
 from pathlib import Path
 
-from etsy_listings.ai.listing_inputs import ListingAiInputs
-from etsy_listings.ai.proposals import proposal_staleness
-from etsy_listings.workspace import Workspace
+from etsy_listings.core.ai.listing_inputs import ListingAiInputs
+from etsy_listings.core.ai.proposals import proposal_staleness
+from etsy_listings.core.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING
 

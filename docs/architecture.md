@@ -18,8 +18,12 @@ requires current descriptions to stay truthful during migration and a complete
 architecture reconciliation at completion. This document still describes the
 current checkout; the specification governs changed ownership, and its one
 user-visible change, removing the native host, is implemented: `ui` serves
-HTTP in the foreground. The npm project has also moved to `src/ui`. Unrelated
-invariants below remain in force.
+HTTP in the foreground. The npm project has also moved to `src/ui`, and the
+foundational backend packages (`engine`, `workspace`, `render`, `clients`,
+`config`, `ai`, `market`, `batches`, `listing_templates`) plus
+`connections.py` and `errors.py` now live under `etsy_listings.core`; module
+paths such as `engine/run.py` below are relative to `src/etsy_listings/core/`.
+Unrelated invariants below remain in force.
 
 ## Runtime and dependencies
 
@@ -105,7 +109,7 @@ and what it deliberately withholds.
 | `market` | Comparable-listing research, scoring and evidence snapshots | Read-only Etsy data informs wording rather than product facts |
 | `batches` | Upload validation, staging, name allocation and idempotent local creation | Creates ordinary listings; AI dispatch belongs to the UI server |
 
-`connections.py` builds clients and `RunContext`. Printify tokens and Etsy
+`core/connections.py` builds clients and `RunContext`. Printify tokens and Etsy
 bearers resolve at request time, but the Etsy app key pair is read during
 construction to decide whether an optional client exists. `credentials.py`
 owns credential capture, verification and storage. `prompts.py` chooses the

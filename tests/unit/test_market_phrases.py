@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.market.models import ScoredListing
-from etsy_listings.market.phrases import rank_phrases
+from etsy_listings.core.market.models import ScoredListing
+from etsy_listings.core.market.phrases import rank_phrases
 
 
 def _scored(listing_id: int, score_raw: float, *tags: str) -> ScoredListing:

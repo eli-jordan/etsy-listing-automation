@@ -43,10 +43,10 @@ from typing import Any
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.config.defaults import Defaults
-from etsy_listings.config.listing import Listing
-from etsy_listings.workspace import layout, to_native_path
-from etsy_listings.workspace.workspace import (
+from etsy_listings.core.config.defaults import Defaults
+from etsy_listings.core.config.listing import Listing
+from etsy_listings.core.workspace import layout, to_native_path
+from etsy_listings.core.workspace.workspace import (
     InvalidRefError,
     PathEscapesWorkspaceError,
     Workspace,

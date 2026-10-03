@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from etsy_listings.batches import BatchRow, reviewable, standing
+from etsy_listings.core.batches import BatchRow, reviewable, standing
 
 
 def _row(n: int, **fields: Any) -> BatchRow:  # noqa: ANN401

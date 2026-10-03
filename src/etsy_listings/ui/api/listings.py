@@ -40,30 +40,38 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import ValidationError
 
-from etsy_listings import connections
-from etsy_listings.ai.proposals import ProposalStore
-from etsy_listings.batches import BatchStore
-from etsy_listings.clients.etsy.tokens import EtsyAuthError
-from etsy_listings.clients.etsy.transport import EtsyApiError
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.listing import EMPTY_DRAFT, Listing
-from etsy_listings.config.listing_validation import (
+from etsy_listings.core import connections
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.batches import BatchStore
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.listing import EMPTY_DRAFT, Listing
+from etsy_listings.core.config.listing_validation import (
     DELETED_ON_PUBLISHED,
     check_listing,
     check_listing_yaml_present,
 )
-from etsy_listings.config.listing_validation import Issue as ValidationIssue
-from etsy_listings.config.money import Money
-from etsy_listings.config.pricing_plan import PricingPlan
-from etsy_listings.config.secrets import MissingCredentialError
-from etsy_listings.engine.preview import lookup_preview
-from etsy_listings.engine.status import (
+from etsy_listings.core.config.listing_validation import Issue as ValidationIssue
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.secrets import MissingCredentialError
+from etsy_listings.core.engine.preview import lookup_preview
+from etsy_listings.core.engine.status import (
     ListingGesture,
     ListingStatus,
     is_live_etsy_state,
     listing_gestures,
     remote_ids,
     workspace_listing_status,
+)
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.atomic import write_yaml_atomic
+from etsy_listings.core.workspace.common_copy import CommonCopyError
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import (
+    InvalidRefError,
+    Workspace,
 )
 from etsy_listings.newcmd.logic import (
     build_pricing_plan_choices,
@@ -93,14 +101,6 @@ from etsy_listings.ui.api.schemas import (
 from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.ui.runs.executor import ContextFactory
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.atomic import write_yaml_atomic
-from etsy_listings.workspace.common_copy import CommonCopyError
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import (
-    InvalidRefError,
-    Workspace,
-)
 
 router = APIRouter(prefix="/api/listings", tags=["listings"])
 
@@ -686,7 +686,7 @@ def _preview_response(
     request: Request, target: Target, template: str, colour: str | None
 ) -> Response:
     """ADR-0040, ADR-0041: the preview a plan run already rendered for this scene, at its
-    *current* hash. :func:`~etsy_listings.engine.preview.lookup_preview` owns
+    *current* hash. :func:`~etsy_listings.core.engine.preview.lookup_preview` owns
     the hash and the path; this is the HTTP adapter over it.
     """
     factory: ContextFactory = request.app.state.context_factory

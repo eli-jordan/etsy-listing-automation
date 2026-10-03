@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.workspace.video import ProbeFailure, VideoFacts, probe_video
+from etsy_listings.core.workspace.video import ProbeFailure, VideoFacts, probe_video
 
 VIDEOS = Path(__file__).parent.parent / "fixtures" / "video"
 

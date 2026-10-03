@@ -13,8 +13,8 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.clients.etsy.tokens import EtsyAuthError
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.ui.api import etsystate
 
 

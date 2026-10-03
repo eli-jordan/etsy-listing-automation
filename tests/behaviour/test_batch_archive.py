@@ -20,9 +20,9 @@ from pathlib import Path
 import pytest
 from PIL import Image
 
-from etsy_listings.batches import StagingRefused, StagingStore, review, stage_pngs
-from etsy_listings.batches import archive as archive_module
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.batches import StagingRefused, StagingStore, review, stage_pngs
+from etsy_listings.core.batches import archive as archive_module
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.batches import a_listing_template, png, uploads
 

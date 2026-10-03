@@ -155,7 +155,7 @@ The Etsy fields are absent until `auth` has stored credentials `setup` can look
 them up with — the tool asks for each by name at the point it actually needs
 one, and none of them is ever typed as a number. Every price you write anywhere in this workspace
 must be in the currency you set here (`349 NOK`, never a bare `349` — see
-`Money` in [config/money.py](../../src/etsy_listings/config/money.py)).
+`Money` in [config/money.py](../../src/etsy_listings/core/config/money.py)).
 
 Point the tool at this workspace one of two ways:
 

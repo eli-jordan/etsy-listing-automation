@@ -13,10 +13,11 @@ from pathlib import Path
 import typer
 
 from etsy_listings import prompts, terminal
-from etsy_listings.clients.printify.models import Blueprint, PrintProvider, VariantSet
-from etsy_listings.clients.printify.protocol import CatalogClient
-from etsy_listings.config.media import MAX_IMAGES
-from etsy_listings.config.slug import SlugCollisionError
+from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider, VariantSet
+from etsy_listings.core.clients.printify.protocol import CatalogClient
+from etsy_listings.core.config.media import MAX_IMAGES
+from etsy_listings.core.config.slug import SlugCollisionError
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.newcmd import fx_rate, unofficial_variant_costs
 from etsy_listings.newcmd.logic import (
     CREATE_NEW_PLAN_LABEL,
@@ -43,7 +44,6 @@ from etsy_listings.newcmd.logic import (
 from etsy_listings.newcmd.logic import (
     pricing_plan_ref as make_pricing_plan_ref,
 )
-from etsy_listings.workspace.workspace import Workspace
 
 DEFAULT_PLACEHOLDER = "front"
 

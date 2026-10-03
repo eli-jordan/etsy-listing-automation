@@ -18,14 +18,14 @@ from pathlib import Path
 import httpx
 import pytest
 
-from etsy_listings import connections
-from etsy_listings.clients.etsy.listings import HttpEtsyListingClient
-from etsy_listings.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
-from etsy_listings.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
-from etsy_listings.clients.printify import Blueprint, CachedCatalogClient, FakeCatalogClient
-from etsy_listings.config.secrets import MissingCredentialError
-from etsy_listings.workspace import layout
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core import connections
+from etsy_listings.core.clients.etsy.listings import HttpEtsyListingClient
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient, HttpEtsyMarketClient
+from etsy_listings.core.clients.etsy.transport import BASE_URL as ETSY_BASE_URL
+from etsy_listings.core.clients.printify import Blueprint, CachedCatalogClient, FakeCatalogClient
+from etsy_listings.core.config.secrets import MissingCredentialError
+from etsy_listings.core.workspace import layout
+from etsy_listings.core.workspace.workspace import Workspace
 
 KEY_PAIR = "ETSY_KEYSTRING=test-keystring\nETSY_SHARED_SECRET=test-secret\n"
 

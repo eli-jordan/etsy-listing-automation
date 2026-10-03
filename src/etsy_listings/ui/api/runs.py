@@ -38,6 +38,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.schemas import (
     ApplyRunDetail,
     ApplyRunSummary,
@@ -62,7 +63,6 @@ from etsy_listings.ui.runs.registry import (
     WorkspaceApply,
     WorkspacePlan,
 )
-from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(prefix="/api/runs", tags=["runs"])
 

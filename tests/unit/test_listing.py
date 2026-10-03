@@ -6,15 +6,15 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.config.description import DescriptionConfig
-from etsy_listings.config.listing import (
+from etsy_listings.core.config.description import DescriptionConfig
+from etsy_listings.core.config.listing import (
     EMPTY_DRAFT,
     EtsyListingConfig,
     Listing,
     TemplateMediaEntry,
 )
-from etsy_listings.config.money import Money
-from etsy_listings.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.config.pricing_plan import PricingPlan
 
 BASE: dict[str, object] = {
     "garment_profile": "comfort-colors-1717",
@@ -255,14 +255,14 @@ def test_rejects_artwork_override_for_unlisted_colour() -> None:
 
 
 def test_load_missing_file_raises_actionable_error(tmp_path: Path) -> None:
-    from etsy_listings.config.errors import ConfigLoadError
+    from etsy_listings.core.config.errors import ConfigLoadError
 
     with pytest.raises(ConfigLoadError, match="not found"):
         Listing.load(tmp_path / "missing.yaml", currency="NOK")
 
 
 def test_load_wraps_validation_error_with_path(tmp_path: Path) -> None:
-    from etsy_listings.config.errors import ConfigLoadError
+    from etsy_listings.core.config.errors import ConfigLoadError
 
     bad_path = tmp_path / "listing.yaml"
     bad_path.write_text(yaml.safe_dump({**BASE, "prices": {"S": 349}}))

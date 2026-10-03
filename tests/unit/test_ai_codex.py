@@ -2,10 +2,10 @@
 implementation plan, PR4, items 1-4).
 
 Nothing here launches a real `codex` process. Readiness tests replace
-`etsy_listings.ai.codex.subprocess.run` (the same double-and-monkeypatch
+`etsy_listings.core.ai.codex.subprocess.run` (the same double-and-monkeypatch
 pattern `tests/support/doubles.py.FakeRun` already established for
 `prompts.py`'s fzf lookup); generate/argv tests replace
-`etsy_listings.ai.codex.run_managed` so they can assert on exactly what argv,
+`etsy_listings.core.ai.codex.run_managed` so they can assert on exactly what argv,
 cwd, and stdin the adapter builds without exercising `ai/process.py`'s own
 (separately tested) subprocess machinery.
 """
@@ -19,14 +19,14 @@ from typing import Any
 
 import pytest
 
-from etsy_listings.ai import codex
-from etsy_listings.ai.errors import (
+from etsy_listings.core.ai import codex
+from etsy_listings.core.ai.errors import (
     ProviderCancelledError,
     ProviderGenerationError,
     ProviderTimeoutError,
     ProviderUnavailableError,
 )
-from etsy_listings.ai.models import (
+from etsy_listings.core.ai.models import (
     Deadline,
     GarmentContext,
     ProviderReadiness,
@@ -34,8 +34,8 @@ from etsy_listings.ai.models import (
     RepairContext,
     SeoRequest,
 )
-from etsy_listings.ai.process import ProcessResult
-from etsy_listings.ai.prompt import RESPONSE_SCHEMA, build_seo_task
+from etsy_listings.core.ai.process import ProcessResult
+from etsy_listings.core.ai.prompt import RESPONSE_SCHEMA, build_seo_task
 
 _EXEC_HELP = """
 Usage: codex exec [OPTIONS] [PROMPT]

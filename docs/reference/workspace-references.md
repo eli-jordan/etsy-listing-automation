@@ -27,6 +27,6 @@ state and cached proposals. It leaves ordinary listings, designs and templates
 intact. A later plan notices missing render outputs and schedules work again.
 
 The enforcing sources are
-[`workspace.py`](../../src/etsy_listings/workspace/workspace.py),
-[`layout.py`](../../src/etsy_listings/workspace/layout.py) and
-[`listing_template.py`](../../src/etsy_listings/config/listing_template.py).
+[`workspace.py`](../../src/etsy_listings/core/workspace/workspace.py),
+[`layout.py`](../../src/etsy_listings/core/workspace/layout.py) and
+[`listing_template.py`](../../src/etsy_listings/core/config/listing_template.py).

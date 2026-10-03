@@ -8,10 +8,10 @@ from pathlib import Path
 import pytest
 import yaml
 
-from etsy_listings.render.config import load_template_config
-from etsy_listings.render.io import load_design, load_template_base
-from etsy_listings.render.maps import height_map, luminance_map
-from etsy_listings.render.pipeline import Layer, render_scene
+from etsy_listings.core.render.config import load_template_config
+from etsy_listings.core.render.io import load_design, load_template_base
+from etsy_listings.core.render.maps import height_map, luminance_map
+from etsy_listings.core.render.pipeline import Layer, render_scene
 
 FIXTURES = Path(__file__).parent.parent.parent / "fixtures"
 DESIGN_PATH = FIXTURES / "render" / "grid-target.png"

@@ -11,7 +11,7 @@ Manager on 2026-09-25.
 
 from __future__ import annotations
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient, GallerySlot
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, GallerySlot
 
 SHOP_ID = 67961328
 LISTING_ID = 4582417670
@@ -184,7 +184,7 @@ def test_a_video_id_in_image_ids_is_refused_and_changes_nothing() -> None:
     """Measured: `400` "That ListingImage does not exist", nothing changed."""
     import pytest
 
-    from etsy_listings.clients.etsy.transport import EtsyApiError
+    from etsy_listings.core.clients.etsy.transport import EtsyApiError
 
     probe = _row_1()
     ids = [probe.images["1"], probe.videos["B"], probe.images["2"]]
@@ -203,7 +203,7 @@ def test_detaching_an_image_deletes_its_swatch_link_for_good() -> None:
     """Measured on duke: cut `image_ids` to one image and restore all five,
     and only the survivor's link is left. Restoring an image restores nothing
     else -- which is why the stage re-asserts swatches after every cut."""
-    from etsy_listings.clients.etsy.models import VariationImageLink
+    from etsy_listings.core.clients.etsy.models import VariationImageLink
 
     probe = Probe()
     for label in "123":
@@ -236,7 +236,7 @@ class Clock:
 def test_a_third_active_video_is_refused_with_409() -> None:
     import pytest
 
-    from etsy_listings.clients.etsy.listings import VideoSlotsFullError
+    from etsy_listings.core.clients.etsy.listings import VideoSlotsFullError
 
     probe = Probe()
     probe.image("1")
@@ -255,7 +255,7 @@ def test_the_eleventh_association_in_a_day_is_refused_with_400_on_an_empty_listi
     comes with no video on the listing at all."""
     import pytest
 
-    from etsy_listings.clients.etsy.listings import VideoBudgetExhaustedError
+    from etsy_listings.core.clients.etsy.listings import VideoBudgetExhaustedError
 
     probe = Probe(FakeEtsyListingClient(clock=Clock()))
     probe.image("1")
@@ -275,7 +275,7 @@ def test_the_eleventh_association_in_a_day_is_refused_with_400_on_an_empty_listi
 def test_the_budget_is_per_listing_and_frees_up_after_24_hours() -> None:
     import pytest
 
-    from etsy_listings.clients.etsy.listings import VideoBudgetExhaustedError
+    from etsy_listings.core.clients.etsy.listings import VideoBudgetExhaustedError
 
     clock = Clock()
     probe = Probe(FakeEtsyListingClient(clock=clock))

@@ -12,7 +12,7 @@ left. A refactoring only registers here when logic actually disappears.
 
     uv run python scripts/sloc.py            # src and tests, per file
     uv run python scripts/sloc.py --summary  # just the totals
-    uv run python scripts/sloc.py src/etsy_listings/engine
+    uv run python scripts/sloc.py src/etsy_listings/core/engine
 
 Frontend TypeScript is counted too, minus the generated OpenAPI client, which
 nobody writes and nobody should be credited for shrinking.

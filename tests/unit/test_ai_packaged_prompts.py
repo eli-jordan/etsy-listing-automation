@@ -11,9 +11,9 @@ from __future__ import annotations
 
 import re
 
-from etsy_listings.ai.market_queries import default_market_queries_prompt_text
-from etsy_listings.ai.prompt import default_seo_prompt_text
-from etsy_listings.market import MARKET_BEGIN
+from etsy_listings.core.ai.market_queries import default_market_queries_prompt_text
+from etsy_listings.core.ai.prompt import default_seo_prompt_text
+from etsy_listings.core.market import MARKET_BEGIN
 
 
 def _section(text: str, heading: str) -> str:

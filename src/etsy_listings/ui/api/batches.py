@@ -27,9 +27,9 @@ from fastapi import APIRouter, Form, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from pydantic import ValidationError
 
-from etsy_listings.ai.listing_inputs import ListingAiInputs
-from etsy_listings.ai.proposals import ProposalStore
-from etsy_listings.batches import (
+from etsy_listings.core.ai.listing_inputs import ListingAiInputs
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.batches import (
     Batch,
     BatchRow,
     BatchStore,
@@ -49,8 +49,10 @@ from etsy_listings.batches import (
     standing,
     upload_path,
 )
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.errors import UserFacingError
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.errors import UserFacingError
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.airuns.registry import AiRunRegistry
 from etsy_listings.ui.api.schemas import (
     AiReadinessBlock,
@@ -70,8 +72,6 @@ from etsy_listings.ui.api.seo import batch_readiness
 from etsy_listings.ui.api.thumbnails import thumbnail_response
 from etsy_listings.ui.batchqueue import RETRYABLE, BatchQueue
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
 
 router = APIRouter(tags=["batches"])
 

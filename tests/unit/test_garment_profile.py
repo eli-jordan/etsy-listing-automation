@@ -12,8 +12,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.garment_profile import GarmentProfile
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.garment_profile import GarmentProfile
 
 MINIMAL: dict[str, object] = {
     "blueprint": {"brand": "Comfort Colors", "model": "1717"},

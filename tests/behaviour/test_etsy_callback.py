@@ -15,8 +15,8 @@ from typing import Any
 import httpx
 import pytest
 
-from etsy_listings.clients.etsy.callback import CallbackError, wait_for_redirect
-from etsy_listings.clients.etsy.oauth import OAuthError
+from etsy_listings.core.clients.etsy.callback import CallbackError, wait_for_redirect
+from etsy_listings.core.clients.etsy.oauth import OAuthError
 
 
 def _free_port() -> int:

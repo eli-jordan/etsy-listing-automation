@@ -21,10 +21,10 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from etsy_listings.ai.models import ProviderReadiness
-from etsy_listings.batches import StagingStore, stage_pngs
+from etsy_listings.core.ai.models import ProviderReadiness
+from etsy_listings.core.batches import StagingStore, stage_pngs
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png, uploads

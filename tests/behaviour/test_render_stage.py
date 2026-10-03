@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.plan import build_plan
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.placement import ArtworkResolutionError
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.plan import build_plan
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.placement import ArtworkResolutionError
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import a_context, a_lock

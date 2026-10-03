@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
-from etsy_listings.clients.etsy import oauth
+from etsy_listings.core.clients.etsy import oauth
 
 # --------------------------------------------------------------------- PKCE
 

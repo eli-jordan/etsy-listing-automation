@@ -19,13 +19,13 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from etsy_listings.ai.proposals import ProposalStore
-from etsy_listings.clients.printify.fakes import FakePrintifyClient
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.run import plan_listings
-from etsy_listings.engine.stages import STAGES
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.clients.printify.fakes import FakePrintifyClient
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.run import plan_listings
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.workspace.workspace import Workspace, remove_tree
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace, remove_tree
 
 from tests.support.ai_runs import ChainProvider, seed_prompts, seeded_market, wait_for
 from tests.support.batches import LISTING_TEMPLATE, a_listing_template, png

@@ -18,13 +18,13 @@ import yaml
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from etsy_listings import connections
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
-from etsy_listings.clients.etsy.models import ShopSection
-from etsy_listings.engine.lock import Lockfile
+from etsy_listings.core import connections
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient, FakeEtsyShopClient
+from etsy_listings.core.clients.etsy.models import ShopSection
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api import etsystate
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.builders import (
     copy_listing,

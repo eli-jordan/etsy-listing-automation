@@ -12,10 +12,10 @@ import pytest
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from etsy_listings.render.config import DisplaceConfig, Point, RenderConfig
+from etsy_listings.core.render.config import DisplaceConfig, Point, RenderConfig
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.api import templates
 from etsy_listings.ui.api.app import create_app
-from etsy_listings.workspace.workspace import Workspace
 
 
 @pytest.fixture(autouse=True)

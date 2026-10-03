@@ -13,13 +13,13 @@ from pathlib import Path
 
 import pytest
 
-import etsy_listings.engine.stages.render as render_module
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.events import EnginePreviewRendered, EngineRunEvent
-from etsy_listings.engine.plan import StageState, build_plan
-from etsy_listings.engine.run import preview_listing
-from etsy_listings.engine.stages import STAGES
-from etsy_listings.engine.stages.render import (
+import etsy_listings.core.engine.stages.render as render_module
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.events import EnginePreviewRendered, EngineRunEvent
+from etsy_listings.core.engine.plan import StageState, build_plan
+from etsy_listings.core.engine.run import preview_listing
+from etsy_listings.core.engine.stages import STAGES
+from etsy_listings.core.engine.stages.render import (
     PREVIEW_WORKERS,
     RenderStage,
     _hash_token,

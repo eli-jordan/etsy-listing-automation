@@ -14,9 +14,9 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.money import Money
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.money import Money
 
 BASE: dict[str, object] = {
     "garment_profile": "comfort-colors-1717",

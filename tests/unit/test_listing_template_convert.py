@@ -16,17 +16,17 @@ from typing import Any
 import pytest
 import yaml
 
-from etsy_listings.config.listing_template import ListingTemplate
-from etsy_listings.config.money import Money
-from etsy_listings.listing_templates import (
+from etsy_listings.core.config.listing_template import ListingTemplate
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.listing_templates import (
     ListingTemplateExistsError,
     UnreadableAssetError,
     from_listing,
     from_template,
     save,
 )
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING, edit_listing
 

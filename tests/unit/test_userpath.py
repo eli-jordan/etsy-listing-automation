@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.workspace.userpath import to_native_path
+from etsy_listings.core.workspace.userpath import to_native_path
 
 windows_only = pytest.mark.skipif(os.name != "nt", reason="translation is a Windows-only concern")
 
@@ -53,10 +53,10 @@ def test_translates_cygwin_home_path_via_cygpath() -> None:
 def test_untranslatable_path_is_returned_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
     """Without cygpath there is no mount table to consult, so the original
     path is preserved -- a wrong guess would be worse than the plain error."""
-    monkeypatch.setattr("etsy_listings.workspace.userpath.shutil.which", lambda _: None)
+    monkeypatch.setattr("etsy_listings.core.workspace.userpath.shutil.which", lambda _: None)
     assert to_native_path("/home/Admin/workspace") == Path("/home/Admin/workspace")
 
 
 def test_is_a_no_op_on_posix_platforms(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("etsy_listings.workspace.userpath.os.name", "posix")
+    monkeypatch.setattr("etsy_listings.core.workspace.userpath.os.name", "posix")
     assert to_native_path("/home/admin/workspace") == Path("/home/admin/workspace")

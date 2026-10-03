@@ -12,11 +12,11 @@ from pathlib import Path
 
 import yaml
 
-from etsy_listings.clients.etsy.models import Shop as EtsyShop
-from etsy_listings.clients.printify.models import Shop
-from etsy_listings.config.defaults import Defaults
+from etsy_listings.core.clients.etsy.models import Shop as EtsyShop
+from etsy_listings.core.clients.printify.models import Shop
+from etsy_listings.core.config.defaults import Defaults
+from etsy_listings.core.workspace import layout
 from etsy_listings.setupcmd import logic
-from etsy_listings.workspace import layout
 
 # ------------------------------------------------------------- the skeleton
 

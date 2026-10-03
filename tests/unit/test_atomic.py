@@ -10,7 +10,7 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.workspace.atomic import read_bytes_retrying, write_bytes_atomic
+from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_bytes_atomic
 
 from tests.support.refusals import refuse_reads
 
@@ -70,7 +70,7 @@ def test_a_replace_refused_while_a_reader_has_the_file_open_is_retried(
         real(source, target)
 
     monkeypatch.setattr(os, "replace", busy)
-    monkeypatch.setattr("etsy_listings.workspace.atomic.time.sleep", lambda _: None)
+    monkeypatch.setattr("etsy_listings.core.workspace.atomic.time.sleep", lambda _: None)
 
     write_bytes_atomic(path, b"new")
 
@@ -88,7 +88,7 @@ def test_a_replace_that_stays_refused_is_raised_and_leaves_no_temporary(
         raise PermissionError(13, "Access is denied")
 
     monkeypatch.setattr(os, "replace", refused)
-    monkeypatch.setattr("etsy_listings.workspace.atomic.time.sleep", lambda _: None)
+    monkeypatch.setattr("etsy_listings.core.workspace.atomic.time.sleep", lambda _: None)
 
     with pytest.raises(PermissionError):
         write_bytes_atomic(path, b"new")

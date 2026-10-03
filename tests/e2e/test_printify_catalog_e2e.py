@@ -24,9 +24,9 @@ from typing import Any
 import httpx
 import pytest
 
-from etsy_listings.clients.printify import BASE_URL, HttpCatalogClient
-from etsy_listings.clients.printify.models import Blueprint, PrintProvider
-from etsy_listings.clients.printify.resolve import CatalogResolutionError, resolve_blueprint
+from etsy_listings.core.clients.printify import BASE_URL, HttpCatalogClient
+from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider
+from etsy_listings.core.clients.printify.resolve import CatalogResolutionError, resolve_blueprint
 
 pytestmark = pytest.mark.e2e
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, ConfigDict
 
-from etsy_listings.engine.lock import (
+from etsy_listings.core.engine.lock import (
     IncompleteApply,
     Lockfile,
     StageApplyResult,

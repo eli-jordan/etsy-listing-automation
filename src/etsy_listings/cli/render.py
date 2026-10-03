@@ -11,7 +11,7 @@ output is shown as missing because the stage observed it missing.
 
 from __future__ import annotations
 
-from etsy_listings.engine.change import Drift, Plan, StagePlan
+from etsy_listings.core.engine.change import Drift, Plan, StagePlan
 
 
 def format_plan(plan: Plan) -> str:

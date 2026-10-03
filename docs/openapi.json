@@ -2598,7 +2598,7 @@
         "type": "object"
       },
       "ListingFailedEvent": {
-        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.engine.run.StalePlanError`.",
+        "description": "The engine's ``EngineListingFailed`` wire twin. ``message`` is the\n:class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word\n(decision 5) -- never the generic internal-error text, which belongs to a\n:class:`PhaseEvent` naming the whole run ``failed`` instead, since a\ndefect is not about any one listing. ``stale_plan`` is set only when the\nerror was a :class:`~etsy_listings.core.engine.run.StalePlanError`.",
         "properties": {
           "id": {
             "title": "Id",
@@ -9671,7 +9671,7 @@
     },
     "/api/templates/{name}/thumbnail": {
       "get": {
-        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo is shown is\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_preview_photo`'s\nquestion, not this endpoint's.\n\n``colour`` narrows that to one photo of a ``colour-matrix`` set, for\ncallers that are showing a *particular* variant rather than standing in\nfor the template: the listings editor's reel draws one tile per\n``media`` entry, and without this every colour of a set drew the same\npicture, since ``template_preview_photo`` deliberately answers \"any one\nof them\". Resolution goes through\n:meth:`~etsy_listings.workspace.workspace.Workspace.template_base_image`,\nwhich owns ADR-0004's filename convention and its trailing-segment\nfallback -- this endpoint must not glob for ``{colour}.png`` itself.\n\nHow it is downscaled and served is:mod:`etsy_listings.ui.api.thumbnails`'\nquestion -- the listings table asks the same one of a design.",
+        "description": "The template's own photo, downscaled, for the rail.\n\nNot a render: the rail shows every template in the workspace at once, and\nrunning the real pipeline once per row would make opening the calibrator\ncost as much as calibrating. Which photo is shown is\n:meth:`~etsy_listings.core.workspace.workspace.Workspace.template_preview_photo`'s\nquestion, not this endpoint's.\n\n``colour`` narrows that to one photo of a ``colour-matrix`` set, for\ncallers that are showing a *particular* variant rather than standing in\nfor the template: the listings editor's reel draws one tile per\n``media`` entry, and without this every colour of a set drew the same\npicture, since ``template_preview_photo`` deliberately answers \"any one\nof them\". Resolution goes through\n:meth:`~etsy_listings.core.workspace.workspace.Workspace.template_base_image`,\nwhich owns ADR-0004's filename convention and its trailing-segment\nfallback -- this endpoint must not glob for ``{colour}.png`` itself.\n\nHow it is downscaled and served is:mod:`etsy_listings.ui.api.thumbnails`'\nquestion -- the listings table asks the same one of a design.",
         "operationId": "thumbnail_api_templates__name__thumbnail_get",
         "parameters": [
           {

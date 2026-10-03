@@ -16,10 +16,11 @@ from fastapi.staticfiles import StaticFiles
 from starlette.requests import Request
 from starlette.responses import FileResponse, JSONResponse, Response
 
-from etsy_listings import connections
-from etsy_listings.ai.proposals import ProposalStore
-from etsy_listings.batches import BatchStore, StagingStore
-from etsy_listings.clients.etsy.market import EtsyMarketClient
+from etsy_listings.core import connections
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.batches import BatchStore, StagingStore
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient
+from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 from etsy_listings.ui.airuns.registry import AiRunRegistry
 from etsy_listings.ui.airuns.runner import AiRunner, MarketClientFactory
 from etsy_listings.ui.api.airuns import router as ai_runs_router
@@ -37,7 +38,6 @@ from etsy_listings.ui.batchqueue import BatchQueue
 from etsy_listings.ui.runs.executor import ContextFactory, RunExecutor
 from etsy_listings.ui.runs.registry import RunRegistry
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace.workspace import InvalidNameError, Workspace
 
 
 def _frontend_dist() -> Path:

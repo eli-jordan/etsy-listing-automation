@@ -10,20 +10,22 @@ requirements, guides, research and decisions.
 
 ```
 src/etsy_listings/
+  core/ transport-independent backend; no FastAPI, Typer or terminal/prompt imports
+    workspace/ root discovery, path resolution, the only code that knows the directory layout
+    config/ pydantic models, Money, slugs, listing_validation.py (every local refusal)
+    engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
+    render/ pure render passes, frozen RenderConfig, pipeline
+    clients/ printify/ and etsy/ — transport, models, fakes
+    ai/ SEO/brief providers (Codex/Claude), prompts, proposals
+    market/ market-informed SEO research
+    listing_templates/ template conversion, validation and frozen content capture
+    batches/ staging, naming, archive inspection and ordinary listing creation
+    connections.py errors.py client wiring, UserFacingError
   cli/ Typer app, one module per command
-  workspace/ root discovery, path resolution, the only code that knows the directory layout
-  config/ pydantic models, Money, slugs, listing_validation.py (every local refusal)
-  engine/ Stage protocol, Change vocabulary, lockfile, plan/apply/run, lifecycle, stages/
-  render/ pure render passes, frozen RenderConfig, pipeline
-  clients/ printify/ and etsy/ — transport, models, fakes
-  ai/ SEO/brief providers (Codex/Claude), prompts, proposals
-  market/ market-informed SEO research
-  listing_templates/ template conversion, validation and frozen content capture
-  batches/ staging, naming, archive inspection and ordinary listing creation
   ui/ FastAPI api/, run workers and hosting; release wheels carry the built SPA in ui/static/
-src/ui/ React/npm project (see src/ui/AGENTS.md)
   newcmd/ setupcmd/ authcmd/ the `new`, `setup` and `auth` wizards
-  connections.py credentials.py prompts.py terminal.py client wiring, credential steps, prompt backend, encoding guard
+  credentials.py prompts.py terminal.py credential steps, prompt backend, encoding guard
+src/ui/ React/npm project (see src/ui/AGENTS.md)
 tests/ unit, golden, behaviour, browser, contract, e2e; shared doubles in tests/support/
 docs/ guides/, features/<topic>-YYYYMMDD/, adr/, reference/, research/, history/, architecture.md
 scripts/ check.sh, sloc.py, generate_test_assets.py
@@ -99,7 +101,7 @@ feature with delivery PR links. See the [documentation authority rules](docs/REA
 
 The repo is `/home/Admin/code/etsy-listing-automation` in cygwin, `C:\cygwin64\home\Admin\code\etsy-listing-automation` from Windows. `uv`, Python and `node` are Windows binaries on cygwin's PATH: the working directory translates, path *arguments* do not.
 
-- `--root` / `ETSY_LISTINGS_ROOT` accept cygwin paths and translate them (`workspace/userpath.py`), so `--root` is declared `str`, not `Path`. Any new CLI option taking a user path needs the same treatment.
+- `--root` / `ETSY_LISTINGS_ROOT` accept cygwin paths and translate them (`core/workspace/userpath.py`), so `--root` is declared `str`, not `Path`. Any new CLI option taking a user path needs the same treatment.
 - The cygwin pty is not a Windows console. prompt_toolkit cannot prompt (`NoConsoleScreenBufferError`), so all interactive prompts go through `prompts.py`'s plain-`input()` fallback — never call questionary directly. `isatty()` is False and the encoding is cp1252; `terminal.adopt_declared_encoding()` trusts `LANG`, `FORCE_COLOR` opts colour back in.
 - A cygwin-only binary (e.g. `fzf`, a shebang script) is invisible to `shutil.which`. `newcmd/prompts.py` falls back to cygwin's `sh.exe`; any new external-command dependency needs the same two-step lookup.
 - `core.fileMode` is false in this repo. Leave it; do not commit mode-only changes. `LF → CRLF` warnings are noise.

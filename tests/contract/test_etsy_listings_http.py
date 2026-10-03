@@ -14,8 +14,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from etsy_listings.clients.etsy.listings import HttpEtsyListingClient
-from etsy_listings.clients.etsy.transport import EtsyApiError
+from etsy_listings.core.clients.etsy.listings import HttpEtsyListingClient
+from etsy_listings.core.clients.etsy.transport import EtsyApiError
 
 from tests.support.http import etsy_transport
 
@@ -396,7 +396,7 @@ def test_update_variation_images_posts_the_triples_to_the_shop_scoped_path() -> 
         seen["body"] = httpx.Response(200, content=request.read()).json()
         return httpx.Response(200, json={"count": 1, "results": []})
 
-    from etsy_listings.clients.etsy.models import VariationImageLink
+    from etsy_listings.core.clients.etsy.models import VariationImageLink
 
     _client(handler).update_variation_images(
         SHOP_ID,
@@ -783,8 +783,8 @@ def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:  # noqa
     within 24 h, upload or re-attach alike, answers `400` with the same text
     a full listing gets. Shown verbatim it would send the seller looking for
     videos that are not there."""
-    from etsy_listings.clients.etsy.listings import VideoBudgetExhaustedError
-    from etsy_listings.errors import UserFacingError
+    from etsy_listings.core.clients.etsy.listings import VideoBudgetExhaustedError
+    from etsy_listings.core.errors import UserFacingError
 
     calls: list[httpx.Request] = []
 
@@ -805,7 +805,7 @@ def test_the_daily_budget_400_is_reworded_into_what_it_is(send) -> None:  # noqa
 def test_a_full_listing_409_is_its_own_error(send) -> None:  # noqa: ANN001
     """Measured: a third upload with `is_multi_video=true` against two active
     videos answers `409`, after the bytes had been sent."""
-    from etsy_listings.clients.etsy.listings import (
+    from etsy_listings.core.clients.etsy.listings import (
         VideoBudgetExhaustedError,
         VideoSlotsFullError,
     )
@@ -819,7 +819,7 @@ def test_a_full_listing_409_is_its_own_error(send) -> None:  # noqa: ANN001
 
 
 def test_any_other_400_stays_etsys_own_words() -> None:
-    from etsy_listings.clients.etsy.listings import (
+    from etsy_listings.core.clients.etsy.listings import (
         VideoBudgetExhaustedError,
         VideoSlotsFullError,
     )

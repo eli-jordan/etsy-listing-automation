@@ -11,9 +11,9 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.config import MarketWeights
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.config import MarketWeights
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.workspace.workspace import Workspace
 
 SPEC_DEFAULTS = {
     "reviews": 30,

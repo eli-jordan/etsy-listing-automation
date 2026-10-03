@@ -10,9 +10,13 @@ the empty overlap -- were never exercised at all.
 
 from __future__ import annotations
 
-from etsy_listings.clients.etsy.models import Inventory, InventoryProduct, InventoryPropertyValue
-from etsy_listings.config.slug import ColourExceptions
-from etsy_listings.engine.stages.colour_property import resolve_colour_property
+from etsy_listings.core.clients.etsy.models import (
+    Inventory,
+    InventoryProduct,
+    InventoryPropertyValue,
+)
+from etsy_listings.core.config.slug import ColourExceptions
+from etsy_listings.core.engine.stages.colour_property import resolve_colour_property
 
 COLOUR_PROPERTY = 200
 SIZE_PROPERTY = 100

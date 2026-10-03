@@ -14,7 +14,7 @@ from typer.testing import CliRunner
 from etsy_listings import prompts
 from etsy_listings.cli import app as cli
 from etsy_listings.cli.app import app
-from etsy_listings.engine.context import Event
+from etsy_listings.core.engine.context import Event
 
 runner = CliRunner()
 

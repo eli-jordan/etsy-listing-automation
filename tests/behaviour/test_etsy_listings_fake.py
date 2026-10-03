@@ -6,8 +6,8 @@ reproduce or it blesses a broken media stage (features/etsy-listing-20260910/spe
 
 from __future__ import annotations
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.clients.etsy.models import VariationImageLink
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.models import VariationImageLink
 
 SHOP_ID = 67961328
 LISTING_ID = 4572550919
@@ -146,7 +146,7 @@ def test_an_empty_list_clears_the_links() -> None:
 
 
 def test_shipping_profiles_and_production_partners_are_seeded() -> None:
-    from etsy_listings.clients.etsy.models import ProductionPartner, ShippingProfile
+    from etsy_listings.core.clients.etsy.models import ProductionPartner, ShippingProfile
 
     client = FakeEtsyListingClient(
         shipping_profiles=[ShippingProfile(shipping_profile_id=1, title="NOK standard tee")],

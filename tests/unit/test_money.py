@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from etsy_listings.config.money import Money, MoneyFormatError, require_currency
+from etsy_listings.core.config.money import Money, MoneyFormatError, require_currency
 
 
 def test_parses_amount_and_currency() -> None:

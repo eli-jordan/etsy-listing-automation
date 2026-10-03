@@ -18,8 +18,8 @@ import threading
 import httpx
 import pytest
 
-from etsy_listings.clients.etsy.transport import BASE_URL, RateGate, Transport
-from etsy_listings.config.secrets import EtsyAppKey
+from etsy_listings.core.clients.etsy.transport import BASE_URL, RateGate, Transport
+from etsy_listings.core.config.secrets import EtsyAppKey
 
 
 class FakeTime:
@@ -185,7 +185,7 @@ def test_the_daily_budget_is_logged_at_debug(caplog: pytest.LogCaptureFixture) -
     handler, _ = _answering(time, 9)
     transport = _transport(time, handler)
 
-    with caplog.at_level(logging.DEBUG, logger="etsy_listings.clients.etsy.transport"):
+    with caplog.at_level(logging.DEBUG, logger="etsy_listings.core.clients.etsy.transport"):
         transport.get("/a")
 
     [record] = [r for r in caplog.records if "remaining today" in r.getMessage()]

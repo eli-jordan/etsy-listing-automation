@@ -12,8 +12,8 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.clients.printify.models import (
+from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
+from etsy_listings.core.clients.printify.models import (
     Blueprint,
     PrintAreaPlaceholder,
     PrintProvider,
@@ -22,13 +22,13 @@ from etsy_listings.clients.printify.models import (
     VariantOptions,
     VariantSet,
 )
-from etsy_listings.engine.apply import execute
-from etsy_listings.engine.change import PriceChange
-from etsy_listings.engine.context import RunContext
-from etsy_listings.engine.lock import Lockfile
-from etsy_listings.engine.plan import PlannedRun, build_plan
-from etsy_listings.engine.stages.printify_product import PrintifyProductStage
-from etsy_listings.engine.stages.render import RenderStage
+from etsy_listings.core.engine.apply import execute
+from etsy_listings.core.engine.change import PriceChange
+from etsy_listings.core.engine.context import RunContext
+from etsy_listings.core.engine.lock import Lockfile
+from etsy_listings.core.engine.plan import PlannedRun, build_plan
+from etsy_listings.core.engine.stages.printify_product import PrintifyProductStage
+from etsy_listings.core.engine.stages.render import RenderStage
 
 from tests.support.builders import FIXTURE_LISTING as LISTING
 from tests.support.builders import (

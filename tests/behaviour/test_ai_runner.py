@@ -21,17 +21,17 @@ from pathlib import Path
 import pytest
 import yaml
 
-from etsy_listings.ai.errors import SeoTryAgainError
-from etsy_listings.ai.proposals import ProposalStore
-from etsy_listings.clients.etsy.fakes import FakeEtsyMarketClient, server_error
-from etsy_listings.errors import INTERNAL_ERROR_MESSAGE
-from etsy_listings.market import snapshot as market_snapshot
-from etsy_listings.market.block import MARKET_BEGIN
+from etsy_listings.core.ai.errors import SeoTryAgainError
+from etsy_listings.core.ai.proposals import ProposalStore
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyMarketClient, server_error
+from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE
+from etsy_listings.core.market import snapshot as market_snapshot
+from etsy_listings.core.market.block import MARKET_BEGIN
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.airuns.events import AiStepEvent, StepId
 from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry
 from etsy_listings.ui.airuns.runner import RUN_LIMIT_SECONDS, TIMEOUT_MESSAGE, AiRunner
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace.workspace import Workspace
 
 from tests.support.ai_runs import (
     DRAFTED_BRIEF,

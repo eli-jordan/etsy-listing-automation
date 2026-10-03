@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.engine.context import MissingClientError
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.engine.context import MissingClientError
 
 from tests.support.builders import a_context
 

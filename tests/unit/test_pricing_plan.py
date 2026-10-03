@@ -6,9 +6,9 @@ import pytest
 import yaml
 from pydantic import ValidationError
 
-from etsy_listings.config.errors import ConfigLoadError
-from etsy_listings.config.money import Money
-from etsy_listings.config.pricing_plan import PricingPlan
+from etsy_listings.core.config.errors import ConfigLoadError
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.config.pricing_plan import PricingPlan
 
 BASE: dict[str, object] = {
     "garment_profile": "comfort-colors-1717",

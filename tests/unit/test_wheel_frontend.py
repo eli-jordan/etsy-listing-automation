@@ -145,7 +145,7 @@ SERVE_SCRIPT = textwrap.dedent(
     import etsy_listings
     from fastapi.testclient import TestClient
     from etsy_listings.ui.api.app import create_app
-    from etsy_listings.workspace.workspace import Workspace
+    from etsy_listings.core.workspace.workspace import Workspace
 
     install, workspace = Path(sys.argv[1]), Path(sys.argv[2])
     assert Path(etsy_listings.__file__).is_relative_to(install), etsy_listings.__file__

@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.market import lead
+from etsy_listings.core.market import lead
 
 
 @pytest.mark.parametrize(

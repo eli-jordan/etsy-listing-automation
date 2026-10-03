@@ -15,8 +15,8 @@ sources have been tried.
 `pricing_plan` is a path reference, using the same
 [workspace and owner roots](workspace-references.md) as design files. Loading
 it belongs to the caller; the listing model resolves prices from an already
-loaded plan. See [listing.py](../../src/etsy_listings/config/listing.py) and
-[pricing_plan.py](../../src/etsy_listings/config/pricing_plan.py).
+loaded plan. See [listing.py](../../src/etsy_listings/core/config/listing.py) and
+[pricing_plan.py](../../src/etsy_listings/core/config/pricing_plan.py).
 
 The `new` wizard can convert Printify's USD production cost into the shop
 currency to help choose a retail price. Saved prices remain explicit amounts;
@@ -31,7 +31,7 @@ override, then the template placement's artwork override, then an
 the sole design key if there is exactly one. An explicit key that is absent
 from the design map refuses the operation. Rendering and Printify product
 creation share this resolver so the photograph and printed shirt use the same
-file. See [placement.py](../../src/etsy_listings/engine/stages/placement.py) and
+file. See [placement.py](../../src/etsy_listings/core/engine/stages/placement.py) and
 the [rendering specification](../features/multi-placement-rendering-20260903/spec.md).
 
 `colors` chooses sellable variants. `media` chooses which mockup scenes render
@@ -42,7 +42,7 @@ and reusable versus listing-local assets.
 A requested colour that matches no catalog colour is refused. A requested
 size that no colour offers is also refused. A missing colour/size cell is
 reported and skipped, because the printer may offer a sparse matrix. See
-[resolve.py](../../src/etsy_listings/clients/printify/resolve.py).
+[resolve.py](../../src/etsy_listings/core/clients/printify/resolve.py).
 
 ## Etsy resource names
 
@@ -55,5 +55,5 @@ the shop default. Return policies have no title, so they are matched by their
 return, exchange and deadline terms. These resources resolve against the live
 shop once per run, and a name or terms miss refuses the listing instead of
 choosing another resource. See
-[shopcatalog.py](../../src/etsy_listings/clients/etsy/shopcatalog.py) and the
+[shopcatalog.py](../../src/etsy_listings/core/clients/etsy/shopcatalog.py) and the
 [Etsy specification](../features/etsy-listing-20260910/spec.md).

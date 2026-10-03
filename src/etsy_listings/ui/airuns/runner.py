@@ -41,18 +41,24 @@ from pathlib import Path
 
 import yaml
 
-from etsy_listings.ai.brief import BriefRequest
-from etsy_listings.ai.errors import ProviderCancelledError, SeoGenerationError
-from etsy_listings.ai.listing_inputs import ListingAiInputs, PreparedSeo
-from etsy_listings.ai.market_queries import MarketQueriesRequest
-from etsy_listings.ai.orchestrator import generate_brief, generate_market_queries, generate_proposal
-from etsy_listings.ai.proposals import ProposalChoices, ProposalStore
-from etsy_listings.ai.providers import AiProvider
-from etsy_listings.clients.etsy.market import EtsyMarketClient
-from etsy_listings.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
-from etsy_listings.market import MarketResearchError, ResearchCancelled, research
-from etsy_listings.market import snapshot as market_snapshot
-from etsy_listings.market.cache import CachedEtsyMarketClient
+from etsy_listings.core.ai.brief import BriefRequest
+from etsy_listings.core.ai.errors import ProviderCancelledError, SeoGenerationError
+from etsy_listings.core.ai.listing_inputs import ListingAiInputs, PreparedSeo
+from etsy_listings.core.ai.market_queries import MarketQueriesRequest
+from etsy_listings.core.ai.orchestrator import (
+    generate_brief,
+    generate_market_queries,
+    generate_proposal,
+)
+from etsy_listings.core.ai.proposals import ProposalChoices, ProposalStore
+from etsy_listings.core.ai.providers import AiProvider
+from etsy_listings.core.clients.etsy.market import EtsyMarketClient
+from etsy_listings.core.errors import INTERNAL_ERROR_MESSAGE, UserFacingError
+from etsy_listings.core.market import MarketResearchError, ResearchCancelled, research
+from etsy_listings.core.market import snapshot as market_snapshot
+from etsy_listings.core.market.cache import CachedEtsyMarketClient
+from etsy_listings.core.workspace.atomic import write_yaml_atomic
+from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.ui.airuns.events import (
     STEP_IDS,
     AiBriefEvent,
@@ -62,8 +68,6 @@ from etsy_listings.ui.airuns.events import (
 )
 from etsy_listings.ui.airuns.registry import AiRun, AiRunRegistry
 from etsy_listings.ui.workspace_locks import WorkspaceLocks
-from etsy_listings.workspace.atomic import write_yaml_atomic
-from etsy_listings.workspace.workspace import Workspace
 
 logger = logging.getLogger(__name__)
 

@@ -3,7 +3,7 @@ turns into JSON (ADR-0041, decision 7).
 
 Two things are true about the engine's own ``Plan``/``StagePlan``/``Change``
 types that make them unfit to serialise directly. They are plain dataclasses,
-and changes may carry a :class:`~etsy_listings.config.money.Money` that JSON
+and changes may carry a :class:`~etsy_listings.core.config.money.Money` that JSON
 does not convert on its own. And the four ``Change`` shapes (``FieldChange``,
 ``ListChange``, ``PriceChange``, ``MediaChange``) are a plain union with no
 field a frontend union type could discriminate on -- exactly the ambiguity
@@ -14,7 +14,7 @@ rather than reusing whatever shape happened to be lying around.
 So every engine type gains a small DTO mirror here, each with an explicit
 ``kind``/``type`` literal a frontend can switch on, built by walking the real
 value once ( :func:`_jsonable`) rather than leaning on pydantic to already know
-what a ``Money`` is. This is *not* :func:`~etsy_listings.engine.run._canonical`
+what a ``Money`` is. This is *not* :func:`~etsy_listings.core.engine.run._canonical`
 reused: that helper exists to drop ``snapshot`` for the plan fingerprint
 and must never be tempted to keep it; this one exists to keep it, because the
 whole reason a plan run streams a ``listing_planned`` event is to show the
@@ -38,8 +38,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from etsy_listings.config.money import Money
-from etsy_listings.engine.change import (
+from etsy_listings.core.config.money import Money
+from etsy_listings.core.engine.change import (
     Action,
     Change,
     Drift,
@@ -50,12 +50,12 @@ from etsy_listings.engine.change import (
     PriceChange,
     StagePlan,
 )
-from etsy_listings.engine.stages.etsy_listing import EtsyListingSnapshot
-from etsy_listings.engine.stages.etsy_media import EtsyMediaSnapshot
-from etsy_listings.engine.stages.etsy_videos import EtsyVideosSnapshot
-from etsy_listings.engine.stages.printify_product import ProductSnapshot
-from etsy_listings.engine.stages.publish import PublishSnapshot
-from etsy_listings.engine.stages.render import RenderSnapshot
+from etsy_listings.core.engine.stages.etsy_listing import EtsyListingSnapshot
+from etsy_listings.core.engine.stages.etsy_media import EtsyMediaSnapshot
+from etsy_listings.core.engine.stages.etsy_videos import EtsyVideosSnapshot
+from etsy_listings.core.engine.stages.printify_product import ProductSnapshot
+from etsy_listings.core.engine.stages.publish import PublishSnapshot
+from etsy_listings.core.engine.stages.render import RenderSnapshot
 
 RunKind = Literal["plan", "apply"]
 RunScope = Literal["listings", "workspace"]
@@ -97,7 +97,7 @@ def _jsonable(value: Any) -> Any:  # noqa: ANN401 - a generic tree walk, by cons
     :class:`Money`, a nested pydantic model (a snapshot, or a snapshot field
     that is itself one), a dataclass, a ``Path``, an ``Enum``, a
     list/tuple/dict of any of those, or a plain JSON scalar already. Unlike
-    :func:`~etsy_listings.engine.run._canonical`, this keeps every field by
+    :func:`~etsy_listings.core.engine.run._canonical`, this keeps every field by
     name (including one literally called ``snapshot``) -- there is no
     fingerprint here for a snapshot to spoil.
     """
@@ -465,11 +465,11 @@ class StageFailedEvent(BaseModel):
 
 class ListingFailedEvent(BaseModel):
     """The engine's ``EngineListingFailed`` wire twin. ``message`` is the
-    :class:`~etsy_listings.errors.UserFacingError`'s own text, word for word
+    :class:`~etsy_listings.core.errors.UserFacingError`'s own text, word for word
     (decision 5) -- never the generic internal-error text, which belongs to a
     :class:`PhaseEvent` naming the whole run ``failed`` instead, since a
     defect is not about any one listing. ``stale_plan`` is set only when the
-    error was a :class:`~etsy_listings.engine.run.StalePlanError`."""
+    error was a :class:`~etsy_listings.core.engine.run.StalePlanError`."""
 
     type: Literal["listing_failed"] = "listing_failed"
     id: int

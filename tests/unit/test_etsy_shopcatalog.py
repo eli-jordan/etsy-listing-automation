@@ -11,14 +11,14 @@ from __future__ import annotations
 
 import pytest
 
-from etsy_listings.clients.etsy.fakes import FakeEtsyListingClient
-from etsy_listings.clients.etsy.models import (
+from etsy_listings.core.clients.etsy.fakes import FakeEtsyListingClient
+from etsy_listings.core.clients.etsy.models import (
     ProductionPartner,
     ReturnPolicy,
     ShippingProfile,
     ShopSection,
 )
-from etsy_listings.clients.etsy.shopcatalog import (
+from etsy_listings.core.clients.etsy.shopcatalog import (
     EtsyShopCatalog,
     ReturnPolicyTerms,
     ShopCatalogError,

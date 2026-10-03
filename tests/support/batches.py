@@ -9,10 +9,10 @@ from pathlib import Path
 
 from PIL import Image
 
-from etsy_listings.batches import Upload
-from etsy_listings.listing_templates import from_listing, save
-from etsy_listings.workspace.facts import WorkspaceFacts
-from etsy_listings.workspace.workspace import Workspace
+from etsy_listings.core.batches import Upload
+from etsy_listings.core.listing_templates import from_listing, save
+from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.builders import FIXTURE_LISTING, edit_garment_profile, edit_listing
 
