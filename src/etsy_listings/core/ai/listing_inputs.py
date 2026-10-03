@@ -20,6 +20,7 @@ from etsy_listings.core.ai.proposals import (
 )
 from etsy_listings.core.errors import UserFacingError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 _PREFERRED_DESIGN_KEYS = ("default", "on-light", "on-dark")
@@ -44,7 +45,7 @@ class ListingAiInputs:
     def read(
         cls, workspace: Workspace, name: str, *, facts: WorkspaceFacts | None = None
     ) -> ListingAiInputs:
-        if not workspace.listing_file(name).is_file():
+        if not ListingDocuments(workspace).exists(name):
             raise UserFacingError(f"the listing {name!r} no longer exists")
         listing = workspace.load_listing(name)
         facts = facts or WorkspaceFacts.gather(workspace)

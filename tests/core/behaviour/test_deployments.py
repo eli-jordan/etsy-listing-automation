@@ -33,7 +33,6 @@ from etsy_listings.core.application.deploy.registry import (
     WorkspacePlan,
 )
 from etsy_listings.core.application.refusals import ReviewedPlanRefused
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient
 from etsy_listings.core.engine.context import EventSink, RunContext
@@ -260,7 +259,6 @@ def test_runs_execute_one_at_a_time_in_the_order_queued_after_yielding_ai_work(
     copy_listing(workspace_root, "second")
     ai = AiCoordinator(
         workspace,
-        locks=WorkspaceLocks(),
         proposals=ProposalStore(workspace),
         batches=BatchStore(workspace),
         providers=lambda _workspace: [],

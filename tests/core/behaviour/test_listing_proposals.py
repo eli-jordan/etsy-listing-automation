@@ -27,7 +27,8 @@ from etsy_listings.core.application.refusals import (
     ProposalMissing,
     ProposalReplaced,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
+from etsy_listings.core.listing_artifacts import remove_listing
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 from tests.support.ai_runs import TODAY, proposal_payload
@@ -61,7 +62,6 @@ def _resolve(workspace: Workspace, proposals: ProposalStore, **sections: object)
         workspace,
         proposals,
         LISTING,
-        locks=WorkspaceLocks(),
         generated_at=sections.pop("generated_at", TODAY),
         **sections,  # type: ignore[arg-type]
     )
@@ -164,7 +164,6 @@ def test_resolving_refuses_a_missing_listing_or_proposal(
             workspace,
             proposals,
             "never-saved",
-            locks=WorkspaceLocks(),
             generated_at=TODAY,
             title="accepted",
         )
@@ -177,24 +176,22 @@ def test_a_listing_deleted_while_resolving_waits_is_refused_and_leaves_no_record
     the resolution re-checks the listing rather than writing a record back
     for a listing that is gone."""
     _generated(workspace, proposals)
-    locks = WorkspaceLocks()
+    documents = ListingDocuments(workspace)
     refused: list[BaseException] = []
 
     def resolve() -> None:
         try:
-            resolve_proposal(
-                workspace, proposals, LISTING, locks=locks, generated_at=TODAY, title="accepted"
-            )
+            resolve_proposal(workspace, proposals, LISTING, generated_at=TODAY, title="accepted")
         except ListingMissing as exc:
             refused.append(exc)
 
-    with locks.listing(LISTING):
+    with documents.lock(LISTING):
         waiting = threading.Thread(target=resolve)
         waiting.start()
         waiting.join(timeout=0.2)
         assert waiting.is_alive(), "the resolution did not wait for the lock"
         proposals.remove(LISTING)
-        workspace.remove_listing(LISTING)
+        remove_listing(workspace, LISTING)
     waiting.join(timeout=5)
 
     assert len(refused) == 1

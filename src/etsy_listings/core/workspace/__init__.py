@@ -17,6 +17,12 @@ So: ask for ``workspace.lock_file(name)``, never join
 ``load_exceptions`` are how the tree's files are opened, so no caller writes
 its own ``yaml.safe_load`` against a path it assembled.
 
+Writing ``listing.yaml`` has one module of its own,
+:mod:`~etsy_listings.core.workspace.listing_documents`. Every writer goes
+through ``ListingDocuments`` for its lock, retrying read and atomic replace,
+and for the one answer to "is there a listing?" and "is this name free?".
+It is imported from its own module, as ``atomic`` is, rather than from here.
+
 :class:`WorkspaceFacts` is the same rule applied to *repeated* reading: the
 garment profiles and template configs a listing check needs, gathered once for
 a request rather than re-parsed inside every check of every row -- and the

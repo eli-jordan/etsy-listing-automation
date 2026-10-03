@@ -1,9 +1,10 @@
 """What a direct listing-operation test injects in place of the UI process's
 coordinators (module-structure plan, PR 6).
 
-The write locks are the real ``WorkspaceLocks`` -- competing writes are only
-proved against the lock that serialises them -- and so is the AI run
-registry, core's own since PR 9. The Etsy state memo is replaced: only Etsy
+Nothing replaces the write locks. They are each listing's own
+``ListingDocuments.lock``, which the operations take themselves, and competing
+writes are only proved against the lock that serialises them. The AI run
+registry is the real one too, core's own since PR 9. The Etsy state memo is replaced: only Etsy
 knows a listing's state.
 """
 

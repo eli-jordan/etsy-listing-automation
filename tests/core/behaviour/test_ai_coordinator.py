@@ -27,7 +27,6 @@ from etsy_listings.core.application.refusals import (
     ListingDraftingInBatch,
     ListingMissing,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import Batch, BatchStore, StagingStore, confirm, stage_pngs
 from etsy_listings.core.workspace.workspace import Workspace
 
@@ -68,7 +67,6 @@ def ai(
     market = seeded_market()
     coordinator = AiCoordinator(
         workspace,
-        locks=WorkspaceLocks(),
         proposals=ProposalStore(workspace),
         batches=batches,
         providers=lambda _workspace: [provider],
@@ -84,7 +82,7 @@ def _batch(workspace: Workspace, batches: BatchStore, *names: str) -> Batch:
     staging = StagingStore(workspace)
     files = [(f"{name}.png", png(i + 1)) for i, name in enumerate(names)]
     session = stage_pngs(workspace, staging, LISTING_TEMPLATE, uploads(*files))
-    return confirm(workspace, staging, batches, session.id, lock=WorkspaceLocks().listing)
+    return confirm(workspace, staging, batches, session.id)
 
 
 def _states(batches: BatchStore, batch: Batch) -> list[str | None]:
@@ -108,7 +106,6 @@ def test_constructing_the_coordinator_starts_no_thread(
 
     AiCoordinator(
         workspace,
-        locks=WorkspaceLocks(),
         proposals=ProposalStore(workspace),
         batches=batches,
         providers=lambda _workspace: [provider],

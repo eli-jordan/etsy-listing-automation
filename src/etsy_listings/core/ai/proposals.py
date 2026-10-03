@@ -20,10 +20,8 @@ the summary read the same reasons.
 from __future__ import annotations
 
 import json
-import threading
 from collections import Counter
-from collections.abc import Iterator, Sequence
-from contextlib import ExitStack, contextmanager
+from collections.abc import Sequence
 from datetime import datetime
 from typing import Literal
 
@@ -31,6 +29,7 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from etsy_listings.core.ai.models import SeoProposal
 from etsy_listings.core.workspace.atomic import read_bytes_retrying, write_json_atomic
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 SCHEMA = 1
@@ -143,37 +142,18 @@ class ProposalReplacedError(Exception):
     """A resolution named a proposal that has since been regenerated."""
 
 
-_GUARD = threading.Lock()
-_LOCKS: dict[tuple[str, str], threading.Lock] = {}
-"""Every record's lock in this process, keyed by the resolved proposals
-directory and the casefolded listing name. Process-wide, not per store:
-the engine removes a fully applied listing's proposal through a store of
-its own while the UI's store may be resolving the same record, and
-two sets of locks would let the remove land inside that read-modify-write
-and be written back over."""
-
-
 class ProposalStore:
     """The one reader and writer of proposal records. Every mutation is a
-    read-modify-write under the record's lock, and every store over
-    one workspace shares those locks, so a store is cheap to make."""
+    read-modify-write under the listing's lock (``ListingDocuments.lock``).
+    That lock is process-wide, shared by every store over one workspace and
+    by every other writer to the listing. So when the engine removes a fully
+    applied listing's proposal through a store of its own while the UI's
+    store is resolving the same record, the remove waits instead of landing
+    inside that read-modify-write. A store is cheap to make."""
 
     def __init__(self, workspace: Workspace) -> None:
         self._workspace = workspace
-
-    @contextmanager
-    def _lock(self, *listings: str) -> Iterator[None]:
-        """Every named record's lock, taken in sorted order so two moves in
-        opposite directions cannot deadlock. Keyed by casefold, as the
-        listing write locks are, so two spellings that may be one file on
-        disk are never written at once."""
-        directory = str(self._workspace.proposal_file(listings[0]).parent.resolve())
-        with ExitStack() as stack:
-            for name in sorted({name.casefold() for name in listings}):
-                with _GUARD:
-                    lock = _LOCKS.setdefault((directory, name), threading.Lock())
-                stack.enter_context(lock)
-            yield
+        self._lock = ListingDocuments(workspace).lock
 
     def load(self, listing: str) -> ProposalRecord | None:
         """``listing``'s proposal, or ``None`` for none -- and for a record

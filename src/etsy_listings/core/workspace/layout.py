@@ -83,8 +83,7 @@ PREVIEWS_DIR = "previews"
 """ADR-0040: full-size renders `plan` produces ahead of `apply`, content-addressed
 by `scene_hash` under `PREVIEWS_DIR/<listing>/<template>/`. Sibling to
 `RENDERS_DIR` rather than nested inside it -- a preview is not yet an applied
-render, and `Workspace.remove_listing` needs to be able to wipe one without
-the other."""
+render, and either must be wipeable without the other."""
 MARKET_DIR = "market"
 """Market-informed SEO's caches (features/market-seo-20260924/spec.md, *Cache*), each a directory
 inside it: :data:`MARKET_SEARCH_DIR` and :data:`MARKET_STATS_DIR` hold the

@@ -41,8 +41,8 @@ from etsy_listings.core.application.refusals import (
     ListingDraftingInBatch,
     ListingMissing,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -53,7 +53,6 @@ class AiCoordinator:
         self,
         workspace: Workspace,
         *,
-        locks: WorkspaceLocks,
         proposals: ProposalStore,
         batches: BatchStore,
         providers: ProviderFactory = default_ai_providers,
@@ -64,7 +63,6 @@ class AiCoordinator:
         self._runner = AiRunner(
             workspace=workspace,
             registry=self._registry,
-            locks=locks,
             providers=providers,
             market_client=market_client,
             proposals=proposals,
@@ -110,7 +108,7 @@ class AiCoordinator:
         :class:`ListingDraftingInBatch`, and -- after the active-run check --
         :class:`AiNotReady` with the readiness rule that failed.
         """
-        if not self._workspace.listing_file(listing).is_file():
+        if not ListingDocuments(self._workspace).exists(listing):
             raise ListingMissing(listing)
         refused = self._claimed(listing)
         if refused is not None:

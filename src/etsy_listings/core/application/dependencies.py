@@ -20,7 +20,7 @@ executor and the AI runner are implementation-only (Import Linter's
 fills without importing the machinery behind the coordinator.
 
 Everything else an operation coordinates through is core's own, so it takes
-that class directly: the write locks (``workspace_locks.WorkspaceLocks``,
+that class directly: the template write locks (``workspace_locks.WorkspaceLocks``,
 since PR 8), and the AI run registry, the batch queue, AI readiness and the
 deploy-to-AI handoff (``ai/``, since PR 9). One implementation each and no
 second one in sight left an interface for them nothing to vary.

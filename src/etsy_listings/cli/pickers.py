@@ -137,7 +137,7 @@ def build_design_choices(paths: list[Path], listing_names: set[str]) -> list[Cho
     filesystem-dependent.
 
     A design that already has a listing is marked: ``new`` refuses to
-    overwrite one (``write_listing``), so the row would otherwise look
+    overwrite one (``ListingDocuments.create``), so the row would otherwise look
     like a choice and behave like a dead end. Marked as a trailing note rather
     than through :func:`marked_choices` -- this callout is a warning, and
     sorting warnings to the top would be exactly wrong.

@@ -17,14 +17,14 @@ import names the module it depends on. Public interfaces:
     ``list_listings``, ``listing_row`` -> ``ListingRow``; ``pricing_summary``
     (shared with listing templates) -> ``PricedSize``; ``Priced``.
 ``listing_edits``
-    ``edit_listing``: an editor save's locked read-merge-write.
+    ``edit_listing``: an editor save's patch merged into ``listing.yaml``.
 ``listing_creation``
-    ``create_listing``, ``write_listing``; the ``new`` wizard's stub --
+    ``create_listing``; the ``new`` wizard's stub --
     ``load_template_kind``, ``build_media_entries``, ``build_listing_stub``,
     ``validate_listing_stub``.
 ``listing_identity``
     ``rename_listing``, ``delete_listing`` -> ``Deletion``: everything keyed
-    by a listing's name follows or goes with it.
+    by a listing's name follows or goes with it (``core.listing_artifacts``).
 ``pricing_plans``
     ``load_candidate_pricing_plans``, ``pricing_plan_options`` /
     ``PricingPlanOption``, ``pricing_plan_ref``; a starting plan from live
@@ -89,8 +89,8 @@ import names the module it depends on. Public interfaces:
     ``AiNotReady``; ``ProposalMissing``, ``ProposalReplaced``;
     ``ReviewedPlanRefused``.
 ``workspace_locks``
-    ``WorkspaceLocks``: the per-listing and per-listing-template write locks
-    every read-merge-write holds, one instance per application runtime.
+    ``WorkspaceLocks``: the per-listing-template write locks every
+    template check-then-write holds, one instance per application runtime.
 ``deploy``
     Deployment runs -- registry, FIFO executor and their event log; see the
     subpackage's own initialiser.

@@ -104,9 +104,10 @@ package never drags in OpenCV, FastAPI or Typer to reach one name.
 |---|---|---|
 | `cli` | Typer commands, terminal presentation of engine reports (`cli/render.py`), command options, prompts and the `auth`/`setup`/`new` wizards' question order (`cli/auth.py`, `cli/setup.py`, `cli/new.py`, with `cli/credentials.py` and `cli/pickers.py`) | Uses engine reports rather than computing a second diff; wizards call core operations for every decision and write; only `cli/ui.py` imports the server, and only `server.hosting` |
 | `server` | FastAPI routing and wire schemas (`server/api/`), HTTP status mapping, SSE framing, reconnect and disconnect polling, request-serving caches (`imagecache`, `etsystate`, thumbnails), static SPA serving and app startup/shutdown (`server/hosting.py`, the lifespan in `server/api/app.py`) | Constructs one of each core coordinator, store and lock set per process and starts and stops them; decides no workflow rule itself |
-| `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; per-listing write locks; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns locking around read/merge/write and the records that follow a listing or listing template; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
+| `core/application` | Operations shared by server and CLI: listing reads, edits, creation, rename/delete and pricing plans; the wizards' reusable operations (credentials, workspace setup, shop discovery, garment profiles); mockup-template calibration and preview scenes; listing-template library; batch staging and workflow; per-listing-template write locks; deployment runs (`deploy/`); AI runs, batch AI queue, readiness and proposals (`ai/`); host-supplied seams (`dependencies.py`) and typed refusals (`refusals.py`) | Owns the records that follow a listing or listing template, and locking around listing-template writes; listing documents and listing-keyed files are edited only through `core/workspace/listing_documents.py` and `core/listing_artifacts.py`; answers with results or typed refusals, never status codes or terminal text; constructing a coordinator starts no thread; takes decoded images and upload streams, never request objects or caches |
 | `core/engine` | Stage protocol, comparison, lockfile, lifecycle, runs, previews and status | Stages return values; the engine decides execution and records progress |
-| `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, video probes, Cygwin path translation and request facts | Owns workspace layout and containment; callers may do I/O on paths it supplies |
+| `core/workspace` | Root discovery, layout, reference resolution, file loading, atomic writes, video probes, Cygwin path translation and request facts; `listing_documents.py` is the one reader and writer of `listing.yaml` and holds each listing's process-wide lock | Owns workspace layout and containment; callers may do I/O on paths it supplies, except `listing.yaml`, which every writer edits through `ListingDocuments` |
+| `core/listing_artifacts.py` | Moving and removing everything keyed by a listing's name: its directory, render cache, previews, market snapshot and cached proposal | One list serves rename, wipe and a pending delete; every operation holds the listing's lock. Batch rows and AI runs stay with `core/application/listing_identity.py` |
 | `core/render` | Configuration and pure image passes | No workspace knowledge; callers supply images and geometry |
 | `core/clients` | Typed protocols, transports, Printify catalog/product and Etsy APIs, OAuth tokens and fakes | Shared transport per vendor; separate caller authority through protocols |
 | `core/config` | Validated documents, settings, money, slugs, secrets and local listing refusals | No knowledge of directory layout; path-based loaders and the design-resolution check currently perform file I/O |
@@ -393,7 +394,7 @@ geometry. Upload staging freezes the selected listing-template document and
 owned assets under its write lock. The server decodes multipart uploads into
 byte streams; bounded loose-PNG/ZIP inspection in `core/batches` precedes
 review. Confirm and retry revalidate shared references and allocate names
-under a name lock. They create ordinary listings and retained batch records,
+under the listing's document lock. They create ordinary listings and retained batch records,
 idempotently, without deploying (ADR-0047, ADR-0051). Staging expires seven
 days after its last edit and is swept at startup. `BatchQueue` dispatches
 queued rows through the existing AI runner, defaults to one concurrent batch
@@ -407,8 +408,10 @@ AI, and holds those names against new AI until deployment ends (ADR-0050).
 ### Process-local limitations
 
 These are preserved deliberately; the restructure moved them into core without
-changing them. `WorkspaceLocks` serializes read/merge/write operations and
-name changes inside one process only. Deployment and AI registries hold runs in
+changing them. The listing document locks (`ListingDocuments.lock`) serialize
+every `listing.yaml` edit, proposal record write and listing rename or removal,
+including the engine's, and `WorkspaceLocks` serializes listing-template writes,
+inside one process only. Deployment and AI registries hold runs in
 memory. There is no cross-process lock protecting concurrent CLI and server
 writes, no shared registry across multiple ASGI workers or servers on one
 workspace, and CLI `apply` neither consults nor joins the server's queue.
@@ -602,6 +605,14 @@ later. Each traces to a decision.
   application operation goes through them, and so does a new `glob`.
   `Workspace.prune_previews` owns stale-preview enumeration and removal;
   `relative_path` serializes paths for HTTP.
+- **Every `listing.yaml` write goes through `ListingDocuments`.** The editor's
+  patch, an AI brief, a delete mark, an apply consuming `renew`, batch creation
+  and `new` all read, change and write under the listing's lock, through the
+  retrying reader and an atomic replace. The same lock guards the listing's
+  proposal record and its rename or removal (`core/listing_artifacts.py`), so
+  there is no lock order to get wrong. "Is there a listing?" (`exists`) and
+  "may a new listing take this name?" (`is_free`) are answered there and
+  nowhere else.
 - **A client is built through `core/connections.py`.** Which credential is
   resolved when, what a missing one means, and where the Etsy token file lives
   are one set of answers, not four (`cli`, `setup`, `auth` and the e2e layer

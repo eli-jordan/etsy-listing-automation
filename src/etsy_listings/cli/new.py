@@ -42,7 +42,6 @@ from etsy_listings.core.application.listing_creation import (
     build_media_entries,
     load_template_kind,
     validate_listing_stub,
-    write_listing,
 )
 from etsy_listings.core.application.pricing_plans import (
     create_starting_pricing_plan,
@@ -53,6 +52,7 @@ from etsy_listings.core.clients.printify.models import Blueprint, PrintProvider,
 from etsy_listings.core.clients.printify.protocol import CatalogClient
 from etsy_listings.core.config.media import MAX_IMAGES
 from etsy_listings.core.config.slug import SlugCollisionError
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -233,13 +233,12 @@ def _pick_or_create_pricing_plan(
 
 
 def _reject_existing_listing(workspace: Workspace, design_name: str) -> None:
-    """``write_listing`` refuses to overwrite, but it is the *last* thing
-    ``new`` does -- so without this the whole wizard runs before saying no.
-    Checked here rather than only on the picked row, because the argument
-    reaches the same dead end."""
-    path = workspace.listing_file(design_name)
-    if path.is_file():
-        typer.echo(f"a listing already exists at {path}", err=True)
+    """Creating the listing refuses a taken name, but it is the *last* thing
+    ``new`` does, so without this check the whole wizard would run before
+    saying no. It is checked here rather than only on the picked row,
+    because a name given as the argument reaches the same dead end."""
+    if not ListingDocuments(workspace).is_free(design_name):
+        typer.echo(f"a listing already exists at {workspace.listing_dir(design_name)}", err=True)
         raise typer.Exit(code=1)
 
 
@@ -297,5 +296,5 @@ def run_new(
         media=media,
     )
     validate_listing_stub(listing_data, currency=workspace.defaults.etsy.currency)
-    path = write_listing(workspace, design_name, listing_data)
+    path = ListingDocuments(workspace).create(design_name, listing_data)
     typer.echo(f"wrote {path}")

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
 from typing import Annotated, Any, Final, Literal, Self
 
@@ -269,10 +269,14 @@ class Listing(BaseModel):
         return cls.model_validate(dict(EMPTY_DRAFT), context={"currency": currency})
 
     @classmethod
-    def load(cls, path: Path, *, currency: str) -> Listing:
+    def load(
+        cls, path: Path, *, currency: str, read: Callable[[Path], bytes] = Path.read_bytes
+    ) -> Listing:
+        """``read`` fetches the file's bytes, as for ``ListingTemplate.load``:
+        the workspace passes its retrying reader."""
         if not path.is_file():
             raise ConfigLoadError(path, "listing file not found")
-        raw = parse_yaml(path, path.read_text(encoding="utf-8")) or {}
+        raw = parse_yaml(path, read(path).decode("utf-8")) or {}
         try:
             return cls.model_validate(raw, context={"currency": currency})
         except ValidationError as exc:

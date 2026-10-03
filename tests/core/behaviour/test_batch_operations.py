@@ -108,7 +108,6 @@ def _queue(workspace: Workspace, batches: BatchStore) -> BatchQueue:
     market = seeded_market()
     return AiCoordinator(
         workspace,
-        locks=WorkspaceLocks(),
         proposals=ProposalStore(workspace),
         batches=batches,
         providers=lambda _workspace: [ChainProvider()],
@@ -170,7 +169,6 @@ def _confirm(
         staging,
         batches,
         session_id,
-        locks=WorkspaceLocks(),
         queue=queue or _queue(workspace, batches),
     )
 
@@ -394,10 +392,9 @@ class TestConfirm:
         self, workspace: Workspace, staging: StagingStore, batches: BatchStore, queue: BatchQueue
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)), ("b.png", png(2)))
-        locks = WorkspaceLocks()
 
         def confirm() -> Batch:
-            return confirm_batch(workspace, staging, batches, session.id, locks=locks, queue=queue)
+            return confirm_batch(workspace, staging, batches, session.id, queue=queue)
 
         with ThreadPoolExecutor(max_workers=2) as pool:
             one, two = (f.result() for f in [pool.submit(confirm), pool.submit(confirm)])
@@ -439,12 +436,11 @@ class TestRetry:
         staging: StagingStore,
         batches: BatchStore,
         queue: BatchQueue,
-        locks: WorkspaceLocks,
     ) -> None:
         batch = _failed_batch(workspace, staging, batches)
 
         retried = retry_batch_row(
-            workspace, staging, batches, batch.id, batch.rows[0].id, locks=locks, queue=queue
+            workspace, staging, batches, batch.id, batch.rows[0].id, queue=queue
         )
 
         assert (retried.rows[0].creation, retried.rows[0].ai) == ("created", "queued")
@@ -457,7 +453,6 @@ class TestRetry:
         staging: StagingStore,
         batches: BatchStore,
         queue: BatchQueue,
-        locks: WorkspaceLocks,
         ai: str,
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)))
@@ -466,9 +461,7 @@ class TestRetry:
         batch.rows[0] = row.model_copy(update={"ai": ai, "ai_error": "it broke"})
         batches.save(batch)
 
-        retried = retry_batch_row(
-            workspace, staging, batches, batch.id, row.id, locks=locks, queue=queue
-        )
+        retried = retry_batch_row(workspace, staging, batches, batch.id, row.id, queue=queue)
 
         assert (retried.rows[0].ai, retried.rows[0].ai_error) == ("queued", None)
         assert _woken(queue)
@@ -482,7 +475,6 @@ class TestRetry:
         staging: StagingStore,
         batches: BatchStore,
         queue: BatchQueue,
-        locks: WorkspaceLocks,
         ai: str,
         deleted: bool,
     ) -> None:
@@ -492,9 +484,7 @@ class TestRetry:
         batches.save(batch)
 
         with pytest.raises(NothingToRetry, match="a has nothing to retry"):
-            retry_batch_row(
-                workspace, staging, batches, batch.id, batch.rows[0].id, locks=locks, queue=queue
-            )
+            retry_batch_row(workspace, staging, batches, batch.id, batch.rows[0].id, queue=queue)
         assert _ai(batches, batch) == [ai] and not _woken(queue)
 
     def test_unknown_batches_and_rows_are_refused(
@@ -503,13 +493,12 @@ class TestRetry:
         staging: StagingStore,
         batches: BatchStore,
         queue: BatchQueue,
-        locks: WorkspaceLocks,
     ) -> None:
         batch = _failed_batch(workspace, staging, batches)
         with pytest.raises(BatchRowMissing, match="no batch row 'nope'"):
-            retry_batch_row(workspace, staging, batches, batch.id, "nope", locks=locks, queue=queue)
+            retry_batch_row(workspace, staging, batches, batch.id, "nope", queue=queue)
         with pytest.raises(BatchMissing, match="no batch '0123abcd'"):
-            retry_batch(workspace, staging, batches, "0123abcd", locks=locks, queue=queue)
+            retry_batch(workspace, staging, batches, "0123abcd", queue=queue)
 
     def test_retry_all_creates_failed_rows_then_requeues_failed_ai(
         self,
@@ -517,7 +506,6 @@ class TestRetry:
         staging: StagingStore,
         batches: BatchStore,
         queue: BatchQueue,
-        locks: WorkspaceLocks,
     ) -> None:
         session = _stage(workspace, staging, ("a.png", png(1)), ("b.png", png(2)))
         workspace.design_file("a").mkdir(parents=True)
@@ -526,7 +514,7 @@ class TestRetry:
         batch.rows[1] = batch.rows[1].model_copy(update={"ai": "failed"})
         batches.save(batch)
 
-        retried = retry_batch(workspace, staging, batches, batch.id, locks=locks, queue=queue)
+        retried = retry_batch(workspace, staging, batches, batch.id, queue=queue)
 
         assert [(r.creation, r.ai) for r in retried.rows] == [
             ("created", "queued"),
@@ -588,7 +576,6 @@ class TestSteerAndKeep:
         market = seeded_market()
         ai = AiCoordinator(
             workspace,
-            locks=WorkspaceLocks(),
             proposals=ProposalStore(workspace),
             batches=batches,
             providers=lambda _workspace: [provider],

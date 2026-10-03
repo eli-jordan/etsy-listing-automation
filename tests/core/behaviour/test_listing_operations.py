@@ -9,7 +9,7 @@ the AI run -- with it. What an outcome becomes on the wire (404, 409, a 200
 with ``field_errors``) is the listings API tests' business.
 
 Competing writes are made to overlap by slowing the step every listing write
-passes through (``yaml.safe_dump``) or the directory move (``Path.rename``),
+passes through (``yaml.safe_dump``) or the directory move (``Path.replace``),
 so the interleaving is not left to chance.
 """
 
@@ -24,7 +24,6 @@ from typing import Any
 import pytest
 import yaml
 
-from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.listing_creation import create_listing
 from etsy_listings.core.application.listing_edits import edit_listing
@@ -40,7 +39,6 @@ from etsy_listings.core.application.refusals import (
     ListingNameTaken,
     PublishedListingDeletion,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.config.listing import EMPTY_DRAFT
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
@@ -64,11 +62,6 @@ def workspace(workspace_root: Path) -> Workspace:
     return Workspace.discover(root_override=workspace_root)
 
 
-@pytest.fixture
-def locks() -> WorkspaceLocks:
-    return WorkspaceLocks()
-
-
 def _document(workspace: Workspace, name: str = NAME) -> dict[str, Any]:
     loaded: dict[str, Any] = yaml.safe_load(
         workspace.listing_file(name).read_text(encoding="utf-8")
@@ -81,7 +74,6 @@ def _edit(workspace: Workspace, patch: dict[str, Any], **kwargs: Any) -> Invalid
         workspace,
         kwargs.pop("name", NAME),
         patch,
-        locks=kwargs.pop("locks", WorkspaceLocks()),
         batches=BatchStore(workspace),
     )
 
@@ -91,9 +83,7 @@ def _rename(workspace: Workspace, new: str, **kwargs: Any) -> None:  # noqa: ANN
         workspace,
         kwargs.pop("old", NAME),
         new,
-        locks=kwargs.pop("locks", WorkspaceLocks()),
         batches=BatchStore(workspace),
-        proposals=ProposalStore(workspace),
         ai_runs=kwargs.pop("ai_runs", AiRunRegistry()),
     )
 
@@ -102,9 +92,7 @@ def _delete(workspace: Workspace, **kwargs: Any):  # noqa: ANN202, ANN401
     return delete_listing(
         workspace,
         kwargs.pop("name", NAME),
-        locks=kwargs.pop("locks", WorkspaceLocks()),
         batches=BatchStore(workspace),
-        proposals=ProposalStore(workspace),
         ai_runs=kwargs.pop("ai_runs", AiRunRegistry()),
         etsy_states=kwargs.pop("etsy_states", etsy_reports()),
     )
@@ -299,6 +287,9 @@ class TestRenameListing:
         renders = workspace.renders_dir(NAME) / "flat-lay-01"
         renders.mkdir(parents=True)
         (renders / "black.png").write_bytes(b"not really a png")
+        preview = workspace.preview_file(NAME, "flat-lay-01", "black", "deadbeef")
+        preview.parent.mkdir(parents=True)
+        preview.write_bytes(b"png")
         seed_snapshot(workspace.root, NAME)
         seed_proposal(workspace.root, NAME)
         store = batch_naming(workspace, "b1", NAME, "someone-else")
@@ -308,6 +299,8 @@ class TestRenameListing:
         assert not workspace.listing_dir(NAME).exists()
         assert workspace.lock_file("hike-away").is_file()
         assert (workspace.renders_dir("hike-away") / "flat-lay-01" / "black.png").is_file()
+        assert workspace.preview_file("hike-away", "flat-lay-01", "black", "deadbeef").is_file()
+        assert not workspace.preview_dir(NAME).exists()
         assert workspace.market_snapshot_file("hike-away").is_file()
         assert not workspace.market_snapshot_file(NAME).exists()
         assert has_proposal(workspace.root, "hike-away")
@@ -457,13 +450,13 @@ def slow_writes(monkeypatch: pytest.MonkeyPatch) -> None:
 
 @pytest.fixture
 def slow_renames(monkeypatch: pytest.MonkeyPatch) -> None:
-    real = Path.rename
+    real = Path.replace
 
     def slow(self: Path, target: Any) -> Path:  # noqa: ANN401
         time.sleep(0.3)
         return real(self, target)
 
-    monkeypatch.setattr(Path, "rename", slow)
+    monkeypatch.setattr(Path, "replace", slow)
 
 
 def _together(*calls: Callable[[], object]) -> list[object]:
@@ -486,12 +479,10 @@ def _together(*calls: Callable[[], object]) -> list[object]:
 
 @pytest.mark.usefixtures("slow_writes")
 class TestCompetingWrites:
-    def test_two_concurrent_edits_both_land(
-        self, workspace: Workspace, locks: WorkspaceLocks
-    ) -> None:
+    def test_two_concurrent_edits_both_land(self, workspace: Workspace) -> None:
         _together(
-            lambda: _edit(workspace, {"brief": "A sunset hike."}, locks=locks),
-            lambda: _edit(workspace, {"etsy": {"title": "Take A Hike Tee"}}, locks=locks),
+            lambda: _edit(workspace, {"brief": "A sunset hike."}),
+            lambda: _edit(workspace, {"etsy": {"title": "Take A Hike Tee"}}),
         )
 
         written = _document(workspace)
@@ -499,12 +490,12 @@ class TestCompetingWrites:
         assert written["etsy"]["title"] == "Take A Hike Tee"
 
     def test_an_edit_queued_behind_a_rename_finds_the_listing_gone(
-        self, workspace: Workspace, locks: WorkspaceLocks, slow_renames: None
+        self, workspace: Workspace, slow_renames: None
     ) -> None:
         """It must not write a fresh ``listing.yaml`` under the old name."""
         rename, edit = _together(
-            lambda: _rename(workspace, "hike-away", locks=locks),
-            lambda: _edit(workspace, {"brief": "Too late."}, locks=locks),
+            lambda: _rename(workspace, "hike-away"),
+            lambda: _edit(workspace, {"brief": "Too late."}),
         )
 
         assert rename is None
@@ -513,13 +504,13 @@ class TestCompetingWrites:
         assert _document(workspace, "hike-away").get("brief") != "Too late."
 
     def test_a_create_and_a_rename_to_the_same_name_do_not_both_win(
-        self, workspace: Workspace, locks: WorkspaceLocks, slow_renames: None
+        self, workspace: Workspace, slow_renames: None
     ) -> None:
         document = _document(workspace)
 
         outcomes = _together(
-            lambda: _rename(workspace, "fresh", locks=locks),
-            lambda: create_listing(workspace, "fresh", document, locks=locks),
+            lambda: _rename(workspace, "fresh"),
+            lambda: create_listing(workspace, "fresh", document),
         )
 
         assert sorted(type(o).__name__ for o in outcomes) == ["ListingNameTaken", "NoneType"]

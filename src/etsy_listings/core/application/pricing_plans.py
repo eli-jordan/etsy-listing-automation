@@ -175,7 +175,7 @@ def write_pricing_plan(
     notes: list[str],
 ) -> Path:
     """Writes ``pricing-plans/{slugify(name)}.yaml``, refusing to overwrite
-    (mirrors core's ``listing_creation.write_listing``). ``price_overrides``
+    (as ``ListingDocuments.create`` refuses a taken name). ``price_overrides``
     is written empty -- the wizard never guesses a per-colour markup, only
     the flat table."""
     path = workspace.pricing_plans_dir() / f"{slugify(name)}.yaml"

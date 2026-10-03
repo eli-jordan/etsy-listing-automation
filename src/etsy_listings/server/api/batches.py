@@ -7,7 +7,7 @@ The operations are :mod:`etsy_listings.core.application.batch_staging`'s and
 :mod:`~etsy_listings.core.application.batch_workflow`'s (module-structure
 plan, PR 7). This module decodes the multipart upload into ``Upload``
 streams, supplies the AI coordinator's batch queue -- which also says whether
-AI could run -- and the locks, and decides only what each answer is on the
+AI could run -- and the listing-template locks, and decides only what each answer is on the
 wire:
 
 * An upload refused before staging is a ``422`` whose ``detail`` is the
@@ -18,8 +18,9 @@ wire:
 * An id nobody holds -- a session, a batch or a row -- is a ``404``. An id
   that is not a single path segment is the app-wide ``400``.
 
-Both stores and the per-listing locks are the app's (`app.state`), so a
-confirm and an editor's create of the same name wait for each other.
+Both stores are the app's (`app.state`). A confirm and an editor's create of
+the same name wait for each other on the listing's document lock
+(``core/workspace/listing_documents.py``).
 """
 
 from __future__ import annotations
@@ -293,7 +294,6 @@ def confirm_staging(request: Request, session_id: str) -> BatchDetail:
             _staging(request),
             _batches(request),
             session_id,
-            locks=_locks(request),
             queue=_queue(request),
         )
     except StagingMissing as exc:
@@ -327,7 +327,6 @@ def retry_batch_row(request: Request, batch_id: str, row: str) -> BatchDetail:
             _batches(request),
             batch_id,
             row,
-            locks=_locks(request),
             queue=_queue(request),
         )
     except _MISSING as exc:
@@ -346,7 +345,6 @@ def retry_batch(request: Request, batch_id: str) -> BatchDetail:
             _staging(request),
             _batches(request),
             batch_id,
-            locks=_locks(request),
             queue=_queue(request),
         )
     except BatchMissing as exc:

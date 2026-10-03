@@ -7,7 +7,7 @@ The HTTP adapter over ``core/application``'s listing operations
 table, ``listing_edits`` merges an editor save, ``listing_creation`` names a
 new one, ``listing_identity`` renames and deletes. Each owns its locking,
 existence re-checks and the records that follow a listing. This module
-decodes requests, passes in the process's coordinators (write locks, AI run
+decodes requests, passes in the process's coordinators (batch store, AI run
 registry, Etsy state memo), maps refusals to status codes and projects
 results onto the wire schemas.
 
@@ -37,7 +37,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
 
 from etsy_listings.core import connections
-from etsy_listings.core.ai.proposals import ProposalStore
 from etsy_listings.core.application.ai.registry import AiRunRegistry
 from etsy_listings.core.application.dependencies import ContextFactory, EtsyStates
 from etsy_listings.core.application.listing_creation import create_listing as create
@@ -65,7 +64,6 @@ from etsy_listings.core.application.refusals import (
     ListingNameTaken,
     PublishedListingDeletion,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.clients.etsy.tokens import EtsyAuthError
 from etsy_listings.core.clients.etsy.transport import EtsyApiError
@@ -76,6 +74,7 @@ from etsy_listings.core.engine.preview import lookup_preview
 from etsy_listings.core.workspace import layout
 from etsy_listings.core.workspace.common_copy import CommonCopyError
 from etsy_listings.core.workspace.facts import WorkspaceFacts
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.etsystate import etsy_states
 from etsy_listings.server.api.schemas import (
@@ -110,16 +109,6 @@ def _workspace(request: Request) -> Workspace:
     return workspace
 
 
-def _locks(request: Request) -> WorkspaceLocks:
-    locks: WorkspaceLocks = request.app.state.workspace_locks
-    return locks
-
-
-def _proposals(request: Request) -> ProposalStore:
-    store: ProposalStore = request.app.state.proposal_store
-    return store
-
-
 def _batch_store(request: Request) -> BatchStore:
     store: BatchStore = request.app.state.batch_store
     return store
@@ -147,7 +136,7 @@ class Target:
 
 
 def _require_listing(workspace: Workspace, name: str) -> None:
-    if not workspace.listing_file(name).is_file():
+    if not ListingDocuments(workspace).exists(name):
         raise _not_found(ListingMissing(name))
 
 
@@ -282,9 +271,7 @@ def patch_listing(target: Existing, body: dict[str, Any], request: Request) -> L
     ``field_errors`` beside the listing as it still is."""
     workspace, name = target.workspace, target.name
     try:
-        refused = edit_listing(
-            workspace, name, body, locks=_locks(request), batches=_batch_store(request)
-        )
+        refused = edit_listing(workspace, name, body, batches=_batch_store(request))
     except ListingMissing as exc:
         raise _not_found(exc) from exc
     return _detail(workspace, name, field_errors=refused.field_errors if refused else None)
@@ -304,9 +291,7 @@ def delete_listing(target: Existing, request: Request) -> ListingSummary | Respo
         deletion = delete(
             workspace,
             name,
-            locks=_locks(request),
             batches=_batch_store(request),
-            proposals=_proposals(request),
             ai_runs=_ai_runs(request),
             etsy_states=_etsy_states(workspace),
         )
@@ -331,7 +316,7 @@ def create_listing(request: Request, body: CreateListingRequest) -> ListingDetai
     """
     workspace = _workspace(request)
     try:
-        refused = create(workspace, body.name, body.document, locks=_locks(request))
+        refused = create(workspace, body.name, body.document)
     except ListingNameTaken as exc:
         raise _conflict(exc) from exc
     if refused is not None:
@@ -353,9 +338,7 @@ def rename_listing(target: Existing, body: RenameListingRequest, request: Reques
             target.workspace,
             target.name,
             body.new_name,
-            locks=_locks(request),
             batches=_batch_store(request),
-            proposals=_proposals(request),
             ai_runs=_ai_runs(request),
         )
     except ListingMissing as exc:

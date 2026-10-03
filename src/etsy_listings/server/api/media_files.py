@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import FileResponse, Response
 
 from etsy_listings.core.config.media import media_kind
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.schemas import MediaFileSummary
 from etsy_listings.server.api.thumbnails import thumbnail_response
@@ -83,7 +84,7 @@ def list_listing_media_files(request: Request, listing: str) -> list[MediaFileSu
     exist, rather than an empty group that would look like one with nothing
     in it."""
     workspace = _workspace(request)
-    if not workspace.listing_file(listing).is_file():
+    if not ListingDocuments(workspace).exists(listing):
         raise HTTPException(status_code=404, detail=f"no listing {listing!r}")
     directory = workspace.listing_dir(listing)
     rows: list[MediaFileSummary] = []

@@ -2,8 +2,9 @@
 
 Engine, workspace, config, clients, rendering, AI, market research, listing
 templates and batches live here, with shared client construction
-(:mod:`~etsy_listings.core.connections`) and the user-facing error base
-(:mod:`~etsy_listings.core.errors`). Core may write files, call external
+(:mod:`~etsy_listings.core.connections`), the user-facing error base
+(:mod:`~etsy_listings.core.errors`) and the move and removal of everything
+keyed by a listing's name (:mod:`~etsy_listings.core.listing_artifacts`). Core may write files, call external
 services and run background work, but it never imports FastAPI, Typer, the
 UI server, the CLI or the terminal/prompt adapters that sit on top of it.
 

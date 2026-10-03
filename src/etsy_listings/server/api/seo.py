@@ -32,7 +32,6 @@ from etsy_listings.core.application.refusals import (
     ProposalMissing,
     ProposalReplaced,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
 from etsy_listings.core.market import snapshot as market_snapshot
 from etsy_listings.core.market.snapshot import MarketSnapshot
 from etsy_listings.server.api.listings import Existing
@@ -120,13 +119,11 @@ def resolve_listing_proposal(
     records only that the section was dealt with. Under the listing's write
     lock, so a delete or rename cannot land between the read and the write
     and leave a record behind for a listing that is gone."""
-    locks: WorkspaceLocks = request.app.state.workspace_locks
     try:
         return resolve_proposal(
             target.workspace,
             _proposals(request),
             target.name,
-            locks=locks,
             generated_at=body.generated_at,
             title=body.title,
             tags=body.tags,

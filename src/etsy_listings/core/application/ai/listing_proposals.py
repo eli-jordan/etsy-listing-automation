@@ -27,7 +27,7 @@ from etsy_listings.core.application.refusals import (
     ProposalMissing,
     ProposalReplaced,
 )
-from etsy_listings.core.application.workspace_locks import WorkspaceLocks
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 
 
@@ -47,7 +47,6 @@ def resolve_proposal(
     proposals: ProposalStore,
     name: str,
     *,
-    locks: WorkspaceLocks,
     generated_at: datetime,
     title: Resolution | None = None,
     tags: Resolution | None = None,
@@ -65,7 +64,7 @@ def resolve_proposal(
     has been regenerated since.
     """
     _require(workspace, name)
-    with locks.listing(name):
+    with ListingDocuments(workspace).lock(name):
         _require(workspace, name)
         try:
             record = proposals.resolve(
@@ -79,5 +78,5 @@ def resolve_proposal(
 
 
 def _require(workspace: Workspace, name: str) -> None:
-    if not workspace.listing_file(name).is_file():
+    if not ListingDocuments(workspace).exists(name):
         raise ListingMissing(name)

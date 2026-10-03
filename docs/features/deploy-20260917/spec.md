@@ -215,8 +215,8 @@ the reviewed image. Render passes are pure and OpenCV and Pillow are pinned
 exactly (ADR-0012), so a promoted file is the same bytes a fresh render would have
 produced. The `outputs` hash axis cannot tell the difference, and nothing is
 uploaded twice. CLI `apply` gets promotion for free whenever a UI plan ran
-first. `Workspace.remove_listing` also removes
-`.cache/previews/{listing}/`.
+first. Removing a listing (`core/listing_artifacts.py`) also removes
+`.cache/previews/{listing}/`, and a rename moves it.
 
 Previews are **not** part of `build_plan`. The UI's plan run calls
 `preview_listing(ctx, planned, on_event, should_stop)` in `engine/run.py`
@@ -413,7 +413,7 @@ deploys.
 | `engine/stages/etsy_media.py` | `EtsyMediaLive.images: tuple[{rank, image_id, url}]`; per-rank `MediaChange`; `snapshot()` | ADR-0038 |
 | `engine/stages/render.py` | `scene_hash`; `snapshot()`; `preview()`; promotion in `apply()` | ADR-0040 |
 | `clients/etsy/models.py` | `ListingImage.url_570xN` | ADR-0038 |
-| `workspace/workspace.py` | `preview_file(...)`, `preview_dir(listing)`; `remove_listing` removes previews | ADR-0040 |
+| `workspace/workspace.py` | `preview_file(...)`, `preview_dir(listing)`; `core/listing_artifacts.py` moves and removes them with the listing | ADR-0040 |
 | `cli/render.py` | print drift labels when present | ADR-0038 |
 
 ## Run coordination and server

@@ -6,7 +6,7 @@ listing operations' and is tested directly in ``test_listing_operations.py``.
 What is left here is the adapter's half: that the routes hand every request
 the process's one set of locks, and that a refusal reached under the lock
 becomes the same status code as one reached before it. The overlap is
-forced by slowing ``Path.rename`` so it is not left to chance.
+forced by slowing ``Path.replace`` so it is not left to chance.
 """
 
 from __future__ import annotations
@@ -49,13 +49,13 @@ def _listing(workspace: Workspace, name: str = NAME) -> dict[str, Any]:
 def slow_renames(monkeypatch: pytest.MonkeyPatch) -> None:
     """A rename checks the new name is free, then moves the directory; a
     pause before the move holds that window open."""
-    real = Path.rename
+    real = Path.replace
 
     def slow(self: Path, target: Any) -> Path:  # noqa: ANN401
         time.sleep(0.3)
         return real(self, target)
 
-    monkeypatch.setattr(Path, "rename", slow)
+    monkeypatch.setattr(Path, "replace", slow)
 
 
 def _together(*requests: Callable[[], httpx.Response]) -> list[httpx.Response]:
