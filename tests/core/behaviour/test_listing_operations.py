@@ -8,17 +8,15 @@ follow a listing -- render cache, market snapshot, AI proposal, batch rows,
 the AI run -- with it. What an outcome becomes on the wire (404, 409, a 200
 with ``field_errors``) is the listings API tests' business.
 
-Competing writes are made to overlap by slowing the step every listing write
-passes through (``yaml.safe_dump``) or the directory move (``Path.replace``),
-so the interleaving is not left to chance.
+Competing writes are made to overlap through the persistence seam: the first
+operation to take the listing's lock holds it at a bounded gate, and its
+contender starts only once it has (``tests/support/gates.py``).
 """
 
 from __future__ import annotations
 
-import threading
-import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractContextManager
 from pathlib import Path
 from typing import Any
 
@@ -42,11 +40,13 @@ from etsy_listings.core.application.refusals import (
 )
 from etsy_listings.core.batches import BatchStore
 from etsy_listings.core.config.listing import EMPTY_DRAFT
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import InvalidNameError, Workspace
 
 from tests.support.ai_runs import has_proposal, seed_proposal, seed_snapshot
 from tests.support.builders import FIXTURE_LISTING
 from tests.support.builders import edit_listing as edit_listing_file
+from tests.support.gates import LockGate, workers
 from tests.support.listings import (
     ai_run,
     applied,
@@ -439,88 +439,87 @@ class TestDeleteListing:
 
 
 @pytest.fixture
-def slow_writes(monkeypatch: pytest.MonkeyPatch) -> None:
-    real = yaml.safe_dump
+def listing_lock(monkeypatch: pytest.MonkeyPatch) -> LockGate:
+    """Arms a gate on the listings' persistence seam: the first operation to
+    take a listing's lock holds it until the test releases it."""
+    gate = LockGate("the listing")
+    real = ListingDocuments.lock
 
-    def slow(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
-        time.sleep(0.3)
-        return real(*args, **kwargs)
+    def gated(self: ListingDocuments, name: str, *more: str) -> AbstractContextManager[None]:
+        return gate.around(lambda: real(self, name, *more))
 
-    monkeypatch.setattr(yaml, "safe_dump", slow)
-
-
-@pytest.fixture
-def slow_renames(monkeypatch: pytest.MonkeyPatch) -> threading.Event:
-    """Slows a rename's move. The event is set once a move has begun, which
-    is to say once the rename holds the listing's lock."""
-    real = Path.replace
-    moving = threading.Event()
-
-    def slow(self: Path, target: Any) -> Path:  # noqa: ANN401
-        moving.set()
-        time.sleep(0.3)
-        return real(self, target)
-
-    monkeypatch.setattr(Path, "replace", slow)
-    return moving
+    monkeypatch.setattr(ListingDocuments, "lock", gated)
+    return gate
 
 
-def _together(*calls: Callable[[], object]) -> list[object]:
-    """Start each call a moment after the one before, so they overlap in a
-    known order; a raised refusal is returned in its place."""
+def _refused(call: Callable[[], object]) -> Callable[[], object]:
+    """``call``, with a listing refusal returned in place of its result."""
 
-    def outcome(call: Callable[[], object]) -> object:
+    def outcome() -> object:
         try:
             return call()
         except (ListingMissing, ListingNameTaken) as exc:
             return exc
 
-    with ThreadPoolExecutor(max_workers=len(calls)) as pool:
-        futures = []
-        for call in calls:
-            futures.append(pool.submit(outcome, call))
-            time.sleep(0.1)
-        return [future.result() for future in futures]
+    return outcome
 
 
-@pytest.mark.usefixtures("slow_writes")
+def _contend(
+    gate: LockGate, holder: Callable[[], object], contender: Callable[[], object]
+) -> tuple[object, object]:
+    """Run ``holder`` until it holds the lock, then ``contender``; check the
+    contender waits outside, release, and return both outcomes."""
+    with workers(gate) as start:
+        first = start("holder", _refused(holder))
+        gate.held.wait_entered()
+        second = start("contender", _refused(contender))
+        gate.assert_contender_kept_out()
+        gate.held.release()
+        return first.outcome(), second.outcome()
+
+
 class TestCompetingWrites:
-    def test_two_concurrent_edits_both_land(self, workspace: Workspace) -> None:
-        _together(
+    def test_two_concurrent_edits_both_land(
+        self, workspace: Workspace, listing_lock: LockGate
+    ) -> None:
+        first, second = _contend(
+            listing_lock,
             lambda: _edit(workspace, {"brief": "A sunset hike."}),
             lambda: _edit(workspace, {"etsy": {"title": "Take A Hike Tee"}}),
         )
 
+        assert (first, second) == (None, None)
         written = _document(workspace)
         assert written["brief"] == "A sunset hike."
         assert written["etsy"]["title"] == "Take A Hike Tee"
 
     def test_an_edit_queued_behind_a_rename_finds_the_listing_gone(
-        self, workspace: Workspace, slow_renames: threading.Event
+        self, workspace: Workspace, listing_lock: LockGate
     ) -> None:
-        """It must not write a fresh ``listing.yaml`` under the old name. The
-        edit starts only once the rename holds the lock, so the order is the
-        one under test rather than whichever thread a busy runner ran first."""
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            renaming = pool.submit(_rename, workspace, "hike-away")
-            assert slow_renames.wait(timeout=10), "the rename never began its move"
-            with pytest.raises(ListingMissing):
-                _edit(workspace, {"brief": "Too late."})
-            renaming.result()
+        """It must not write a fresh ``listing.yaml`` under the old name."""
+        rename, edit = _contend(
+            listing_lock,
+            lambda: _rename(workspace, "hike-away"),
+            lambda: _edit(workspace, {"brief": "Too late."}),
+        )
 
-        assert not workspace.listing_dir(NAME).exists()
+        assert rename is None
+        assert isinstance(edit, ListingMissing)
         assert not workspace.listing_dir(NAME).exists()
         assert _document(workspace, "hike-away").get("brief") != "Too late."
 
     def test_a_create_and_a_rename_to_the_same_name_do_not_both_win(
-        self, workspace: Workspace, slow_renames: threading.Event
+        self, workspace: Workspace, listing_lock: LockGate
     ) -> None:
         document = _document(workspace)
 
-        outcomes = _together(
+        rename, create = _contend(
+            listing_lock,
             lambda: _rename(workspace, "fresh"),
             lambda: create_listing(workspace, "fresh", document),
         )
 
-        assert sorted(type(o).__name__ for o in outcomes) == ["ListingNameTaken", "NoneType"]
+        assert rename is None
+        assert isinstance(create, ListingNameTaken)
+        assert not workspace.listing_dir(NAME).exists()
         assert workspace.listing_file("fresh").is_file()
