@@ -51,6 +51,8 @@ from etsy_listings.core.workspace.layout import (
 )
 from etsy_listings.core.workspace.workspace import Workspace
 
+from tests.support.gates import GATE_TIMEOUT
+
 Task = Literal["brief", "queries", "seo"]
 
 TODAY = datetime(2026, 9, 24, 12, 0, tzinfo=UTC)
@@ -129,10 +131,13 @@ class ChainProvider:
         self.repairs.append(repair)
         self.started[kind].set()
         gate = self.gates.get(kind)
+        held_until = time.monotonic() + GATE_TIMEOUT
         while gate is not None and not gate.wait(0.01):
             if cancel_event is not None and cancel_event.is_set():
                 self.cancelled.append(kind)
                 raise ProviderCancelledError(self.name)
+            if time.monotonic() > held_until:  # a failed test never released it
+                raise AssertionError(f"the {kind} gate was never released or cancelled")
         if kind in self.during:
             self.during[kind]()
         if kind in self.failures:

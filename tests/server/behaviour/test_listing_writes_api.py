@@ -6,25 +6,27 @@ listing operations' and is tested directly in ``test_listing_operations.py``.
 What is left here is the adapter's half: that the routes hand every request
 the process's one set of locks, and that a refusal reached under the lock
 becomes the same status code as one reached before it. The overlap is
-forced by slowing ``Path.replace`` so it is not left to chance.
+forced at the persistence seam: the first request's handler holds the
+listing's lock at a bounded gate, and the second is sent only once it does.
 """
 
 from __future__ import annotations
 
-import threading
-import time
 from collections.abc import Callable
-from concurrent.futures import ThreadPoolExecutor
+from contextlib import AbstractContextManager
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import httpx
 import pytest
 import yaml
 from fastapi.testclient import TestClient
 
+from etsy_listings.core.workspace.listing_documents import ListingDocuments
 from etsy_listings.core.workspace.workspace import Workspace
 from etsy_listings.server.api.app import create_app
+
+from tests.support.gates import LockGate, workers
 
 NAME = "take-a-hike"
 
@@ -47,63 +49,60 @@ def _listing(workspace: Workspace, name: str = NAME) -> dict[str, Any]:
 
 
 @pytest.fixture
-def slow_renames(monkeypatch: pytest.MonkeyPatch) -> threading.Event:
-    """A rename checks the new name is free, then moves the directory; a
-    pause before the move holds that window open. The event is set once a
-    move has begun, which is to say once the rename holds the listing's
-    lock."""
-    real = Path.replace
-    moving = threading.Event()
+def listing_lock(monkeypatch: pytest.MonkeyPatch) -> LockGate:
+    """The first request to take a listing's lock holds it until released."""
+    gate = LockGate("the listing")
+    real = ListingDocuments.lock
 
-    def slow(self: Path, target: Any) -> Path:  # noqa: ANN401
-        moving.set()
-        time.sleep(0.3)
-        return real(self, target)
+    def gated(self: ListingDocuments, name: str, *more: str) -> AbstractContextManager[None]:
+        return gate.around(lambda: real(self, name, *more))
 
-    monkeypatch.setattr(Path, "replace", slow)
-    return moving
+    monkeypatch.setattr(ListingDocuments, "lock", gated)
+    return gate
 
 
-def _together(*requests: Callable[[], httpx.Response]) -> list[httpx.Response]:
-    """Start each request a moment after the one before, so they overlap in
-    a known order."""
-    with ThreadPoolExecutor(max_workers=len(requests)) as pool:
-        futures = []
-        for request in requests:
-            futures.append(pool.submit(request))
-            time.sleep(0.1)
-        return [future.result() for future in futures]
+def _contend(
+    gate: LockGate,
+    holder: Callable[[], httpx.Response],
+    contender: Callable[[], httpx.Response],
+) -> tuple[httpx.Response, httpx.Response]:
+    """Send ``holder`` until its handler holds the lock, then ``contender``;
+    check the contender waits outside, release, and return both responses."""
+    with workers(gate) as start:
+        first = start("holder", holder)
+        gate.held.wait_entered()
+        second = start("contender", contender)
+        gate.assert_contender_kept_out()
+        gate.held.release()
+        return cast(httpx.Response, first.result()), cast(httpx.Response, second.result())
 
 
-@pytest.mark.usefixtures("slow_renames")
 class TestCompetingWrites:
     def test_a_patch_queued_behind_a_rename_is_a_404(
-        self, client: TestClient, workspace: Workspace, slow_renames: threading.Event
+        self, client: TestClient, workspace: Workspace, listing_lock: LockGate
     ) -> None:
-        """The PATCH is sent only once the rename holds the lock, so the
-        order is the one under test rather than whichever request a busy
-        runner happened to reach first."""
-        with ThreadPoolExecutor(max_workers=1) as pool:
-            renaming = pool.submit(
-                client.post, f"/api/listings/{NAME}/rename", json={"new_name": "hike-away"}
-            )
-            assert slow_renames.wait(timeout=10), "the rename never began its move"
-            edit = client.patch(f"/api/listings/{NAME}", json={"brief": "Too late."})
-            rename = renaming.result()
+        rename, edit = _contend(
+            listing_lock,
+            lambda: client.post(f"/api/listings/{NAME}/rename", json={"new_name": "hike-away"}),
+            lambda: client.patch(f"/api/listings/{NAME}", json={"brief": "Too late."}),
+        )
 
         assert rename.status_code == 200
         assert edit.status_code == 404
         assert not workspace.listing_dir(NAME).exists()
+        assert _listing(workspace, "hike-away").get("brief") != "Too late."
 
     def test_a_create_and_a_rename_to_the_same_name_are_a_200_and_a_409(
-        self, client: TestClient, workspace: Workspace
+        self, client: TestClient, workspace: Workspace, listing_lock: LockGate
     ) -> None:
         document = _listing(workspace)
 
-        rename, create = _together(
+        rename, create = _contend(
+            listing_lock,
             lambda: client.post(f"/api/listings/{NAME}/rename", json={"new_name": "fresh"}),
             lambda: client.post("/api/listings", json={"name": "fresh", "document": document}),
         )
 
-        assert sorted([rename.status_code, create.status_code]) == [200, 409]
+        assert (rename.status_code, create.status_code) == (200, 409)
+        assert not workspace.listing_dir(NAME).exists()
         assert workspace.listing_file("fresh").is_file()
