@@ -13,15 +13,7 @@ from pathlib import Path
 import pytest
 
 from etsy_listings.core.clients.printify.fakes import FakeCatalogClient, FakePrintifyClient
-from etsy_listings.core.clients.printify.models import (
-    Blueprint,
-    PrintAreaPlaceholder,
-    PrintProvider,
-    Shop,
-    Variant,
-    VariantOptions,
-    VariantSet,
-)
+from etsy_listings.core.clients.printify.models import ProductVariant, Shop, VariantSet
 from etsy_listings.core.engine.apply import execute
 from etsy_listings.core.engine.change import PriceChange
 from etsy_listings.core.engine.context import RunContext
@@ -39,45 +31,27 @@ from tests.support.builders import (
     set_shop_id,
     write_design,
 )
-
-BLUEPRINT = Blueprint(
-    id=706, title="Unisex Garment-Dyed T-shirt", brand="Comfort Colors®", model="1717"
+from tests.support.pipeline import (
+    COLOURS,
+    FULL_PRINT_AREA,
+    SIZES,
+    a_catalog,
+    at_print_area,
+    variants,
 )
-PROVIDER = PrintProvider(id=29, title="Monster Digital")
-COLOURS = ["Black", "Blue Jean", "Ivory", "Moss"]
-SIZES = ["S", "M", "L", "XL", "XXL", "XXXL"]
+
 SHOP_ID = 28819281
 STAGE = PrintifyProductStage()
-PRINT_AREA = (4500, 5400)
-"""The profile's front print area. A design at exactly this size passes the
-resolution gate; anything smaller is what `write_design` is asked for when a
-test wants the refusal."""
+HAND_ENABLED = 9001
+"""A variant id the fixture never asks for, enabled on the live product by hand."""
 TOO_SMALL = (120, 140)
-
-
-def _variants() -> VariantSet:
-    placeholder = PrintAreaPlaceholder(position="front", width=PRINT_AREA[0], height=PRINT_AREA[1])
-    return VariantSet(
-        variants=tuple(
-            Variant(
-                id=1000 + colour_index * 10 + size_index,
-                title=f"{colour} / {size}",
-                options=VariantOptions(color=colour, size=size),
-                placeholders=(placeholder,),
-            )
-            for colour_index, colour in enumerate(COLOURS)
-            for size_index, size in enumerate(SIZES)
-        )
-    )
+"""Below the fixture print area at either scale -- what `write_design` is
+asked for when a test wants the resolution refusal."""
 
 
 @pytest.fixture
 def catalog() -> FakeCatalogClient:
-    return FakeCatalogClient(
-        blueprints=[BLUEPRINT],
-        providers_by_blueprint={706: [PROVIDER]},
-        variants_by_key={(706, 29): _variants()},
-    )
+    return a_catalog()
 
 
 @pytest.fixture
@@ -88,14 +62,14 @@ def printify() -> FakePrintifyClient:
 @pytest.fixture
 def root(workspace_root: Path) -> Path:
     """The fixture workspace, made Phase-2 ready: a Printify shop id, real
-    copy instead of the fixture's blank placeholders, and a design at print
-    resolution.
+    copy instead of the fixture's blank placeholders, and a design at the
+    (shrunken, see `tests.support.pipeline.PRINT_AREA`) print area.
 
     All three are things `plan` refuses without, and each has its own test
     below -- these are the *passing* values."""
     set_shop_id(workspace_root, SHOP_ID)
     set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
-    write_design(workspace_root, PRINT_AREA)
+    at_print_area(workspace_root)
     return workspace_root
 
 
@@ -178,7 +152,7 @@ def test_prices_reach_printify_as_minor_units_of_the_shop_currency(root, catalog
     """
     _apply(_ctx(root, catalog, printify), a_lock())
 
-    by_id = {variant.id: variant.options for variant in _variants().variants}
+    by_id = {variant.id: variant.options for variant in variants().variants}
     priced = {
         (by_id[variant_id].color, by_id[variant_id].size): price
         for variant_id, price in printify.created[0].variants.items()
@@ -345,21 +319,63 @@ def test_dropping_a_colour_disables_its_variants_explicitly(root, catalog, print
     lock = _apply(ctx, lock)
 
     product = printify.products["fake-product-1"]
-    moss_ids = {v.id for v in _variants().variants if v.options.color == "Moss"}
+    moss_ids = {v.id for v in variants().variants if v.options.color == "Moss"}
     still_enabled = set(product.enabled_variants())
     assert not (moss_ids & still_enabled)
 
 
 def test_an_update_reads_the_product_before_writing_it(root, catalog, printify) -> None:
-    """The coverage rule makes the read mandatory: an update's print areas
-    must name every variant the product has, which only a read knows."""
+    """The coverage rule makes the read mandatory: an update must retire every
+    variant the product has *now*, which only a fresh read knows.
+
+    So the live product changes between runs -- someone enables a variant by
+    hand after a run has already read the product. A stage that reused that
+    earlier read, or its own create response, would send an update that never
+    mentions the hand-enabled variant, and it would keep selling."""
     ctx = _ctx(root, catalog, printify)
     lock = _apply(ctx, a_lock())
+    lock = _apply(ctx, lock)  # a no-op run that has read the product once already
+    live = printify.products["fake-product-1"]
+    printify.products["fake-product-1"] = live.model_copy(
+        update={
+            "variants": (*live.variants, ProductVariant(id=HAND_ENABLED, price=1, is_enabled=True))
+        }
+    )
 
     edit_listing(root, prices={**dict.fromkeys(SIZES, "359 NOK")})
     _apply(ctx, lock)
 
-    assert printify.updated, "it updated rather than created a second product"
+    assert len(printify.created) == 1, "it updated rather than created a second product"
+    assert set(printify.updated[0].variants.values()) == {35900}
+    after = {v.id: v.is_enabled for v in printify.products["fake-product-1"].variants}
+    assert after.get(HAND_ENABLED) is False, "the variant enabled since the last read is retired"
+
+
+def test_a_design_sized_for_the_shrunken_fixture_is_refused_by_the_real_profile(
+    workspace_root: Path, printify
+) -> None:
+    """The small fixture shrinks the profile; it does not loosen the gate. The
+    fixture garment's own 4500x5400 print area still refuses the small design."""
+    set_shop_id(workspace_root, SHOP_ID)
+    set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
+    write_design(workspace_root, (450, 540))
+
+    ctx = _ctx(workspace_root, a_catalog(FULL_PRINT_AREA), printify)
+    stage_plan = _stage_plan(ctx, a_lock())
+
+    assert "too small" in (stage_plan.blocked or "")
+
+
+def test_a_full_resolution_design_is_uploaded_and_created(workspace_root: Path, printify) -> None:
+    """The one representative run at real scale: the fixture profile as
+    shipped, a design exactly its print area, through upload and create."""
+    set_shop_id(workspace_root, SHOP_ID)
+    set_copy(workspace_root, title="Take A Hike Tee", description="A retro sunset.")
+    design = write_design(workspace_root, FULL_PRINT_AREA)
+
+    _apply(_ctx(workspace_root, a_catalog(FULL_PRINT_AREA), printify), a_lock())
+
+    assert list(printify.uploads.values()) == [design.read_bytes()]
     assert len(printify.created) == 1
 
 
@@ -568,7 +584,7 @@ def test_a_discontinued_cell_is_reported_rather_than_fatal(root, catalog, printi
     dropped = VariantSet(
         variants=tuple(
             v
-            for v in _variants().variants
+            for v in variants().variants
             if not (v.options.color == "Moss" and v.options.size == "XXXL")
         )
     )
